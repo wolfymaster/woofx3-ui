@@ -25,9 +25,35 @@ Preferred communication style: Simple, everyday language.
 
 ### Backend Architecture
 - **Runtime**: Node.js with Express
-- **API Style**: RESTful JSON API with pagination support
+- **API Style**: Cap'n Web RPC (object-capability RPC system from Cloudflare)
+- **RPC Endpoints**: WebSocket at `/rpc` and HTTP batch POST at `/rpc`
 - **Development Server**: Vite dev server with HMR, proxied through Express
 - **Build System**: esbuild for server bundling, Vite for client bundling
+
+### API Pattern (Cap'n Web RPC)
+The API uses [capnweb](https://github.com/cloudflare/capnweb) - a JavaScript-native, low-boilerplate RPC system:
+
+- **Shared Types**: `shared/api.ts` defines the `StreamControlApi` interface contract
+- **Server**: `server/api-server.ts` implements `StreamControlApiServer extends RpcTarget`
+- **Client**: `client/src/lib/rpc-client.ts` provides typed RPC stubs
+
+Usage on client:
+```typescript
+import { api } from '@/lib/rpc-client';
+
+// WebSocket (persistent connection)
+const user = await api.ws.getUser();
+const workflows = await api.ws.getWorkflows({ page: 1 });
+
+// HTTP batch (single request, good for one-off calls)
+const stats = await api.http.getDashboardStats();
+```
+
+Key benefits:
+- Type-safe method calls with full TypeScript support
+- Promise pipelining for batched calls in single round-trip
+- Bidirectional calling (server can call client callbacks)
+- Object-capability security patterns
 
 ### Data Layer
 - **ORM**: Drizzle ORM with PostgreSQL dialect
@@ -82,6 +108,7 @@ shared/           # Shared code between client/server
 - **Framer Motion**: Animation library
 - **Wouter**: Lightweight client-side router
 - **Nanostores**: Atomic state management
+- **capnweb**: Object-capability RPC system for type-safe client-server communication
 
 ### Replit-Specific
 - `@replit/vite-plugin-runtime-error-modal`: Error overlay in development

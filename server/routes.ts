@@ -1,8 +1,9 @@
 import type { Express, Request, Response } from "express";
 import { type Server } from "http";
-import { WebSocketServer, WebSocket as WsWebSocket } from "ws";
+import { WebSocketServer } from "ws";
 import { newWebSocketRpcSession, nodeHttpBatchRpcResponse } from "capnweb";
 import { StreamControlApiServer } from "./api-server";
+import { createBrowserWebSocketAdapter } from "./ws-adapter";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -10,9 +11,10 @@ export async function registerRoutes(
 ): Promise<Server> {
   const wss = new WebSocketServer({ noServer: true });
 
-  wss.on('connection', (ws: WsWebSocket) => {
+  wss.on('connection', (ws) => {
     const apiServer = new StreamControlApiServer();
-    newWebSocketRpcSession(ws as unknown as WebSocket, apiServer);
+    const browserWs = createBrowserWebSocketAdapter(ws);
+    newWebSocketRpcSession(browserWs, apiServer);
   });
 
   httpServer.on('upgrade', (request, socket, head) => {
