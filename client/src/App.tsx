@@ -9,6 +9,7 @@ import { useTheme } from "@/hooks/use-theme";
 import Dashboard from "@/pages/dashboard";
 import Modules from "@/pages/modules";
 import Workflows from "@/pages/workflows";
+import WorkflowsNew from "@/pages/workflows-new";
 import WorkflowBuilder from "@/pages/workflow-builder";
 import Assets from "@/pages/assets";
 import Scenes from "@/pages/scenes";
@@ -29,7 +30,7 @@ function Router() {
       <Route path="/modules" component={Modules} />
       <Route path="/modules/installed" component={Modules} />
       <Route path="/workflows" component={Workflows} />
-      <Route path="/workflows/new" component={WorkflowBuilder} />
+      <Route path="/workflows/new" component={WorkflowsNew} />
       <Route path="/workflows/:id" component={WorkflowBuilder} />
       <Route path="/assets" component={Assets} />
       <Route path="/scenes" component={Scenes} />
