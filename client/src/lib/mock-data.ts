@@ -1,38 +1,6 @@
-import type { Express, Request, Response } from "express";
-import { createServer, type Server } from "http";
+import type { Team, Account, User, Module, Workflow, Asset, Scene, Widget, PaginatedResponse } from '@/types';
 
-interface PaginatedResponse<T> {
-  data: T[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    totalItems: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
-}
-
-function paginate<T>(items: T[], page: number, pageSize: number): PaginatedResponse<T> {
-  const totalItems = items.length;
-  const totalPages = Math.ceil(totalItems / pageSize);
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-
-  return {
-    data: items.slice(start, end),
-    pagination: {
-      page,
-      pageSize,
-      totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    },
-  };
-}
-
-const mockUser = {
+export const mockUser: User = {
   id: 'user-1',
   email: 'alex@streamcontrol.io',
   displayName: 'Alex Chen',
@@ -42,17 +10,17 @@ const mockUser = {
   createdAt: '2024-01-01T00:00:00Z',
 };
 
-const mockTeams = [
+export const mockTeams: Team[] = [
   { id: 'team-1', name: 'Demo Team', slug: 'demo-team', ownerId: 'user-1', createdAt: '2024-01-01T00:00:00Z' },
   { id: 'team-2', name: 'Production Team', slug: 'production-team', ownerId: 'user-1', createdAt: '2024-01-15T00:00:00Z' },
 ];
 
-const mockAccounts = [
+export const mockAccounts: Account[] = [
   { id: 'account-1', name: 'Main Channel', slug: 'main-channel', teamId: 'team-1', createdAt: '2024-01-01T00:00:00Z' },
   { id: 'account-2', name: 'Gaming Channel', slug: 'gaming-channel', teamId: 'team-1', createdAt: '2024-01-05T00:00:00Z' },
 ];
 
-let mockModules = [
+export const mockModules: Module[] = [
   {
     id: 'mod-1',
     name: 'Twitch Integration',
@@ -63,8 +31,13 @@ let mockModules = [
     author: 'StreamControl Team',
     isInstalled: true,
     isEnabled: true,
-    triggers: [],
-    actions: [],
+    triggers: [
+      { id: 'chat-message', name: 'Chat Message', description: 'Triggered when a chat message is received', parameters: [] },
+      { id: 'new-follower', name: 'New Follower', description: 'Triggered when someone follows the channel', parameters: [] },
+    ],
+    actions: [
+      { id: 'send-chat', name: 'Send Chat Message', description: 'Send a message to chat', parameters: [] },
+    ],
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-10T00:00:00Z',
   },
@@ -175,16 +148,22 @@ let mockModules = [
   },
 ];
 
-let mockWorkflows = [
+export const mockWorkflows: Workflow[] = [
   {
     id: 'wf-1',
     name: 'Chat Commands Handler',
     description: 'Responds to custom chat commands with configurable responses and cooldowns.',
     accountId: 'account-1',
     isEnabled: true,
-    nodes: [],
-    edges: [],
-    stats: { runsToday: 156, successRate: 99.2 },
+    nodes: [
+      { id: 'n1', type: 'trigger', moduleId: 'mod-1', definitionId: 'chat-message', position: { x: 100, y: 150 }, data: { label: 'Chat Message', description: 'When message received', icon: 'MessageSquare', parameters: {} } },
+      { id: 'n2', type: 'condition', moduleId: 'core', definitionId: 'condition', position: { x: 400, y: 100 }, data: { label: 'Check Command', description: 'If starts with !', icon: 'Filter', parameters: {} } },
+      { id: 'n3', type: 'action', moduleId: 'mod-1', definitionId: 'send-chat', position: { x: 700, y: 50 }, data: { label: 'Send Response', description: 'Reply in chat', icon: 'MessageSquare', parameters: {} } },
+    ],
+    edges: [
+      { id: 'e1', source: 'n1', target: 'n2' },
+      { id: 'e2', source: 'n2', target: 'n3' },
+    ],
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-10T00:00:00Z',
   },
@@ -196,7 +175,6 @@ let mockWorkflows = [
     isEnabled: true,
     nodes: [],
     edges: [],
-    stats: { runsToday: 23, successRate: 100 },
     createdAt: '2024-01-02T00:00:00Z',
     updatedAt: '2024-01-09T00:00:00Z',
   },
@@ -208,7 +186,6 @@ let mockWorkflows = [
     isEnabled: true,
     nodes: [],
     edges: [],
-    stats: { runsToday: 8, successRate: 100 },
     createdAt: '2024-01-03T00:00:00Z',
     updatedAt: '2024-01-08T00:00:00Z',
   },
@@ -220,7 +197,6 @@ let mockWorkflows = [
     isEnabled: true,
     nodes: [],
     edges: [],
-    stats: { runsToday: 89, successRate: 97.8 },
     createdAt: '2024-01-04T00:00:00Z',
     updatedAt: '2024-01-07T00:00:00Z',
   },
@@ -232,7 +208,6 @@ let mockWorkflows = [
     isEnabled: false,
     nodes: [],
     edges: [],
-    stats: { runsToday: 2, successRate: 50 },
     createdAt: '2024-01-05T00:00:00Z',
     updatedAt: '2024-01-06T00:00:00Z',
   },
@@ -244,13 +219,12 @@ let mockWorkflows = [
     isEnabled: true,
     nodes: [],
     edges: [],
-    stats: { runsToday: 12, successRate: 100 },
     createdAt: '2024-01-06T00:00:00Z',
     updatedAt: '2024-01-05T00:00:00Z',
   },
 ];
 
-let mockAssets = [
+export const mockAssets: Asset[] = [
   { id: 'asset-1', name: 'alert-sound.mp3', type: 'audio', mimeType: 'audio/mp3', size: 245000, url: '/assets/alert-sound.mp3', accountId: 'account-1', tags: ['alerts', 'sounds'], createdAt: '2024-01-10T00:00:00Z', updatedAt: '2024-01-10T00:00:00Z' },
   { id: 'asset-2', name: 'follow-animation.webm', type: 'video', mimeType: 'video/webm', size: 1240000, url: '/assets/follow-animation.webm', accountId: 'account-1', tags: ['animations', 'follow'], createdAt: '2024-01-09T00:00:00Z', updatedAt: '2024-01-09T00:00:00Z' },
   { id: 'asset-3', name: 'overlay-frame.png', type: 'image', mimeType: 'image/png', size: 520000, url: '/assets/overlay-frame.png', accountId: 'account-1', tags: ['overlay', 'frame'], createdAt: '2024-01-08T00:00:00Z', updatedAt: '2024-01-08T00:00:00Z' },
@@ -265,7 +239,7 @@ let mockAssets = [
   { id: 'asset-12', name: 'custom-font.woff2', type: 'font', mimeType: 'font/woff2', size: 85000, url: '/assets/custom-font.woff2', accountId: 'account-1', tags: ['fonts', 'typography'], createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' },
 ];
 
-let mockScenes = [
+export const mockScenes: Scene[] = [
   {
     id: 'scene-1',
     name: 'Main Overlay',
@@ -291,7 +265,10 @@ let mockScenes = [
     width: 1920,
     height: 1080,
     backgroundColor: '#1a1a2e',
-    widgets: [],
+    widgets: [
+      { id: 'w5', type: 'text', name: 'BRB Text', position: { x: 760, y: 400 }, size: { width: 400, height: 80 }, rotation: 0, opacity: 100, zIndex: 2, locked: false, visible: true, properties: { text: 'Be Right Back', fontSize: 48, fontFamily: 'Inter', color: '#ffffff', align: 'center' } },
+      { id: 'w6', type: 'timer', name: 'Countdown', position: { x: 860, y: 500 }, size: { width: 200, height: 60 }, rotation: 0, opacity: 100, zIndex: 1, locked: false, visible: true, properties: { duration: 300 } },
+    ],
     createdAt: '2024-01-02T00:00:00Z',
     updatedAt: '2024-01-08T00:00:00Z',
   },
@@ -309,266 +286,25 @@ let mockScenes = [
   },
 ];
 
-export async function registerRoutes(
-  httpServer: Server,
-  app: Express
-): Promise<Server> {
+export function paginate<T>(items: T[], page: number, pageSize: number): PaginatedResponse<T> {
+  const totalItems = items.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  
+  return {
+    data: items.slice(start, end),
+    pagination: {
+      page,
+      pageSize,
+      totalItems,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+    },
+  };
+}
 
-  app.get('/api/user', (req: Request, res: Response) => {
-    res.json(mockUser);
-  });
-
-  app.get('/api/teams', (req: Request, res: Response) => {
-    res.json(mockTeams);
-  });
-
-  app.get('/api/teams/:id', (req: Request, res: Response) => {
-    const team = mockTeams.find(t => t.id === req.params.id);
-    if (!team) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Team not found' });
-    }
-    res.json(team);
-  });
-
-  app.get('/api/accounts', (req: Request, res: Response) => {
-    const { teamId } = req.query;
-    let accounts = mockAccounts;
-    if (teamId) {
-      accounts = accounts.filter(a => a.teamId === teamId);
-    }
-    res.json(accounts);
-  });
-
-  app.get('/api/accounts/:id', (req: Request, res: Response) => {
-    const account = mockAccounts.find(a => a.id === req.params.id);
-    if (!account) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Account not found' });
-    }
-    res.json(account);
-  });
-
-  app.get('/api/modules', (req: Request, res: Response) => {
-    const { page = '1', pageSize = '20', category, search, installed } = req.query;
-    let modules = [...mockModules];
-
-    if (category) {
-      modules = modules.filter(m => m.category === category);
-    }
-    if (search) {
-      const query = String(search).toLowerCase();
-      modules = modules.filter(m =>
-        m.name.toLowerCase().includes(query) ||
-        m.description.toLowerCase().includes(query)
-      );
-    }
-    if (installed === 'true') {
-      modules = modules.filter(m => m.isInstalled);
-    }
-
-    res.json(paginate(modules, parseInt(page as string), parseInt(pageSize as string)));
-  });
-
-  app.get('/api/modules/:id', (req: Request, res: Response) => {
-    const module = mockModules.find(m => m.id === req.params.id);
-    if (!module) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Module not found' });
-    }
-    res.json(module);
-  });
-
-  app.post('/api/modules/:id/install', (req: Request, res: Response) => {
-    const module = mockModules.find(m => m.id === req.params.id);
-    if (!module) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Module not found' });
-    }
-    module.isInstalled = true;
-    module.isEnabled = true;
-    module.updatedAt = new Date().toISOString();
-    res.json(module);
-  });
-
-  app.post('/api/modules/:id/uninstall', (req: Request, res: Response) => {
-    const module = mockModules.find(m => m.id === req.params.id);
-    if (!module) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Module not found' });
-    }
-    module.isInstalled = false;
-    module.isEnabled = false;
-    module.updatedAt = new Date().toISOString();
-    res.json(module);
-  });
-
-  app.get('/api/workflows', (req: Request, res: Response) => {
-    const { page = '1', pageSize = '20', accountId, enabled } = req.query;
-    let workflows = [...mockWorkflows];
-
-    if (accountId) {
-      workflows = workflows.filter(w => w.accountId === accountId);
-    }
-    if (enabled === 'true') {
-      workflows = workflows.filter(w => w.isEnabled);
-    } else if (enabled === 'false') {
-      workflows = workflows.filter(w => !w.isEnabled);
-    }
-
-    res.json(paginate(workflows, parseInt(page as string), parseInt(pageSize as string)));
-  });
-
-  app.get('/api/workflows/:id', (req: Request, res: Response) => {
-    const workflow = mockWorkflows.find(w => w.id === req.params.id);
-    if (!workflow) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Workflow not found' });
-    }
-    res.json(workflow);
-  });
-
-  app.post('/api/workflows', (req: Request, res: Response) => {
-    const newWorkflow = {
-      id: `wf-${Date.now()}`,
-      ...req.body,
-      nodes: req.body.nodes || [],
-      edges: req.body.edges || [],
-      stats: { runsToday: 0, successRate: 100 },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockWorkflows.push(newWorkflow);
-    res.status(201).json(newWorkflow);
-  });
-
-  app.patch('/api/workflows/:id', (req: Request, res: Response) => {
-    const index = mockWorkflows.findIndex(w => w.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Workflow not found' });
-    }
-    mockWorkflows[index] = {
-      ...mockWorkflows[index],
-      ...req.body,
-      updatedAt: new Date().toISOString(),
-    };
-    res.json(mockWorkflows[index]);
-  });
-
-  app.delete('/api/workflows/:id', (req: Request, res: Response) => {
-    const index = mockWorkflows.findIndex(w => w.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Workflow not found' });
-    }
-    mockWorkflows.splice(index, 1);
-    res.status(204).send();
-  });
-
-  app.get('/api/assets', (req: Request, res: Response) => {
-    const { page = '1', pageSize = '20', accountId, type, search } = req.query;
-    let assets = [...mockAssets];
-
-    if (accountId) {
-      assets = assets.filter(a => a.accountId === accountId);
-    }
-    if (type) {
-      assets = assets.filter(a => a.type === type);
-    }
-    if (search) {
-      const query = String(search).toLowerCase();
-      assets = assets.filter(a =>
-        a.name.toLowerCase().includes(query) ||
-        a.tags.some(t => t.toLowerCase().includes(query))
-      );
-    }
-
-    res.json(paginate(assets, parseInt(page as string), parseInt(pageSize as string)));
-  });
-
-  app.get('/api/assets/:id', (req: Request, res: Response) => {
-    const asset = mockAssets.find(a => a.id === req.params.id);
-    if (!asset) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Asset not found' });
-    }
-    res.json(asset);
-  });
-
-  app.delete('/api/assets/:id', (req: Request, res: Response) => {
-    const index = mockAssets.findIndex(a => a.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Asset not found' });
-    }
-    mockAssets.splice(index, 1);
-    res.status(204).send();
-  });
-
-  app.get('/api/scenes', (req: Request, res: Response) => {
-    const { page = '1', pageSize = '20', accountId } = req.query;
-    let scenes = [...mockScenes];
-
-    if (accountId) {
-      scenes = scenes.filter(s => s.accountId === accountId);
-    }
-
-    res.json(paginate(scenes, parseInt(page as string), parseInt(pageSize as string)));
-  });
-
-  app.get('/api/scenes/:id', (req: Request, res: Response) => {
-    const scene = mockScenes.find(s => s.id === req.params.id);
-    if (!scene) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Scene not found' });
-    }
-    res.json(scene);
-  });
-
-  app.post('/api/scenes', (req: Request, res: Response) => {
-    const newScene = {
-      id: `scene-${Date.now()}`,
-      ...req.body,
-      widgets: req.body.widgets || [],
-      width: req.body.width || 1920,
-      height: req.body.height || 1080,
-      backgroundColor: req.body.backgroundColor || 'transparent',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockScenes.push(newScene);
-    res.status(201).json(newScene);
-  });
-
-  app.patch('/api/scenes/:id', (req: Request, res: Response) => {
-    const index = mockScenes.findIndex(s => s.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Scene not found' });
-    }
-    mockScenes[index] = {
-      ...mockScenes[index],
-      ...req.body,
-      updatedAt: new Date().toISOString(),
-    };
-    res.json(mockScenes[index]);
-  });
-
-  app.delete('/api/scenes/:id', (req: Request, res: Response) => {
-    const index = mockScenes.findIndex(s => s.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ code: 'NOT_FOUND', message: 'Scene not found' });
-    }
-    mockScenes.splice(index, 1);
-    res.status(204).send();
-  });
-
-  app.get('/api/stats/dashboard', (req: Request, res: Response) => {
-    res.json({
-      activeWorkflows: mockWorkflows.filter(w => w.isEnabled).length,
-      totalWorkflows: mockWorkflows.length,
-      installedModules: mockModules.filter(m => m.isInstalled).length,
-      totalModules: mockModules.length,
-      totalAssets: mockAssets.length,
-      totalAssetsSize: mockAssets.reduce((sum, a) => sum + a.size, 0),
-      eventsToday: mockWorkflows.reduce((sum, w) => sum + w.stats.runsToday, 0),
-      systemHealth: {
-        cpu: 24,
-        memory: 68,
-        storage: 45,
-        apiRateLimit: { used: 1234, total: 10000 },
-      },
-    });
-  });
-
-  return httpServer;
+export function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
