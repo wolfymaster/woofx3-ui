@@ -5,18 +5,20 @@ import { ArrowRight, ArrowLeft, Check, Loader2, Sparkles, Plus, Trash2 } from 'l
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { TriggerConfigForm } from './trigger-config-form';
 import { 
   triggerPresets, 
   actionPresets, 
   generateWorkflowFromPresets,
-  generateMultiThresholdWorkflow,
+  generateMultiTierWorkflow,
+  getDefaultConfigValues,
   type TriggerPreset,
   type ActionPreset,
-  type ThresholdAction,
+  type TierConfig,
+  type TriggerConfigValues,
 } from '@/lib/workflow-presets';
 
 interface PresetCardProps<T extends TriggerPreset | ActionPreset> {
@@ -67,20 +69,19 @@ type EditorStep = 'trigger' | 'configure' | 'action';
 interface StepIndicatorProps {
   currentStep: EditorStep;
   trigger: TriggerPreset | null;
-  hasThresholds: boolean;
-  thresholdActions: ThresholdAction[];
-  action: ActionPreset | null;
+  hasConfig: boolean;
 }
 
-function StepIndicator({ currentStep, trigger, hasThresholds, thresholdActions, action }: StepIndicatorProps) {
-  const steps = hasThresholds 
+function StepIndicator({ currentStep, trigger, hasConfig }: StepIndicatorProps) {
+  const steps = hasConfig 
     ? [
-        { id: 'trigger', label: '1. Trigger', done: !!trigger && currentStep !== 'trigger' },
-        { id: 'configure', label: '2. Configure', done: thresholdActions.length > 0 && currentStep !== 'configure' },
+        { id: 'trigger', label: '1. Trigger' },
+        { id: 'configure', label: '2. Configure' },
+        { id: 'action', label: '3. Action' },
       ]
     : [
-        { id: 'trigger', label: '1. Trigger', done: !!trigger && currentStep !== 'trigger' },
-        { id: 'action', label: '2. Action', done: !!action },
+        { id: 'trigger', label: '1. Trigger' },
+        { id: 'action', label: '2. Action' },
       ];
 
   return (
@@ -90,11 +91,9 @@ function StepIndicator({ currentStep, trigger, hasThresholds, thresholdActions, 
           {index > 0 && <ArrowRight className="h-4 w-4 text-muted-foreground" />}
           <div className={cn(
             "flex items-center gap-2 px-3 py-1.5 rounded-full text-sm",
-            currentStep === step.id ? "bg-primary text-primary-foreground" : 
-            step.done ? "bg-green-500/10 text-green-500" : "bg-muted text-muted-foreground"
+            currentStep === step.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
           )}>
             <span className="font-medium">{step.label}</span>
-            {step.done && <Check className="h-4 w-4" />}
           </div>
         </div>
       ))}
@@ -102,81 +101,92 @@ function StepIndicator({ currentStep, trigger, hasThresholds, thresholdActions, 
   );
 }
 
-interface ThresholdConfigRowProps {
+interface TierRowProps {
+  tier: TierConfig;
   trigger: TriggerPreset;
-  thresholdAction: ThresholdAction;
   index: number;
-  onUpdate: (index: number, updates: Partial<ThresholdAction>) => void;
-  onRemove: (index: number) => void;
+  onUpdate: (id: string, updates: Partial<TierConfig>) => void;
+  onRemove: (id: string) => void;
   canRemove: boolean;
 }
 
-function ThresholdConfigRow({ trigger, thresholdAction, index, onUpdate, onRemove, canRemove }: ThresholdConfigRowProps) {
-  const ActionIcon = thresholdAction.action?.icon;
+function TierRow({ tier, trigger, index, onUpdate, onRemove, canRemove }: TierRowProps) {
+  const [showActionConfig, setShowActionConfig] = useState(false);
   
   return (
     <Card className="p-4">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <Select
-            value={thresholdAction.threshold.toString()}
-            onValueChange={(value) => onUpdate(index, { threshold: parseInt(value) })}
-          >
-            <SelectTrigger className="w-28" data-testid={`select-threshold-${index}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {trigger.suggestedThresholds?.map(t => (
-                <SelectItem key={t} value={t.toString()}>
-                  {t} {trigger.thresholdUnit}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <Badge variant="secondary">Tier {index + 1}</Badge>
+          {canRemove && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onRemove(tier.id)}
+              data-testid={`button-remove-tier-${index}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
-        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
-
-        <div className="flex-1">
-          <Select
-            value={thresholdAction.action?.id || ''}
-            onValueChange={(value) => {
-              const action = actionPresets.find(a => a.id === value);
-              if (action) onUpdate(index, { action });
-            }}
-          >
-            <SelectTrigger className="w-full" data-testid={`select-action-${index}`}>
-              <SelectValue placeholder="Select action..." />
-            </SelectTrigger>
-            <SelectContent>
-              {actionPresets.map(action => (
-                <SelectItem key={action.id} value={action.id}>
-                  <div className="flex items-center gap-2">
-                    <action.icon className={cn("h-4 w-4", action.color)} />
-                    {action.name}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {thresholdAction.action && ActionIcon && (
-          <div className={cn("h-8 w-8 rounded flex items-center justify-center bg-muted shrink-0")}>
-            <ActionIcon className={cn("h-4 w-4", thresholdAction.action.color)} />
-          </div>
+        {trigger.config?.fields && (
+          <TriggerConfigForm
+            fields={trigger.config.fields}
+            values={tier.values}
+            onChange={(values) => onUpdate(tier.id, { values })}
+          />
         )}
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => onRemove(index)}
-          disabled={!canRemove}
-          className="shrink-0"
-          data-testid={`button-remove-threshold-${index}`}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <div className="border-t border-border pt-4">
+          <div className="flex items-center gap-2 mb-3">
+            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Then do this action:</span>
+          </div>
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {actionPresets.slice(0, 6).map(action => {
+              const isSelected = tier.action?.id === action.id;
+              const ActionIcon = action.icon;
+              return (
+                <Card
+                  key={action.id}
+                  className={cn(
+                    "p-3 cursor-pointer transition-all hover-elevate",
+                    isSelected && "ring-2 ring-primary bg-primary/5"
+                  )}
+                  onClick={() => {
+                    onUpdate(tier.id, { 
+                      action, 
+                      actionConfig: action.config?.fields 
+                        ? getDefaultConfigValues(action.config.fields) 
+                        : {} 
+                    });
+                    setShowActionConfig(true);
+                  }}
+                  data-testid={`card-tier-action-${index}-${action.id}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <ActionIcon className={cn("h-4 w-4", action.color)} />
+                    <span className="text-xs font-medium truncate">{action.name}</span>
+                    {isSelected && <Check className="h-3 w-3 text-primary ml-auto shrink-0" />}
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          {tier.action?.config?.fields && showActionConfig && (
+            <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+              <p className="text-xs text-muted-foreground mb-3">Configure {tier.action.name}:</p>
+              <TriggerConfigForm
+                fields={tier.action.config.fields}
+                values={tier.actionConfig}
+                onChange={(actionConfig) => onUpdate(tier.id, { actionConfig })}
+              />
+            </div>
+          )}
+        </div>
       </div>
     </Card>
   );
@@ -188,7 +198,9 @@ export function BasicWorkflowEditor() {
   const [step, setStep] = useState<EditorStep>('trigger');
   const [selectedTrigger, setSelectedTrigger] = useState<TriggerPreset | null>(null);
   const [selectedAction, setSelectedAction] = useState<ActionPreset | null>(null);
-  const [thresholdActions, setThresholdActions] = useState<ThresholdAction[]>([]);
+  const [triggerConfig, setTriggerConfig] = useState<TriggerConfigValues>({});
+  const [actionConfig, setActionConfig] = useState<TriggerConfigValues>({});
+  const [tiers, setTiers] = useState<TierConfig[]>([]);
 
   const createWorkflow = useMutation({
     mutationFn: async (data: { name: string; description: string; nodes: any[]; edges: any[] }) => {
@@ -216,76 +228,92 @@ export function BasicWorkflowEditor() {
     },
   });
 
+  const hasConfig = !!selectedTrigger?.config?.fields?.length;
+  const supportsTiers = !!selectedTrigger?.config?.supportsTiers;
+
   const handleTriggerSelect = (trigger: TriggerPreset) => {
     setSelectedTrigger(trigger);
     setSelectedAction(null);
-    setThresholdActions([]);
+    setTriggerConfig(trigger.config?.fields ? getDefaultConfigValues(trigger.config.fields) : {});
+    setActionConfig({});
     
-    if (trigger.hasThresholds && trigger.suggestedThresholds) {
-      setThresholdActions([
-        { threshold: trigger.suggestedThresholds[0], action: actionPresets[0] }
-      ]);
+    if (trigger.config?.supportsTiers) {
+      const defaultValues = trigger.config.fields ? getDefaultConfigValues(trigger.config.fields) : {};
+      setTiers([{ 
+        id: 'tier-1', 
+        values: defaultValues, 
+        action: null, 
+        actionConfig: {} 
+      }]);
+      setStep('configure');
+    } else if (trigger.config?.fields?.length) {
+      setTiers([]);
       setStep('configure');
     } else {
+      setTiers([]);
       setStep('action');
     }
   };
 
   const handleActionSelect = (action: ActionPreset) => {
     setSelectedAction(action);
+    setActionConfig(action.config?.fields ? getDefaultConfigValues(action.config.fields) : {});
   };
 
-  const handleAddThreshold = () => {
-    if (!selectedTrigger?.suggestedThresholds) return;
-    
-    const usedThresholds = new Set(thresholdActions.map(ta => ta.threshold));
-    const nextThreshold = selectedTrigger.suggestedThresholds.find(t => !usedThresholds.has(t));
-    
-    if (nextThreshold) {
-      setThresholdActions([
-        ...thresholdActions,
-        { threshold: nextThreshold, action: actionPresets[0] }
-      ]);
-    }
+  const handleAddTier = () => {
+    if (!selectedTrigger?.config?.fields) return;
+    const newTier: TierConfig = {
+      id: `tier-${Date.now()}`,
+      values: getDefaultConfigValues(selectedTrigger.config.fields),
+      action: null,
+      actionConfig: {},
+    };
+    setTiers([...tiers, newTier]);
   };
 
-  const handleUpdateThreshold = (index: number, updates: Partial<ThresholdAction>) => {
-    setThresholdActions(prev => prev.map((ta, i) => 
-      i === index ? { ...ta, ...updates } : ta
-    ));
+  const handleUpdateTier = (id: string, updates: Partial<TierConfig>) => {
+    setTiers(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   };
 
-  const handleRemoveThreshold = (index: number) => {
-    setThresholdActions(prev => prev.filter((_, i) => i !== index));
+  const handleRemoveTier = (id: string) => {
+    setTiers(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleContinueToAction = () => {
+    setStep('action');
   };
 
   const handleCreate = () => {
     if (!selectedTrigger) return;
     
     let workflow;
-    if (selectedTrigger.hasThresholds) {
-      const validThresholdActions = thresholdActions.filter(ta => ta.action);
-      if (validThresholdActions.length === 0) return;
-      workflow = generateMultiThresholdWorkflow(selectedTrigger, validThresholdActions);
+    if (supportsTiers && tiers.length > 0) {
+      const validTiers = tiers.filter(t => t.action);
+      if (validTiers.length === 0) return;
+      workflow = generateMultiTierWorkflow(selectedTrigger, validTiers);
     } else {
       if (!selectedAction) return;
-      workflow = generateWorkflowFromPresets(selectedTrigger, selectedAction);
+      workflow = generateWorkflowFromPresets(selectedTrigger, selectedAction, triggerConfig, actionConfig);
     }
     
     createWorkflow.mutate(workflow);
   };
 
   const handleBack = () => {
-    if (step === 'action' || step === 'configure') {
+    if (step === 'action') {
+      if (hasConfig) {
+        setStep('configure');
+      } else {
+        setStep('trigger');
+      }
+    } else if (step === 'configure') {
       setStep('trigger');
-      setSelectedAction(null);
-      setThresholdActions([]);
     }
   };
 
   const canCreate = selectedTrigger && (
-    selectedTrigger.hasThresholds 
-      ? thresholdActions.length > 0 && thresholdActions.every(ta => ta.action)
+    supportsTiers 
+      ? tiers.length > 0 && tiers.every(t => t.action)
       : !!selectedAction
   );
 
@@ -301,7 +329,7 @@ export function BasicWorkflowEditor() {
         </div>
         <p className="text-muted-foreground">
           {step === 'trigger' && "Choose what triggers your workflow"}
-          {step === 'configure' && "Configure trigger thresholds and actions"}
+          {step === 'configure' && "Configure your trigger settings"}
           {step === 'action' && "Choose what happens when triggered"}
         </p>
       </div>
@@ -309,9 +337,7 @@ export function BasicWorkflowEditor() {
       <StepIndicator 
         currentStep={step} 
         trigger={selectedTrigger}
-        hasThresholds={!!selectedTrigger?.hasThresholds}
-        thresholdActions={thresholdActions}
-        action={selectedAction} 
+        hasConfig={hasConfig}
       />
 
       {step === 'trigger' && (
@@ -350,38 +376,47 @@ export function BasicWorkflowEditor() {
                 {selectedTrigger.name}
               </Badge>
               <span className="text-sm text-muted-foreground">
-                Configure different tiers
+                {supportsTiers ? 'Configure tiers' : 'Configure settings'}
               </span>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAddThreshold}
-              disabled={thresholdActions.length >= (selectedTrigger.suggestedThresholds?.length || 0)}
-              data-testid="button-add-threshold"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Tier
-            </Button>
+            {supportsTiers && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddTier}
+                data-testid="button-add-tier"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Add Tier
+              </Button>
+            )}
           </div>
 
-          <div className="space-y-3">
-            {thresholdActions.map((ta, index) => (
-              <ThresholdConfigRow
-                key={index}
-                trigger={selectedTrigger}
-                thresholdAction={ta}
-                index={index}
-                onUpdate={handleUpdateThreshold}
-                onRemove={handleRemoveThreshold}
-                canRemove={thresholdActions.length > 1}
-              />
-            ))}
-          </div>
-
-          <p className="text-xs text-muted-foreground text-center mt-4">
-            Add multiple tiers to trigger different actions based on the amount
-          </p>
+          {supportsTiers ? (
+            <div className="space-y-4">
+              {tiers.map((tier, index) => (
+                <TierRow
+                  key={tier.id}
+                  tier={tier}
+                  trigger={selectedTrigger}
+                  index={index}
+                  onUpdate={handleUpdateTier}
+                  onRemove={handleRemoveTier}
+                  canRemove={tiers.length > 1}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card className="p-6">
+              {selectedTrigger.config?.fields && (
+                <TriggerConfigForm
+                  fields={selectedTrigger.config.fields}
+                  values={triggerConfig}
+                  onChange={setTriggerConfig}
+                />
+              )}
+            </Card>
+          )}
         </div>
       )}
 
@@ -420,6 +455,17 @@ export function BasicWorkflowEditor() {
               </div>
             );
           })}
+
+          {selectedAction?.config?.fields && (
+            <Card className="p-6">
+              <h4 className="text-sm font-medium mb-4">Configure {selectedAction.name}</h4>
+              <TriggerConfigForm
+                fields={selectedAction.config.fields}
+                values={actionConfig}
+                onChange={setActionConfig}
+              />
+            </Card>
+          )}
         </div>
       )}
 
@@ -435,38 +481,31 @@ export function BasicWorkflowEditor() {
         </Button>
 
         <div className="flex items-center gap-3">
-          {step === 'configure' && thresholdActions.length > 0 && (
-            <span className="text-sm text-muted-foreground">
-              {thresholdActions.length} tier{thresholdActions.length > 1 ? 's' : ''} configured
-            </span>
+          {step === 'configure' && !supportsTiers && (
+            <Button
+              variant="outline"
+              onClick={handleContinueToAction}
+              data-testid="button-continue"
+            >
+              Continue
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
           )}
           
-          {step === 'action' && selectedTrigger && selectedAction && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Badge variant="outline" className="gap-1">
-                <selectedTrigger.icon className="h-3 w-3" />
-                {selectedTrigger.name}
-              </Badge>
-              <ArrowRight className="h-4 w-4" />
-              <Badge variant="outline" className="gap-1">
-                <selectedAction.icon className="h-3 w-3" />
-                {selectedAction.name}
-              </Badge>
-            </div>
+          {(step === 'action' || (step === 'configure' && supportsTiers)) && (
+            <Button 
+              onClick={handleCreate}
+              disabled={!canCreate || createWorkflow.isPending}
+              data-testid="button-create-workflow"
+            >
+              {createWorkflow.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4 mr-2" />
+              )}
+              Create Workflow
+            </Button>
           )}
-          
-          <Button 
-            onClick={handleCreate}
-            disabled={!canCreate || createWorkflow.isPending}
-            data-testid="button-create-workflow"
-          >
-            {createWorkflow.isPending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4 mr-2" />
-            )}
-            Create Workflow
-          </Button>
         </div>
       </div>
     </div>
