@@ -39,19 +39,6 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-  SidebarRail,
-  SidebarTrigger,
-} from '@/components/ui/sidebar';
 import { $currentTeam, $currentUser, $commandPaletteOpen, $notifications } from '@/lib/stores';
 import { useTheme } from '@/hooks/use-theme';
 import { CommandPalette } from './command-palette';
@@ -174,10 +161,6 @@ function AppHeader() {
   return (
     <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 gap-4 shrink-0">
       <div className="flex items-center gap-4">
-        <SidebarTrigger data-testid="button-sidebar-toggle" />
-        
-        <Separator orientation="vertical" className="h-6" />
-
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground">
             <MonitorPlay className="h-4 w-4" />
@@ -278,70 +261,65 @@ function AppHeader() {
   );
 }
 
-function AppSidebar() {
+function WorkspaceDock() {
   const [location] = useLocation();
-  
-  return (
-    <Sidebar collapsible="icon">
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {mainNavItems.map((item) => {
-                const isActive = item.href === '/' 
-                  ? location === '/' 
-                  : location.startsWith(item.href);
-                return (
-                  <SidebarMenuItem key={item.id}>
-                    <SidebarMenuButton 
-                      asChild 
-                      isActive={isActive}
-                      tooltip={item.label}
-                      data-testid={`sidebar-nav-${item.id}`}
-                    >
-                      <Link href={item.href}>
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
 
-        <div className="mt-auto">
-          <SidebarGroup>
-            <SidebarGroupLabel>Settings</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {utilityItems.map((item) => {
-                  const isActive = location === item.href;
-                  return (
-                    <SidebarMenuItem key={item.id}>
-                      <SidebarMenuButton 
-                        asChild 
-                        isActive={isActive}
-                        tooltip={item.label}
-                        data-testid={`sidebar-utility-${item.id}`}
-                      >
-                        <Link href={item.href}>
-                          <item.icon className="h-4 w-4" />
-                          <span>{item.label}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </div>
-      </SidebarContent>
-      <SidebarRail />
-    </Sidebar>
+  return (
+    <nav className="h-12 bg-muted/30 border-b border-border flex items-center px-4 gap-1 shrink-0">
+      <div className="flex items-center gap-1">
+        {mainNavItems.map((item) => {
+          const isActive = item.href === '/' 
+            ? location === '/' 
+            : location.startsWith(item.href);
+          
+          return (
+            <Link key={item.id} href={item.href}>
+              <Button
+                variant={isActive ? "secondary" : "ghost"}
+                size="sm"
+                className={cn(
+                  "gap-2 h-8",
+                  isActive && "bg-background shadow-sm"
+                )}
+                data-testid={`nav-${item.id}`}
+              >
+                <item.icon className="h-4 w-4" />
+                <span className="hidden sm:inline">{item.label}</span>
+              </Button>
+            </Link>
+          );
+        })}
+      </div>
+
+      <Separator orientation="vertical" className="h-6 mx-2" />
+
+      <div className="flex items-center gap-1">
+        {utilityItems.map((item) => {
+          const isActive = location === item.href;
+          
+          return (
+            <Link key={item.id} href={item.href}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isActive ? "secondary" : "ghost"}
+                    size="icon"
+                    className={cn(
+                      "h-8 w-8",
+                      isActive && "bg-background shadow-sm"
+                    )}
+                    data-testid={`nav-${item.id}`}
+                  >
+                    <item.icon className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{item.label}</TooltipContent>
+              </Tooltip>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
   );
 }
 
@@ -364,29 +342,19 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const style = {
-    "--sidebar-width": "14rem",
-    "--sidebar-width-icon": "3rem",
-  };
-
   return (
-    <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex h-screen w-full overflow-hidden bg-background">
-        <AppSidebar />
-        
-        <div className="flex flex-col flex-1 min-w-0">
-          <AppHeader />
-          
-          <main className="flex-1 overflow-auto p-6">
-            {children}
-          </main>
-        </div>
-      </div>
+    <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+      <AppHeader />
+      <WorkspaceDock />
+      
+      <main className="flex-1 overflow-auto">
+        {children}
+      </main>
       
       <CommandPalette 
         open={commandPaletteOpen} 
         onOpenChange={(open: boolean) => $commandPaletteOpen.set(open)} 
       />
-    </SidebarProvider>
+    </div>
   );
 }
