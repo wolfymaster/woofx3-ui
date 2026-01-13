@@ -48,6 +48,7 @@
     "@tanstack/react-virtual": "^3.13.18",
     "@types/uuid": "^10.0.0",
     "@xstate/react": "^6.0.0",
+    "capnweb": "^0.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
