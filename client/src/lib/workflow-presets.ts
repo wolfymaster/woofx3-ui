@@ -18,6 +18,11 @@ import {
   type LucideIcon
 } from 'lucide-react';
 
+export interface ThresholdConfig {
+  value: number;
+  label: string;
+}
+
 export interface TriggerPreset {
   id: string;
   name: string;
@@ -25,6 +30,14 @@ export interface TriggerPreset {
   icon: LucideIcon;
   category: 'chat' | 'events' | 'time' | 'stream';
   color: string;
+  hasThresholds?: boolean;
+  thresholdUnit?: string;
+  suggestedThresholds?: number[];
+}
+
+export interface ThresholdAction {
+  threshold: number;
+  action: ActionPreset;
 }
 
 export interface ActionPreset {
@@ -60,6 +73,9 @@ export const triggerPresets: TriggerPreset[] = [
     icon: Star,
     category: 'events',
     color: 'text-purple-500',
+    hasThresholds: true,
+    thresholdUnit: 'subs',
+    suggestedThresholds: [1, 5, 10, 25, 50, 100],
   },
   {
     id: 'trigger-donation',
@@ -68,6 +84,9 @@ export const triggerPresets: TriggerPreset[] = [
     icon: Heart,
     category: 'events',
     color: 'text-pink-500',
+    hasThresholds: true,
+    thresholdUnit: 'dollars',
+    suggestedThresholds: [5, 10, 25, 50, 100],
   },
   {
     id: 'trigger-cheer',
@@ -76,6 +95,9 @@ export const triggerPresets: TriggerPreset[] = [
     icon: Gift,
     category: 'events',
     color: 'text-yellow-500',
+    hasThresholds: true,
+    thresholdUnit: 'bits',
+    suggestedThresholds: [100, 500, 1000, 5000, 10000],
   },
   {
     id: 'trigger-raid',
@@ -208,6 +230,58 @@ export function generateWorkflowFromPresets(
       type: 'smoothstep',
     },
   ];
+
+  return { name, description, nodes, edges };
+}
+
+export function generateMultiThresholdWorkflow(
+  trigger: TriggerPreset,
+  thresholdActions: ThresholdAction[]
+): { name: string; description: string; nodes: any[]; edges: any[] } {
+  const thresholdValues = thresholdActions.map(ta => ta.threshold).sort((a, b) => a - b);
+  const name = `${trigger.name} Automation (${thresholdValues.join(', ')} ${trigger.thresholdUnit || ''})`;
+  const description = `Multi-tier ${trigger.name.toLowerCase()} automation with ${thresholdActions.length} trigger${thresholdActions.length > 1 ? 's' : ''}.`;
+
+  const nodes: any[] = [];
+  const edges: any[] = [];
+  const ySpacing = 120;
+
+  thresholdActions.forEach((ta, index) => {
+    const yPos = 100 + (index * ySpacing);
+    const triggerId = `trigger-node-${index}`;
+    const actionId = `action-node-${index}`;
+
+    nodes.push({
+      id: triggerId,
+      type: 'trigger',
+      position: { x: 100, y: yPos },
+      data: {
+        label: `${trigger.name} (${ta.threshold} ${trigger.thresholdUnit || ''})`,
+        triggerId: trigger.id,
+        category: trigger.category,
+        threshold: ta.threshold,
+        thresholdUnit: trigger.thresholdUnit,
+      },
+    });
+
+    nodes.push({
+      id: actionId,
+      type: 'action',
+      position: { x: 450, y: yPos },
+      data: {
+        label: ta.action.name,
+        actionId: ta.action.id,
+        category: ta.action.category,
+      },
+    });
+
+    edges.push({
+      id: `edge-${index}`,
+      source: triggerId,
+      target: actionId,
+      type: 'smoothstep',
+    });
+  });
 
   return { name, description, nodes, edges };
 }
