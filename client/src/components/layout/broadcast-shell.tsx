@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '@nanostores/react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, 
   Puzzle, 
@@ -15,13 +14,11 @@ import {
   Sun,
   Moon,
   Radio,
-  ChevronUp,
-  ChevronDown,
-  Circle,
   Activity,
   Volume2,
   VolumeX,
-  MonitorPlay
+  MonitorPlay,
+  Circle
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
@@ -47,35 +44,34 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
+  SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { $currentTeam, $currentUser, $commandPaletteOpen, $notifications } from '@/lib/stores';
 import { useTheme } from '@/hooks/use-theme';
 import { CommandPalette } from './command-palette';
-import { ContextRibbon } from './context-ribbon';
 
-interface WorkspaceItem {
+interface NavItem {
   id: string;
   label: string;
-  shortLabel: string;
   icon: React.ComponentType<{ className?: string }>;
   href: string;
-  color: string;
 }
 
-const workspaces: WorkspaceItem[] = [
-  { id: 'dashboard', label: 'Dashboard', shortLabel: 'DASH', icon: LayoutDashboard, href: '/', color: 'bg-blue-500' },
-  { id: 'modules', label: 'Modules', shortLabel: 'MOD', icon: Puzzle, href: '/modules', color: 'bg-purple-500' },
-  { id: 'workflows', label: 'Workflows', shortLabel: 'WRK', icon: Workflow, href: '/workflows', color: 'bg-amber-500' },
-  { id: 'assets', label: 'Assets', shortLabel: 'AST', icon: FolderOpen, href: '/assets', color: 'bg-green-500' },
-  { id: 'scenes', label: 'Scenes', shortLabel: 'SCN', icon: Layers, href: '/scenes', color: 'bg-rose-500' },
+const mainNavItems: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/' },
+  { id: 'modules', label: 'Modules', icon: Puzzle, href: '/modules' },
+  { id: 'workflows', label: 'Workflows', icon: Workflow, href: '/workflows' },
+  { id: 'assets', label: 'Assets', icon: FolderOpen, href: '/assets' },
+  { id: 'scenes', label: 'Scenes', icon: Layers, href: '/scenes' },
 ];
 
-const utilityItems = [
+const utilityItems: NavItem[] = [
   { id: 'team', label: 'Team', icon: Users, href: '/team' },
   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ];
@@ -143,8 +139,6 @@ function TransportControls() {
         <TooltipContent>{isLive ? 'End your stream' : 'Start streaming'}</TooltipContent>
       </Tooltip>
 
-      <Separator orientation="vertical" className="h-6 mx-2" />
-
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -162,153 +156,7 @@ function TransportControls() {
   );
 }
 
-function WorkspaceDock() {
-  const [location] = useLocation();
-  const [isExpanded, setIsExpanded] = useState(true);
-
-  const currentWorkspace = workspaces.find(w => {
-    if (w.href === '/') return location === '/';
-    return location.startsWith(w.href);
-  }) || workspaces[0];
-
-  return (
-    <motion.div
-      initial={false}
-      animate={{ height: isExpanded ? 'auto' : 48 }}
-      className="bg-card/95 backdrop-blur-md border-t border-border"
-    >
-      <div className="flex items-center justify-between px-2 h-12">
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setIsExpanded(!isExpanded)}
-            data-testid="button-toggle-dock"
-          >
-            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-          </Button>
-          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Workspaces
-          </span>
-        </div>
-
-        {!isExpanded && (
-          <div className="flex items-center gap-1">
-            {workspaces.map((workspace) => {
-              const Icon = workspace.icon;
-              const isActive = workspace === currentWorkspace;
-              return (
-                <Tooltip key={workspace.id}>
-                  <TooltipTrigger asChild>
-                    <Link href={workspace.href}>
-                      <Button
-                        variant={isActive ? "secondary" : "ghost"}
-                        size="icon"
-                        className="h-8 w-8"
-                        data-testid={`dock-item-${workspace.id}-collapsed`}
-                      >
-                        <Icon className={cn("h-4 w-4", isActive && "text-primary")} />
-                      </Button>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent>{workspace.label}</TooltipContent>
-                </Tooltip>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="flex items-center gap-1">
-          {utilityItems.map((item) => {
-            const Icon = item.icon;
-            const isActive = location === item.href;
-            return (
-              <Tooltip key={item.id}>
-                <TooltipTrigger asChild>
-                  <Link href={item.href}>
-                    <Button
-                      variant={isActive ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-8 w-8"
-                      data-testid={`dock-utility-${item.id}`}
-                    >
-                      <Icon className={cn("h-4 w-4", isActive && "text-primary")} />
-                    </Button>
-                  </Link>
-                </TooltipTrigger>
-                <TooltipContent>{item.label}</TooltipContent>
-              </Tooltip>
-            );
-          })}
-        </div>
-      </div>
-
-      <AnimatePresence>
-        {isExpanded && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="px-2 pb-2"
-          >
-            <div className="flex items-stretch gap-2">
-              {workspaces.map((workspace) => {
-                const Icon = workspace.icon;
-                const isActive = workspace === currentWorkspace;
-                return (
-                  <Link key={workspace.id} href={workspace.href} className="flex-1">
-                    <motion.div
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={cn(
-                        "relative flex flex-col items-center justify-center gap-2 p-4 rounded-lg cursor-pointer transition-all",
-                        "border-2",
-                        isActive
-                          ? "bg-primary/10 border-primary shadow-lg shadow-primary/20"
-                          : "bg-background/50 border-border hover:border-primary/50 hover:bg-background"
-                      )}
-                      data-testid={`dock-item-${workspace.id}`}
-                    >
-                      <div className={cn(
-                        "flex items-center justify-center w-10 h-10 rounded-lg",
-                        workspace.color,
-                        "text-white shadow-md"
-                      )}>
-                        <Icon className="h-5 w-5" />
-                      </div>
-                      
-                      <div className="text-center">
-                        <div className={cn(
-                          "text-xs font-bold uppercase tracking-wider",
-                          isActive ? "text-primary" : "text-muted-foreground"
-                        )}>
-                          {workspace.shortLabel}
-                        </div>
-                        <div className="text-[10px] text-muted-foreground mt-0.5">
-                          {workspace.label}
-                        </div>
-                      </div>
-
-                      {isActive && (
-                        <motion.div
-                          layoutId="workspace-indicator"
-                          className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-8 h-1 bg-primary rounded-full"
-                        />
-                      )}
-                    </motion.div>
-                  </Link>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-function BroadcastHeader() {
+function AppHeader() {
   const notifications = useStore($notifications);
   const currentUser = useStore($currentUser);
   const currentTeam = useStore($currentTeam);
@@ -324,24 +172,30 @@ function BroadcastHeader() {
   }, []);
 
   return (
-    <header className="h-14 bg-card/95 backdrop-blur-md border-b border-border flex items-center justify-between px-4 gap-4 shrink-0 z-50">
+    <header className="h-14 bg-card border-b border-border flex items-center justify-between px-4 gap-4 shrink-0">
       <div className="flex items-center gap-4">
+        <SidebarTrigger data-testid="button-sidebar-toggle" />
+        
+        <Separator orientation="vertical" className="h-6" />
+
         <div className="flex items-center gap-2">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary text-primary-foreground">
             <MonitorPlay className="h-4 w-4" />
           </div>
-          <span className="font-bold text-lg tracking-tight">{teamName}</span>
+          <span className="font-bold text-lg tracking-tight hidden sm:block">{teamName}</span>
         </div>
 
-        <Separator orientation="vertical" className="h-6" />
+        <Separator orientation="vertical" className="h-6 hidden md:block" />
 
-        <StreamStatus />
+        <div className="hidden md:block">
+          <StreamStatus />
+        </div>
       </div>
 
       <div className="flex items-center gap-2">
         <Button
           variant="outline"
-          className="hidden md:flex items-center gap-2 text-muted-foreground w-56 justify-start bg-background/50"
+          className="hidden lg:flex items-center gap-2 text-muted-foreground w-56 justify-start bg-background/50"
           onClick={openCommandPalette}
           data-testid="button-command-palette"
         >
@@ -352,11 +206,11 @@ function BroadcastHeader() {
           </kbd>
         </Button>
 
-        <Separator orientation="vertical" className="h-6" />
-
-        <TransportControls />
-
-        <Separator orientation="vertical" className="h-6" />
+        <div className="hidden md:flex items-center">
+          <Separator orientation="vertical" className="h-6 mr-2" />
+          <TransportControls />
+          <Separator orientation="vertical" className="h-6 ml-2" />
+        </div>
 
         <Tooltip>
           <TooltipTrigger asChild>
@@ -428,12 +282,13 @@ function AppSidebar() {
   const [location] = useLocation();
   
   return (
-    <Sidebar collapsible="icon" className="border-r-0">
-      <SidebarContent className="bg-sidebar">
+    <Sidebar collapsible="icon">
+      <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>Workspaces</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {workspaces.map((item) => {
+              {mainNavItems.map((item) => {
                 const isActive = item.href === '/' 
                   ? location === '/' 
                   : location.startsWith(item.href);
@@ -459,6 +314,7 @@ function AppSidebar() {
 
         <div className="mt-auto">
           <SidebarGroup>
+            <SidebarGroupLabel>Settings</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {utilityItems.map((item) => {
@@ -509,24 +365,21 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   }, []);
 
   const style = {
-    "--sidebar-width": "13rem",
+    "--sidebar-width": "14rem",
     "--sidebar-width-icon": "3rem",
   };
 
   return (
-    <SidebarProvider defaultOpen={false} style={style as React.CSSProperties}>
+    <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full overflow-hidden bg-background">
         <AppSidebar />
         
         <div className="flex flex-col flex-1 min-w-0">
-          <BroadcastHeader />
-          <ContextRibbon />
+          <AppHeader />
           
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-auto p-6">
             {children}
           </main>
-          
-          <WorkspaceDock />
         </div>
       </div>
       
