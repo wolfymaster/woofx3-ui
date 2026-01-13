@@ -496,6 +496,27 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  app.post('/api/assets', (req: Request, res: Response) => {
+    const { name, type, mimeType, size, tags = [] } = req.body;
+    if (!name || !type) {
+      return res.status(400).json({ code: 'BAD_REQUEST', message: 'Name and type are required' });
+    }
+    const newAsset = {
+      id: `asset-${Date.now()}`,
+      name,
+      type,
+      mimeType: mimeType || 'application/octet-stream',
+      size: size || 0,
+      url: `/assets/${name}`,
+      accountId: 'account-1',
+      tags,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockAssets.unshift(newAsset);
+    res.status(201).json(newAsset);
+  });
+
   app.get('/api/scenes', (req: Request, res: Response) => {
     const { page = '1', pageSize = '20', accountId } = req.query;
     let scenes = [...mockScenes];

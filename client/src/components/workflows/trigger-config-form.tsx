@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -5,12 +6,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { FileAudio, FileImage, FileVideo, Upload } from 'lucide-react';
+import { FileAudio, FileImage, FileVideo, Upload, X } from 'lucide-react';
 import { 
   type ConfigField, 
   type TriggerConfigValues, 
   type ConfigValue,
 } from '@/lib/workflow-presets';
+import { AssetLibraryModal } from './asset-library-modal';
+import type { Asset } from '@/types';
 
 interface ConfigFieldRendererProps {
   field: ConfigField;
@@ -188,39 +191,79 @@ function ToggleField({ field, value, onChange }: ConfigFieldRendererProps) {
   );
 }
 
+interface MediaFieldValue {
+  id: string;
+  name: string;
+  url: string;
+  type: string;
+}
+
 function MediaField({ field, value, onChange }: ConfigFieldRendererProps) {
+  const [modalOpen, setModalOpen] = useState(false);
   const MediaIcon = field.mediaType === 'audio' ? FileAudio : 
                     field.mediaType === 'video' ? FileVideo : FileImage;
+
+  const assetValue = value as MediaFieldValue | null;
+  const filterTypes = field.mediaType ? [field.mediaType] : undefined;
+
+  const handleSelect = (asset: Asset) => {
+    onChange({
+      id: asset.id,
+      name: asset.name,
+      url: asset.url,
+      type: asset.type,
+    });
+  };
 
   return (
     <div className="space-y-2">
       <Label>{field.label}</Label>
-      {value ? (
-        <Card className="p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <MediaIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm">{value}</span>
+      {assetValue ? (
+        <Card className="p-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <MediaIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-sm truncate">{assetValue.name}</span>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => onChange(null)}
-            data-testid={`button-remove-${field.id}`}
-          >
-            Remove
-          </Button>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => setModalOpen(true)}
+              data-testid={`button-change-${field.id}`}
+            >
+              Change
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => onChange(null)}
+              data-testid={`button-remove-${field.id}`}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
         </Card>
       ) : (
         <Button 
           variant="outline" 
           className="w-full justify-start gap-2"
-          onClick={() => onChange(`sample-${field.mediaType || 'file'}.${field.mediaType === 'audio' ? 'mp3' : field.mediaType === 'video' ? 'mp4' : 'png'}`)}
+          onClick={() => setModalOpen(true)}
           data-testid={`button-select-${field.id}`}
         >
           <Upload className="h-4 w-4" />
-          Select {field.mediaType || 'file'}
+          Browse Library
         </Button>
       )}
+
+      <AssetLibraryModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        onSelect={handleSelect}
+        filterTypes={filterTypes}
+        title={`Select ${field.label}`}
+        description={`Choose ${field.mediaType ? `a ${field.mediaType} file` : 'an asset'} from your library or upload a new one.`}
+      />
     </div>
   );
 }
