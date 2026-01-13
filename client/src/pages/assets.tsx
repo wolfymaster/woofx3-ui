@@ -494,13 +494,13 @@ export default function Assets() {
       )}
 
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted-foreground">
+        <div className="text-sm text-muted-foreground">
           {isLoading ? (
-            <Skeleton className="h-4 w-32 inline-block" />
+            <Skeleton className="h-4 w-32" />
           ) : (
-            <>{filteredAssets.length} files · {formatFileSize(totalSize)} total</>
+            <span>{filteredAssets.length} files · {formatFileSize(totalSize)} total</span>
           )}
-        </p>
+        </div>
         <Button variant="ghost" size="sm" onClick={handleSelectAll} disabled={isLoading}>
           {selectedAssets.size === filteredAssets.length ? 'Deselect All' : 'Select All'}
         </Button>
