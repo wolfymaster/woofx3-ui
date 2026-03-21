@@ -1,20 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Settings as SettingsIcon,
   User,
   Bell,
   Palette,
   Shield,
   Key,
-  Globe,
   Moon,
   Sun,
   Monitor,
   Check,
+  Server,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -32,15 +31,46 @@ import {
 import { PageHeader } from '@/components/layout/page-header';
 import { useTheme } from '@/hooks/use-theme';
 import { cn } from '@/lib/utils';
+import { $engineUrl, $apiKey } from '@/lib/stores';
+import { useStore } from '@nanostores/react';
+
+type UserPreferences = { email: boolean; push: boolean; workflow: boolean; marketing: boolean };
 
 export default function Settings() {
   const { theme, setTheme, preset, presets, setPreset } = useTheme();
-  const [notifications, setNotifications] = useState({
+  const queryClient = useQueryClient();
+
+  const { data: preferences, isLoading: prefsLoading } = useQuery({
+    queryKey: ['userPreferences'],
+    queryFn: (): Promise<UserPreferences> => Promise.resolve({ email: true, push: false, workflow: true, marketing: false }),
+  });
+
+  const [notifications, setNotifications] = useState<UserPreferences>({
     email: true,
     push: false,
     workflow: true,
     marketing: false,
   });
+
+  // Sync local state with fetched preferences
+  useEffect(() => {
+    if (preferences) {
+      setNotifications(preferences);
+    }
+  }, [preferences]);
+
+  const updatePrefsMutation = useMutation({
+    mutationFn: (prefs: UserPreferences) => Promise.resolve(prefs),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userPreferences'] });
+    },
+  });
+
+  const handleNotificationChange = (key: keyof UserPreferences, value: boolean) => {
+    const newPrefs = { ...notifications, [key]: value };
+    setNotifications(newPrefs);
+    updatePrefsMutation.mutate(newPrefs);
+  };
 
   return (
     <div className="p-6 lg:p-8 max-w-[1000px] mx-auto">
@@ -67,6 +97,10 @@ export default function Settings() {
             <TabsTrigger value="security" className="justify-start w-full" data-testid="tab-security">
               <Shield className="h-4 w-4 mr-2" />
               Security
+            </TabsTrigger>
+            <TabsTrigger value="engine" className="justify-start w-full" data-testid="tab-engine">
+              <Server className="h-4 w-4 mr-2" />
+              Engine
             </TabsTrigger>
             <TabsTrigger value="integrations" className="justify-start w-full" data-testid="tab-integrations">
               <Key className="h-4 w-4 mr-2" />
@@ -260,7 +294,8 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={notifications.email}
-                      onCheckedChange={(v) => setNotifications(prev => ({ ...prev, email: v }))}
+                      onCheckedChange={(v) => handleNotificationChange('email', v)}
+                      disabled={prefsLoading}
                       data-testid="switch-email-notifications"
                     />
                   </div>
@@ -274,7 +309,8 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={notifications.push}
-                      onCheckedChange={(v) => setNotifications(prev => ({ ...prev, push: v }))}
+                      onCheckedChange={(v) => handleNotificationChange('push', v)}
+                      disabled={prefsLoading}
                       data-testid="switch-push-notifications"
                     />
                   </div>
@@ -288,7 +324,8 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={notifications.workflow}
-                      onCheckedChange={(v) => setNotifications(prev => ({ ...prev, workflow: v }))}
+                      onCheckedChange={(v) => handleNotificationChange('workflow', v)}
+                      disabled={prefsLoading}
                       data-testid="switch-workflow-notifications"
                     />
                   </div>
@@ -302,7 +339,8 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={notifications.marketing}
-                      onCheckedChange={(v) => setNotifications(prev => ({ ...prev, marketing: v }))}
+                      onCheckedChange={(v) => handleNotificationChange('marketing', v)}
+                      disabled={prefsLoading}
                       data-testid="switch-marketing-notifications"
                     />
                   </div>
@@ -358,6 +396,54 @@ export default function Settings() {
                 </CardHeader>
                 <CardContent>
                   <Button variant="destructive" data-testid="button-delete-account">Delete Account</Button>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="engine" className="mt-0">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Engine Configuration</CardTitle>
+                  <CardDescription>
+                    Configure the backend API endpoint and authentication for the UI.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="grid gap-2">
+                    <Label htmlFor="engine-url">Engine URL</Label>
+                    <Input
+                      id="engine-url"
+                      placeholder="localhost:8080 or https://api.example.com"
+                      value={useStore($engineUrl)}
+                      onChange={(e) => $engineUrl.set(e.target.value)}
+                      data-testid="input-engine-url"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      The hostname and port (or full URL) where the backend API is running.
+                      If no protocol is specified, the current page's protocol will be used.
+                    </p>
+                  </div>
+                  <Separator />
+                  <div className="grid gap-2">
+                    <Label htmlFor="api-key">API Key</Label>
+                    <Input
+                      id="api-key"
+                      type="password"
+                      placeholder="Enter your API key"
+                      value={useStore($apiKey)}
+                      onChange={(e) => $apiKey.set(e.target.value)}
+                      data-testid="input-api-key"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Optional API key for authenticating with the backend API.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                    <div className="h-2 w-2 rounded-full bg-green-500" />
+                    <p className="text-sm text-muted-foreground">
+                      Changes are saved automatically and will reconnect the WebSocket connection.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>

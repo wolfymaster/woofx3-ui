@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Plus,
   Search,
@@ -11,7 +12,6 @@ import {
   Mail,
   Trash2,
   Edit3,
-  Copy,
   ExternalLink,
   Building2,
 } from 'lucide-react';
@@ -54,41 +54,10 @@ import {
 } from '@/components/ui/table';
 import { Label } from '@/components/ui/label';
 import { PageHeader } from '@/components/layout/page-header';
-import { EmptyState } from '@/components/common/empty-state';
 import { cn } from '@/lib/utils';
+import type { TeamMember } from '@shared/api';
 
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-  role: 'owner' | 'admin' | 'member' | 'viewer';
-  status: 'active' | 'pending' | 'inactive';
-  joinedAt: string;
-}
-
-interface Account {
-  id: string;
-  name: string;
-  slug: string;
-  avatar?: string;
-  memberCount: number;
-  createdAt: string;
-}
-
-const mockMembers: TeamMember[] = [
-  { id: '1', name: 'Alex Chen', email: 'alex@example.com', role: 'owner', status: 'active', joinedAt: '2024-01-01' },
-  { id: '2', name: 'Sarah Kim', email: 'sarah@example.com', role: 'admin', status: 'active', joinedAt: '2024-01-05' },
-  { id: '3', name: 'Jordan Lee', email: 'jordan@example.com', role: 'member', status: 'active', joinedAt: '2024-01-10' },
-  { id: '4', name: 'Taylor Swift', email: 'taylor@example.com', role: 'member', status: 'pending', joinedAt: '2024-01-12' },
-  { id: '5', name: 'Chris Park', email: 'chris@example.com', role: 'viewer', status: 'active', joinedAt: '2024-01-08' },
-];
-
-const mockAccounts: Account[] = [
-  { id: '1', name: 'Main Channel', slug: 'main-channel', memberCount: 4, createdAt: '2024-01-01' },
-  { id: '2', name: 'Gaming Channel', slug: 'gaming-channel', memberCount: 2, createdAt: '2024-01-05' },
-  { id: '3', name: 'IRL Streams', slug: 'irl-streams', memberCount: 3, createdAt: '2024-01-10' },
-];
+type Account = { id: string; name: string; displayName?: string; slug: string; createdAt: string };
 
 const roleColors: Record<string, string> = {
   owner: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
@@ -112,7 +81,20 @@ export default function Team() {
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [newAccountName, setNewAccountName] = useState('');
 
-  const filteredMembers = mockMembers.filter(m =>
+  // TODO: Get current team ID from context/store
+  const teamId = 'team-1';
+
+  const { data: members = [], isLoading: membersLoading } = useQuery({
+    queryKey: ['teamMembers', teamId],
+    queryFn: (): Promise<TeamMember[]> => Promise.resolve([]),
+  });
+
+  const { data: accounts = [], isLoading: accountsLoading } = useQuery({
+    queryKey: ['accounts', teamId],
+    queryFn: (): Promise<Account[]> => Promise.resolve([]),
+  });
+
+  const filteredMembers = members.filter(m =>
     m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     m.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -142,12 +124,12 @@ export default function Team() {
           <TabsTrigger value="members" data-testid="tab-members">
             <Users className="h-4 w-4 mr-2" />
             Members
-            <Badge variant="secondary" className="ml-2">{mockMembers.length}</Badge>
+            <Badge variant="secondary" className="ml-2">{members.length}</Badge>
           </TabsTrigger>
           <TabsTrigger value="accounts" data-testid="tab-accounts">
             <Building2 className="h-4 w-4 mr-2" />
             Accounts
-            <Badge variant="secondary" className="ml-2">{mockAccounts.length}</Badge>
+            <Badge variant="secondary" className="ml-2">{accounts.length}</Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -229,75 +211,79 @@ export default function Team() {
                 </div>
               </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Member</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Joined</TableHead>
-                    <TableHead className="w-10"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredMembers.map(member => (
-                    <TableRow key={member.id} className="hover-elevate" data-testid={`row-member-${member.id}`}>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarImage src={member.avatar} />
-                            <AvatarFallback className="text-xs">
-                              {member.name.split(' ').map(n => n[0]).join('')}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{member.name}</p>
-                            <p className="text-sm text-muted-foreground">{member.email}</p>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn('capitalize', roleColors[member.role])}>
-                          {roleIcons[member.role]}
-                          {member.role}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={member.status === 'active' ? 'secondary' : 'outline'} className="capitalize">
-                          {member.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {new Date(member.joinedAt).toLocaleDateString()}
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Edit3 className="h-4 w-4 mr-2" />
-                              Edit Role
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>
-                              <Mail className="h-4 w-4 mr-2" />
-                              Resend Invite
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem className="text-destructive focus:text-destructive">
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Remove
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+              {membersLoading ? (
+                <div className="text-center py-8 text-muted-foreground">Loading members...</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Member</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Joined</TableHead>
+                      <TableHead className="w-10"></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMembers.map(member => (
+                      <TableRow key={member.id} className="hover-elevate" data-testid={`row-member-${member.id}`}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={member.avatarUrl} />
+                              <AvatarFallback className="text-xs">
+                                {member.name.split(' ').map(n => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">{member.name}</p>
+                              <p className="text-sm text-muted-foreground">{member.email}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn('capitalize', roleColors[member.role])}>
+                            {roleIcons[member.role]}
+                            {member.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={member.status === 'active' ? 'secondary' : 'outline'} className="capitalize">
+                            {member.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {new Date(member.joinedAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem>
+                                <Edit3 className="h-4 w-4 mr-2" />
+                                Edit Role
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Mail className="h-4 w-4 mr-2" />
+                                Resend Invite
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-destructive focus:text-destructive">
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Remove
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -344,13 +330,14 @@ export default function Team() {
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {mockAccounts.map(account => (
+            {accountsLoading ? (
+              <div className="col-span-full text-center py-8 text-muted-foreground">Loading accounts...</div>
+            ) : accounts.map(account => (
               <Card key={account.id} className="hover-elevate" data-testid={`card-account-${account.id}`}>
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-12 w-12">
-                        <AvatarImage src={account.avatar} />
                         <AvatarFallback className="bg-primary/10 text-primary">
                           {account.name.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
@@ -388,10 +375,6 @@ export default function Team() {
                     </DropdownMenu>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      {account.memberCount} members
-                    </span>
                     <span>Created {new Date(account.createdAt).toLocaleDateString()}</span>
                   </div>
                 </CardContent>

@@ -47,8 +47,8 @@ import {
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
-import { queryClient, apiRequest } from '@/lib/queryClient';
-import type { Scene, PaginatedResponse } from '@/types';
+import { queryClient } from '@/lib/queryClient';
+import type { Scene, PaginatedResponse, CreateSceneInput } from '@shared/api';
 
 interface SceneCardProps {
   scene: Scene;
@@ -152,19 +152,17 @@ export default function Scenes() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const { data: scenesData, isLoading, error, refetch } = useQuery<PaginatedResponse<Scene>>({
-    queryKey: ['/api/scenes'],
+  const { data: scenesData, isLoading, error, refetch } = useQuery({
+    queryKey: ['scenes'],
+    queryFn: (): Promise<PaginatedResponse<Scene>> => Promise.resolve({ data: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0, hasNext: false, hasPrev: false } }),
   });
 
   const scenes = scenesData?.data || [];
 
   const createMutation = useMutation({
-    mutationFn: async (data: Partial<Scene>) => {
-      const response = await apiRequest('POST', '/api/scenes', data);
-      return response.json();
-    },
+    mutationFn: (_data: CreateSceneInput): Promise<Scene> => Promise.reject(new Error('Not implemented')),
     onSuccess: (newScene) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/scenes'] });
+      queryClient.invalidateQueries({ queryKey: ['scenes'] });
       setIsCreating(false);
       setNewSceneName('');
       navigate(`/scenes/${newScene.id}`);
@@ -172,11 +170,9 @@ export default function Scenes() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest('DELETE', `/api/scenes/${id}`);
-    },
+    mutationFn: (_id: string): Promise<boolean> => Promise.resolve(false),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/scenes'] });
+      queryClient.invalidateQueries({ queryKey: ['scenes'] });
       setDeleteDialogOpen(false);
       setDeletingId(null);
     },

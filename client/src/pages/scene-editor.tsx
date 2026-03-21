@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -77,22 +78,17 @@ const widgetTypes = [
   { type: 'custom', label: 'Custom HTML', icon: Code },
 ];
 
-const mockScene: Scene = {
-  id: '1',
-  name: 'Main Overlay',
-  description: 'Primary streaming overlay with chat and alerts',
-  accountId: '1',
+const defaultScene: Scene = {
+  id: '',
+  name: 'New Scene',
+  description: '',
+  accountId: '',
   width: 1920,
   height: 1080,
   backgroundColor: 'transparent',
-  widgets: [
-    { id: 'w1', type: 'text', name: 'Stream Title', position: { x: 50, y: 50 }, size: { width: 400, height: 60 }, rotation: 0, opacity: 100, zIndex: 3, locked: false, visible: true, properties: { text: 'Welcome to the Stream!', fontSize: 32, fontFamily: 'Inter', color: '#ffffff', align: 'left' } },
-    { id: 'w2', type: 'image', name: 'Logo', position: { x: 1720, y: 50 }, size: { width: 150, height: 150 }, rotation: 0, opacity: 100, zIndex: 2, locked: false, visible: true, properties: { src: '/logo.png' } },
-    { id: 'w3', type: 'chat', name: 'Chat Widget', position: { x: 1520, y: 600 }, size: { width: 380, height: 400 }, rotation: 0, opacity: 80, zIndex: 1, locked: false, visible: true, properties: {} },
-    { id: 'w4', type: 'shape', name: 'Background Box', position: { x: 30, y: 30 }, size: { width: 440, height: 100 }, rotation: 0, opacity: 50, zIndex: 0, locked: false, visible: true, properties: { fill: '#000000', borderRadius: 8 } },
-  ],
-  createdAt: '2024-01-01',
-  updatedAt: '2024-01-10',
+  widgets: [],
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
 };
 
 interface SortableLayerItemProps {
@@ -301,11 +297,40 @@ function CanvasWidget({ widget, isSelected, scale, onSelect, onMove, onResize }:
 export default function SceneEditor() {
   const [, params] = useRoute('/scenes/:id');
   const [, navigate] = useLocation();
-  const [scene, setScene] = useState<Scene>(mockScene);
+  const queryClient = useQueryClient();
+  const sceneId = params?.id;
+
+  const { data: fetchedScene, isLoading } = useQuery({
+    queryKey: ['scene', sceneId],
+    queryFn: (): Promise<Scene | null> => Promise.resolve(null),
+    enabled: !!sceneId,
+  });
+
+  const [scene, setScene] = useState<Scene>(defaultScene);
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.5);
   const [showGrid, setShowGrid] = useState(true);
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Sync fetched scene to local state when it loads
+  useEffect(() => {
+    if (fetchedScene) {
+      setScene(fetchedScene);
+    }
+  }, [fetchedScene]);
+
+  const saveMutation = useMutation({
+    mutationFn: (): Promise<Scene | null> => Promise.resolve(null),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scene', sceneId] });
+    },
+  });
+
+  const handleSave = useCallback(() => {
+    if (sceneId) {
+      saveMutation.mutate();
+    }
+  }, [sceneId, saveMutation]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -411,6 +436,14 @@ export default function SceneEditor() {
     }
   }, [scene.widgets]);
 
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-muted-foreground">Loading scene...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
@@ -439,9 +472,13 @@ export default function SceneEditor() {
             <Play className="h-4 w-4 mr-2" />
             Preview
           </Button>
-          <Button data-testid="button-save-scene">
+          <Button
+            onClick={handleSave}
+            disabled={saveMutation.isPending || !sceneId}
+            data-testid="button-save-scene"
+          >
             <Save className="h-4 w-4 mr-2" />
-            Save
+            {saveMutation.isPending ? 'Saving...' : 'Save'}
           </Button>
         </div>
       </div>

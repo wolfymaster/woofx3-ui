@@ -15,30 +15,71 @@ export interface PaginatedResponse<T> {
   };
 }
 
-export interface User {
-  id: string;
-  email: string;
-  displayName: string;
-  role: string;
-  teamIds: string[];
-  accountIds: string[];
-  createdAt: string;
+export interface StreamStatus {
+  isLive: boolean;
+  uptime: string;
+  viewerCount: number;
+  startedAt?: string;
 }
 
-export interface Team {
-  id: string;
-  name: string;
-  slug: string;
-  ownerId: string;
-  createdAt: string;
+// Configuration field types for dynamic forms
+export type ConfigFieldType = 'string' | 'number' | 'boolean' | 'select' | 'multiselect' | 'range' | 'color' | 'media' | 'json';
+
+export interface ConfigFieldOption {
+  value: string;
+  label: string;
 }
 
-export interface Account {
+export interface ConfigField {
   id: string;
   name: string;
-  slug: string;
-  teamId: string;
-  createdAt: string;
+  type: ConfigFieldType;
+  label: string;
+  description?: string;
+  required?: boolean;
+  placeholder?: string;
+  defaultValue?: unknown;
+  options?: ConfigFieldOption[];
+  // For number/range fields
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  // For media fields
+  mediaType?: 'image' | 'audio' | 'video';
+  // Validation
+  validation?: {
+    pattern?: string;
+    message?: string;
+  };
+}
+
+export interface TriggerDefinition {
+  id: string;
+  moduleId: string;
+  name: string;
+  description: string;
+  icon: string; // Icon name (e.g., 'MessageCircle', 'UserPlus')
+  category: string;
+  color?: string;
+  config: {
+    fields: ConfigField[];
+    supportsTiers?: boolean;
+    tierLabel?: string;
+  };
+}
+
+export interface ActionDefinition {
+  id: string;
+  moduleId: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  color?: string;
+  config: {
+    fields: ConfigField[];
+  };
 }
 
 export interface Module {
@@ -196,36 +237,67 @@ export interface DashboardStats {
   };
 }
 
-export interface StreamControlApi {
-  getUser(): Promise<User>;
-
-  getTeams(): Promise<Team[]>;
-  getTeam(id: string): Promise<Team | null>;
-
-  getAccounts(teamId?: string): Promise<Account[]>;
-  getAccount(id: string): Promise<Account | null>;
-
-  getModules(query?: ModulesQuery): Promise<PaginatedResponse<Module>>;
-  getModule(id: string): Promise<Module | null>;
-  installModule(id: string): Promise<Module>;
-  uninstallModule(id: string): Promise<Module>;
-
-  getWorkflows(query?: WorkflowsQuery): Promise<PaginatedResponse<Workflow>>;
-  getWorkflow(id: string): Promise<Workflow | null>;
-  createWorkflow(input: CreateWorkflowInput): Promise<Workflow>;
-  updateWorkflow(id: string, input: UpdateWorkflowInput): Promise<Workflow | null>;
-  deleteWorkflow(id: string): Promise<boolean>;
-
-  getAssets(query?: AssetsQuery): Promise<PaginatedResponse<Asset>>;
-  getAsset(id: string): Promise<Asset | null>;
-  createAsset(input: CreateAssetInput): Promise<Asset>;
-  deleteAsset(id: string): Promise<boolean>;
-
-  getScenes(query?: ScenesQuery): Promise<PaginatedResponse<Scene>>;
-  getScene(id: string): Promise<Scene | null>;
-  createScene(input: CreateSceneInput): Promise<Scene>;
-  updateScene(id: string, input: UpdateSceneInput): Promise<Scene | null>;
-  deleteScene(id: string): Promise<boolean>;
-
-  getDashboardStats(): Promise<DashboardStats>;
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: 'owner' | 'admin' | 'member';
+  status: 'active' | 'invited' | 'inactive';
+  joinedAt: string;
+  avatarUrl?: string;
 }
+
+export interface WorkflowRun {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: 'success' | 'failed' | 'running';
+  startedAt: string;
+  duration: number;
+  trigger: string;
+}
+
+export interface WorkflowRunsQuery {
+  workflowId?: string;
+  accountId?: string;
+  limit?: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  user: string;
+  message: string;
+  timestamp: string;
+  badges: string[];
+  color: string;
+}
+
+export interface StreamEvent {
+  id: string;
+  type: 'follow' | 'subscription' | 'donation' | 'raid' | 'cheer' | 'gift';
+  user: string;
+  amount?: number;
+  message?: string;
+  timestamp: string;
+}
+
+export interface StreamEventsQuery {
+  accountId: string;
+  limit?: number;
+  types?: string[];
+}
+
+export interface UserPreferences {
+  email: boolean;
+  push: boolean;
+  workflow: boolean;
+  marketing: boolean;
+}
+
+export interface DashboardModule {
+  id: string;
+  type: string;
+  title: string;
+  config?: Record<string, unknown>;
+}
+

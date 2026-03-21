@@ -45,7 +45,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
-import { $sidebarCollapsed, $currentTeam, $currentAccount, $currentUser, $commandPaletteOpen, $notifications } from '@/lib/stores';
+import { $sidebarCollapsed, $commandPaletteOpen, $notifications } from '@/lib/stores';
 import { useTheme } from '@/hooks/use-theme';
 import type { NavigationItem } from '@/types';
 
@@ -211,10 +211,7 @@ function NavItem({ item, collapsed, depth = 0 }: NavItemProps) {
 }
 
 function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
-  const currentTeam = useStore($currentTeam);
-  const currentAccount = useStore($currentAccount);
-
-  const displayName = currentAccount?.name || currentTeam?.name || 'Select Team';
+  const displayName = 'Select Instance';
   const initials = displayName.slice(0, 2).toUpperCase();
 
   if (collapsed) {
@@ -223,7 +220,7 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="w-10 h-10" data-testid="button-team-switcher">
             <Avatar className="h-8 w-8">
-              <AvatarImage src={currentAccount?.avatarUrl || currentTeam?.avatarUrl} />
+              <AvatarImage src={undefined} />
               <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
                 {initials}
               </AvatarFallback>
@@ -255,7 +252,7 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
           data-testid="button-team-switcher"
         >
           <Avatar className="h-9 w-9">
-            <AvatarImage src={currentAccount?.avatarUrl || currentTeam?.avatarUrl} />
+            <AvatarImage src={undefined} />
             <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
               {initials}
             </AvatarFallback>
@@ -263,7 +260,7 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold truncate">{displayName}</p>
             <p className="text-xs text-muted-foreground truncate">
-              {currentAccount ? 'Account' : 'Team'}
+              {'Instance'}
             </p>
           </div>
           <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -298,12 +295,11 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
 }
 
 function UserMenu({ collapsed }: { collapsed: boolean }) {
-  const currentUser = useStore($currentUser);
   const { theme, toggleTheme, preset, presets, setPreset } = useTheme();
 
-  const displayName = currentUser?.displayName || 'Demo User';
-  const email = currentUser?.email || 'demo@streamcontrol.io';
-  const initials = displayName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  const displayName = 'Demo User';
+  const email = 'demo@streamcontrol.io';
+  const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
 
   const content = (
     <div className={cn(
@@ -311,7 +307,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
       collapsed && 'justify-center'
     )}>
       <Avatar className="h-8 w-8">
-        <AvatarImage src={currentUser?.avatarUrl} />
+        <AvatarImage src={undefined} />
         <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
           {initials}
         </AvatarFallback>
