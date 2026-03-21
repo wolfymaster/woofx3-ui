@@ -1,12 +1,11 @@
 import { useState } from 'react';
+import { useQuery as useConvexQuery } from 'convex/react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link, useLocation } from 'wouter';
-import { 
-  Plus, 
-  Search, 
+import {
+  Plus,
+  Search,
   MoreHorizontal,
-  Play,
-  Pause,
   Copy,
   Trash2,
   Edit3,
@@ -14,12 +13,13 @@ import {
   Zap,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
+  BookTemplate,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -46,19 +46,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
 import { cn } from '@/lib/utils';
-import { queryClient, apiRequest } from '@/lib/queryClient';
-import type { Workflow, PaginatedResponse } from '@/types';
-
-interface WorkflowWithStats extends Workflow {
-  stats: { runsToday: number; successRate: number };
-}
+import { transport } from '@/lib/transport';
+import type { Workflow, CreateWorkflowInput } from '@/lib/transport';
+import { useInstance } from '@/hooks/use-instance';
+import { api } from '@convex/_generated/api';
 
 interface WorkflowCardProps {
-  workflow: WorkflowWithStats;
+  workflow: Workflow;
   onToggle: (id: string, enabled: boolean) => void;
   onEdit: (id: string) => void;
   onDuplicate: (id: string) => void;
@@ -70,7 +75,7 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
   const [, navigate] = useLocation();
 
   return (
-    <Card 
+    <Card
       className="group hover-elevate cursor-pointer overflow-visible"
       onClick={() => navigate(`/workflows/${workflow.id}`)}
       data-testid={`card-workflow-${workflow.id}`}
@@ -80,7 +85,7 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
           <div className="flex items-start gap-3 flex-1 min-w-0">
             <div className={cn(
               'h-10 w-10 rounded-lg flex items-center justify-center shrink-0',
-              workflow.isEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+              workflow.enabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
             )}>
               <WorkflowIcon className="h-5 w-5" />
             </div>
@@ -91,7 +96,7 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
                 </h3>
               </div>
               <p className="text-sm text-muted-foreground line-clamp-2">
-                {workflow.description}
+                {workflow.description ?? ''}
               </p>
             </div>
           </div>
@@ -100,7 +105,7 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Switch
-                checked={workflow.isEnabled}
+                checked={workflow.enabled}
                 onCheckedChange={(checked) => onToggle(workflow.id, checked)}
                 data-testid={`switch-workflow-${workflow.id}`}
               />
@@ -121,7 +126,7 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
                   Duplicate
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem 
+                <DropdownMenuItem
                   onClick={() => onDelete(workflow.id)}
                   className="text-destructive focus:text-destructive"
                 >
@@ -136,19 +141,14 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
         <div className="flex items-center gap-4 pt-4 border-t border-border/50">
           <div className="flex items-center gap-1.5 text-sm">
             <Zap className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{workflow.stats.runsToday}</span>
-            <span className="text-muted-foreground">runs today</span>
+            <span className="font-medium">{workflow.steps.length}</span>
+            <span className="text-muted-foreground">steps</span>
           </div>
           <div className="flex items-center gap-1.5 text-sm">
-            {workflow.stats.successRate >= 95 ? (
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
-            ) : workflow.stats.successRate >= 80 ? (
-              <AlertCircle className="h-4 w-4 text-yellow-500" />
-            ) : (
-              <AlertCircle className="h-4 w-4 text-red-500" />
-            )}
-            <span className="font-medium">{workflow.stats.successRate}%</span>
-            <span className="text-muted-foreground">success</span>
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <span className="font-medium text-muted-foreground">
+              {workflow.enabled ? 'Active' : 'Inactive'}
+            </span>
           </div>
         </div>
       </CardContent>
@@ -177,176 +177,167 @@ function WorkflowCardSkeleton() {
   );
 }
 
+type WorkflowTemplate = {
+  _id: string;
+  name: string;
+  description: string;
+  trigger: string;
+  workflowJson: Record<string, unknown>;
+};
+
+function TemplatePickerDialog({
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (template: WorkflowTemplate) => void;
+}) {
+  const templates = useConvexQuery(api.workflowTemplates.list, {}) as WorkflowTemplate[] | undefined;
+
+  const triggerEmoji: Record<string, string> = {
+    follow: '👤',
+    subscribe: '⭐',
+    bits: '💎',
+    raid: '🚨',
+    gift: '🎁',
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>From Template</DialogTitle>
+          <DialogDescription>
+            Choose a Twitch event template to pre-populate your workflow.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 mt-2">
+          {templates === undefined ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))
+          ) : templates.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">No templates available.</p>
+          ) : (
+            templates.map((t) => (
+              <button
+                key={t._id}
+                className="w-full text-left p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                onClick={() => { onSelect(t); onOpenChange(false); }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">{triggerEmoji[t.trigger] ?? '⚡'}</span>
+                  <div>
+                    <p className="font-medium text-sm">{t.name}</p>
+                    <p className="text-xs text-muted-foreground">{t.description}</p>
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Workflows() {
   const [, navigate] = useLocation();
+  const { instance } = useInstance();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
-  const { data: workflowsData, isLoading, error, refetch } = useQuery<PaginatedResponse<WorkflowWithStats>>({
-    queryKey: ['/api/workflows'],
+  const instanceId = instance?._id ?? '';
+
+  const { data: workflows = [], isLoading, error, refetch } = useQuery({
+    queryKey: ['workflows', instanceId],
+    queryFn: () => (instanceId ? transport.getWorkflows(instanceId) : Promise.resolve([])),
+    enabled: !!instanceId,
   });
-
-  const workflows = workflowsData?.data || [];
 
   const toggleMutation = useMutation({
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
       setTogglingId(id);
-      const response = await apiRequest('PATCH', `/api/workflows/${id}`, { isEnabled: enabled });
-      return response.json();
+      return transport.updateWorkflow(instanceId, id, { enabled });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/workflows'] });
-      setTogglingId(null);
-    },
-    onError: () => {
-      setTogglingId(null);
-    },
+    onSuccess: () => { refetch(); setTogglingId(null); },
+    onError: () => setTogglingId(null),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest('DELETE', `/api/workflows/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/workflows'] });
-      setDeleteDialogOpen(false);
-      setDeletingId(null);
-    },
+    mutationFn: (id: string) => transport.deleteWorkflow(instanceId, id),
+    onSuccess: () => { refetch(); setDeleteDialogOpen(false); setDeletingId(null); },
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: Partial<Workflow>) => {
-      const response = await apiRequest('POST', '/api/workflows', data);
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/workflows'] });
-    },
+    mutationFn: (data: CreateWorkflowInput) => transport.createWorkflow(instanceId, data),
+    onSuccess: () => refetch(),
   });
 
-  const filteredWorkflows = workflows.filter(w => {
+  const filteredWorkflows = workflows.filter((w) => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       if (!w.name.toLowerCase().includes(query) && !w.description?.toLowerCase().includes(query)) {
         return false;
       }
     }
-    if (statusFilter === 'enabled' && !w.isEnabled) return false;
-    if (statusFilter === 'disabled' && w.isEnabled) return false;
+    if (statusFilter === 'enabled' && !w.enabled) return false;
+    if (statusFilter === 'disabled' && w.enabled) return false;
     return true;
   });
 
-  const handleToggle = (id: string, enabled: boolean) => {
-    toggleMutation.mutate({ id, enabled });
-  };
-
-  const handleEdit = (id: string) => {
-    navigate(`/workflows/${id}`);
-  };
+  const handleToggle = (id: string, enabled: boolean) => toggleMutation.mutate({ id, enabled });
+  const handleEdit = (id: string) => navigate(`/workflows/${id}`);
 
   const handleDuplicate = (id: string) => {
-    const workflow = workflows.find(w => w.id === id);
-    if (workflow) {
-      createMutation.mutate({
-        name: `${workflow.name} (Copy)`,
-        description: workflow.description,
-        accountId: workflow.accountId,
-        isEnabled: false,
-        nodes: workflow.nodes,
-        edges: workflow.edges,
-      });
-    }
+    const workflow = workflows.find((w) => w.id === id);
+    if (!workflow) return;
+    createMutation.mutate({
+      name: `${workflow.name} (Copy)`,
+      description: workflow.description,
+      enabled: false,
+      steps: workflow.steps,
+    });
   };
 
-  const handleDelete = (id: string) => {
-    setDeletingId(id);
-    setDeleteDialogOpen(true);
-  };
+  const handleDelete = (id: string) => { setDeletingId(id); setDeleteDialogOpen(true); };
+  const confirmDelete = () => { if (deletingId) deleteMutation.mutate(deletingId); };
 
-  const confirmDelete = () => {
-    if (deletingId) {
-      deleteMutation.mutate(deletingId);
-    }
+  const handleTemplateSelect = (template: WorkflowTemplate) => {
+    const wf = template.workflowJson as { name?: string; steps?: unknown[]; variables?: Record<string, string> };
+    createMutation.mutate({
+      name: wf.name ?? template.name,
+      description: template.description,
+      enabled: false,
+      steps: (wf.steps as CreateWorkflowInput['steps']) ?? [],
+      variables: wf.variables,
+    });
   };
-
-  const enabledCount = workflows.filter(w => w.isEnabled).length;
-  const totalRuns = workflows.reduce((sum, w) => sum + w.stats.runsToday, 0);
-  const avgSuccess = workflows.length > 0 
-    ? (workflows.reduce((sum, w) => sum + w.stats.successRate, 0) / workflows.length).toFixed(1)
-    : '0';
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
-      <PageHeader 
-        title="Workflows" 
+      <PageHeader
+        title="Workflows"
         description="Automate your stream with trigger-action workflows."
         actions={
-          <Button onClick={() => navigate('/workflows/new')} data-testid="button-new-workflow">
-            <Plus className="h-4 w-4 mr-2" />
-            New Workflow
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setTemplateDialogOpen(true)}>
+              <BookTemplate className="h-4 w-4 mr-2" />
+              From Template
+            </Button>
+            <Button onClick={() => navigate('/workflows/new')} data-testid="button-new-workflow">
+              <Plus className="h-4 w-4 mr-2" />
+              New Workflow
+            </Button>
+          </div>
         }
       />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Workflows</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-12 mb-1" />
-                <Skeleton className="h-3 w-20" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{workflows.length}</div>
-                <p className="text-xs text-muted-foreground">{enabledCount} enabled</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Runs Today</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-16 mb-1" />
-                <Skeleton className="h-3 w-24" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{totalRuns.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">across all workflows</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Average Success</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <>
-                <Skeleton className="h-8 w-14 mb-1" />
-                <Skeleton className="h-3 w-28" />
-              </>
-            ) : (
-              <>
-                <div className="text-2xl font-bold">{avgSuccess}%</div>
-                <p className="text-xs text-muted-foreground">workflow completion rate</p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="relative flex-1 max-w-sm">
@@ -376,7 +367,7 @@ export default function Workflows() {
       {error ? (
         <ErrorState
           title="Failed to load workflows"
-          message="An error occurred while fetching the workflows."
+          message="Unable to connect to the woofx3 instance."
           onRetry={() => refetch()}
         />
       ) : isLoading ? (
@@ -389,19 +380,16 @@ export default function Workflows() {
         <EmptyState
           icon={WorkflowIcon}
           title="No workflows found"
-          description={workflows.length === 0 
-            ? "Create your first workflow to start automating your stream."
-            : "Try adjusting your search or filters."
+          description={
+            workflows.length === 0
+              ? 'Create your first workflow to start automating your stream.'
+              : 'Try adjusting your search or filters.'
           }
           action={{
             label: workflows.length === 0 ? 'Create Workflow' : 'Clear Filters',
             onClick: () => {
-              if (workflows.length === 0) {
-                navigate('/workflows/new');
-              } else {
-                setSearchQuery('');
-                setStatusFilter('all');
-              }
+              if (workflows.length === 0) navigate('/workflows/new');
+              else { setSearchQuery(''); setStatusFilter('all'); }
             },
           }}
         />
@@ -431,18 +419,22 @@ export default function Workflows() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : null}
+              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <TemplatePickerDialog
+        open={templateDialogOpen}
+        onOpenChange={setTemplateDialogOpen}
+        onSelect={handleTemplateSelect}
+      />
     </div>
   );
 }

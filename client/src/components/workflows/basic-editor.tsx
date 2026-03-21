@@ -9,9 +9,9 @@ import { cn } from '@/lib/utils';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
 import { TriggerConfigForm } from './trigger-config-form';
-import { 
-  triggerPresets, 
-  actionPresets, 
+import {
+  triggerPresets,
+  actionPresets,
   generateWorkflowFromPresets,
   generateMultiTierWorkflow,
   getDefaultConfigValues,
@@ -27,15 +27,15 @@ interface PresetCardProps<T extends TriggerPreset | ActionPreset> {
   onClick: () => void;
 }
 
-function PresetCard<T extends TriggerPreset | ActionPreset>({ 
-  preset, 
-  isSelected, 
-  onClick 
+function PresetCard<T extends TriggerPreset | ActionPreset>({
+  preset,
+  isSelected,
+  onClick
 }: PresetCardProps<T>) {
   const Icon = preset.icon;
-  
+
   return (
-    <Card 
+    <Card
       className={cn(
         "p-4 cursor-pointer transition-all hover-elevate",
         isSelected && "ring-2 ring-primary bg-primary/5"
@@ -64,44 +64,78 @@ function PresetCard<T extends TriggerPreset | ActionPreset>({
   );
 }
 
-type EditorStep = 'trigger' | 'configure' | 'action';
+// Compact action card for variant action selection
+function CompactActionCard({
+  action,
+  isSelected,
+  onClick
+}: {
+  action: ActionPreset;
+  isSelected: boolean;
+  onClick: () => void;
+}) {
+  const ActionIcon = action.icon;
+  return (
+    <Card
+      className={cn(
+        "p-3 cursor-pointer transition-all hover-elevate",
+        isSelected && "ring-2 ring-primary bg-primary/5"
+      )}
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-2">
+        <ActionIcon className={cn("h-4 w-4", action.color)} />
+        <span className="text-xs font-medium truncate">{action.name}</span>
+        {isSelected && <Check className="h-3 w-3 text-primary ml-auto shrink-0" />}
+      </div>
+    </Card>
+  );
+}
+
+type EditorStep = 'trigger' | 'trigger-config' | 'action' | 'action-config';
 
 interface StepIndicatorProps {
   currentStep: EditorStep;
-  trigger: TriggerPreset | null;
-  hasConfig: boolean;
+  hasTriggerConfig: boolean;
+  hasActionConfig: boolean;
 }
 
-function StepIndicator({ currentStep, trigger, hasConfig }: StepIndicatorProps) {
-  const steps = hasConfig 
-    ? [
-        { id: 'trigger', label: '1. Trigger' },
-        { id: 'configure', label: '2. Configure' },
-        { id: 'action', label: '3. Action' },
-      ]
-    : [
-        { id: 'trigger', label: '1. Trigger' },
-        { id: 'action', label: '2. Action' },
-      ];
+function StepIndicator({ currentStep, hasTriggerConfig, hasActionConfig }: StepIndicatorProps) {
+  const allSteps: { id: EditorStep; label: string; show: boolean }[] = [
+    { id: 'trigger', label: 'Trigger', show: true },
+    { id: 'trigger-config', label: 'Configure', show: hasTriggerConfig },
+    { id: 'action', label: 'Action', show: true },
+    { id: 'action-config', label: 'Settings', show: hasActionConfig },
+  ];
+
+  const visibleSteps = allSteps.filter(s => s.show);
+  const currentIndex = visibleSteps.findIndex(s => s.id === currentStep);
 
   return (
     <div className="flex items-center justify-center gap-2 mb-6">
-      {steps.map((step, index) => (
-        <div key={step.id} className="flex items-center gap-2">
-          {index > 0 && <ArrowRight className="h-4 w-4 text-muted-foreground" />}
-          <div className={cn(
-            "flex items-center gap-2 px-3 py-1.5 rounded-full text-sm",
-            currentStep === step.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-          )}>
-            <span className="font-medium">{step.label}</span>
+      {visibleSteps.map((step, index) => {
+        const isActive = step.id === currentStep;
+        const isCompleted = index < currentIndex;
+
+        return (
+          <div key={step.id} className="flex items-center gap-2">
+            {index > 0 && <ArrowRight className="h-4 w-4 text-muted-foreground" />}
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-1.5 rounded-full text-sm",
+              isActive ? "bg-primary text-primary-foreground" :
+              isCompleted ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
+            )}>
+              <span className="font-medium">{index + 1}. {step.label}</span>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
-interface TierRowProps {
+// Variant config row - only shows config fields, no action picker
+interface VariantConfigRowProps {
   tier: TierConfig;
   trigger: TriggerPreset;
   index: number;
@@ -110,20 +144,18 @@ interface TierRowProps {
   canRemove: boolean;
 }
 
-function TierRow({ tier, trigger, index, onUpdate, onRemove, canRemove }: TierRowProps) {
-  const [showActionConfig, setShowActionConfig] = useState(false);
-  
+function VariantConfigRow({ tier, trigger, index, onUpdate, onRemove, canRemove }: VariantConfigRowProps) {
   return (
     <Card className="p-4">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <Badge variant="secondary">Tier {index + 1}</Badge>
+          <Badge variant="secondary">Variant {index + 1}</Badge>
           {canRemove && (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => onRemove(tier.id)}
-              data-testid={`button-remove-tier-${index}`}
+              data-testid={`button-remove-variant-${index}`}
             >
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -137,56 +169,111 @@ function TierRow({ tier, trigger, index, onUpdate, onRemove, canRemove }: TierRo
             onChange={(values) => onUpdate(tier.id, { values })}
           />
         )}
+      </div>
+    </Card>
+  );
+}
 
-        <div className="border-t border-border pt-4">
-          <div className="flex items-center gap-2 mb-3">
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Then do this action:</span>
-          </div>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {actionPresets.slice(0, 6).map(action => {
-              const isSelected = tier.action?.id === action.id;
-              const ActionIcon = action.icon;
-              return (
-                <Card
-                  key={action.id}
-                  className={cn(
-                    "p-3 cursor-pointer transition-all hover-elevate",
-                    isSelected && "ring-2 ring-primary bg-primary/5"
-                  )}
-                  onClick={() => {
-                    onUpdate(tier.id, { 
-                      action, 
-                      actionConfig: action.config?.fields 
-                        ? getDefaultConfigValues(action.config.fields) 
-                        : {} 
-                    });
-                    setShowActionConfig(true);
-                  }}
-                  data-testid={`card-tier-action-${index}-${action.id}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <ActionIcon className={cn("h-4 w-4", action.color)} />
-                    <span className="text-xs font-medium truncate">{action.name}</span>
-                    {isSelected && <Check className="h-3 w-3 text-primary ml-auto shrink-0" />}
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+// Variant action row - for selecting action for each variant
+interface VariantActionRowProps {
+  tier: TierConfig;
+  trigger: TriggerPreset;
+  index: number;
+  onSelectAction: (tierId: string, action: ActionPreset) => void;
+}
 
-          {tier.action?.config?.fields && showActionConfig && (
-            <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-3">Configure {tier.action.name}:</p>
-              <TriggerConfigForm
-                fields={tier.action.config.fields}
-                values={tier.actionConfig}
-                onChange={(actionConfig) => onUpdate(tier.id, { actionConfig })}
-              />
-            </div>
+function VariantActionRow({ tier, trigger, index, onSelectAction }: VariantActionRowProps) {
+  // Get a label for this variant based on its config values
+  const getVariantLabel = () => {
+    const amount = tier.values.amount as { type: string; value?: number; min?: number; max?: number } | undefined;
+    if (amount) {
+      const unit = trigger.config?.tierLabel || '';
+      if (amount.type === 'range') {
+        return `${amount.min}-${amount.max} ${unit}`;
+      }
+      return `${amount.value} ${unit}`;
+    }
+    return `Variant ${index + 1}`;
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="gap-1">
+            <trigger.icon className="h-3 w-3" />
+            {getVariantLabel()}
+          </Badge>
+          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          {tier.action ? (
+            <Badge variant="default" className="gap-1">
+              <tier.action.icon className="h-3 w-3" />
+              {tier.action.name}
+            </Badge>
+          ) : (
+            <span className="text-sm text-muted-foreground">Select an action...</span>
           )}
         </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+          {actionPresets.map(action => (
+            <CompactActionCard
+              key={action.id}
+              action={action}
+              isSelected={tier.action?.id === action.id}
+              onClick={() => onSelectAction(tier.id, action)}
+            />
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// Variant action config row - for configuring action for each variant
+interface VariantActionConfigRowProps {
+  tier: TierConfig;
+  trigger: TriggerPreset;
+  index: number;
+  onUpdateConfig: (tierId: string, actionConfig: TriggerConfigValues) => void;
+}
+
+function VariantActionConfigRow({ tier, trigger, index, onUpdateConfig }: VariantActionConfigRowProps) {
+  if (!tier.action?.config?.fields) return null;
+
+  // Get a label for this variant based on its config values
+  const getVariantLabel = () => {
+    const amount = tier.values.amount as { type: string; value?: number; min?: number; max?: number } | undefined;
+    if (amount) {
+      const unit = trigger.config?.tierLabel || '';
+      if (amount.type === 'range') {
+        return `${amount.min}-${amount.max} ${unit}`;
+      }
+      return `${amount.value} ${unit}`;
+    }
+    return `Variant ${index + 1}`;
+  };
+
+  return (
+    <Card className="p-4">
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="gap-1">
+            <trigger.icon className="h-3 w-3" />
+            {getVariantLabel()}
+          </Badge>
+          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+          <Badge variant="default" className="gap-1">
+            <tier.action.icon className="h-3 w-3" />
+            {tier.action.name}
+          </Badge>
+        </div>
+
+        <TriggerConfigForm
+          fields={tier.action.config.fields}
+          values={tier.actionConfig}
+          onChange={(actionConfig) => onUpdateConfig(tier.id, actionConfig)}
+        />
       </div>
     </Card>
   );
@@ -228,7 +315,10 @@ export function BasicWorkflowEditor() {
     },
   });
 
-  const hasConfig = !!selectedTrigger?.config?.fields?.length;
+  const hasTriggerConfig = !!selectedTrigger?.config?.fields?.length;
+  const hasActionConfig = selectedTrigger?.config?.supportsTiers
+    ? tiers.some(t => t.action?.config?.fields?.length)
+    : !!selectedAction?.config?.fields?.length;
   const supportsTiers = !!selectedTrigger?.config?.supportsTiers;
 
   const handleTriggerSelect = (trigger: TriggerPreset) => {
@@ -236,21 +326,23 @@ export function BasicWorkflowEditor() {
     setSelectedAction(null);
     setTriggerConfig(trigger.config?.fields ? getDefaultConfigValues(trigger.config.fields) : {});
     setActionConfig({});
-    
+
     if (trigger.config?.supportsTiers) {
       const defaultValues = trigger.config.fields ? getDefaultConfigValues(trigger.config.fields) : {};
-      setTiers([{ 
-        id: 'tier-1', 
-        values: defaultValues, 
-        action: null, 
-        actionConfig: {} 
+      setTiers([{
+        id: 'tier-1',
+        values: defaultValues,
+        action: null,
+        actionConfig: {}
       }]);
-      setStep('configure');
-    } else if (trigger.config?.fields?.length) {
-      setTiers([]);
-      setStep('configure');
     } else {
       setTiers([]);
+    }
+
+    // Auto-advance: if trigger has config, go to trigger-config, otherwise go to action
+    if (trigger.config?.fields?.length) {
+      setStep('trigger-config');
+    } else {
       setStep('action');
     }
   };
@@ -258,9 +350,32 @@ export function BasicWorkflowEditor() {
   const handleActionSelect = (action: ActionPreset) => {
     setSelectedAction(action);
     setActionConfig(action.config?.fields ? getDefaultConfigValues(action.config.fields) : {});
+
+    // Auto-advance: if action has config, go to action-config
+    if (action.config?.fields?.length) {
+      setStep('action-config');
+    }
   };
 
-  const handleAddTier = () => {
+  const handleVariantActionSelect = (tierId: string, action: ActionPreset) => {
+    setTiers(prev => prev.map(t =>
+      t.id === tierId
+        ? {
+            ...t,
+            action,
+            actionConfig: action.config?.fields ? getDefaultConfigValues(action.config.fields) : {}
+          }
+        : t
+    ));
+  };
+
+  const handleVariantActionConfigUpdate = (tierId: string, actionConfig: TriggerConfigValues) => {
+    setTiers(prev => prev.map(t =>
+      t.id === tierId ? { ...t, actionConfig } : t
+    ));
+  };
+
+  const handleAddVariant = () => {
     if (!selectedTrigger?.config?.fields) return;
     const newTier: TierConfig = {
       id: `tier-${Date.now()}`,
@@ -271,21 +386,30 @@ export function BasicWorkflowEditor() {
     setTiers([...tiers, newTier]);
   };
 
-  const handleUpdateTier = (id: string, updates: Partial<TierConfig>) => {
+  const handleUpdateVariant = (id: string, updates: Partial<TierConfig>) => {
     setTiers(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   };
 
-  const handleRemoveTier = (id: string) => {
+  const handleRemoveVariant = (id: string) => {
     setTiers(prev => prev.filter(t => t.id !== id));
   };
 
-  const handleContinueToAction = () => {
-    setStep('action');
+  const handleContinue = () => {
+    if (step === 'trigger-config') {
+      setStep('action');
+    } else if (step === 'action' && supportsTiers) {
+      // For variant mode, check if all variants have actions and any need config
+      const allHaveActions = tiers.every(t => t.action);
+      const anyNeedsConfig = tiers.some(t => t.action?.config?.fields?.length);
+      if (allHaveActions && anyNeedsConfig) {
+        setStep('action-config');
+      }
+    }
   };
 
   const handleCreate = () => {
     if (!selectedTrigger) return;
-    
+
     let workflow;
     if (supportsTiers && tiers.length > 0) {
       const validTiers = tiers.filter(t => t.action);
@@ -295,30 +419,68 @@ export function BasicWorkflowEditor() {
       if (!selectedAction) return;
       workflow = generateWorkflowFromPresets(selectedTrigger, selectedAction, triggerConfig, actionConfig);
     }
-    
+
     createWorkflow.mutate(workflow);
   };
 
   const handleBack = () => {
-    if (step === 'action') {
-      if (hasConfig) {
-        setStep('configure');
+    if (step === 'action-config') {
+      setStep('action');
+      if (!supportsTiers) {
+        setSelectedAction(null);
+        setActionConfig({});
+      }
+    } else if (step === 'action') {
+      if (hasTriggerConfig) {
+        setStep('trigger-config');
       } else {
         setStep('trigger');
+        setSelectedTrigger(null);
       }
-    } else if (step === 'configure') {
+      // Clear variant actions when going back
+      if (supportsTiers) {
+        setTiers(prev => prev.map(t => ({ ...t, action: null, actionConfig: {} })));
+      }
+    } else if (step === 'trigger-config') {
       setStep('trigger');
+      setSelectedTrigger(null);
     }
   };
 
+  // Can create when:
+  // - For variant mode: all variants have actions selected
+  // - For simple mode: action is selected
   const canCreate = selectedTrigger && (
-    supportsTiers 
+    supportsTiers
       ? tiers.length > 0 && tiers.every(t => t.action)
       : !!selectedAction
   );
 
+  // For variant mode: can continue to action-config if all have actions and any needs config
+  const canContinueToActionConfig = supportsTiers &&
+    tiers.every(t => t.action) &&
+    tiers.some(t => t.action?.config?.fields?.length);
+
+  // All variants have actions but none need config - can create directly
+  const variantsReadyNoConfig = supportsTiers &&
+    tiers.every(t => t.action) &&
+    !tiers.some(t => t.action?.config?.fields?.length);
+
   const triggerCategories = ['events', 'chat', 'time', 'stream'] as const;
   const actionCategories = ['alerts', 'chat', 'scene', 'audio', 'integration'] as const;
+
+  const stepDescriptions: Record<EditorStep, string> = {
+    'trigger': 'Choose what triggers your workflow',
+    'trigger-config': supportsTiers
+      ? `Configure ${selectedTrigger?.name || 'trigger'} variants`
+      : `Configure ${selectedTrigger?.name || 'trigger'} settings`,
+    'action': supportsTiers
+      ? 'Choose an action for each variant'
+      : 'Choose what happens when triggered',
+    'action-config': supportsTiers
+      ? 'Configure action settings for each variant'
+      : `Configure ${selectedAction?.name || 'action'} settings`,
+  };
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -327,25 +489,22 @@ export function BasicWorkflowEditor() {
           <Sparkles className="h-5 w-5 text-primary" />
           <h2 className="text-xl font-semibold">Quick Workflow Builder</h2>
         </div>
-        <p className="text-muted-foreground">
-          {step === 'trigger' && "Choose what triggers your workflow"}
-          {step === 'configure' && "Configure your trigger settings"}
-          {step === 'action' && "Choose what happens when triggered"}
-        </p>
+        <p className="text-muted-foreground">{stepDescriptions[step]}</p>
       </div>
 
-      <StepIndicator 
-        currentStep={step} 
-        trigger={selectedTrigger}
-        hasConfig={hasConfig}
+      <StepIndicator
+        currentStep={step}
+        hasTriggerConfig={hasTriggerConfig}
+        hasActionConfig={hasActionConfig}
       />
 
+      {/* Step 1: Trigger Selection */}
       {step === 'trigger' && (
         <div className="space-y-6">
           {triggerCategories.map(category => {
             const categoryTriggers = triggerPresets.filter(t => t.category === category);
             if (categoryTriggers.length === 0) return null;
-            
+
             return (
               <div key={category}>
                 <h3 className="text-sm font-medium text-muted-foreground mb-3 capitalize">
@@ -367,7 +526,8 @@ export function BasicWorkflowEditor() {
         </div>
       )}
 
-      {step === 'configure' && selectedTrigger && (
+      {/* Step 2: Trigger Configuration */}
+      {step === 'trigger-config' && selectedTrigger && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -375,19 +535,21 @@ export function BasicWorkflowEditor() {
                 <selectedTrigger.icon className="h-3 w-3" />
                 {selectedTrigger.name}
               </Badge>
-              <span className="text-sm text-muted-foreground">
-                {supportsTiers ? 'Configure tiers' : 'Configure settings'}
-              </span>
+              {supportsTiers && (
+                <span className="text-sm text-muted-foreground">
+                  Add variants for different {selectedTrigger.config?.tierLabel || 'amounts'}
+                </span>
+              )}
             </div>
             {supportsTiers && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleAddTier}
-                data-testid="button-add-tier"
+                onClick={handleAddVariant}
+                data-testid="button-add-variant"
               >
                 <Plus className="h-4 w-4 mr-1" />
-                Add Tier
+                Add Variant
               </Button>
             )}
           </div>
@@ -395,13 +557,13 @@ export function BasicWorkflowEditor() {
           {supportsTiers ? (
             <div className="space-y-4">
               {tiers.map((tier, index) => (
-                <TierRow
+                <VariantConfigRow
                   key={tier.id}
                   tier={tier}
                   trigger={selectedTrigger}
                   index={index}
-                  onUpdate={handleUpdateTier}
-                  onRemove={handleRemoveTier}
+                  onUpdate={handleUpdateVariant}
+                  onRemove={handleRemoveVariant}
                   canRemove={tiers.length > 1}
                 />
               ))}
@@ -420,9 +582,10 @@ export function BasicWorkflowEditor() {
         </div>
       )}
 
+      {/* Step 3: Action Selection */}
       {step === 'action' && (
         <div className="space-y-6">
-          {selectedTrigger && (
+          {selectedTrigger && !supportsTiers && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 mb-4">
               <Badge variant="secondary" className="gap-1">
                 <selectedTrigger.icon className="h-3 w-3" />
@@ -433,67 +596,145 @@ export function BasicWorkflowEditor() {
             </div>
           )}
 
-          {actionCategories.map(category => {
-            const categoryActions = actionPresets.filter(a => a.category === category);
-            if (categoryActions.length === 0) return null;
-            
-            return (
-              <div key={category}>
-                <h3 className="text-sm font-medium text-muted-foreground mb-3 capitalize">
-                  {category}
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {categoryActions.map(action => (
-                    <PresetCard
-                      key={action.id}
-                      preset={action}
-                      isSelected={selectedAction?.id === action.id}
-                      onClick={() => handleActionSelect(action)}
-                    />
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+          {/* Variant mode: show action picker for each variant */}
+          {supportsTiers ? (
+            <div className="space-y-4">
+              {tiers.map((tier, index) => (
+                <VariantActionRow
+                  key={tier.id}
+                  tier={tier}
+                  trigger={selectedTrigger!}
+                  index={index}
+                  onSelectAction={handleVariantActionSelect}
+                />
+              ))}
+            </div>
+          ) : (
+            /* Simple mode: show all actions */
+            actionCategories.map(category => {
+              const categoryActions = actionPresets.filter(a => a.category === category);
+              if (categoryActions.length === 0) return null;
 
-          {selectedAction?.config?.fields && (
-            <Card className="p-6">
-              <h4 className="text-sm font-medium mb-4">Configure {selectedAction.name}</h4>
-              <TriggerConfigForm
-                fields={selectedAction.config.fields}
-                values={actionConfig}
-                onChange={setActionConfig}
-              />
-            </Card>
+              return (
+                <div key={category}>
+                  <h3 className="text-sm font-medium text-muted-foreground mb-3 capitalize">
+                    {category}
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {categoryActions.map(action => (
+                      <PresetCard
+                        key={action.id}
+                        preset={action}
+                        isSelected={selectedAction?.id === action.id}
+                        onClick={() => handleActionSelect(action)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       )}
 
+      {/* Step 4: Action Configuration */}
+      {step === 'action-config' && (
+        <div className="space-y-4">
+          {supportsTiers ? (
+            /* Variant mode: show config for each variant's action */
+            tiers.map((tier, index) => (
+              <VariantActionConfigRow
+                key={tier.id}
+                tier={tier}
+                trigger={selectedTrigger!}
+                index={index}
+                onUpdateConfig={handleVariantActionConfigUpdate}
+              />
+            ))
+          ) : (
+            /* Simple mode: show single action config */
+            selectedAction && (
+              <>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+                  {selectedTrigger && (
+                    <>
+                      <Badge variant="secondary" className="gap-1">
+                        <selectedTrigger.icon className="h-3 w-3" />
+                        {selectedTrigger.name}
+                      </Badge>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                    </>
+                  )}
+                  <Badge variant="default" className="gap-1">
+                    <selectedAction.icon className="h-3 w-3" />
+                    {selectedAction.name}
+                  </Badge>
+                </div>
+
+                <Card className="p-6">
+                  {selectedAction.config?.fields && (
+                    <TriggerConfigForm
+                      fields={selectedAction.config.fields}
+                      values={actionConfig}
+                      onChange={setActionConfig}
+                    />
+                  )}
+                </Card>
+              </>
+            )
+          )}
+        </div>
+      )}
+
+      {/* Footer with Back and Continue/Create buttons */}
       <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
-        <Button 
-          variant="ghost" 
-          onClick={handleBack}
-          disabled={step === 'trigger'}
-          data-testid="button-back"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
+        {step !== 'trigger' ? (
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={handleBack}
+            className="gap-2"
+            data-testid="button-back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+        ) : (
+          <div />
+        )}
 
         <div className="flex items-center gap-3">
-          {step === 'configure' && !supportsTiers && (
+          {/* Continue button for trigger-config step */}
+          {step === 'trigger-config' && (
             <Button
-              variant="outline"
-              onClick={handleContinueToAction}
+              onClick={handleContinue}
               data-testid="button-continue"
             >
               Continue
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
           )}
-          
-          {(step === 'action' || (step === 'configure' && supportsTiers)) && (
-            <Button 
+
+          {/* Continue button for variant action step (if any actions need config) */}
+          {step === 'action' && canContinueToActionConfig && (
+            <Button
+              onClick={handleContinue}
+              data-testid="button-continue"
+            >
+              Continue
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Button>
+          )}
+
+          {/* Create button shows on:
+              - action step if simple mode action is selected and has no config
+              - action step if variant mode and all variants have actions with no config
+              - action-config step
+          */}
+          {((step === 'action' && !supportsTiers && selectedAction && !selectedAction.config?.fields?.length) ||
+            (step === 'action' && variantsReadyNoConfig) ||
+            step === 'action-config') && (
+            <Button
               onClick={handleCreate}
               disabled={!canCreate || createWorkflow.isPending}
               data-testid="button-create-workflow"
