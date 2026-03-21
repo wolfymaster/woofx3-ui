@@ -1,10 +1,13 @@
 import { atom, map } from 'nanostores';
-import type { User, Team, Account, ThemePreset } from '@/types';
+import type { ThemePreset } from '@/types';
 
 const STORAGE_KEYS = {
   theme: 'streamdeck-theme',
   themePreset: 'streamdeck-theme-preset',
   sidebarCollapsed: 'streamdeck-sidebar-collapsed',
+  engineUrl: 'streamdeck-engine-url',
+  apiKey: 'streamdeck-api-key',
+  currentInstanceId: 'woofx3-current-instance-id',
 };
 
 function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -26,12 +29,10 @@ function persistValue<T>(key: string, value: T): void {
   }
 }
 
-export const $currentUser = atom<User | null>(null);
-export const $currentTeam = atom<Team | null>(null);
-export const $currentAccount = atom<Account | null>(null);
-
-export const $teams = atom<Team[]>([]);
-export const $accounts = atom<Account[]>([]);
+// Currently selected woofx3 instance ID (persisted to localStorage)
+const initialInstanceId = getStoredValue<string | null>(STORAGE_KEYS.currentInstanceId, null);
+export const $currentInstanceId = atom<string | null>(initialInstanceId);
+$currentInstanceId.subscribe((value) => persistValue(STORAGE_KEYS.currentInstanceId, value));
 
 const initialSidebarCollapsed = getStoredValue(STORAGE_KEYS.sidebarCollapsed, false);
 export const $sidebarCollapsed = atom<boolean>(initialSidebarCollapsed);
@@ -45,6 +46,20 @@ export const $themePreset = atom<string>(initialThemePreset);
 $theme.subscribe((value) => persistValue(STORAGE_KEYS.theme, value));
 $themePreset.subscribe((value) => persistValue(STORAGE_KEYS.themePreset, value));
 $sidebarCollapsed.subscribe((value) => persistValue(STORAGE_KEYS.sidebarCollapsed, value));
+
+// Engine configuration
+const getDefaultEngineUrl = (): string => {
+  if (typeof window === 'undefined') return 'localhost:8080';
+  return `${window.location.hostname}:8080`;
+};
+
+const initialEngineUrl = getStoredValue<string>(STORAGE_KEYS.engineUrl, getDefaultEngineUrl());
+const initialApiKey = getStoredValue<string>(STORAGE_KEYS.apiKey, '');
+export const $engineUrl = atom<string>(initialEngineUrl);
+export const $apiKey = atom<string>(initialApiKey);
+
+$engineUrl.subscribe((value) => persistValue(STORAGE_KEYS.engineUrl, value));
+$apiKey.subscribe((value) => persistValue(STORAGE_KEYS.apiKey, value));
 
 export const themePresets: ThemePreset[] = [
   {
