@@ -1,11 +1,14 @@
 import { useState, useCallback, useEffect } from 'react';
-import { 
-  GripVertical, 
-  Plus, 
+import { useQuery, useMutation } from 'convex/react';
+import {
+  GripVertical,
+  Plus,
   RotateCcw,
   Maximize2,
   Minimize2,
-  X
+  X,
+  Loader2,
+  AlertCircle,
 } from 'lucide-react';
 import {
   Panel,
@@ -21,26 +24,27 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { api } from '@convex/_generated/api';
+import { useInstance } from '@/hooks/use-instance';
 import { ChatModule } from '@/components/dashboard/chat-module';
 import { WorkflowRunsModule } from '@/components/dashboard/workflow-runs-module';
 import { EventFeedModule } from '@/components/dashboard/event-feed-module';
+import { MacroPadModule } from '@/components/dashboard/macro-pad-module';
+import type { DashboardModule } from '@shared/api';
 
-interface DashboardModule {
-  id: string;
-  type: 'chat' | 'workflow-runs' | 'event-feed';
-  title: string;
-}
-
-const moduleComponents: Record<string, React.ComponentType> = {
+// Registry of available module components
+const moduleComponents: Record<string, React.ComponentType<{ config?: Record<string, unknown>; onConfigChange?: (config: Record<string, unknown>) => void }>> = {
   'chat': ChatModule,
   'workflow-runs': WorkflowRunsModule,
   'event-feed': EventFeedModule,
+  'macro-pad': MacroPadModule,
 };
 
 const moduleLabels: Record<string, string> = {
   'chat': 'Chat Client',
   'workflow-runs': 'Workflow Runs',
   'event-feed': 'Event Feed',
+  'macro-pad': 'Macro Pad',
 };
 
 const defaultModules: DashboardModule[] = [
@@ -54,10 +58,21 @@ interface ModulePanelProps {
   onRemove: (id: string) => void;
   isMaximized: boolean;
   onToggleMaximize: (id: string) => void;
+  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
 }
 
-function ModulePanel({ module, onRemove, isMaximized, onToggleMaximize }: ModulePanelProps) {
+function ModulePanel({ module, onRemove, isMaximized, onToggleMaximize, onConfigChange }: ModulePanelProps) {
   const Component = moduleComponents[module.type];
+
+  if (!Component) {
+    return (
+      <Card className="h-full flex flex-col overflow-hidden" data-testid={`panel-${module.id}`}>
+        <div className="flex items-center justify-center h-full text-muted-foreground">
+          Unknown module type: {module.type}
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <Card className="h-full flex flex-col overflow-hidden" data-testid={`panel-${module.id}`}>
@@ -67,17 +82,17 @@ function ModulePanel({ module, onRemove, isMaximized, onToggleMaximize }: Module
           <span className="text-xs font-medium text-muted-foreground">{module.title}</span>
         </div>
         <div className="flex items-center gap-0.5">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             className="h-6 w-6"
             onClick={() => onToggleMaximize(module.id)}
           >
             {isMaximized ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             className="h-6 w-6 text-muted-foreground hover:text-destructive"
             onClick={() => onRemove(module.id)}
           >
@@ -86,7 +101,10 @@ function ModulePanel({ module, onRemove, isMaximized, onToggleMaximize }: Module
         </div>
       </div>
       <div className="flex-1 min-h-0 overflow-hidden">
-        {Component && <Component />}
+        <Component 
+          config={module.config} 
+          onConfigChange={onConfigChange ? (config) => onConfigChange(module.id, config) : undefined}
+        />
       </div>
     </Card>
   );
@@ -114,11 +132,13 @@ function ResizeHandle({ direction = 'horizontal' }: { direction?: 'horizontal' |
 function ThreePanelLayout({ 
   modules, 
   onRemove, 
-  onToggleMaximize 
+  onToggleMaximize,
+  onConfigChange
 }: { 
   modules: DashboardModule[];
   onRemove: (id: string) => void;
   onToggleMaximize: (id: string) => void;
+  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
 }) {
   return (
     <PanelGroup direction="horizontal" autoSaveId="dashboard-h">
@@ -128,6 +148,7 @@ function ThreePanelLayout({
           onRemove={onRemove}
           isMaximized={false}
           onToggleMaximize={onToggleMaximize}
+          onConfigChange={onConfigChange}
         />
       </Panel>
       <ResizeHandle direction="horizontal" />
@@ -139,6 +160,7 @@ function ThreePanelLayout({
               onRemove={onRemove}
               isMaximized={false}
               onToggleMaximize={onToggleMaximize}
+              onConfigChange={onConfigChange}
             />
           </Panel>
           <ResizeHandle direction="vertical" />
@@ -148,6 +170,7 @@ function ThreePanelLayout({
               onRemove={onRemove}
               isMaximized={false}
               onToggleMaximize={onToggleMaximize}
+              onConfigChange={onConfigChange}
             />
           </Panel>
         </PanelGroup>
@@ -159,11 +182,13 @@ function ThreePanelLayout({
 function TwoPanelLayout({ 
   modules, 
   onRemove, 
-  onToggleMaximize 
+  onToggleMaximize,
+  onConfigChange
 }: { 
   modules: DashboardModule[];
   onRemove: (id: string) => void;
   onToggleMaximize: (id: string) => void;
+  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
 }) {
   return (
     <PanelGroup direction="horizontal" autoSaveId="dashboard-2">
@@ -173,6 +198,7 @@ function TwoPanelLayout({
           onRemove={onRemove}
           isMaximized={false}
           onToggleMaximize={onToggleMaximize}
+          onConfigChange={onConfigChange}
         />
       </Panel>
       <ResizeHandle direction="horizontal" />
@@ -182,6 +208,7 @@ function TwoPanelLayout({
           onRemove={onRemove}
           isMaximized={false}
           onToggleMaximize={onToggleMaximize}
+          onConfigChange={onConfigChange}
         />
       </Panel>
     </PanelGroup>
@@ -191,11 +218,13 @@ function TwoPanelLayout({
 function OnePanelLayout({ 
   modules, 
   onRemove, 
-  onToggleMaximize 
+  onToggleMaximize,
+  onConfigChange
 }: { 
   modules: DashboardModule[];
   onRemove: (id: string) => void;
   onToggleMaximize: (id: string) => void;
+  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
 }) {
   return (
     <ModulePanel 
@@ -203,6 +232,7 @@ function OnePanelLayout({
       onRemove={onRemove}
       isMaximized={false}
       onToggleMaximize={onToggleMaximize}
+      onConfigChange={onConfigChange}
     />
   );
 }
@@ -210,11 +240,13 @@ function OnePanelLayout({
 function FourPanelLayout({ 
   modules, 
   onRemove, 
-  onToggleMaximize 
+  onToggleMaximize,
+  onConfigChange
 }: { 
   modules: DashboardModule[];
   onRemove: (id: string) => void;
   onToggleMaximize: (id: string) => void;
+  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
 }) {
   return (
     <PanelGroup direction="horizontal" autoSaveId="dashboard-4h">
@@ -226,6 +258,7 @@ function FourPanelLayout({
               onRemove={onRemove}
               isMaximized={false}
               onToggleMaximize={onToggleMaximize}
+              onConfigChange={onConfigChange}
             />
           </Panel>
           <ResizeHandle direction="vertical" />
@@ -235,6 +268,7 @@ function FourPanelLayout({
               onRemove={onRemove}
               isMaximized={false}
               onToggleMaximize={onToggleMaximize}
+              onConfigChange={onConfigChange}
             />
           </Panel>
         </PanelGroup>
@@ -248,6 +282,7 @@ function FourPanelLayout({
               onRemove={onRemove}
               isMaximized={false}
               onToggleMaximize={onToggleMaximize}
+              onConfigChange={onConfigChange}
             />
           </Panel>
           <ResizeHandle direction="vertical" />
@@ -257,6 +292,7 @@ function FourPanelLayout({
               onRemove={onRemove}
               isMaximized={false}
               onToggleMaximize={onToggleMaximize}
+              onConfigChange={onConfigChange}
             />
           </Panel>
         </PanelGroup>
@@ -266,23 +302,43 @@ function FourPanelLayout({
 }
 
 export default function Dashboard() {
-  const [modules, setModules] = useState<DashboardModule[]>(() => {
-    const saved = localStorage.getItem('dashboard-modules');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return defaultModules;
-      }
-    }
-    return defaultModules;
-  });
+  const { instance, isLoading: instanceLoading } = useInstance();
 
+  // Load layout from Convex
+  const savedModules = useQuery(
+    api.dashboardLayouts.getLayout,
+    instance ? { instanceId: instance._id } : 'skip'
+  );
+
+  // Save layout to Convex
+  const saveLayout = useMutation(api.dashboardLayouts.saveLayout);
+
+  // Local state initialized from Convex data
+  const [modules, setModules] = useState<DashboardModule[]>([]);
   const [maximizedId, setMaximizedId] = useState<string | null>(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
+  // Sync from Convex when data loads
   useEffect(() => {
-    localStorage.setItem('dashboard-modules', JSON.stringify(modules));
-  }, [modules]);
+    if (savedModules !== undefined && !hasInitialized) {
+      setModules(savedModules.length > 0 ? savedModules : defaultModules);
+      setHasInitialized(true);
+    }
+  }, [savedModules, hasInitialized]);
+
+  // Save to Convex when modules change (debounced)
+  useEffect(() => {
+    if (!hasInitialized || !instance) return;
+
+    const timeout = setTimeout(() => {
+      saveLayout({ instanceId: instance._id, modules });
+    }, 1000);
+
+    return () => clearTimeout(timeout);
+  }, [modules, hasInitialized, instance?._id]);
+
+  const isLoading = instanceLoading || savedModules === undefined;
+  const error = null;
 
   const handleRemoveModule = useCallback((id: string) => {
     setModules(prev => prev.filter(m => m.id !== id));
@@ -294,7 +350,7 @@ export default function Dashboard() {
   const handleAddModule = useCallback((type: string) => {
     const newModule: DashboardModule = {
       id: `mod-${Date.now()}`,
-      type: type as DashboardModule['type'],
+      type,
       title: moduleLabels[type],
     };
     setModules(prev => [...prev, newModule]);
@@ -303,6 +359,7 @@ export default function Dashboard() {
   const handleResetLayout = useCallback(() => {
     setModules(defaultModules);
     setMaximizedId(null);
+    // Clear panel resize state from localStorage
     localStorage.removeItem('dashboard-h');
     localStorage.removeItem('dashboard-v');
     localStorage.removeItem('dashboard-2');
@@ -315,7 +372,35 @@ export default function Dashboard() {
     setMaximizedId(prev => prev === id ? null : id);
   }, []);
 
+  const handleModuleConfigChange = useCallback((moduleId: string, config: Record<string, unknown>) => {
+    setModules(prev => prev.map(m => m.id === moduleId ? { ...m, config } : m));
+  }, []);
+
   const availableModuleTypes = Object.keys(moduleLabels);
+
+  // Error state (unused with Convex but kept for future use)
+  if (error) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
+          <h2 className="text-lg font-semibold mb-2">Failed to Load Dashboard</h2>
+          <p className="text-sm text-muted-foreground mb-4">
+            Unable to load dashboard layout.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state while fetching layout
+  if (isLoading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (maximizedId) {
     const maximizedModule = modules.find(m => m.id === maximizedId);
@@ -419,6 +504,7 @@ export default function Dashboard() {
             modules={modules}
             onRemove={handleRemoveModule}
             onToggleMaximize={handleToggleMaximize}
+            onConfigChange={handleModuleConfigChange}
           />
         )}
         {modules.length === 2 && (
@@ -426,6 +512,7 @@ export default function Dashboard() {
             modules={modules}
             onRemove={handleRemoveModule}
             onToggleMaximize={handleToggleMaximize}
+            onConfigChange={handleModuleConfigChange}
           />
         )}
         {modules.length === 3 && (
@@ -433,6 +520,7 @@ export default function Dashboard() {
             modules={modules}
             onRemove={handleRemoveModule}
             onToggleMaximize={handleToggleMaximize}
+            onConfigChange={handleModuleConfigChange}
           />
         )}
         {modules.length >= 4 && (
@@ -440,6 +528,7 @@ export default function Dashboard() {
             modules={modules.slice(0, 4)}
             onRemove={handleRemoveModule}
             onToggleMaximize={handleToggleMaximize}
+            onConfigChange={handleModuleConfigChange}
           />
         )}
       </div>
