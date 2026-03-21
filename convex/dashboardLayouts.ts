@@ -1,6 +1,6 @@
-import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
 
 const defaultModules = [
   { id: "chat-1", type: "chat", title: "Chat" },
@@ -16,9 +16,7 @@ export const getLayout = query({
 
     const layout = await ctx.db
       .query("dashboardLayouts")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", args.instanceId).eq("userId", userId)
-      )
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
       .first();
 
     return layout?.modules ?? defaultModules;
@@ -43,9 +41,7 @@ export const saveLayout = mutation({
 
     const existing = await ctx.db
       .query("dashboardLayouts")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", args.instanceId).eq("userId", userId)
-      )
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
       .first();
 
     if (existing) {

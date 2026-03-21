@@ -1,5 +1,5 @@
-import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { internalMutation, query } from "./_generated/server";
 
 export const list = query({
   args: {
@@ -62,8 +62,7 @@ export const seed = internalMutation({
               name: "Send Sub Message",
               type: "command",
               parameters: {
-                message:
-                  "Thank you {{username}} for the {{tier}} sub! 🎊 You're awesome!",
+                message: "Thank you {{username}} for the {{tier}} sub! 🎊 You're awesome!",
               },
             },
           ],
@@ -83,8 +82,7 @@ export const seed = internalMutation({
               name: "Send Cheer Thanks",
               type: "command",
               parameters: {
-                message:
-                  "{{username}} just cheered {{amount}} bits! Thank you so much! 💎",
+                message: "{{username}} just cheered {{amount}} bits! Thank you so much! 💎",
               },
             },
           ],
@@ -104,8 +102,7 @@ export const seed = internalMutation({
               name: "Welcome Raiders",
               type: "command",
               parameters: {
-                message:
-                  "🚨 RAID! Welcome {{raiderName}} and their {{viewerCount}} viewers! Everyone say hi!",
+                message: "🚨 RAID! Welcome {{raiderName}} and their {{viewerCount}} viewers! Everyone say hi!",
               },
             },
           ],
@@ -125,8 +122,7 @@ export const seed = internalMutation({
               name: "Send Gift Sub Message",
               type: "command",
               parameters: {
-                message:
-                  "{{username}} just gifted {{count}} subs to the community! 🎁 What a legend!",
+                message: "{{username}} just gifted {{count}} subs to the community! 🎁 What a legend!",
               },
             },
           ],

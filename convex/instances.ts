@@ -1,6 +1,6 @@
-import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
 
 export const listForCurrentUser = query({
   args: {},
@@ -13,9 +13,7 @@ export const listForCurrentUser = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
-    const instances = await Promise.all(
-      memberships.map((m) => ctx.db.get(m.instanceId))
-    );
+    const instances = await Promise.all(memberships.map((m) => ctx.db.get(m.instanceId)));
     return instances.filter(Boolean);
   },
 });

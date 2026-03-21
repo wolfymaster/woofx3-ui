@@ -1,6 +1,6 @@
-import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
 
 export const list = query({
   args: {
@@ -13,17 +13,13 @@ export const list = query({
     let results = all;
 
     if (args.tags && args.tags.length > 0) {
-      results = results.filter((m) =>
-        args.tags!.some((tag) => m.tags.includes(tag))
-      );
+      results = results.filter((m) => args.tags!.some((tag) => m.tags.includes(tag)));
     }
 
     if (args.search) {
       const lower = args.search.toLowerCase();
       results = results.filter(
-        (m) =>
-          m.name.toLowerCase().includes(lower) ||
-          m.description.toLowerCase().includes(lower)
+        (m) => m.name.toLowerCase().includes(lower) || m.description.toLowerCase().includes(lower)
       );
     }
 

@@ -1,6 +1,6 @@
-import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
 
 export const list = query({
   args: { instanceId: v.id("instances") },
@@ -17,11 +17,7 @@ export const create = mutation({
   args: {
     instanceId: v.id("instances"),
     command: v.string(),
-    type: v.union(
-      v.literal("static"),
-      v.literal("dynamic"),
-      v.literal("function")
-    ),
+    type: v.union(v.literal("static"), v.literal("dynamic"), v.literal("function")),
     response: v.optional(v.string()),
     template: v.optional(v.string()),
     functionId: v.optional(v.string()),
@@ -43,13 +39,7 @@ export const update = mutation({
   args: {
     commandId: v.id("chatCommands"),
     command: v.optional(v.string()),
-    type: v.optional(
-      v.union(
-        v.literal("static"),
-        v.literal("dynamic"),
-        v.literal("function")
-      )
-    ),
+    type: v.optional(v.union(v.literal("static"), v.literal("dynamic"), v.literal("function"))),
     response: v.optional(v.string()),
     template: v.optional(v.string()),
     functionId: v.optional(v.string()),

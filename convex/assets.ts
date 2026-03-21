@@ -1,6 +1,6 @@
-import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
 
 export const generateUploadUrl = mutation({
   args: {},
@@ -35,21 +35,15 @@ export const create = mutation({
 export const list = query({
   args: {
     instanceId: v.id("instances"),
-    type: v.optional(
-      v.union(v.literal("image"), v.literal("audio"), v.literal("video"))
-    ),
+    type: v.optional(v.union(v.literal("image"), v.literal("audio"), v.literal("video"))),
   },
   handler: async (ctx, args) => {
-    let q = ctx.db
-      .query("assets")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId));
+    let q = ctx.db.query("assets").withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId));
 
     const assets = await q.order("desc").collect();
 
     // Filter by type if specified
-    const filtered = args.type
-      ? assets.filter((a) => a.type === args.type)
-      : assets;
+    const filtered = args.type ? assets.filter((a) => a.type === args.type) : assets;
 
     // Attach signed URLs
     return Promise.all(
