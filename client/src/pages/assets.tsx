@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useState, useMemo, useCallback, useRef } from 'react';
+import { useQuery, useMutation } from 'convex/react';
 import {
   Search,
   Filter,
@@ -18,7 +18,6 @@ import {
   FolderOpen,
   SortAsc,
   SortDesc,
-  X,
   Loader2,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -27,8 +26,14 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Toggle } from '@/components/ui/toggle';
-import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,14 +72,27 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
 import { cn } from '@/lib/utils';
-import { queryClient, apiRequest } from '@/lib/queryClient';
-import type { Asset, PaginatedResponse } from '@/types';
+import { api } from '@convex/_generated/api';
+import { useInstance } from '@/hooks/use-instance';
+import type { Id } from '@convex/_generated/dataModel';
+
+type ConvexAsset = {
+  _id: Id<'assets'>;
+  name: string;
+  type: 'image' | 'audio' | 'video';
+  mimeType: string;
+  size: number;
+  url: string | null;
+  createdAt: number;
+  instanceId: Id<'instances'>;
+  storageId: Id<'_storage'>;
+  createdBy: Id<'users'>;
+};
 
 const typeIcons: Record<string, React.ReactNode> = {
   image: <Image className="h-5 w-5" />,
   video: <Video className="h-5 w-5" />,
   audio: <Music className="h-5 w-5" />,
-  font: <FileText className="h-5 w-5" />,
   other: <FileText className="h-5 w-5" />,
 };
 
@@ -85,8 +103,8 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
-function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString('en-US', {
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -94,14 +112,14 @@ function formatDate(dateString: string): string {
 }
 
 interface AssetCardProps {
-  asset: Asset;
+  asset: ConvexAsset;
   selected: boolean;
   onSelect: (id: string, selected: boolean) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: Id<'assets'>) => void;
 }
 
 function AssetCard({ asset, selected, onSelect, onDelete }: AssetCardProps) {
-  const Icon = typeIcons[asset.type];
+  const Icon = typeIcons[asset.type] ?? typeIcons.other;
 
   return (
     <Card
@@ -109,7 +127,7 @@ function AssetCard({ asset, selected, onSelect, onDelete }: AssetCardProps) {
         'group relative hover-elevate cursor-pointer overflow-visible transition-all',
         selected && 'ring-2 ring-primary'
       )}
-      data-testid={`card-asset-${asset.id}`}
+      data-testid={`card-asset-${asset._id}`}
     >
       <div
         className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
@@ -117,22 +135,20 @@ function AssetCard({ asset, selected, onSelect, onDelete }: AssetCardProps) {
       >
         <Checkbox
           checked={selected}
-          onCheckedChange={(checked) => onSelect(asset.id, !!checked)}
-          data-testid={`checkbox-asset-${asset.id}`}
+          onCheckedChange={(checked) => onSelect(asset._id, !!checked)}
+          data-testid={`checkbox-asset-${asset._id}`}
         />
       </div>
       <CardContent className="p-0">
         <div className="aspect-square bg-muted/50 flex items-center justify-center">
-          {asset.type === 'image' ? (
-            <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
-              <Image className="h-12 w-12 text-muted-foreground/50" />
-            </div>
+          {asset.type === 'image' && asset.url ? (
+            <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
           ) : (
             <div className="text-muted-foreground">{Icon}</div>
           )}
         </div>
         <div className="p-3">
-          <p className="text-sm font-medium truncate" title={asset.name} data-testid={`text-asset-name-${asset.id}`}>
+          <p className="text-sm font-medium truncate" title={asset.name} data-testid={`text-asset-name-${asset._id}`}>
             {asset.name}
           </p>
           <p className="text-xs text-muted-foreground">
@@ -151,18 +167,16 @@ function AssetCard({ asset, selected, onSelect, onDelete }: AssetCardProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>
-              <Download className="h-4 w-4 mr-2" />
-              Download
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Copy className="h-4 w-4 mr-2" />
-              Copy URL
-            </DropdownMenuItem>
+            {asset.url && (
+              <DropdownMenuItem onClick={() => navigator.clipboard.writeText(asset.url!)}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copy URL
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-destructive focus:text-destructive"
-              onClick={() => onDelete(asset.id)}
+              onClick={() => onDelete(asset._id)}
             >
               <Trash2 className="h-4 w-4 mr-2" />
               Delete
@@ -188,96 +202,170 @@ function AssetCardSkeleton() {
   );
 }
 
-function UploadZone({ onUpload }: { onUpload: (files: FileList) => void }) {
+function UploadAssetsModal({
+  open,
+  onOpenChange,
+  instanceId,
+  generateUploadUrl,
+  createAsset,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  instanceId: Id<'instances'>;
+  generateUploadUrl: () => Promise<string>;
+  createAsset: (args: {
+    instanceId: Id<'instances'>;
+    name: string;
+    type: 'image' | 'audio' | 'video';
+    storageId: Id<'_storage'>;
+    mimeType: string;
+    size: number;
+  }) => Promise<Id<'assets'>>;
+}) {
   const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState('');
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
+  const handleFiles = useCallback(
+    async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
+      setIsUploading(true);
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          setProgress(`Uploading ${file.name} (${i + 1}/${files.length})...`);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
+          const uploadUrl = await generateUploadUrl();
+          const result = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': file.type },
+            body: file,
+          });
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files.length > 0) {
-      onUpload(e.dataTransfer.files);
-    }
-  }, [onUpload]);
+          if (!result.ok) throw new Error(`Upload failed: ${result.statusText}`);
+
+          const { storageId } = await result.json() as { storageId: Id<'_storage'> };
+          const type = file.type.startsWith('image/')
+            ? 'image'
+            : file.type.startsWith('audio/')
+            ? 'audio'
+            : 'video';
+
+          await createAsset({
+            instanceId,
+            name: file.name,
+            type,
+            storageId,
+            mimeType: file.type,
+            size: file.size,
+          });
+        }
+        onOpenChange(false);
+      } catch (err) {
+        console.error('Upload failed:', err);
+        alert('Upload failed. Please try again.');
+      } finally {
+        setIsUploading(false);
+        setProgress('');
+      }
+    },
+    [instanceId, generateUploadUrl, createAsset, onOpenChange],
+  );
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      handleFiles(e.dataTransfer.files);
+    },
+    [handleFiles],
+  );
 
   return (
-    <div
-      className={cn(
-        'border-2 border-dashed rounded-lg p-8 text-center transition-colors',
-        isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50'
-      )}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      data-testid="zone-upload"
-    >
-      <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-      <p className="text-sm font-medium mb-1">Drag and drop files here</p>
-      <p className="text-xs text-muted-foreground mb-4">or click to browse</p>
-      <Button variant="outline" size="sm">
-        <Upload className="h-4 w-4 mr-2" />
-        Browse Files
-      </Button>
-    </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Upload Assets</DialogTitle>
+          <DialogDescription>
+            Upload image, audio, or video files to your asset library.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div
+          className={cn(
+            'border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer',
+            isDragging ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/50',
+          )}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+          onDrop={handleDrop}
+          data-testid="zone-upload-assets-modal"
+        >
+          <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-sm font-medium mb-1">Drag and drop files here</p>
+          <p className="text-xs text-muted-foreground mb-4">or click to browse</p>
+          <label>
+            <input
+              type="file"
+              className="hidden"
+              accept="image/*,video/*,audio/*"
+              multiple
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+            <Button variant="outline" size="sm" asChild>
+              <span>
+                <Upload className="h-4 w-4 mr-2" />
+                Browse Files
+              </span>
+            </Button>
+          </label>
+        </div>
+
+        {isUploading && (
+          <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {progress}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
 export default function Assets() {
+  const { instance, isLoading: instanceLoading } = useInstance();
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [typeFilter, setTypeFilter] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set());
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<Id<'assets'> | null>(null);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
 
-  const { data: assetsData, isLoading, error, refetch } = useQuery<PaginatedResponse<Asset>>({
-    queryKey: ['/api/assets'],
-  });
+  const assetsRaw = useQuery(
+    api.assets.list,
+    instance ? { instanceId: instance._id } : 'skip'
+  ) as ConvexAsset[] | undefined;
 
-  const assets = assetsData?.data || [];
+  const assets = assetsRaw ?? [];
+  const isLoading = instanceLoading || assetsRaw === undefined;
 
-  const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest('DELETE', `/api/assets/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/assets'] });
-      setDeleteDialogOpen(false);
-      setDeletingId(null);
-      setSelectedAssets(prev => {
-        const next = new Set(prev);
-        if (deletingId) next.delete(deletingId);
-        return next;
-      });
-    },
-  });
+  const removeAsset = useMutation(api.assets.remove);
+  const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
+  const createAsset = useMutation(api.assets.create);
 
   const filteredAssets = useMemo(() => {
     let result = assets;
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      result = result.filter(a =>
-        a.name.toLowerCase().includes(query) ||
-        a.tags.some(t => t.toLowerCase().includes(query))
-      );
+      result = result.filter((a) => a.name.toLowerCase().includes(query));
     }
 
     if (typeFilter.length > 0) {
-      result = result.filter(a => typeFilter.includes(a.type));
+      result = result.filter((a) => typeFilter.includes(a.type));
     }
 
     result = [...result].sort((a, b) => {
@@ -285,7 +373,7 @@ export default function Assets() {
       if (sortBy === 'name') {
         comparison = a.name.localeCompare(b.name);
       } else if (sortBy === 'date') {
-        comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        comparison = a.createdAt - b.createdAt;
       } else if (sortBy === 'size') {
         comparison = a.size - b.size;
       }
@@ -296,13 +384,10 @@ export default function Assets() {
   }, [assets, searchQuery, typeFilter, sortBy, sortOrder]);
 
   const handleSelect = useCallback((id: string, selected: boolean) => {
-    setSelectedAssets(prev => {
+    setSelectedAssets((prev) => {
       const next = new Set(prev);
-      if (selected) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
+      if (selected) next.add(id);
+      else next.delete(id);
       return next;
     });
   }, []);
@@ -311,44 +396,41 @@ export default function Assets() {
     if (selectedAssets.size === filteredAssets.length) {
       setSelectedAssets(new Set());
     } else {
-      setSelectedAssets(new Set(filteredAssets.map(a => a.id)));
+      setSelectedAssets(new Set(filteredAssets.map((a) => a._id)));
     }
   }, [filteredAssets, selectedAssets]);
 
-  const handleDelete = useCallback((id: string) => {
+  const handleDelete = useCallback((id: Id<'assets'>) => {
     setDeletingId(id);
     setDeleteDialogOpen(true);
   }, []);
 
-  const confirmDelete = () => {
-    if (deletingId) {
-      deleteMutation.mutate(deletingId);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const confirmDelete = async () => {
+    if (!deletingId) return;
+    setIsDeleting(true);
+    try {
+      await removeAsset({ assetId: deletingId });
+      setSelectedAssets((prev) => {
+        const next = new Set(prev);
+        next.delete(deletingId);
+        return next;
+      });
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
+      setDeletingId(null);
     }
   };
 
-  const handleUpload = useCallback((files: FileList) => {
-    setIsUploading(true);
-    setUploadProgress(0);
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsUploading(false);
-          return 100;
-        }
-        return prev + 10;
-      });
-    }, 200);
-  }, []);
-
   const toggleTypeFilter = useCallback((type: string) => {
-    setTypeFilter(prev =>
-      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    setTypeFilter((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
     );
   }, []);
 
   const totalSize = assets.reduce((sum, a) => sum + a.size, 0);
-  const allTypes = ['image', 'video', 'audio', 'font', 'other'];
+  const allTypes = ['image', 'video', 'audio'];
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
@@ -361,36 +443,13 @@ export default function Assets() {
               <FolderPlus className="h-4 w-4 mr-2" />
               New Folder
             </Button>
-            <Button data-testid="button-upload-assets">
+            <Button onClick={() => setUploadModalOpen(true)} data-testid="button-upload-assets" disabled={!instance}>
               <Upload className="h-4 w-4 mr-2" />
               Upload
             </Button>
           </div>
         }
       />
-
-      {isUploading && (
-        <Card className="mb-6">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Uploading files...</span>
-                  <span className="text-sm text-muted-foreground">{uploadProgress}%</span>
-                </div>
-                <Progress value={uploadProgress} className="h-2" />
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => setIsUploading(false)}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="mb-6">
-        <UploadZone onUpload={handleUpload} />
-      </div>
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div className="flex items-center gap-2 flex-1">
@@ -412,7 +471,7 @@ export default function Assets() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
               <DropdownMenuLabel>File Type</DropdownMenuLabel>
-              {allTypes.map(type => (
+              {allTypes.map((type) => (
                 <DropdownMenuCheckboxItem
                   key={type}
                   checked={typeFilter.includes(type)}
@@ -442,7 +501,7 @@ export default function Assets() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            onClick={() => setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))}
             data-testid="button-sort-order"
           >
             {sortOrder === 'asc' ? <SortAsc className="h-4 w-4" /> : <SortDesc className="h-4 w-4" />}
@@ -477,14 +536,6 @@ export default function Assets() {
               <span className="font-medium">{selectedAssets.size}</span> items selected
             </span>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                Download
-              </Button>
-              <Button variant="destructive" size="sm">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
-              </Button>
               <Button variant="ghost" size="sm" onClick={() => setSelectedAssets(new Set())}>
                 Clear Selection
               </Button>
@@ -506,13 +557,7 @@ export default function Assets() {
         </Button>
       </div>
 
-      {error ? (
-        <ErrorState
-          title="Failed to load assets"
-          message="An error occurred while fetching the assets."
-          onRetry={() => refetch()}
-        />
-      ) : isLoading ? (
+      {isLoading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {Array.from({ length: 12 }).map((_, i) => (
             <AssetCardSkeleton key={i} />
@@ -522,22 +567,23 @@ export default function Assets() {
         <EmptyState
           icon={FolderOpen}
           title="No assets found"
-          description={assets.length === 0
-            ? "Upload your first file to get started."
-            : "Try adjusting your search or filters."
+          description={
+            assets.length === 0
+              ? 'Upload your first file to get started.'
+              : 'Try adjusting your search or filters.'
           }
           action={{
             label: 'Upload Files',
-            onClick: () => {},
+            onClick: () => setUploadModalOpen(true),
           }}
         />
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-          {filteredAssets.map(asset => (
+          {filteredAssets.map((asset) => (
             <AssetCard
-              key={asset.id}
+              key={asset._id}
               asset={asset}
-              selected={selectedAssets.has(asset.id)}
+              selected={selectedAssets.has(asset._id)}
               onSelect={handleSelect}
               onDelete={handleDelete}
             />
@@ -562,18 +608,18 @@ export default function Assets() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAssets.map(asset => (
-                <TableRow key={asset.id} className="hover-elevate">
+              {filteredAssets.map((asset) => (
+                <TableRow key={asset._id} className="hover-elevate">
                   <TableCell>
                     <Checkbox
-                      checked={selectedAssets.has(asset.id)}
-                      onCheckedChange={(checked) => handleSelect(asset.id, !!checked)}
+                      checked={selectedAssets.has(asset._id)}
+                      onCheckedChange={(checked) => handleSelect(asset._id, !!checked)}
                     />
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded bg-muted flex items-center justify-center text-muted-foreground">
-                        {typeIcons[asset.type]}
+                        {typeIcons[asset.type] ?? typeIcons.other}
                       </div>
                       <span className="font-medium">{asset.name}</span>
                     </div>
@@ -591,18 +637,16 @@ export default function Assets() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Copy className="h-4 w-4 mr-2" />
-                          Copy URL
-                        </DropdownMenuItem>
+                        {asset.url && (
+                          <DropdownMenuItem onClick={() => navigator.clipboard.writeText(asset.url!)}>
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy URL
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
-                          onClick={() => handleDelete(asset.id)}
+                          onClick={() => handleDelete(asset._id)}
                         >
                           <Trash2 className="h-4 w-4 mr-2" />
                           Delete
@@ -627,18 +671,26 @@ export default function Assets() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : null}
+              {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {instance && (
+        <UploadAssetsModal
+          open={uploadModalOpen}
+          onOpenChange={setUploadModalOpen}
+          instanceId={instance._id}
+          generateUploadUrl={generateUploadUrl}
+          createAsset={createAsset}
+        />
+      )}
     </div>
   );
 }
