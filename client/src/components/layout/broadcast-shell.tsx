@@ -204,7 +204,7 @@ function AppHeader() {
           <DropdownMenuContent align="start" className="w-64">
             <DropdownMenuLabel>Switch Instance</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {instances.map((inst: { _id: string; name: string }) => inst && (
+            {instances.map((inst) => inst && (
               <DropdownMenuItem
                 key={inst._id}
                 onClick={() => setInstance(inst._id)}

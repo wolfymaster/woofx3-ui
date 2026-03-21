@@ -10,7 +10,7 @@ export function useInstance() {
 
   const instance =
     (instanceId
-      ? instances?.find((i: { _id: string }) => i?._id === instanceId)
+      ? instances?.find((i) => i !== null && i._id === instanceId)
       : null) ??
     instances?.[0] ??
     null;

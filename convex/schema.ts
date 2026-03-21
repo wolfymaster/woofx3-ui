@@ -10,7 +10,7 @@ export default defineSchema({
     name: v.string(),
     ownerId: v.id("users"),
     createdAt: v.number(),
-  }),
+  }).index("by_owner", ["ownerId"]),
 
   // instances: a single woofx3 deployment
   instances: defineTable({
