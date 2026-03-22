@@ -1,20 +1,19 @@
-import { useState } from 'react';
-import { useLocation } from 'wouter';
-import { useAuthActions } from '@convex-dev/auth/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { MonitorPlay, Loader2 } from 'lucide-react';
-import { Link } from 'wouter';
+import { useAuthActions } from "@convex-dev/auth/react";
+import { Loader2, MonitorPlay } from "lucide-react";
+import { useState } from "react";
+import { Link, useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 export default function Register() {
   const [, navigate] = useLocation();
   const { signIn } = useAuthActions();
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,9 +21,9 @@ export default function Register() {
     setError(null);
     setIsLoading(true);
     try {
-      await signIn('twitch', { redirectTo: '/auth/onboarding' });
-    } catch (e) {
-      setError('Failed to connect with Twitch. Please try again.');
+      await signIn("twitch", { redirectTo: "/auth/onboarding" });
+    } catch {
+      setError("Failed to connect with Twitch. Please try again.");
       setIsLoading(false);
     }
   }
@@ -34,10 +33,10 @@ export default function Register() {
     setError(null);
     setIsLoading(true);
     try {
-      await signIn('password', { name, email, password, flow: 'signUp' });
-      navigate('/auth/onboarding');
-    } catch (e: any) {
-      setError(e?.message || 'Registration failed. Please try again.');
+      await signIn("password", { name, email, password, flow: "signUp" });
+      navigate("/auth/onboarding");
+    } catch (err: any) {
+      setError(err?.message || "Registration failed. Please try again.");
       setIsLoading(false);
     }
   }
@@ -58,14 +57,9 @@ export default function Register() {
             <CardDescription>Get started with your streaming control plane</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={handleTwitchRegister}
-              disabled={isLoading}
-            >
+            <Button variant="outline" className="w-full" onClick={handleTwitchRegister} disabled={isLoading}>
               <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
+                <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z" />
               </svg>
               Continue with Twitch
             </Button>
@@ -116,18 +110,16 @@ export default function Register() {
                 />
               </div>
 
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
+              {error && <p className="text-sm text-destructive">{error}</p>}
 
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Create account'}
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create account"}
               </Button>
             </form>
           </CardContent>
           <CardFooter className="justify-center">
             <p className="text-sm text-muted-foreground">
-              Already have an account?{' '}
+              Already have an account?{" "}
               <Link href="/auth/login" className="text-primary hover:underline">
                 Sign in
               </Link>
