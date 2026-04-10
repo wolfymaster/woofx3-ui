@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { useLocation } from 'wouter';
 import {
@@ -51,9 +51,10 @@ import { cn } from '@/lib/utils';
 import { api } from '@convex/_generated/api';
 import { useInstance } from '@/hooks/use-instance';
 import type { Id } from '@convex/_generated/dataModel';
+import { transport, type EngineModule } from '@/lib/transport';
 
 type ModuleRepoItem = {
-  _id: Id<'moduleRepository'>;
+  _id: Id<"moduleRepository">;
   name: string;
   description: string;
   version: string;
@@ -62,19 +63,18 @@ type ModuleRepoItem = {
   archiveKey: string;
 };
 
-type InstalledModuleItem = {
-  _id: Id<'installedModules'>;
-  instanceId: Id<'instances'>;
-  moduleId: Id<'moduleRepository'>;
-  enabled: boolean;
-  installedAt: number;
-  module: ModuleRepoItem | null;
-};
-
-type ModuleView = ModuleRepoItem & {
+type ModuleView = {
+  _id: Id<"moduleRepository"> | string;
+  name: string;
+  description: string;
+  version: string;
+  tags: string[];
+  manifest: Record<string, unknown>;
+  archiveKey: string;
   isInstalled: boolean;
   isEnabled: boolean;
-  installedRecordId?: Id<'installedModules'>;
+  engineState?: string;
+  isOrphan?: boolean;
 };
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -90,19 +90,19 @@ const categoryIcons: Record<string, React.ReactNode> = {
 
 const categories = Object.keys(categoryIcons);
 
-function getCategory(module: ModuleRepoItem): string {
-  return (module.manifest?.category as string) || module.tags[0] || 'Utilities';
+function getCategory(module: ModuleView): string {
+  return (module.manifest?.category as string) || module.tags[0] || "Utilities";
 }
 
-function getAuthor(module: ModuleRepoItem): string {
-  return (module.manifest?.author as string) || 'Unknown';
+function getAuthor(module: ModuleView): string {
+  return (module.manifest?.author as string) || "Unknown";
 }
 
 interface ModuleCardProps {
   module: ModuleView;
-  onInstall: (id: Id<'moduleRepository'>) => void;
-  onUninstall: (id: Id<'moduleRepository'>) => void;
-  onToggleEnabled: (id: Id<'moduleRepository'>, enabled: boolean) => void;
+  onInstall: (id: Id<"moduleRepository"> | string) => void;
+  onUninstall: (id: Id<"moduleRepository"> | string) => void;
+  onToggleEnabled: (id: Id<"moduleRepository"> | string, enabled: boolean) => void;
   isInstalling?: boolean;
 }
 
@@ -181,7 +181,7 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, isInstall
               <ExternalLink className="h-4 w-4" />
             </Button>
           </>
-        ) : (
+        ) : !module.isOrphan ? (
           <Button
             size="sm"
             className="flex-1"
@@ -194,9 +194,9 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, isInstall
             ) : (
               <Download className="h-4 w-4 mr-2" />
             )}
-            {isInstalling ? 'Installing...' : 'Install'}
+            {isInstalling ? "Installing..." : "Install"}
           </Button>
-        )}
+        ) : null}
       </CardFooter>
     </Card>
   );
@@ -233,35 +233,81 @@ export default function Modules() {
   const [sortBy, setSortBy] = useState('name');
   const [activeTab, setActiveTab] = useState('installed');
   const [installingId, setInstallingId] = useState<Id<'moduleRepository'> | null>(null);
+  const [engineModules, setEngineModules] = useState<EngineModule[]>([]);
+  const [engineError, setEngineError] = useState<string | null>(null);
 
   const repoModules = useQuery(api.moduleRepository.list, {}) as ModuleRepoItem[] | undefined;
-  const installedModules = useQuery(
-    api.installedModules.listForInstance,
-    instance ? { instanceId: instance._id } : 'skip'
-  ) as InstalledModuleItem[] | undefined;
-
-  const installModule = useMutation(api.installedModules.install);
-  const uninstallModule = useMutation(api.installedModules.uninstall);
-  const setEnabled = useMutation(api.installedModules.setEnabled);
+  const enqueueEngineInstall = useMutation(api.moduleRepository.enqueueEngineInstall);
 
   const isLoading = instanceLoading || repoModules === undefined;
 
+  const runtimeInstanceId = useMemo(() => {
+    if (!instance) return '';
+    const maybeApplicationId = (instance as Record<string, unknown>).applicationId;
+    return (typeof maybeApplicationId === 'string' && maybeApplicationId.length > 0)
+      ? maybeApplicationId
+      : instance._id;
+  }, [instance]);
+
+  const refreshEngineModules = async () => {
+    if (!runtimeInstanceId) {
+      setEngineModules([]);
+      setEngineError(null);
+      return;
+    }
+    try {
+      const modules = await transport.listEngineModules(runtimeInstanceId);
+      setEngineModules(modules);
+      setEngineError(null);
+    } catch (err) {
+      console.error('Failed to fetch engine modules:', err);
+      setEngineError('Could not reach engine module list.');
+      setEngineModules([]);
+    }
+  };
+
+  useEffect(() => {
+    void refreshEngineModules();
+  }, [runtimeInstanceId]);
+
   // Merge repo modules with installed status
   const allModules = useMemo((): ModuleView[] => {
-    if (!repoModules) return [];
-    const installedMap = new Map<string, InstalledModuleItem>();
-    (installedModules ?? []).forEach((im) => installedMap.set(im.moduleId, im));
+    if (!repoModules) {
+      return [];
+    }
+    const installedMap = new Map<string, EngineModule>();
+    engineModules.forEach((m) => installedMap.set(`${m.name}:${m.version}`, m));
 
-    return repoModules.map((m) => {
-      const installed = installedMap.get(m._id);
+    const repoViews: ModuleView[] = repoModules.map((m) => {
+      const key = `${m.name}:${m.version}`;
+      const installed = installedMap.get(key);
+      if (installed) {
+        installedMap.delete(key);
+      }
       return {
         ...m,
         isInstalled: !!installed,
-        isEnabled: installed?.enabled ?? false,
-        installedRecordId: installed?._id,
+        isEnabled: (installed?.state ?? "disabled") === "active",
+        engineState: installed?.state,
       };
     });
-  }, [repoModules, installedModules]);
+
+    const orphans: ModuleView[] = Array.from(installedMap.values()).map((em) => ({
+      _id: `engine:${em.name}:${em.version}`,
+      name: em.name,
+      description: "Installed on engine (not in module catalog)",
+      version: em.version,
+      tags: [],
+      manifest: {},
+      archiveKey: "",
+      isInstalled: true,
+      isEnabled: em.state === "active",
+      engineState: em.state,
+      isOrphan: true,
+    }));
+
+    return [...repoViews, ...orphans];
+  }, [repoModules, engineModules]);
 
   const installedModuleViews = useMemo(
     () => allModules.filter((m) => m.isInstalled),
@@ -294,26 +340,39 @@ export default function Modules() {
     return result;
   };
 
-  const handleInstall = async (moduleId: Id<'moduleRepository'>) => {
-    if (!instance) return;
+  const handleInstall = async (moduleId: Id<"moduleRepository"> | string) => {
+    if (!instance || typeof moduleId === "string") {
+      return;
+    }
     setInstallingId(moduleId);
     try {
-      await installModule({ instanceId: instance._id, moduleId });
+      await enqueueEngineInstall({ instanceId: instance._id, moduleId });
+      await refreshEngineModules();
     } catch (err) {
-      console.error('Install failed:', err);
+      console.error("Install failed:", err);
     } finally {
       setInstallingId(null);
     }
   };
 
-  const handleUninstall = async (moduleId: Id<'moduleRepository'>) => {
-    if (!instance) return;
-    await uninstallModule({ instanceId: instance._id, moduleId }).catch(console.error);
+  const handleUninstall = async (moduleId: Id<"moduleRepository"> | string) => {
+    const module = allModules.find((m) => m._id === moduleId);
+    if (!module || !runtimeInstanceId) {
+      return;
+    }
+    await transport.uninstallEngineModule(runtimeInstanceId, module.name).catch(console.error);
+    await refreshEngineModules();
   };
 
-  const handleToggleEnabled = async (moduleId: Id<'moduleRepository'>, enabled: boolean) => {
-    if (!instance) return;
-    await setEnabled({ instanceId: instance._id, moduleId, enabled }).catch(console.error);
+  const handleToggleEnabled = async (moduleId: Id<"moduleRepository"> | string, enabled: boolean) => {
+    const module = allModules.find((m) => m._id === moduleId);
+    if (!module || !runtimeInstanceId) {
+      return;
+    }
+    await transport
+      .setEngineModuleState(runtimeInstanceId, module.name, enabled ? "active" : "disabled")
+      .catch(console.error);
+    await refreshEngineModules();
   };
 
   const toggleCategory = (category: string) => {
@@ -366,9 +425,9 @@ export default function Modules() {
                 <span className="text-xs text-muted-foreground hidden md:block">v{module.version}</span>
                 {module.isInstalled ? (
                   <Button variant="outline" size="sm" onClick={() => handleToggleEnabled(module._id, !module.isEnabled)}>
-                    {module.isEnabled ? 'Disable' : 'Enable'}
+                    {module.isEnabled ? "Disable" : "Enable"}
                   </Button>
-                ) : (
+                ) : !module.isOrphan && (
                   <Button size="sm" onClick={() => handleInstall(module._id)} disabled={installingId === module._id}>
                     {installingId === module._id ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -398,6 +457,16 @@ export default function Modules() {
           </Button>
         }
       />
+
+      {engineError && (
+        <div className="mb-4">
+          <ErrorState
+            title="Engine connection issue"
+            message={engineError}
+            onRetry={() => { void refreshEngineModules(); }}
+          />
+        </div>
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
