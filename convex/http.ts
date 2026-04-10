@@ -203,6 +203,39 @@ http.route({
   }),
 });
 
+http.route({ path: "/api/webhooks/woofx3/notify", method: "OPTIONS", handler: preflightHandler });
+http.route({
+  path: "/api/webhooks/woofx3/notify",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const payload = await request.json();
+
+    if (!payload.instanceId || !payload.type) {
+      return corsJson({ error: "Missing required fields: instanceId, type" }, 400);
+    }
+
+    if (payload.type === "module.installed") {
+      const p = payload.payload;
+      if (!p?.name || !p?.version) {
+        return corsJson({ error: "Missing module name/version in payload" }, 400);
+      }
+
+      await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
+        instanceId: payload.instanceId,
+        moduleName: p.name,
+        moduleVersion: p.version,
+        triggers: p.triggers ?? [],
+        actions: p.actions ?? [],
+      });
+
+      return corsJson({ success: true, type: "module.installed" });
+    }
+
+    // Future event types can be handled here
+    return corsJson({ success: true, type: payload.type, handled: false });
+  }),
+});
+
 http.route({ pathPrefix: "/api/browser-source/", method: "OPTIONS", handler: preflightHandler });
 http.route({
   pathPrefix: "/api/browser-source/",
