@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { useLocation } from 'wouter';
 import {
@@ -249,7 +249,7 @@ export default function Modules() {
       : instance._id;
   }, [instance]);
 
-  const refreshEngineModules = async () => {
+  const refreshEngineModules = useCallback(async (retries = 2) => {
     if (!runtimeInstanceId) {
       setEngineModules([]);
       setEngineError(null);
@@ -260,15 +260,19 @@ export default function Modules() {
       setEngineModules(modules);
       setEngineError(null);
     } catch (err) {
-      console.error('Failed to fetch engine modules:', err);
-      setEngineError('Could not reach engine module list.');
+      if (retries > 0) {
+        await new Promise((r) => setTimeout(r, 1500));
+        return refreshEngineModules(retries - 1);
+      }
+      console.error("Failed to fetch engine modules:", err);
+      setEngineError("Could not reach engine module list.");
       setEngineModules([]);
     }
-  };
+  }, [runtimeInstanceId]);
 
   useEffect(() => {
     void refreshEngineModules();
-  }, [runtimeInstanceId]);
+  }, [refreshEngineModules]);
 
   // Merge repo modules with installed status
   const allModules = useMemo((): ModuleView[] => {
@@ -427,7 +431,7 @@ export default function Modules() {
                   <Button variant="outline" size="sm" onClick={() => handleToggleEnabled(module._id, !module.isEnabled)}>
                     {module.isEnabled ? "Disable" : "Enable"}
                   </Button>
-                ) : !module.isOrphan && (
+                ) : !module.isOrphan ? (
                   <Button size="sm" onClick={() => handleInstall(module._id)} disabled={installingId === module._id}>
                     {installingId === module._id ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -436,7 +440,7 @@ export default function Modules() {
                     )}
                     Install
                   </Button>
-                )}
+                ) : null}
               </div>
             </div>
           );
