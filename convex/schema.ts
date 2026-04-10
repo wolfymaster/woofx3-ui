@@ -92,22 +92,24 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_instance", ["instanceId"]),
 
-  // moduleRepository: directory of all available modules (seeded by admins)
+  // moduleRepository: directory of all available modules (seeded by admins or uploaded)
   moduleRepository: defineTable({
+    instanceId: v.optional(v.id("instances")),
     name: v.string(),
     description: v.string(),
     version: v.string(),
     tags: v.array(v.string()),
     manifest: v.any(),
     archiveKey: v.string(),
-  }),
-
-  // installedModules: which modules are installed per instance
-  installedModules: defineTable({
-    instanceId: v.id("instances"),
-    moduleId: v.id("moduleRepository"),
-    enabled: v.boolean(),
-    installedAt: v.number(),
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("delivering"),
+        v.literal("installed"),
+        v.literal("failed"),
+      ),
+    ),
+    statusMessage: v.optional(v.string()),
   }).index("by_instance", ["instanceId"]),
 
   // dashboardLayouts: dashboard widget configuration per user/instance
@@ -124,37 +126,53 @@ export default defineSchema({
     ),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
-  // triggerDefinitions: available workflow trigger types (built-ins + module-contributed)
+  // triggerDefinitions: UI metadata only; at most one row per stable trigger id (matches engine / module id)
   triggerDefinitions: defineTable({
-    slug: v.string(), // stable external ID, e.g. "trigger-chat-command"
+    slug: v.string(), // stable id, e.g. twitch.channel.follow (namespaced by module)
     name: v.string(),
     description: v.string(),
-    category: v.string(), // "chat" | "events" | "time" | "stream"
-    color: v.string(), // tailwind class, e.g. "text-blue-500"
-    icon: v.string(), // Lucide icon name, e.g. "MessageCircle"
-    event: v.optional(v.string()), // NATS subject, e.g. "message.user.twitch"
-    allowVariants: v.optional(v.boolean()),
-    configFields: v.optional(v.array(v.any())), // ConfigField[]
-    supportsTiers: v.optional(v.boolean()), // UI: show multi-tier builder
-    tierLabel: v.optional(v.string()), // UI: label for tier amounts, e.g. "bits"
-    moduleId: v.optional(v.id("moduleRepository")), // absent = built-in
-  })
-    .index("by_slug", ["slug"])
-    .index("by_module", ["moduleId"]),
-
-  // actionDefinitions: available workflow action types (built-ins + module-contributed)
-  actionDefinitions: defineTable({
-    slug: v.string(), // e.g. "action-show-alert"
-    name: v.string(),
-    description: v.string(),
-    category: v.string(), // "alerts" | "chat" | "scene" | "audio" | "integration"
+    category: v.string(),
     color: v.string(),
-    icon: v.string(), // Lucide icon name
-    configFields: v.optional(v.array(v.any())), // ConfigField[]
+    icon: v.string(),
+    event: v.optional(v.string()),
+    allowVariants: v.optional(v.boolean()),
+    configFields: v.optional(v.array(v.any())),
+    supportsTiers: v.optional(v.boolean()),
+    tierLabel: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
   })
     .index("by_slug", ["slug"])
     .index("by_module", ["moduleId"]),
+
+  // actionDefinitions: UI metadata only; at most one row per stable action id
+  actionDefinitions: defineTable({
+    slug: v.string(),
+    name: v.string(),
+    description: v.string(),
+    category: v.string(),
+    color: v.string(),
+    icon: v.string(),
+    configFields: v.optional(v.array(v.any())),
+    moduleId: v.optional(v.id("moduleRepository")),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_module", ["moduleId"]),
+
+  // instanceEnabledTriggers: which trigger ids are enabled for a given instance (module lifecycle)
+  instanceEnabledTriggers: defineTable({
+    instanceId: v.id("instances"),
+    triggerId: v.string(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_trigger", ["instanceId", "triggerId"]),
+
+  // instanceEnabledActions: which action ids are enabled for a given instance
+  instanceEnabledActions: defineTable({
+    instanceId: v.id("instances"),
+    actionId: v.string(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_action", ["instanceId", "actionId"]),
 
   // workflowTemplates: predefined workflow templates for common Twitch events
   workflowTemplates: defineTable({
