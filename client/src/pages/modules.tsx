@@ -75,6 +75,8 @@ type ModuleView = {
   isEnabled: boolean;
   engineState?: string;
   isOrphan?: boolean;
+  status?: "pending" | "delivering" | "installed" | "failed";
+  statusMessage?: string;
 };
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -103,10 +105,11 @@ interface ModuleCardProps {
   onInstall: (id: Id<"moduleRepository"> | string) => void;
   onUninstall: (id: Id<"moduleRepository"> | string) => void;
   onToggleEnabled: (id: Id<"moduleRepository"> | string, enabled: boolean) => void;
+  onRetry: (id: Id<"moduleRepository">) => void;
   isInstalling?: boolean;
 }
 
-function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, isInstalling }: ModuleCardProps) {
+function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, onRetry, isInstalling }: ModuleCardProps) {
   const category = getCategory(module);
   const author = getAuthor(module);
   const CategoryIcon = categoryIcons[category] ? (
@@ -136,6 +139,17 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, isInstall
                   Installed
                 </Badge>
               )}
+              {module.status === "delivering" && (
+                <Badge variant="secondary" className="shrink-0 text-xs">
+                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                  Installing
+                </Badge>
+              )}
+              {module.status === "failed" && (
+                <Badge variant="destructive" className="shrink-0 text-xs">
+                  Failed
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
               v{module.version} · by {author}
@@ -157,7 +171,20 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, isInstall
         </div>
       </CardContent>
       <CardFooter className="pt-0 gap-2">
-        {module.isInstalled ? (
+        {module.status === "failed" ? (
+          <div className="flex-1 flex items-center gap-2">
+            <p className="text-xs text-destructive truncate flex-1" title={module.statusMessage}>
+              {module.statusMessage || "Installation failed"}
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onRetry(module._id as Id<"moduleRepository">)}
+            >
+              Retry
+            </Button>
+          </div>
+        ) : module.isInstalled ? (
           <>
             <Button
               variant="outline"
@@ -293,6 +320,8 @@ export default function Modules() {
         isInstalled: !!installed,
         isEnabled: (installed?.state ?? "disabled") === "active",
         engineState: installed?.state,
+        status: (m as Record<string, unknown>).status as ModuleView["status"],
+        statusMessage: (m as Record<string, unknown>).statusMessage as string | undefined,
       };
     });
 
@@ -379,6 +408,21 @@ export default function Modules() {
     await refreshEngineModules();
   };
 
+  const handleRetry = async (moduleId: Id<"moduleRepository">) => {
+    if (!instance) {
+      return;
+    }
+    setInstallingId(moduleId);
+    try {
+      await enqueueEngineInstall({ instanceId: instance._id, moduleId });
+      await refreshEngineModules();
+    } catch (err) {
+      console.error("Retry failed:", err);
+    } finally {
+      setInstallingId(null);
+    }
+  };
+
   const toggleCategory = (category: string) => {
     setSelectedCategories((prev) =>
       prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]
@@ -397,6 +441,7 @@ export default function Modules() {
             onInstall={handleInstall}
             onUninstall={handleUninstall}
             onToggleEnabled={handleToggleEnabled}
+            onRetry={handleRetry}
             isInstalling={installingId === module._id}
           />
         ))}
