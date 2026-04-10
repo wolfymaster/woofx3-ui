@@ -41,11 +41,11 @@ export const processModuleInstalled = internalMutation({
     actions: v.array(actionValidator),
   },
   handler: async (ctx, { moduleName, moduleVersion, triggers, actions }) => {
-    // Find the moduleRepository record by name + version
-    const allModules = await ctx.db.query("moduleRepository").collect();
-    const moduleRecord = allModules.find(
-      (m) => m.name === moduleName && m.version === moduleVersion,
-    );
+    // Find the moduleRepository record by name + version using index
+    const moduleRecord = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_name_version", (q) => q.eq("name", moduleName).eq("version", moduleVersion))
+      .first();
     const moduleId = moduleRecord?._id;
 
     // Upsert trigger definitions

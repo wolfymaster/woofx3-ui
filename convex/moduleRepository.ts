@@ -72,7 +72,10 @@ export const enqueueEngineInstall = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    await ctx.db.patch(args.moduleId, { status: "pending", statusMessage: undefined });
     await ctx.scheduler.runAfter(0, internal.moduleEngine.deliverZipToInstance, {
       moduleId: args.moduleId,
       instanceId: args.instanceId,
@@ -97,7 +100,10 @@ export const updateStatus = internalMutation({
     if (!existing) {
       return;
     }
-    await ctx.db.patch(moduleId, { status, statusMessage });
+    await ctx.db.patch(moduleId, {
+      status,
+      statusMessage: status === "failed" ? statusMessage : undefined,
+    });
   },
 });
 
@@ -108,11 +114,17 @@ export const getInstallDeliveryData = internalQuery({
   },
   handler: async (ctx, args) => {
     const instance = await ctx.db.get(args.instanceId);
-    if (!instance) throw new Error("Instance not found");
+    if (!instance) {
+      throw new Error("Instance not found");
+    }
     const module = await ctx.db.get(args.moduleId);
-    if (!module) throw new Error("Module not found");
+    if (!module) {
+      throw new Error("Module not found");
+    }
     const archiveUrl = await ctx.storage.getUrl(module.archiveKey as Id<"_storage">);
-    if (!archiveUrl) throw new Error("Module archive not found");
+    if (!archiveUrl) {
+      throw new Error("Module archive not found");
+    }
     return {
       instanceUrl: instance.url,
       archiveUrl,

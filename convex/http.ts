@@ -221,7 +221,7 @@ http.route({
       instanceId: payload.instanceId,
     });
 
-    if (expectedSecret && providedSecret !== expectedSecret) {
+    if (!expectedSecret || providedSecret !== expectedSecret) {
       return corsJson({ error: "Unauthorized" }, 401);
     }
 

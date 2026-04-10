@@ -42,11 +42,8 @@ export const deliverZipToInstance = internalAction({
       }>(normalizeEngineApiUrl(delivery.instanceUrl));
       await rpc.installModuleZip(delivery.fileName, zipBase64);
 
-      await ctx.runMutation(internal.moduleRepository.updateStatus, {
-        moduleId: args.moduleId,
-        status: "installed",
-      });
-
+      // Note: status transitions to "installed" when the engine sends the
+      // module.installed webhook callback. The action only confirms delivery.
       return { delivered: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
