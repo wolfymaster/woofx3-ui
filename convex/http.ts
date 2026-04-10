@@ -214,6 +214,17 @@ http.route({
       return corsJson({ error: "Missing required fields: instanceId, type" }, 400);
     }
 
+    // Validate webhook secret
+    const authHeader = request.headers.get("Authorization");
+    const providedSecret = authHeader?.replace("Bearer ", "");
+    const expectedSecret = await ctx.runQuery(internal.webhookAuth.getWebhookSecret, {
+      instanceId: payload.instanceId,
+    });
+
+    if (expectedSecret && providedSecret !== expectedSecret) {
+      return corsJson({ error: "Unauthorized" }, 401);
+    }
+
     if (payload.type === "module.installed") {
       const p = payload.payload;
       if (!p?.name || !p?.version) {
