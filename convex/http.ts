@@ -225,6 +225,16 @@ http.route({
       return corsJson({ error: "Unauthorized" }, 401);
     }
 
+    // Validate applicationId if provided — must match a known application record
+    if (payload.applicationId) {
+      const app = await ctx.runQuery(internal.instances.getApplicationForInstance, {
+        instanceId: payload.instanceId,
+      });
+      if (app && app.applicationId !== payload.applicationId) {
+        return corsJson({ error: "applicationId mismatch" }, 403);
+      }
+    }
+
     if (payload.type === "module.installed") {
       const p = payload.payload;
       if (!p?.name || !p?.version) {

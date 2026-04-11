@@ -127,6 +127,8 @@ export const getInstallDeliveryData = internalQuery({
     }
     return {
       instanceUrl: instance.url,
+      apiKey: instance.apiKey ?? null,
+      applicationId: instance.applicationId ?? null,
       archiveUrl,
       fileName: `${module.name}-${module.version}.zip`,
     };

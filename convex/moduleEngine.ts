@@ -37,9 +37,20 @@ export const deliverZipToInstance = internalAction({
       const archiveBuffer = await archiveRes.arrayBuffer();
       const zipBase64 = Buffer.from(archiveBuffer).toString("base64");
 
+      const apiUrl = normalizeEngineApiUrl(delivery.instanceUrl);
+      const headers: Record<string, string> = {};
+      if (delivery.apiKey) {
+        headers["Authorization"] = `Bearer ${delivery.apiKey}`;
+      }
+      if (delivery.applicationId) {
+        headers["X-Application-Id"] = delivery.applicationId;
+      }
+      const rpcInit = Object.keys(headers).length > 0
+        ? new Request(apiUrl, { headers })
+        : apiUrl;
       const rpc = newHttpBatchRpcSession<{
         installModuleZip(fileName: string, zipBase64: string): Promise<unknown>;
-      }>(normalizeEngineApiUrl(delivery.instanceUrl));
+      }>(rpcInit);
       await rpc.installModuleZip(delivery.fileName, zipBase64);
 
       // Note: status transitions to "installed" when the engine sends the
