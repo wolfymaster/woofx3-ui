@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAction, useMutation as useConvexMutation } from 'convex/react';
 import {
   User,
   Bell,
@@ -10,7 +11,10 @@ import {
   Sun,
   Monitor,
   Check,
+  CheckCircle2,
   Server,
+  Loader2,
+  XCircle,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -33,6 +37,205 @@ import { useTheme } from '@/hooks/use-theme';
 import { cn } from '@/lib/utils';
 import { $engineUrl, $apiKey } from '@/lib/stores';
 import { useStore } from '@nanostores/react';
+import { api } from '@convex/_generated/api';
+import { useInstance } from '@/hooks/use-instance';
+
+type ConnectionStatus = "idle" | "testing" | "success" | "error";
+
+function EngineSettingsTab() {
+  const { instance, isLoading: instanceLoading } = useInstance();
+  const testConnectionAction = useAction(api.engineHealth.testConnection);
+  const updateInstance = useConvexMutation(api.instances.update);
+  const [status, setStatus] = useState<ConnectionStatus>("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [savingUrl, setSavingUrl] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fallbackUrl = useStore($engineUrl);
+  const apiKey = useStore($apiKey);
+
+  const [urlDraft, setUrlDraft] = useState(fallbackUrl);
+
+  useEffect(() => {
+    const next = instance?.url?.trim() || fallbackUrl;
+    setUrlDraft(next);
+  }, [instance, fallbackUrl]);
+
+  const effectiveUrl = urlDraft.trim();
+
+  const persistEngineUrl = useCallback(async () => {
+    setSaveError(null);
+    if (!instance) {
+      return;
+    }
+    const trimmed = urlDraft.trim();
+    if (!trimmed || trimmed === instance.url.trim()) {
+      $engineUrl.set(trimmed);
+      return;
+    }
+    setSavingUrl(true);
+    try {
+      await updateInstance({ instanceId: instance._id, url: trimmed });
+      $engineUrl.set(trimmed);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSavingUrl(false);
+    }
+  }, [instance, urlDraft, updateInstance]);
+
+  const handleTestConnection = useCallback(async () => {
+    if (!effectiveUrl) {
+      setStatus("error");
+      setErrorMsg("No engine URL configured");
+      return;
+    }
+    setStatus("testing");
+    setErrorMsg(null);
+
+    if (resetTimer.current) {
+      clearTimeout(resetTimer.current);
+    }
+
+    try {
+      const result = await testConnectionAction({ url: effectiveUrl });
+      if (result.ok) {
+        setStatus("success");
+      } else {
+        setStatus("error");
+        setErrorMsg(result.error ?? "Unknown error");
+      }
+    } catch (e) {
+      setStatus("error");
+      setErrorMsg(e instanceof Error ? e.message : String(e));
+    }
+
+    resetTimer.current = setTimeout(() => {
+      setStatus("idle");
+      setErrorMsg(null);
+    }, 5000);
+  }, [effectiveUrl, testConnectionAction]);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimer.current) {
+        clearTimeout(resetTimer.current);
+      }
+    };
+  }, []);
+
+  if (instanceLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center gap-2 py-8 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading instance…
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!instance) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-sm text-muted-foreground">
+          No instance selected. Complete onboarding or pick an instance from the header menu.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Engine Configuration</CardTitle>
+        <CardDescription>
+          Endpoint for the selected instance ({instance.name}). Each instance has its own engine URL.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid gap-2">
+          <Label htmlFor="engine-url">Engine URL</Label>
+          <div className="flex flex-wrap gap-2">
+            <Input
+              id="engine-url"
+              placeholder="localhost:8080 or https://api.example.com"
+              value={urlDraft}
+              onChange={(e) => setUrlDraft(e.target.value)}
+              onBlur={() => {
+                void persistEngineUrl();
+              }}
+              className="flex-1 min-w-[200px]"
+              data-testid="input-engine-url"
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={savingUrl || !effectiveUrl}
+              onClick={() => {
+                void persistEngineUrl();
+              }}
+              data-testid="button-save-engine-url"
+            >
+              {savingUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save URL"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleTestConnection}
+              disabled={!effectiveUrl || status === "testing"}
+              data-testid="button-test-connection"
+            >
+              {status === "testing" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {status === "success" && <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />}
+              {status === "error" && <XCircle className="h-4 w-4 mr-2 text-destructive" />}
+              {status === "idle" && <Server className="h-4 w-4 mr-2" />}
+              {status === "testing"
+                ? "Testing..."
+                : status === "success"
+                  ? "Connected"
+                  : status === "error"
+                    ? "Failed"
+                    : "Test Connection"}
+            </Button>
+          </div>
+          {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+          {status === "error" && errorMsg && (
+            <p className="text-xs text-destructive">{errorMsg}</p>
+          )}
+          {status === "success" && (
+            <p className="text-xs text-green-500">Engine is reachable.</p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            The hostname and port (or full URL) where this instance&apos;s backend API is running.
+            If no protocol is specified, the current page&apos;s protocol will be used.
+          </p>
+        </div>
+        <Separator />
+        <div className="grid gap-2">
+          <Label htmlFor="api-key">API Key</Label>
+          <Input
+            id="api-key"
+            type="password"
+            placeholder="Enter your API key"
+            value={apiKey}
+            onChange={(e) => $apiKey.set(e.target.value)}
+            data-testid="input-api-key"
+          />
+          <p className="text-xs text-muted-foreground">
+            Optional override when the stored instance key is missing (e.g. local dev). Saved in this browser only.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+          <div className="h-2 w-2 rounded-full bg-green-500" />
+          <p className="text-sm text-muted-foreground">
+            Saving the engine URL updates this instance and reconnects the live engine connection.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 type UserPreferences = { email: boolean; push: boolean; workflow: boolean; marketing: boolean };
 
@@ -232,11 +435,12 @@ export default function Settings() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     {presets.map(p => (
-                      <div
+                      <button
                         key={p.id}
+                        type="button"
                         onClick={() => setPreset(p.id)}
                         className={cn(
-                          'relative rounded-lg border-2 p-4 cursor-pointer hover-elevate',
+                          'relative w-full text-left rounded-lg border-2 p-4 cursor-pointer hover-elevate',
                           preset.id === p.id ? 'border-primary' : 'border-muted'
                         )}
                         data-testid={`button-preset-${p.id}`}
@@ -271,7 +475,7 @@ export default function Settings() {
                             style={{ backgroundColor: `hsl(${p.colors.accent})` }}
                           />
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </CardContent>
@@ -401,51 +605,7 @@ export default function Settings() {
             </TabsContent>
 
             <TabsContent value="engine" className="mt-0">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Engine Configuration</CardTitle>
-                  <CardDescription>
-                    Configure the backend API endpoint and authentication for the UI.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid gap-2">
-                    <Label htmlFor="engine-url">Engine URL</Label>
-                    <Input
-                      id="engine-url"
-                      placeholder="localhost:8080 or https://api.example.com"
-                      value={useStore($engineUrl)}
-                      onChange={(e) => $engineUrl.set(e.target.value)}
-                      data-testid="input-engine-url"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      The hostname and port (or full URL) where the backend API is running.
-                      If no protocol is specified, the current page's protocol will be used.
-                    </p>
-                  </div>
-                  <Separator />
-                  <div className="grid gap-2">
-                    <Label htmlFor="api-key">API Key</Label>
-                    <Input
-                      id="api-key"
-                      type="password"
-                      placeholder="Enter your API key"
-                      value={useStore($apiKey)}
-                      onChange={(e) => $apiKey.set(e.target.value)}
-                      data-testid="input-api-key"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Optional API key for authenticating with the backend API.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-                    <div className="h-2 w-2 rounded-full bg-green-500" />
-                    <p className="text-sm text-muted-foreground">
-                      Changes are saved automatically and will reconnect the WebSocket connection.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+              <EngineSettingsTab />
             </TabsContent>
 
             <TabsContent value="integrations" className="mt-0">
