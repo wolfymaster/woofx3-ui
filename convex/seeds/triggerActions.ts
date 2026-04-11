@@ -1,11 +1,10 @@
 /**
- * Seed built-in trigger and action definitions.
+ * Seed Convex UI rows for triggerDefinitions / actionDefinitions (dev/bootstrap).
+ * Production path: engine webhook upserts defs by stable id; module install maintains instance join tables.
  *
  * Run via: bunx convex run seeds/triggerActions:seed
  *
- * Idempotent: drops all known built-in slugs then re-inserts them.
- * Any trigger/action not in BUILTIN_TRIGGER_SLUGS / BUILTIN_ACTION_SLUGS
- * (e.g. module-contributed ones) is left untouched.
+ * Idempotent for slugs listed below; other slugs are left untouched.
  */
 import { internalMutation } from "../_generated/server";
 import { internal } from "../_generated/api";

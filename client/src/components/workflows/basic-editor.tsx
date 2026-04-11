@@ -1,17 +1,17 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { ArrowRight, ArrowLeft, Check, Loader2, Sparkles, Plus, Trash2 } from 'lucide-react';
+import { AlertCircle, ArrowRight, ArrowLeft, Check, Loader2, Sparkles, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { useToast } from '@/hooks/use-toast';
+import { useWorkflowCatalog } from '@/hooks/use-workflow-catalog';
 import { TriggerConfigForm } from './trigger-config-form';
 import {
-  triggerPresets,
-  actionPresets,
   generateWorkflowFromPresets,
   generateMultiTierWorkflow,
   getDefaultConfigValues,
@@ -179,10 +179,13 @@ interface VariantActionRowProps {
   tier: TierConfig;
   trigger: TriggerPreset;
   index: number;
+  actionChoices: ActionPreset[];
   onSelectAction: (tierId: string, action: ActionPreset) => void;
 }
 
-function VariantActionRow({ tier, trigger, index, onSelectAction }: VariantActionRowProps) {
+function VariantActionRow({ tier, trigger, index, actionChoices, onSelectAction }: VariantActionRowProps) {
+  const TriggerIcon = trigger.icon;
+  const TierActionIcon = tier.action?.icon;
   // Get a label for this variant based on its config values
   const getVariantLabel = () => {
     const amount = tier.values.amount as { type: string; value?: number; min?: number; max?: number } | undefined;
@@ -201,13 +204,13 @@ function VariantActionRow({ tier, trigger, index, onSelectAction }: VariantActio
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="gap-1">
-            <trigger.icon className="h-3 w-3" />
+            <TriggerIcon className="h-3 w-3" />
             {getVariantLabel()}
           </Badge>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
-          {tier.action ? (
+          {tier.action && TierActionIcon ? (
             <Badge variant="default" className="gap-1">
-              <tier.action.icon className="h-3 w-3" />
+              <TierActionIcon className="h-3 w-3" />
               {tier.action.name}
             </Badge>
           ) : (
@@ -216,7 +219,7 @@ function VariantActionRow({ tier, trigger, index, onSelectAction }: VariantActio
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-          {actionPresets.map(action => (
+          {actionChoices.map((action) => (
             <CompactActionCard
               key={action.id}
               action={action}
@@ -241,6 +244,9 @@ interface VariantActionConfigRowProps {
 function VariantActionConfigRow({ tier, trigger, index, onUpdateConfig }: VariantActionConfigRowProps) {
   if (!tier.action?.config?.fields) return null;
 
+  const TriggerIcon = trigger.icon;
+  const ActionIcon = tier.action.icon;
+
   // Get a label for this variant based on its config values
   const getVariantLabel = () => {
     const amount = tier.values.amount as { type: string; value?: number; min?: number; max?: number } | undefined;
@@ -259,12 +265,12 @@ function VariantActionConfigRow({ tier, trigger, index, onUpdateConfig }: Varian
       <div className="space-y-4">
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="gap-1">
-            <trigger.icon className="h-3 w-3" />
+            <TriggerIcon className="h-3 w-3" />
             {getVariantLabel()}
           </Badge>
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
           <Badge variant="default" className="gap-1">
-            <tier.action.icon className="h-3 w-3" />
+            <ActionIcon className="h-3 w-3" />
             {tier.action.name}
           </Badge>
         </div>
@@ -282,6 +288,26 @@ function VariantActionConfigRow({ tier, trigger, index, onUpdateConfig }: Varian
 export function BasicWorkflowEditor() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const {
+    instance,
+    instanceLoading,
+    triggerPresets,
+    actionPresets,
+    engine,
+    loading: catalogLoading,
+    error: catalogError,
+    refresh,
+  } = useWorkflowCatalog();
+
+  const triggerCategoryOrder = useMemo(
+    () => Array.from(new Set(triggerPresets.map((t) => t.category))).sort(),
+    [triggerPresets],
+  );
+  const actionCategoryOrder = useMemo(
+    () => Array.from(new Set(actionPresets.map((a) => a.category))).sort(),
+    [actionPresets],
+  );
+
   const [step, setStep] = useState<EditorStep>('trigger');
   const [selectedTrigger, setSelectedTrigger] = useState<TriggerPreset | null>(null);
   const [selectedAction, setSelectedAction] = useState<ActionPreset | null>(null);
@@ -410,7 +436,7 @@ export function BasicWorkflowEditor() {
   const handleCreate = () => {
     if (!selectedTrigger) return;
 
-    let workflow;
+    let workflow: ReturnType<typeof generateWorkflowFromPresets>;
     if (supportsTiers && tiers.length > 0) {
       const validTiers = tiers.filter(t => t.action);
       if (validTiers.length === 0) return;
@@ -466,9 +492,6 @@ export function BasicWorkflowEditor() {
     tiers.every(t => t.action) &&
     !tiers.some(t => t.action?.config?.fields?.length);
 
-  const triggerCategories = ['events', 'chat', 'time', 'stream'] as const;
-  const actionCategories = ['alerts', 'chat', 'scene', 'audio', 'integration'] as const;
-
   const stepDescriptions: Record<EditorStep, string> = {
     'trigger': 'Choose what triggers your workflow',
     'trigger-config': supportsTiers
@@ -482,6 +505,35 @@ export function BasicWorkflowEditor() {
       : `Configure ${selectedAction?.name || 'action'} settings`,
   };
 
+  if (instanceLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm">Loading instance…</p>
+      </div>
+    );
+  }
+
+  if (!instance) {
+    return (
+      <Alert className="max-w-xl mx-auto">
+        <AlertTitle>No instance selected</AlertTitle>
+        <AlertDescription>
+          Select or create an instance in the shell to load workflow triggers and actions from the catalog.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (catalogLoading && !catalogError && triggerPresets.length === 0 && actionPresets.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground max-w-4xl mx-auto">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <p className="text-sm">Loading workflow catalog…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-6">
@@ -492,6 +544,39 @@ export function BasicWorkflowEditor() {
         <p className="text-muted-foreground">{stepDescriptions[step]}</p>
       </div>
 
+      {catalogError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Catalog unavailable</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{catalogError}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {engine?.status === "error" && engine.message && (
+        <Alert className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Engine catalog</AlertTitle>
+          <AlertDescription>
+            Technical details from the instance were not merged ({engine.message}). UI definitions still apply.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!catalogLoading && triggerPresets.length === 0 && step === "trigger" && (
+        <Alert className="mb-4">
+          <AlertTitle>No triggers</AlertTitle>
+          <AlertDescription>
+            This instance has no enabled triggers in the catalog yet. Enable definitions in Convex or align engine
+            trigger IDs with your UI rows.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <StepIndicator
         currentStep={step}
         hasTriggerConfig={hasTriggerConfig}
@@ -501,8 +586,8 @@ export function BasicWorkflowEditor() {
       {/* Step 1: Trigger Selection */}
       {step === 'trigger' && (
         <div className="space-y-6">
-          {triggerCategories.map(category => {
-            const categoryTriggers = triggerPresets.filter(t => t.category === category);
+          {triggerCategoryOrder.map((category) => {
+            const categoryTriggers = triggerPresets.filter((t) => t.category === category);
             if (categoryTriggers.length === 0) return null;
 
             return (
@@ -527,12 +612,14 @@ export function BasicWorkflowEditor() {
       )}
 
       {/* Step 2: Trigger Configuration */}
-      {step === 'trigger-config' && selectedTrigger && (
+      {step === 'trigger-config' && selectedTrigger && (() => {
+        const SelectedTriggerIcon = selectedTrigger.icon;
+        return (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="gap-1">
-                <selectedTrigger.icon className="h-3 w-3" />
+                <SelectedTriggerIcon className="h-3 w-3" />
                 {selectedTrigger.name}
               </Badge>
               {supportsTiers && (
@@ -580,21 +667,25 @@ export function BasicWorkflowEditor() {
             </Card>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* Step 3: Action Selection */}
       {step === 'action' && (
         <div className="space-y-6">
-          {selectedTrigger && !supportsTiers && (
+          {selectedTrigger && !supportsTiers && (() => {
+            const StIcon = selectedTrigger.icon;
+            return (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50 mb-4">
               <Badge variant="secondary" className="gap-1">
-                <selectedTrigger.icon className="h-3 w-3" />
+                <StIcon className="h-3 w-3" />
                 {selectedTrigger.name}
               </Badge>
               <ArrowRight className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">Select an action...</span>
             </div>
-          )}
+            );
+          })()}
 
           {/* Variant mode: show action picker for each variant */}
           {supportsTiers ? (
@@ -605,13 +696,14 @@ export function BasicWorkflowEditor() {
                   tier={tier}
                   trigger={selectedTrigger!}
                   index={index}
+                  actionChoices={actionPresets}
                   onSelectAction={handleVariantActionSelect}
                 />
               ))}
             </div>
           ) : (
             /* Simple mode: show all actions */
-            actionCategories.map(category => {
+            actionCategoryOrder.map((category) => {
               const categoryActions = actionPresets.filter(a => a.category === category);
               if (categoryActions.length === 0) return null;
 
@@ -653,20 +745,23 @@ export function BasicWorkflowEditor() {
             ))
           ) : (
             /* Simple mode: show single action config */
-            selectedAction && (
+            selectedAction && (() => {
+              const SelActionIcon = selectedAction.icon;
+              const SelTriggerIcon = selectedTrigger?.icon;
+              return (
               <>
                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-                  {selectedTrigger && (
+                  {selectedTrigger && SelTriggerIcon && (
                     <>
                       <Badge variant="secondary" className="gap-1">
-                        <selectedTrigger.icon className="h-3 w-3" />
+                        <SelTriggerIcon className="h-3 w-3" />
                         {selectedTrigger.name}
                       </Badge>
                       <ArrowRight className="h-4 w-4 text-muted-foreground" />
                     </>
                   )}
                   <Badge variant="default" className="gap-1">
-                    <selectedAction.icon className="h-3 w-3" />
+                    <SelActionIcon className="h-3 w-3" />
                     {selectedAction.name}
                   </Badge>
                 </div>
@@ -681,7 +776,8 @@ export function BasicWorkflowEditor() {
                   )}
                 </Card>
               </>
-            )
+              );
+            })()
           )}
         </div>
       )}

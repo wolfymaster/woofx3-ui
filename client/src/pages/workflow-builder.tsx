@@ -1,17 +1,17 @@
 import { useState, useCallback, useMemo } from 'react';
 import ReactFlow, {
-  Node,
-  Edge,
+  type Node,
+  type Edge,
+  type Connection,
   Controls,
   Background,
   MiniMap,
   addEdge,
-  Connection,
   useNodesState,
   useEdgesState,
   Panel,
   BackgroundVariant,
-  NodeTypes,
+  type NodeTypes,
   Handle,
   Position,
 } from 'reactflow';
@@ -28,25 +28,17 @@ import {
   Settings2,
   ChevronLeft,
   Zap,
-  MessageSquare,
-  Bell,
   Clock,
-  Filter,
   GitBranch,
   ArrowRight,
-  Puzzle,
-  Plus,
-  X,
   GripVertical,
   Search,
-} from 'lucide-react';
+} from "lucide-react";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
@@ -70,6 +62,8 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 import { cn } from '@/lib/utils';
+import { useWorkflowCatalog } from '@/hooks/use-workflow-catalog';
+import { resolveLucideIcon } from '@/lib/resolve-lucide-icon';
 
 interface NodeData {
   label: string;
@@ -80,32 +74,14 @@ interface NodeData {
   parameters?: Record<string, unknown>;
 }
 
-const nodeCategories = [
-  {
-    name: 'Triggers',
-    type: 'trigger',
-    icon: <Zap className="h-4 w-4" />,
-    items: [
-      { id: 'chat-message', label: 'Chat Message', description: 'When a chat message is received', icon: 'MessageSquare' },
-      { id: 'new-follower', label: 'New Follower', description: 'When someone follows the channel', icon: 'Bell' },
-      { id: 'subscription', label: 'Subscription', description: 'When someone subscribes', icon: 'Bell' },
-      { id: 'donation', label: 'Donation', description: 'When a donation is received', icon: 'Zap' },
-      { id: 'raid', label: 'Raid', description: 'When the channel is raided', icon: 'Zap' },
-      { id: 'channel-points', label: 'Channel Points', description: 'When points are redeemed', icon: 'Zap' },
-    ],
-  },
-  {
-    name: 'Actions',
-    type: 'action',
-    icon: <ArrowRight className="h-4 w-4" />,
-    items: [
-      { id: 'send-message', label: 'Send Message', description: 'Send a chat message', icon: 'MessageSquare' },
-      { id: 'play-sound', label: 'Play Sound', description: 'Play an audio file', icon: 'Bell' },
-      { id: 'show-alert', label: 'Show Alert', description: 'Display an on-screen alert', icon: 'Bell' },
-      { id: 'update-overlay', label: 'Update Overlay', description: 'Modify overlay elements', icon: 'Puzzle' },
-      { id: 'api-request', label: 'API Request', description: 'Make an HTTP request', icon: 'Zap' },
-    ],
-  },
+type NodeLibraryCategory = {
+  name: string;
+  type: NodeData['type'];
+  icon: React.ReactNode;
+  items: { id: string; label: string; description: string; icon: string }[];
+};
+
+const staticNodeLibraryCategories: NodeLibraryCategory[] = [
   {
     name: 'Logic',
     type: 'condition',
@@ -128,19 +104,8 @@ const nodeCategories = [
   },
 ];
 
-const iconComponents: Record<string, React.ComponentType<{ className?: string }>> = {
-  Zap,
-  MessageSquare,
-  Bell,
-  Clock,
-  Filter,
-  GitBranch,
-  ArrowRight,
-  Puzzle,
-};
-
 function CustomNode({ data, selected }: { data: NodeData; selected: boolean }) {
-  const Icon = iconComponents[data.icon || 'Zap'] || Zap;
+  const Icon = resolveLucideIcon(data.icon || 'Zap');
   
   const typeColors = {
     trigger: 'border-green-500/50 bg-green-500/5',
@@ -236,28 +201,54 @@ const initialEdges: Edge[] = [
 ];
 
 interface NodeLibraryProps {
+  categories: NodeLibraryCategory[];
+  catalogLoading: boolean;
+  catalogError: string | null;
+  onRetryCatalog: () => void;
   onDragStart: (event: React.DragEvent, nodeType: string, data: Partial<NodeData>) => void;
 }
 
-function NodeLibrary({ onDragStart }: NodeLibraryProps) {
+function NodeLibrary({ categories, catalogLoading, catalogError, onRetryCatalog, onDragStart }: NodeLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredCategories = useMemo(() => {
-    if (!searchQuery) return nodeCategories;
-    
+    if (!searchQuery) {
+      return categories;
+    }
+
     const query = searchQuery.toLowerCase();
-    return nodeCategories.map(cat => ({
-      ...cat,
-      items: cat.items.filter(item => 
-        item.label.toLowerCase().includes(query) ||
-        item.description.toLowerCase().includes(query)
-      ),
-    })).filter(cat => cat.items.length > 0);
-  }, [searchQuery]);
+    return categories
+      .map((cat) => ({
+        ...cat,
+        items: cat.items.filter(
+          (item) =>
+            item.label.toLowerCase().includes(query) || item.description.toLowerCase().includes(query),
+        ),
+      }))
+      .filter((cat) => cat.items.length > 0);
+  }, [searchQuery, categories]);
+
+  const defaultOpen = useMemo(() => categories.map((c) => c.name), [categories]);
 
   return (
     <div className="w-60 bg-sidebar border-r border-sidebar-border flex flex-col">
-      <div className="p-3 border-b border-sidebar-border">
+      <div className="p-3 border-b border-sidebar-border space-y-2">
+        {catalogError && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
+            <p className="font-medium">Catalog</p>
+            <p className="opacity-90 line-clamp-2">{catalogError}</p>
+            <button
+              type="button"
+              onClick={() => void onRetryCatalog()}
+              className="mt-1 text-primary underline underline-offset-2"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+        {catalogLoading && (
+          <p className="text-xs text-muted-foreground">Loading instance catalog…</p>
+        )}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -270,7 +261,7 @@ function NodeLibrary({ onDragStart }: NodeLibraryProps) {
         </div>
       </div>
       <ScrollArea className="flex-1">
-        <Accordion type="multiple" defaultValue={['Triggers', 'Actions', 'Logic', 'Timing']} className="px-2 py-2">
+        <Accordion type="multiple" defaultValue={defaultOpen} className="px-2 py-2">
           {filteredCategories.map((category) => (
             <AccordionItem key={category.name} value={category.name} className="border-none">
               <AccordionTrigger className="py-2 px-2 text-sm font-medium hover:no-underline hover:bg-sidebar-accent rounded-md">
@@ -282,8 +273,10 @@ function NodeLibrary({ onDragStart }: NodeLibraryProps) {
               <AccordionContent className="pb-2">
                 <div className="space-y-1">
                   {category.items.map((item) => {
-                    const Icon = iconComponents[item.icon] || Zap;
+                    const Icon = resolveLucideIcon(item.icon);
                     return (
+                      // Draggable palette row: must be a div for HTML5 DnD (not a button).
+                      // biome-ignore lint/a11y/noStaticElementInteractions: drag source for React Flow
                       <div
                         key={item.id}
                         className="flex items-center gap-2 p-2 rounded-md cursor-grab hover-elevate text-sm"
@@ -437,8 +430,44 @@ function NodeInspector({ node, onClose, onUpdate }: NodeInspectorProps) {
 }
 
 export default function WorkflowBuilder() {
-  const [, params] = useRoute('/workflows/:id');
+  useRoute('/workflows/:id');
   const [, navigate] = useLocation();
+  const { catalogTriggers, catalogActions, loading: catalogLoading, error: catalogError, refresh } =
+    useWorkflowCatalog();
+
+  const nodeLibraryCategories = useMemo((): NodeLibraryCategory[] => {
+    const dynamic: NodeLibraryCategory[] = [];
+    const triggerItems = catalogTriggers.map((t) => ({
+      id: t.id,
+      label: t.name,
+      description: t.description,
+      icon: t.icon || 'Zap',
+    }));
+    if (triggerItems.length > 0) {
+      dynamic.push({
+        name: 'Triggers',
+        type: 'trigger',
+        icon: <Zap className="h-4 w-4" />,
+        items: triggerItems,
+      });
+    }
+    const actionItems = catalogActions.map((a) => ({
+      id: a.id,
+      label: a.name,
+      description: a.description,
+      icon: a.icon || 'ArrowRight',
+    }));
+    if (actionItems.length > 0) {
+      dynamic.push({
+        name: 'Actions',
+        type: 'action',
+        icon: <ArrowRight className="h-4 w-4" />,
+        items: actionItems,
+      });
+    }
+    return [...dynamic, ...staticNodeLibraryCategories];
+  }, [catalogTriggers, catalogActions]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<Node<NodeData> | null>(null);
@@ -541,7 +570,13 @@ export default function WorkflowBuilder() {
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <NodeLibrary onDragStart={onDragStart} />
+        <NodeLibrary
+          categories={nodeLibraryCategories}
+          catalogLoading={catalogLoading}
+          catalogError={catalogError}
+          onRetryCatalog={refresh}
+          onDragStart={onDragStart}
+        />
         
         <div className="flex-1 relative">
           <ReactFlow
