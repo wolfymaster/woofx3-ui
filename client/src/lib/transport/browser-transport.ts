@@ -1,7 +1,7 @@
 // BrowserTransport — wraps the Cap'n Web RPC client for direct browser→woofx3 communication.
 // Uses polling for subscriptions since the woofx3 API is currently point-in-time.
 
-import { newWebSocketRpcSession, RpcStub } from "capnweb";
+import { newWebSocketRpcSession, RpcStub, RpcTarget } from "capnweb";
 import type {
   WoofxTransport,
   StreamStatus,
@@ -14,7 +14,7 @@ import type {
 } from "./interface";
 
 // Minimal RPC API contract for the woofx3 instance connection
-interface WoofxRpcApi {
+interface WoofxRpcApi extends RpcTarget {
   getStreamStatus(instanceId: string): Promise<StreamStatus>;
   sendChatMessage(instanceId: string, message: string): Promise<unknown>;
   getChatMessages(instanceId: string, limit: number): Promise<unknown[]>;

@@ -2,11 +2,12 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, mutation, query } from "./_generated/server";
+import { RpcTarget } from "capnweb";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 /** Engine RPC surface for workflow CRUD (see woofx3 api/src/api.ts). */
-type WorkflowEngineRpc = {
+interface WorkflowEngineRpc extends RpcTarget {
   createWorkflow(data: {
     name: string;
     description?: string;
@@ -26,7 +27,7 @@ type WorkflowEngineRpc = {
     },
   ): Promise<unknown>;
   deleteWorkflow(id: string): Promise<unknown>;
-};
+}
 
 /**
  * List all workflows for an instance (Convex-side UI state: nodes, edges, metadata).

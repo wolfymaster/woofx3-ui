@@ -1,9 +1,13 @@
 "use node";
 
-import { newHttpBatchRpcSession } from "capnweb";
+import { newHttpBatchRpcSession, RpcTarget } from "capnweb";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+
+interface ModuleInstallRpc extends RpcTarget {
+  installModuleZip(fileName: string, zipBase64: string): Promise<unknown>;
+}
 
 function normalizeEngineApiUrl(instanceUrl: string): string {
   const trimmed = instanceUrl.trim();
@@ -48,9 +52,7 @@ export const deliverZipToInstance = internalAction({
       const rpcInit = Object.keys(headers).length > 0
         ? new Request(apiUrl, { headers })
         : apiUrl;
-      const rpc = newHttpBatchRpcSession<{
-        installModuleZip(fileName: string, zipBase64: string): Promise<unknown>;
-      }>(rpcInit);
+      const rpc = newHttpBatchRpcSession<ModuleInstallRpc>(rpcInit);
       await rpc.installModuleZip(delivery.fileName, zipBase64);
 
       // Note: status transitions to "installed" when the engine sends the

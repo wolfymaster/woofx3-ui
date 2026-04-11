@@ -3,16 +3,17 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
+import { RpcTarget } from "capnweb";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import type { CatalogBundle } from "./workflowCatalogContext";
 import { loadCatalogBundle } from "./workflowCatalogContext";
 
 /** woofx3 Api RPC surface used over HTTP batch (see woofx3 api/src/api.ts). */
-type WoofxEngineRpc = {
+interface WoofxEngineRpc extends RpcTarget {
   getTriggers(moduleId?: string): Promise<unknown>;
   getActions(moduleId?: string): Promise<unknown>;
   getWorkflows(query: { accountId: string }): Promise<unknown>;
-};
+}
 
 function asObjectArray(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) {
