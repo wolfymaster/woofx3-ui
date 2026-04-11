@@ -8,6 +8,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
+function getLoginNextPath(): string {
+  if (typeof window === "undefined") {
+    return "/";
+  }
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (next && next.startsWith("/")) {
+    return next;
+  }
+  return "/";
+}
+
 export default function Login() {
   const [, navigate] = useLocation();
   const { signIn } = useAuthActions();
@@ -20,7 +31,7 @@ export default function Login() {
     setError(null);
     setIsLoading(true);
     try {
-      await signIn("twitch", { redirectTo: "/" });
+      await signIn("twitch", { redirectTo: getLoginNextPath() });
     } catch {
       setError("Failed to connect with Twitch. Please try again.");
       setIsLoading(false);
@@ -33,7 +44,7 @@ export default function Login() {
     setIsLoading(true);
     try {
       await signIn("password", { email, password, flow: "signIn" });
-      navigate("/");
+      navigate(getLoginNextPath());
     } catch (e) {
       setError("Invalid email or password.");
       setIsLoading(false);

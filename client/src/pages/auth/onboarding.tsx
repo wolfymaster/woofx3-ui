@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
-import { useMutation, useQuery } from 'convex/react';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import { useConvexAuth } from 'convex/react';
 import { api } from '@convex/_generated/api';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MonitorPlay, Loader2, Check, Server, Building2 } from 'lucide-react';
 import { $currentInstanceId } from '@/lib/stores';
-import { v4 as uuidv4 } from 'uuid';
+import type { Id } from '@convex/_generated/dataModel';
 
 const STEPS = [
   { id: 'account', title: 'Create your workspace', icon: Building2, description: 'Set up your account name' },
@@ -34,15 +34,20 @@ export default function Onboarding() {
 
   const createAccount = useMutation(api.accounts.createAccount);
   const createInstance = useMutation(api.instances.create);
+  const registerInstance = useAction(api.registration.registerInstance);
   const existingAccount = useQuery(api.accounts.getMyAccount);
+  const [workspaceAccountId, setWorkspaceAccountId] = useState<Id<'accounts'> | null>(null);
+  const [registrationStatus, setRegistrationStatus] = useState<string | null>(null);
+  const didPrefill = useRef(false);
 
-  // Pre-fill account name from user display name
-  useState(() => {
-    if (user?.name && !accountName) {
-      setAccountName(user.name);
-      setInstanceName(`${user.name}'s Instance`);
+  useEffect(() => {
+    if (!user?.name || didPrefill.current) {
+      return;
     }
-  });
+    setAccountName(user.name);
+    setInstanceName(`${user.name}'s Instance`);
+    didPrefill.current = true;
+  }, [user?.name]);
 
   async function handleAccountStep(e: React.FormEvent) {
     e.preventDefault();
@@ -50,7 +55,10 @@ export default function Onboarding() {
     setIsLoading(true);
     try {
       if (!existingAccount) {
-        await createAccount({ name: accountName.trim() });
+        const id = await createAccount({ name: accountName.trim() });
+        setWorkspaceAccountId(id);
+      } else {
+        setWorkspaceAccountId(existingAccount._id);
       }
       setStep(1);
     } catch (err: any) {
@@ -65,15 +73,27 @@ export default function Onboarding() {
     setError(null);
     setIsLoading(true);
     try {
-      const account = existingAccount;
-      if (!account) throw new Error('Account not found');
+      const accountIdToUse = existingAccount?._id ?? workspaceAccountId;
+      if (!accountIdToUse) {
+        throw new Error('Account not found');
+      }
 
+      setRegistrationStatus('Creating instance...');
       const instanceId = await createInstance({
-        accountId: account._id,
+        accountId: accountIdToUse,
         name: instanceName.trim(),
         url: instanceUrl.trim(),
-        applicationId: uuidv4(),
       });
+
+      // Register with the woofx3 engine (handshake)
+      setRegistrationStatus('Registering with engine...');
+      const result = await registerInstance({ instanceId });
+
+      if (!result.ok) {
+        // Instance was created but registration failed — still usable, warn the user
+        console.warn('[onboarding] Engine registration failed:', result.error);
+        setError(`Instance created but engine registration failed: ${result.error}. You can retry from Settings.`);
+      }
 
       $currentInstanceId.set(instanceId);
       navigate('/');
@@ -81,6 +101,7 @@ export default function Onboarding() {
       setError(err.message || 'Failed to create instance.');
     } finally {
       setIsLoading(false);
+      setRegistrationStatus(null);
     }
   }
 
@@ -201,7 +222,7 @@ export default function Onboarding() {
                   </Button>
                   <Button type="submit" className="flex-1" disabled={isLoading}>
                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Get started
+                    {registrationStatus ?? 'Get started'}
                   </Button>
                 </div>
               </form>
