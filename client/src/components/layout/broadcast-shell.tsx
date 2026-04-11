@@ -7,14 +7,13 @@ import {
   Workflow,
   FolderOpen,
   Layers,
+  MessageSquare,
   Settings,
   Users,
   Search,
   Bell,
   Command,
   Activity,
-  Volume2,
-  VolumeX,
   MonitorPlay,
   Circle,
   ChevronDown,
@@ -43,6 +42,7 @@ import {
 import { $commandPaletteOpen, $notifications } from '@/lib/stores';
 import { useConvexUser, useAuthActions } from '@/hooks/use-convex-auth';
 import { useInstance } from '@/hooks/use-instance';
+import { useSyncEngineTransport } from '@/hooks/use-sync-engine-transport';
 import {
   Dialog,
   DialogContent,
@@ -70,6 +70,8 @@ const mainNavItems: NavItem[] = [
   { id: 'workflows', label: 'Workflows', icon: Workflow, href: '/workflows' },
   { id: 'assets', label: 'Assets', icon: FolderOpen, href: '/assets' },
   { id: 'scenes', label: 'Scenes', icon: Layers, href: '/scenes' },
+  { id: 'alerts', label: 'Alert Log', icon: Bell, href: '/alerts' },
+  { id: 'commands', label: 'Commands', icon: MessageSquare, href: '/commands' },
 ];
 
 const utilityItems: NavItem[] = [
@@ -127,28 +129,6 @@ function StreamStatus({ accountId = 'default' }: StreamStatusProps) {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function TransportControls() {
-  const [isMuted, setIsMuted] = useState(false);
-
-  return (
-    <div className="flex items-center gap-1">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setIsMuted(!isMuted)}
-            data-testid="button-toggle-mute"
-          >
-            {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{isMuted ? 'Unmute' : 'Mute'}</TooltipContent>
-      </Tooltip>
     </div>
   );
 }
@@ -244,12 +224,6 @@ function AppHeader() {
             <Command className="h-3 w-3" />K
           </kbd>
         </Button>
-
-        <div className="hidden md:flex items-center">
-          <Separator orientation="vertical" className="h-6 mr-2" />
-          <TransportControls />
-          <Separator orientation="vertical" className="h-6 ml-2" />
-        </div>
 
         <Tooltip>
           <TooltipTrigger asChild>
@@ -407,6 +381,7 @@ interface BroadcastShellProps {
 
 export function BroadcastShell({ children }: BroadcastShellProps) {
   const commandPaletteOpen = useStore($commandPaletteOpen);
+  useSyncEngineTransport();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

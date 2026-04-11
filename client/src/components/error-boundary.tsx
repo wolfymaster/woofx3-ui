@@ -5,6 +5,8 @@ interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
   onReset?: () => void;
+  /** When this key changes the boundary resets automatically (e.g. pass the current route). */
+  resetKey?: string;
 }
 
 interface ErrorBoundaryState {
@@ -20,6 +22,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
+  }
+
+  static getDerivedStateFromProps(
+    props: ErrorBoundaryProps,
+    state: ErrorBoundaryState & { prevResetKey?: string },
+  ) {
+    if (props.resetKey !== undefined && props.resetKey !== state.prevResetKey) {
+      return { hasError: false, error: undefined, prevResetKey: props.resetKey };
+    }
+    return { prevResetKey: props.resetKey };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
@@ -38,7 +50,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       if (this.props.fallback) {
         return this.props.fallback;
       }
-      return <ErrorFallback onReset={this.handleReset} />;
+      return (
+        <ErrorFallback
+          onReset={this.handleReset}
+          message={this.state.error?.message}
+        />
+      );
     }
 
     return this.props.children;

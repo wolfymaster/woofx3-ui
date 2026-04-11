@@ -4,7 +4,6 @@
 import { BrowserTransport } from "./browser-transport";
 import { TauriTransport } from "./tauri-transport";
 import type { WoofxTransport } from "./interface";
-import { $engineUrl, $apiKey } from "@/lib/stores";
 
 function isTauri(): boolean {
   return (
@@ -23,14 +22,8 @@ function createTransport(): WoofxTransport {
 
 export const transport: WoofxTransport = createTransport();
 
-// Reconnect when engine URL or API key changes
-$engineUrl.subscribe((url) => {
-  transport.connect(url, $apiKey.get());
-});
-
-$apiKey.subscribe((key) => {
-  transport.connect($engineUrl.get(), key);
-});
+// Connection is driven by `useSyncEngineTransport` in BroadcastShell so the active
+// woofx3 deployment matches the selected Convex instance (per-instance `url` / `apiKey`).
 
 export type { WoofxTransport };
 export * from "./interface";

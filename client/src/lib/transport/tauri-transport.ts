@@ -14,6 +14,7 @@ import type {
   WorkflowRun,
   Workflow,
   CreateWorkflowInput,
+  EngineModule,
 } from "./interface";
 
 export class TauriTransport implements WoofxTransport {
@@ -99,6 +100,21 @@ export class TauriTransport implements WoofxTransport {
 
   async getModuleState(instanceId: string, moduleId: string): Promise<unknown> {
     // TODO: invoke('get_module_state', { instanceId, moduleId })
+    throw new Error("TauriTransport not yet implemented");
+  }
+
+  async listEngineModules(instanceId: string): Promise<EngineModule[]> {
+    // TODO: invoke('list_engine_modules', { instanceId })
+    throw new Error("TauriTransport not yet implemented");
+  }
+
+  async uninstallEngineModule(instanceId: string, name: string): Promise<void> {
+    // TODO: invoke('uninstall_engine_module', { instanceId, name })
+    throw new Error("TauriTransport not yet implemented");
+  }
+
+  async setEngineModuleState(instanceId: string, name: string, state: string): Promise<void> {
+    // TODO: invoke('set_engine_module_state', { instanceId, name, state })
     throw new Error("TauriTransport not yet implemented");
   }
 }

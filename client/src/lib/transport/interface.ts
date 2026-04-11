@@ -81,6 +81,12 @@ export interface CreateWorkflowInput {
   variables?: Record<string, string>;
 }
 
+export interface EngineModule {
+  name: string;
+  version: string;
+  state: string;
+}
+
 export interface WoofxTransport {
   // Connection lifecycle
   connect(url: string, apiKey?: string): void;
@@ -118,4 +124,7 @@ export interface WoofxTransport {
 
   // Module state (runtime data owned by woofx3)
   getModuleState(instanceId: string, moduleId: string): Promise<unknown>;
+  listEngineModules(instanceId: string): Promise<EngineModule[]>;
+  uninstallEngineModule(instanceId: string, name: string): Promise<void>;
+  setEngineModuleState(instanceId: string, name: string, state: string): Promise<void>;
 }

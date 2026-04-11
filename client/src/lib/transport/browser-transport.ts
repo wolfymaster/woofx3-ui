@@ -10,6 +10,7 @@ import type {
   WorkflowRun,
   Workflow,
   CreateWorkflowInput,
+  EngineModule,
 } from "./interface";
 
 // Minimal RPC API contract for the woofx3 instance connection
@@ -25,6 +26,9 @@ interface WoofxRpcApi {
   deleteWorkflow(id: string): Promise<unknown>;
   triggerWorkflowByName(id: string, params: Record<string, unknown>, source: string): Promise<unknown>;
   getModule(id: string): Promise<unknown>;
+  listEngineModules(): Promise<EngineModule[]>;
+  uninstallEngineModule(name: string): Promise<{ success: boolean }>;
+  setEngineModuleState(name: string, state: string): Promise<{ success: boolean }>;
 }
 
 const POLL_INTERVAL_CHAT = 3000;
@@ -230,5 +234,18 @@ export class BrowserTransport implements WoofxTransport {
   async getModuleState(instanceId: string, moduleId: string): Promise<unknown> {
     const result = await this.getSession().getModule(moduleId);
     return result;
+  }
+
+  async listEngineModules(instanceId: string): Promise<EngineModule[]> {
+    const result = await this.getSession().listEngineModules();
+    return result as EngineModule[];
+  }
+
+  async uninstallEngineModule(instanceId: string, name: string): Promise<void> {
+    await this.getSession().uninstallEngineModule(name);
+  }
+
+  async setEngineModuleState(instanceId: string, name: string, state: string): Promise<void> {
+    await this.getSession().setEngineModuleState(name, state);
   }
 }
