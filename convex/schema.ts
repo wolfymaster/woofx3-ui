@@ -12,16 +12,59 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_owner", ["ownerId"]),
 
+  // accountMembers: users with access to an account (team). Owner also has accounts.ownerId.
+  accountMembers: defineTable({
+    accountId: v.id("accounts"),
+    userId: v.id("users"),
+    role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
+    createdAt: v.number(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_user", ["userId"])
+    .index("by_account_user", ["accountId", "userId"]),
+
+  // invitations: pending team invites before acceptance
+  invitations: defineTable({
+    accountId: v.id("accounts"),
+    email: v.string(),
+    role: v.union(v.literal("admin"), v.literal("member")),
+    token: v.string(),
+    invitedByUserId: v.id("users"),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("accepted"),
+      v.literal("revoked"),
+      v.literal("expired"),
+    ),
+    expiresAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_account", ["accountId"])
+    .index("by_account_email", ["accountId", "email"]),
+
   // instances: a single woofx3 deployment
   instances: defineTable({
     accountId: v.id("accounts"),
     name: v.string(),
     url: v.string(), // user-configured (e.g. "localhost:8080" or "https://...")
-    applicationId: v.string(), // UUID identifying this woofx3 instance
+    applicationId: v.optional(v.string()), // engine-returned during registration handshake
+    webhookSecret: v.optional(v.string()), // per-instance secret established during registration
+    apiKey: v.optional(v.string()), // engine-generated API key returned during registration
     createdAt: v.number(),
     // Optional per-instance storage provider override (falls back to STORAGE_PROVIDER env var)
     storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),
   }).index("by_account", ["accountId"]),
+
+  // applications: engine-internal application scoping per instance
+  applications: defineTable({
+    instanceId: v.id("instances"),
+    applicationId: v.string(), // engine-returned value — Convex never generates this
+    name: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_app", ["instanceId", "applicationId"]),
 
   // instanceMembers: users who have access to an instance
   instanceMembers: defineTable({
@@ -30,7 +73,8 @@ export default defineSchema({
     role: v.union(v.literal("owner"), v.literal("admin"), v.literal("member")),
   })
     .index("by_user", ["userId"])
-    .index("by_instance", ["instanceId"]),
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_user", ["instanceId", "userId"]),
 
   // platformLinks: OAuth tokens for streaming platforms (Twitch, etc.) per instance
   platformLinks: defineTable({
@@ -110,7 +154,9 @@ export default defineSchema({
       ),
     ),
     statusMessage: v.optional(v.string()),
-  }).index("by_instance", ["instanceId"]),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_name_version", ["name", "version"]),
 
   // dashboardLayouts: dashboard widget configuration per user/instance
   dashboardLayouts: defineTable({

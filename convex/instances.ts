@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 
 export const listForCurrentUser = query({
   args: {},
@@ -27,12 +28,24 @@ export const get = query({
     // Verify user has access
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_instance_user", (q) =>
+        q.eq("instanceId", args.instanceId).eq("userId", userId),
+      )
       .first();
 
     if (!membership) return null;
     return ctx.db.get(args.instanceId);
+  },
+});
+
+/**
+ * Internal query for server-side lookups (e.g. registration action).
+ * No auth check — only callable from other Convex functions.
+ */
+export const getInternal = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    return ctx.db.get(instanceId);
   },
 });
 
@@ -41,7 +54,6 @@ export const create = mutation({
     accountId: v.id("accounts"),
     name: v.string(),
     url: v.string(),
-    applicationId: v.string(),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -65,6 +77,18 @@ export const create = mutation({
       role: "owner",
     });
 
+    const teammates = await ctx.db
+      .query("accountMembers")
+      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
+      .collect();
+
+    for (const m of teammates) {
+      if (m.userId === userId) {
+        continue;
+      }
+      await ensureInstanceMember(ctx, instanceId, m.userId, mapAccountRoleToInstanceRole(m.role));
+    }
+
     return instanceId;
   },
 });
@@ -81,8 +105,9 @@ export const update = mutation({
 
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_instance_user", (q) =>
+        q.eq("instanceId", args.instanceId).eq("userId", userId),
+      )
       .first();
 
     if (!membership || membership.role === "member") {
@@ -91,6 +116,20 @@ export const update = mutation({
 
     const { instanceId, ...updates } = args;
     await ctx.db.patch(instanceId, updates);
+  },
+});
+
+/**
+ * Internal query to look up the application record for an instance.
+ * Returns the first (currently only) application for the given instance.
+ */
+export const getApplicationForInstance = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    return ctx.db
+      .query("applications")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
   },
 });
 
@@ -136,5 +175,47 @@ export const savePlatformLink = mutation({
     }
 
     return ctx.db.insert("platformLinks", args);
+  },
+});
+
+/**
+ * Internal mutation used by the registration action to persist handshake results.
+ * Not exposed to clients.
+ */
+export const applyRegistration = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    webhookSecret: v.string(),
+    apiKey: v.optional(v.string()),
+  },
+  handler: async (ctx, { instanceId, applicationId, webhookSecret, apiKey }) => {
+    const instance = await ctx.db.get(instanceId);
+    if (!instance) {
+      throw new Error("Instance not found");
+    }
+
+    const patch: Record<string, unknown> = { applicationId, webhookSecret };
+    if (apiKey !== undefined) {
+      patch.apiKey = apiKey;
+    }
+    await ctx.db.patch(instanceId, patch);
+
+    // Also create/upsert an application record in the applications table
+    const existing = await ctx.db
+      .query("applications")
+      .withIndex("by_instance_app", (q) =>
+        q.eq("instanceId", instanceId).eq("applicationId", applicationId),
+      )
+      .first();
+
+    if (!existing) {
+      await ctx.db.insert("applications", {
+        instanceId,
+        applicationId,
+        name: "Default",
+        createdAt: Date.now(),
+      });
+    }
   },
 });
