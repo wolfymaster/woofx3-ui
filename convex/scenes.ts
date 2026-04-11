@@ -39,8 +39,9 @@ export const get = query({
 
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", scene.instanceId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_instance_user", (q) =>
+        q.eq("instanceId", scene.instanceId).eq("userId", userId),
+      )
       .first();
 
     if (!membership) return null;
@@ -106,8 +107,9 @@ export const updateWidgets = mutation({
 
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", scene.instanceId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_instance_user", (q) =>
+        q.eq("instanceId", scene.instanceId).eq("userId", userId),
+      )
       .first();
 
     if (!membership) throw new Error("Not authorized");
@@ -135,8 +137,9 @@ export const update = mutation({
 
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", scene.instanceId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_instance_user", (q) =>
+        q.eq("instanceId", scene.instanceId).eq("userId", userId),
+      )
       .first();
 
     if (!membership) throw new Error("Not authorized");
@@ -160,8 +163,9 @@ export const remove = mutation({
 
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", scene.instanceId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_instance_user", (q) =>
+        q.eq("instanceId", scene.instanceId).eq("userId", userId),
+      )
       .first();
 
     if (!membership || membership.role === "member") {
@@ -183,8 +187,9 @@ export const duplicate = mutation({
 
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance", (q) => q.eq("instanceId", scene.instanceId))
-      .filter((q) => q.eq(q.field("userId"), userId))
+      .withIndex("by_instance_user", (q) =>
+        q.eq("instanceId", scene.instanceId).eq("userId", userId),
+      )
       .first();
 
     if (!membership) throw new Error("Not authorized");

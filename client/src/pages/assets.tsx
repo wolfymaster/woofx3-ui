@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useAction } from 'convex/react';
 import {
   Search,
   Filter,
@@ -75,6 +75,15 @@ import { cn } from '@/lib/utils';
 import { api } from '@convex/_generated/api';
 import { useInstance } from '@/hooks/use-instance';
 import type { Id } from '@convex/_generated/dataModel';
+
+type AssetUploadIntent = {
+  uploadUrl: string;
+  method: 'PUT' | 'POST';
+  headers?: Record<string, string>;
+  fileKey: string;
+  provider: 'convex' | 'r2' | 'local';
+  requiresResponseKey: boolean;
+};
 
 type ConvexAsset = {
   _id: Id<'assets'>;
@@ -206,20 +215,26 @@ function UploadAssetsModal({
   open,
   onOpenChange,
   instanceId,
-  generateUploadUrl,
+  generateUploadIntent,
   createAsset,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   instanceId: Id<'instances'>;
-  generateUploadUrl: () => Promise<string>;
+  generateUploadIntent: (args: {
+    instanceId: Id<'instances'>;
+    fileName: string;
+    mimeType: string;
+  }) => Promise<AssetUploadIntent>;
   createAsset: (args: {
     instanceId: Id<'instances'>;
     name: string;
     type: 'image' | 'audio' | 'video';
-    storageId: Id<'_storage'>;
+    fileKey: string;
+    storageProvider: 'convex' | 'r2' | 'local';
     mimeType: string;
     size: number;
+    folderId?: Id<'folders'>;
   }) => Promise<Id<'assets'>>;
 }) {
   const [isDragging, setIsDragging] = useState(false);
@@ -235,16 +250,33 @@ function UploadAssetsModal({
           const file = files[i];
           setProgress(`Uploading ${file.name} (${i + 1}/${files.length})...`);
 
-          const uploadUrl = await generateUploadUrl();
-          const result = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': file.type },
+          const intent = await generateUploadIntent({
+            instanceId,
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+          });
+
+          const headers = new Headers(intent.headers);
+          if (file.type && !headers.has('Content-Type')) {
+            headers.set('Content-Type', file.type);
+          }
+
+          const result = await fetch(intent.uploadUrl, {
+            method: intent.method,
+            headers,
             body: file,
           });
 
-          if (!result.ok) throw new Error(`Upload failed: ${result.statusText}`);
+          if (!result.ok) {
+            throw new Error(`Upload failed: ${result.statusText}`);
+          }
 
-          const { storageId } = await result.json() as { storageId: Id<'_storage'> };
+          let fileKey = intent.fileKey;
+          if (intent.requiresResponseKey) {
+            const body = (await result.json()) as { storageId: string };
+            fileKey = body.storageId;
+          }
+
           const type = file.type.startsWith('image/')
             ? 'image'
             : file.type.startsWith('audio/')
@@ -255,8 +287,9 @@ function UploadAssetsModal({
             instanceId,
             name: file.name,
             type,
-            storageId,
-            mimeType: file.type,
+            fileKey,
+            storageProvider: intent.provider,
+            mimeType: file.type || 'application/octet-stream',
             size: file.size,
           });
         }
@@ -269,7 +302,7 @@ function UploadAssetsModal({
         setProgress('');
       }
     },
-    [instanceId, generateUploadUrl, createAsset, onOpenChange],
+    [instanceId, generateUploadIntent, createAsset, onOpenChange],
   );
 
   const handleDrop = useCallback(
@@ -353,7 +386,7 @@ export default function Assets() {
   const isLoading = instanceLoading || assetsRaw === undefined;
 
   const removeAsset = useMutation(api.assets.remove);
-  const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
+  const generateUploadIntent = useAction(api.assets.generateUploadIntent);
   const createAsset = useMutation(api.assets.create);
 
   const filteredAssets = useMemo(() => {
@@ -687,7 +720,7 @@ export default function Assets() {
           open={uploadModalOpen}
           onOpenChange={setUploadModalOpen}
           instanceId={instance._id}
-          generateUploadUrl={generateUploadUrl}
+          generateUploadIntent={generateUploadIntent}
           createAsset={createAsset}
         />
       )}

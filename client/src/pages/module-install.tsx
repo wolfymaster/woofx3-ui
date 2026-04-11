@@ -21,8 +21,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
 import { PageHeader } from '@/components/layout/page-header';
 import { useTheme } from '@/hooks/use-theme';
 import { cn } from '@/lib/utils';
@@ -290,11 +288,10 @@ export default function ModuleInstall() {
   const [checkResults, setCheckResults] = useState<CheckResult[]>([]);
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
-  const [installMode, setInstallMode] = useState<'install' | 'install-activate'>('install-activate');
+  const [installError, setInstallError] = useState<string | null>(null);
 
   const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
   const createModule = useMutation(api.moduleRepository.create);
-  const installModule = useMutation(api.installedModules.install);
 
   const fileTree = useMemo(() => buildFileTree(files), [files]);
   
@@ -327,19 +324,16 @@ export default function ModuleInstall() {
     }
   }, [files]);
 
-  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const processZipFile = useCallback(async (file: File) => {
     try {
       const zip = await JSZip.loadAsync(file);
       const extractedFiles: Record<string, string> = {};
 
       await Promise.all(
         Object.keys(zip.files).map(async (filename) => {
-          const file = zip.files[filename];
-          if (!file.dir) {
-            const content = await file.async('string');
+          const zipEntry = zip.files[filename];
+          if (!zipEntry.dir) {
+            const content = await zipEntry.async('string');
             extractedFiles[filename] = content;
           }
         })
@@ -348,9 +342,45 @@ export default function ModuleInstall() {
       setFiles(extractedFiles);
     } catch (error) {
       console.error('Failed to extract zip:', error);
-      alert('Failed to extract zip file. Please ensure it is a valid zip archive.');
+      setInstallError('Failed to extract zip file. Please ensure it is a valid zip archive.');
     }
   }, []);
+
+  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) { return; }
+    await processZipFile(file);
+  }, [processZipFile]);
+
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files[0];
+    if (!file) { return; }
+
+    if (!file.name.endsWith('.zip')) {
+      setInstallError('Please drop a .zip file.');
+      return;
+    }
+
+    await processZipFile(file);
+  }, [processZipFile]);
 
   const handleFileChange = useCallback((path: string, content: string) => {
     setFiles(prev => ({
@@ -361,11 +391,12 @@ export default function ModuleInstall() {
 
   const handleInstall = useCallback(async () => {
     if (!instance) {
-      alert('No instance selected. Please select an instance first.');
+      setInstallError('No instance selected. Please select an instance first.');
       return;
     }
 
     setIsInstalling(true);
+    setInstallError(null);
     try {
       // Build zip from current files
       const zip = new JSZip();
@@ -401,6 +432,7 @@ export default function ModuleInstall() {
 
       // Create module repository entry
       const moduleId = await createModule({
+        instanceId: instance._id,
         name,
         description,
         version,
@@ -409,19 +441,14 @@ export default function ModuleInstall() {
         archiveKey: storageId,
       });
 
-      // Auto-install if selected
-      if (installMode === 'install-activate') {
-        await installModule({ instanceId: instance._id, moduleId });
-      }
-
       navigate('/modules');
     } catch (error) {
       console.error('Failed to install module:', error);
-      alert('Failed to install module. Please try again.');
+      setInstallError(error instanceof Error ? error.message : 'Failed to install module. Please try again.');
     } finally {
       setIsInstalling(false);
     }
-  }, [files, installMode, navigate, instance, generateUploadUrl, createModule, installModule]);
+  }, [files, navigate, instance, generateUploadUrl, createModule]);
 
   const allChecksPassed = checkResults.length > 0 && checkResults.every(r => r.status === 'pass');
   const selectedContent = selectedPath ? files[selectedPath] : null;
@@ -435,13 +462,23 @@ export default function ModuleInstall() {
           description="Upload a module zip file to install it."
         />
         
-        <Card className="mt-8">
+        <Card
+          className={cn(
+            "mt-8 transition-colors",
+            isDragging && "border-primary border-2 bg-primary/5",
+          )}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
           <CardContent className="pt-12 pb-12">
             <div className="flex flex-col items-center justify-center">
-              <Upload className="h-16 w-16 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Upload Module Zip</h3>
+              <Upload className={cn("h-16 w-16 mb-4", isDragging ? "text-primary" : "text-muted-foreground")} />
+              <h3 className="text-lg font-semibold mb-2">
+                {isDragging ? "Drop to upload" : "Upload Module Zip"}
+              </h3>
               <p className="text-sm text-muted-foreground mb-6 text-center max-w-md">
-                Select a zip file containing your module files. The module will be extracted and validated before installation.
+                Drag and drop a zip file here, or click the button below to browse.
               </p>
               <label>
                 <input
@@ -573,21 +610,10 @@ export default function ModuleInstall() {
           <Separator />
 
           <div className="p-4 border-b">
-            <h3 className="text-sm font-semibold mb-3">Install Options</h3>
-            <RadioGroup value={installMode} onValueChange={(v) => setInstallMode(v as typeof installMode)}>
-              <div className="flex items-center space-x-2 mb-2">
-                <RadioGroupItem value="install" id="install-only" />
-                <Label htmlFor="install-only" className="text-sm cursor-pointer">
-                  Install Only
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="install-activate" id="install-activate" />
-                <Label htmlFor="install-activate" className="text-sm cursor-pointer">
-                  Install and Activate
-                </Label>
-              </div>
-            </RadioGroup>
+            <h3 className="text-sm font-semibold mb-1">Install Behavior</h3>
+            <p className="text-xs text-muted-foreground">
+              Creating this module now enqueues delivery to the selected engine instance.
+            </p>
           </div>
 
           <div className="p-4 mt-auto">
@@ -612,6 +638,14 @@ export default function ModuleInstall() {
               <p className="text-xs text-muted-foreground mt-2 text-center">
                 Fix validation errors before installing
               </p>
+            )}
+            {installError && (
+              <div className="mt-3 p-3 rounded-md border bg-red-500/10 border-red-500/20">
+                <div className="flex items-center gap-2 text-sm text-red-500">
+                  <XCircle className="h-4 w-4 shrink-0" />
+                  <span>{installError}</span>
+                </div>
+              </div>
             )}
           </div>
         </div>
