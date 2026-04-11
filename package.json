@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "tsc"
+    "check": "tsc",
+    "docs": "bun --cwd docs run docs",
+    "docs:build": "bun --cwd docs run docs:build",
+    "docs:preview": "bun --cwd docs run docs:preview"
   },
   "dependencies": {
     "@auth/core": "^0.37.0",

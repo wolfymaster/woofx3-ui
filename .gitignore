@@ -10,3 +10,8 @@ src-tauri/target/
 .claude/
 .vscode/
 .worktrees/
+
+# VitePress (docs/)
+docs/node_modules
+docs/.vitepress/cache
+docs/.vitepress/dist
