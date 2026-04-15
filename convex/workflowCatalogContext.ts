@@ -2,23 +2,18 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalQuery, type QueryCtx } from "./_generated/server";
 
-async function assertInstanceMember(
-  ctx: QueryCtx,
-  userId: Id<"users">,
-  instanceId: Id<"instances">,
-) {
+async function assertInstanceMember(ctx: QueryCtx, userId: Id<"users">, instanceId: Id<"instances">) {
   const membership = await ctx.db
     .query("instanceMembers")
-    .withIndex("by_instance_user", (q) =>
-      q.eq("instanceId", instanceId).eq("userId", userId),
-    )
+    .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
     .first();
   return membership ?? null;
 }
 
 export type CatalogBundle = {
   url: string;
-  apiKey: string | null;
+  clientId: string | null;
+  clientSecret: string | null;
   enabledTriggerIds: string[];
   enabledActionIds: string[];
   triggerDefs: Record<string, Doc<"triggerDefinitions">>;
@@ -28,7 +23,7 @@ export type CatalogBundle = {
 export async function loadCatalogBundle(
   ctx: QueryCtx,
   userId: Id<"users">,
-  instanceId: Id<"instances">,
+  instanceId: Id<"instances">
 ): Promise<CatalogBundle | null> {
   const membership = await assertInstanceMember(ctx, userId, instanceId);
   if (!membership) {
@@ -77,7 +72,8 @@ export async function loadCatalogBundle(
 
   return {
     url: instance.url,
-    apiKey: instance.apiKey ?? null,
+    clientId: instance.clientId ?? null,
+    clientSecret: instance.clientSecret ?? null,
     enabledTriggerIds,
     enabledActionIds,
     triggerDefs,

@@ -5,16 +5,18 @@ import { auth } from "./auth";
 import { logger } from "./logger";
 import "./browserSource";
 import "./obsCommands";
+import "./moduleWebhook";
 
 const http = httpRouter();
 
-const CORS_HEADERS: Record<string, string> = process.env.CORS_ENABLED === "true"
-  ? {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    }
-  : {};
+const CORS_HEADERS: Record<string, string> =
+  process.env.CORS_ENABLED === "true"
+    ? {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      }
+    : {};
 
 function corsJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -203,57 +205,86 @@ http.route({
   }),
 });
 
-http.route({ path: "/api/webhooks/woofx3/notify", method: "OPTIONS", handler: preflightHandler });
+http.route({ path: "/api/webhooks/woofx3", method: "OPTIONS", handler: preflightHandler });
 http.route({
-  path: "/api/webhooks/woofx3/notify",
+  path: "/api/webhooks/woofx3",
   method: "POST",
   handler: httpAction(async (ctx, request) => {
     const payload = await request.json();
 
-    if (!payload.instanceId || !payload.type) {
-      return corsJson({ error: "Missing required fields: instanceId, type" }, 400);
+    if (!payload.type) {
+      return corsJson({ error: "Missing required field: type" }, 400);
     }
 
-    // Validate webhook secret
+    // Validate webhook secret (callbackToken) via Bearer token
     const authHeader = request.headers.get("Authorization");
     const providedSecret = authHeader?.replace("Bearer ", "");
-    const expectedSecret = await ctx.runQuery(internal.webhookAuth.getWebhookSecret, {
-      instanceId: payload.instanceId,
-    });
+    if (!providedSecret) {
+      return corsJson({ error: "Missing Authorization header" }, 401);
+    }
 
-    if (!expectedSecret || providedSecret !== expectedSecret) {
+    // Look up instance by webhook secret
+    const instance = await ctx.runQuery(internal.instances.getByWebhookSecret, {
+      webhookSecret: providedSecret,
+    });
+    if (!instance) {
       return corsJson({ error: "Unauthorized" }, 401);
     }
 
-    // Validate applicationId if provided — must match a known application record
-    if (payload.applicationId) {
-      const app = await ctx.runQuery(internal.instances.getApplicationForInstance, {
-        instanceId: payload.instanceId,
-      });
-      if (app && app.applicationId !== payload.applicationId) {
-        return corsJson({ error: "applicationId mismatch" }, 403);
-      }
-    }
+    const eventType = payload.type as string;
 
-    if (payload.type === "module.installed") {
-      const p = payload.payload;
+    logger.info("webhook: event received", {
+      instanceId: instance._id,
+      type: eventType,
+    });
+
+    if (eventType === "module.installed") {
+      const p = payload.payload ?? payload.data;
       if (!p?.name || !p?.version) {
         return corsJson({ error: "Missing module name/version in payload" }, 400);
       }
 
       await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
-        instanceId: payload.instanceId,
+        instanceId: instance._id,
         moduleName: p.name,
         moduleVersion: p.version,
         triggers: p.triggers ?? [],
         actions: p.actions ?? [],
       });
 
-      return corsJson({ success: true, type: "module.installed" });
+      return corsJson({ success: true, type: eventType });
+    }
+
+    if (eventType === "module.trigger.registered") {
+      const data = payload.data ?? payload.payload;
+      if (data?.name && data?.version) {
+        await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
+          instanceId: instance._id,
+          moduleName: data.name,
+          moduleVersion: data.version,
+          triggers: data.triggers ?? [],
+          actions: [],
+        });
+        return corsJson({ success: true, type: eventType });
+      }
+    }
+
+    if (eventType === "module.action.registered") {
+      const data = payload.data ?? payload.payload;
+      if (data?.name && data?.version) {
+        await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
+          instanceId: instance._id,
+          moduleName: data.name,
+          moduleVersion: data.version,
+          triggers: [],
+          actions: data.actions ?? [],
+        });
+        return corsJson({ success: true, type: eventType });
+      }
     }
 
     // Future event types can be handled here
-    return corsJson({ success: true, type: payload.type, handled: false });
+    return corsJson({ success: true, type: eventType, handled: false });
   }),
 });
 
@@ -277,10 +308,13 @@ http.route({
 
     if (!sourceKey) {
       const debugInfo = await ctx.runQuery(internal.browserSource.getAllBrowserSourceKeys, {});
-      return corsJson({
-        error: "Invalid source key",
-        debug: { requestedKey: key.substring(0, 8) + "...", ...debugInfo },
-      }, 401);
+      return corsJson(
+        {
+          error: "Invalid source key",
+          debug: { requestedKey: key.substring(0, 8) + "...", ...debugInfo },
+        },
+        401
+      );
     }
 
     await ctx.runMutation(internal.browserSource.updateSourceKeyLastUsed, {
@@ -290,7 +324,9 @@ http.route({
 
     const scene = await ctx.runQuery(internal.browserSource.getScene, { sceneId: sourceKey.sceneId });
     const slots = await ctx.runQuery(internal.browserSource.getSceneSlots, { sceneId: sourceKey.sceneId });
-    const alertDescriptors = await ctx.runQuery(internal.browserSource.getAlertDescriptorsForScene, { sceneId: sourceKey.sceneId });
+    const alertDescriptors = await ctx.runQuery(internal.browserSource.getAlertDescriptorsForScene, {
+      sceneId: sourceKey.sceneId,
+    });
 
     return corsJson({ scene, slots, alertDescriptors, sourceKeyId: sourceKey._id });
   }),
@@ -330,8 +366,14 @@ http.route({
       const alert = await ctx.runQuery(internal.browserSource.getAlert, { alertId: alertId as string });
       if (alert && "_id" in alert && "instanceId" in alert && "sceneId" in alert) {
         const typedAlert = alert as {
-          instanceId: string; sceneId: string; alertType: string; user: string;
-          amount?: number; message?: string; tier?: string; createdAt: number;
+          instanceId: string;
+          sceneId: string;
+          alertType: string;
+          user: string;
+          amount?: number;
+          message?: string;
+          tier?: string;
+          createdAt: number;
         };
         await ctx.runMutation(internal.browserSource.createAlertHistory, {
           instanceId: typedAlert.instanceId as any,

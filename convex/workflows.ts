@@ -199,7 +199,10 @@ export const syncToEngine = action({
       throw new Error("Not authorized or instance not found");
     }
 
-    const rpc = createEngineRpcSession<WorkflowEngineRpc>(bundle.url, bundle.apiKey);
+    if (!bundle.clientId || !bundle.clientSecret) {
+      throw new Error("Instance is not registered with the engine");
+    }
+    const rpc = createEngineRpcSession<WorkflowEngineRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
 
     if (wf.engineWorkflowId) {
       console.log(

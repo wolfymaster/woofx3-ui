@@ -202,7 +202,10 @@ export const fetchMerged = action({
     let engineMessage: string | undefined;
 
     try {
-      const rpc = createEngineRpcSession<WoofxEngineRpc>(bundle.url, bundle.apiKey);
+      if (!bundle.clientId || !bundle.clientSecret) {
+        throw new Error("Instance is not registered with the engine");
+      }
+      const rpc = createEngineRpcSession<WoofxEngineRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
       const [rawTriggers, rawActions] = await Promise.all([rpc.getTriggers(), rpc.getActions()]);
       triggerMap = byTechnicalId(asObjectArray(rawTriggers), technicalTriggerId);
       actionMap = byTechnicalId(asObjectArray(rawActions), technicalActionId);
@@ -243,7 +246,10 @@ export const listWorkflows = action({
     }
 
     try {
-      const rpc = createEngineRpcSession<WoofxEngineRpc>(bundle.url, bundle.apiKey);
+      if (!bundle.clientId || !bundle.clientSecret) {
+        throw new Error("Instance is not registered with the engine");
+      }
+      const rpc = createEngineRpcSession<WoofxEngineRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
       const result = (await rpc.getWorkflows({ accountId: instanceId })) as {
         items?: unknown[];
       } | null;
