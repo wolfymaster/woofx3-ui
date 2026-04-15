@@ -60,33 +60,27 @@ Convex is the authority on `instanceId`. The engine is the authority on `applica
 Before any other communication can happen, the engine must be registered. This occurs once during onboarding when the user provides their engine URL:
 
 1. The UI saves the engine URL and Convex creates the `instance` record. The Convex `_id` **is** the `instanceId`.
-2. Convex fires a registration action that POSTs to `<engineUrl>/api/register`:
+2. Convex connects to the engine via capnweb HTTP batch RPC and calls `gateway.ping()` to verify connectivity.
+3. Convex calls `gateway.registerClient(description, callbackUrl, callbackToken)`:
+   - `description`: `"woofx3-dashboard"`
+   - `callbackUrl`: `https://<CONVEX_SITE_URL>/api/webhooks/woofx3`
+   - `callbackToken`: per-instance generated secret (the engine includes this as `Authorization: Bearer <token>` on every callback)
+4. The engine creates a client record and responds with:
    ```json
-   {
-     "instanceId": "<convex instance _id>",
-     "webhookUrl": "https://<CONVEX_SITE_URL>/api/webhooks/woofx3/notify",
-     "webhookSecret": "<per-instance generated secret>"
-   }
+   { "clientId": "<uuid>", "clientSecret": "<64 hex chars>" }
    ```
-3. The engine persists all three values permanently in its `settings` table.
-4. The engine responds with its default `applicationId`:
-   ```json
-   { "status": "registered", "instanceId": "...", "applicationId": "<engine default app id>" }
-   ```
-5. Convex stores the returned `applicationId` on the `application` record linked to this instance.
-6. From this point, **every outbound call from the engine includes both `instanceId` and `applicationId`**, and targets the stored `webhookUrl`.
-
-> The optional "Test Connection" ping (`GET /ping`) verifies the engine URL is reachable *before* registration is attempted. Registration is always a subsequent, explicit step.
+5. Convex stores `clientId`, `clientSecret`, and `webhookSecret` (the callbackToken) on the instance record. The `clientSecret` is returned only once — if lost, the client must re-register.
+6. From this point, **every Convex→Engine RPC call** authenticates via `gateway.authenticate(clientId, clientSecret)`, and **every Engine→Convex callback** includes the `callbackToken` as a Bearer token.
 
 ### Channel 1: UI → Engine (Convex Proxy)
 
 ```
-Browser → Convex Action (server-side fetch) → Engine HTTP API
+Browser → Convex Action → capnweb HTTP batch RPC → Engine ApiGateway → Api
 ```
 
-- Convex looks up `engineUrl` from the instance record by `instanceId`.
-- Convex **always includes `applicationId`** in proxied requests so the engine scopes its response to the correct application.
-- Convex calls the engine using server-side `fetch()` — no `"use node"` needed.
+- Convex connects to the engine's `ApiGateway` via capnweb HTTP batch and calls `gateway.authenticate(clientId, clientSecret)` to obtain an `Api` stub.
+- capnweb promise pipelining means authentication + the first API call happen in a single HTTP batch round trip.
+- **capnweb HTTP batch constraint**: Each `newHttpBatchRpcSession` is single-use — the entire batch is sent on the first `await`, and the session is consumed. Never `await` authenticate separately from the API call. Chain them: `const result = await createEngineRpcSession(...).someMethod()`. Multiple independent API calls require separate sessions.
 - **Never call the engine directly from the browser.**
 - **Never use `WoofxTransport` for Convex-proxied calls.** `WoofxTransport` is reserved for real-time browser↔engine WebSocket channels only (e.g. live workflow status streams).
 
@@ -96,10 +90,9 @@ Browser → Convex Action (server-side fetch) → Engine HTTP API
 Engine → POST <webhookUrl> (read from engine settings table at call time)
 ```
 
-- `webhookUrl` is a **single shared endpoint** for all engine instances: `POST /api/webhooks/woofx3/notify` on the Convex HTTP surface.
-- The engine **always** includes both `instanceId` and `applicationId` in every request body — `instanceId` routes to the correct tenant, `applicationId` scopes within it.
-- The Convex webhook handler validates `instanceId`, upserts the relevant data, and Convex's reactive subscriptions automatically push updates to connected browser clients with no additional polling.
-- Auth: the engine includes the per-instance `webhookSecret` (established during registration) in the `Authorization` header.
+- `callbackUrl` is a **single shared endpoint** for all engine instances: `POST /api/webhooks/woofx3` on the Convex HTTP surface.
+- Auth: the engine includes the per-instance `callbackToken` (established during registration) in the `Authorization: Bearer <token>` header.
+- The Convex webhook handler looks up the instance by the Bearer token, validates the request, upserts the relevant data, and Convex's reactive subscriptions automatically push updates to connected browser clients with no additional polling.
 - The webhook endpoint must be **idempotent** — duplicate deliveries must not create duplicate records (use entity `id` as upsert key).
 
 ### Account Sharing

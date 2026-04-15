@@ -22,10 +22,12 @@ bun run docs:build
 
 ## Engine ↔ UI — rules agents must follow
 
-- **`instanceId`** = Convex `instances` document `_id`. **`applicationId`** = engine-internal; Convex stores the value returned after registration. Neither side invents the other’s ID.
+- **`instanceId`** = Convex `instances` document `_id`. **`applicationId`** = engine-internal; Convex stores the value returned after registration. Neither side invents the other's ID.
 - **UI → engine (mutations that should be trusted):** browser → **Convex action** → engine HTTP API. **Do not** call the engine from the browser for these paths.
-- **`WoofxTransport`** (`client/src/lib/transport/`) — **only** for realtime browser↔engine (e.g. WebSocket). **Not** for Convex-proxied calls.
-- **Engine → UI:** POST shared webhook on Convex; must be **idempotent**; validate `instanceId`; body includes `instanceId` + `applicationId`.
+- **All engine API calls from Convex use capnweb HTTP batch RPC** via `createEngineRpcSession(url, clientId, clientSecret)` in `convex/lib/engineInstanceUrl.ts`. This creates a gateway, calls `gateway.authenticate()`, and returns the Api stub — all pipelined in one batch.
+- **capnweb HTTP batch is single-use**: the batch fires on the first `await` and the session is consumed. Never `await` authenticate separately — chain the API call: `await createEngineRpcSession(...).someMethod()`. Multiple independent calls need separate sessions. Convex does not support WebSocket, so `newWebSocketRpcSession` cannot be used in Convex actions.
+- **`WoofxTransport`** (`client/src/lib/transport/`) — **only** for realtime browser↔engine WebSocket. Uses `newWebSocketRpcSession` + `gateway.authenticate()`. **Not** for Convex-proxied calls.
+- **Engine → UI:** POST to `/api/webhooks/woofx3` on Convex; `Authorization: Bearer <callbackToken>` header; must be **idempotent**.
 
 Account sharing is **Convex-only**; the engine has no user/account model.
 
