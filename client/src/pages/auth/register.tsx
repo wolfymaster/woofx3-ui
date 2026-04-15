@@ -34,6 +34,8 @@ export default function Register() {
     setIsLoading(true);
     try {
       await signIn("password", { name, email, password, flow: "signUp" });
+      // TODO: Show success notice on login form after account creation - when user is redirected
+      // to login, display notice telling them account was created and to login
       navigate("/auth/onboarding");
     } catch (err: any) {
       setError(err?.message || "Registration failed. Please try again.");

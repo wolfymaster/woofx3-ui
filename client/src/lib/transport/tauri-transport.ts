@@ -18,8 +18,8 @@ import type {
 } from "./interface";
 
 export class TauriTransport implements WoofxTransport {
-  connect(url: string, apiKey?: string): void {
-    // TODO: invoke('connect_woofx3', { url, apiKey })
+  connect(url: string, clientId?: string, clientSecret?: string): void {
+    // TODO: invoke('connect_woofx3', { url, clientId, clientSecret })
     throw new Error("TauriTransport not yet implemented");
   }
 

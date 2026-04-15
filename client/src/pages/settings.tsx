@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAction, useMutation as useConvexMutation } from 'convex/react';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAction, useMutation as useConvexMutation } from "convex/react";
 import {
   User,
   Bell,
@@ -15,30 +15,35 @@ import {
   Server,
   Loader2,
   XCircle,
-} from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+  AlertTriangle,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { PageHeader } from '@/components/layout/page-header';
-import { useTheme } from '@/hooks/use-theme';
-import { cn } from '@/lib/utils';
-import { $engineUrl, $apiKey } from '@/lib/stores';
-import { useStore } from '@nanostores/react';
-import { api } from '@convex/_generated/api';
-import { useInstance } from '@/hooks/use-instance';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { PageHeader } from "@/components/layout/page-header";
+import { useTheme } from "@/hooks/use-theme";
+import { cn } from "@/lib/utils";
+import { $engineUrl } from "@/lib/stores";
+import { useStore } from "@nanostores/react";
+import { api } from "@convex/_generated/api";
+import { useInstance } from "@/hooks/use-instance";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
@@ -53,7 +58,6 @@ function EngineSettingsTab() {
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fallbackUrl = useStore($engineUrl);
-  const apiKey = useStore($apiKey);
 
   const [urlDraft, setUrlDraft] = useState(fallbackUrl);
 
@@ -200,31 +204,24 @@ function EngineSettingsTab() {
             </Button>
           </div>
           {saveError && <p className="text-xs text-destructive">{saveError}</p>}
-          {status === "error" && errorMsg && (
-            <p className="text-xs text-destructive">{errorMsg}</p>
-          )}
-          {status === "success" && (
-            <p className="text-xs text-green-500">Engine is reachable.</p>
-          )}
+          {status === "error" && errorMsg && <p className="text-xs text-destructive">{errorMsg}</p>}
+          {status === "success" && <p className="text-xs text-green-500">Engine is reachable.</p>}
           <p className="text-xs text-muted-foreground">
-            The hostname and port (or full URL) where this instance&apos;s backend API is running.
-            If no protocol is specified, the current page&apos;s protocol will be used.
+            The hostname and port (or full URL) where this instance&apos;s backend API is running. If no protocol is
+            specified, the current page&apos;s protocol will be used.
           </p>
         </div>
         <Separator />
         <div className="grid gap-2">
-          <Label htmlFor="api-key">API Key</Label>
-          <Input
-            id="api-key"
-            type="password"
-            placeholder="Enter your API key"
-            value={apiKey}
-            onChange={(e) => $apiKey.set(e.target.value)}
-            data-testid="input-api-key"
-          />
-          <p className="text-xs text-muted-foreground">
-            Optional override when the stored instance key is missing (e.g. local dev). Saved in this browser only.
-          </p>
+          <Label>Registration Status</Label>
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+            <div className={`h-2 w-2 rounded-full ${instance?.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
+            <p className="text-sm text-muted-foreground">
+              {instance?.clientId
+                ? "Registered with engine"
+                : "Not registered — re-run onboarding or register from here."}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
           <div className="h-2 w-2 rounded-full bg-green-500" />
@@ -242,10 +239,15 @@ type UserPreferences = { email: boolean; push: boolean; workflow: boolean; marke
 export default function Settings() {
   const { theme, setTheme, preset, presets, setPreset } = useTheme();
   const queryClient = useQueryClient();
+  const { instance } = useInstance();
+  const deleteInstanceAction = useAction(api.instances.deleteInstance);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const { data: preferences, isLoading: prefsLoading } = useQuery({
-    queryKey: ['userPreferences'],
-    queryFn: (): Promise<UserPreferences> => Promise.resolve({ email: true, push: false, workflow: true, marketing: false }),
+    queryKey: ["userPreferences"],
+    queryFn: (): Promise<UserPreferences> =>
+      Promise.resolve({ email: true, push: false, workflow: true, marketing: false }),
   });
 
   const [notifications, setNotifications] = useState<UserPreferences>({
@@ -265,7 +267,7 @@ export default function Settings() {
   const updatePrefsMutation = useMutation({
     mutationFn: (prefs: UserPreferences) => Promise.resolve(prefs),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['userPreferences'] });
+      queryClient.invalidateQueries({ queryKey: ["userPreferences"] });
     },
   });
 
@@ -275,12 +277,22 @@ export default function Settings() {
     updatePrefsMutation.mutate(newPrefs);
   };
 
+  const handleDeleteInstance = async () => {
+    if (!instance) return;
+    setDeleting(true);
+    try {
+      await deleteInstanceAction({ instanceId: instance._id });
+      window.location.href = "/";
+    } catch (e) {
+      console.error("Failed to delete instance:", e);
+      setDeleting(false);
+      setDeleteDialogOpen(false);
+    }
+  };
+
   return (
     <div className="p-6 lg:p-8 max-w-[1000px] mx-auto">
-      <PageHeader
-        title="Settings"
-        description="Manage your account and application preferences."
-      />
+      <PageHeader title="Settings" description="Manage your account and application preferences." />
 
       <Tabs defaultValue="profile" className="space-y-6" orientation="vertical">
         <div className="flex flex-col md:flex-row gap-6">
@@ -325,10 +337,10 @@ export default function Settings() {
                       <AvatarFallback className="text-lg">AC</AvatarFallback>
                     </Avatar>
                     <div>
-                      <Button variant="outline" size="sm">Change Avatar</Button>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        JPG, PNG or GIF. Max 2MB.
-                      </p>
+                      <Button variant="outline" size="sm">
+                        Change Avatar
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-1">JPG, PNG or GIF. Max 2MB.</p>
                     </div>
                   </div>
 
@@ -375,15 +387,11 @@ export default function Settings() {
                 <CardContent>
                   <RadioGroup
                     value={theme}
-                    onValueChange={(v) => setTheme(v as 'light' | 'dark')}
+                    onValueChange={(v) => setTheme(v as "light" | "dark")}
                     className="grid grid-cols-3 gap-4"
                   >
                     <div>
-                      <RadioGroupItem
-                        value="light"
-                        id="theme-light"
-                        className="peer sr-only"
-                      />
+                      <RadioGroupItem value="light" id="theme-light" className="peer sr-only" />
                       <Label
                         htmlFor="theme-light"
                         className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
@@ -394,11 +402,7 @@ export default function Settings() {
                       </Label>
                     </div>
                     <div>
-                      <RadioGroupItem
-                        value="dark"
-                        id="theme-dark"
-                        className="peer sr-only"
-                      />
+                      <RadioGroupItem value="dark" id="theme-dark" className="peer sr-only" />
                       <Label
                         htmlFor="theme-dark"
                         className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
@@ -409,12 +413,7 @@ export default function Settings() {
                       </Label>
                     </div>
                     <div>
-                      <RadioGroupItem
-                        value="system"
-                        id="theme-system"
-                        className="peer sr-only"
-                        disabled
-                      />
+                      <RadioGroupItem value="system" id="theme-system" className="peer sr-only" disabled />
                       <Label
                         htmlFor="theme-system"
                         className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 opacity-50 cursor-not-allowed"
@@ -434,14 +433,14 @@ export default function Settings() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
-                    {presets.map(p => (
+                    {presets.map((p) => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => setPreset(p.id)}
                         className={cn(
-                          'relative w-full text-left rounded-lg border-2 p-4 cursor-pointer hover-elevate',
-                          preset.id === p.id ? 'border-primary' : 'border-muted'
+                          "relative w-full text-left rounded-lg border-2 p-4 cursor-pointer hover-elevate",
+                          preset.id === p.id ? "border-primary" : "border-muted"
                         )}
                         data-testid={`button-preset-${p.id}`}
                       >
@@ -458,22 +457,10 @@ export default function Settings() {
                           <span className="font-medium">{p.name}</span>
                         </div>
                         <div className="flex gap-1">
-                          <div
-                            className="h-6 w-6 rounded"
-                            style={{ backgroundColor: `hsl(${p.colors.background})` }}
-                          />
-                          <div
-                            className="h-6 w-6 rounded"
-                            style={{ backgroundColor: `hsl(${p.colors.sidebar})` }}
-                          />
-                          <div
-                            className="h-6 w-6 rounded"
-                            style={{ backgroundColor: `hsl(${p.colors.card})` }}
-                          />
-                          <div
-                            className="h-6 w-6 rounded"
-                            style={{ backgroundColor: `hsl(${p.colors.accent})` }}
-                          />
+                          <div className="h-6 w-6 rounded" style={{ backgroundColor: `hsl(${p.colors.background})` }} />
+                          <div className="h-6 w-6 rounded" style={{ backgroundColor: `hsl(${p.colors.sidebar})` }} />
+                          <div className="h-6 w-6 rounded" style={{ backgroundColor: `hsl(${p.colors.card})` }} />
+                          <div className="h-6 w-6 rounded" style={{ backgroundColor: `hsl(${p.colors.accent})` }} />
                         </div>
                       </button>
                     ))}
@@ -492,13 +479,11 @@ export default function Settings() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label>Email Notifications</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receive notifications via email.
-                      </p>
+                      <p className="text-sm text-muted-foreground">Receive notifications via email.</p>
                     </div>
                     <Switch
                       checked={notifications.email}
-                      onCheckedChange={(v) => handleNotificationChange('email', v)}
+                      onCheckedChange={(v) => handleNotificationChange("email", v)}
                       disabled={prefsLoading}
                       data-testid="switch-email-notifications"
                     />
@@ -507,13 +492,11 @@ export default function Settings() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label>Push Notifications</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receive browser push notifications.
-                      </p>
+                      <p className="text-sm text-muted-foreground">Receive browser push notifications.</p>
                     </div>
                     <Switch
                       checked={notifications.push}
-                      onCheckedChange={(v) => handleNotificationChange('push', v)}
+                      onCheckedChange={(v) => handleNotificationChange("push", v)}
                       disabled={prefsLoading}
                       data-testid="switch-push-notifications"
                     />
@@ -528,7 +511,7 @@ export default function Settings() {
                     </div>
                     <Switch
                       checked={notifications.workflow}
-                      onCheckedChange={(v) => handleNotificationChange('workflow', v)}
+                      onCheckedChange={(v) => handleNotificationChange("workflow", v)}
                       disabled={prefsLoading}
                       data-testid="switch-workflow-notifications"
                     />
@@ -537,13 +520,11 @@ export default function Settings() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label>Marketing Updates</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receive news about new features and updates.
-                      </p>
+                      <p className="text-sm text-muted-foreground">Receive news about new features and updates.</p>
                     </div>
                     <Switch
                       checked={notifications.marketing}
-                      onCheckedChange={(v) => handleNotificationChange('marketing', v)}
+                      onCheckedChange={(v) => handleNotificationChange("marketing", v)}
                       disabled={prefsLoading}
                       data-testid="switch-marketing-notifications"
                     />
@@ -583,12 +564,16 @@ export default function Settings() {
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">Status: <span className="text-muted-foreground">Disabled</span></p>
+                      <p className="font-medium">
+                        Status: <span className="text-muted-foreground">Disabled</span>
+                      </p>
                       <p className="text-sm text-muted-foreground">
                         Protect your account with 2FA using an authenticator app.
                       </p>
                     </div>
-                    <Button variant="outline" data-testid="button-enable-2fa">Enable 2FA</Button>
+                    <Button variant="outline" data-testid="button-enable-2fa">
+                      Enable 2FA
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -596,10 +581,16 @@ export default function Settings() {
               <Card className="border-destructive/50">
                 <CardHeader>
                   <CardTitle className="text-destructive">Danger Zone</CardTitle>
-                  <CardDescription>Irreversible actions for your account.</CardDescription>
+                  <CardDescription>Irreversible actions for this instance.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Button variant="destructive" data-testid="button-delete-account">Delete Account</Button>
+                  <Button
+                    variant="destructive"
+                    data-testid="button-delete-account"
+                    onClick={() => setDeleteDialogOpen(true)}
+                  >
+                    Delete Instance
+                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>
@@ -625,7 +616,9 @@ export default function Settings() {
                         <p className="text-sm text-muted-foreground">Not connected</p>
                       </div>
                     </div>
-                    <Button variant="outline" data-testid="button-connect-twitch">Connect</Button>
+                    <Button variant="outline" data-testid="button-connect-twitch">
+                      Connect
+                    </Button>
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-lg border">
                     <div className="flex items-center gap-3">
@@ -637,7 +630,9 @@ export default function Settings() {
                         <p className="text-sm text-muted-foreground">Not connected</p>
                       </div>
                     </div>
-                    <Button variant="outline" data-testid="button-connect-youtube">Connect</Button>
+                    <Button variant="outline" data-testid="button-connect-youtube">
+                      Connect
+                    </Button>
                   </div>
                   <div className="flex items-center justify-between p-4 rounded-lg border">
                     <div className="flex items-center gap-3">
@@ -649,7 +644,9 @@ export default function Settings() {
                         <p className="text-sm text-muted-foreground">Not connected</p>
                       </div>
                     </div>
-                    <Button variant="outline" data-testid="button-connect-discord">Connect</Button>
+                    <Button variant="outline" data-testid="button-connect-discord">
+                      Connect
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -662,9 +659,7 @@ export default function Settings() {
                 <CardContent>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-muted-foreground">
-                        You haven't created any API keys yet.
-                      </p>
+                      <p className="text-sm text-muted-foreground">You haven't created any API keys yet.</p>
                     </div>
                     <Button variant="outline" data-testid="button-create-api-key">
                       <Key className="h-4 w-4 mr-2" />
@@ -677,6 +672,33 @@ export default function Settings() {
           </div>
         </div>
       </Tabs>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Instance</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this instance? This action is irreversible and will permanently remove all
+              data associated with this instance, including workflows, scenes, and assets.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteInstance}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 mr-2" />
+              )}
+              Delete Instance
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

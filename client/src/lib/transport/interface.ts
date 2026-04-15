@@ -89,7 +89,7 @@ export interface EngineModule {
 
 export interface WoofxTransport {
   // Connection lifecycle
-  connect(url: string, apiKey?: string): void;
+  connect(url: string, clientId?: string, clientSecret?: string): void;
   disconnect(): void;
   isConnected(): boolean;
 

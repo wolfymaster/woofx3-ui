@@ -1,23 +1,28 @@
-import { useState, useRef, useEffect } from 'react';
-import { Send, Smile, Settings2, Users } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { transport } from '@/lib/transport';
-import type { ChatMessage } from '@/lib/transport';
-import { useInstance } from '@/hooks/use-instance';
+import { useState, useRef, useEffect } from "react";
+import { useAction } from "convex/react";
+import { Send, Smile, Settings2, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { transport } from "@/lib/transport";
+import type { ChatMessage } from "@/lib/transport";
+import { useInstance } from "@/hooks/use-instance";
+import { api } from "@convex/_generated/api";
 
 function ChatMessageItem({ message }: { message: ChatMessage }) {
   const displayName = message.displayName || message.username;
   const initials = displayName.slice(0, 2).toUpperCase();
-  const color = message.color || '#888888';
+  const color = message.color || "#888888";
 
   return (
-    <div className="flex items-start gap-2 py-1.5 px-2 hover:bg-muted/30 rounded" data-testid={`chat-message-${message.id}`}>
+    <div
+      className="flex items-start gap-2 py-1.5 px-2 hover:bg-muted/30 rounded"
+      data-testid={`chat-message-${message.id}`}
+    >
       <Avatar className="h-6 w-6 shrink-0">
-        <AvatarFallback className="text-[10px]" style={{ backgroundColor: color + '20', color }}>
+        <AvatarFallback className="text-[10px]" style={{ backgroundColor: color + "20", color }}>
           {initials}
         </AvatarFallback>
       </Avatar>
@@ -45,8 +50,9 @@ interface ChatModuleProps {
 export function ChatModule({ config: _config }: ChatModuleProps) {
   const { instance } = useInstance();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sendChatMessage = useAction(api.moduleEngine.sendChatMessage);
 
   // Subscribe to chat messages via transport
   useEffect(() => {
@@ -67,14 +73,14 @@ export function ChatModule({ config: _config }: ChatModuleProps) {
     }
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputValue.trim() || !instance) return;
-    transport.sendChatMessage(instance._id, inputValue).catch(console.error);
-    setInputValue('');
+    await sendChatMessage({ instanceId: instance._id, message: inputValue }).catch(console.error);
+    setInputValue("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
@@ -99,12 +105,10 @@ export function ChatModule({ config: _config }: ChatModuleProps) {
         <div className="py-2">
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground text-sm py-4">
-              {instance ? 'Waiting for chat messages...' : 'No instance connected'}
+              {instance ? "Waiting for chat messages..." : "No instance connected"}
             </div>
           ) : (
-            [...messages].reverse().map((msg) => (
-              <ChatMessageItem key={msg.id} message={msg} />
-            ))
+            [...messages].reverse().map((msg) => <ChatMessageItem key={msg.id} message={msg} />)
           )}
         </div>
       </ScrollArea>

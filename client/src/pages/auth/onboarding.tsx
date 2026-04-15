@@ -90,9 +90,8 @@ export default function Onboarding() {
       const result = await registerInstance({ instanceId });
 
       if (!result.ok) {
-        // Instance was created but registration failed — still usable, warn the user
-        console.warn('[onboarding] Engine registration failed:', result.error);
-        setError(`Instance created but engine registration failed: ${result.error}. You can retry from Settings.`);
+        setError(`Engine registration failed: ${result.error}`);
+        return;
       }
 
       $currentInstanceId.set(instanceId);

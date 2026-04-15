@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useQuery, useMutation } from 'convex/react';
-import { useLocation } from 'wouter';
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useQuery, useMutation, useAction } from "convex/react";
+import { useLocation } from "wouter";
 import {
   Search,
   Filter,
@@ -21,14 +21,14 @@ import {
   Upload,
   ToggleLeft,
   ToggleRight,
-} from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardFooter } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Toggle } from '@/components/ui/toggle';
-import { Skeleton } from '@/components/ui/skeleton';
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Toggle } from "@/components/ui/toggle";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,22 +36,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { PageHeader } from '@/components/layout/page-header';
-import { EmptyState } from '@/components/common/empty-state';
-import { ErrorState } from '@/components/common/error-state';
-import { cn } from '@/lib/utils';
-import { api } from '@convex/_generated/api';
-import { useInstance } from '@/hooks/use-instance';
-import type { Id } from '@convex/_generated/dataModel';
-import { transport, type EngineModule } from '@/lib/transport';
+} from "@/components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageHeader } from "@/components/layout/page-header";
+import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { cn } from "@/lib/utils";
+import { api } from "@convex/_generated/api";
+import { useInstance } from "@/hooks/use-instance";
+import type { Id } from "@convex/_generated/dataModel";
 
 type ModuleRepoItem = {
   _id: Id<"moduleRepository">;
@@ -119,10 +112,7 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, onRetry, 
   );
 
   return (
-    <Card
-      className="group flex flex-col hover-elevate overflow-visible"
-      data-testid={`card-module-${module._id}`}
-    >
+    <Card className="group flex flex-col hover-elevate overflow-visible" data-testid={`card-module-${module._id}`}>
       <CardContent className="pt-6 flex-1">
         <div className="flex items-start gap-4 mb-4">
           <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -156,9 +146,7 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, onRetry, 
             </p>
           </div>
         </div>
-        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
-          {module.description}
-        </p>
+        <p className="text-sm text-muted-foreground line-clamp-2 mb-4">{module.description}</p>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">
             {category}
@@ -176,11 +164,7 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, onRetry, 
             <p className="text-xs text-destructive truncate flex-1" title={module.statusMessage}>
               {module.statusMessage || "Installation failed"}
             </p>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onRetry(module._id as Id<"moduleRepository">)}
-            >
+            <Button size="sm" variant="outline" onClick={() => onRetry(module._id as Id<"moduleRepository">)}>
               Retry
             </Button>
           </div>
@@ -194,9 +178,15 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, onRetry, 
               data-testid={`button-toggle-${module._id}`}
             >
               {module.isEnabled ? (
-                <><ToggleRight className="h-4 w-4 mr-2 text-green-500" />Enabled</>
+                <>
+                  <ToggleRight className="h-4 w-4 mr-2 text-green-500" />
+                  Enabled
+                </>
               ) : (
-                <><ToggleLeft className="h-4 w-4 mr-2" />Disabled</>
+                <>
+                  <ToggleLeft className="h-4 w-4 mr-2" />
+                  Disabled
+                </>
               )}
             </Button>
             <Button
@@ -216,11 +206,7 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, onRetry, 
             disabled={isInstalling}
             data-testid={`button-install-${module._id}`}
           >
-            {isInstalling ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
+            {isInstalling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
             {isInstalling ? "Installing..." : "Install"}
           </Button>
         ) : null}
@@ -254,48 +240,58 @@ function ModuleCardSkeleton() {
 export default function Modules() {
   const [, navigate] = useLocation();
   const { instance, isLoading: instanceLoading } = useInstance();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState('name');
-  const [activeTab, setActiveTab] = useState('installed');
-  const [installingId, setInstallingId] = useState<Id<'moduleRepository'> | null>(null);
+  const [sortBy, setSortBy] = useState("name");
+  const [activeTab, setActiveTab] = useState("installed");
+  const [installingId, setInstallingId] = useState<Id<"moduleRepository"> | null>(null);
+  interface EngineModule {
+    name: string;
+    version: string;
+    state: string;
+  }
+
   const [engineModules, setEngineModules] = useState<EngineModule[]>([]);
   const [engineError, setEngineError] = useState<string | null>(null);
 
   const repoModules = useQuery(api.moduleRepository.list, {}) as ModuleRepoItem[] | undefined;
   const enqueueEngineInstall = useMutation(api.moduleRepository.enqueueEngineInstall);
+  const engineListModules = useAction(api.moduleEngine.listEngineModules);
+  const engineUninstallModule = useAction(api.moduleEngine.uninstallEngineModule);
+  const engineSetModuleState = useAction(api.moduleEngine.setEngineModuleState);
 
   const isLoading = instanceLoading || repoModules === undefined;
 
   const runtimeInstanceId = useMemo(() => {
-    if (!instance) return '';
+    if (!instance) return "";
     const maybeApplicationId = (instance as Record<string, unknown>).applicationId;
-    return (typeof maybeApplicationId === 'string' && maybeApplicationId.length > 0)
-      ? maybeApplicationId
-      : instance._id;
+    return typeof maybeApplicationId === "string" && maybeApplicationId.length > 0 ? maybeApplicationId : instance._id;
   }, [instance]);
 
-  const refreshEngineModules = useCallback(async (retries = 2) => {
-    if (!runtimeInstanceId) {
-      setEngineModules([]);
-      setEngineError(null);
-      return;
-    }
-    try {
-      const modules = await transport.listEngineModules(runtimeInstanceId);
-      setEngineModules(modules);
-      setEngineError(null);
-    } catch (err) {
-      if (retries > 0) {
-        await new Promise((r) => setTimeout(r, 1500));
-        return refreshEngineModules(retries - 1);
+  const refreshEngineModules = useCallback(
+    async (retries = 2) => {
+      if (!instance) {
+        setEngineModules([]);
+        setEngineError(null);
+        return;
       }
-      console.error("Failed to fetch engine modules:", err);
-      setEngineError("Could not reach engine module list.");
-      setEngineModules([]);
-    }
-  }, [runtimeInstanceId]);
+      try {
+        const modules = await engineListModules({ instanceId: instance._id });
+        setEngineModules(modules ?? []);
+        setEngineError(null);
+      } catch (err) {
+        if (retries > 0) {
+          await new Promise((r) => setTimeout(r, 1500));
+          return refreshEngineModules(retries - 1);
+        }
+        console.error("Failed to fetch engine modules:", err);
+        setEngineError("Could not reach engine module list.");
+        setEngineModules([]);
+      }
+    },
+    [instance, engineListModules]
+  );
 
   useEffect(() => {
     void refreshEngineModules();
@@ -342,10 +338,7 @@ export default function Modules() {
     return [...repoViews, ...orphans];
   }, [repoModules, engineModules]);
 
-  const installedModuleViews = useMemo(
-    () => allModules.filter((m) => m.isInstalled),
-    [allModules]
-  );
+  const installedModuleViews = useMemo(() => allModules.filter((m) => m.isInstalled), [allModules]);
 
   const filterModules = (modules: ModuleView[]) => {
     let result = modules;
@@ -365,8 +358,8 @@ export default function Modules() {
     }
 
     result = [...result].sort((a, b) => {
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
-      if (sortBy === 'category') return getCategory(a).localeCompare(getCategory(b));
+      if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "category") return getCategory(a).localeCompare(getCategory(b));
       return 0;
     });
 
@@ -390,21 +383,23 @@ export default function Modules() {
 
   const handleUninstall = async (moduleId: Id<"moduleRepository"> | string) => {
     const module = allModules.find((m) => m._id === moduleId);
-    if (!module || !runtimeInstanceId) {
+    if (!module || !instance) {
       return;
     }
-    await transport.uninstallEngineModule(runtimeInstanceId, module.name).catch(console.error);
+    await engineUninstallModule({ instanceId: instance._id, name: module.name }).catch(console.error);
     await refreshEngineModules();
   };
 
   const handleToggleEnabled = async (moduleId: Id<"moduleRepository"> | string, enabled: boolean) => {
     const module = allModules.find((m) => m._id === moduleId);
-    if (!module || !runtimeInstanceId) {
+    if (!module || !instance) {
       return;
     }
-    await transport
-      .setEngineModuleState(runtimeInstanceId, module.name, enabled ? "active" : "disabled")
-      .catch(console.error);
+    await engineSetModuleState({
+      instanceId: instance._id,
+      name: module.name,
+      state: enabled ? "active" : "disabled",
+    }).catch(console.error);
     await refreshEngineModules();
   };
 
@@ -432,7 +427,7 @@ export default function Modules() {
   const renderModuleGrid = (modules: ModuleView[]) => {
     const filtered = filterModules(modules);
     if (filtered.length === 0) return null;
-    return viewMode === 'grid' ? (
+    return viewMode === "grid" ? (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtered.map((module) => (
           <ModuleCard
@@ -464,16 +459,24 @@ export default function Modules() {
                 <div className="flex items-center gap-2">
                   <h3 className="font-medium truncate">{module.name}</h3>
                   {module.isInstalled && (
-                    <Badge variant="secondary" className="text-xs">Installed</Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      Installed
+                    </Badge>
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground truncate">{module.description}</p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="outline" className="text-xs hidden sm:flex">{category}</Badge>
+                <Badge variant="outline" className="text-xs hidden sm:flex">
+                  {category}
+                </Badge>
                 <span className="text-xs text-muted-foreground hidden md:block">v{module.version}</span>
                 {module.isInstalled ? (
-                  <Button variant="outline" size="sm" onClick={() => handleToggleEnabled(module._id, !module.isEnabled)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleToggleEnabled(module._id, !module.isEnabled)}
+                  >
                     {module.isEnabled ? "Disable" : "Enable"}
                   </Button>
                 ) : !module.isOrphan ? (
@@ -500,7 +503,7 @@ export default function Modules() {
         title="Modules"
         description="Browse and manage your stream automation modules."
         actions={
-          <Button onClick={() => navigate('/modules/install')} variant="outline">
+          <Button onClick={() => navigate("/modules/install")} variant="outline">
             <Upload className="h-4 w-4 mr-2" />
             Install Module
           </Button>
@@ -512,7 +515,9 @@ export default function Modules() {
           <ErrorState
             title="Engine connection issue"
             message={engineError}
-            onRetry={() => { void refreshEngineModules(); }}
+            onRetry={() => {
+              void refreshEngineModules();
+            }}
           />
         </div>
       )}
@@ -522,11 +527,15 @@ export default function Modules() {
           <TabsList>
             <TabsTrigger value="installed" data-testid="tab-installed-modules">
               Installed
-              <Badge variant="secondary" className="ml-2">{installedModuleViews.length}</Badge>
+              <Badge variant="secondary" className="ml-2">
+                {installedModuleViews.length}
+              </Badge>
             </TabsTrigger>
             <TabsTrigger value="all" data-testid="tab-all-modules">
               All Modules
-              <Badge variant="secondary" className="ml-2">{allModules.length}</Badge>
+              <Badge variant="secondary" className="ml-2">
+                {allModules.length}
+              </Badge>
             </TabsTrigger>
           </TabsList>
 
@@ -578,8 +587,8 @@ export default function Modules() {
 
             <div className="flex items-center border rounded-md">
               <Toggle
-                pressed={viewMode === 'grid'}
-                onPressedChange={() => setViewMode('grid')}
+                pressed={viewMode === "grid"}
+                onPressedChange={() => setViewMode("grid")}
                 size="sm"
                 className="rounded-r-none"
                 data-testid="button-view-grid"
@@ -587,8 +596,8 @@ export default function Modules() {
                 <Grid3X3 className="h-4 w-4" />
               </Toggle>
               <Toggle
-                pressed={viewMode === 'list'}
-                onPressedChange={() => setViewMode('list')}
+                pressed={viewMode === "list"}
+                onPressedChange={() => setViewMode("list")}
                 size="sm"
                 className="rounded-l-none"
                 data-testid="button-view-list"
@@ -611,7 +620,13 @@ export default function Modules() {
               icon={Puzzle}
               title="No modules found"
               description="Try adjusting your search or filters, or install a module from a zip file."
-              action={{ label: 'Clear Filters', onClick: () => { setSearchQuery(''); setSelectedCategories([]); } }}
+              action={{
+                label: "Clear Filters",
+                onClick: () => {
+                  setSearchQuery("");
+                  setSelectedCategories([]);
+                },
+              }}
             />
           ) : (
             renderModuleGrid(allModules)
@@ -630,7 +645,7 @@ export default function Modules() {
               icon={Puzzle}
               title="No installed modules"
               description="Browse the module library to find and install modules for your stream."
-              action={{ label: 'Browse Modules', onClick: () => setActiveTab('all') }}
+              action={{ label: "Browse Modules", onClick: () => setActiveTab("all") }}
             />
           ) : (
             renderModuleGrid(installedModuleViews)

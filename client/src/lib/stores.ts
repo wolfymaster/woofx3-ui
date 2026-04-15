@@ -6,7 +6,6 @@ const STORAGE_KEYS = {
   themePreset: 'streamdeck-theme-preset',
   sidebarCollapsed: 'streamdeck-sidebar-collapsed',
   engineUrl: 'streamdeck-engine-url',
-  apiKey: 'streamdeck-api-key',
   currentInstanceId: 'woofx3-current-instance-id',
 };
 
@@ -54,12 +53,9 @@ const getDefaultEngineUrl = (): string => {
 };
 
 const initialEngineUrl = getStoredValue<string>(STORAGE_KEYS.engineUrl, getDefaultEngineUrl());
-const initialApiKey = getStoredValue<string>(STORAGE_KEYS.apiKey, '');
 export const $engineUrl = atom<string>(initialEngineUrl);
-export const $apiKey = atom<string>(initialApiKey);
 
 $engineUrl.subscribe((value) => persistValue(STORAGE_KEYS.engineUrl, value));
-$apiKey.subscribe((value) => persistValue(STORAGE_KEYS.apiKey, value));
 
 export const themePresets: ThemePreset[] = [
   {

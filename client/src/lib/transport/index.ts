@@ -23,7 +23,7 @@ function createTransport(): WoofxTransport {
 export const transport: WoofxTransport = createTransport();
 
 // Connection is driven by `useSyncEngineTransport` in BroadcastShell so the active
-// woofx3 deployment matches the selected Convex instance (per-instance `url` / `apiKey`).
+// woofx3 deployment matches the selected Convex instance (per-instance `url` / `clientId` / `clientSecret`).
 
 export type { WoofxTransport };
 export * from "./interface";

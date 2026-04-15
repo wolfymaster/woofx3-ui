@@ -1,27 +1,19 @@
-import { useState, useCallback, useEffect } from 'react';
-import {
-  Plus,
-  Edit,
-  Trash2,
-  Pencil,
-  MessageSquare,
-  Workflow,
-  Globe,
-  Loader2,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
-import { transport } from '@/lib/transport';
-import type { Workflow as TransportWorkflow } from '@/lib/transport';
-import { useInstance } from '@/hooks/use-instance';
-import { MacroConfigModal } from './macro-config-modal';
+import { useState, useCallback, useEffect } from "react";
+import { useAction } from "convex/react";
+import { Plus, Edit, Trash2, Pencil, MessageSquare, Workflow, Globe, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { transport } from "@/lib/transport";
+import { useInstance } from "@/hooks/use-instance";
+import { api } from "@convex/_generated/api";
+import { MacroConfigModal } from "./macro-config-modal";
 
 export interface MacroButton {
   id: string;
   label: string;
   icon?: string;
-  type: 'chat-command' | 'trigger-workflow' | 'http-request';
+  type: "chat-command" | "trigger-workflow" | "http-request";
   config: {
     // For chat-command
     command?: string;
@@ -29,7 +21,7 @@ export interface MacroButton {
     workflowId?: string;
     // For http-request
     url?: string;
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE';
+    method?: "GET" | "POST" | "PUT" | "DELETE";
     headers?: Record<string, string>;
     body?: string;
   };
@@ -42,20 +34,19 @@ interface MacroPadModuleProps {
 
 export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) {
   const { instance } = useInstance();
-  const [macros, setMacros] = useState<MacroButton[]>(
-    (config?.macros as MacroButton[]) || []
-  );
+  const [macros, setMacros] = useState<MacroButton[]>((config?.macros as MacroButton[]) || []);
   const [isEditMode, setIsEditMode] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [editingMacro, setEditingMacro] = useState<MacroButton | null>(null);
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
-  const [workflows, setWorkflows] = useState<TransportWorkflow[]>([]);
+  const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
+  const listEngineWorkflows = useAction(api.moduleEngine.listWorkflows);
 
-  // Load workflows via transport
+  // Load workflows via Convex
   useEffect(() => {
     if (!instance) return;
-    transport.getWorkflows(instance._id).then(setWorkflows).catch(console.error);
-  }, [instance?._id]);
+    listEngineWorkflows({ instanceId: instance._id }).then(setWorkflows).catch(console.error);
+  }, [instance?._id, listEngineWorkflows]);
 
   // Sync macros from config when it changes
   useEffect(() => {
@@ -74,73 +65,82 @@ export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) 
     setConfigModalOpen(true);
   }, []);
 
-  const handleDeleteMacro = useCallback((id: string) => {
-    const newMacros = macros.filter(m => m.id !== id);
-    setMacros(newMacros);
-    onConfigChange?.({ macros: newMacros });
-  }, [macros, onConfigChange]);
+  const handleDeleteMacro = useCallback(
+    (id: string) => {
+      const newMacros = macros.filter((m) => m.id !== id);
+      setMacros(newMacros);
+      onConfigChange?.({ macros: newMacros });
+    },
+    [macros, onConfigChange]
+  );
 
-  const handleSaveMacro = useCallback((macro: MacroButton) => {
-    let newMacros: MacroButton[];
-    if (editingMacro) {
-      // Update existing macro
-      newMacros = macros.map(m => m.id === editingMacro.id ? macro : m);
-    } else {
-      // Add new macro
-      newMacros = [...macros, macro];
-    }
-    setMacros(newMacros);
-    onConfigChange?.({ macros: newMacros });
-    setConfigModalOpen(false);
-    setEditingMacro(null);
-  }, [editingMacro, macros, onConfigChange]);
-
-  const handleExecuteMacro = useCallback(async (macro: MacroButton) => {
-    if (isEditMode) return;
-    
-    setIsExecuting(macro.id);
-    try {
-      switch (macro.type) {
-        case 'chat-command':
-          // Execute chat command
-          if (macro.config.command) {
-            // TODO: Implement chat command execution via API
-            console.log('Executing chat command:', macro.config.command);
-          }
-          break;
-        case 'trigger-workflow':
-          // Trigger workflow
-          if (macro.config.workflowId) {
-            // TODO: Implement workflow trigger via API
-            console.log('Triggering workflow:', macro.config.workflowId);
-          }
-          break;
-        case 'http-request':
-          // Make HTTP request
-          if (macro.config.url) {
-            const response = await fetch(macro.config.url, {
-              method: macro.config.method || 'GET',
-              headers: macro.config.headers || {},
-              body: macro.config.body ? JSON.stringify(JSON.parse(macro.config.body)) : undefined,
-            });
-            console.log('HTTP request result:', response.status);
-          }
-          break;
+  const handleSaveMacro = useCallback(
+    (macro: MacroButton) => {
+      let newMacros: MacroButton[];
+      if (editingMacro) {
+        // Update existing macro
+        newMacros = macros.map((m) => (m.id === editingMacro.id ? macro : m));
+      } else {
+        // Add new macro
+        newMacros = [...macros, macro];
       }
-    } catch (error) {
-      console.error('Failed to execute macro:', error);
-    } finally {
-      setIsExecuting(null);
-    }
-  }, [isEditMode]);
+      setMacros(newMacros);
+      onConfigChange?.({ macros: newMacros });
+      setConfigModalOpen(false);
+      setEditingMacro(null);
+    },
+    [editingMacro, macros, onConfigChange]
+  );
+
+  const handleExecuteMacro = useCallback(
+    async (macro: MacroButton) => {
+      if (isEditMode) return;
+
+      setIsExecuting(macro.id);
+      try {
+        switch (macro.type) {
+          case "chat-command":
+            // Execute chat command
+            if (macro.config.command) {
+              // TODO: Implement chat command execution via API
+              console.log("Executing chat command:", macro.config.command);
+            }
+            break;
+          case "trigger-workflow":
+            // Trigger workflow
+            if (macro.config.workflowId) {
+              // TODO: Implement workflow trigger via API
+              console.log("Triggering workflow:", macro.config.workflowId);
+            }
+            break;
+          case "http-request":
+            // Make HTTP request
+            if (macro.config.url) {
+              const response = await fetch(macro.config.url, {
+                method: macro.config.method || "GET",
+                headers: macro.config.headers || {},
+                body: macro.config.body ? JSON.stringify(JSON.parse(macro.config.body)) : undefined,
+              });
+              console.log("HTTP request result:", response.status);
+            }
+            break;
+        }
+      } catch (error) {
+        console.error("Failed to execute macro:", error);
+      } finally {
+        setIsExecuting(null);
+      }
+    },
+    [isEditMode]
+  );
 
   const getIcon = (iconName?: string) => {
     const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-      'message': MessageSquare,
-      'workflow': Workflow,
-      'globe': Globe,
+      message: MessageSquare,
+      workflow: Workflow,
+      globe: Globe,
     };
-    return iconMap[iconName || ''] || MessageSquare;
+    return iconMap[iconName || ""] || MessageSquare;
   };
 
   return (
@@ -149,21 +149,11 @@ export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) 
         <span className="text-sm font-semibold">Macro Pad</span>
         <div className="flex items-center gap-1">
           {macros.length > 0 && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={() => setIsEditMode(!isEditMode)}
-            >
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditMode(!isEditMode)}>
               <Edit className="h-3.5 w-3.5" />
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={handleAddMacro}
-          >
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleAddMacro}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -177,9 +167,7 @@ export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) 
                 <MessageSquare className="h-8 w-8 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground mb-2">No macros yet</p>
-              <p className="text-xs text-muted-foreground mb-4">
-                Add your first macro to get started
-              </p>
+              <p className="text-xs text-muted-foreground mb-4">Add your first macro to get started</p>
             </div>
             <Button onClick={handleAddMacro} size="sm">
               <Plus className="h-4 w-4 mr-2" />
@@ -196,9 +184,9 @@ export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) 
                 <Card
                   key={macro.id}
                   className={cn(
-                    'aspect-square flex flex-col items-center justify-center p-2 relative transition-all',
-                    !isEditMode && 'cursor-pointer hover:bg-muted/50',
-                    isExecutingThis && 'opacity-50'
+                    "aspect-square flex flex-col items-center justify-center p-2 relative transition-all",
+                    !isEditMode && "cursor-pointer hover:bg-muted/50",
+                    isExecutingThis && "opacity-50"
                   )}
                   onClick={() => !isEditMode && handleExecuteMacro(macro)}
                 >
@@ -234,9 +222,7 @@ export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) 
                     ) : (
                       <Icon className="h-6 w-6 text-muted-foreground" />
                     )}
-                    <span className="text-xs font-medium text-center line-clamp-2">
-                      {macro.label}
-                    </span>
+                    <span className="text-xs font-medium text-center line-clamp-2">{macro.label}</span>
                   </div>
                 </Card>
               );
