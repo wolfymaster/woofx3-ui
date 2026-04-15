@@ -30,12 +30,7 @@ export default defineSchema({
     role: v.union(v.literal("admin"), v.literal("member")),
     token: v.string(),
     invitedByUserId: v.id("users"),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("accepted"),
-      v.literal("revoked"),
-      v.literal("expired"),
-    ),
+    status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("revoked"), v.literal("expired")),
     expiresAt: v.number(),
     createdAt: v.number(),
   })
@@ -49,12 +44,15 @@ export default defineSchema({
     name: v.string(),
     url: v.string(), // user-configured (e.g. "localhost:8080" or "https://...")
     applicationId: v.optional(v.string()), // engine-returned during registration handshake
-    webhookSecret: v.optional(v.string()), // per-instance secret established during registration
-    apiKey: v.optional(v.string()), // engine-generated API key returned during registration
+    clientId: v.optional(v.string()), // engine-generated client identifier returned during registration
+    clientSecret: v.optional(v.string()), // engine-generated secret returned during registration (used to authenticate capnweb sessions)
+    webhookSecret: v.optional(v.string()), // UI-generated secret sent to engine during registration (callbackToken); engine includes in callback Authorization headers
     createdAt: v.number(),
     // Optional per-instance storage provider override (falls back to STORAGE_PROVIDER env var)
     storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),
-  }).index("by_account", ["accountId"]),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_webhook_secret", ["webhookSecret"]),
 
   // applications: engine-internal application scoping per instance
   applications: defineTable({
@@ -146,12 +144,7 @@ export default defineSchema({
     manifest: v.any(),
     archiveKey: v.string(),
     status: v.optional(
-      v.union(
-        v.literal("pending"),
-        v.literal("delivering"),
-        v.literal("installed"),
-        v.literal("failed"),
-      ),
+      v.union(v.literal("pending"), v.literal("delivering"), v.literal("installed"), v.literal("failed"))
     ),
     statusMessage: v.optional(v.string()),
   })

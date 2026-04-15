@@ -96,3 +96,45 @@ export const createAccount = mutation({
     return accountId;
   },
 });
+
+export const deleteMyAccount = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const account = await ctx.db
+      .query("accounts")
+      .withIndex("by_owner", (q) => q.eq("ownerId", userId))
+      .first();
+    if (!account) throw new Error("No account found");
+
+    const accountId = account._id;
+
+    const instances = await ctx.db
+      .query("instances")
+      .withIndex("by_account", (q) => q.eq("accountId", accountId))
+      .collect();
+    for (const instance of instances) {
+      await ctx.db.delete(instance._id);
+    }
+
+    const licenses = await ctx.db
+      .query("licenses")
+      .withIndex("by_account", (q) => q.eq("accountId", accountId))
+      .collect();
+    for (const license of licenses) {
+      await ctx.db.delete(license._id);
+    }
+
+    const accountMembers = await ctx.db
+      .query("accountMembers")
+      .withIndex("by_account", (q) => q.eq("accountId", accountId))
+      .collect();
+    for (const member of accountMembers) {
+      await ctx.db.delete(member._id);
+    }
+
+    await ctx.db.delete(accountId);
+  },
+});

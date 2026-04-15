@@ -1,7 +1,14 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { createEngineRpcSession, type RpcTarget } from "./lib/engineInstanceUrl";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+
+/** Engine RPC surface for instance CRUD (see woofx3 api/src/api.ts). */
+interface InstanceEngineRpc extends RpcTarget {
+  deleteInstance(params: { instanceName: string }): Promise<unknown>;
+}
 
 export const listForCurrentUser = query({
   args: {},
@@ -28,9 +35,7 @@ export const get = query({
     // Verify user has access
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", args.instanceId).eq("userId", userId),
-      )
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
       .first();
 
     if (!membership) return null;
@@ -105,9 +110,7 @@ export const update = mutation({
 
     const membership = await ctx.db
       .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", args.instanceId).eq("userId", userId),
-      )
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
       .first();
 
     if (!membership || membership.role === "member") {
@@ -119,10 +122,71 @@ export const update = mutation({
   },
 });
 
-/**
- * Internal query to look up the application record for an instance.
- * Returns the first (currently only) application for the given instance.
- */
+export const deleteInstance = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+
+    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId: args.instanceId, userId });
+    if (!membership || membership.role === "member") {
+      throw new Error("Not authorized");
+    }
+
+    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: args.instanceId });
+    if (!instance) throw new Error("Instance not found");
+
+    if (!instance.clientId || !instance.clientSecret) {
+      throw new Error("Instance is not registered with the engine");
+    }
+    const engine = createEngineRpcSession<InstanceEngineRpc>(instance.url, instance.clientId, instance.clientSecret);
+    await engine.deleteInstance({ instanceName: instance.name });
+
+    await ctx.runMutation(internal.instances.deleteInstanceData, { instanceId: args.instanceId });
+  },
+});
+
+export const getMembership = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }) => {
+    return ctx.db
+      .query("instanceMembers")
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
+      .first();
+  },
+});
+
+export const deleteInstanceData = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const applications = await ctx.db
+      .query("applications")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const app of applications) {
+      await ctx.db.delete(app._id);
+    }
+
+    const platformLinks = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const link of platformLinks) {
+      await ctx.db.delete(link._id);
+    }
+
+    const instanceMembers = await ctx.db
+      .query("instanceMembers")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const member of instanceMembers) {
+      await ctx.db.delete(member._id);
+    }
+
+    await ctx.db.delete(instanceId);
+  },
+});
+
 export const getApplicationForInstance = internalQuery({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
@@ -185,37 +249,30 @@ export const savePlatformLink = mutation({
 export const applyRegistration = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
+    clientId: v.string(),
+    clientSecret: v.string(),
     webhookSecret: v.string(),
-    apiKey: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, applicationId, webhookSecret, apiKey }) => {
+  handler: async (ctx, { instanceId, clientId, clientSecret, webhookSecret }) => {
     const instance = await ctx.db.get(instanceId);
     if (!instance) {
       throw new Error("Instance not found");
     }
 
-    const patch: Record<string, unknown> = { applicationId, webhookSecret };
-    if (apiKey !== undefined) {
-      patch.apiKey = apiKey;
-    }
-    await ctx.db.patch(instanceId, patch);
+    await ctx.db.patch(instanceId, { clientId, clientSecret, webhookSecret });
+  },
+});
 
-    // Also create/upsert an application record in the applications table
-    const existing = await ctx.db
-      .query("applications")
-      .withIndex("by_instance_app", (q) =>
-        q.eq("instanceId", instanceId).eq("applicationId", applicationId),
-      )
+/**
+ * Internal query to look up an instance by its webhook secret (callbackToken).
+ * Used by the /api/webhooks/woofx3 endpoint for Bearer token auth.
+ */
+export const getByWebhookSecret = internalQuery({
+  args: { webhookSecret: v.string() },
+  handler: async (ctx, { webhookSecret }) => {
+    return ctx.db
+      .query("instances")
+      .withIndex("by_webhook_secret", (q) => q.eq("webhookSecret", webhookSecret))
       .first();
-
-    if (!existing) {
-      await ctx.db.insert("applications", {
-        instanceId,
-        applicationId,
-        name: "Default",
-        createdAt: Date.now(),
-      });
-    }
   },
 });
