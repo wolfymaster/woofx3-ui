@@ -4,18 +4,15 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalAction } from "./_generated/server";
-import { createEngineRpcSession, type RpcTarget } from "./lib/engineInstanceUrl";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
-interface ModuleInstallRpc extends RpcTarget {
-  installModuleZip(fileName: string, zipBase64: string, context: Record<string, string>): Promise<unknown>;
-}
-
-interface ModuleManageRpc extends RpcTarget {
-  listEngineModules(): Promise<unknown>;
-  uninstallModule(id: string, context: Record<string, string>): Promise<unknown>;
+/**
+ * Local extension of the shared EngineApi for methods the engine exposes
+ * but which haven't made it into @woofx3/api yet. Remove each entry as the
+ * shared interface catches up.
+ */
+interface LocalEngineApi extends EngineApi {
   setEngineModuleState(name: string, state: string): Promise<unknown>;
-  sendChatMessage(message: string): Promise<unknown>;
-  getWorkflows(query: { accountId: string }): Promise<unknown>;
 }
 
 interface EngineModule {
@@ -41,14 +38,10 @@ export const listEngineModules = action({
       throw new Error("Instance is not registered with the engine");
     }
 
-    const rpc = createEngineRpcSession<ModuleManageRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
 
     try {
-      const result = (await (rpc as any).listEngineModules()) as Array<{
-        name?: string;
-        version?: string;
-        state?: string;
-      }>;
+      const result = await rpc.listEngineModules();
 
       return (result ?? [])
         .filter((m) => !!m.name)
@@ -105,7 +98,7 @@ export const requestModuleUninstall = action({
     });
 
     try {
-      const rpc = createEngineRpcSession<ModuleManageRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
+      const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
       await rpc.uninstallModule(module.name, { moduleKey });
       return { moduleKey };
     } catch (err) {
@@ -140,9 +133,9 @@ export const setEngineModuleState = action({
       throw new Error("Instance is not registered with the engine");
     }
 
-    const rpc = createEngineRpcSession<ModuleManageRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
 
-    await (rpc as any).setEngineModuleState(name, state);
+    await rpc.setEngineModuleState(name, state);
     return { success: true };
   },
 });
@@ -189,7 +182,7 @@ export const deliverZipToInstance = internalAction({
       if (!delivery.clientId || !delivery.clientSecret) {
         throw new Error("Instance is not registered with the engine");
       }
-      const rpc = createEngineRpcSession<ModuleInstallRpc>(
+      const rpc = createEngineRpcSession<LocalEngineApi>(
         delivery.instanceUrl,
         delivery.clientId,
         delivery.clientSecret

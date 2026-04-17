@@ -2,32 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, mutation, query } from "./_generated/server";
-import { RpcTarget } from "capnweb";
-import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
-
-/** Engine RPC surface for workflow CRUD (see woofx3 api/src/api.ts). */
-interface WorkflowEngineRpc extends RpcTarget {
-  createWorkflow(data: {
-    name: string;
-    description?: string;
-    accountId: string;
-    isEnabled?: boolean;
-    steps?: unknown[];
-    trigger?: unknown;
-  }): Promise<unknown>;
-  updateWorkflow(
-    id: string,
-    data: {
-      name?: string;
-      description?: string;
-      isEnabled?: boolean;
-      steps?: unknown[];
-      trigger?: unknown;
-    },
-  ): Promise<unknown>;
-  deleteWorkflow(id: string): Promise<unknown>;
-}
 
 /**
  * List all workflows for an instance (Convex-side UI state: nodes, edges, metadata).
@@ -202,7 +178,7 @@ export const syncToEngine = action({
     if (!bundle.clientId || !bundle.clientSecret) {
       throw new Error("Instance is not registered with the engine");
     }
-    const rpc = createEngineRpcSession<WorkflowEngineRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
 
     if (wf.engineWorkflowId) {
       console.log(
@@ -220,13 +196,13 @@ export const syncToEngine = action({
     console.log(
       `[syncToEngine] Creating engine workflow for Convex workflow "${workflowId}"`,
     );
-    const result = (await rpc.createWorkflow({
+    const result = await rpc.createWorkflow({
       name: wf.name,
       description: wf.description ?? "",
       accountId: wf.instanceId,
       isEnabled: wf.isEnabled,
       steps: wf.nodes as unknown[],
-    })) as { id?: string } | null;
+    });
 
     const engineWorkflowId = result?.id ?? null;
     if (engineWorkflowId) {
