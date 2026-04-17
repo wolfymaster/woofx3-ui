@@ -18,6 +18,10 @@ export default defineConfig({
       "@shared": path.resolve(import.meta.dirname, "shared"),
       "@assets": path.resolve(import.meta.dirname, "attached_assets"),
       "@convex": path.resolve(import.meta.dirname, "convex"),
+      "@woofx3/api": path.resolve(
+        import.meta.dirname,
+        "../woofx3/shared/clients/typescript/api/api.ts",
+      ),
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
