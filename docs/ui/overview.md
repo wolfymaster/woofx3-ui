@@ -29,8 +29,9 @@ Most Convex-backed screens use **`useInstance()`** (`client/src/hooks/use-instan
 
 The codebase is intentionally **hybrid**:
 
-- **Convex** (`useQuery` / `useMutation` / `useAction`) — multi-tenant control-plane data: accounts, instances, workflows metadata, assets, module catalog, dashboard layout, engine health checks, etc.
-- **`WoofxTransport`** (`client/src/lib/transport/`) — direct **browser ↔ engine** WebSocket (or future Tauri IPC) for runtime data (chat, stream status, modules on the engine). Documented in-repo as *not* for Convex-proxied calls.
+- **Convex** (`useQuery` / `useMutation` / `useAction`) — multi-tenant control-plane data: accounts, instances, workflows metadata, assets, module catalog, dashboard layout, engine health checks, etc. Engine-proxied reads (e.g. `moduleEngine.listEngineModules`, `workflowCatalog.fetchMerged`) are Convex **actions** that talk to the engine over capnweb on the server side.
+- **`WoofxTransport`** (`client/src/lib/transport/`) — direct **browser ↔ engine** WebSocket (or future Tauri IPC) for **realtime** channels only (chat, stream status, workflow runs). Documented in-repo as *not* for Convex-proxied calls. Browsing / installing / uninstalling modules does **not** use the transport — those flows go browser → Convex mutation/action → engine.
+- **`transientEvents`** (Convex realtime subscription) — the bridge the UI uses to observe async engine operations correlated via an operation-specific key. Any flow that RPCs the engine and later receives a webhook callback (module install, uninstall, future async operations) emits progress/success/error events to this table; components subscribe by `correlationKey` and get realtime pushes the moment the webhook handler writes.
 - **TanStack Query** — used where code still follows older “API client” patterns: some dashboard modules, **Team**, **Scenes** list, **Scene editor**, and parts of **workflow creation** (`BasicWorkflowEditor` + `apiRequest`). Some of these `queryFn`s are **stubs** (empty arrays) until wired to Convex or the transport.
 
 When you touch a screen, check imports: `from "convex/react"` vs `@/lib/transport` vs `@/lib/queryClient` tells you which path it uses.
