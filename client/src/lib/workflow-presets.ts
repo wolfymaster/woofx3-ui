@@ -1,26 +1,15 @@
 import type { LucideIcon } from "lucide-react";
+import type {
+  ConfigField,
+  ConfigFieldType,
+  TriggerConfig,
+} from "@woofx3/api/ui-schema";
 
-export type FieldType = "number" | "range" | "text" | "select" | "media" | "toggle";
-
-export interface ConfigField {
-  id: string;
-  label: string;
-  type: FieldType;
-  required?: boolean;
-  placeholder?: string;
-  unit?: string;
-  options?: { value: string; label: string }[];
-  min?: number;
-  max?: number;
-  defaultValue?: any;
-  mediaType?: "image" | "audio" | "video";
-}
-
-export interface TriggerConfig {
-  fields: ConfigField[];
-  supportsTiers?: boolean;
-  tierLabel?: string;
-}
+// ConfigField / TriggerConfig are the shared parsed shape of configSchema.
+// Re-export them here so UI code keeps the same import site; additional
+// UI-only types (TriggerPreset, ConfigValue, etc.) remain defined below.
+export type { ConfigField, TriggerConfig };
+export type FieldType = ConfigFieldType;
 
 export interface ConfigValue {
   type: "single" | "range";
@@ -69,7 +58,7 @@ export function getDefaultConfigValues(fields: ConfigField[]): TriggerConfigValu
   const values: TriggerConfigValues = {};
   fields.forEach((field) => {
     if (field.defaultValue !== undefined) {
-      values[field.id] = field.defaultValue;
+      values[field.id] = field.defaultValue as TriggerConfigValues[string];
     } else if (field.type === "range") {
       values[field.id] = { type: "single", value: field.min || 1 };
     } else if (field.type === "number") {
