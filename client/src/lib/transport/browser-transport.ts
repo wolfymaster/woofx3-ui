@@ -1,9 +1,14 @@
-// BrowserTransport — wraps the Cap'n Web RPC client for direct browser→woofx3 communication.
-// Authenticates via gateway.authenticate(clientId, clientSecret) per the ApiGateway pattern.
-// Uses polling for subscriptions since the woofx3 API is currently point-in-time.
+// BrowserTransport — wraps the woofx3 SDK's capnweb WebSocket client for
+// direct browser→engine communication. Authenticates via the SDK's
+// createEngineBrowserSession (which handles gateway.authenticate + promise
+// pipelining under the hood). Subscriptions are polling-based since the
+// engine's current Api surface is point-in-time.
 
-import { newWebSocketRpcSession, RpcTarget } from "capnweb";
-import type { ApiGatewayContract } from "@woofx3/api/rpc";
+import {
+  createEngineBrowserSession,
+  RpcTarget,
+  type EngineBrowserSession,
+} from "@woofx3/api/client";
 import type { Woofx3EngineApi } from "@woofx3/api";
 import type {
   WoofxTransport,
@@ -25,62 +30,33 @@ interface BrowserEngineApi extends RpcTarget, Woofx3EngineApi {
   setEngineModuleState(name: string, state: string): Promise<{ success: boolean }>;
 }
 
-/** Gateway over WebSocket — same shape as HTTP batch, different transport. */
-interface BrowserGateway extends RpcTarget, ApiGatewayContract {
-  authenticate(clientId: string, clientSecret: string): Promise<BrowserEngineApi>;
-}
-
 const POLL_INTERVAL_CHAT = 3000;
 const POLL_INTERVAL_EVENTS = 5000;
 const POLL_INTERVAL_RUNS = 10000;
 
-function buildWebSocketUrl(engineUrl: string): string {
-  if (engineUrl.includes("://")) {
-    try {
-      const parsed = new URL(engineUrl);
-      const protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
-      return `${protocol}//${parsed.host}/api`;
-    } catch {
-      throw new Error(`Invalid engine URL: ${engineUrl}`);
-    }
-  }
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${engineUrl}/api`;
-}
-
 export class BrowserTransport implements WoofxTransport {
-  private gateway: any = null;
-  private api: any = null;
+  private session: EngineBrowserSession<BrowserEngineApi> | null = null;
   private connected = false;
 
   connect(url: string, clientId?: string, clientSecret?: string): void {
-    if (this.gateway) {
-      this.gateway[Symbol.dispose]();
-      this.gateway = null;
-      this.api = null;
+    if (this.session) {
+      this.session.dispose();
+      this.session = null;
       this.connected = false;
     }
 
-    if (!url) {
+    if (!url || !clientId || !clientSecret) {
+      // Without credentials we can't build an authenticated session. The
+      // old transport allowed an unauthenticated "ping-only" mode; nothing
+      // in the current UI uses that path, so drop it.
       return;
     }
 
     try {
-      const wsUrl = buildWebSocketUrl(url);
-      this.gateway = newWebSocketRpcSession<BrowserGateway>(wsUrl) as any;
-
-      if (clientId && clientSecret) {
-        // Authenticate via gateway — capnweb promise pipelining means
-        // this + the first API call happen in a single round trip.
-        this.api = this.gateway.authenticate(clientId, clientSecret);
-      } else {
-        // No credentials — gateway is available but API calls will fail.
-        // This allows ping() to work for connection testing.
-        this.api = null;
-      }
-
+      const fallback = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
+      this.session = createEngineBrowserSession<BrowserEngineApi>(url, clientId, clientSecret, fallback);
       this.connected = true;
-      console.log("[Transport] Connected to woofx3 at", wsUrl);
+      console.log("[Transport] Connected to woofx3 at", url);
     } catch (err) {
       this.connected = false;
       console.warn("[Transport] Failed to connect:", err);
@@ -88,23 +64,22 @@ export class BrowserTransport implements WoofxTransport {
   }
 
   disconnect(): void {
-    if (this.gateway) {
-      this.gateway[Symbol.dispose]();
-      this.gateway = null;
+    if (this.session) {
+      this.session.dispose();
+      this.session = null;
     }
-    this.api = null;
     this.connected = false;
   }
 
   isConnected(): boolean {
-    return this.connected && !!this.api;
+    return this.connected && !!this.session;
   }
 
-  private getApi(): any {
-    if (!this.api) {
+  private getApi(): BrowserEngineApi {
+    if (!this.session) {
       throw new Error("Not connected to woofx3 instance");
     }
-    return this.api;
+    return this.session.api;
   }
 
   async getStreamStatus(instanceId: string): Promise<StreamStatus> {
@@ -124,7 +99,7 @@ export class BrowserTransport implements WoofxTransport {
     instanceId: string,
     callback: (msg: ChatMessage) => void
   ): () => void {
-    const api = this.api;
+    const api = this.session?.api;
     if (!api) {
       return () => {};
     }
@@ -134,11 +109,11 @@ export class BrowserTransport implements WoofxTransport {
       try {
         const messages = await api.getChatMessages(instanceId, 50);
         const newMessages = lastId
-          ? messages.filter((m: any) => m.id > lastId!)
+          ? messages.filter((m) => m.id > lastId!)
           : messages;
         if (newMessages.length > 0) {
           lastId = newMessages[newMessages.length - 1].id;
-          newMessages.forEach((m: any) => callback(m as ChatMessage));
+          newMessages.forEach((m) => callback(m as unknown as ChatMessage));
         }
       } catch {
         // Silently ignore connection errors during polling
@@ -152,7 +127,7 @@ export class BrowserTransport implements WoofxTransport {
     instanceId: string,
     callback: (event: StreamEvent) => void
   ): () => void {
-    const api = this.api;
+    const api = this.session?.api;
     if (!api) {
       return () => {};
     }
@@ -165,11 +140,11 @@ export class BrowserTransport implements WoofxTransport {
           limit: 20,
         });
         const newEvents = lastId
-          ? events.filter((e: any) => e.id > lastId!)
+          ? events.filter((e) => e.id > lastId!)
           : events;
         if (newEvents.length > 0) {
           lastId = newEvents[newEvents.length - 1].id;
-          newEvents.forEach((e: any) => callback(e as StreamEvent));
+          newEvents.forEach((e) => callback(e as unknown as StreamEvent));
         }
       } catch {
         // Silently ignore
@@ -183,7 +158,7 @@ export class BrowserTransport implements WoofxTransport {
     instanceId: string,
     callback: (run: WorkflowRun) => void
   ): () => void {
-    const api = this.api;
+    const api = this.session?.api;
     if (!api) {
       return () => {};
     }
@@ -191,7 +166,7 @@ export class BrowserTransport implements WoofxTransport {
     const interval = setInterval(async () => {
       try {
         const runs = await api.getWorkflowRuns({ accountId: instanceId });
-        runs.forEach((r: any) => callback(r as WorkflowRun));
+        runs.forEach((r) => callback(r as unknown as WorkflowRun));
       } catch {
         // Silently ignore
       }
@@ -212,53 +187,52 @@ export class BrowserTransport implements WoofxTransport {
     workflow: CreateWorkflowInput
   ): Promise<Workflow> {
     const result = await this.getApi().createWorkflow({
-      ...workflow,
-      applicationId: instanceId,
-      createdBy: "user",
-    } as any);
-    return result as Workflow;
+      name: workflow.name,
+      description: workflow.description,
+      accountId: instanceId,
+      isEnabled: workflow.enabled,
+      steps: workflow.steps,
+    });
+    return result as unknown as Workflow;
   }
 
   async updateWorkflow(
-    instanceId: string,
+    _instanceId: string,
     workflowId: string,
     updates: Partial<CreateWorkflowInput>
   ): Promise<Workflow> {
-    const result = await this.getApi().updateWorkflow(
-      workflowId,
-      updates as any
-    );
-    return result as Workflow;
+    const result = await this.getApi().updateWorkflow(workflowId, {
+      name: updates.name,
+      description: updates.description,
+      isEnabled: updates.enabled,
+      steps: updates.steps,
+    });
+    return result as unknown as Workflow;
   }
 
-  async deleteWorkflow(instanceId: string, workflowId: string): Promise<void> {
+  async deleteWorkflow(_instanceId: string, workflowId: string): Promise<void> {
     await this.getApi().deleteWorkflow(workflowId);
   }
 
-  async executeWorkflow(instanceId: string, workflowId: string): Promise<string> {
-    const result = await this.getApi().triggerWorkflowByName(
-      workflowId,
-      {},
-      "user"
-    );
-    return (result as any).executionId || workflowId;
+  async executeWorkflow(_instanceId: string, workflowId: string): Promise<string> {
+    const result = await this.getApi().triggerWorkflowByName(workflowId, {}, "user");
+    return result.executionId || workflowId;
   }
 
-  async getModuleState(instanceId: string, moduleId: string): Promise<unknown> {
-    const result = await this.getApi().getModule(moduleId);
-    return result;
+  async getModuleState(_instanceId: string, moduleId: string): Promise<unknown> {
+    return this.getApi().getModule(moduleId);
   }
 
-  async listEngineModules(instanceId: string): Promise<EngineModule[]> {
+  async listEngineModules(_instanceId: string): Promise<EngineModule[]> {
     const result = await this.getApi().listEngineModules();
     return result as EngineModule[];
   }
 
-  async uninstallEngineModule(instanceId: string, name: string): Promise<void> {
+  async uninstallEngineModule(_instanceId: string, name: string): Promise<void> {
     await this.getApi().uninstallEngineModule(name);
   }
 
-  async setEngineModuleState(instanceId: string, name: string, state: string): Promise<void> {
+  async setEngineModuleState(_instanceId: string, name: string, state: string): Promise<void> {
     await this.getApi().setEngineModuleState(name, state);
   }
 }
