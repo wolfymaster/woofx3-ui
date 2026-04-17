@@ -34,6 +34,7 @@ export default defineConfig({
           collapsed: false,
           items: [
             { text: "Overview", link: "/patterns/" },
+            { text: "configSchema contract", link: "/patterns/config-schema" },
           ],
         },
       ],
