@@ -1,4 +1,5 @@
 import { httpRouter } from "convex/server";
+import type { CallbackEnvelope } from "@woofx3/api/webhooks";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
@@ -250,7 +251,13 @@ http.route({
       return corsJson({ error: "Unauthorized" }, 401);
     }
 
-    const eventType = payload.type as string;
+    // Envelope shape is @woofx3/api/webhooks CallbackEnvelope; `data` is the
+    // discriminated CallbackEvent union. We trust the engine's contract and
+    // narrow by event.type — anything outside the union falls through to
+    // `handled: false` so legacy or future event types are safe to ignore.
+    const envelope = payload as CallbackEnvelope;
+    const event = envelope.data;
+    const eventType = event?.type ?? (payload.type as string | undefined) ?? "";
 
     logger.info("webhook: event received", {
       instanceId: instance._id,
@@ -258,167 +265,95 @@ http.route({
       payload: JSON.stringify(payload),
     });
 
-    // Extract moduleKey from the event data (echoed back by the engine)
-    const eventData = payload.data ?? payload.payload ?? {};
-    const moduleKey = eventData.moduleKey as string | undefined;
-
-    if (eventType === "module.installed") {
-      const p = payload.payload ?? payload.data;
-      const mName = p?.moduleName ?? p?.name;
-      const mVersion = p?.version;
-      if (!mName || !mVersion || !moduleKey) {
-        const missing = [!mName && "moduleName", !mVersion && "version", !moduleKey && "data.moduleKey"].filter(
-          Boolean
-        );
-        logger.warn("webhook: module.installed missing required fields", {
-          missing,
-          mName: mName ?? null,
-          mVersion: mVersion ?? null,
-          moduleKey: moduleKey ?? null,
-          dataKeys: Object.keys(eventData),
-        });
-        return corsJson({ error: `Missing fields: ${missing.join(", ")}` }, 400);
-      }
-
-      await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
-        instanceId: instance._id,
-        correlationKey: moduleKey,
-        moduleName: mName,
-        moduleVersion: mVersion,
-        triggers: p.triggers ?? [],
-        actions: p.actions ?? [],
+    if (!event || typeof event !== "object" || !event.type) {
+      logger.warn("webhook: envelope missing typed data", {
+        eventType,
+        hasData: !!payload.data,
       });
-
-      return corsJson({ success: true, type: eventType });
+      return corsJson({ success: true, type: eventType, handled: false });
     }
 
-    if (eventType === "module.install_failed") {
-      const p = payload.payload ?? payload.data;
-      const mName = p?.moduleName ?? p?.name;
-      const mVersion = p?.version;
-      if (!mName || !mVersion || !moduleKey) {
-        const missing = [!mName && "moduleName", !mVersion && "version", !moduleKey && "data.moduleKey"].filter(
-          Boolean
-        );
-        logger.warn("webhook: module.install_failed missing required fields", {
-          missing,
-          mName: mName ?? null,
-          mVersion: mVersion ?? null,
-          moduleKey: moduleKey ?? null,
-          dataKeys: Object.keys(eventData),
-        });
-        return corsJson({ error: `Missing fields: ${missing.join(", ")}` }, 400);
-      }
-
-      await ctx.runMutation(internal.moduleWebhook.processModuleInstallFailed, {
-        instanceId: instance._id,
-        correlationKey: moduleKey,
-        moduleName: mName,
-        moduleVersion: mVersion,
-        statusMessage: p.message ?? p.error ?? "Module installation failed on the engine.",
-      });
-
-      return corsJson({ success: true, type: eventType });
-    }
-
-    if (eventType === "module.deleted") {
-      const p = payload.payload ?? payload.data;
-      const mName = p?.moduleName ?? p?.name;
-      if (!mName || !moduleKey) {
-        const missing = [!mName && "moduleName", !moduleKey && "data.moduleKey"].filter(Boolean);
-        logger.warn("webhook: module.deleted missing required fields", {
-          missing,
-          mName: mName ?? null,
-          moduleKey: moduleKey ?? null,
-          dataKeys: Object.keys(eventData),
-        });
-        if (mName) {
-          await ctx.runMutation(internal.moduleWebhook.emitDeleteErrorForMissingKey, {
-            instanceId: instance._id,
-            moduleName: mName,
-            reason: `Engine returned a ${eventType} webhook without a moduleKey. The module was not removed on the UI side.`,
-          });
-        }
-        return corsJson({ error: `Missing fields: ${missing.join(", ")}` }, 400);
-      }
-
-      await ctx.runMutation(internal.moduleWebhook.processModuleDeleted, {
-        instanceId: instance._id,
-        correlationKey: moduleKey,
-        moduleName: mName,
-        moduleVersion: p?.version,
-      });
-
-      return corsJson({ success: true, type: eventType });
-    }
-
-    if (eventType === "module.delete_failed") {
-      const p = payload.payload ?? payload.data;
-      const mName = p?.moduleName ?? p?.name;
-      if (!mName || !moduleKey) {
-        const missing = [!mName && "moduleName", !moduleKey && "data.moduleKey"].filter(Boolean);
-        logger.warn("webhook: module.delete_failed missing required fields", {
-          missing,
-          mName: mName ?? null,
-          moduleKey: moduleKey ?? null,
-          dataKeys: Object.keys(eventData),
-        });
-        if (mName) {
-          await ctx.runMutation(internal.moduleWebhook.emitDeleteErrorForMissingKey, {
-            instanceId: instance._id,
-            moduleName: mName,
-            reason: p?.error ?? p?.message ?? `Engine returned a ${eventType} webhook without a moduleKey.`,
-          });
-        }
-        return corsJson({ error: `Missing fields: ${missing.join(", ")}` }, 400);
-      }
-
-      await ctx.runMutation(internal.moduleWebhook.processModuleDeleteFailed, {
-        instanceId: instance._id,
-        correlationKey: moduleKey,
-        moduleName: mName,
-        moduleVersion: p?.version,
-        error: p.error ?? p.message ?? undefined,
-        conflicts: Array.isArray(p.conflicts) ? p.conflicts : undefined,
-      });
-
-      return corsJson({ success: true, type: eventType });
-    }
-
-    if (eventType === "module.trigger.registered") {
-      const data = payload.data ?? payload.payload;
-      const tName = data?.moduleName ?? data?.name;
-      const tVersion = data?.version;
-      if (tName && tVersion) {
-        await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
+    switch (event.type) {
+      case "module.installed": {
+        await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
           instanceId: instance._id,
-          moduleName: tName,
-          moduleVersion: tVersion,
-          triggers: data.triggers ?? [],
+          correlationKey: event.moduleKey,
+          moduleName: event.moduleName,
+          moduleVersion: event.version,
+          // module.installed carries no definitions — those arrive on
+          // separate module.trigger.registered / module.action.registered
+          // events.
+          triggers: [],
           actions: [],
         });
-        return corsJson({ success: true, type: eventType });
+        return corsJson({ success: true, type: event.type });
       }
-    }
 
-    if (eventType === "module.action.registered") {
-      const data = payload.data ?? payload.payload;
-      const aName = data?.moduleName ?? data?.name;
-      const aVersion = data?.version;
-      if (aName && aVersion) {
+      case "module.install_failed": {
+        await ctx.runMutation(internal.moduleWebhook.processModuleInstallFailed, {
+          instanceId: instance._id,
+          correlationKey: event.moduleKey,
+          moduleName: event.moduleName,
+          moduleVersion: event.version,
+          statusMessage: event.error || "Module installation failed on the engine.",
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case "module.deleted": {
+        await ctx.runMutation(internal.moduleWebhook.processModuleDeleted, {
+          instanceId: instance._id,
+          correlationKey: event.moduleKey,
+          moduleName: event.moduleName,
+          moduleVersion: undefined,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case "module.delete_failed": {
+        await ctx.runMutation(internal.moduleWebhook.processModuleDeleteFailed, {
+          instanceId: instance._id,
+          correlationKey: event.moduleKey,
+          moduleName: event.moduleName,
+          moduleVersion: undefined,
+          error: event.error || undefined,
+          conflicts: event.inUseResources,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case "module.trigger.registered": {
         await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
           instanceId: instance._id,
-          moduleName: aName,
-          moduleVersion: aVersion,
-          triggers: [],
-          actions: data.actions ?? [],
+          moduleName: event.moduleName,
+          moduleVersion: event.version,
+          triggers: event.triggers,
+          actions: [],
         });
-        return corsJson({ success: true, type: eventType });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case "module.action.registered": {
+        await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
+          instanceId: instance._id,
+          moduleName: event.moduleName,
+          moduleVersion: event.version,
+          triggers: [],
+          actions: event.actions,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      default: {
+        // TypeScript enforces exhaustiveness: adding a new event type to the
+        // shared union forces this branch to update. For unknown runtime
+        // types (e.g. older/newer engines), we just log and acknowledge.
+        const _exhaustive: never = event;
+        void _exhaustive;
+        logger.warn("webhook: unhandled event type", { eventType });
+        return corsJson({ success: true, type: eventType, handled: false });
       }
     }
-
-    // Future event types can be handled here
-    return corsJson({ success: true, type: eventType, handled: false });
   }),
 });
 
