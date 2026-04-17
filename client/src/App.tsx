@@ -16,6 +16,7 @@ import AcceptInvite from "@/pages/auth/accept-invite";
 import Onboarding from "@/pages/auth/onboarding";
 import Register from "@/pages/auth/register";
 import Dashboard from "@/pages/dashboard";
+import ModuleDetail from "@/pages/module-detail";
 import ModuleInstall from "@/pages/module-install";
 import Modules from "@/pages/modules";
 import AlertLog from "@/pages/alert-log";
@@ -113,6 +114,7 @@ function AppRoutes() {
                   <Route path="/modules" component={Modules} />
                   <Route path="/modules/installed" component={Modules} />
                   <Route path="/modules/install" component={ModuleInstall} />
+                  <Route path="/modules/:id" component={ModuleDetail} />
                   <Route path="/workflows" component={Workflows} />
                   <Route path="/workflows/new" component={WorkflowsNew} />
                   <Route path="/workflows/:id" component={WorkflowBuilder} />

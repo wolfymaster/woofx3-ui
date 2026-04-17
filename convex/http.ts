@@ -166,7 +166,18 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const payload = await request.json();
 
+    logger.info("webhook: alerts endpoint hit", {
+      eventType: payload.eventType,
+      instanceId: payload.instanceId,
+      user: payload.user,
+    });
+
     if (!payload.instanceId || !payload.eventType || !payload.user) {
+      logger.warn("webhook: alerts missing required fields", {
+        hasInstanceId: !!payload.instanceId,
+        hasEventType: !!payload.eventType,
+        hasUser: !!payload.user,
+      });
       return corsJson({ error: "Missing required fields" }, 400);
     }
 
@@ -212,7 +223,13 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const payload = await request.json();
 
+    logger.info("webhook: incoming request", {
+      type: payload.type,
+      url: request.url,
+    });
+
     if (!payload.type) {
+      logger.warn("webhook: missing type field", { payload: JSON.stringify(payload) });
       return corsJson({ error: "Missing required field: type" }, 400);
     }
 
@@ -220,6 +237,7 @@ http.route({
     const authHeader = request.headers.get("Authorization");
     const providedSecret = authHeader?.replace("Bearer ", "");
     if (!providedSecret) {
+      logger.warn("webhook: missing Authorization header");
       return corsJson({ error: "Missing Authorization header" }, 401);
     }
 
@@ -228,6 +246,7 @@ http.route({
       webhookSecret: providedSecret,
     });
     if (!instance) {
+      logger.warn("webhook: unauthorized - no instance found for provided secret");
       return corsJson({ error: "Unauthorized" }, 401);
     }
 
@@ -236,18 +255,36 @@ http.route({
     logger.info("webhook: event received", {
       instanceId: instance._id,
       type: eventType,
+      payload: JSON.stringify(payload),
     });
+
+    // Extract moduleKey from the event data (echoed back by the engine)
+    const eventData = payload.data ?? payload.payload ?? {};
+    const moduleKey = eventData.moduleKey as string | undefined;
 
     if (eventType === "module.installed") {
       const p = payload.payload ?? payload.data;
-      if (!p?.name || !p?.version) {
-        return corsJson({ error: "Missing module name/version in payload" }, 400);
+      const mName = p?.moduleName ?? p?.name;
+      const mVersion = p?.version;
+      if (!mName || !mVersion || !moduleKey) {
+        const missing = [!mName && "moduleName", !mVersion && "version", !moduleKey && "data.moduleKey"].filter(
+          Boolean
+        );
+        logger.warn("webhook: module.installed missing required fields", {
+          missing,
+          mName: mName ?? null,
+          mVersion: mVersion ?? null,
+          moduleKey: moduleKey ?? null,
+          dataKeys: Object.keys(eventData),
+        });
+        return corsJson({ error: `Missing fields: ${missing.join(", ")}` }, 400);
       }
 
       await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
         instanceId: instance._id,
-        moduleName: p.name,
-        moduleVersion: p.version,
+        correlationKey: moduleKey,
+        moduleName: mName,
+        moduleVersion: mVersion,
         triggers: p.triggers ?? [],
         actions: p.actions ?? [],
       });
@@ -255,13 +292,108 @@ http.route({
       return corsJson({ success: true, type: eventType });
     }
 
+    if (eventType === "module.install_failed") {
+      const p = payload.payload ?? payload.data;
+      const mName = p?.moduleName ?? p?.name;
+      const mVersion = p?.version;
+      if (!mName || !mVersion || !moduleKey) {
+        const missing = [!mName && "moduleName", !mVersion && "version", !moduleKey && "data.moduleKey"].filter(
+          Boolean
+        );
+        logger.warn("webhook: module.install_failed missing required fields", {
+          missing,
+          mName: mName ?? null,
+          mVersion: mVersion ?? null,
+          moduleKey: moduleKey ?? null,
+          dataKeys: Object.keys(eventData),
+        });
+        return corsJson({ error: `Missing fields: ${missing.join(", ")}` }, 400);
+      }
+
+      await ctx.runMutation(internal.moduleWebhook.processModuleInstallFailed, {
+        instanceId: instance._id,
+        correlationKey: moduleKey,
+        moduleName: mName,
+        moduleVersion: mVersion,
+        statusMessage: p.message ?? p.error ?? "Module installation failed on the engine.",
+      });
+
+      return corsJson({ success: true, type: eventType });
+    }
+
+    if (eventType === "module.deleted") {
+      const p = payload.payload ?? payload.data;
+      const mName = p?.moduleName ?? p?.name;
+      if (!mName || !moduleKey) {
+        const missing = [!mName && "moduleName", !moduleKey && "data.moduleKey"].filter(Boolean);
+        logger.warn("webhook: module.deleted missing required fields", {
+          missing,
+          mName: mName ?? null,
+          moduleKey: moduleKey ?? null,
+          dataKeys: Object.keys(eventData),
+        });
+        if (mName) {
+          await ctx.runMutation(internal.moduleWebhook.emitDeleteErrorForMissingKey, {
+            instanceId: instance._id,
+            moduleName: mName,
+            reason: `Engine returned a ${eventType} webhook without a moduleKey. The module was not removed on the UI side.`,
+          });
+        }
+        return corsJson({ error: `Missing fields: ${missing.join(", ")}` }, 400);
+      }
+
+      await ctx.runMutation(internal.moduleWebhook.processModuleDeleted, {
+        instanceId: instance._id,
+        correlationKey: moduleKey,
+        moduleName: mName,
+        moduleVersion: p?.version,
+      });
+
+      return corsJson({ success: true, type: eventType });
+    }
+
+    if (eventType === "module.delete_failed") {
+      const p = payload.payload ?? payload.data;
+      const mName = p?.moduleName ?? p?.name;
+      if (!mName || !moduleKey) {
+        const missing = [!mName && "moduleName", !moduleKey && "data.moduleKey"].filter(Boolean);
+        logger.warn("webhook: module.delete_failed missing required fields", {
+          missing,
+          mName: mName ?? null,
+          moduleKey: moduleKey ?? null,
+          dataKeys: Object.keys(eventData),
+        });
+        if (mName) {
+          await ctx.runMutation(internal.moduleWebhook.emitDeleteErrorForMissingKey, {
+            instanceId: instance._id,
+            moduleName: mName,
+            reason: p?.error ?? p?.message ?? `Engine returned a ${eventType} webhook without a moduleKey.`,
+          });
+        }
+        return corsJson({ error: `Missing fields: ${missing.join(", ")}` }, 400);
+      }
+
+      await ctx.runMutation(internal.moduleWebhook.processModuleDeleteFailed, {
+        instanceId: instance._id,
+        correlationKey: moduleKey,
+        moduleName: mName,
+        moduleVersion: p?.version,
+        error: p.error ?? p.message ?? undefined,
+        conflicts: Array.isArray(p.conflicts) ? p.conflicts : undefined,
+      });
+
+      return corsJson({ success: true, type: eventType });
+    }
+
     if (eventType === "module.trigger.registered") {
       const data = payload.data ?? payload.payload;
-      if (data?.name && data?.version) {
-        await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
+      const tName = data?.moduleName ?? data?.name;
+      const tVersion = data?.version;
+      if (tName && tVersion) {
+        await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
           instanceId: instance._id,
-          moduleName: data.name,
-          moduleVersion: data.version,
+          moduleName: tName,
+          moduleVersion: tVersion,
           triggers: data.triggers ?? [],
           actions: [],
         });
@@ -271,11 +403,13 @@ http.route({
 
     if (eventType === "module.action.registered") {
       const data = payload.data ?? payload.payload;
-      if (data?.name && data?.version) {
-        await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
+      const aName = data?.moduleName ?? data?.name;
+      const aVersion = data?.version;
+      if (aName && aVersion) {
+        await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
           instanceId: instance._id,
-          moduleName: data.name,
-          moduleVersion: data.version,
+          moduleName: aName,
+          moduleVersion: aVersion,
           triggers: [],
           actions: data.actions ?? [],
         });

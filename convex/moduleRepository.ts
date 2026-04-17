@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 
 export const list = query({
@@ -36,9 +36,15 @@ export const get = query({
   },
 });
 
-export const create = mutation({
+/**
+ * Upload the zip to storage and deliver it to the engine.
+ * No moduleRepository record is created — that only happens on successful install
+ * via the webhook callback. Errors are communicated via transientEvents.
+ */
+export const uploadAndDeliver = mutation({
   args: {
     instanceId: v.id("instances"),
+    moduleKey: v.string(),
     name: v.string(),
     description: v.string(),
     version: v.string(),
@@ -51,20 +57,26 @@ export const create = mutation({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const { instanceId, ...moduleData } = args;
-    const moduleId = await ctx.db.insert("moduleRepository", {
-      ...moduleData,
-      instanceId,
-      status: "pending",
-    });
     await ctx.scheduler.runAfter(0, internal.moduleEngine.deliverZipToInstance, {
-      moduleId,
-      instanceId,
+      instanceId: args.instanceId,
+      moduleKey: args.moduleKey,
+      archiveKey: args.archiveKey,
+      fileName: `${args.name}-${args.version}.zip`,
+      moduleMeta: {
+        name: args.name,
+        description: args.description,
+        version: args.version,
+        tags: args.tags,
+        manifest: args.manifest,
+      },
     });
-    return moduleId;
+    return { delivered: true };
   },
 });
 
+/**
+ * Re-deliver an existing module record's archive to the engine.
+ */
 export const enqueueEngineInstall = mutation({
   args: {
     instanceId: v.id("instances"),
@@ -75,62 +87,87 @@ export const enqueueEngineInstall = mutation({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    await ctx.db.patch(args.moduleId, { status: "pending", statusMessage: undefined });
+    const module = await ctx.db.get(args.moduleId);
+    if (!module) {
+      throw new Error("Module not found");
+    }
     await ctx.scheduler.runAfter(0, internal.moduleEngine.deliverZipToInstance, {
-      moduleId: args.moduleId,
       instanceId: args.instanceId,
+      moduleKey: module.moduleKey ?? `${module.name}:${module.version}:unknown`,
+      archiveKey: module.archiveKey,
+      fileName: `${module.name}-${module.version}.zip`,
+      moduleMeta: {
+        name: module.name,
+        description: module.description,
+        version: module.version,
+        tags: module.tags,
+        manifest: module.manifest,
+      },
     });
     return { enqueued: true };
   },
 });
 
-export const updateStatus = internalMutation({
+/**
+ * Internal-only: cascade-delete a moduleRepository record, its archive blob,
+ * and all triggerDefinitions/actionDefinitions rows that point at it.
+ *
+ * Called from the module.uninstalled webhook processor after the engine has
+ * confirmed the uninstall. Not exposed to the UI — all user-initiated removals
+ * go through the async requestModuleUninstall action.
+ */
+export const deleteRepositoryRecord = internalMutation({
   args: {
     moduleId: v.id("moduleRepository"),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("delivering"),
-      v.literal("installed"),
-      v.literal("failed"),
-    ),
-    statusMessage: v.optional(v.string()),
   },
-  handler: async (ctx, { moduleId, status, statusMessage }) => {
-    const existing = await ctx.db.get(moduleId);
-    if (!existing) {
+  handler: async (ctx, args) => {
+    const module = await ctx.db.get(args.moduleId);
+    if (!module) {
       return;
     }
-    await ctx.db.patch(moduleId, {
-      status,
-      statusMessage: status === "failed" ? statusMessage : undefined,
-    });
+    if (module.archiveKey) {
+      await ctx.storage.delete(module.archiveKey as Id<"_storage">);
+    }
+
+    const triggers = await ctx.db
+      .query("triggerDefinitions")
+      .withIndex("by_module", (q) => q.eq("moduleId", args.moduleId))
+      .collect();
+    for (const trigger of triggers) {
+      await ctx.db.delete(trigger._id);
+    }
+
+    const actions = await ctx.db
+      .query("actionDefinitions")
+      .withIndex("by_module", (q) => q.eq("moduleId", args.moduleId))
+      .collect();
+    for (const action of actions) {
+      await ctx.db.delete(action._id);
+    }
+
+    await ctx.db.delete(args.moduleId);
   },
 });
 
-export const getInstallDeliveryData = internalQuery({
+export const getDeliveryData = internalQuery({
   args: {
     instanceId: v.id("instances"),
-    moduleId: v.id("moduleRepository"),
+    archiveKey: v.string(),
   },
   handler: async (ctx, args) => {
     const instance = await ctx.db.get(args.instanceId);
     if (!instance) {
       throw new Error("Instance not found");
     }
-    const module = await ctx.db.get(args.moduleId);
-    if (!module) {
-      throw new Error("Module not found");
-    }
-    const archiveUrl = await ctx.storage.getUrl(module.archiveKey as Id<"_storage">);
+    const archiveUrl = await ctx.storage.getUrl(args.archiveKey as Id<"_storage">);
     if (!archiveUrl) {
-      throw new Error("Module archive not found");
+      throw new Error("Module archive not found in storage");
     }
     return {
       instanceUrl: instance.url,
       clientId: instance.clientId ?? null,
       clientSecret: instance.clientSecret ?? null,
       archiveUrl,
-      fileName: `${module.name}-${module.version}.zip`,
     };
   },
 });

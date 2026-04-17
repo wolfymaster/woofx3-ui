@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import JSZip from 'jszip';
 import Editor from '@monaco-editor/react';
 import {
@@ -11,7 +11,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Download,
+
   Loader2,
   ChevronRight,
   ChevronDown,
@@ -20,7 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { PageHeader } from '@/components/layout/page-header';
 import { useTheme } from '@/hooks/use-theme';
 import { cn } from '@/lib/utils';
@@ -279,6 +279,32 @@ async function runChecks(files: Record<string, string>): Promise<CheckResult[]> 
   return results;
 }
 
+/**
+ * If every path shares a single top-level directory (e.g. "my-module/"),
+ * return that prefix so it can be stripped when re-zipping.
+ */
+function getCommonDirectoryPrefix(paths: string[]): string {
+  if (paths.length === 0) {
+    return "";
+  }
+  const firstSlash = paths[0].indexOf("/");
+  if (firstSlash === -1) {
+    return "";
+  }
+  const candidate = paths[0].slice(0, firstSlash + 1);
+  if (paths.every((p) => p.startsWith(candidate))) {
+    return candidate;
+  }
+  return "";
+}
+
+function toSnakeCase(str: string): string {
+  return str
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[\s\-]+/g, '_')
+    .toLowerCase();
+}
+
 export default function ModuleInstall() {
   const [, navigate] = useLocation();
   const { theme } = useTheme();
@@ -289,9 +315,19 @@ export default function ModuleInstall() {
   const [isRunningChecks, setIsRunningChecks] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
+  const [pendingModuleKey, setPendingModuleKey] = useState<string | null>(null);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
-  const createModule = useMutation(api.moduleRepository.create);
+  const uploadAndDeliver = useMutation(api.moduleRepository.uploadAndDeliver);
+
+  // Subscribe to transient events — Convex realtime pushes the moment the webhook emits one
+  const installEvent = useQuery(
+    api.transientEvents.get,
+    pendingModuleKey && instance
+      ? { instanceId: instance._id, correlationKey: pendingModuleKey }
+      : "skip",
+  );
 
   const fileTree = useMemo(() => buildFileTree(files), [files]);
   
@@ -324,6 +360,35 @@ export default function ModuleInstall() {
     }
   }, [files]);
 
+  // React to transient events from the engine webhook
+  useEffect(() => {
+    if (!installEvent) {
+      return;
+    }
+    if (installEvent.status === "success") {
+      const timer = setTimeout(() => navigate("/modules"), 1500);
+      return () => clearTimeout(timer);
+    }
+    if (installEvent.status === "error") {
+      setInstallError(installEvent.message || "Module installation failed on the engine.");
+      setIsInstalling(false);
+      setPendingModuleKey(null);
+    }
+  }, [installEvent, navigate]);
+
+  // Timeout: if engine doesn't respond within 60 seconds, show an error
+  useEffect(() => {
+    if (!pendingModuleKey) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setInstallError("Installation timed out. The engine did not respond within 60 seconds.");
+      setIsInstalling(false);
+      setPendingModuleKey(null);
+    }, 60_000);
+    return () => clearTimeout(timer);
+  }, [pendingModuleKey]);
+
   const processZipFile = useCallback(async (file: File) => {
     try {
       const zip = await JSZip.loadAsync(file);
@@ -353,22 +418,35 @@ export default function ModuleInstall() {
   }, [processZipFile]);
 
   const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useState({ current: 0 })[0];
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current += 1;
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragging(true);
+    }
+  }, [dragCounter]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
-  }, []);
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  }, [dragCounter]);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCounter.current = 0;
     setIsDragging(false);
 
     const file = e.dataTransfer.files[0];
@@ -380,7 +458,7 @@ export default function ModuleInstall() {
     }
 
     await processZipFile(file);
-  }, [processZipFile]);
+  }, [processZipFile, dragCounter]);
 
   const handleFileChange = useCallback((path: string, content: string) => {
     setFiles(prev => ({
@@ -398,10 +476,12 @@ export default function ModuleInstall() {
     setIsInstalling(true);
     setInstallError(null);
     try {
-      // Build zip from current files
+      // Re-zip extracted files at the root (strip any common wrapper directory)
       const zip = new JSZip();
+      const paths = Object.keys(files);
+      const commonPrefix = getCommonDirectoryPrefix(paths);
       for (const [path, content] of Object.entries(files)) {
-        zip.file(path, content);
+        zip.file(path.slice(commonPrefix.length), content);
       }
       const zipBlob = await zip.generateAsync({ type: 'blob' });
 
@@ -412,7 +492,7 @@ export default function ModuleInstall() {
         headers: { 'Content-Type': 'application/zip' },
         body: zipBlob,
       });
-      if (!uploadResult.ok) throw new Error('Upload failed');
+      if (!uploadResult.ok) { throw new Error('Upload failed'); }
       const { storageId } = await uploadResult.json() as { storageId: Id<'_storage'> };
 
       // Parse manifest from extracted files
@@ -430,9 +510,31 @@ export default function ModuleInstall() {
       const version = (manifest.version as string) || '1.0.0';
       const tags: string[] = Array.isArray(manifest.tags) ? manifest.tags as string[] : [];
 
-      // Create module repository entry
-      const moduleId = await createModule({
+      // Generate deterministic moduleKey: id:version:hash
+      // This key is passed to the engine and echoed back in the webhook,
+      // then used as the correlationKey for the transient event subscription.
+      const moduleId = (manifest.id as string) || toSnakeCase(name);
+      const zipArrayBuffer = await zipBlob.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest('SHA-256', zipArrayBuffer);
+      const hashHex = Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+      const shortHash = hashHex.slice(0, 7);
+      const moduleKey = `${moduleId}:${version}:${shortHash}`;
+
+      console.log("[module-install] moduleKey components", {
+        manifestId: manifest.id,
+        manifestName: manifest.name,
+        moduleId,
+        version,
+        zipSize: zipArrayBuffer.byteLength,
+        fullHash: hashHex,
+        shortHash,
+        moduleKey,
+      });
+
+      // Deliver zip to the engine — no DB record until webhook callback
+      await uploadAndDeliver({
         instanceId: instance._id,
+        moduleKey,
         name,
         description,
         version,
@@ -441,14 +543,14 @@ export default function ModuleInstall() {
         archiveKey: storageId,
       });
 
-      navigate('/modules');
+      // Subscribe to transient events for this moduleKey
+      setPendingModuleKey(moduleKey);
     } catch (error) {
       console.error('Failed to install module:', error);
       setInstallError(error instanceof Error ? error.message : 'Failed to install module. Please try again.');
-    } finally {
       setIsInstalling(false);
     }
-  }, [files, navigate, instance, generateUploadUrl, createModule]);
+  }, [files, instance, generateUploadUrl, uploadAndDeliver]);
 
   const allChecksPassed = checkResults.length > 0 && checkResults.every(r => r.status === 'pass');
   const selectedContent = selectedPath ? files[selectedPath] : null;
@@ -467,6 +569,7 @@ export default function ModuleInstall() {
             "mt-8 transition-colors",
             isDragging && "border-primary border-2 bg-primary/5",
           )}
+          onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -502,7 +605,7 @@ export default function ModuleInstall() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="flex flex-col h-[calc(100vh-6.5rem)]">
       <div className="border-b bg-background shrink-0">
         <div className="p-6 max-w-[1600px] mx-auto">
           <PageHeader 
@@ -564,16 +667,18 @@ export default function ModuleInstall() {
         </div>
 
         {/* Checks & Actions */}
-        <div className="w-80 border-l bg-muted/30 shrink-0 flex flex-col">
-          <div className="p-4 border-b">
-            <h3 className="text-sm font-semibold mb-4">Validation Checks</h3>
+        <div className="w-80 border-l bg-muted/30 shrink-0 flex flex-col overflow-hidden">
+          <div className="p-4 border-b shrink-0">
+            <h3 className="text-sm font-semibold">Validation Checks</h3>
+          </div>
+          <div className="flex-1 overflow-hidden p-4">
             {isRunningChecks ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Running checks...
               </div>
             ) : (
-              <ScrollArea className="h-64">
+              <ScrollArea className="h-full">
                 <div className="space-y-2">
                   {checkResults.map((result) => (
                     <div
@@ -607,49 +712,70 @@ export default function ModuleInstall() {
             )}
           </div>
 
-          <Separator />
-
-          <div className="p-4 border-b">
-            <h3 className="text-sm font-semibold mb-1">Install Behavior</h3>
-            <p className="text-xs text-muted-foreground">
-              Creating this module now enqueues delivery to the selected engine instance.
-            </p>
-          </div>
-
-          <div className="p-4 mt-auto">
-            <Button
-              className="w-full"
-              onClick={handleInstall}
-              disabled={!allChecksPassed || isInstalling}
-            >
-              {isInstalling ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Installing...
-                </>
-              ) : (
-                <>
-                  <Download className="h-4 w-4 mr-2" />
-                  Install Module
-                </>
-              )}
-            </Button>
-            {!allChecksPassed && (
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                Fix validation errors before installing
-              </p>
-            )}
-            {installError && (
-              <div className="mt-3 p-3 rounded-md border bg-red-500/10 border-red-500/20">
-                <div className="flex items-center gap-2 text-sm text-red-500">
-                  <XCircle className="h-4 w-4 shrink-0" />
-                  <span>{installError}</span>
+          <div className="p-4 border-t shrink-0">
+            {installEvent?.status === "success" ? (
+              <div className="p-3 rounded-md border bg-green-500/10 border-green-500/20">
+                <div className="flex items-center gap-2 text-sm text-green-500">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>Module installed successfully. Redirecting…</span>
                 </div>
               </div>
+            ) : (
+              <>
+                <Button
+                  className="w-full"
+                  onClick={handleInstall}
+                  disabled={!allChecksPassed || isInstalling}
+                >
+                  {isInstalling ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Installing…
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload and Install
+                    </>
+                  )}
+                </Button>
+                {!allChecksPassed && !isInstalling && (
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Fix validation errors before installing
+                  </p>
+                )}
+                {installError && (
+                  <div className="mt-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-destructive">
+                      <XCircle className="h-4 w-4 shrink-0" />
+                      <span>Install failed</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground"
+                      onClick={() => setShowErrorDetails(true)}
+                    >
+                      Show details
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
       </div>
+
+      <Dialog open={showErrorDetails} onOpenChange={setShowErrorDetails}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Install Failed</DialogTitle>
+          </DialogHeader>
+          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">
+            {installError}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

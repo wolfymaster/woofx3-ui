@@ -137,6 +137,7 @@ export default defineSchema({
   // moduleRepository: directory of all available modules (seeded by admins or uploaded)
   moduleRepository: defineTable({
     instanceId: v.optional(v.id("instances")),
+    moduleKey: v.optional(v.string()),
     name: v.string(),
     description: v.string(),
     version: v.string(),
@@ -149,7 +150,8 @@ export default defineSchema({
     statusMessage: v.optional(v.string()),
   })
     .index("by_instance", ["instanceId"])
-    .index("by_name_version", ["name", "version"]),
+    .index("by_name_version", ["name", "version"])
+    .index("by_module_key", ["moduleKey"]),
 
   // dashboardLayouts: dashboard widget configuration per user/instance
   dashboardLayouts: defineTable({
@@ -474,4 +476,19 @@ export default defineSchema({
   })
     .index("by_scene_and_state", ["sceneId", "state"])
     .index("by_ttl", ["ttl"]),
+
+  // transientEvents: ephemeral messages for realtime UI subscriptions.
+  // Keyed by a client-generated correlationKey so the UI can subscribe before the event exists.
+  // Cleaned up automatically via scheduled deletion after TTL expires.
+  transientEvents: defineTable({
+    instanceId: v.id("instances"),
+    correlationKey: v.string(),
+    type: v.string(),
+    status: v.union(v.literal("progress"), v.literal("success"), v.literal("error")),
+    message: v.optional(v.string()),
+    data: v.optional(v.any()),
+    expiresAt: v.number(),
+  })
+    .index("by_instance_correlation", ["instanceId", "correlationKey"])
+    .index("by_expires_at", ["expiresAt"]),
 });

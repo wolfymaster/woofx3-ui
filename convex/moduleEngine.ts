@@ -2,17 +2,17 @@
 
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type RpcTarget } from "./lib/engineInstanceUrl";
 
 interface ModuleInstallRpc extends RpcTarget {
-  installModuleZip(fileName: string, zipBase64: string): Promise<unknown>;
+  installModuleZip(fileName: string, zipBase64: string, context: Record<string, string>): Promise<unknown>;
 }
 
 interface ModuleManageRpc extends RpcTarget {
   listEngineModules(): Promise<unknown>;
-  uninstallEngineModule(name: string): Promise<unknown>;
+  uninstallModule(id: string, context: Record<string, string>): Promise<unknown>;
   setEngineModuleState(name: string, state: string): Promise<unknown>;
   sendChatMessage(message: string): Promise<unknown>;
   getWorkflows(query: { accountId: string }): Promise<unknown>;
@@ -64,9 +64,17 @@ export const listEngineModules = action({
   },
 });
 
-export const uninstallEngineModule = action({
-  args: { instanceId: v.id("instances"), name: v.string() },
-  handler: async (ctx, { instanceId, name }) => {
+/**
+ * Request an async uninstall of a module from the engine.
+ *
+ * Fires-and-forgets an RPC to the engine; the engine performs the uninstall in the
+ * background and POSTs a module.uninstalled or module.uninstall_failed webhook back.
+ * The UI subscribes to the transient event keyed by the returned moduleKey to observe
+ * progress, success, or a conflict-list failure.
+ */
+export const requestModuleUninstall = action({
+  args: { instanceId: v.id("instances"), moduleId: v.id("moduleRepository") },
+  handler: async (ctx, { instanceId, moduleId }): Promise<{ moduleKey: string }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
@@ -76,15 +84,42 @@ export const uninstallEngineModule = action({
     if (!bundle) {
       throw new Error("Not authorized or instance not found");
     }
-
     if (!bundle.clientId || !bundle.clientSecret) {
       throw new Error("Instance is not registered with the engine");
     }
 
-    const rpc = createEngineRpcSession<ModuleManageRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const module = await ctx.runQuery(api.moduleRepository.get, { moduleId });
+    if (!module) {
+      throw new Error("Module not found");
+    }
 
-    await (rpc as any).uninstallEngineModule(name);
-    return { success: true };
+    const moduleKey = module.moduleKey ?? `${module.name}:${module.version}:manual-${Date.now()}`;
+
+    await ctx.runMutation(internal.transientEvents.emit, {
+      instanceId,
+      correlationKey: moduleKey,
+      type: "module.uninstall",
+      status: "progress",
+      message: `Requesting uninstall of ${module.name}@${module.version}...`,
+      data: { moduleName: module.name, moduleVersion: module.version },
+    });
+
+    try {
+      const rpc = createEngineRpcSession<ModuleManageRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
+      await rpc.uninstallModule(module.name, { moduleKey });
+      return { moduleKey };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await ctx.runMutation(internal.transientEvents.emit, {
+        instanceId,
+        correlationKey: moduleKey,
+        type: "module.uninstall",
+        status: "error",
+        message: `Uninstall request failed: ${message}`,
+        data: { moduleName: module.name, moduleVersion: module.version },
+      });
+      throw err;
+    }
   },
 });
 
@@ -115,16 +150,23 @@ export const setEngineModuleState = action({
 export const deliverZipToInstance = internalAction({
   args: {
     instanceId: v.id("instances"),
-    moduleId: v.id("moduleRepository"),
+    moduleKey: v.string(),
+    archiveKey: v.string(),
+    fileName: v.string(),
+    moduleMeta: v.object({
+      name: v.string(),
+      description: v.string(),
+      version: v.string(),
+      tags: v.array(v.string()),
+      manifest: v.any(),
+    }),
   },
   handler: async (ctx, args) => {
-    await ctx.runMutation(internal.moduleRepository.updateStatus, {
-      moduleId: args.moduleId,
-      status: "delivering",
-    });
-
     try {
-      const delivery = await ctx.runQuery(internal.moduleRepository.getInstallDeliveryData, args);
+      const delivery = await ctx.runQuery(internal.moduleRepository.getDeliveryData, {
+        instanceId: args.instanceId,
+        archiveKey: args.archiveKey,
+      });
       const archiveRes = await fetch(delivery.archiveUrl);
       if (!archiveRes.ok) {
         throw new Error(`Failed to fetch module archive: ${archiveRes.status} ${archiveRes.statusText}`);
@@ -132,25 +174,41 @@ export const deliverZipToInstance = internalAction({
       const archiveBuffer = await archiveRes.arrayBuffer();
       const zipBase64 = Buffer.from(archiveBuffer).toString("base64");
 
+      // Log hash components for comparison with client-side and engine-side hashes
+      const { createHash } = await import("crypto");
+      const serverHashHex = createHash("sha256").update(Buffer.from(archiveBuffer)).digest("hex");
+      const serverShortHash = serverHashHex.slice(0, 7);
+      console.log("[deliverZip] hash components", {
+        moduleKey: args.moduleKey,
+        zipSize: archiveBuffer.byteLength,
+        fullHash: serverHashHex,
+        shortHash: serverShortHash,
+        fileName: args.fileName,
+      });
+
       if (!delivery.clientId || !delivery.clientSecret) {
         throw new Error("Instance is not registered with the engine");
       }
       const rpc = createEngineRpcSession<ModuleInstallRpc>(
         delivery.instanceUrl,
         delivery.clientId,
-        delivery.clientSecret,
+        delivery.clientSecret
       );
-      await rpc.installModuleZip(delivery.fileName, zipBase64);
 
-      // Note: status transitions to "installed" when the engine sends the
-      // module.installed webhook callback. The action only confirms delivery.
+      // Pass moduleKey in context so the engine echoes it back in the webhook
+      await rpc.installModuleZip(args.fileName, zipBase64, { moduleKey: args.moduleKey });
+
       return { delivered: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      await ctx.runMutation(internal.moduleRepository.updateStatus, {
-        moduleId: args.moduleId,
-        status: "failed",
-        statusMessage: message,
+      // Emit a transient error so the UI picks it up immediately
+      await ctx.runMutation(internal.transientEvents.emit, {
+        instanceId: args.instanceId,
+        correlationKey: args.moduleKey,
+        type: "module.install",
+        status: "error",
+        message: `Delivery failed: ${message}`,
+        data: { moduleName: args.moduleMeta.name, moduleVersion: args.moduleMeta.version },
       });
       throw err;
     }

@@ -1,50 +1,50 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { useQuery, useMutation, useAction } from "convex/react";
-import { useLocation } from "wouter";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useAction, useMutation, useQuery } from "convex/react";
 import {
-  Search,
+  Bell,
+  Check,
+  Download,
+  Eye,
   Filter,
   Grid3X3,
   List,
-  Download,
-  Check,
-  ExternalLink,
-  Puzzle,
-  Sparkles,
-  MessageSquare,
-  Zap,
-  Music,
-  Video,
-  Bell,
-  Settings2,
   Loader2,
+  MessageSquare,
+  Music,
+  Puzzle,
+  Search,
+  Settings2,
+  Sparkles,
+  Trash2,
   Upload,
-  ToggleLeft,
-  ToggleRight,
+  Video,
+  Zap,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
+import { EmptyState } from "@/components/common/empty-state";
+import { ErrorState } from "@/components/common/error-state";
+import { PageHeader } from "@/components/layout/page-header";
+import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Toggle } from "@/components/ui/toggle";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PageHeader } from "@/components/layout/page-header";
-import { EmptyState } from "@/components/common/empty-state";
-import { ErrorState } from "@/components/common/error-state";
-import { cn } from "@/lib/utils";
-import { api } from "@convex/_generated/api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Toggle } from "@/components/ui/toggle";
 import { useInstance } from "@/hooks/use-instance";
-import type { Id } from "@convex/_generated/dataModel";
+import { cn } from "@/lib/utils";
 
 type ModuleRepoItem = {
   _id: Id<"moduleRepository">;
@@ -54,6 +54,7 @@ type ModuleRepoItem = {
   tags: string[];
   manifest: Record<string, unknown>;
   archiveKey: string;
+  moduleKey?: string;
 };
 
 type ModuleView = {
@@ -64,6 +65,7 @@ type ModuleView = {
   tags: string[];
   manifest: Record<string, unknown>;
   archiveKey: string;
+  moduleKey?: string;
   isInstalled: boolean;
   isEnabled: boolean;
   engineState?: string;
@@ -96,13 +98,14 @@ function getAuthor(module: ModuleView): string {
 interface ModuleCardProps {
   module: ModuleView;
   onInstall: (id: Id<"moduleRepository"> | string) => void;
-  onUninstall: (id: Id<"moduleRepository"> | string) => void;
-  onToggleEnabled: (id: Id<"moduleRepository"> | string, enabled: boolean) => void;
+  onDelete: (id: Id<"moduleRepository">) => void;
   onRetry: (id: Id<"moduleRepository">) => void;
+  onView: (id: Id<"moduleRepository">) => void;
+  onShowError: (message: string) => void;
   isInstalling?: boolean;
 }
 
-function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, onRetry, isInstalling }: ModuleCardProps) {
+function ModuleCard({ module, onInstall, onDelete, onRetry, onView, onShowError, isInstalling }: ModuleCardProps) {
   const category = getCategory(module);
   const author = getAuthor(module);
   const CategoryIcon = categoryIcons[category] ? (
@@ -160,55 +163,88 @@ function ModuleCard({ module, onInstall, onUninstall, onToggleEnabled, onRetry, 
       </CardContent>
       <CardFooter className="pt-0 gap-2">
         {module.status === "failed" ? (
-          <div className="flex-1 flex items-center gap-2">
-            <p className="text-xs text-destructive truncate flex-1" title={module.statusMessage}>
-              {module.statusMessage || "Installation failed"}
-            </p>
-            <Button size="sm" variant="outline" onClick={() => onRetry(module._id as Id<"moduleRepository">)}>
-              Retry
-            </Button>
+          <div className="flex-1 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm text-destructive">
+              <span>Failed</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={() => onShowError(module.statusMessage || "Installation failed")}
+              >
+                Show details
+              </Button>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="outline" onClick={() => onRetry(module._id as Id<"moduleRepository">)}>
+                Retry
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => onDelete(module._id as Id<"moduleRepository">)}
+                data-testid={`button-delete-${module._id}`}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
-        ) : module.isInstalled ? (
+        ) : module.isInstalled && !module.isOrphan ? (
           <>
             <Button
               variant="outline"
               size="sm"
               className="flex-1"
-              onClick={() => onToggleEnabled(module._id, !module.isEnabled)}
-              data-testid={`button-toggle-${module._id}`}
+              onClick={() => onView(module._id as Id<"moduleRepository">)}
+              data-testid={`button-view-${module._id}`}
             >
-              {module.isEnabled ? (
-                <>
-                  <ToggleRight className="h-4 w-4 mr-2 text-green-500" />
-                  Enabled
-                </>
-              ) : (
-                <>
-                  <ToggleLeft className="h-4 w-4 mr-2" />
-                  Disabled
-                </>
-              )}
+              <Eye className="h-4 w-4 mr-2" />
+              View Details
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onUninstall(module._id)}
-              data-testid={`button-uninstall-${module._id}`}
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => onDelete(module._id as Id<"moduleRepository">)}
+              data-testid={`button-delete-${module._id}`}
             >
-              <ExternalLink className="h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
             </Button>
           </>
-        ) : !module.isOrphan ? (
+        ) : module.isInstalled ? (
           <Button
+            variant="outline"
             size="sm"
             className="flex-1"
-            onClick={() => onInstall(module._id)}
-            disabled={isInstalling}
-            data-testid={`button-install-${module._id}`}
+            onClick={() => onView(module._id as Id<"moduleRepository">)}
+            data-testid={`button-view-${module._id}`}
           >
-            {isInstalling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
-            {isInstalling ? "Installing..." : "Install"}
+            <Eye className="h-4 w-4 mr-2" />
+            View Details
           </Button>
+        ) : !module.isOrphan ? (
+          <>
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={() => onInstall(module._id)}
+              disabled={isInstalling}
+              data-testid={`button-install-${module._id}`}
+            >
+              {isInstalling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+              {isInstalling ? "Installing..." : "Install"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => onDelete(module._id as Id<"moduleRepository">)}
+              data-testid={`button-delete-${module._id}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </>
         ) : null}
       </CardFooter>
     </Card>
@@ -244,8 +280,8 @@ export default function Modules() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState("name");
-  const [activeTab, setActiveTab] = useState("installed");
   const [installingId, setInstallingId] = useState<Id<"moduleRepository"> | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   interface EngineModule {
     name: string;
     version: string;
@@ -258,16 +294,14 @@ export default function Modules() {
   const repoModules = useQuery(api.moduleRepository.list, {}) as ModuleRepoItem[] | undefined;
   const enqueueEngineInstall = useMutation(api.moduleRepository.enqueueEngineInstall);
   const engineListModules = useAction(api.moduleEngine.listEngineModules);
-  const engineUninstallModule = useAction(api.moduleEngine.uninstallEngineModule);
-  const engineSetModuleState = useAction(api.moduleEngine.setEngineModuleState);
+  const [uninstallTarget, setUninstallTarget] = useState<{
+    _id: Id<"moduleRepository">;
+    name: string;
+    version: string;
+    moduleKey?: string;
+  } | null>(null);
 
   const isLoading = instanceLoading || repoModules === undefined;
-
-  const runtimeInstanceId = useMemo(() => {
-    if (!instance) return "";
-    const maybeApplicationId = (instance as Record<string, unknown>).applicationId;
-    return typeof maybeApplicationId === "string" && maybeApplicationId.length > 0 ? maybeApplicationId : instance._id;
-  }, [instance]);
 
   const refreshEngineModules = useCallback(
     async (retries = 2) => {
@@ -313,6 +347,7 @@ export default function Modules() {
       }
       return {
         ...m,
+        moduleKey: m.moduleKey,
         isInstalled: !!installed,
         isEnabled: (installed?.state ?? "disabled") === "active",
         engineState: installed?.state,
@@ -338,8 +373,6 @@ export default function Modules() {
     return [...repoViews, ...orphans];
   }, [repoModules, engineModules]);
 
-  const installedModuleViews = useMemo(() => allModules.filter((m) => m.isInstalled), [allModules]);
-
   const filterModules = (modules: ModuleView[]) => {
     let result = modules;
 
@@ -358,8 +391,12 @@ export default function Modules() {
     }
 
     result = [...result].sort((a, b) => {
-      if (sortBy === "name") return a.name.localeCompare(b.name);
-      if (sortBy === "category") return getCategory(a).localeCompare(getCategory(b));
+      if (sortBy === "name") {
+        return a.name.localeCompare(b.name);
+      }
+      if (sortBy === "category") {
+        return getCategory(a).localeCompare(getCategory(b));
+      }
       return 0;
     });
 
@@ -381,26 +418,21 @@ export default function Modules() {
     }
   };
 
-  const handleUninstall = async (moduleId: Id<"moduleRepository"> | string) => {
-    const module = allModules.find((m) => m._id === moduleId);
-    if (!module || !instance) {
+  const handleDelete = (moduleId: Id<"moduleRepository">) => {
+    const target = allModules.find((m) => m._id === moduleId);
+    if (!target) {
       return;
     }
-    await engineUninstallModule({ instanceId: instance._id, name: module.name }).catch(console.error);
-    await refreshEngineModules();
+    setUninstallTarget({
+      _id: moduleId,
+      name: target.name,
+      version: target.version,
+      moduleKey: target.moduleKey,
+    });
   };
 
-  const handleToggleEnabled = async (moduleId: Id<"moduleRepository"> | string, enabled: boolean) => {
-    const module = allModules.find((m) => m._id === moduleId);
-    if (!module || !instance) {
-      return;
-    }
-    await engineSetModuleState({
-      instanceId: instance._id,
-      name: module.name,
-      state: enabled ? "active" : "disabled",
-    }).catch(console.error);
-    await refreshEngineModules();
+  const handleView = (moduleId: Id<"moduleRepository">) => {
+    navigate(`/modules/${moduleId}`);
   };
 
   const handleRetry = async (moduleId: Id<"moduleRepository">) => {
@@ -426,7 +458,9 @@ export default function Modules() {
 
   const renderModuleGrid = (modules: ModuleView[]) => {
     const filtered = filterModules(modules);
-    if (filtered.length === 0) return null;
+    if (filtered.length === 0) {
+      return null;
+    }
     return viewMode === "grid" ? (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {filtered.map((module) => (
@@ -434,9 +468,10 @@ export default function Modules() {
             key={module._id}
             module={module}
             onInstall={handleInstall}
-            onUninstall={handleUninstall}
-            onToggleEnabled={handleToggleEnabled}
+            onDelete={handleDelete}
             onRetry={handleRetry}
+            onView={handleView}
+            onShowError={setErrorDetail}
             isInstalling={installingId === module._id}
           />
         ))}
@@ -471,23 +506,72 @@ export default function Modules() {
                   {category}
                 </Badge>
                 <span className="text-xs text-muted-foreground hidden md:block">v{module.version}</span>
-                {module.isInstalled ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleToggleEnabled(module._id, !module.isEnabled)}
-                  >
-                    {module.isEnabled ? "Disable" : "Enable"}
+                {module.status === "failed" ? (
+                  <>
+                    <span className="text-sm text-destructive">Failed</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground"
+                      onClick={() => setErrorDetail(module.statusMessage || "Installation failed")}
+                    >
+                      Show details
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRetry(module._id as Id<"moduleRepository">)}
+                    >
+                      Retry
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDelete(module._id as Id<"moduleRepository">)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : module.isInstalled && !module.isOrphan ? (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => navigate(`/modules/${module._id}`)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      View
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDelete(module._id as Id<"moduleRepository">)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : module.isInstalled ? (
+                  <Button variant="outline" size="sm" onClick={() => navigate(`/modules/${module._id}`)}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
                   </Button>
                 ) : !module.isOrphan ? (
-                  <Button size="sm" onClick={() => handleInstall(module._id)} disabled={installingId === module._id}>
-                    {installingId === module._id ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Download className="h-4 w-4 mr-2" />
-                    )}
-                    Install
-                  </Button>
+                  <>
+                    <Button size="sm" onClick={() => handleInstall(module._id)} disabled={installingId === module._id}>
+                      {installingId === module._id ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
+                      )}
+                      Install
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => handleDelete(module._id as Id<"moduleRepository">)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -510,148 +594,139 @@ export default function Modules() {
         }
       />
 
-      {engineError && (
-        <div className="mb-4">
-          <ErrorState
-            title="Engine connection issue"
-            message={engineError}
-            onRetry={() => {
-              void refreshEngineModules();
-            }}
-          />
-        </div>
-      )}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-end gap-4 mb-6">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search modules..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+              data-testid="input-search-modules"
+            />
+          </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <TabsList>
-            <TabsTrigger value="installed" data-testid="tab-installed-modules">
-              Installed
-              <Badge variant="secondary" className="ml-2">
-                {installedModuleViews.length}
-              </Badge>
-            </TabsTrigger>
-            <TabsTrigger value="all" data-testid="tab-all-modules">
-              All Modules
-              <Badge variant="secondary" className="ml-2">
-                {allModules.length}
-              </Badge>
-            </TabsTrigger>
-          </TabsList>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" data-testid="button-filter-modules">
+                <Filter className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Categories</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {categories.map((category) => (
+                <DropdownMenuCheckboxItem
+                  key={category}
+                  checked={selectedCategories.includes(category)}
+                  onCheckedChange={() => toggleCategory(category)}
+                >
+                  <span className="flex items-center gap-2">
+                    {categoryIcons[category]}
+                    {category}
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search modules..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-                data-testid="input-search-modules"
-              />
-            </div>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-32 hidden sm:flex" data-testid="select-sort-modules">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="category">Category</SelectItem>
+            </SelectContent>
+          </Select>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" data-testid="button-filter-modules">
-                  <Filter className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>Categories</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                {categories.map((category) => (
-                  <DropdownMenuCheckboxItem
-                    key={category}
-                    checked={selectedCategories.includes(category)}
-                    onCheckedChange={() => toggleCategory(category)}
-                  >
-                    <span className="flex items-center gap-2">
-                      {categoryIcons[category]}
-                      {category}
-                    </span>
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="w-32 hidden sm:flex" data-testid="select-sort-modules">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="name">Name</SelectItem>
-                <SelectItem value="category">Category</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="flex items-center border rounded-md">
-              <Toggle
-                pressed={viewMode === "grid"}
-                onPressedChange={() => setViewMode("grid")}
-                size="sm"
-                className="rounded-r-none"
-                data-testid="button-view-grid"
-              >
-                <Grid3X3 className="h-4 w-4" />
-              </Toggle>
-              <Toggle
-                pressed={viewMode === "list"}
-                onPressedChange={() => setViewMode("list")}
-                size="sm"
-                className="rounded-l-none"
-                data-testid="button-view-list"
-              >
-                <List className="h-4 w-4" />
-              </Toggle>
-            </div>
+          <div className="flex items-center border rounded-md">
+            <Toggle
+              pressed={viewMode === "grid"}
+              onPressedChange={() => setViewMode("grid")}
+              size="sm"
+              className="rounded-r-none"
+              data-testid="button-view-grid"
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </Toggle>
+            <Toggle
+              pressed={viewMode === "list"}
+              onPressedChange={() => setViewMode("list")}
+              size="sm"
+              className="rounded-l-none"
+              data-testid="button-view-list"
+            >
+              <List className="h-4 w-4" />
+            </Toggle>
           </div>
         </div>
+      </div>
 
-        <TabsContent value="all" className="mt-0">
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <ModuleCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : filterModules(allModules).length === 0 ? (
-            <EmptyState
-              icon={Puzzle}
-              title="No modules found"
-              description="Try adjusting your search or filters, or install a module from a zip file."
-              action={{
-                label: "Clear Filters",
-                onClick: () => {
-                  setSearchQuery("");
-                  setSelectedCategories([]);
-                },
-              }}
-            />
-          ) : (
-            renderModuleGrid(allModules)
-          )}
-        </TabsContent>
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <ModuleCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : engineError ? (
+        <ErrorState
+          title="Engine connection issue"
+          message={engineError}
+          onRetry={() => {
+            void refreshEngineModules();
+          }}
+        />
+      ) : filterModules(allModules).length === 0 ? (
+        <EmptyState
+          icon={Puzzle}
+          title="No modules found"
+          description="Try adjusting your search or filters, or install a module from a zip file."
+          action={{
+            label: "Clear Filters",
+            onClick: () => {
+              setSearchQuery("");
+              setSelectedCategories([]);
+            },
+          }}
+        />
+      ) : (
+        renderModuleGrid(allModules)
+      )}
 
-        <TabsContent value="installed" className="mt-0">
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <ModuleCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : filterModules(installedModuleViews).length === 0 ? (
-            <EmptyState
-              icon={Puzzle}
-              title="No installed modules"
-              description="Browse the module library to find and install modules for your stream."
-              action={{ label: "Browse Modules", onClick: () => setActiveTab("all") }}
-            />
-          ) : (
-            renderModuleGrid(installedModuleViews)
-          )}
-        </TabsContent>
-      </Tabs>
+      <Dialog
+        open={errorDetail !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setErrorDetail(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Install Failed</DialogTitle>
+          </DialogHeader>
+          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{errorDetail}</pre>
+        </DialogContent>
+      </Dialog>
+
+      {instance && (
+        <UninstallModuleDialog
+          open={uninstallTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setUninstallTarget(null);
+            }
+          }}
+          instanceId={instance._id}
+          module={uninstallTarget}
+          onSuccess={() => {
+            setUninstallTarget(null);
+            void refreshEngineModules();
+          }}
+        />
+      )}
     </div>
   );
 }
