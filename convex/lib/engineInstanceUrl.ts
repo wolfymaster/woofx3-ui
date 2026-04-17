@@ -1,10 +1,26 @@
 import { RpcTarget, type RpcCompatible, newHttpBatchRpcSession } from "capnweb";
+import type { StreamControlApi } from "@woofx3/api";
 
 export { RpcTarget };
 
 /**
+ * Marker base for authenticated API stubs. Extends both capnweb's RpcTarget
+ * (required for capnweb proxy typing) and the shared StreamControlApi shape
+ * from @woofx3/api, so callers that declare `interface Foo extends EngineApi`
+ * automatically get access to every method the engine exposes in the shared
+ * type package.
+ *
+ * Per-file RPC interfaces (WoofxEngineRpc, WorkflowEngineRpc, etc.) will be
+ * retired as the UI migrates to use EngineApi directly.
+ */
+export interface EngineApi extends RpcTarget, StreamControlApi {}
+
+/**
  * The unauthenticated entry point for a woofx3 engine instance.
  * Exposed via capnweb — connect to the engine URL and get a Gateway stub.
+ *
+ * Shape mirrors StreamControlGateway in @woofx3/api; declared locally with
+ * `extends RpcTarget` so capnweb's proxy typing resolves correctly.
  */
 export interface ApiGateway extends RpcTarget {
   ping(): Promise<{ status: string }>;
@@ -14,15 +30,6 @@ export interface ApiGateway extends RpcTarget {
     callbackToken: string,
   ): Promise<{ clientId: string; clientSecret: string }>;
   authenticate(clientId: string, clientSecret: string): Promise<EngineApi>;
-}
-
-/**
- * The authenticated API surface returned by gateway.authenticate().
- * Individual RPC interfaces in each file extend this or use it as a base.
- */
-export interface EngineApi extends RpcTarget {
-  // Marker interface — concrete method signatures are declared by callers
-  // via their own RPC interfaces that extend EngineApi.
 }
 
 /**
