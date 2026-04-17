@@ -48,7 +48,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { EmptyState } from '@/components/common/empty-state';
 import { ErrorState } from '@/components/common/error-state';
 import { queryClient } from '@/lib/queryClient';
-import type { Scene, PaginatedResponse, CreateSceneInput } from '@shared/api';
+import type { Scene, PaginatedResponse, CreateSceneInput } from '@/types/scenes';
 
 interface SceneCardProps {
   scene: Scene;

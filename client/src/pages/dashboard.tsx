@@ -30,7 +30,7 @@ import { ChatModule } from '@/components/dashboard/chat-module';
 import { WorkflowRunsModule } from '@/components/dashboard/workflow-runs-module';
 import { EventFeedModule } from '@/components/dashboard/event-feed-module';
 import { MacroPadModule } from '@/components/dashboard/macro-pad-module';
-import type { DashboardModule } from '@shared/api';
+import type { DashboardModule } from '@woofx3/api';
 
 // Registry of available module components
 const moduleComponents: Record<string, React.ComponentType<{ config?: Record<string, unknown>; onConfigChange?: (config: Record<string, unknown>) => void }>> = {
