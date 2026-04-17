@@ -20,7 +20,7 @@ export default defineConfig({
       "@convex": path.resolve(import.meta.dirname, "convex"),
       "@woofx3/api": path.resolve(
         import.meta.dirname,
-        "../woofx3/shared/clients/typescript/api/api.ts",
+        "../woofx3/shared/clients/typescript/api/index.ts",
       ),
     },
   },

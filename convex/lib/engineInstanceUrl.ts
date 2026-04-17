@@ -1,4 +1,5 @@
 import { RpcTarget, type RpcCompatible, newHttpBatchRpcSession } from "capnweb";
+import type { ApiGatewayContract } from "@woofx3/api/rpc";
 import type { StreamControlApi } from "@woofx3/api";
 
 export { RpcTarget };
@@ -19,16 +20,15 @@ export interface EngineApi extends RpcTarget, StreamControlApi {}
  * The unauthenticated entry point for a woofx3 engine instance.
  * Exposed via capnweb — connect to the engine URL and get a Gateway stub.
  *
- * Shape mirrors StreamControlGateway in @woofx3/api; declared locally with
- * `extends RpcTarget` so capnweb's proxy typing resolves correctly.
+ * Extends ApiGatewayContract from @woofx3/api/rpc (the engine's authoritative
+ * shape) and adds the capnweb RpcTarget tag locally. If the engine changes
+ * a gateway method signature and the shared contract updates, TypeScript
+ * enforces the match here without manual mirroring.
  */
-export interface ApiGateway extends RpcTarget {
-  ping(): Promise<{ status: string }>;
-  registerClient(
-    description: string,
-    callbackUrl: string,
-    callbackToken: string,
-  ): Promise<{ clientId: string; clientSecret: string }>;
+export interface ApiGateway extends RpcTarget, ApiGatewayContract {
+  // authenticate narrowed to return EngineApi (StreamControlApi + RpcTarget).
+  // ApiGatewayContract says Promise<ApiContract> which is a structural
+  // supertype of EngineApi, so this is a safe covariant override.
   authenticate(clientId: string, clientSecret: string): Promise<EngineApi>;
 }
 

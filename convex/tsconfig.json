@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@woofx3/api": ["../../woofx3/shared/clients/typescript/api/api.ts"]
+      "@woofx3/api": ["../../woofx3/shared/clients/typescript/api/index.ts"],
+      "@woofx3/api/*": ["../../woofx3/shared/clients/typescript/api/*.ts"]
     }
   },
   "include": ["./**/*"],
