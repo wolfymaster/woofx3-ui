@@ -140,6 +140,62 @@ export const setEngineModuleState = action({
   },
 });
 
+/**
+ * Send a chat message via the engine. Proxies to rpc.sendChatMessage which
+ * takes (accountId, message) — we pass instanceId as the accountId since
+ * the engine's concept of "account" maps 1:1 to a Convex instance today.
+ */
+export const sendChatMessage = action({
+  args: { instanceId: v.id("instances"), message: v.string() },
+  handler: async (
+    ctx,
+    { instanceId, message }
+  ): Promise<{ success: boolean; messageId: string }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const bundle = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, { instanceId, userId });
+    if (!bundle) {
+      throw new Error("Not authorized or instance not found");
+    }
+    if (!bundle.clientId || !bundle.clientSecret) {
+      throw new Error("Instance is not registered with the engine");
+    }
+
+    const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return rpc.sendChatMessage(instanceId, message);
+  },
+});
+
+/**
+ * List engine workflows as `{ id, name }` pairs for UI pickers (e.g. the
+ * macro pad's "Trigger Workflow" dropdown). Flattens the engine's
+ * PaginatedWorkflows response to the minimum the picker needs.
+ */
+export const listWorkflows = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<Array<{ id: string; name: string }>> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const bundle = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, { instanceId, userId });
+    if (!bundle) {
+      throw new Error("Not authorized or instance not found");
+    }
+    if (!bundle.clientId || !bundle.clientSecret) {
+      throw new Error("Instance is not registered with the engine");
+    }
+
+    const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const result = await rpc.getWorkflows({ accountId: instanceId });
+    return (result?.workflows ?? []).map((w) => ({ id: w.id, name: w.name }));
+  },
+});
+
 export const deliverZipToInstance = internalAction({
   args: {
     instanceId: v.id("instances"),

@@ -4,7 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FileAudio, FileImage, FileVideo, Upload, X } from "lucide-react";
 import { type ConfigField, type TriggerConfigValues } from "@/lib/workflow-presets";
-import { ConfigurationForm, type CustomFieldRenderer } from "@/components/common/configuration-form";
+import {
+  ConfigurationForm,
+  type CustomFieldRenderer,
+  type FieldDescriptor,
+} from "@/components/common/configuration-form";
 import { AssetLibraryModal } from "./asset-library-modal";
 import type { Asset } from "@/types";
 
@@ -107,7 +111,11 @@ const customRenderers: Record<string, CustomFieldRenderer> = {
 export function TriggerConfigForm({ fields, values, onChange, className }: TriggerConfigFormProps) {
   return (
     <ConfigurationForm
-      fields={fields}
+      // ConfigField has a narrower, intentional shape (see workflow-presets);
+      // FieldDescriptor is ConfigurationForm's structural superset. The cast
+      // is a runtime no-op — every ConfigField already satisfies the renderer
+      // requirements.
+      fields={fields as unknown as FieldDescriptor[]}
       values={values as Record<string, unknown>}
       onChange={(v) => onChange(v as TriggerConfigValues)}
       customRenderers={customRenderers}

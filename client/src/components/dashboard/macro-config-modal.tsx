@@ -26,13 +26,18 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import type { MacroButton } from './macro-pad-module';
-import type { Workflow } from '@/lib/transport';
+/**
+ * Minimal shape the picker needs — only `id` + `name` are read. Sourced from
+ * `api.moduleEngine.listWorkflows`, which projects the engine's
+ * PaginatedWorkflows into this.
+ */
+type WorkflowOption = { id: string; name: string };
 
 interface MacroConfigModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   macro: MacroButton | null;
-  workflows: Workflow[];
+  workflows: WorkflowOption[];
   onSave: (macro: MacroButton) => void;
 }
 
