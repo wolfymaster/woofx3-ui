@@ -2,13 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
-import { createEngineRpcSession, type RpcTarget } from "./lib/engineInstanceUrl";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
-
-/** Engine RPC surface for instance CRUD (see woofx3 api/src/api.ts). */
-interface InstanceEngineRpc extends RpcTarget {
-  deleteInstance(params: { instanceName: string }): Promise<unknown>;
-}
 
 export const listForCurrentUser = query({
   args: {},
@@ -136,11 +131,18 @@ export const deleteInstance = action({
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: args.instanceId });
     if (!instance) throw new Error("Instance not found");
 
-    if (!instance.clientId || !instance.clientSecret) {
-      throw new Error("Instance is not registered with the engine");
+    // Unregister from the engine best-effort — delete the client record so it
+    // stops receiving callbacks. Failure here (engine unreachable, client
+    // already gone) must not block the local delete since the UI's instance
+    // record is the source of truth for the user's view.
+    if (instance.clientId && instance.clientSecret) {
+      try {
+        const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+        await engine.deleteClient(instance.clientId);
+      } catch (err) {
+        console.warn("[deleteInstance] engine.deleteClient failed (proceeding with local delete)", err);
+      }
     }
-    const engine = createEngineRpcSession<InstanceEngineRpc>(instance.url, instance.clientId, instance.clientSecret);
-    await engine.deleteInstance({ instanceName: instance.name });
 
     await ctx.runMutation(internal.instances.deleteInstanceData, { instanceId: args.instanceId });
   },

@@ -3,17 +3,9 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import { action, internalMutation, query } from "./_generated/server";
-import { RpcTarget } from "capnweb";
-import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import type { CatalogBundle } from "./workflowCatalogContext";
 import { loadCatalogBundle } from "./workflowCatalogContext";
-
-/** woofx3 Api RPC surface used over HTTP batch (see woofx3 api/src/api.ts). */
-interface WoofxEngineRpc extends RpcTarget {
-  getTriggers(moduleId?: string): Promise<unknown>;
-  getActions(moduleId?: string): Promise<unknown>;
-  getWorkflows(query: { accountId: string }): Promise<unknown>;
-}
 
 function asObjectArray(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) {
@@ -205,7 +197,7 @@ export const fetchMerged = action({
       if (!bundle.clientId || !bundle.clientSecret) {
         throw new Error("Instance is not registered with the engine");
       }
-      const rpc = createEngineRpcSession<WoofxEngineRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
+      const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
       const [rawTriggers, rawActions] = await Promise.all([rpc.getTriggers(), rpc.getActions()]);
       triggerMap = byTechnicalId(asObjectArray(rawTriggers), technicalTriggerId);
       actionMap = byTechnicalId(asObjectArray(rawActions), technicalActionId);
@@ -231,7 +223,7 @@ export const fetchMerged = action({
  */
 export const listWorkflows = action({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
+  handler: async (ctx, { instanceId }): Promise<Record<string, unknown>[]> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
@@ -249,11 +241,9 @@ export const listWorkflows = action({
       if (!bundle.clientId || !bundle.clientSecret) {
         throw new Error("Instance is not registered with the engine");
       }
-      const rpc = createEngineRpcSession<WoofxEngineRpc>(bundle.url, bundle.clientId, bundle.clientSecret);
-      const result = (await rpc.getWorkflows({ accountId: instanceId })) as {
-        items?: unknown[];
-      } | null;
-      return asObjectArray(result?.items);
+      const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+      const result = await rpc.getWorkflows({ accountId: instanceId });
+      return asObjectArray(result?.workflows);
     } catch (e) {
       throw new Error(
         `Failed to load workflows: ${e instanceof Error ? e.message : String(e)}`,
