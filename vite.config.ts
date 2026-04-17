@@ -13,15 +13,23 @@ export default defineConfig({
       : []),
   ],
   resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
-      "@convex": path.resolve(import.meta.dirname, "convex"),
-      "@woofx3/api": path.resolve(
-        import.meta.dirname,
-        "../woofx3/shared/clients/typescript/api/index.ts",
-      ),
-    },
+    // Order matters: more-specific entries must come before less-specific
+    // prefixes, otherwise vite's prefix matcher rewrites `@woofx3/api/client`
+    // to `<api-dir>.ts/client` (which never resolves).
+    alias: [
+      { find: /^@\/(.*)$/, replacement: path.resolve(import.meta.dirname, "client", "src") + "/$1" },
+      { find: /^@assets\/(.*)$/, replacement: path.resolve(import.meta.dirname, "attached_assets") + "/$1" },
+      { find: /^@convex\/(.*)$/, replacement: path.resolve(import.meta.dirname, "convex") + "/$1" },
+      // `@woofx3/api` → index.ts; `@woofx3/api/<sub>` → <sub>.ts
+      {
+        find: /^@woofx3\/api\/(.+)$/,
+        replacement: path.resolve(import.meta.dirname, "../woofx3/shared/clients/typescript/api") + "/$1.ts",
+      },
+      {
+        find: /^@woofx3\/api$/,
+        replacement: path.resolve(import.meta.dirname, "../woofx3/shared/clients/typescript/api/index.ts"),
+      },
+    ],
   },
   root: path.resolve(import.meta.dirname, "client"),
   envDir: path.resolve(import.meta.dirname),
