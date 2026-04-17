@@ -161,6 +161,7 @@ Configured in both `tsconfig.json` and `vite.config.ts`. Always use these — ne
 - **Proven patterns**: use well-regarded architecture and design patterns when they fit this stack (layering, hooks, transport boundaries, idempotent webhooks, etc.).
 - **Less code, more foresight**: design APIs and boundaries that tolerate future change; avoid speculative features.
 - **Iterate with git**: if something feels wrong, commit or branch and try another shape—comparison is cheap.
+- **No Co-Authored-By lines**: never add `Co-Authored-By` trailers to commits. AI agents do not get credit for work.
 - **Verify before moving on**: run `bun run check`, `bunx biome check .`, and any tests or Convex checks relevant to your edits; keep them passing before layering new behavior.
 - **Have fun**: the best code is often written when you can be creative and express yourself—pair that with the discipline above.
 

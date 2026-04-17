@@ -69,7 +69,7 @@ Summary (see `CLAUDE.md` for the full list): `internal*` for private APIs; valid
 - **Explicit** over implicit; **sparse** comments (complex / non-obvious only); **optimize for the reader**.
 - **Braces** on all `if` / `else` / `for` / `while` bodies.
 - **Composition** and TypeScript **interfaces** over inheritance; **established patterns**; **design for change** (less code you regret later).
-- **Git**: second-guess bad fits—commit or branch and try another approach.
+- **Git**: second-guess bad fits—commit or branch and try another approach. **Never** add `Co-Authored-By` trailers to commits.
 - **Verification**: run `bun run check`, `bunx biome check .`, and relevant tests; keep **green** before stacking new features.
 - **Have fun**: creative, expressive work and solid engineering reinforce each other.
 
