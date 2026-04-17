@@ -1,5 +1,6 @@
 import { httpRouter } from "convex/server";
 import type { CallbackEnvelope } from "@woofx3/api/webhooks";
+import { EngineEventType } from "@woofx3/api/webhooks";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
@@ -274,7 +275,7 @@ http.route({
     }
 
     switch (event.type) {
-      case "module.installed": {
+      case EngineEventType.MODULE_INSTALLED: {
         await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
           instanceId: instance._id,
           correlationKey: event.moduleKey,
@@ -289,7 +290,7 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
-      case "module.install_failed": {
+      case EngineEventType.MODULE_INSTALL_FAILED: {
         await ctx.runMutation(internal.moduleWebhook.processModuleInstallFailed, {
           instanceId: instance._id,
           correlationKey: event.moduleKey,
@@ -300,7 +301,7 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
-      case "module.deleted": {
+      case EngineEventType.MODULE_DELETED: {
         await ctx.runMutation(internal.moduleWebhook.processModuleDeleted, {
           instanceId: instance._id,
           correlationKey: event.moduleKey,
@@ -310,7 +311,7 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
-      case "module.delete_failed": {
+      case EngineEventType.MODULE_DELETE_FAILED: {
         await ctx.runMutation(internal.moduleWebhook.processModuleDeleteFailed, {
           instanceId: instance._id,
           correlationKey: event.moduleKey,
@@ -322,7 +323,7 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
-      case "module.trigger.registered": {
+      case EngineEventType.MODULE_TRIGGER_REGISTERED: {
         await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
           instanceId: instance._id,
           moduleName: event.moduleName,
@@ -333,7 +334,7 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
-      case "module.action.registered": {
+      case EngineEventType.MODULE_ACTION_REGISTERED: {
         await ctx.runMutation(internal.moduleWebhook.processRegisteredDefinitions, {
           instanceId: instance._id,
           moduleName: event.moduleName,
