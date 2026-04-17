@@ -54,9 +54,15 @@ export const registerInstance = action({
       const pingGateway = createEngineGatewaySession(instance.url);
       await pingGateway.ping();
 
-      // Register as a client (new HTTP batch session — each batch is single-use)
+      // Register as a client (new HTTP batch session — each batch is single-use).
+      // userId is the Convex-authenticated user driving onboarding; the engine
+      // stores it so the resulting client record is attributable to a user.
       const registerGateway = createEngineGatewaySession(instance.url);
-      const result = await registerGateway.registerClient("woofx3-dashboard", callbackUrl, callbackToken);
+      const result = await registerGateway.registerClient("woofx3-dashboard", {
+        userId,
+        callbackUrl,
+        callbackToken,
+      });
 
       console.log(`[registerInstance] Registration successful — clientId=${result.clientId}`);
 
