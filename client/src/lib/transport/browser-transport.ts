@@ -3,6 +3,8 @@
 // Uses polling for subscriptions since the woofx3 API is currently point-in-time.
 
 import { newWebSocketRpcSession, RpcTarget } from "capnweb";
+import type { ApiGatewayContract } from "@woofx3/api/rpc";
+import type { Woofx3EngineApi } from "@woofx3/api";
 import type {
   WoofxTransport,
   StreamStatus,
@@ -14,28 +16,18 @@ import type {
   EngineModule,
 } from "./interface";
 
-// The authenticated API surface returned by gateway.authenticate()
-interface WoofxRpcApi extends RpcTarget {
-  getStreamStatus(instanceId: string): Promise<StreamStatus>;
-  sendChatMessage(instanceId: string, message: string): Promise<unknown>;
-  getChatMessages(instanceId: string, limit: number): Promise<unknown[]>;
-  getStreamEvents(query: { accountId: string; limit?: number }): Promise<unknown[]>;
-  getWorkflowRuns(query: { accountId: string }): Promise<unknown[]>;
-  getWorkflows(query: { accountId: string }): Promise<{ items?: unknown[] }>;
-  createWorkflow(input: Record<string, unknown>): Promise<unknown>;
-  updateWorkflow(id: string, updates: Record<string, unknown>): Promise<unknown>;
-  deleteWorkflow(id: string): Promise<unknown>;
-  triggerWorkflowByName(id: string, params: Record<string, unknown>, source: string): Promise<unknown>;
-  getModule(id: string): Promise<unknown>;
-  listEngineModules(): Promise<EngineModule[]>;
-  uninstallEngineModule(name: string): Promise<{ success: boolean }>;
+/**
+ * Local intersection: Woofx3EngineApi with an extra method the engine
+ * exposes but hasn't made it into the shared interface yet. Retire each
+ * override as the shared surface catches up.
+ */
+interface BrowserEngineApi extends RpcTarget, Woofx3EngineApi {
   setEngineModuleState(name: string, state: string): Promise<{ success: boolean }>;
 }
 
-// The unauthenticated gateway entry point
-interface ApiGateway extends RpcTarget {
-  ping(): Promise<{ status: string }>;
-  authenticate(clientId: string, clientSecret: string): Promise<WoofxRpcApi>;
+/** Gateway over WebSocket — same shape as HTTP batch, different transport. */
+interface BrowserGateway extends RpcTarget, ApiGatewayContract {
+  authenticate(clientId: string, clientSecret: string): Promise<BrowserEngineApi>;
 }
 
 const POLL_INTERVAL_CHAT = 3000;
@@ -75,7 +67,7 @@ export class BrowserTransport implements WoofxTransport {
 
     try {
       const wsUrl = buildWebSocketUrl(url);
-      this.gateway = newWebSocketRpcSession<ApiGateway>(wsUrl) as any;
+      this.gateway = newWebSocketRpcSession<BrowserGateway>(wsUrl) as any;
 
       if (clientId && clientSecret) {
         // Authenticate via gateway — capnweb promise pipelining means
@@ -212,7 +204,7 @@ export class BrowserTransport implements WoofxTransport {
     const result = await this.getApi().getWorkflows({
       accountId: instanceId,
     });
-    return (result.items || []) as Workflow[];
+    return (result?.workflows ?? []) as unknown as Workflow[];
   }
 
   async createWorkflow(
