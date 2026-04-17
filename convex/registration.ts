@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { createGatewaySession } from "./lib/engineInstanceUrl";
+import { createEngineGatewaySession } from "./lib/engineInstanceUrl";
 
 /**
  * Generate a cryptographically random hex string for use as a webhook callback token.
@@ -51,11 +51,11 @@ export const registerInstance = action({
 
     try {
       // Verify engine connectivity (separate HTTP batch — consumed on await)
-      const pingGateway = createGatewaySession(instance.url);
+      const pingGateway = createEngineGatewaySession(instance.url);
       await pingGateway.ping();
 
       // Register as a client (new HTTP batch session — each batch is single-use)
-      const registerGateway = createGatewaySession(instance.url);
+      const registerGateway = createEngineGatewaySession(instance.url);
       const result = await registerGateway.registerClient("woofx3-dashboard", callbackUrl, callbackToken);
 
       console.log(`[registerInstance] Registration successful — clientId=${result.clientId}`);

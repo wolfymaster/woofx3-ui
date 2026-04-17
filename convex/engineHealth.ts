@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { createGatewaySession } from "./lib/engineInstanceUrl";
+import { createEngineGatewaySession } from "./lib/engineInstanceUrl";
 
 /**
  * Ping the woofx3 engine via capnweb gateway.ping() to verify connectivity.
@@ -25,7 +25,7 @@ export const testConnection = action({
     console.log(`[engineHealth] Testing connection to: ${baseUrl}`);
 
     try {
-      const gateway = createGatewaySession(baseUrl);
+      const gateway = createEngineGatewaySession(baseUrl);
       await gateway.ping();
       console.log(`[engineHealth] Connection successful`);
       return { ok: true };
