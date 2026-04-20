@@ -1,4 +1,4 @@
-# Live Stream Control Platform - Design Guidelines
+# woofx3 — Design guidelines
 
 ## Design Approach
 

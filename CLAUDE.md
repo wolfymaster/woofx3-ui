@@ -150,7 +150,7 @@ Always use `bun`/`bunx`, never `npm`/`npx`/`node`.
 
 Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Always use these — never use relative paths that cross directory boundaries.
 
-`@woofx3/api` resolves to a sibling `woofx3` checkout and gives both Convex and client code access to the engine's shared type package (`StreamControlGateway`, `StreamControlApi`, etc.). `convex/lib/engineInstanceUrl.ts` bridges the shared shape into capnweb's proxy typing via `interface EngineApi extends RpcTarget, StreamControlApi {}`. Per-file RPC interfaces (e.g. `WoofxEngineRpc` in `workflowCatalog.ts`) still exist and will be retired as the shared type package catches up to what the engine exposes.
+`@woofx3/api` resolves to a sibling `woofx3` checkout and gives both Convex and client code access to the engine's shared type package (`Woofx3EngineGateway`, `Woofx3EngineApi`, etc.). `convex/lib/engineInstanceUrl.ts` bridges the shared shape into capnweb's proxy typing via `interface EngineApi extends RpcTarget, Woofx3EngineApi {}`. Per-file RPC interfaces (e.g. `WoofxEngineRpc` in `workflowCatalog.ts`) still exist and will be retired as the shared type package catches up to what the engine exposes.
 
 ## Code conventions
 

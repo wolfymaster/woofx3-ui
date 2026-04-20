@@ -1,8 +1,8 @@
-# StreamControl - Live Stream Management Platform
+# woofx3 — Live stream management platform
 
 ## Overview
 
-StreamControl is a professional live stream management platform that provides workflow automation, asset management, scene editing, and module integrations for content creators. The application follows a "Professional Control Plane" design philosophy, blending production control interface patterns (like Premiere Pro and OBS Studio) with modern dashboard design elements.
+woofx3 is a professional live stream management platform that provides workflow automation, asset management, scene editing, and module integrations for content creators. The application follows a "Professional Control Plane" design philosophy, blending production control interface patterns (like Premiere Pro and OBS Studio) with modern dashboard design elements.
 
 The platform enables users to manage streaming workflows, install and configure modules (integrations like Twitch, chat commands), organize media assets, and build broadcast scenes with a visual editor.
 
@@ -33,8 +33,8 @@ Preferred communication style: Simple, everyday language.
 ### API Pattern (Cap'n Web RPC)
 The API uses [capnweb](https://github.com/cloudflare/capnweb) - a JavaScript-native, low-boilerplate RPC system:
 
-- **Shared Types**: `shared/api.ts` defines the `StreamControlApi` interface contract
-- **Server**: `server/api-server.ts` implements `StreamControlApiServer extends RpcTarget`
+- **Shared Types**: `shared/api.ts` defines the `Woofx3EngineApi` interface contract
+- **Server**: engine RPC server implements `Woofx3EngineApi` (via `RpcTarget` / capnweb)
 - **Client**: `client/src/lib/rpc-client.ts` provides typed RPC stubs
 
 Usage on client:

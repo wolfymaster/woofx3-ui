@@ -298,7 +298,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
   const { theme, toggleTheme, preset, presets, setPreset } = useTheme();
 
   const displayName = 'Demo User';
-  const email = 'demo@streamcontrol.io';
+  const email = 'demo@woofx3.io';
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
 
   const content = (

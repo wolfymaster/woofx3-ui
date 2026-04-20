@@ -17,7 +17,7 @@ Convex is the **multi-tenant control plane**: auth, accounts, instances, assets,
 
 Generated API types live in `convex/_generated/`. Follow **`convex/_generated/ai/guidelines.md`** when adding functions.
 
-Shared engine types are imported from the `@woofx3/api` package (resolved via a `tsconfig`/`vite` path alias to a sibling `woofx3` checkout — see `tsconfig.json`, `convex/tsconfig.json`, `vite.config.ts`). `lib/engineInstanceUrl.ts` declares `EngineApi extends RpcTarget & StreamControlApi` so per-file capnweb interfaces can inherit the shared method surface as it grows.
+Shared engine types are imported from the `@woofx3/api` package (resolved via a `tsconfig`/`vite` path alias to a sibling `woofx3` checkout — see `tsconfig.json`, `convex/tsconfig.json`, `vite.config.ts`). `lib/engineInstanceUrl.ts` declares `EngineApi extends RpcTarget & Woofx3EngineApi` so per-file capnweb interfaces can inherit the shared method surface as it grows.
 
 ## HTTP router (`convex/http.ts`)
 
