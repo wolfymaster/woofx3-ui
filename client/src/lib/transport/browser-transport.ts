@@ -165,29 +165,27 @@ export class BrowserTransport implements WoofxTransport {
     return (result?.workflows ?? []) as unknown as Workflow[];
   }
 
-  async createWorkflow(instanceId: string, workflow: CreateWorkflowInput): Promise<Workflow> {
-    const result = await this.getApi().createWorkflow({
-      name: workflow.name,
-      description: workflow.description,
-      accountId: instanceId,
-      isEnabled: workflow.enabled,
-      steps: workflow.steps,
-    });
-    return result as unknown as Workflow;
+  // TODO(part-c): These direct engine calls are deprecated. The UI now routes
+  // workflow mutations through the Convex `workflowActions` action surface
+  // (`createFromDefinition` / `updateFromDefinition` / `deleteByEngineId` /
+  // `setEnabled`), which proxies to the engine and correlates via webhook.
+  // Part C rewrites the BasicEditor and WorkflowBuilder to use those; once
+  // that lands, these methods and the `CreateWorkflowInput` transport type
+  // can be removed entirely.
+  async createWorkflow(_instanceId: string, _workflow: CreateWorkflowInput): Promise<Workflow> {
+    throw new Error(
+      "BrowserTransport.createWorkflow is deprecated; call convex action workflowActions.createFromDefinition instead"
+    );
   }
 
   async updateWorkflow(
     _instanceId: string,
-    workflowId: string,
-    updates: Partial<CreateWorkflowInput>
+    _workflowId: string,
+    _updates: Partial<CreateWorkflowInput>
   ): Promise<Workflow> {
-    const result = await this.getApi().updateWorkflow(workflowId, {
-      name: updates.name,
-      description: updates.description,
-      isEnabled: updates.enabled,
-      steps: updates.steps,
-    });
-    return result as unknown as Workflow;
+    throw new Error(
+      "BrowserTransport.updateWorkflow is deprecated; call convex action workflowActions.updateFromDefinition instead"
+    );
   }
 
   async deleteWorkflow(_instanceId: string, workflowId: string): Promise<void> {

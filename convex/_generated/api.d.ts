@@ -17,6 +17,7 @@ import type * as assets from "../assets.js";
 import type * as auth from "../auth.js";
 import type * as browserSource from "../browserSource.js";
 import type * as chatCommands from "../chatCommands.js";
+import type * as crons from "../crons.js";
 import type * as dashboardLayouts from "../dashboardLayouts.js";
 import type * as engineHealth from "../engineHealth.js";
 import type * as folders from "../folders.js";
@@ -48,8 +49,10 @@ import type * as triggerDefinitions from "../triggerDefinitions.js";
 import type * as twitchAuth from "../twitchAuth.js";
 import type * as users from "../users.js";
 import type * as webhookAuth from "../webhookAuth.js";
+import type * as workflowActions from "../workflowActions.js";
 import type * as workflowCatalog from "../workflowCatalog.js";
 import type * as workflowCatalogContext from "../workflowCatalogContext.js";
+import type * as workflowInternal from "../workflowInternal.js";
 import type * as workflowTemplates from "../workflowTemplates.js";
 import type * as workflows from "../workflows.js";
 
@@ -69,6 +72,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   browserSource: typeof browserSource;
   chatCommands: typeof chatCommands;
+  crons: typeof crons;
   dashboardLayouts: typeof dashboardLayouts;
   engineHealth: typeof engineHealth;
   folders: typeof folders;
@@ -100,8 +104,10 @@ declare const fullApi: ApiFromModules<{
   twitchAuth: typeof twitchAuth;
   users: typeof users;
   webhookAuth: typeof webhookAuth;
+  workflowActions: typeof workflowActions;
   workflowCatalog: typeof workflowCatalog;
   workflowCatalogContext: typeof workflowCatalogContext;
+  workflowInternal: typeof workflowInternal;
   workflowTemplates: typeof workflowTemplates;
   workflows: typeof workflows;
 }>;

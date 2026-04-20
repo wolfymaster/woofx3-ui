@@ -1,25 +1,24 @@
-import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { AlertCircle, ArrowLeft, ArrowRight, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { AlertCircle, ArrowRight, ArrowLeft, Check, Loader2, Sparkles, Plus, Trash2 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { cn } from "@/lib/utils";
-import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { TriggerConfigForm } from "./trigger-config-form";
+import { cn } from "@/lib/utils";
 import {
-  generateWorkflowFromPresets,
-  generateMultiTierWorkflow,
-  getDefaultConfigValues,
-  type TriggerPreset,
   type ActionPreset,
+  generateMultiTierWorkflow,
+  generateWorkflowFromPresets,
+  getDefaultConfigValues,
   type TierConfig,
   type TriggerConfigValues,
+  type TriggerPreset,
 } from "@/lib/workflow-presets";
+import { TriggerConfigForm } from "./trigger-config-form";
 
 interface PresetCardProps<T extends TriggerPreset | ActionPreset> {
   preset: T;
@@ -289,15 +288,9 @@ function VariantActionConfigRow({ tier, trigger, index, onUpdateConfig }: Varian
 }
 
 export function BasicWorkflowEditor() {
-  const [, navigate] = useLocation();
+  const [, _navigate] = useLocation();
   const { toast } = useToast();
-  const {
-    instance,
-    instanceLoading,
-    triggerPresets,
-    actionPresets,
-    loading: catalogLoading,
-  } = useWorkflowCatalog();
+  const { instance, instanceLoading, triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
   const triggerCategoryOrder = useMemo(
     () => Array.from(new Set(triggerPresets.map((t) => t.category))).sort(),
@@ -315,27 +308,19 @@ export function BasicWorkflowEditor() {
   const [actionConfig, setActionConfig] = useState<TriggerConfigValues>({});
   const [tiers, setTiers] = useState<TierConfig[]>([]);
 
+  // TODO(part-c): Rewrite to call convex `workflowActions.createFromDefinition`
+  // with the canonical WorkflowDefinition derived from the editor's preset
+  // state. The legacy POST /api/workflows REST endpoint was removed as part
+  // of the JSON-first refactor (Part B). This mutation is temporarily a
+  // no-op that surfaces a toast so the UI still compiles.
   const createWorkflow = useMutation({
-    mutationFn: async (data: { name: string; description: string; nodes: any[]; edges: any[] }) => {
-      const response = await apiRequest("POST", "/api/workflows", {
-        ...data,
-        accountId: "account-1",
-        isEnabled: true,
-      });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/workflows"] });
-      toast({
-        title: "Workflow created!",
-        description: "Your new workflow is ready to use.",
-      });
-      navigate(`/workflows/${data.id}`);
+    mutationFn: async (_data: { name: string; description: string; nodes: unknown[]; edges: unknown[] }) => {
+      throw new Error("Create workflow is disabled until Part C of the JSON-first refactor lands");
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to create workflow. Please try again.",
+        title: "Create temporarily unavailable",
+        description: "The workflow editor is being migrated to the JSON-first engine contract.",
         variant: "destructive",
       });
     },

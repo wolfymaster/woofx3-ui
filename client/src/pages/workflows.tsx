@@ -1,38 +1,23 @@
-import { useState } from 'react';
-import { useQuery as useConvexQuery, useMutation as useConvexMutation } from 'convex/react';
-import { useLocation } from 'wouter';
+import { api } from "@convex/_generated/api";
+import type { Doc, Id } from "@convex/_generated/dataModel";
+import { useQuery as useConvexQuery } from "convex/react";
 import {
+  BookTemplate,
+  CheckCircle2,
+  Copy,
+  Edit3,
+  Loader2,
+  MoreHorizontal,
   Plus,
   Search,
-  MoreHorizontal,
-  Copy,
   Trash2,
-  Edit3,
   Workflow as WorkflowIcon,
   Zap,
-  CheckCircle2,
-  Loader2,
-  BookTemplate,
-} from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+} from "lucide-react";
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { EmptyState } from "@/components/common/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,23 +27,47 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog';
-import { PageHeader } from '@/components/layout/page-header';
-import { EmptyState } from '@/components/common/empty-state';
-import { cn } from '@/lib/utils';
-import { useInstance } from '@/hooks/use-instance';
-import { api } from '@convex/_generated/api';
-import type { Doc, Id } from '@convex/_generated/dataModel';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { useInstance } from "@/hooks/use-instance";
+import { cn } from "@/lib/utils";
+
+// TODO(part-c): This page pre-dates the JSON-first workflow refactor; the
+// Convex row no longer carries `name`/`description`/`nodes` directly — those
+// live inside `definition`. Part C will rewrite this screen to read the
+// canonical WorkflowDefinition. Until then we project a legacy-shape view
+// over the stored definition so the existing markup continues to compile.
+type LegacyWorkflowView = Omit<Doc<"workflows">, "nodes"> & {
+  name: string;
+  description?: string;
+  nodes: unknown[];
+};
+
+function toLegacyView(workflow: Doc<"workflows">): LegacyWorkflowView {
+  const def = (workflow.definition ?? {}) as { name?: string; description?: string };
+  return {
+    ...workflow,
+    name: def.name ?? "Untitled workflow",
+    description: def.description,
+    nodes: workflow.nodes ?? [],
+  };
+}
 
 interface WorkflowCardProps {
-  workflow: Doc<"workflows">;
+  workflow: LegacyWorkflowView;
   onToggle: (id: Id<"workflows">, enabled: boolean) => void;
   onEdit: (id: Id<"workflows">) => void;
   onDuplicate: (id: Id<"workflows">) => void;
@@ -78,10 +87,12 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
       <CardContent className="pt-6">
         <div className="flex items-start justify-between gap-4 mb-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div className={cn(
-              'h-10 w-10 rounded-lg flex items-center justify-center shrink-0',
-              workflow.isEnabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
-            )}>
+            <div
+              className={cn(
+                "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
+                workflow.isEnabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+              )}
+            >
               <WorkflowIcon className="h-5 w-5" />
             </div>
             <div className="flex-1 min-w-0">
@@ -90,9 +101,7 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
                   {workflow.name}
                 </h3>
               </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">
-                {workflow.description ?? ''}
-              </p>
+              <p className="text-sm text-muted-foreground line-clamp-2">{workflow.description ?? ""}</p>
             </div>
           </div>
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -141,9 +150,7 @@ function WorkflowCard({ workflow, onToggle, onEdit, onDuplicate, onDelete, isTog
           </div>
           <div className="flex items-center gap-1.5 text-sm">
             <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <span className="font-medium text-muted-foreground">
-              {workflow.isEnabled ? 'Active' : 'Inactive'}
-            </span>
+            <span className="font-medium text-muted-foreground">{workflow.isEnabled ? "Active" : "Inactive"}</span>
           </div>
         </div>
       </CardContent>
@@ -192,11 +199,11 @@ function TemplatePickerDialog({
   const templates = useConvexQuery(api.workflowTemplates.list, {}) as WorkflowTemplate[] | undefined;
 
   const triggerEmoji: Record<string, string> = {
-    follow: '👤',
-    subscribe: '⭐',
-    bits: '💎',
-    raid: '🚨',
-    gift: '🎁',
+    follow: "👤",
+    subscribe: "⭐",
+    bits: "💎",
+    raid: "🚨",
+    gift: "🎁",
   };
 
   return (
@@ -204,15 +211,11 @@ function TemplatePickerDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>From Template</DialogTitle>
-          <DialogDescription>
-            Choose a Twitch event template to pre-populate your workflow.
-          </DialogDescription>
+          <DialogDescription>Choose a Twitch event template to pre-populate your workflow.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2 mt-2">
           {templates === undefined ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-16 w-full" />
-            ))
+            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
           ) : templates.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">No templates available.</p>
           ) : (
@@ -220,10 +223,13 @@ function TemplatePickerDialog({
               <button
                 key={t._id}
                 className="w-full text-left p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                onClick={() => { onSelect(t); onOpenChange(false); }}
+                onClick={() => {
+                  onSelect(t);
+                  onOpenChange(false);
+                }}
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-2xl">{triggerEmoji[t.trigger] ?? '⚡'}</span>
+                  <span className="text-2xl">{triggerEmoji[t.trigger] ?? "⚡"}</span>
                   <div>
                     <p className="font-medium text-sm">{t.name}</p>
                     <p className="text-xs text-muted-foreground">{t.description}</p>
@@ -241,33 +247,49 @@ function TemplatePickerDialog({
 export default function Workflows() {
   const [, navigate] = useLocation();
   const { instance } = useInstance();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
-  const workflows = useConvexQuery(api.workflows.list, instance ? { instanceId: instance._id } : "skip");
-  const isLoading = workflows === undefined;
+  const workflowDocs = useConvexQuery(api.workflows.list, instance ? { instanceId: instance._id } : "skip");
+  const isLoading = workflowDocs === undefined;
+  const workflows = (workflowDocs ?? []).map(toLegacyView);
 
-  const updateWorkflow = useConvexMutation(api.workflows.update);
-  const removeWorkflow = useConvexMutation(api.workflows.remove);
-  const createWorkflow = useConvexMutation(api.workflows.create);
+  // TODO(part-c): Wire these to the new workflowActions CRUD surface. Until
+  // Part C rewrites this page, toggling/duplicating/removing from the list
+  // surface is a no-op that reports the feature as temporarily unavailable.
+  const notAvailable = async (): Promise<void> => {
+    throw new Error("Workflow list actions are disabled until Part C of the JSON-first refactor lands");
+  };
+  const updateWorkflow = notAvailable as unknown as (args: {
+    id: Id<"workflows">;
+    isEnabled?: boolean;
+  }) => Promise<void>;
+  const removeWorkflow = notAvailable as unknown as (args: { id: Id<"workflows"> }) => Promise<void>;
+  const createWorkflow = notAvailable as unknown as (args: {
+    instanceId: Id<"instances">;
+    name: string;
+    description?: string;
+    nodes: unknown[];
+    edges: unknown[];
+  }) => Promise<void>;
 
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const filteredWorkflows = (workflows ?? []).filter((w) => {
+  const filteredWorkflows = workflows.filter((w) => {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       if (!w.name.toLowerCase().includes(query) && !w.description?.toLowerCase().includes(query)) {
         return false;
       }
     }
-    if (statusFilter === 'enabled' && !w.isEnabled) {
+    if (statusFilter === "enabled" && !w.isEnabled) {
       return false;
     }
-    if (statusFilter === 'disabled' && w.isEnabled) {
+    if (statusFilter === "disabled" && w.isEnabled) {
       return false;
     }
     return true;
@@ -297,11 +319,14 @@ export default function Workflows() {
       name: `${workflow.name} (Copy)`,
       description: workflow.description,
       nodes: workflow.nodes,
-      edges: workflow.edges,
+      edges: workflow.edges ?? [],
     });
   };
 
-  const handleDelete = (id: Id<"workflows">) => { setDeletingId(id); setDeleteDialogOpen(true); };
+  const handleDelete = (id: Id<"workflows">) => {
+    setDeletingId(id);
+    setDeleteDialogOpen(true);
+  };
 
   const confirmDelete = async () => {
     if (!deletingId) {
@@ -326,8 +351,8 @@ export default function Workflows() {
       instanceId: instance._id,
       name: wf.name ?? template.name,
       description: template.description,
-      nodes: (wf.nodes as Doc<"workflows">["nodes"]) ?? [],
-      edges: (wf.edges as Doc<"workflows">["edges"]) ?? [],
+      nodes: wf.nodes ?? [],
+      edges: wf.edges ?? [],
     });
   };
 
@@ -342,7 +367,7 @@ export default function Workflows() {
               <BookTemplate className="h-4 w-4 mr-2" />
               From Template
             </Button>
-            <Button onClick={() => navigate('/workflows/new')} data-testid="button-new-workflow">
+            <Button onClick={() => navigate("/workflows/new")} data-testid="button-new-workflow">
               <Plus className="h-4 w-4 mr-2" />
               New Workflow
             </Button>
@@ -387,17 +412,17 @@ export default function Workflows() {
           title="No workflows found"
           description={
             (workflows ?? []).length === 0
-              ? 'Create your first workflow to start automating your stream.'
-              : 'Try adjusting your search or filters.'
+              ? "Create your first workflow to start automating your stream."
+              : "Try adjusting your search or filters."
           }
           action={{
-            label: (workflows ?? []).length === 0 ? 'Create Workflow' : 'Clear Filters',
+            label: (workflows ?? []).length === 0 ? "Create Workflow" : "Clear Filters",
             onClick: () => {
               if ((workflows ?? []).length === 0) {
-                navigate('/workflows/new');
+                navigate("/workflows/new");
               } else {
-                setSearchQuery('');
-                setStatusFilter('all');
+                setSearchQuery("");
+                setStatusFilter("all");
               }
             },
           }}
