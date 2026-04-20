@@ -24,7 +24,7 @@ export interface ChatMessage {
 
 export interface StreamEvent {
   id: string;
-  type: 'follow' | 'subscribe' | 'gift' | 'bits' | 'raid' | 'cheer' | 'custom';
+  type: "follow" | "subscribe" | "gift" | "bits" | "raid" | "cheer" | "custom";
   userId?: string;
   username?: string;
   amount?: number;
@@ -38,7 +38,7 @@ export interface WorkflowRun {
   id: string;
   workflowId: string;
   workflowName: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
   startedAt: Date;
   completedAt?: Date;
   triggeredBy?: string;
@@ -73,14 +73,6 @@ export interface WorkflowStep {
   async?: boolean;
 }
 
-export interface CreateWorkflowInput {
-  name: string;
-  description?: string;
-  enabled?: boolean;
-  steps: WorkflowStep[];
-  variables?: Record<string, string>;
-}
-
 export interface EngineModule {
   name: string;
   version: string;
@@ -98,28 +90,18 @@ export interface WoofxTransport {
 
   // Chat
   sendChatMessage(instanceId: string, message: string): Promise<void>;
-  subscribeChatMessages(
-    instanceId: string,
-    callback: (msg: ChatMessage) => void
-  ): () => void;
+  subscribeChatMessages(instanceId: string, callback: (msg: ChatMessage) => void): () => void;
 
   // Stream events
-  subscribeStreamEvents(
-    instanceId: string,
-    callback: (event: StreamEvent) => void
-  ): () => void;
+  subscribeStreamEvents(instanceId: string, callback: (event: StreamEvent) => void): () => void;
 
   // Workflow runs
-  subscribeWorkflowRuns(
-    instanceId: string,
-    callback: (run: WorkflowRun) => void
-  ): () => void;
+  subscribeWorkflowRuns(instanceId: string, callback: (run: WorkflowRun) => void): () => void;
 
-  // Workflow CRUD
+  // Workflow read / ad-hoc execute only. Create/update/delete now go through
+  // the Convex `workflowActions` surface (createFromDefinition, etc.) — the
+  // engine mints ids and webhook-echoes state back to Convex.
   getWorkflows(instanceId: string): Promise<Workflow[]>;
-  createWorkflow(instanceId: string, workflow: CreateWorkflowInput): Promise<Workflow>;
-  updateWorkflow(instanceId: string, workflowId: string, updates: Partial<CreateWorkflowInput>): Promise<Workflow>;
-  deleteWorkflow(instanceId: string, workflowId: string): Promise<void>;
   executeWorkflow(instanceId: string, workflowId: string): Promise<string>;
 
   // Module state (runtime data owned by woofx3)

@@ -7,14 +7,13 @@
 // and Rust commands defined in src-tauri/src/main.rs
 
 import type {
-  WoofxTransport,
-  StreamStatus,
   ChatMessage,
-  StreamEvent,
-  WorkflowRun,
-  Workflow,
-  CreateWorkflowInput,
   EngineModule,
+  StreamEvent,
+  StreamStatus,
+  WoofxTransport,
+  Workflow,
+  WorkflowRun,
 } from "./interface";
 
 export class TauriTransport implements WoofxTransport {
@@ -42,54 +41,23 @@ export class TauriTransport implements WoofxTransport {
     throw new Error("TauriTransport not yet implemented");
   }
 
-  subscribeChatMessages(
-    instanceId: string,
-    callback: (msg: ChatMessage) => void
-  ): () => void {
+  subscribeChatMessages(instanceId: string, callback: (msg: ChatMessage) => void): () => void {
     // TODO: Tauri event listener on 'chat-message' events emitted from Rust
     throw new Error("TauriTransport not yet implemented");
   }
 
-  subscribeStreamEvents(
-    instanceId: string,
-    callback: (event: StreamEvent) => void
-  ): () => void {
+  subscribeStreamEvents(instanceId: string, callback: (event: StreamEvent) => void): () => void {
     // TODO: Tauri event listener on 'stream-event' events
     throw new Error("TauriTransport not yet implemented");
   }
 
-  subscribeWorkflowRuns(
-    instanceId: string,
-    callback: (run: WorkflowRun) => void
-  ): () => void {
+  subscribeWorkflowRuns(instanceId: string, callback: (run: WorkflowRun) => void): () => void {
     // TODO: Tauri event listener on 'workflow-run' events
     throw new Error("TauriTransport not yet implemented");
   }
 
   async getWorkflows(instanceId: string): Promise<Workflow[]> {
     // TODO: invoke('get_workflows', { instanceId })
-    throw new Error("TauriTransport not yet implemented");
-  }
-
-  async createWorkflow(
-    instanceId: string,
-    workflow: CreateWorkflowInput
-  ): Promise<Workflow> {
-    // TODO: invoke('create_workflow', { instanceId, workflow })
-    throw new Error("TauriTransport not yet implemented");
-  }
-
-  async updateWorkflow(
-    instanceId: string,
-    workflowId: string,
-    updates: Partial<CreateWorkflowInput>
-  ): Promise<Workflow> {
-    // TODO: invoke('update_workflow', { instanceId, workflowId, updates })
-    throw new Error("TauriTransport not yet implemented");
-  }
-
-  async deleteWorkflow(instanceId: string, workflowId: string): Promise<void> {
-    // TODO: invoke('delete_workflow', { instanceId, workflowId })
     throw new Error("TauriTransport not yet implemented");
   }
 
