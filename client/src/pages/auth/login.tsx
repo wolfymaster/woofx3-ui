@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
+const CONVEX_SITE_URL =
+  (import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ??
+  (import.meta.env.VITE_CONVEX_URL as string).replace(/\.convex\.cloud$/, ".convex.site");
+
 function getLoginNextPath(): string {
   if (typeof window === "undefined") {
     return "/";
@@ -27,15 +31,11 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleTwitchLogin() {
+  function handleTwitchLogin() {
     setError(null);
     setIsLoading(true);
-    try {
-      await signIn("twitch", { redirectTo: getLoginNextPath() });
-    } catch {
-      setError("Failed to connect with Twitch. Please try again.");
-      setIsLoading(false);
-    }
+    const redirectTo = encodeURIComponent(getLoginNextPath());
+    window.location.href = `${CONVEX_SITE_URL}/api/auth/twitch/start?redirect_to=${redirectTo}`;
   }
 
   async function handlePasswordLogin(e: React.FormEvent) {

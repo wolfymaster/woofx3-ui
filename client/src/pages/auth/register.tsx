@@ -8,6 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
+const CONVEX_SITE_URL =
+  (import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ??
+  (import.meta.env.VITE_CONVEX_URL as string).replace(/\.convex\.cloud$/, ".convex.site");
+
 export default function Register() {
   const [, navigate] = useLocation();
   const { signIn } = useAuthActions();
@@ -17,15 +21,11 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleTwitchRegister() {
+  function handleTwitchRegister() {
     setError(null);
     setIsLoading(true);
-    try {
-      await signIn("twitch", { redirectTo: "/auth/onboarding" });
-    } catch {
-      setError("Failed to connect with Twitch. Please try again.");
-      setIsLoading(false);
-    }
+    const redirectTo = encodeURIComponent("/auth/onboarding");
+    window.location.href = `${CONVEX_SITE_URL}/api/auth/twitch/start?redirect_to=${redirectTo}`;
   }
 
   async function handleRegister(e: React.FormEvent) {

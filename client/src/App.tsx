@@ -15,6 +15,7 @@ import Login from "@/pages/auth/login";
 import AcceptInvite from "@/pages/auth/accept-invite";
 import Onboarding from "@/pages/auth/onboarding";
 import Register from "@/pages/auth/register";
+import TwitchCallback from "@/pages/auth/twitch-callback";
 import Dashboard from "@/pages/dashboard";
 import ModuleDetail from "@/pages/module-detail";
 import ModuleInstall from "@/pages/module-install";
@@ -53,7 +54,9 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
-      navigate("/auth/login");
+      const current = window.location.pathname + window.location.search;
+      const nextParam = current === "/" ? "" : `?next=${encodeURIComponent(current)}`;
+      navigate(`/auth/login${nextParam}`);
     }
   }, [isAuthenticated, isLoading, navigate]);
 
@@ -96,6 +99,7 @@ function AppRoutes() {
       {/* Auth routes — accessible without authentication */}
       <Route path="/auth/login" component={Login} />
       <Route path="/auth/register" component={Register} />
+      <Route path="/auth/twitch/callback" component={TwitchCallback} />
       <Route path="/auth/accept-invite" component={AcceptInvite} />
       <Route path="/auth/onboarding">
         <AuthGuard>
