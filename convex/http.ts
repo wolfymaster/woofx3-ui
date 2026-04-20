@@ -1,6 +1,6 @@
-import { httpRouter } from "convex/server";
 import type { CallbackEnvelope } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
+import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
@@ -342,6 +342,39 @@ http.route({
           triggers: [],
           actions: event.actions,
         });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WORKFLOW_CREATED:
+      case EngineEventType.WORKFLOW_UPDATED: {
+        await ctx.runMutation(internal.workflowInternal.upsertFromWebhook, {
+          instanceId: instance._id,
+          applicationId: event.applicationId,
+          engineWorkflowId: event.workflow.id,
+          definition: event.workflow.definition,
+          isEnabled: event.workflow.isEnabled,
+        });
+        if (event.correlationKey) {
+          await ctx.runMutation(internal.workflowInternal.resolveCorrelation, {
+            correlationKey: event.correlationKey,
+            engineWorkflowId: event.workflow.id,
+            op: event.type === EngineEventType.WORKFLOW_CREATED ? "create" : "update",
+          });
+        }
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WORKFLOW_DELETED: {
+        await ctx.runMutation(internal.workflowInternal.deleteFromWebhook, {
+          instanceId: instance._id,
+          engineWorkflowId: event.workflowId,
+        });
+        if (event.correlationKey) {
+          await ctx.runMutation(internal.workflowInternal.resolveCorrelationForDelete, {
+            correlationKey: event.correlationKey,
+            engineWorkflowId: event.workflowId,
+          });
+        }
         return corsJson({ success: true, type: event.type });
       }
 
