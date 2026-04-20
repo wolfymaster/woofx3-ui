@@ -223,20 +223,40 @@ export default defineSchema({
     workflowJson: v.any(),
   }),
 
-  // workflows: UI workflow state per instance (nodes/edges for visual editor)
+  // workflows: Convex-side mirror of canonical engine WorkflowDefinition, plus
+  // an optional ReactFlow projection cache (nodes/edges) derived in the browser.
   workflows: defineTable({
     instanceId: v.id("instances"),
-    engineWorkflowId: v.optional(v.string()), // ID from woofx3 engine after sync
-    name: v.string(),
-    description: v.optional(v.string()),
+    applicationId: v.string(),
+    engineWorkflowId: v.string(),
+    definition: v.any(), // WorkflowDefinition; enforced in code
     isEnabled: v.boolean(),
-    nodes: v.array(v.any()), // ReactFlow node objects
-    edges: v.array(v.any()), // ReactFlow edge objects
+    nodes: v.optional(v.array(v.any())),
+    edges: v.optional(v.array(v.any())),
+    projectionUpdatedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_instance", ["instanceId"])
-    .index("by_engine_id", ["engineWorkflowId"]),
+    .index("by_engine_id", ["instanceId", "engineWorkflowId"]),
+
+  // pendingWorkflowOperations: correlation records awaiting a webhook echo
+  pendingWorkflowOperations: defineTable({
+    correlationKey: v.string(),
+    instanceId: v.id("instances"),
+    op: v.union(v.literal("create"), v.literal("update"), v.literal("delete")),
+    expiresAt: v.number(),
+  })
+    .index("by_correlation", ["correlationKey"])
+    .index("by_expiry", ["expiresAt"]),
+
+  // completedWorkflowOperations: webhook-confirmed outcomes keyed by correlationKey
+  completedWorkflowOperations: defineTable({
+    correlationKey: v.string(),
+    engineWorkflowId: v.string(),
+    op: v.union(v.literal("create"), v.literal("update"), v.literal("delete")),
+    completedAt: v.number(),
+  }).index("by_correlation", ["correlationKey"]),
 
   // twitchOAuthState: short-lived CSRF state for Twitch OAuth flow
   twitchOAuthState: defineTable({
