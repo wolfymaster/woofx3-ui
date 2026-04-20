@@ -1,6 +1,6 @@
+import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { useMemo } from "react";
-import { api } from "@convex/_generated/api";
 import { useInstance } from "@/hooks/use-instance";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { ActionPreset, ConfigField, FieldType, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
@@ -38,9 +38,7 @@ function normalizeConfigFields(raw: unknown): ConfigField[] {
       max: typeof o.max === "number" ? o.max : undefined,
       defaultValue: o.defaultValue,
       mediaType:
-        o.mediaType === "image" || o.mediaType === "audio" || o.mediaType === "video"
-          ? o.mediaType
-          : undefined,
+        o.mediaType === "image" || o.mediaType === "audio" || o.mediaType === "video" ? o.mediaType : undefined,
     };
     if (Array.isArray(o.options)) {
       field.options = o.options
@@ -49,7 +47,7 @@ function normalizeConfigFields(raw: unknown): ConfigField[] {
             !!opt &&
             typeof opt === "object" &&
             typeof (opt as { value?: unknown }).value === "string" &&
-            typeof (opt as { label?: unknown }).label === "string",
+            typeof (opt as { label?: unknown }).label === "string"
         )
         .map((opt) => ({ value: opt.value, label: opt.label }));
     }
@@ -100,6 +98,7 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
     icon,
     category: row.category,
     color: row.color,
+    event: row.event,
     config,
   };
 }
@@ -120,10 +119,7 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
 
 export function useWorkflowCatalog() {
   const { instance, isLoading: instanceLoading } = useInstance();
-  const raw = useQuery(
-    api.workflowCatalog.get,
-    instance ? { instanceId: instance._id } : "skip",
-  );
+  const raw = useQuery(api.workflowCatalog.get, instance ? { instanceId: instance._id } : "skip");
 
   const triggers = (raw?.triggers ?? []) as CatalogTriggerRow[];
   const actions = (raw?.actions ?? []) as CatalogActionRow[];

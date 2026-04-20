@@ -1,9 +1,5 @@
+import type { ConfigField, ConfigFieldType, TriggerConfig } from "@woofx3/api/ui-schema";
 import type { LucideIcon } from "lucide-react";
-import type {
-  ConfigField,
-  ConfigFieldType,
-  TriggerConfig,
-} from "@woofx3/api/ui-schema";
 
 // ConfigField / TriggerConfig are the shared parsed shape of configSchema.
 // Re-export them here so UI code keeps the same import site; additional
@@ -29,6 +25,12 @@ export interface TriggerPreset {
   icon: LucideIcon;
   category: string;
   color: string;
+  /**
+   * Engine event type this trigger fires on (e.g. "cheer.user.twitch"). Required
+   * to build canonical WorkflowDefinition JSON from a preset; surfaced from
+   * the Convex catalog via `useWorkflowCatalog`.
+   */
+  event?: string;
   config?: TriggerConfig;
 }
 
@@ -89,115 +91,7 @@ export function formatConfigValue(value: ConfigValue | number | string | boolean
   return `${value}${unit ? ` ${unit}` : ""}`;
 }
 
-export function generateWorkflowFromPresets(
-  trigger: TriggerPreset,
-  action: ActionPreset,
-  triggerConfig?: TriggerConfigValues,
-  actionConfig?: TriggerConfigValues,
-): { name: string; description: string; nodes: any[]; edges: any[] } {
-  const name = `${trigger.name} \u2192 ${action.name}`;
-  const description = `When ${trigger.description.toLowerCase()}, ${action.description.toLowerCase()}.`;
-
-  const nodes = [
-    {
-      id: "trigger-node",
-      type: "trigger",
-      position: { x: 100, y: 100 },
-      data: {
-        label: trigger.name,
-        triggerId: trigger.id,
-        category: trigger.category,
-        config: triggerConfig || {},
-      },
-    },
-    {
-      id: "action-node",
-      type: "action",
-      position: { x: 400, y: 100 },
-      data: {
-        label: action.name,
-        actionId: action.id,
-        category: action.category,
-        config: actionConfig || {},
-      },
-    },
-  ];
-
-  const edges = [
-    {
-      id: "edge-1",
-      source: "trigger-node",
-      target: "action-node",
-      type: "smoothstep",
-    },
-  ];
-
-  return { name, description, nodes, edges };
-}
-
-export function generateMultiTierWorkflow(
-  trigger: TriggerPreset,
-  tiers: TierConfig[],
-): { name: string; description: string; nodes: any[]; edges: any[] } {
-  const tierLabels = tiers.map((t) => {
-    const amount = t.values.amount as ConfigValue;
-    if (amount?.type === "range") {
-      return `${amount.min}-${amount.max}`;
-    }
-    return amount?.value?.toString() || "?";
-  });
-
-  const name = `${trigger.name} Automation (${tierLabels.join(", ")} ${trigger.config?.tierLabel || ""})`;
-  const description = `Multi-tier ${trigger.name.toLowerCase()} automation with ${tiers.length} trigger${tiers.length > 1 ? "s" : ""}.`;
-
-  const nodes: any[] = [];
-  const edges: any[] = [];
-  const ySpacing = 140;
-
-  tiers.forEach((tier, index) => {
-    const yPos = 100 + index * ySpacing;
-    const triggerId = `trigger-node-${index}`;
-    const actionId = `action-node-${index}`;
-
-    const amount = tier.values.amount as ConfigValue;
-    const labelSuffix =
-      amount?.type === "range"
-        ? `${amount.min}-${amount.max} ${trigger.config?.tierLabel || ""}`
-        : `${amount?.value || "?"} ${trigger.config?.tierLabel || ""}`;
-
-    nodes.push({
-      id: triggerId,
-      type: "trigger",
-      position: { x: 100, y: yPos },
-      data: {
-        label: `${trigger.name} (${labelSuffix})`,
-        triggerId: trigger.id,
-        category: trigger.category,
-        config: tier.values,
-      },
-    });
-
-    if (tier.action) {
-      nodes.push({
-        id: actionId,
-        type: "action",
-        position: { x: 450, y: yPos },
-        data: {
-          label: tier.action.name,
-          actionId: tier.action.id,
-          category: tier.action.category,
-          config: tier.actionConfig,
-        },
-      });
-
-      edges.push({
-        id: `edge-${index}`,
-        source: triggerId,
-        target: actionId,
-        type: "smoothstep",
-      });
-    }
-  });
-
-  return { name, description, nodes, edges };
-}
+// Canonical WorkflowDefinition generation lives in workflow-presets-json.ts.
+// The legacy ReactFlow-shaped generators were removed as part of the JSON-first
+// refactor — the engine is now the authority for workflow structure and mints
+// its own ids on creation.
