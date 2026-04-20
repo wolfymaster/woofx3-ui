@@ -1,7 +1,71 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
+
+async function enableTriggerForInstance(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  triggerId: string,
+) {
+  const existing = await ctx.db
+    .query("instanceEnabledTriggers")
+    .withIndex("by_instance_trigger", (q) =>
+      q.eq("instanceId", instanceId).eq("triggerId", triggerId),
+    )
+    .first();
+  if (!existing) {
+    await ctx.db.insert("instanceEnabledTriggers", { instanceId, triggerId });
+  }
+}
+
+async function enableActionForInstance(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  actionId: string,
+) {
+  const existing = await ctx.db
+    .query("instanceEnabledActions")
+    .withIndex("by_instance_action", (q) =>
+      q.eq("instanceId", instanceId).eq("actionId", actionId),
+    )
+    .first();
+  if (!existing) {
+    await ctx.db.insert("instanceEnabledActions", { instanceId, actionId });
+  }
+}
+
+async function disableTriggerForInstance(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  triggerId: string,
+) {
+  const existing = await ctx.db
+    .query("instanceEnabledTriggers")
+    .withIndex("by_instance_trigger", (q) =>
+      q.eq("instanceId", instanceId).eq("triggerId", triggerId),
+    )
+    .first();
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  }
+}
+
+async function disableActionForInstance(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  actionId: string,
+) {
+  const existing = await ctx.db
+    .query("instanceEnabledActions")
+    .withIndex("by_instance_action", (q) =>
+      q.eq("instanceId", instanceId).eq("actionId", actionId),
+    )
+    .first();
+  if (existing) {
+    await ctx.db.delete(existing._id);
+  }
+}
 
 /*
  * Payload shape for trigger/action definitions inside module.installed and
@@ -229,6 +293,7 @@ export const processModuleInstalled = internalMutation({
       } else {
         await ctx.db.insert("triggerDefinitions", row);
       }
+      await enableTriggerForInstance(ctx, instanceId, row.slug);
     }
 
     for (const action of actions) {
@@ -242,6 +307,7 @@ export const processModuleInstalled = internalMutation({
       } else {
         await ctx.db.insert("actionDefinitions", row);
       }
+      await enableActionForInstance(ctx, instanceId, row.slug);
     }
   },
 });
@@ -259,7 +325,7 @@ export const processRegisteredDefinitions = internalMutation({
     triggers: v.array(triggerValidator),
     actions: v.array(actionValidator),
   },
-  handler: async (ctx, { moduleName, moduleVersion, triggers, actions }) => {
+  handler: async (ctx, { instanceId, moduleName, moduleVersion, triggers, actions }) => {
     // Try to find the module record to link definitions to it
     const record = await ctx.db
       .query("moduleRepository")
@@ -278,6 +344,7 @@ export const processRegisteredDefinitions = internalMutation({
       } else {
         await ctx.db.insert("triggerDefinitions", row);
       }
+      await enableTriggerForInstance(ctx, instanceId, row.slug);
     }
 
     for (const action of actions) {
@@ -291,6 +358,7 @@ export const processRegisteredDefinitions = internalMutation({
       } else {
         await ctx.db.insert("actionDefinitions", row);
       }
+      await enableActionForInstance(ctx, instanceId, row.slug);
     }
   },
 });
@@ -354,6 +422,7 @@ export const processModuleDeleted = internalMutation({
         .withIndex("by_module", (q) => q.eq("moduleId", record._id))
         .collect();
       for (const trigger of triggers) {
+        await disableTriggerForInstance(ctx, instanceId, trigger.slug);
         await ctx.db.delete(trigger._id);
       }
       const actions = await ctx.db
@@ -361,6 +430,7 @@ export const processModuleDeleted = internalMutation({
         .withIndex("by_module", (q) => q.eq("moduleId", record._id))
         .collect();
       for (const action of actions) {
+        await disableActionForInstance(ctx, instanceId, action.slug);
         await ctx.db.delete(action._id);
       }
       await ctx.db.delete(record._id);
