@@ -4,21 +4,17 @@
 // pipelining under the hood). Subscriptions are polling-based since the
 // engine's current Api surface is point-in-time.
 
-import {
-  createEngineBrowserSession,
-  RpcTarget,
-  type EngineBrowserSession,
-} from "@woofx3/api/client";
 import type { Woofx3EngineApi } from "@woofx3/api";
+import { createEngineBrowserSession, type EngineBrowserSession, type RpcTarget } from "@woofx3/api/client";
 import type {
-  WoofxTransport,
-  StreamStatus,
   ChatMessage,
-  StreamEvent,
-  WorkflowRun,
-  Workflow,
   CreateWorkflowInput,
   EngineModule,
+  StreamEvent,
+  StreamStatus,
+  WoofxTransport,
+  Workflow,
+  WorkflowRun,
 } from "./interface";
 
 /**
@@ -95,10 +91,7 @@ export class BrowserTransport implements WoofxTransport {
     await this.getApi().sendChatMessage(instanceId, message);
   }
 
-  subscribeChatMessages(
-    instanceId: string,
-    callback: (msg: ChatMessage) => void
-  ): () => void {
+  subscribeChatMessages(instanceId: string, callback: (msg: ChatMessage) => void): () => void {
     const api = this.session?.api;
     if (!api) {
       return () => {};
@@ -108,9 +101,7 @@ export class BrowserTransport implements WoofxTransport {
     const interval = setInterval(async () => {
       try {
         const messages = await api.getChatMessages(instanceId, 50);
-        const newMessages = lastId
-          ? messages.filter((m) => m.id > lastId!)
-          : messages;
+        const newMessages = lastId ? messages.filter((m) => m.id > lastId!) : messages;
         if (newMessages.length > 0) {
           lastId = newMessages[newMessages.length - 1].id;
           newMessages.forEach((m) => callback(m as unknown as ChatMessage));
@@ -123,10 +114,7 @@ export class BrowserTransport implements WoofxTransport {
     return () => clearInterval(interval);
   }
 
-  subscribeStreamEvents(
-    instanceId: string,
-    callback: (event: StreamEvent) => void
-  ): () => void {
+  subscribeStreamEvents(instanceId: string, callback: (event: StreamEvent) => void): () => void {
     const api = this.session?.api;
     if (!api) {
       return () => {};
@@ -139,9 +127,7 @@ export class BrowserTransport implements WoofxTransport {
           accountId: instanceId,
           limit: 20,
         });
-        const newEvents = lastId
-          ? events.filter((e) => e.id > lastId!)
-          : events;
+        const newEvents = lastId ? events.filter((e) => e.id > lastId!) : events;
         if (newEvents.length > 0) {
           lastId = newEvents[newEvents.length - 1].id;
           newEvents.forEach((e) => callback(e as unknown as StreamEvent));
@@ -154,10 +140,7 @@ export class BrowserTransport implements WoofxTransport {
     return () => clearInterval(interval);
   }
 
-  subscribeWorkflowRuns(
-    instanceId: string,
-    callback: (run: WorkflowRun) => void
-  ): () => void {
+  subscribeWorkflowRuns(instanceId: string, callback: (run: WorkflowRun) => void): () => void {
     const api = this.session?.api;
     if (!api) {
       return () => {};
@@ -182,10 +165,7 @@ export class BrowserTransport implements WoofxTransport {
     return (result?.workflows ?? []) as unknown as Workflow[];
   }
 
-  async createWorkflow(
-    instanceId: string,
-    workflow: CreateWorkflowInput
-  ): Promise<Workflow> {
+  async createWorkflow(instanceId: string, workflow: CreateWorkflowInput): Promise<Workflow> {
     const result = await this.getApi().createWorkflow({
       name: workflow.name,
       description: workflow.description,
