@@ -58,6 +58,11 @@ export const registerInstance = action({
       // userId is the Convex-authenticated user driving onboarding; the engine
       // stores it so the resulting client record is attributable to a user.
       const registerGateway = createEngineGatewaySession(instance.url);
+      console.log("registerClient args", {
+        userId: [typeof userId, userId],
+        callbackUrl: [typeof callbackUrl, callbackUrl],
+        callbackToken: [typeof callbackToken, callbackToken],
+      });
       const result = await registerGateway.registerClient("woofx3-dashboard", {
         userId,
         callbackUrl,
