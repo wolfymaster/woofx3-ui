@@ -19,7 +19,7 @@ import {
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -509,6 +509,23 @@ export default function WorkflowBuilder() {
     }
     return [...dynamic, ...staticNodeLibraryCategories];
   }, [catalogTriggers, catalogActions]);
+
+  // Push the freshly-derived projection back to Convex once on mount so the
+  // workflow list can render thumbnails without the browser recomputing. Best
+  // effort; if the row hasn't been mirrored yet the mutation no-ops.
+  const hasPushedRef = useRef(false);
+  useEffect(() => {
+    if (!definition || !instanceId || hasPushedRef.current) {
+      return;
+    }
+    hasPushedRef.current = true;
+    void updateProjection({
+      instanceId: instanceId as never,
+      engineWorkflowId: definition.id,
+      nodes: projection.nodes as unknown[],
+      edges: projection.edges as unknown[],
+    }).catch(() => {});
+  }, [definition, instanceId, projection, updateProjection]);
 
   const workflowName = definition?.name ?? workflow?.definition?.name ?? "Workflow";
   const isLoading = workflow === undefined;
