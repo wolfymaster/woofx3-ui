@@ -1,5 +1,5 @@
-import { useAction } from "convex/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useQuery } from "convex/react";
+import { useMemo } from "react";
 import { api } from "@convex/_generated/api";
 import { useInstance } from "@/hooks/use-instance";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
@@ -118,73 +118,26 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
   };
 }
 
-export type WorkflowCatalogEngineMeta =
-  | { status: "ok" }
-  | { status: "error"; message?: string }
-  | { status: "not_implemented" };
-
 export function useWorkflowCatalog() {
   const { instance, isLoading: instanceLoading } = useInstance();
-  const fetchMerged = useAction(api.workflowCatalog.fetchMerged);
-
-  const [raw, setRaw] = useState<{
-    triggers: CatalogTriggerRow[];
-    actions: CatalogActionRow[];
-    engine: WorkflowCatalogEngineMeta;
-  } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!instance) {
-      setRaw(null);
-      setError(null);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await fetchMerged({ instanceId: instance._id });
-      setRaw({
-        triggers: (result.triggers ?? []) as CatalogTriggerRow[],
-        actions: (result.actions ?? []) as CatalogActionRow[],
-        engine: result.engine as WorkflowCatalogEngineMeta,
-      });
-    } catch (e) {
-      setRaw(null);
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [instance, fetchMerged]);
-
-  useEffect(() => {
-    if (!instance?._id) {
-      setRaw(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    void load();
-  }, [instance?._id, load]);
-
-  const triggerPresets = useMemo(
-    () => (raw ? raw.triggers.map(toTriggerPreset) : []),
-    [raw],
+  const raw = useQuery(
+    api.workflowCatalog.get,
+    instance ? { instanceId: instance._id } : "skip",
   );
 
-  const actionPresets = useMemo(() => (raw ? raw.actions.map(toActionPreset) : []), [raw]);
+  const triggers = (raw?.triggers ?? []) as CatalogTriggerRow[];
+  const actions = (raw?.actions ?? []) as CatalogActionRow[];
+
+  const triggerPresets = useMemo(() => triggers.map(toTriggerPreset), [triggers]);
+  const actionPresets = useMemo(() => actions.map(toActionPreset), [actions]);
 
   return {
     instance,
     instanceLoading,
     triggerPresets,
     actionPresets,
-    catalogTriggers: raw?.triggers ?? [],
-    catalogActions: raw?.actions ?? [],
-    engine: raw?.engine ?? null,
-    loading,
-    error,
-    refresh: load,
+    catalogTriggers: triggers,
+    catalogActions: actions,
+    loading: instanceLoading || (!!instance && raw === undefined),
   };
 }

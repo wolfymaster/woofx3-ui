@@ -1,65 +1,15 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import { action, internalMutation, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import type { CatalogBundle } from "./workflowCatalogContext";
 import { loadCatalogBundle } from "./workflowCatalogContext";
 
-function asObjectArray(value: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value.filter((item): item is Record<string, unknown> => item !== null && typeof item === "object");
-}
-
-function technicalTriggerId(row: Record<string, unknown>): string | null {
-  const a = row.id;
-  if (typeof a === "string" && a.length > 0) {
-    return a;
-  }
-  const b = row.trigger_id;
-  if (typeof b === "string" && b.length > 0) {
-    return b;
-  }
-  return null;
-}
-
-function technicalActionId(row: Record<string, unknown>): string | null {
-  const a = row.id;
-  if (typeof a === "string" && a.length > 0) {
-    return a;
-  }
-  const b = row.action_id;
-  if (typeof b === "string" && b.length > 0) {
-    return b;
-  }
-  return null;
-}
-
-function byTechnicalId(
-  rows: Record<string, unknown>[],
-  idFn: (row: Record<string, unknown>) => string | null,
-): Map<string, Record<string, unknown>> {
-  const map = new Map<string, Record<string, unknown>>();
-  for (const row of rows) {
-    const id = idFn(row);
-    if (id) {
-      map.set(id, row);
-    }
-  }
-  return map;
-}
-
-function catalogTriggerRow(
-  def: Doc<"triggerDefinitions">,
-  id: string,
-  technical: Record<string, unknown> | null,
-) {
+function catalogTriggerRow(def: Doc<"triggerDefinitions">, id: string) {
   return {
     id,
-    technical,
     name: def.name,
     description: def.description,
     category: def.category,
@@ -74,14 +24,9 @@ function catalogTriggerRow(
   };
 }
 
-function catalogActionRow(
-  def: Doc<"actionDefinitions">,
-  id: string,
-  technical: Record<string, unknown> | null,
-) {
+function catalogActionRow(def: Doc<"actionDefinitions">, id: string) {
   return {
     id,
-    technical,
     name: def.name,
     description: def.description,
     category: def.category,
@@ -92,39 +37,19 @@ function catalogActionRow(
   };
 }
 
-type MergedCatalogRowTrigger = ReturnType<typeof catalogTriggerRow>;
-type MergedCatalogRowAction = ReturnType<typeof catalogActionRow>;
-type MergedCatalogEngineMeta = { status: "ok" | "error" | "not_implemented"; message?: string };
-
 type MergedCatalogResponse = {
-  triggers: MergedCatalogRowTrigger[];
-  actions: MergedCatalogRowAction[];
-  engine: MergedCatalogEngineMeta;
+  triggers: ReturnType<typeof catalogTriggerRow>[];
+  actions: ReturnType<typeof catalogActionRow>[];
 };
 
-function mergeCatalog(
-  bundle: CatalogBundle,
-  engineTriggerMap: Map<string, Record<string, unknown>> | null,
-  engineActionMap: Map<string, Record<string, unknown>> | null,
-  engineMeta: MergedCatalogEngineMeta,
-): MergedCatalogResponse {
-  const strictEngine = engineTriggerMap !== null && engineActionMap !== null;
-
+function mergeCatalog(bundle: CatalogBundle): MergedCatalogResponse {
   const triggers = [];
   for (const id of bundle.enabledTriggerIds) {
     const def = bundle.triggerDefs[id];
     if (!def) {
       continue;
     }
-    let technical: Record<string, unknown> | null = null;
-    if (strictEngine) {
-      const row = engineTriggerMap.get(id);
-      if (!row) {
-        continue;
-      }
-      technical = row;
-    }
-    triggers.push(catalogTriggerRow(def, id, technical));
+    triggers.push(catalogTriggerRow(def, id));
   }
 
   const actions = [];
@@ -133,23 +58,16 @@ function mergeCatalog(
     if (!def) {
       continue;
     }
-    let technical: Record<string, unknown> | null = null;
-    if (strictEngine) {
-      const row = engineActionMap.get(id);
-      if (!row) {
-        continue;
-      }
-      technical = row;
-    }
-    actions.push(catalogActionRow(def, id, technical));
+    actions.push(catalogActionRow(def, id));
   }
 
-  return { triggers, actions, engine: engineMeta };
+  return { triggers, actions };
 }
 
 /**
- * Workflow builder catalog without calling the engine (Convex-only).
- * Use `fetchMerged` when the instance is reachable for technical payloads.
+ * Workflow builder catalog. Convex is the UI's source of truth — kept in sync
+ * with the engine via module webhook callbacks (module.installed / module.deleted
+ * / module.trigger.registered / module.action.registered).
  */
 export const get = query({
   args: { instanceId: v.id("instances") },
@@ -164,56 +82,7 @@ export const get = query({
       return null;
     }
 
-    return mergeCatalog(bundle, null, null, { status: "not_implemented" });
-  },
-});
-
-/**
- * Full catalog: same join + UI merge as `get`, plus engine `getTriggers` / `getActions` over HTTP batch RPC.
- * When the engine call fails, falls back to UI-only rows (`technical` null) like `get`.
- */
-export const fetchMerged = action({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }): Promise<MergedCatalogResponse> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-
-    const bundle = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, {
-      instanceId,
-      userId,
-    });
-    if (!bundle) {
-      throw new Error("Not authorized or instance not found");
-    }
-
-    let triggerMap: Map<string, Record<string, unknown>> | null = null;
-    let actionMap: Map<string, Record<string, unknown>> | null = null;
-    let engineStatus: "ok" | "error" = "ok";
-    let engineMessage: string | undefined;
-
-    try {
-      if (!bundle.clientId || !bundle.clientSecret) {
-        throw new Error("Instance is not registered with the engine");
-      }
-      const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-      const [rawTriggers, rawActions] = await Promise.all([rpc.getTriggers(), rpc.getActions()]);
-      triggerMap = byTechnicalId(asObjectArray(rawTriggers), technicalTriggerId);
-      actionMap = byTechnicalId(asObjectArray(rawActions), technicalActionId);
-    } catch (e) {
-      engineStatus = "error";
-      engineMessage = e instanceof Error ? e.message : String(e);
-    }
-
-    if (engineStatus === "ok") {
-      return mergeCatalog(bundle, triggerMap, actionMap, { status: "ok" });
-    }
-
-    return mergeCatalog(bundle, null, null, {
-      status: "error",
-      message: engineMessage,
-    });
+    return mergeCatalog(bundle);
   },
 });
 
@@ -243,11 +112,13 @@ export const listWorkflows = action({
       }
       const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
       const result = await rpc.getWorkflows({ accountId: instanceId });
-      return asObjectArray(result?.workflows);
+      const workflows = result?.workflows;
+      if (!Array.isArray(workflows)) {
+        return [];
+      }
+      return workflows as unknown as Record<string, unknown>[];
     } catch (e) {
-      throw new Error(
-        `Failed to load workflows: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      throw new Error(`Failed to load workflows: ${e instanceof Error ? e.message : String(e)}`);
     }
   },
 });
@@ -260,9 +131,7 @@ export const enableTriggerForInstance = internalMutation({
   handler: async (ctx, { instanceId, triggerId }) => {
     const existing = await ctx.db
       .query("instanceEnabledTriggers")
-      .withIndex("by_instance_trigger", (q) =>
-        q.eq("instanceId", instanceId).eq("triggerId", triggerId),
-      )
+      .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
       .first();
     if (existing) {
       return existing._id;
@@ -279,9 +148,7 @@ export const disableTriggerForInstance = internalMutation({
   handler: async (ctx, { instanceId, triggerId }) => {
     const existing = await ctx.db
       .query("instanceEnabledTriggers")
-      .withIndex("by_instance_trigger", (q) =>
-        q.eq("instanceId", instanceId).eq("triggerId", triggerId),
-      )
+      .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
       .first();
     if (existing) {
       await ctx.db.delete(existing._id);
@@ -297,9 +164,7 @@ export const enableActionForInstance = internalMutation({
   handler: async (ctx, { instanceId, actionId }) => {
     const existing = await ctx.db
       .query("instanceEnabledActions")
-      .withIndex("by_instance_action", (q) =>
-        q.eq("instanceId", instanceId).eq("actionId", actionId),
-      )
+      .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
       .first();
     if (existing) {
       return existing._id;
@@ -316,9 +181,7 @@ export const disableActionForInstance = internalMutation({
   handler: async (ctx, { instanceId, actionId }) => {
     const existing = await ctx.db
       .query("instanceEnabledActions")
-      .withIndex("by_instance_action", (q) =>
-        q.eq("instanceId", instanceId).eq("actionId", actionId),
-      )
+      .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
       .first();
     if (existing) {
       await ctx.db.delete(existing._id);
@@ -337,9 +200,7 @@ export const devEnableAllDefinitionsForInstance = internalMutation({
     for (const d of triggerDefs) {
       const existing = await ctx.db
         .query("instanceEnabledTriggers")
-        .withIndex("by_instance_trigger", (q) =>
-          q.eq("instanceId", instanceId).eq("triggerId", d.slug),
-        )
+        .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", d.slug))
         .first();
       if (!existing) {
         await ctx.db.insert("instanceEnabledTriggers", {
@@ -353,9 +214,7 @@ export const devEnableAllDefinitionsForInstance = internalMutation({
     for (const d of actionDefs) {
       const existing = await ctx.db
         .query("instanceEnabledActions")
-        .withIndex("by_instance_action", (q) =>
-          q.eq("instanceId", instanceId).eq("actionId", d.slug),
-        )
+        .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", d.slug))
         .first();
       if (!existing) {
         await ctx.db.insert("instanceEnabledActions", {

@@ -203,12 +203,10 @@ const initialEdges: Edge[] = [
 interface NodeLibraryProps {
   categories: NodeLibraryCategory[];
   catalogLoading: boolean;
-  catalogError: string | null;
-  onRetryCatalog: () => void;
   onDragStart: (event: React.DragEvent, nodeType: string, data: Partial<NodeData>) => void;
 }
 
-function NodeLibrary({ categories, catalogLoading, catalogError, onRetryCatalog, onDragStart }: NodeLibraryProps) {
+function NodeLibrary({ categories, catalogLoading, onDragStart }: NodeLibraryProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredCategories = useMemo(() => {
@@ -233,19 +231,6 @@ function NodeLibrary({ categories, catalogLoading, catalogError, onRetryCatalog,
   return (
     <div className="w-60 bg-sidebar border-r border-sidebar-border flex flex-col">
       <div className="p-3 border-b border-sidebar-border space-y-2">
-        {catalogError && (
-          <div className="rounded-md border border-destructive/50 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
-            <p className="font-medium">Catalog</p>
-            <p className="opacity-90 line-clamp-2">{catalogError}</p>
-            <button
-              type="button"
-              onClick={() => void onRetryCatalog()}
-              className="mt-1 text-primary underline underline-offset-2"
-            >
-              Retry
-            </button>
-          </div>
-        )}
         {catalogLoading && (
           <p className="text-xs text-muted-foreground">Loading instance catalog…</p>
         )}
@@ -432,8 +417,7 @@ function NodeInspector({ node, onClose, onUpdate }: NodeInspectorProps) {
 export default function WorkflowBuilder() {
   useRoute('/workflows/:id');
   const [, navigate] = useLocation();
-  const { catalogTriggers, catalogActions, loading: catalogLoading, error: catalogError, refresh } =
-    useWorkflowCatalog();
+  const { catalogTriggers, catalogActions, loading: catalogLoading } = useWorkflowCatalog();
 
   const nodeLibraryCategories = useMemo((): NodeLibraryCategory[] => {
     const dynamic: NodeLibraryCategory[] = [];
@@ -573,8 +557,6 @@ export default function WorkflowBuilder() {
         <NodeLibrary
           categories={nodeLibraryCategories}
           catalogLoading={catalogLoading}
-          catalogError={catalogError}
-          onRetryCatalog={refresh}
           onDragStart={onDragStart}
         />
         

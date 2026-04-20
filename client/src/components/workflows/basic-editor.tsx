@@ -296,10 +296,7 @@ export function BasicWorkflowEditor() {
     instanceLoading,
     triggerPresets,
     actionPresets,
-    engine,
     loading: catalogLoading,
-    error: catalogError,
-    refresh,
   } = useWorkflowCatalog();
 
   const triggerCategoryOrder = useMemo(
@@ -523,7 +520,7 @@ export function BasicWorkflowEditor() {
     );
   }
 
-  if (catalogLoading && !catalogError && triggerPresets.length === 0 && actionPresets.length === 0) {
+  if (catalogLoading && triggerPresets.length === 0 && actionPresets.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground max-w-4xl mx-auto">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -541,19 +538,6 @@ export function BasicWorkflowEditor() {
         </div>
         <p className="text-muted-foreground">{stepDescriptions[step]}</p>
       </div>
-
-      {catalogError && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Catalog unavailable</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>{catalogError}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => void refresh()}>
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
 
       <StepIndicator currentStep={step} hasTriggerConfig={hasTriggerConfig} hasActionConfig={hasActionConfig} />
 
