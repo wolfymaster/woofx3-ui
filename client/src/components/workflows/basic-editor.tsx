@@ -1,5 +1,8 @@
+import { api } from "@convex/_generated/api";
 import { useMutation } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, ArrowRight, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import type { WorkflowDefinition } from "@woofx3/api";
+import { useAction } from "convex/react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -11,13 +14,12 @@ import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { cn } from "@/lib/utils";
 import {
   type ActionPreset,
-  generateMultiTierWorkflow,
-  generateWorkflowFromPresets,
   getDefaultConfigValues,
   type TierConfig,
   type TriggerConfigValues,
   type TriggerPreset,
 } from "@/lib/workflow-presets";
+import { buildDefinitionFromPresets, buildTieredDefinition } from "@/lib/workflow-presets-json";
 import { TriggerConfigForm } from "./trigger-config-form";
 
 interface PresetCardProps<T extends TriggerPreset | ActionPreset> {
@@ -288,9 +290,11 @@ function VariantActionConfigRow({ tier, trigger, index, onUpdateConfig }: Varian
 }
 
 export function BasicWorkflowEditor() {
-  const [, _navigate] = useLocation();
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const { instance, instanceLoading, triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
+  const instanceId = instance?._id;
+  const createFromDefinition = useAction(api.workflowActions.createFromDefinition);
 
   const triggerCategoryOrder = useMemo(
     () => Array.from(new Set(triggerPresets.map((t) => t.category))).sort(),
@@ -308,19 +312,21 @@ export function BasicWorkflowEditor() {
   const [actionConfig, setActionConfig] = useState<TriggerConfigValues>({});
   const [tiers, setTiers] = useState<TierConfig[]>([]);
 
-  // TODO(part-c): Rewrite to call convex `workflowActions.createFromDefinition`
-  // with the canonical WorkflowDefinition derived from the editor's preset
-  // state. The legacy POST /api/workflows REST endpoint was removed as part
-  // of the JSON-first refactor (Part B). This mutation is temporarily a
-  // no-op that surfaces a toast so the UI still compiles.
   const createWorkflow = useMutation({
-    mutationFn: async (_data: { name: string; description: string; nodes: unknown[]; edges: unknown[] }) => {
-      throw new Error("Create workflow is disabled until Part C of the JSON-first refactor lands");
+    mutationFn: async (definition: Omit<WorkflowDefinition, "id">) => {
+      if (!instanceId) {
+        throw new Error("No instance selected");
+      }
+      return createFromDefinition({ instanceId, definition });
     },
-    onError: () => {
+    onSuccess: ({ engineWorkflowId }) => {
+      toast({ title: "Workflow created" });
+      navigate(`/workflows/${engineWorkflowId}`);
+    },
+    onError: (err) => {
       toast({
-        title: "Create temporarily unavailable",
-        description: "The workflow editor is being migrated to the JSON-first engine contract.",
+        title: "Failed to create workflow",
+        description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
     },
@@ -420,20 +426,28 @@ export function BasicWorkflowEditor() {
     }
   };
 
-  const handleCreate = () => {
-    if (!selectedTrigger) return;
-
-    let workflow: ReturnType<typeof generateWorkflowFromPresets>;
+  const previewDefinition = useMemo<Omit<WorkflowDefinition, "id"> | null>(() => {
+    if (!selectedTrigger) {
+      return null;
+    }
     if (supportsTiers && tiers.length > 0) {
       const validTiers = tiers.filter((t) => t.action);
-      if (validTiers.length === 0) return;
-      workflow = generateMultiTierWorkflow(selectedTrigger, validTiers);
-    } else {
-      if (!selectedAction) return;
-      workflow = generateWorkflowFromPresets(selectedTrigger, selectedAction, triggerConfig, actionConfig);
+      if (validTiers.length === 0) {
+        return null;
+      }
+      return buildTieredDefinition(selectedTrigger, validTiers);
     }
+    if (!selectedAction) {
+      return null;
+    }
+    return buildDefinitionFromPresets(selectedTrigger, selectedAction, triggerConfig, actionConfig);
+  }, [selectedTrigger, selectedAction, supportsTiers, tiers, triggerConfig, actionConfig]);
 
-    createWorkflow.mutate(workflow);
+  const handleCreate = () => {
+    if (!previewDefinition) {
+      return;
+    }
+    createWorkflow.mutate(previewDefinition);
   };
 
   const handleBack = () => {
@@ -723,6 +737,16 @@ export function BasicWorkflowEditor() {
                 );
               })()}
         </div>
+      )}
+
+      {/* Preview generated JSON on the final step, before the action buttons */}
+      {canCreate && previewDefinition && (
+        <details className="mt-6" data-testid="details-preview-json">
+          <summary className="text-sm text-muted-foreground cursor-pointer">Preview generated JSON</summary>
+          <pre className="mt-2 p-3 bg-muted rounded text-xs overflow-auto max-h-64">
+            {JSON.stringify(previewDefinition, null, 2)}
+          </pre>
+        </details>
       )}
 
       {/* Footer with Back and Continue/Create buttons */}
