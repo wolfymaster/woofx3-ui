@@ -21,7 +21,7 @@ describe("definitionToReactFlow", () => {
   test("single action task wires trigger → action edge", () => {
     const def: WorkflowDefinition = {
       ...baseDef,
-      tasks: [{ id: "a1", type: "action", parameters: { action: "print" } }],
+      tasks: [{ id: "a1", type: "action", action: "print", parameters: {} }],
     };
     const { nodes, edges } = definitionToReactFlow(def);
     expect(nodes.map((n) => n.id).sort()).toEqual(["__trigger", "a1"]);

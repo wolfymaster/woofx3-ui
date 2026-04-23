@@ -307,8 +307,9 @@ Each tier becomes a `condition` task (checking `${trigger.data.amount}`) plus an
       "conditions": [{ "field": "${trigger.data.amount}", "operator": "between", "value": [100, 500] }],
       "onTrue": ["tier-1-action"] },
     { "id": "tier-1-action", "type": "action",
+      "action": "sendChatMessage",
       "dependsOn": ["tier-1-check"],
-      "parameters": { "action": "sendChatMessage", "message": "..." } },
+      "parameters": { "message": "..." } },
     { "id": "tier-2-check", ... },
     { "id": "tier-2-action", ... }
   ]

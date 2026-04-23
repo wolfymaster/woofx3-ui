@@ -30,10 +30,6 @@ function configValuesToConditions(values: TriggerConfigValues): ConditionConfig[
   return out;
 }
 
-function actionParameters(action: ActionPreset, actionConfig: TriggerConfigValues): Record<string, unknown> {
-  return { action: action.id, ...actionConfig };
-}
-
 export function buildDefinitionFromPresets(
   trigger: TriggerWithEvent,
   action: ActionPreset,
@@ -52,7 +48,8 @@ export function buildDefinitionFromPresets(
       {
         id: "action-1",
         type: "action",
-        parameters: actionParameters(action, actionConfig),
+        action: action.id,
+        parameters: { ...actionConfig },
       },
     ],
   };
@@ -95,8 +92,9 @@ export function buildTieredDefinition(trigger: TriggerWithEvent, tiers: TierConf
     tasks.push({
       id: actionId,
       type: "action",
+      action: tier.action.id,
       dependsOn: [checkId],
-      parameters: actionParameters(tier.action, tier.actionConfig),
+      parameters: { ...tier.actionConfig },
     });
   });
 

@@ -155,9 +155,8 @@ function nodeLabel(node: Node): string {
   if (!task) {
     return node.id;
   }
-  const actionName = (task.parameters?.action as string | undefined) ?? undefined;
-  if (task.type === "action" && actionName) {
-    return actionName;
+  if (task.type === "action" && task.action) {
+    return task.action;
   }
   return `${task.type} · ${task.id}`;
 }
@@ -172,8 +171,7 @@ function CustomNode({ data, selected, type }: NodeProps<ProjectionNode["data"]>)
       ? data.eventType
         ? `Trigger: ${data.eventType}`
         : "Trigger"
-      : ((data.task?.parameters?.action as string | undefined) ??
-        `${data.task?.type ?? "task"} · ${data.task?.id ?? ""}`);
+      : (data.task?.action ?? `${data.task?.type ?? "task"} · ${data.task?.id ?? ""}`);
   const description = data.kind === "task" ? data.task?.id : undefined;
 
   return (

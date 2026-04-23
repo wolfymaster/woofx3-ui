@@ -24,7 +24,7 @@ describe("buildDefinitionFromPresets", () => {
     const def = buildDefinitionFromPresets(cheerTrigger, chatAction, {}, { message: "hi" });
     expect(def.trigger).toEqual({ type: "event", eventType: "cheer.user.twitch", conditions: [] });
     expect(def.tasks).toEqual([
-      { id: "action-1", type: "action", parameters: { action: "sendChatMessage", message: "hi" } },
+      { id: "action-1", type: "action", action: "sendChatMessage", parameters: { message: "hi" } },
     ]);
     expect(def.name).toMatch(/Cheer/);
   });
