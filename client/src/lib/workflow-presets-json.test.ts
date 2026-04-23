@@ -28,6 +28,88 @@ describe("buildDefinitionFromPresets", () => {
     ]);
     expect(def.name).toMatch(/Cheer/);
   });
+
+  test("trigger with dynamic-source field appends picked value to eventType", () => {
+    const commandTrigger = {
+      id: "chatCommand",
+      name: "Chat Command",
+      description: "Triggered by a chat command",
+      category: "Chat",
+      color: "",
+      event: "chat.command",
+      config: {
+        fields: [
+          {
+            id: "command",
+            label: "Command",
+            type: "select" as const,
+            required: true,
+            source: { kind: "commands" as const },
+          },
+        ],
+      },
+    } as unknown as TriggerPreset & { event: string };
+
+    const def = buildDefinitionFromPresets(commandTrigger, chatAction, { command: "hello" }, { message: "hi" });
+    expect(def.trigger.eventType).toBe("chat.command.hello");
+    // The dynamic-source field feeds the subject, not a payload condition.
+    expect(def.trigger.conditions).toEqual([]);
+  });
+
+  test("trigger with dynamic-source field throws when config value is missing", () => {
+    const commandTrigger = {
+      id: "chatCommand",
+      name: "Chat Command",
+      description: "Triggered by a chat command",
+      category: "Chat",
+      color: "",
+      event: "chat.command",
+      config: {
+        fields: [
+          {
+            id: "command",
+            label: "Command",
+            type: "select" as const,
+            required: true,
+            source: { kind: "commands" as const },
+          },
+        ],
+      },
+    } as unknown as TriggerPreset & { event: string };
+
+    expect(() => buildDefinitionFromPresets(commandTrigger, chatAction, {}, {})).toThrow(/missing or not a string/);
+  });
+
+  test("trigger with multiple dynamic-source fields throws", () => {
+    const bogusTrigger = {
+      id: "bogus",
+      name: "Bogus",
+      description: "Two dynamic fields",
+      category: "x",
+      color: "",
+      event: "bogus.event",
+      config: {
+        fields: [
+          {
+            id: "a",
+            label: "A",
+            type: "select" as const,
+            source: { kind: "commands" as const },
+          },
+          {
+            id: "b",
+            label: "B",
+            type: "select" as const,
+            source: { kind: "commands" as const },
+          },
+        ],
+      },
+    } as unknown as TriggerPreset & { event: string };
+
+    expect(() => buildDefinitionFromPresets(bogusTrigger, chatAction, { a: "x", b: "y" }, {})).toThrow(
+      /multiple dynamic-source fields/
+    );
+  });
 });
 
 describe("buildTieredDefinition", () => {

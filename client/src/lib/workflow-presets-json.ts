@@ -1,21 +1,58 @@
 import type { ConditionConfig, TaskDefinition, WorkflowDefinition } from "@woofx3/api";
-import type { ActionPreset, ConfigValue, TierConfig, TriggerConfigValues, TriggerPreset } from "./workflow-presets";
+import type {
+  ActionPreset,
+  ConfigField,
+  ConfigValue,
+  TierConfig,
+  TriggerConfigValues,
+  TriggerPreset,
+} from "./workflow-presets";
 
 type TriggerWithEvent = TriggerPreset & { event?: string };
 
-function triggerEventType(t: TriggerWithEvent): string {
+function triggerBaseEvent(t: TriggerWithEvent): string {
   if (!t.event) {
     throw new Error(`Trigger preset "${t.id}" is missing an "event" field`);
   }
   return t.event;
 }
 
-function configValuesToConditions(values: TriggerConfigValues): ConditionConfig[] {
+// Parameterized triggers expose a ConfigField with a dynamic `source` — the
+// picked value is appended to the base event, yielding the concrete NATS
+// subject the engine will subscribe to (e.g. `chat.command.hello`). The rule
+// is intentionally generic: any single dynamic-source field works, so future
+// triggers can reuse the pattern without special-casing the builder.
+function assembleEventType(trigger: TriggerWithEvent, config: TriggerConfigValues): string {
+  const base = triggerBaseEvent(trigger);
+  const fields: ConfigField[] = trigger.config?.fields ?? [];
+  const dynamic = fields.filter((f) => f.source !== undefined);
+  if (dynamic.length === 0) {
+    return base;
+  }
+  if (dynamic.length > 1) {
+    throw new Error(`trigger "${trigger.id}": multiple dynamic-source fields not yet supported`);
+  }
+  const field = dynamic[0];
+  const value = config[field.id];
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`trigger "${trigger.id}": config field "${field.id}" missing or not a string`);
+  }
+  return `${base}.${value}`;
+}
+
+function configValuesToConditions(values: TriggerConfigValues, trigger: TriggerWithEvent): ConditionConfig[] {
   // Preset trigger config fields that aren't "amount" are used as trigger-level
-  // conditions. Amount is handled per-tier via buildTieredDefinition.
+  // conditions. Amount is handled per-tier via buildTieredDefinition. Dynamic-
+  // source fields are consumed by assembleEventType to build the subject, so
+  // they must not also appear as payload conditions.
+  const fields: ConfigField[] = trigger.config?.fields ?? [];
+  const dynamicIds = new Set(fields.filter((f) => f.source !== undefined).map((f) => f.id));
   const out: ConditionConfig[] = [];
   for (const [key, raw] of Object.entries(values)) {
     if (key === "amount") {
+      continue;
+    }
+    if (dynamicIds.has(key)) {
       continue;
     }
     if (raw === null || raw === undefined || raw === "") {
@@ -41,8 +78,8 @@ export function buildDefinitionFromPresets(
     description: `When ${trigger.description.toLowerCase()}, ${action.description.toLowerCase()}.`,
     trigger: {
       type: "event",
-      eventType: triggerEventType(trigger),
-      conditions: configValuesToConditions(triggerConfig),
+      eventType: assembleEventType(trigger, triggerConfig),
+      conditions: configValuesToConditions(triggerConfig, trigger),
     },
     tasks: [
       {
@@ -98,10 +135,14 @@ export function buildTieredDefinition(trigger: TriggerWithEvent, tiers: TierConf
     });
   });
 
+  // Tiered triggers share a single subject across all variants, so the
+  // dynamic-source value is pulled from the first tier's config; picking any
+  // tier would yield the same subject.
+  const firstTierValues = tiers[0]?.values ?? {};
   return {
     name: `${trigger.name} — tiered`,
     description: `Multi-tier ${trigger.name.toLowerCase()} automation.`,
-    trigger: { type: "event", eventType: triggerEventType(trigger), conditions: [] },
+    trigger: { type: "event", eventType: assembleEventType(trigger, firstTierValues), conditions: [] },
     tasks,
   };
 }
