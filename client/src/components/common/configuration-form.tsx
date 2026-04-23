@@ -1,4 +1,6 @@
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@convex/_generated/api";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -11,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useInstance } from "@/hooks/use-instance";
+import { commandNameToSubjectSegment } from "@/lib/command-slug";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -235,6 +239,74 @@ function SelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
   );
 }
 
+// Dynamic-source select: populated from the current instance's chatCommands
+// table. The saved value is a NATS subject slug (not the raw "!command"
+// string) so downstream code can assemble `chat.command.${value}` verbatim.
+function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
+  const { instance } = useInstance();
+  const instanceId = instance?._id;
+  const commands = useQuery(api.chatCommands.list, instanceId ? { instanceId } : "skip");
+
+  const options = useMemo(() => {
+    if (!commands) {
+      return [];
+    }
+    const out: { value: string; label: string }[] = [];
+    for (const cmd of commands) {
+      // Guard against malformed names so a single bad row does not break
+      // the whole dropdown; the helper throws on NATS-reserved chars.
+      try {
+        out.push({ value: commandNameToSubjectSegment(cmd.command), label: cmd.command });
+      } catch {
+        continue;
+      }
+    }
+    return out;
+  }, [commands]);
+
+  if (!instanceId) {
+    // eslint-disable-next-line no-console
+    console.warn(`[ConfigurationForm] field "${field.id}" uses source.kind=commands but no instance is selected`);
+  }
+
+  const loading = !!instanceId && commands === undefined;
+  const empty = !loading && options.length === 0;
+  const disabled = !instanceId || loading || empty;
+
+  let placeholder: string;
+  if (!instanceId) {
+    placeholder = "No instance selected";
+  } else if (loading) {
+    placeholder = "Loading commands...";
+  } else if (empty) {
+    placeholder = "No commands yet — create one in the Commands page";
+  } else {
+    placeholder = field.placeholder ?? `Select ${field.label.toLowerCase()}...`;
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>
+        {field.label}
+        {field.required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      <Select value={(value as string) ?? ""} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger data-testid={`select-${field.id}`}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
+    </div>
+  );
+}
+
 function ToggleFieldRenderer({ field, value, onChange }: FieldRendererProps) {
   return (
     <div className="space-y-1">
@@ -355,6 +427,20 @@ export function ConfigurationForm({
       {fields.map((field) => {
         const fieldValue = values[field.id];
         const changeHandler = (v: unknown) => handleFieldChange(field.id, v);
+
+        // Dynamic-source fields (e.g. chat commands) short-circuit the type
+        // lookup: the source dictates the renderer regardless of `type`.
+        const source = (field as { source?: { kind?: unknown } }).source;
+        if (source && source.kind === "commands") {
+          return (
+            <CommandsSelectFieldRenderer
+              key={field.id}
+              field={field}
+              value={fieldValue}
+              onChange={changeHandler}
+            />
+          );
+        }
 
         // Check custom renderers first
         if (customRenderers?.[field.type]) {
