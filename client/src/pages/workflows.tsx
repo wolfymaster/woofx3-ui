@@ -1,22 +1,23 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { useAction, useQuery as useConvexQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import {
-  BookTemplate,
+  ArrowLeft,
   CheckCircle2,
   Edit3,
   Loader2,
   MoreHorizontal,
   Plus,
-  Search,
+  Power,
+  PowerOff,
   Trash2,
   Workflow as WorkflowIcon,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
-import { useLocation } from "wouter";
-import { EmptyState } from "@/components/common/empty-state";
-import { PageHeader } from "@/components/layout/page-header";
+import { useEffect, useState } from "react";
+import { useLocation, useParams } from "wouter";
+import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
+import { WorkflowsSidebar, type WorkflowListItem } from "@/components/workflows/workflows-sidebar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,9 +28,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,9 +38,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader } from "@/components/layout/page-header";
 import { Switch } from "@/components/ui/switch";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -52,281 +51,81 @@ function workflowName(row: WorkflowRow): string {
   return def?.name ?? row.engineWorkflowId;
 }
 
-function workflowDescription(row: WorkflowRow): string | undefined {
-  const def = row.definition as { description?: string } | undefined;
-  return def?.description;
-}
-
 function workflowStepCount(row: WorkflowRow): number {
   if (Array.isArray(row.nodes)) {
     return row.nodes.length;
   }
   const def = row.definition as { tasks?: unknown[] } | undefined;
-  // +1 for the implicit trigger node the projection adds.
   return (def?.tasks?.length ?? 0) + 1;
 }
 
-interface WorkflowCardProps {
-  workflow: WorkflowRow;
-  onToggle: (engineWorkflowId: string, enabled: boolean) => void;
-  onEdit: (engineWorkflowId: string) => void;
-  onDelete: (engineWorkflowId: string) => void;
-  isToggling?: boolean;
-}
-
-function WorkflowCard({ workflow, onToggle, onEdit, onDelete, isToggling }: WorkflowCardProps) {
-  const [, navigate] = useLocation();
-  const name = workflowName(workflow);
-  const description = workflowDescription(workflow);
-
-  return (
-    <Card
-      className="group hover-elevate cursor-pointer overflow-visible"
-      onClick={() => navigate(`/workflows/${workflow.engineWorkflowId}`)}
-      data-testid={`card-workflow-${workflow.engineWorkflowId}`}
-    >
-      <CardContent className="pt-6">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex items-start gap-3 flex-1 min-w-0">
-            <div
-              className={cn(
-                "h-10 w-10 rounded-lg flex items-center justify-center shrink-0",
-                workflow.isEnabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-              )}
-            >
-              <WorkflowIcon className="h-5 w-5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-semibold truncate" data-testid={`text-workflow-name-${workflow.engineWorkflowId}`}>
-                  {name}
-                </h3>
-              </div>
-              <p className="text-sm text-muted-foreground line-clamp-2">{description ?? ""}</p>
-            </div>
-          </div>
-          <div
-            className="flex items-center gap-2"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          >
-            {isToggling ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Switch
-                checked={workflow.isEnabled}
-                onCheckedChange={(checked) => onToggle(workflow.engineWorkflowId, checked)}
-                data-testid={`switch-workflow-${workflow.engineWorkflowId}`}
-              />
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" data-testid={`button-workflow-menu-${workflow.engineWorkflowId}`}>
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onEdit(workflow.engineWorkflowId)}>
-                  <Edit3 className="h-4 w-4 mr-2" />
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => onDelete(workflow.engineWorkflowId)}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 pt-4 border-t border-border/50">
-          <div className="flex items-center gap-1.5 text-sm">
-            <Zap className="h-4 w-4 text-muted-foreground" />
-            <span className="font-medium">{workflowStepCount(workflow)}</span>
-            <span className="text-muted-foreground">steps</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-sm">
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-            <span className="font-medium text-muted-foreground">{workflow.isEnabled ? "Active" : "Inactive"}</span>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function WorkflowCardSkeleton() {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-start gap-3 mb-4">
-          <Skeleton className="h-10 w-10 rounded-lg" />
-          <div className="flex-1">
-            <Skeleton className="h-5 w-40 mb-2" />
-            <Skeleton className="h-4 w-full" />
-          </div>
-          <Skeleton className="h-6 w-10" />
-        </div>
-        <div className="flex items-center gap-4 pt-4 border-t border-border/50">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-4 w-24" />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-type WorkflowTemplate = {
-  _id: string;
-  name: string;
-  description: string;
-  trigger: string;
-  workflowJson: Record<string, unknown>;
-};
-
-function TemplatePickerDialog({
-  open,
-  onOpenChange,
-  onSelect,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSelect: (template: WorkflowTemplate) => void;
-}) {
-  const templates = useConvexQuery(api.workflowTemplates.list, {}) as WorkflowTemplate[] | undefined;
-
-  const triggerEmoji: Record<string, string> = {
-    follow: "👤",
-    subscribe: "⭐",
-    bits: "💎",
-    raid: "🚨",
-    gift: "🎁",
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>From Template</DialogTitle>
-          <DialogDescription>Choose a Twitch event template to pre-populate your workflow.</DialogDescription>
-        </DialogHeader>
-        <div className="space-y-2 mt-2">
-          {templates === undefined ? (
-            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full" />)
-          ) : templates.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No templates available.</p>
-          ) : (
-            templates.map((t) => (
-              <button
-                key={t._id}
-                type="button"
-                className="w-full text-left p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                onClick={() => {
-                  onSelect(t);
-                  onOpenChange(false);
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{triggerEmoji[t.trigger] ?? "⚡"}</span>
-                  <div>
-                    <p className="font-medium text-sm">{t.name}</p>
-                    <p className="text-xs text-muted-foreground">{t.description}</p>
-                  </div>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 export default function Workflows() {
-  const [, navigate] = useLocation();
+  const params = useParams<{ id?: string }>();
+  const [location, navigate] = useLocation();
+  const isEditMode = location.endsWith("/edit");
+  const engineWorkflowIdFromUrl = params?.id;
+
   const { toast } = useToast();
   const { instance } = useInstance();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "enabled" | "disabled">("all");
-  const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [deletingEngineId, setDeletingEngineId] = useState<string | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
 
-  const workflowDocs = useConvexQuery(
+  const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowListItem | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const workflows = useQuery(
     api.workflows.list,
     instance ? { instanceId: instance._id as Id<"instances"> } : "skip"
   );
-  const isLoading = workflowDocs === undefined;
-  const workflows = workflowDocs ?? [];
 
   const setEnabled = useAction(api.workflowActions.setEnabled);
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
 
-  const filteredWorkflows = workflows.filter((w) => {
-    const name = workflowName(w);
-    const description = workflowDescription(w);
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      if (!name.toLowerCase().includes(query) && !description?.toLowerCase().includes(query)) {
-        return false;
+  const selectedWorkflowData = workflows?.find(
+    (w) => w.engineWorkflowId === selectedWorkflow?.engineWorkflowId
+  );
+
+  useEffect(() => {
+    if (engineWorkflowIdFromUrl && workflows) {
+      const found = workflows.find((w) => w.engineWorkflowId === engineWorkflowIdFromUrl);
+      if (found) {
+        setSelectedWorkflow({
+          _id: found._id,
+          engineWorkflowId: found.engineWorkflowId,
+          name: workflowName(found),
+          description: (found.definition as { description?: string } | undefined)?.description,
+          isEnabled: found.isEnabled,
+          stepCount: workflowStepCount(found),
+        });
       }
     }
-    if (statusFilter === "enabled" && !w.isEnabled) {
-      return false;
-    }
-    if (statusFilter === "disabled" && w.isEnabled) {
-      return false;
-    }
-    return true;
-  });
+  }, [engineWorkflowIdFromUrl, workflows]);
 
-  const handleToggle = async (engineWorkflowId: string, enabled: boolean) => {
-    if (!instance) {
-      return;
-    }
-    setTogglingId(engineWorkflowId);
-    try {
-      await setEnabled({
-        instanceId: instance._id as Id<"instances">,
-        engineWorkflowId,
-        isEnabled: enabled,
-      });
-    } catch (err) {
-      toast({
-        title: "Failed to toggle workflow",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
-    } finally {
-      setTogglingId(null);
+  const handleSelectWorkflow = (workflow: WorkflowListItem | null) => {
+    setSelectedWorkflow(workflow);
+    if (workflow) {
+      navigate(`/workflows/${workflow.engineWorkflowId}`);
+    } else {
+      navigate("/workflows");
     }
   };
 
-  const handleEdit = (engineWorkflowId: string) => navigate(`/workflows/${engineWorkflowId}`);
-
-  const handleDelete = (engineWorkflowId: string) => {
-    setDeletingEngineId(engineWorkflowId);
+  const handleDelete = () => {
     setDeleteDialogOpen(true);
   };
 
   const confirmDelete = async () => {
-    if (!deletingEngineId || !instance) {
+    if (!instance || !selectedWorkflow) {
       return;
     }
     setIsDeleting(true);
     try {
       await deleteByEngineId({
         instanceId: instance._id as Id<"instances">,
-        engineWorkflowId: deletingEngineId,
+        engineWorkflowId: selectedWorkflow.engineWorkflowId,
       });
       setDeleteDialogOpen(false);
-      setDeletingEngineId(null);
+      setSelectedWorkflow(null);
+      navigate("/workflows");
     } catch (err) {
       toast({
         title: "Failed to delete workflow",
@@ -338,105 +137,237 @@ export default function Workflows() {
     }
   };
 
-  const handleTemplateSelect = (_template: WorkflowTemplate) => {
-    toast({
-      title: "Templates not yet wired",
-      description: "Template-based creation will be re-enabled once the engine accepts canonical JSON templates.",
-    });
+  const handleEdit = () => {
+    if (selectedWorkflow) {
+      navigate(`/workflows/${selectedWorkflow.engineWorkflowId}/edit`);
+    }
+  };
+
+  const handleBackFromEdit = () => {
+    if (selectedWorkflow) {
+      navigate(`/workflows/${selectedWorkflow.engineWorkflowId}`);
+    } else {
+      navigate("/workflows");
+    }
+  };
+
+  const handleToggle = async (enabled: boolean) => {
+    if (!instance || !selectedWorkflow) {
+      return;
+    }
+    try {
+      await setEnabled({
+        instanceId: instance._id as Id<"instances">,
+        engineWorkflowId: selectedWorkflow.engineWorkflowId,
+        isEnabled: enabled,
+      });
+    } catch (err) {
+      toast({
+        title: "Failed to toggle workflow",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
   };
 
   return (
-    <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
-      <PageHeader
-        title="Workflows"
-        description="Automate your stream with trigger-action workflows."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setTemplateDialogOpen(true)}>
-              <BookTemplate className="h-4 w-4 mr-2" />
-              From Template
-            </Button>
-            <Button onClick={() => navigate("/workflows/new")} data-testid="button-new-workflow">
-              <Plus className="h-4 w-4 mr-2" />
-              New Workflow
-            </Button>
-          </div>
-        }
+    <div className="flex h-[calc(100vh-4rem)]">
+      <WorkflowsSidebar
+        selectedWorkflowId={selectedWorkflow?.engineWorkflowId ?? null}
+        onSelectWorkflow={handleSelectWorkflow}
       />
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search workflows..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-            data-testid="input-search-workflows"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-            <SelectTrigger className="w-32" data-testid="select-filter-workflows">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="enabled">Enabled</SelectItem>
-              <SelectItem value="disabled">Disabled</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <div className="flex-1 overflow-hidden">
+        {isEditMode ? (
+          <div className="h-full">
+            <BasicWorkflowEditor />
+          </div>
+        ) : selectedWorkflow && selectedWorkflowData ? (
+          <div className="h-full overflow-auto">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-6">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setSelectedWorkflow(null);
+                    navigate("/workflows");
+                  }}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-semibold">{selectedWorkflow.name}</h2>
+                    <Badge variant={selectedWorkflow.isEnabled ? "secondary" : "outline"} className="text-xs">
+                      {selectedWorkflow.isEnabled ? (
+                        <>
+                          <Power className="h-3 w-3 mr-1" />
+                          Active
+                        </>
+                      ) : (
+                        "Inactive"
+                      )}
+                    </Badge>
+                  </div>
+                  {selectedWorkflow.description && (
+                    <p className="text-sm text-muted-foreground">{selectedWorkflow.description}</p>
+                  )}
+                </div>
+                <>
+                  <Button variant="outline" size="sm" onClick={handleEdit}>
+                    <Edit3 className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon">
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={handleEdit}>
+                        <Edit3 className="h-4 w-4 mr-2" />
+                        Edit Workflow
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={handleDelete}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              </div>
 
-      {isLoading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <WorkflowCardSkeleton key={i} />
-          ))}
-        </div>
-      ) : filteredWorkflows.length === 0 ? (
-        <EmptyState
-          icon={WorkflowIcon}
-          title="No workflows found"
-          description={
-            workflows.length === 0
-              ? "Create your first workflow to start automating your stream."
-              : "Try adjusting your search or filters."
-          }
-          action={{
-            label: workflows.length === 0 ? "Create Workflow" : "Clear Filters",
-            onClick: () => {
-              if (workflows.length === 0) {
-                navigate("/workflows/new");
-              } else {
-                setSearchQuery("");
-                setStatusFilter("all");
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Zap className="h-4 w-4" />
+                      Steps
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{selectedWorkflow.stepCount}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Total steps in workflow</p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Power className="h-4 w-4" />
+                      Status
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2">
+                      <Switch
+                        checked={selectedWorkflow.isEnabled}
+                        onCheckedChange={handleToggle}
+                      />
+                      <span className="text-sm">
+                        {selectedWorkflow.isEnabled ? "Enabled" : "Disabled"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Toggle to enable or disable the workflow
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Trigger
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {selectedWorkflowData.nodes && selectedWorkflowData.nodes.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedWorkflowData.nodes.slice(0, 3).map((node: { type?: string; label?: string }, i: number) => (
+                          <div key={i} className="text-sm">
+                            <span className="text-muted-foreground">{node.type || "trigger"}:</span>{" "}
+                            {node.label || "unnamed"}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No trigger configured</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card className="md:col-span-2 lg:col-span-3">
+                  <CardHeader>
+                    <CardTitle className="text-sm">Definition</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-64">
+                      {JSON.stringify(selectedWorkflowData.definition, null, 2)}
+                    </pre>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+            <PageHeader
+              title="Workflows"
+              description="Automate your stream with trigger-action workflows."
+              actions={
+                <Button onClick={() => navigate("/workflows/new")} data-testid="button-new-workflow">
+                  <Plus className="h-4 w-4 mr-2" />
+                  New Workflow
+                </Button>
               }
-            },
-          }}
-        />
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {filteredWorkflows.map((workflow) => (
-            <WorkflowCard
-              key={workflow._id}
-              workflow={workflow}
-              onToggle={handleToggle}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              isToggling={togglingId === workflow.engineWorkflowId}
             />
-          ))}
-        </div>
-      )}
+
+            {workflows === undefined ? (
+              <div className="flex items-center justify-center min-h-[40vh]">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : workflows.length === 0 ? (
+              <div className="mt-8 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                  <WorkflowIcon className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">No workflows yet</h3>
+                <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
+                  Create your first workflow to start automating your stream.
+                </p>
+                <Button onClick={() => navigate("/workflows/new")}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Workflow
+                </Button>
+              </div>
+            ) : (
+              <div className="mt-8 text-center">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                  <WorkflowIcon className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">Select a workflow</h3>
+                <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                  Choose a workflow from the sidebar to view its details, or create a new one.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Workflow</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this workflow? This action cannot be undone.
+              Are you sure you want to delete "{selectedWorkflow?.name}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -455,12 +386,6 @@ export default function Workflows() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <TemplatePickerDialog
-        open={templateDialogOpen}
-        onOpenChange={setTemplateDialogOpen}
-        onSelect={handleTemplateSelect}
-      />
     </div>
   );
 }

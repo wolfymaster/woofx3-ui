@@ -40,6 +40,7 @@ import type * as moduleRepository from "../moduleRepository.js";
 import type * as moduleWebhook from "../moduleWebhook.js";
 import type * as moduleWidgets from "../moduleWidgets.js";
 import type * as obsCommands from "../obsCommands.js";
+import type * as obsSceneConfigs from "../obsSceneConfigs.js";
 import type * as registration from "../registration.js";
 import type * as sceneSlots from "../sceneSlots.js";
 import type * as scenes from "../scenes.js";
@@ -95,6 +96,7 @@ declare const fullApi: ApiFromModules<{
   moduleWebhook: typeof moduleWebhook;
   moduleWidgets: typeof moduleWidgets;
   obsCommands: typeof obsCommands;
+  obsSceneConfigs: typeof obsSceneConfigs;
   registration: typeof registration;
   sceneSlots: typeof sceneSlots;
   scenes: typeof scenes;

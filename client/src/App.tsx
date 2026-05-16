@@ -27,7 +27,6 @@ import SceneEditor from "@/pages/scene-editor";
 import Scenes from "@/pages/scenes";
 import Settings from "@/pages/settings";
 import Team from "@/pages/team";
-import WorkflowBuilder from "@/pages/workflow-builder";
 import Workflows from "@/pages/workflows";
 import WorkflowsNew from "@/pages/workflows-new";
 import { queryClient } from "./lib/queryClient";
@@ -121,7 +120,8 @@ function AppRoutes() {
                   <Route path="/modules/:id" component={ModuleDetail} />
                   <Route path="/workflows" component={Workflows} />
                   <Route path="/workflows/new" component={WorkflowsNew} />
-                  <Route path="/workflows/:id" component={WorkflowBuilder} />
+                  <Route path="/workflows/:id" component={Workflows} />
+                  <Route path="/workflows/:id/edit" component={Workflows} />
                   <Route path="/assets" component={Assets} />
                   <Route path="/scenes" component={Scenes} />
                   <Route path="/scenes/:id" component={SceneEditor} />
