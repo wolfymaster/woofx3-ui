@@ -10,24 +10,23 @@ export default function TwitchCallback() {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const called = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState("Processing...");
   const redirectTo = useRef(new URLSearchParams(window.location.search).get("redirect_to") ?? "/");
+  const mode = useRef(new URLSearchParams(window.location.search).get("mode") ?? "login");
 
-  // If already authenticated (e.g. page refreshed), skip sign-in and navigate
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate(redirectTo.current);
-    }
-  }, [isAuthenticated, navigate]);
-
-  // Wait for Convex to finish its initial connection before calling signIn.
-  // After signIn succeeds, hard-navigate so the page reloads with the JWT
-  // that was just written to localStorage — this ensures the standard
-  // readStateFromStorage path confirms auth cleanly.
   useEffect(() => {
     if (isLoading) {
       return;
     }
+    if (mode.current === "connect") {
+      setMessage("Twitch connected successfully! Redirecting...");
+      const timer = setTimeout(() => {
+        window.location.href = redirectTo.current;
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
     if (isAuthenticated) {
+      navigate(redirectTo.current);
       return;
     }
     if (called.current) {
@@ -57,9 +56,6 @@ export default function TwitchCallback() {
           }
           cancelled = true;
           if (result.signingIn) {
-            // JWT and refresh token are now in localStorage.
-            // Hard-navigate so the page reloads with a clean Convex connection
-            // and auth is confirmed via the standard page-load flow.
             window.location.href = redirectTo.current;
           } else {
             setError("Sign-in did not complete — please try again");
@@ -87,7 +83,7 @@ export default function TwitchCallback() {
     return () => {
       cancelled = true;
     };
-  }, [signIn, isLoading, isAuthenticated]);
+  }, [signIn, isLoading, isAuthenticated, navigate]);
 
   if (error) {
     return (
@@ -99,7 +95,10 @@ export default function TwitchCallback() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="text-center">
+        <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground mb-4" />
+        <p className="text-sm text-muted-foreground">{message}</p>
+      </div>
     </div>
   );
 }

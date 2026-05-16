@@ -277,6 +277,7 @@ export default defineSchema({
   twitchOAuthState: defineTable({
     state: v.string(),
     redirectTo: v.string(),
+    instanceId: v.optional(v.id("instances")),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 

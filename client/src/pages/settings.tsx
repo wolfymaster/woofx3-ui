@@ -45,6 +45,8 @@ import { $engineUrl } from "@/lib/stores";
 import { useStore } from "@nanostores/react";
 import { api } from "@convex/_generated/api";
 import { useInstance } from "@/hooks/use-instance";
+import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
+import { TwitchIntegrationCard } from "@/components/settings/twitch-integration-card";
 import { StorageSettingsTab } from "./storage-settings";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
@@ -242,6 +244,7 @@ export default function Settings() {
   const { theme, setTheme, preset, presets, setPreset } = useTheme();
   const queryClient = useQueryClient();
   const { instance } = useInstance();
+  const { isConnected, twitchLink, isLoading: twitchLoading } = useTwitchIntegration(instance?._id);
   const deleteInstanceAction = useAction(api.instances.deleteInstance);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -612,20 +615,12 @@ export default function Settings() {
                   <CardDescription>Manage your connected streaming platforms.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between p-4 rounded-lg border">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded bg-purple-600 flex items-center justify-center text-white font-bold">
-                        T
-                      </div>
-                      <div>
-                        <p className="font-medium">Twitch</p>
-                        <p className="text-sm text-muted-foreground">Not connected</p>
-                      </div>
-                    </div>
-                    <Button variant="outline" data-testid="button-connect-twitch">
-                      Connect
-                    </Button>
-                  </div>
+                  <TwitchIntegrationCard
+                    instanceId={instance?._id}
+                    isConnected={isConnected}
+                    twitchLink={twitchLink}
+                    isLoading={twitchLoading}
+                  />
                   <div className="flex items-center justify-between p-4 rounded-lg border">
                     <div className="flex items-center gap-3">
                       <div className="h-10 w-10 rounded bg-red-600 flex items-center justify-center text-white font-bold">
