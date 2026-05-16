@@ -168,3 +168,73 @@ export const reconcileModules = internalMutation({
     return { itemsProcessed: processed };
   },
 });
+
+/**
+ * Reconcile the local `workflows` mirror against a full snapshot returned
+ * by the engine's `getWorkflows()` (paginated). The engine is the source
+ * of truth: rows whose `engineWorkflowId` is present in `engineIds` are
+ * upserted with the supplied definition/isEnabled; rows with an
+ * `engineWorkflowId` that no longer appears are deleted.
+ *
+ * `engineIds` is passed separately from `upserts` so the caller can
+ * declare the full live set even when only a subset is being upserted.
+ * In practice they match, but keeping the parameter explicit avoids
+ * coupling the deletion check to upsert iteration.
+ */
+export const reconcileWorkflows = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    engineIds: v.array(v.string()),
+    upserts: v.array(
+      v.object({
+        engineWorkflowId: v.string(),
+        definition: v.any(),
+        isEnabled: v.boolean(),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, applicationId, engineIds, upserts }) => {
+    const now = Date.now();
+
+    for (const u of upserts) {
+      const existing = await ctx.db
+        .query("workflows")
+        .withIndex("by_engine_id", (q) =>
+          q.eq("instanceId", instanceId).eq("engineWorkflowId", u.engineWorkflowId)
+        )
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          applicationId,
+          definition: u.definition,
+          isEnabled: u.isEnabled,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.insert("workflows", {
+          instanceId,
+          applicationId,
+          engineWorkflowId: u.engineWorkflowId,
+          definition: u.definition,
+          isEnabled: u.isEnabled,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    const liveIds = new Set(engineIds);
+    const local = await ctx.db
+      .query("workflows")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const row of local) {
+      if (!liveIds.has(row.engineWorkflowId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: upserts.length };
+  },
+});
