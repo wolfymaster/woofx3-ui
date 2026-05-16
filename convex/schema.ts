@@ -42,13 +42,14 @@ export default defineSchema({
   instances: defineTable({
     accountId: v.id("accounts"),
     name: v.string(),
-    url: v.string(), // user-configured (e.g. "localhost:8080" or "https://...")
-    applicationId: v.optional(v.string()), // engine-returned during registration handshake
-    clientId: v.optional(v.string()), // engine-generated client identifier returned during registration
-    clientSecret: v.optional(v.string()), // engine-generated secret returned during registration (used to authenticate capnweb sessions)
-    webhookSecret: v.optional(v.string()), // UI-generated secret sent to engine during registration (callbackToken); engine includes in callback Authorization headers
+    url: v.string(),
+    applicationId: v.optional(v.string()),
+    clientId: v.optional(v.string()),
+    clientSecret: v.optional(v.string()),
+    webhookSecret: v.optional(v.string()),
     createdAt: v.number(),
-    // Optional per-instance storage provider override (falls back to STORAGE_PROVIDER env var)
+    lastViewedAt: v.optional(v.number()),
+    lastEngineActivityAt: v.optional(v.number()),
     storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),
   })
     .index("by_account", ["accountId"])
@@ -77,7 +78,7 @@ export default defineSchema({
   // platformLinks: OAuth tokens for streaming platforms (Twitch, etc.) per instance
   platformLinks: defineTable({
     instanceId: v.id("instances"),
-    platform: v.string(), // "twitch" | future platforms
+    platform: v.string(),
     platformUserId: v.string(),
     platformUsername: v.string(),
     channelId: v.string(),
@@ -85,6 +86,7 @@ export default defineSchema({
     refreshToken: v.string(),
     expiresAt: v.number(),
     scopes: v.array(v.string()),
+    connectedByUserId: v.optional(v.string()),
   }).index("by_instance", ["instanceId"]),
 
   // folders: virtual organizational folders for assets per instance
@@ -128,12 +130,15 @@ export default defineSchema({
       v.literal("dynamic"),
       v.literal("function")
     ),
+    typeValue: v.optional(v.string()),
     response: v.optional(v.string()),
     template: v.optional(v.string()),
     functionId: v.optional(v.string()),
     cooldown: v.number(),
+    priority: v.optional(v.number()),
     enabled: v.boolean(),
     createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
   }).index("by_instance", ["instanceId"]),
 
   // moduleRepository: directory of all available modules (seeded by admins or uploaded)
@@ -144,8 +149,10 @@ export default defineSchema({
     description: v.string(),
     version: v.string(),
     tags: v.array(v.string()),
-    manifest: v.any(),
-    archiveKey: v.string(),
+    manifest: v.optional(v.any()),
+    archiveKey: v.optional(v.string()),
+    author: v.optional(v.string()),
+    category: v.optional(v.string()),
     status: v.optional(
       v.union(v.literal("pending"), v.literal("delivering"), v.literal("installed"), v.literal("failed"))
     ),
@@ -167,6 +174,7 @@ export default defineSchema({
         config: v.optional(v.any()),
       })
     ),
+    columnSizes: v.optional(v.array(v.number())),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
   // triggerDefinitions: UI metadata only; at most one row per stable trigger id (matches engine / module id)
@@ -207,6 +215,7 @@ export default defineSchema({
   instanceEnabledTriggers: defineTable({
     instanceId: v.id("instances"),
     triggerId: v.string(),
+    projectionKey: v.optional(v.string()),
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_trigger", ["instanceId", "triggerId"]),
@@ -215,6 +224,7 @@ export default defineSchema({
   instanceEnabledActions: defineTable({
     instanceId: v.id("instances"),
     actionId: v.string(),
+    projectionKey: v.optional(v.string()),
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_action", ["instanceId", "actionId"]),
@@ -233,7 +243,8 @@ export default defineSchema({
     instanceId: v.id("instances"),
     applicationId: v.string(),
     engineWorkflowId: v.string(),
-    definition: v.any(), // WorkflowDefinition; enforced in code
+    projectionKey: v.optional(v.string()),
+    definition: v.any(),
     isEnabled: v.boolean(),
     nodes: v.optional(v.array(v.any())),
     edges: v.optional(v.array(v.any())),
@@ -273,9 +284,15 @@ export default defineSchema({
   twitchPendingAuth: defineTable({
     token: v.string(),
     twitchId: v.string(),
+    twitchLogin: v.optional(v.string()),
     displayName: v.string(),
     email: v.string(),
     profileImage: v.string(),
+    accessToken: v.optional(v.string()),
+    refreshToken: v.optional(v.string()),
+    expiresIn: v.optional(v.number()),
+    obtainmentTimestamp: v.optional(v.number()),
+    scopes: v.optional(v.array(v.string())),
     createdAt: v.number(),
   }).index("by_token", ["token"]),
 
@@ -292,12 +309,15 @@ export default defineSchema({
   scenes: defineTable({
     instanceId: v.id("instances"),
     applicationId: v.optional(v.string()),
+    engineSceneId: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
-    width: v.number(),
-    height: v.number(),
-    backgroundColor: v.string(),
-    widgets: v.optional(v.array(v.any())), // Widget[] — visual layer state
+    width: v.optional(v.number()),
+    height: v.optional(v.number()),
+    layout: v.optional(v.any()),
+    backgroundColor: v.optional(v.string()),
+    widgets: v.optional(v.array(v.any())),
+    sceneWidgets: v.optional(v.array(v.any())),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_instance", ["instanceId"]),

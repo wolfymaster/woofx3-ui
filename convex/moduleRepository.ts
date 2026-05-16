@@ -94,6 +94,9 @@ export const enqueueEngineInstall = mutation({
     if (!module) {
       throw new Error("Module not found");
     }
+    if (!module.archiveKey) {
+      throw new Error("Module has no archiveKey");
+    }
     await ctx.scheduler.runAfter(0, internal.moduleEngine.deliverZipToInstance, {
       instanceId: args.instanceId,
       moduleKey: module.moduleKey ?? `${module.name}:${module.version}:unknown`,
