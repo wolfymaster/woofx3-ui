@@ -543,6 +543,166 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      case EngineEventType.MODULE_TRIGGER_DEREGISTERED: {
+        await ctx.runMutation(internal.moduleWebhook.processDeregisteredDefinitions, {
+          instanceId: instance._id,
+          triggers: event.triggers,
+          actions: [],
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_ACTION_DEREGISTERED: {
+        await ctx.runMutation(internal.moduleWebhook.processDeregisteredDefinitions, {
+          instanceId: instance._id,
+          triggers: [],
+          actions: event.actions,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_FUNCTION_REGISTERED: {
+        await ctx.runMutation(internal.moduleFunctions.upsertFromWebhook, {
+          instanceId: instance._id,
+          moduleKey: event.moduleKey,
+          moduleName: event.moduleName,
+          version: event.version,
+          functions: event.functions,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_FUNCTION_DEREGISTERED: {
+        await ctx.runMutation(internal.moduleFunctions.deleteFromWebhook, {
+          instanceId: instance._id,
+          functions: event.functions,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_ASSET_REGISTERED: {
+        await ctx.runMutation(internal.moduleAssets.upsertFromWebhook, {
+          moduleKey: event.moduleKey,
+          moduleName: event.moduleName,
+          version: event.version,
+          assets: event.assets,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_ASSET_DEREGISTERED: {
+        await ctx.runMutation(internal.moduleAssets.deleteFromWebhook, {
+          assets: event.assets,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_RESOURCE_INSTANCE_CREATED: {
+        await ctx.runMutation(internal.moduleResourceInstances.upsertFromWebhook, {
+          instanceId: instance._id,
+          instance: event.instance,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_RESOURCE_INSTANCE_DELETED: {
+        await ctx.runMutation(internal.moduleResourceInstances.deleteFromWebhook, {
+          instance: event.instance,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_STORAGE_CHANGED: {
+        await ctx.runMutation(internal.transientEvents.emit, {
+          instanceId: instance._id,
+          correlationKey: `${event.moduleId}:${event.key}`,
+          type: "module.storage.changed",
+          status: "success",
+          data: {
+            moduleId: event.moduleId,
+            key: event.key,
+            value: event.value,
+            previousValue: event.previousValue,
+            occurredAt: event.occurredAt,
+          },
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.ENGINE_RESPONSE_RECEIVED: {
+        await ctx.runMutation(internal.transientEvents.emit, {
+          instanceId: instance._id,
+          correlationKey: event.correlationKey,
+          type: "engine.response",
+          status: event.status,
+          message: event.error,
+          data: event.data,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.ALERT_RECORDED: {
+        await ctx.runMutation(internal.engineAlerts.recordFromWebhook, {
+          instanceId: instance._id,
+          snapshot: event.alert,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.ALERT_REPLAYED:
+      case EngineEventType.ALERT_COMPLETED:
+      case EngineEventType.ALERT_FAILED:
+      case EngineEventType.ALERT_TIMED_OUT:
+      case EngineEventType.ALERT_SKIPPED: {
+        await ctx.runMutation(internal.engineAlerts.updateFromWebhook, {
+          instanceId: instance._id,
+          snapshot: event.alert,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WIDGET_STATUS_CHANGED: {
+        const correlationKey =
+          event.widgetCanonicalId ?? `${event.moduleId}:${event.instanceId}:${event.key}`;
+        await ctx.runMutation(internal.transientEvents.emit, {
+          instanceId: instance._id,
+          correlationKey,
+          type: "widget.status.changed",
+          status: "success",
+          data: {
+            moduleId: event.moduleId,
+            widgetInstanceId: event.instanceId,
+            widgetCanonicalId: event.widgetCanonicalId,
+            key: event.key,
+            value: event.value,
+            occurredAt: event.occurredAt,
+          },
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.STREAM_ONLINE: {
+        await ctx.runMutation(internal.instanceLiveState.onStreamOnline, {
+          instanceId: instance._id,
+          applicationId: event.applicationId,
+          twitchUserId: event.twitchUserId,
+          startedAt: event.startedAt,
+          streamTitle: event.streamTitle,
+          gameName: event.gameName,
+          viewerCount: event.viewerCount,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.STREAM_OFFLINE: {
+        await ctx.runMutation(internal.instanceLiveState.onStreamOffline, {
+          instanceId: instance._id,
+          applicationId: event.applicationId,
+          twitchUserId: event.twitchUserId,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       default: {
         logger.warn("webhook: unhandled event type", { eventType });
         return corsJson({ success: true, type: eventType, handled: false });

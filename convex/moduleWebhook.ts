@@ -319,6 +319,45 @@ export const processModuleInstalled = internalMutation({
 });
 
 /**
+ * Process trigger/action deregistration events from the engine. Fires on
+ * MODULE_TRIGGER_DEREGISTERED and MODULE_ACTION_DEREGISTERED, typically as
+ * part of a module delete. Removes the catalog row and clears any per-instance
+ * enablement so workflow builders no longer surface stale options.
+ *
+ * Idempotent: deletes only when the row exists; missing rows are skipped.
+ */
+export const processDeregisteredDefinitions = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    triggers: v.array(triggerValidator),
+    actions: v.array(actionValidator),
+  },
+  handler: async (ctx, { instanceId, triggers, actions }) => {
+    for (const trigger of triggers) {
+      const existing = await ctx.db
+        .query("triggerDefinitions")
+        .withIndex("by_slug", (q) => q.eq("slug", trigger.id))
+        .first();
+      if (existing) {
+        await ctx.db.delete(existing._id);
+      }
+      await disableTriggerForInstance(ctx, instanceId, trigger.id);
+    }
+
+    for (const action of actions) {
+      const existing = await ctx.db
+        .query("actionDefinitions")
+        .withIndex("by_slug", (q) => q.eq("slug", action.id))
+        .first();
+      if (existing) {
+        await ctx.db.delete(existing._id);
+      }
+      await disableActionForInstance(ctx, instanceId, action.id);
+    }
+  },
+});
+
+/**
  * Process trigger/action registration events from the engine.
  * These are standalone events — they don't require a moduleKey or correlationKey.
  * They upsert definitions and optionally link to an existing module record.
@@ -439,6 +478,16 @@ export const processModuleDeleted = internalMutation({
         await disableActionForInstance(ctx, instanceId, action.slug);
         await ctx.db.delete(action._id);
       }
+      await ctx.runMutation(internal.moduleFunctions.cascadeOnModuleDelete, {
+        instanceId,
+        moduleId: record._id,
+      });
+      await ctx.runMutation(internal.moduleAssets.cascadeOnModuleDelete, {
+        moduleId: record._id,
+      });
+      await ctx.runMutation(internal.moduleResourceInstances.cascadeOnModuleDelete, {
+        moduleId: record._id,
+      });
       await ctx.db.delete(record._id);
     }
 

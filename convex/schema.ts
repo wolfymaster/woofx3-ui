@@ -55,6 +55,21 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_webhook_secret", ["webhookSecret"]),
 
+  // instanceLiveState: live stream presence per instance, driven by STREAM_ONLINE/OFFLINE
+  // engine events (and best-effort poll fallback). One row per instance.
+  instanceLiveState: defineTable({
+    instanceId: v.id("instances"),
+    applicationId: v.optional(v.string()),
+    twitchUserId: v.optional(v.string()),
+    isLive: v.boolean(),
+    startedAt: v.optional(v.string()), // ISO from StreamOnlineEvent
+    streamTitle: v.optional(v.string()),
+    gameName: v.optional(v.string()),
+    viewerCount: v.optional(v.number()),
+    lastUpdateSource: v.union(v.literal("webhook"), v.literal("poll")),
+    lastUpdatedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
   // applications: engine-internal application scoping per instance
   applications: defineTable({
     instanceId: v.id("instances"),
@@ -212,6 +227,26 @@ export default defineSchema({
     .index("by_slug", ["slug"])
     .index("by_module", ["moduleId"]),
 
+  // moduleFunctions: UI catalog of sandbox functions registered by installed modules.
+  // Mirrors engine FunctionDefinition; written by MODULE_FUNCTION_REGISTERED handler.
+  // moduleId is optional to accommodate legacy rows that pre-date the
+  // moduleRepository linkage; new writes always populate it.
+  moduleFunctions: defineTable({
+    moduleId: v.optional(v.id("moduleRepository")),
+    engineFunctionId: v.string(), // FunctionDefinition.id (engine UUID)
+    projectionKey: v.optional(v.string()), // {moduleKey}:function:{manifestId}
+    manifestId: v.optional(v.string()), // stable manifest-local id (e.g. "play_alert")
+    moduleName: v.string(),
+    functionName: v.string(), // display name
+    qualifiedName: v.string(), // "{moduleName}/{manifestId}"
+    fileName: v.string(),
+    entryPoint: v.string(),
+    runtime: v.string(),
+  })
+    .index("by_module", ["moduleId"])
+    .index("by_projection_key", ["projectionKey"])
+    .index("by_engine_id", ["engineFunctionId"]),
+
   // instanceEnabledTriggers: which trigger ids are enabled for a given instance (module lifecycle)
   instanceEnabledTriggers: defineTable({
     instanceId: v.id("instances"),
@@ -229,6 +264,15 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_action", ["instanceId", "actionId"]),
+
+  // instanceEnabledFunctions: which function ids are enabled for a given instance
+  instanceEnabledFunctions: defineTable({
+    instanceId: v.id("instances"),
+    functionId: v.string(), // engine FunctionDefinition.id
+    projectionKey: v.optional(v.string()),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_function", ["instanceId", "functionId"]),
 
   // workflowTemplates: predefined workflow templates for common Twitch events
   workflowTemplates: defineTable({
@@ -387,6 +431,47 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_scene", ["sceneId"]),
 
+  // moduleAssets: assets declared by a module's manifest (images/audio/video/data).
+  // Mirrors engine AssetDefinition; written by MODULE_ASSET_REGISTERED handler.
+  // Actions reference assets by canonicalId; editor maps to public URL via the
+  // instance's storage adapter at workflow-save time.
+  moduleAssets: defineTable({
+    moduleId: v.id("moduleRepository"),
+    engineAssetId: v.string(), // AssetDefinition.id
+    canonicalId: v.string(), // {moduleId}:asset:{manifestId}
+    projectionKey: v.string(), // {moduleKey}:asset:{manifestId}
+    manifestId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    repositoryKey: v.string(), // engine-relative storage key
+    manifestPath: v.string(),
+    kind: v.optional(v.string()), // image | audio | video | font | data
+    contentType: v.optional(v.string()),
+    createdByType: v.string(),
+    createdByRef: v.string(),
+  })
+    .index("by_module", ["moduleId"])
+    .index("by_canonical_id", ["canonicalId"])
+    .index("by_projection_key", ["projectionKey"]),
+
+  // moduleResourceInstances: runtime-created instances of module-declared resource
+  // kinds (e.g. user-defined counters). Mirrors engine ResourceInstanceDefinition.
+  // Backs resource_ref ConfigField pickers in the workflow builder.
+  moduleResourceInstances: defineTable({
+    instanceId: v.id("instances"),
+    moduleId: v.id("moduleRepository"),
+    engineInstanceId: v.string(), // ResourceInstanceDefinition.id (engine UUID)
+    resourceInstanceId: v.string(), // manifest-local instance id
+    moduleName: v.string(),
+    kind: v.string(),
+    displayName: v.string(),
+    canonicalId: v.string(), // {moduleName}:{kind}:{instanceId}
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_module", ["moduleId"])
+    .index("by_canonical_id", ["canonicalId"])
+    .index("by_instance_kind", ["instanceId", "kind"]),
+
   // moduleWidgets: registered widgets from module manifests
   moduleWidgets: defineTable({
     moduleId: v.id("moduleRepository"),
@@ -445,6 +530,41 @@ export default defineSchema({
     .index("by_scene_and_state", ["sceneId", "state"])
     .index("by_source_key_and_state", ["sourceKey", "state"])
     .index("by_expires_at", ["expiresAt"]),
+
+  // engineAlerts: engine-authoritative log of dispatched alerts. Mirrors the
+  // engine's alert rows; written by ALERT_RECORDED and updated by
+  // ALERT_REPLAYED/COMPLETED/FAILED/TIMED_OUT/SKIPPED. Distinct from `alerts`
+  // (the browser-source queue) and `alertHistory` (the local fire log).
+  engineAlerts: defineTable({
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    engineAlertId: v.string(), // AlertSnapshot.id
+    payload: v.string(), // JSON AlertPayload envelope
+    workflowId: v.optional(v.string()),
+    sourceEventId: v.optional(v.string()),
+    status: v.union(
+      v.literal("sent"),
+      v.literal("playing"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("replayed"),
+      v.literal("timed_out"),
+      v.literal("skipped"),
+      v.literal("pending"),
+      v.literal("dispatched")
+    ),
+    envelopeId: v.optional(v.string()),
+    dispatchedAt: v.optional(v.string()),
+    playedAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+    error: v.optional(v.string()),
+    engineCreatedAt: v.string(),
+    engineUpdatedAt: v.string(),
+    createdAt: v.number(), // Convex-side ingest time
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_id", ["engineAlertId"])
+    .index("by_instance_status", ["instanceId", "status"]),
 
   // alertHistory: bounded history of fired alerts
   alertHistory: defineTable({
