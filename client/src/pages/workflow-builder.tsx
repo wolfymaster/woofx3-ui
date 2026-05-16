@@ -18,8 +18,8 @@ import {
   Zap,
   ZoomIn,
   ZoomOut,
-  LayoutHorizontal,
-  LayoutVertical,
+  Columns,
+  Rows3,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
@@ -559,9 +559,9 @@ export default function WorkflowBuilder() {
             title={layoutDirection === "horizontal" ? "Switch to vertical layout" : "Switch to horizontal layout"}
           >
             {layoutDirection === "horizontal" ? (
-              <LayoutVertical className="h-4 w-4" />
+              <Rows3 className="h-4 w-4" />
             ) : (
-              <LayoutHorizontal className="h-4 w-4" />
+              <Columns className="h-4 w-4" />
             )}
           </Button>
           <Separator orientation="vertical" className="h-6 mx-2" />

@@ -22,7 +22,7 @@ const chatAction = {
 describe("buildDefinitionFromPresets", () => {
   test("simple trigger+action produces a single-task definition", () => {
     const def = buildDefinitionFromPresets(cheerTrigger, chatAction, {}, { message: "hi" });
-    expect(def.trigger).toEqual({ type: "event", eventType: "cheer.user.twitch", conditions: [] });
+    expect(def.trigger).toEqual({ type: "event", event: "cheer.user.twitch", conditions: [] });
     expect(def.tasks).toEqual([
       { id: "action-1", type: "action", action: "sendChatMessage", parameters: { message: "hi" } },
     ]);
@@ -51,7 +51,7 @@ describe("buildDefinitionFromPresets", () => {
     } as unknown as TriggerPreset & { event: string };
 
     const def = buildDefinitionFromPresets(commandTrigger, chatAction, { command: "hello" }, { message: "hi" });
-    expect(def.trigger.eventType).toBe("chat.command.hello");
+    expect(def.trigger.event).toBe("chat.command.hello");
     // The dynamic-source field feeds the subject, not a payload condition.
     expect(def.trigger.conditions).toEqual([]);
   });

@@ -3,16 +3,14 @@ import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
-export const list = query({
+export const getConfig = query({
   args: {
     instanceId: v.id("instances"),
-    alertType: v.optional(v.string()),
-    user: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      return [];
+      return null;
     }
 
     // Verify the user is a member of this instance
@@ -23,32 +21,35 @@ export const list = query({
 
     const isMember = membership.some((m) => m.instanceId === args.instanceId);
     if (!isMember) {
-      return [];
+      return null;
     }
 
-    let alerts = await ctx.db
-      .query("alertHistory")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .order("desc")
-      .take(200);
-
-    if (args.alertType) {
-      alerts = alerts.filter((a) => a.alertType === args.alertType);
+    // Get the instance to find the engine URL
+    const instance = await ctx.db.get(args.instanceId);
+    if (!instance) {
+      return null;
     }
 
-    if (args.user) {
-      const search = args.user.toLowerCase();
-      alerts = alerts.filter((a) => a.user.toLowerCase().includes(search));
+    if (!instance.clientId || !instance.clientSecret) {
+      return null;
     }
 
-    return alerts;
+    // Call the engine to get storage config
+    const engineApi = createEngineRpcSession<EngineApi>(
+      instance.url,
+      instance.clientId,
+      instance.clientSecret
+    );
+
+    const config = await engineApi.getStorageConfig();
+    return config;
   },
 });
 
-export const replay = mutation({
+export const setConfig = mutation({
   args: {
     instanceId: v.id("instances"),
-    alertId: v.id("alertHistory"),
+    config: v.record(v.string(), v.any()),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -67,12 +68,6 @@ export const replay = mutation({
       throw new Error("Not a member of this instance");
     }
 
-    // Get the alert history entry
-    const alert = await ctx.db.get(args.alertId);
-    if (!alert) {
-      throw new Error("Alert not found");
-    }
-
     // Get the instance to find the engine URL
     const instance = await ctx.db.get(args.instanceId);
     if (!instance) {
@@ -83,14 +78,14 @@ export const replay = mutation({
       throw new Error("Instance not registered with engine");
     }
 
-    // Call the engine to replay the alert
+    // Call the engine to set storage config
     const engineApi = createEngineRpcSession<EngineApi>(
       instance.url,
       instance.clientId,
       instance.clientSecret
     );
 
-    await engineApi.replayAlert(alert._id);
+    await engineApi.setStorageConfig(args.config as any);
 
     return { success: true };
   },

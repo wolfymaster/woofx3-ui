@@ -91,4 +91,39 @@ describe("definitionToReactFlow", () => {
     expect(edges.find((e) => e.source === "__trigger" && e.target === "a1")).toBeUndefined();
     expect(edges.find((e) => e.source === "c1" && e.target === "a1")).toBeDefined();
   });
+
+  test("vertical layout produces different positions than horizontal", () => {
+    const def: WorkflowDefinition = {
+      ...baseDef,
+      tasks: [
+        { id: "a1", type: "action", parameters: {} },
+        { id: "a2", type: "action", dependsOn: ["a1"], parameters: {} },
+      ],
+    };
+    const horizontal = definitionToReactFlow(def, "horizontal");
+    const vertical = definitionToReactFlow(def, "vertical");
+
+    // In horizontal layout, nodes should be spread out on x-axis
+    expect(horizontal.nodes[1].position.x).toBeGreaterThan(horizontal.nodes[0].position.x);
+
+    // In vertical layout, nodes should be spread out on y-axis
+    expect(vertical.nodes[1].position.y).toBeGreaterThan(vertical.nodes[0].position.y);
+  });
+
+  test("vertical layout maintains same nodes and edges as horizontal", () => {
+    const def: WorkflowDefinition = {
+      ...baseDef,
+      tasks: [
+        { id: "a1", type: "action", parameters: {} },
+        { id: "a2", type: "action", dependsOn: ["a1"], parameters: {} },
+      ],
+    };
+    const horizontal = definitionToReactFlow(def, "horizontal");
+    const vertical = definitionToReactFlow(def, "vertical");
+
+    expect(horizontal.nodes.map((n) => n.id)).toEqual(vertical.nodes.map((n) => n.id));
+    expect(horizontal.edges.map((e) => `${e.source}->${e.target}`)).toEqual(
+      vertical.edges.map((e) => `${e.source}->${e.target}`)
+    );
+  });
 });
