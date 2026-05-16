@@ -120,17 +120,18 @@ export default defineSchema({
   // chatCommands: chat commands configured per instance
   chatCommands: defineTable({
     instanceId: v.id("instances"),
-    applicationId: v.optional(v.string()), // engine application scope
-    command: v.string(), // e.g. "!hello"
+    applicationId: v.optional(v.string()),
+    engineCommandId: v.optional(v.string()),
+    command: v.string(),
     type: v.union(
-      v.literal("static"), // fixed text response
-      v.literal("dynamic"), // template with {{variable}} substitution
-      v.literal("function") // invokes a module function
+      v.literal("static"),
+      v.literal("dynamic"),
+      v.literal("function")
     ),
-    response: v.optional(v.string()), // for static type
-    template: v.optional(v.string()), // for dynamic type ({{username}}, {{args}}, etc.)
-    functionId: v.optional(v.string()), // for function type (module function reference)
-    cooldown: v.number(), // seconds between uses
+    response: v.optional(v.string()),
+    template: v.optional(v.string()),
+    functionId: v.optional(v.string()),
+    cooldown: v.number(),
     enabled: v.boolean(),
     createdAt: v.number(),
   }).index("by_instance", ["instanceId"]),

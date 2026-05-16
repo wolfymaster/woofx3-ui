@@ -35,6 +35,7 @@ export const create = mutation({
   args: {
     instanceId: v.id("instances"),
     applicationId: v.optional(v.string()),
+    engineCommandId: v.optional(v.string()),
     command: v.string(),
     type: commandTypeValidator,
     response: v.optional(v.string()),
@@ -54,10 +55,8 @@ export const create = mutation({
       throw new Error("Not authorized");
     }
 
-    // Ensure command starts with "!"
     const command = args.command.startsWith("!") ? args.command : `!${args.command}`;
 
-    // Check for duplicate command name within instance
     const existing = await ctx.db
       .query("chatCommands")
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
@@ -70,6 +69,7 @@ export const create = mutation({
     return ctx.db.insert("chatCommands", {
       instanceId: args.instanceId,
       applicationId: args.applicationId,
+      engineCommandId: args.engineCommandId,
       command,
       type: args.type,
       response: args.response,
@@ -88,6 +88,8 @@ export const create = mutation({
 export const update = mutation({
   args: {
     commandId: v.id("chatCommands"),
+    applicationId: v.optional(v.string()),
+    engineCommandId: v.optional(v.string()),
     command: v.optional(v.string()),
     type: v.optional(commandTypeValidator),
     response: v.optional(v.string()),
