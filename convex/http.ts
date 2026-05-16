@@ -27,6 +27,33 @@ function corsJson(body: unknown, status = 200): Response {
   });
 }
 
+type WidgetSetting = {
+  key: string;
+  fieldType: string;
+  label: string;
+  defaultValue: unknown;
+  options?: { label: string; value: string }[];
+};
+
+function parseSettingsSchema(settingsSchema: string | undefined): WidgetSetting[] {
+  if (!settingsSchema) return [];
+  try {
+    const parsed = JSON.parse(settingsSchema);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item: Record<string, unknown>) => ({
+        key: String(item.key ?? ""),
+        fieldType: String(item.fieldType ?? "text"),
+        label: String(item.label ?? item.key ?? ""),
+        defaultValue: item.defaultValue,
+        options: Array.isArray(item.options) ? item.options as WidgetSetting["options"] : undefined,
+      }));
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
 const preflightHandler = httpAction(async () => {
   if (process.env.CORS_ENABLED !== "true") {
     return new Response(null, { status: 404 });
@@ -342,6 +369,47 @@ http.route({
           triggers: [],
           actions: event.actions,
         });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_WIDGET_REGISTERED: {
+        for (const widget of event.widgets) {
+          const existingWidget = await ctx.db
+            .query("moduleWidgets")
+            .withIndex("by_widget_id", (q) => q.eq("widgetId", widget.id))
+            .first();
+
+          const settings = parseSettingsSchema(widget.settingsSchema);
+          if (existingWidget) {
+            await ctx.db.patch(existingWidget._id, {
+              name: widget.name ?? widget.id,
+              directory: widget.directory ?? "",
+              description: widget.description,
+              alertTypes: widget.alertTypes ?? [],
+              settings,
+            });
+          } else {
+            await ctx.db.insert("moduleWidgets", {
+              moduleId: undefined as any,
+              widgetId: widget.id,
+              name: widget.name ?? widget.id,
+              directory: widget.directory ?? "",
+              description: widget.description,
+              alertTypes: widget.alertTypes ?? [],
+              settings,
+              createdAt: Date.now(),
+            });
+          }
+        }
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.MODULE_WIDGET_DEREGISTERED: {
+        for (const widget of event.widgets) {
+          await ctx.runMutation(internal.moduleWidgets.unregister, {
+            widgetId: widget.id,
+          });
+        }
         return corsJson({ success: true, type: event.type });
       }
 
