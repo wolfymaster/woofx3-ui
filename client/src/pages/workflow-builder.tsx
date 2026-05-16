@@ -18,6 +18,8 @@ import {
   Zap,
   ZoomIn,
   ZoomOut,
+  LayoutHorizontal,
+  LayoutVertical,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
@@ -59,7 +61,7 @@ import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import { $currentInstanceId } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import { definitionToReactFlow, type ProjectionNode } from "@/lib/workflow-projection";
+import { definitionToReactFlow, type ProjectionNode, type LayoutDirection } from "@/lib/workflow-projection";
 
 type NodeKind = "trigger" | "action" | "condition" | "delay" | "wait" | "workflow" | "log";
 
@@ -378,6 +380,7 @@ export default function WorkflowBuilder() {
   );
 
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null);
+  const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>("horizontal");
   useEffect(() => {
     if (workflow?.definition) {
       setDefinition(workflow.definition as WorkflowDefinition);
@@ -385,8 +388,8 @@ export default function WorkflowBuilder() {
   }, [workflow?.definition]);
 
   const projection = useMemo(
-    () => (definition ? definitionToReactFlow(definition) : { nodes: [], edges: [] }),
-    [definition]
+    () => (definition ? definitionToReactFlow(definition, layoutDirection) : { nodes: [], edges: [] }),
+    [definition, layoutDirection]
   );
   const [nodes, setNodes, onNodesChange] = useNodesState(projection.nodes as Node[]);
   const [edges, _setEdges, onEdgesChange] = useEdgesState(projection.edges as Edge[]);
@@ -547,6 +550,19 @@ export default function WorkflowBuilder() {
           </Button>
           <Button variant="ghost" size="icon" disabled data-testid="button-redo">
             <Redo2 className="h-4 w-4" />
+          </Button>
+          <Separator orientation="vertical" className="h-6 mx-2" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setLayoutDirection((prev) => (prev === "horizontal" ? "vertical" : "horizontal"))}
+            title={layoutDirection === "horizontal" ? "Switch to vertical layout" : "Switch to horizontal layout"}
+          >
+            {layoutDirection === "horizontal" ? (
+              <LayoutVertical className="h-4 w-4" />
+            ) : (
+              <LayoutHorizontal className="h-4 w-4" />
+            )}
           </Button>
           <Separator orientation="vertical" className="h-6 mx-2" />
           <Button variant="outline" onClick={() => setShowPreview(true)} data-testid="button-preview-json">

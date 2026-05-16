@@ -13,7 +13,9 @@ export interface ProjectionNode extends Node {
 const NODE_WIDTH = 220;
 const NODE_HEIGHT = 80;
 
-export function definitionToReactFlow(def: WorkflowDefinition): {
+export type LayoutDirection = "horizontal" | "vertical";
+
+export function definitionToReactFlow(def: WorkflowDefinition, direction: LayoutDirection = "horizontal"): {
   nodes: ProjectionNode[];
   edges: Edge[];
 } {
@@ -81,13 +83,14 @@ export function definitionToReactFlow(def: WorkflowDefinition): {
     }
   }
 
-  applyDagreLayout(nodes, edges);
+  applyDagreLayout(nodes, edges, direction);
   return { nodes, edges };
 }
 
-function applyDagreLayout(nodes: ProjectionNode[], edges: Edge[]): void {
+function applyDagreLayout(nodes: ProjectionNode[], edges: Edge[], direction: LayoutDirection): void {
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "LR", nodesep: 40, ranksep: 80 });
+  const rankdir = direction === "horizontal" ? "LR" : "TB";
+  g.setGraph({ rankdir, nodesep: 40, ranksep: 80 });
   g.setDefaultEdgeLabel(() => ({}));
   for (const node of nodes) {
     g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
