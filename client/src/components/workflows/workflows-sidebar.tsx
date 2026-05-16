@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
-import { Loader2, Power, PowerOff, Search, Workflow as WorkflowIcon, Zap } from "lucide-react";
+import { Loader2, Power, PowerOff, Search, Zap } from "lucide-react";
 import { useState } from "react";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Switch } from "@/components/ui/switch";
 
 type WorkflowRow = Doc<"workflows">;
 
@@ -198,42 +197,33 @@ export function WorkflowsSidebar({ selectedWorkflowId, onSelectWorkflow }: Workf
                   }
                 }}
               >
-                <div
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggle(workflow.engineWorkflowId, !workflow.isEnabled);
+                  }}
                   className={cn(
-                    "h-8 w-8 rounded-lg flex items-center justify-center shrink-0",
-                    workflow.isEnabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                    "h-8 w-8 rounded-lg flex items-center justify-center shrink-0 cursor-pointer transition-colors",
+                    workflow.isEnabled
+                      ? "bg-green-500/10 text-green-600 hover:bg-green-500/20"
+                      : "bg-muted text-muted-foreground hover:bg-accent"
                   )}
-                >
-                  <WorkflowIcon className="h-4 w-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-medium truncate">{name}</span>
-                    {workflow.isEnabled ? (
-                      <Power className="h-3 w-3 text-green-500 shrink-0" />
-                    ) : (
-                      <PowerOff className="h-3 w-3 text-muted-foreground shrink-0" />
-                    )}
-                  </div>
-                  <span className="text-[11px] text-muted-foreground truncate block">
-                    {workflowStepCount(workflow)} steps
-                  </span>
-                </div>
-                <div
-                  className="shrink-0"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
+                  title={workflow.isEnabled ? "Click to deactivate" : "Click to activate"}
                 >
                   {isToggling ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : workflow.isEnabled ? (
+                    <Power className="h-4 w-4" />
                   ) : (
-                    <Switch
-                      checked={workflow.isEnabled}
-                      onCheckedChange={(checked) => {
-                        handleToggle(workflow.engineWorkflowId, checked);
-                      }}
-                    />
+                    <PowerOff className="h-4 w-4" />
                   )}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium truncate block">{name}</span>
+                  <span className="text-[11px] text-muted-foreground truncate block">
+                    {workflowStepCount(workflow)} steps
+                  </span>
                 </div>
               </div>
             );

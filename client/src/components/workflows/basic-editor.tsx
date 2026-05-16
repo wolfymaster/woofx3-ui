@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useMutation } from "@tanstack/react-query";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { useAction } from "convex/react";
-import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -530,14 +530,6 @@ export function BasicWorkflowEditor() {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-6">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <Sparkles className="h-5 w-5 text-primary" />
-          <h2 className="text-xl font-semibold">Quick Workflow Builder</h2>
-        </div>
-        <p className="text-muted-foreground">{stepDescriptions[step]}</p>
-      </div>
-
       <StepIndicator currentStep={step} hasTriggerConfig={hasTriggerConfig} hasActionConfig={hasActionConfig} />
 
       {/* Step 1: Trigger Selection */}

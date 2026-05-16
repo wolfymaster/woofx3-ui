@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
-import type { WorkflowDefinition } from "@woofx3/api";
+import type { TaskDefinition, WorkflowDefinition } from "@woofx3/api";
 import { useAction, useMutation, useQuery } from "convex/react";
 import {
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   GitBranch,
   GripVertical,
   Maximize2,
+  Plus,
   Redo2,
   Save,
   Search,
@@ -52,6 +53,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -179,7 +186,7 @@ function CustomNode({ data, selected, type }: NodeProps<ProjectionNode["data"]>)
   return (
     <div
       className={cn(
-        "px-4 py-3 rounded-lg border-2 bg-card min-w-[180px] max-w-[220px]",
+        "px-5 py-4 rounded-xl border-2 bg-card min-w-[240px] max-w-[280px] shadow-sm",
         colors.border,
         selected && "ring-2 ring-primary ring-offset-2 ring-offset-background"
       )}
@@ -188,22 +195,22 @@ function CustomNode({ data, selected, type }: NodeProps<ProjectionNode["data"]>)
       {kind !== "trigger" && (
         <Handle
           type="target"
-          position={Position.Left}
+          position={Position.Top}
           className={cn("!w-3 !h-3 !border-2 !border-background", colors.handle)}
         />
       )}
       <div className="flex items-center gap-3">
-        <div className={cn("h-8 w-8 rounded-md flex items-center justify-center shrink-0", colors.icon)}>
-          <Icon className="h-4 w-4" />
+        <div className={cn("h-9 w-9 rounded-lg flex items-center justify-center shrink-0", colors.icon)}>
+          <Icon className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{label}</p>
+          <p className="text-sm font-semibold truncate">{label}</p>
           {description && <p className="text-xs text-muted-foreground truncate">{description}</p>}
         </div>
       </div>
       <Handle
         type="source"
-        position={Position.Right}
+        position={Position.Bottom}
         className={cn("!w-3 !h-3 !border-2 !border-background", colors.handle)}
       />
     </div>
@@ -380,7 +387,7 @@ export default function WorkflowBuilder() {
   );
 
   const [definition, setDefinition] = useState<WorkflowDefinition | null>(null);
-  const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>("horizontal");
+  const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>("vertical");
   useEffect(() => {
     if (workflow?.definition) {
       setDefinition(workflow.definition as WorkflowDefinition);
@@ -477,6 +484,30 @@ export default function WorkflowBuilder() {
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node);
   }, []);
+
+  const handleAddStep = useCallback(
+    (type: "action" | "condition" | "wait") => {
+      if (!definition) {
+        return;
+      }
+      const newTaskId = `step-${definition.tasks.length + 1}`;
+      const lastTask = definition.tasks[definition.tasks.length - 1];
+      const dependsOn = lastTask ? [lastTask.id] : undefined;
+
+      const newTask: TaskDefinition =
+        type === "action"
+          ? { id: newTaskId, type: "action", action: "", parameters: {}, dependsOn }
+          : type === "condition"
+            ? { id: newTaskId, type: "condition", conditions: [], onTrue: [], onFalse: [], dependsOn }
+            : { id: newTaskId, type: "wait", wait: { type: "event", event: "" }, dependsOn };
+
+      setDefinition({
+        ...definition,
+        tasks: [...definition.tasks, newTask],
+      });
+    },
+    [definition]
+  );
 
   const nodeLibraryCategories = useMemo((): NodeLibraryCategory[] => {
     const dynamic: NodeLibraryCategory[] = [];
@@ -627,6 +658,30 @@ export default function WorkflowBuilder() {
                 <Button variant="outline" size="icon" data-testid="button-fit-view">
                   <Maximize2 className="h-4 w-4" />
                 </Button>
+              </Panel>
+              <Panel position="bottom-center" className="!m-4">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="default" className="gap-2" data-testid="button-add-step">
+                      <Plus className="h-4 w-4" />
+                      Add Step
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center">
+                    <DropdownMenuItem onClick={() => handleAddStep("action")} data-testid="add-step-action">
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                      Action
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleAddStep("condition")} data-testid="add-step-condition">
+                      <GitBranch className="h-4 w-4 mr-2" />
+                      Condition
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleAddStep("wait")} data-testid="add-step-wait">
+                      <Clock className="h-4 w-4 mr-2" />
+                      Wait
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </Panel>
             </ReactFlow>
           )}

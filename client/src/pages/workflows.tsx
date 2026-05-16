@@ -1,23 +1,23 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { WorkflowDefinition } from "@woofx3/api";
 import { useAction, useQuery } from "convex/react";
 import {
   ArrowLeft,
-  CheckCircle2,
-  Edit3,
+  Code,
   Loader2,
-  MoreHorizontal,
+  MoreVertical,
   Plus,
-  Power,
-  PowerOff,
+  Save,
   Trash2,
   Workflow as WorkflowIcon,
-  Zap,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
+import StepListEditor from "@/components/workflows/step-list-editor";
 import { WorkflowsSidebar, type WorkflowListItem } from "@/components/workflows/workflows-sidebar";
+import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -30,7 +30,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,11 +37,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PageHeader } from "@/components/layout/page-header";
-import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 
 type WorkflowRow = Doc<"workflows">;
 
@@ -51,18 +48,9 @@ function workflowName(row: WorkflowRow): string {
   return def?.name ?? row.engineWorkflowId;
 }
 
-function workflowStepCount(row: WorkflowRow): number {
-  if (Array.isArray(row.nodes)) {
-    return row.nodes.length;
-  }
-  const def = row.definition as { tasks?: unknown[] } | undefined;
-  return (def?.tasks?.length ?? 0) + 1;
-}
-
 export default function Workflows() {
   const params = useParams<{ id?: string }>();
-  const [location, navigate] = useLocation();
-  const isEditMode = location.endsWith("/edit");
+  const [, navigate] = useLocation();
   const engineWorkflowIdFromUrl = params?.id;
 
   const { toast } = useToast();
@@ -71,14 +59,21 @@ export default function Workflows() {
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowListItem | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showJson, setShowJson] = useState(false);
 
   const workflows = useQuery(
     api.workflows.list,
     instance ? { instanceId: instance._id as Id<"instances"> } : "skip"
   );
 
-  const setEnabled = useAction(api.workflowActions.setEnabled);
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
+  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
+
+  const [isSaving, setIsSaving] = useState(false);
+  const [currentDefinition, setCurrentDefinition] = useState<WorkflowDefinition | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const selectedWorkflowData = workflows?.find(
     (w) => w.engineWorkflowId === selectedWorkflow?.engineWorkflowId
@@ -94,7 +89,7 @@ export default function Workflows() {
           name: workflowName(found),
           description: (found.definition as { description?: string } | undefined)?.description,
           isEnabled: found.isEnabled,
-          stepCount: workflowStepCount(found),
+          stepCount: 0,
         });
       }
     }
@@ -137,36 +132,80 @@ export default function Workflows() {
     }
   };
 
-  const handleEdit = () => {
-    if (selectedWorkflow) {
-      navigate(`/workflows/${selectedWorkflow.engineWorkflowId}/edit`);
-    }
-  };
-
-  const handleBackFromEdit = () => {
-    if (selectedWorkflow) {
-      navigate(`/workflows/${selectedWorkflow.engineWorkflowId}`);
-    } else {
-      navigate("/workflows");
-    }
-  };
-
-  const handleToggle = async (enabled: boolean) => {
-    if (!instance || !selectedWorkflow) {
+  const handleSave = async () => {
+    if (!instance || !selectedWorkflow || !currentDefinition) {
       return;
     }
+    setIsSaving(true);
     try {
-      await setEnabled({
+      await updateFromDefinition({
         instanceId: instance._id as Id<"instances">,
         engineWorkflowId: selectedWorkflow.engineWorkflowId,
-        isEnabled: enabled,
+        definition: currentDefinition,
       });
+      toast({ title: "Workflow saved" });
     } catch (err) {
       toast({
-        title: "Failed to toggle workflow",
+        title: "Save failed",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDefinitionChange = (definition: WorkflowDefinition) => {
+    setCurrentDefinition(definition);
+  };
+
+  const handleTitleClick = () => {
+    if (!selectedWorkflow) {
+      return;
+    }
+    setEditedTitle(selectedWorkflow.name);
+    setIsEditingTitle(true);
+    setTimeout(() => {
+      titleInputRef.current?.focus();
+      titleInputRef.current?.select();
+    }, 0);
+  };
+
+  const saveTitle = async () => {
+    if (!instance || !selectedWorkflow || !selectedWorkflowData) {
+      return;
+    }
+    const trimmed = editedTitle.trim();
+    if (!trimmed || trimmed === selectedWorkflow.name) {
+      setIsEditingTitle(false);
+      return;
+    }
+    try {
+      const def = selectedWorkflowData.definition as WorkflowDefinition;
+      await updateFromDefinition({
+        instanceId: instance._id as Id<"instances">,
+        engineWorkflowId: selectedWorkflow.engineWorkflowId,
+        definition: { ...def, name: trimmed },
+      });
+      setSelectedWorkflow({ ...selectedWorkflow, name: trimmed });
+      toast({ title: "Workflow name updated" });
+    } catch (err) {
+      toast({
+        title: "Failed to update name",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setIsEditingTitle(false);
+    }
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void saveTitle();
+    } else if (e.key === "Escape") {
+      setIsEditingTitle(false);
     }
   };
 
@@ -178,14 +217,10 @@ export default function Workflows() {
       />
 
       <div className="flex-1 overflow-hidden">
-        {isEditMode ? (
-          <div className="h-full">
-            <BasicWorkflowEditor />
-          </div>
-        ) : selectedWorkflow && selectedWorkflowData ? (
-          <div className="h-full overflow-auto">
-            <div className="p-6">
-              <div className="flex items-center gap-4 mb-6">
+        {selectedWorkflow && selectedWorkflowData ? (
+          <div className="h-full flex flex-col">
+            <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
+              <div className="flex items-center gap-4">
                 <Button
                   variant="ghost"
                   size="icon"
@@ -194,141 +229,75 @@ export default function Workflows() {
                     navigate("/workflows");
                   }}
                 >
-                  <ArrowLeft className="h-4 w-4" />
+                  <ArrowLeft className="h-5 w-5" />
                 </Button>
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl font-semibold">{selectedWorkflow.name}</h2>
-                    <Badge variant={selectedWorkflow.isEnabled ? "secondary" : "outline"} className="text-xs">
-                      {selectedWorkflow.isEnabled ? (
-                        <>
-                          <Power className="h-3 w-3 mr-1" />
-                          Active
-                        </>
-                      ) : (
-                        "Inactive"
-                      )}
-                    </Badge>
-                  </div>
-                  {selectedWorkflow.description && (
-                    <p className="text-sm text-muted-foreground">{selectedWorkflow.description}</p>
+                  {isEditingTitle ? (
+                    <input
+                      ref={titleInputRef}
+                      type="text"
+                      value={editedTitle}
+                      onChange={(e) => setEditedTitle(e.target.value)}
+                      onBlur={() => void saveTitle()}
+                      onKeyDown={handleTitleKeyDown}
+                      className="text-xl font-semibold bg-transparent border-b-2 border-primary outline-none px-0 py-0 w-full max-w-md"
+                    />
+                  ) : (
+                    <h2
+                      className="text-xl font-semibold cursor-pointer hover:text-primary transition-colors"
+                      onClick={handleTitleClick}
+                      title="Click to edit"
+                    >
+                      {selectedWorkflow.name}
+                    </h2>
                   )}
                 </div>
-                <>
-                  <Button variant="outline" size="sm" onClick={handleEdit}>
-                    <Edit3 className="h-4 w-4 mr-2" />
-                    Edit
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={handleEdit}>
-                        <Edit3 className="h-4 w-4 mr-2" />
-                        Edit Workflow
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={handleDelete}
-                        className="text-destructive focus:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Zap className="h-4 w-4" />
-                      Steps
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{selectedWorkflow.stepCount}</div>
-                    <p className="text-xs text-muted-foreground mt-1">Total steps in workflow</p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Power className="h-4 w-4" />
-                      Status
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <Switch
-                        checked={selectedWorkflow.isEnabled}
-                        onCheckedChange={handleToggle}
-                      />
-                      <span className="text-sm">
-                        {selectedWorkflow.isEnabled ? "Enabled" : "Disabled"}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Toggle to enable or disable the workflow
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <CheckCircle2 className="h-4 w-4" />
-                      Trigger
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {selectedWorkflowData.nodes && selectedWorkflowData.nodes.length > 0 ? (
-                      <div className="space-y-2">
-                        {selectedWorkflowData.nodes.slice(0, 3).map((node: { type?: string; label?: string }, i: number) => (
-                          <div key={i} className="text-sm">
-                            <span className="text-muted-foreground">{node.type || "trigger"}:</span>{" "}
-                            {node.label || "unnamed"}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No trigger configured</p>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="md:col-span-2 lg:col-span-3">
-                  <CardHeader>
-                    <CardTitle className="text-sm">Definition</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <pre className="text-xs bg-muted p-3 rounded-md overflow-auto max-h-64">
-                      {JSON.stringify(selectedWorkflowData.definition, null, 2)}
-                    </pre>
-                  </CardContent>
-                </Card>
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={handleSave} disabled={!currentDefinition || isSaving}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {isSaving ? "Saving…" : "Save"}
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setShowJson(true)}>
+                      <Code className="h-4 w-4 mr-2" />
+                      View JSON
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
+
+            <div className="flex-1 overflow-hidden">
+              <StepListEditor onDefinitionChange={handleDefinitionChange} />
+            </div>
+
+            <Sheet open={showJson} onOpenChange={setShowJson}>
+              <SheetContent className="w-[500px] sm:max-w-none">
+                <SheetHeader>
+                  <SheetTitle>Workflow JSON</SheetTitle>
+                </SheetHeader>
+                <div className="mt-6">
+                  <pre className="text-xs bg-muted p-4 rounded-md overflow-auto max-h-[80vh]">
+                    {JSON.stringify(selectedWorkflowData?.definition ?? {}, null, 2)}
+                  </pre>
+                </div>
+              </SheetContent>
+            </Sheet>
           </div>
         ) : (
           <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
-            <PageHeader
-              title="Workflows"
-              description="Automate your stream with trigger-action workflows."
-              actions={
-                <Button onClick={() => navigate("/workflows/new")} data-testid="button-new-workflow">
-                  <Plus className="h-4 w-4 mr-2" />
-                  New Workflow
-                </Button>
-              }
-            />
-
             {workflows === undefined ? (
               <div className="flex items-center justify-center min-h-[40vh]">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -348,15 +317,13 @@ export default function Workflows() {
                 </Button>
               </div>
             ) : (
-              <div className="mt-8 text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-                  <WorkflowIcon className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">Select a workflow</h3>
-                <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-                  Choose a workflow from the sidebar to view its details, or create a new one.
-                </p>
-              </div>
+              <>
+                <PageHeader
+                  title="Create a new workflow"
+                  description="Choose what triggers your workflow"
+                />
+                <BasicWorkflowEditor />
+              </>
             )}
           </div>
         )}
