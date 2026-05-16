@@ -422,6 +422,48 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      case EngineEventType.SCENE_CREATED: {
+        await ctx.runMutation(internal.scenes.upsertFromWebhook, {
+          instanceId: instance._id,
+          applicationId: event.applicationId,
+          engineSceneId: event.scene.id,
+          name: event.scene.name,
+          description: event.scene.description,
+          widgetsJson: event.scene.widgetsJson,
+          layoutJson: event.scene.layoutJson,
+          createdByType: event.scene.createdByType,
+          createdByRef: event.scene.createdByRef,
+          createdAt: event.scene.createdAt,
+          updatedAt: event.scene.updatedAt,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.SCENE_UPDATED: {
+        await ctx.runMutation(internal.scenes.upsertFromWebhook, {
+          instanceId: instance._id,
+          applicationId: event.applicationId,
+          engineSceneId: event.scene.id,
+          name: event.scene.name,
+          description: event.scene.description,
+          widgetsJson: event.scene.widgetsJson,
+          layoutJson: event.scene.layoutJson,
+          createdByType: event.scene.createdByType,
+          createdByRef: event.scene.createdByRef,
+          createdAt: event.scene.createdAt,
+          updatedAt: event.scene.updatedAt,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.SCENE_DELETED: {
+        await ctx.runMutation(internal.scenes.deleteFromWebhook, {
+          instanceId: instance._id,
+          engineSceneId: event.sceneId,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       default: {
         logger.warn("webhook: unhandled event type", { eventType });
         return corsJson({ success: true, type: eventType, handled: false });
