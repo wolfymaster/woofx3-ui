@@ -104,3 +104,67 @@ export const reconcileCommands = internalMutation({
     return { itemsProcessed: processed };
   },
 });
+
+/**
+ * Reconcile the local `installedModules` mirror against a full snapshot
+ * returned by the engine's `listEngineModules()`. The engine is the source
+ * of truth: rows whose `name` is present in the snapshot are upserted;
+ * rows with a `name` that no longer appears are deleted.
+ */
+export const reconcileModules = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    snapshots: v.array(
+      v.object({
+        name: v.string(),
+        version: v.string(),
+        state: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, snapshots }) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("installedModules")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+
+    const existingByName = new Map<string, (typeof existing)[number]>();
+    for (const row of existing) {
+      existingByName.set(row.name, row);
+    }
+
+    const snapshotNames = new Set(snapshots.map((s) => s.name));
+    let processed = 0;
+
+    for (const snap of snapshots) {
+      const found = existingByName.get(snap.name);
+      if (found) {
+        if (found.version !== snap.version || found.state !== snap.state) {
+          await ctx.db.patch(found._id, {
+            version: snap.version,
+            state: snap.state,
+            updatedAt: now,
+          });
+        }
+      } else {
+        await ctx.db.insert("installedModules", {
+          instanceId,
+          name: snap.name,
+          version: snap.version,
+          state: snap.state,
+          updatedAt: now,
+        });
+      }
+      processed++;
+    }
+
+    for (const row of existing) {
+      if (!snapshotNames.has(row.name)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: processed };
+  },
+});
