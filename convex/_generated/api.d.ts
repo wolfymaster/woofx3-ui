@@ -47,6 +47,7 @@ import type * as sceneSlots from "../sceneSlots.js";
 import type * as scenes from "../scenes.js";
 import type * as seeds_triggerActions from "../seeds/triggerActions.js";
 import type * as storage from "../storage.js";
+import type * as streamStatus from "../streamStatus.js";
 import type * as transientEvents from "../transientEvents.js";
 import type * as triggerDefinitions from "../triggerDefinitions.js";
 import type * as twitchAuth from "../twitchAuth.js";
@@ -105,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   scenes: typeof scenes;
   "seeds/triggerActions": typeof seeds_triggerActions;
   storage: typeof storage;
+  streamStatus: typeof streamStatus;
   transientEvents: typeof transientEvents;
   triggerDefinitions: typeof triggerDefinitions;
   twitchAuth: typeof twitchAuth;

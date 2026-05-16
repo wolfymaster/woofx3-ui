@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '@nanostores/react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery as useConvexQuery } from 'convex/react';
 import {
   LayoutDashboard,
   Puzzle,
@@ -88,14 +88,11 @@ interface StreamStatusProps {
 }
 
 function StreamStatus({ accountId = 'default' }: StreamStatusProps) {
-  const { data: status } = useQuery({
-    queryKey: ['streamStatus', accountId],
-    queryFn: async () => {
-      // TODO: replace with transport.getStreamStatus once transport is wired
-      return { isLive: false, uptime: '00:00:00', viewerCount: 0 };
-    },
-    refetchInterval: 5000,
-  });
+  const { instance } = useInstance();
+  const status = useConvexQuery(
+    api.streamStatus.getStreamStatus,
+    instance ? { instanceId: instance._id } : 'skip',
+  );
 
   const isLive = status?.isLive ?? false;
   const uptime = status?.uptime ?? '00:00:00';
