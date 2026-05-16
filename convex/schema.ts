@@ -513,4 +513,34 @@ export default defineSchema({
   })
     .index("by_instance_correlation", ["instanceId", "correlationKey"])
     .index("by_expires_at", ["expiresAt"]),
+
+  // userDashboardLayouts: per-user, per-instance dashboard widget layout persistence
+  userDashboardLayouts: defineTable({
+    userId: v.id("users"),
+    instanceId: v.id("instances"),
+    layout: v.array(
+      v.object({
+        id: v.string(),
+        type: v.string(),
+        position: v.object({ x: v.number(), y: v.number() }),
+        size: v.object({ width: v.number(), height: v.number() }),
+        config: v.optional(v.any()),
+      })
+    ),
+    updatedAt: v.number(),
+  })
+    .index("by_user_instance", ["userId", "instanceId"]),
+
+  // debugEventHistory: history of simulated Twitch events for debugging
+  debugEventHistory: defineTable({
+    userId: v.id("users"),
+    instanceId: v.id("instances"),
+    eventType: v.string(),
+    payload: v.any(),
+    sentAt: v.number(),
+    success: v.boolean(),
+    errorMessage: v.optional(v.string()),
+  })
+    .index("by_user_instance", ["userId", "instanceId"])
+    .index("by_sent_at", ["sentAt"]),
 });

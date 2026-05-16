@@ -30,6 +30,10 @@ import { ChatModule } from '@/components/dashboard/chat-module';
 import { WorkflowRunsModule } from '@/components/dashboard/workflow-runs-module';
 import { EventFeedModule } from '@/components/dashboard/event-feed-module';
 import { MacroPadModule } from '@/components/dashboard/macro-pad-module';
+import { StreamStatusWidget } from '@/components/dashboard/widgets/stream-status';
+import { RecentEventsWidget } from '@/components/dashboard/widgets/recent-events';
+import { QuickActionsWidget } from '@/components/dashboard/widgets/quick-actions';
+import { AlertQueueWidget } from '@/components/dashboard/widgets/alert-queue';
 import type { DashboardModule } from '@woofx3/api';
 
 // Registry of available module components
@@ -38,6 +42,10 @@ const moduleComponents: Record<string, React.ComponentType<{ config?: Record<str
   'workflow-runs': WorkflowRunsModule,
   'event-feed': EventFeedModule,
   'macro-pad': MacroPadModule,
+  'stream-status': StreamStatusWidget,
+  'recent-events': RecentEventsWidget,
+  'quick-actions': QuickActionsWidget,
+  'alert-queue': AlertQueueWidget,
 };
 
 const moduleLabels: Record<string, string> = {
@@ -45,12 +53,17 @@ const moduleLabels: Record<string, string> = {
   'workflow-runs': 'Workflow Runs',
   'event-feed': 'Event Feed',
   'macro-pad': 'Macro Pad',
+  'stream-status': 'Stream Status',
+  'recent-events': 'Recent Events',
+  'quick-actions': 'Quick Actions',
+  'alert-queue': 'Alert Queue',
 };
 
 const defaultModules: DashboardModule[] = [
-  { id: 'mod-1', type: 'chat', title: 'Chat Client' },
-  { id: 'mod-2', type: 'workflow-runs', title: 'Workflow Runs' },
-  { id: 'mod-3', type: 'event-feed', title: 'Event Feed' },
+  { id: 'mod-1', type: 'stream-status', title: 'Stream Status' },
+  { id: 'mod-2', type: 'recent-events', title: 'Recent Events' },
+  { id: 'mod-3', type: 'quick-actions', title: 'Quick Actions' },
+  { id: 'mod-4', type: 'chat', title: 'Chat Client' },
 ];
 
 interface ModulePanelProps {
