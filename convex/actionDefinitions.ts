@@ -27,6 +27,7 @@ export const upsert = internalMutation({
     color: v.string(),
     icon: v.string(),
     configFields: v.optional(v.array(v.any())),
+    projectionKey: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
   },
   handler: async (ctx, args) => {

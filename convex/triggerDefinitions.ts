@@ -31,6 +31,7 @@ export const upsert = internalMutation({
     configFields: v.optional(v.array(v.any())),
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
+    projectionKey: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
   },
   handler: async (ctx, args) => {

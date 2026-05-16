@@ -78,7 +78,7 @@ export function buildDefinitionFromPresets(
     description: `When ${trigger.description.toLowerCase()}, ${action.description.toLowerCase()}.`,
     trigger: {
       type: "event",
-      eventType: assembleEventType(trigger, triggerConfig),
+      event: assembleEventType(trigger, triggerConfig),
       conditions: configValuesToConditions(triggerConfig, trigger),
     },
     tasks: [
@@ -142,7 +142,7 @@ export function buildTieredDefinition(trigger: TriggerWithEvent, tiers: TierConf
   return {
     name: `${trigger.name} — tiered`,
     description: `Multi-tier ${trigger.name.toLowerCase()} automation.`,
-    trigger: { type: "event", eventType: assembleEventType(trigger, firstTierValues), conditions: [] },
+    trigger: { type: "event", event: assembleEventType(trigger, firstTierValues), conditions: [] },
     tasks,
   };
 }

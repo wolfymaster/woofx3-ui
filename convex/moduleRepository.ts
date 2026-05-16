@@ -6,13 +6,16 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 
 export const list = query({
   args: {
+    instanceId: v.optional(v.id("instances")),
     search: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    const all = await ctx.db.query("moduleRepository").collect();
+    let results = await ctx.db.query("moduleRepository").collect();
 
-    let results = all;
+    if (args.instanceId) {
+      results = results.filter((m) => m.instanceId === args.instanceId);
+    }
 
     if (args.tags && args.tags.length > 0) {
       results = results.filter((m) => args.tags!.some((tag) => m.tags.includes(tag)));

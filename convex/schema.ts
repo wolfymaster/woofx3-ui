@@ -180,6 +180,7 @@ export default defineSchema({
     configFields: v.optional(v.array(v.any())),
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
+    projectionKey: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
   })
     .index("by_slug", ["slug"])
@@ -194,6 +195,7 @@ export default defineSchema({
     color: v.string(),
     icon: v.string(),
     configFields: v.optional(v.array(v.any())),
+    projectionKey: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
   })
     .index("by_slug", ["slug"])

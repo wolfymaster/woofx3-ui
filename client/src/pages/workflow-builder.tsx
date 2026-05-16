@@ -149,7 +149,7 @@ function nodeLabel(node: Node): string {
     return node.id;
   }
   if (data.kind === "trigger") {
-    return data.eventType ? `Trigger: ${data.eventType}` : "Trigger";
+    return data.event ? `Trigger: ${data.event}` : "Trigger";
   }
   const task = data.task;
   if (!task) {
@@ -168,8 +168,8 @@ function CustomNode({ data, selected, type }: NodeProps<ProjectionNode["data"]>)
 
   const label =
     data.kind === "trigger"
-      ? data.eventType
-        ? `Trigger: ${data.eventType}`
+      ? data.event
+        ? `Trigger: ${data.event}`
         : "Trigger"
       : (data.task?.action ?? `${data.task?.type ?? "task"} · ${data.task?.id ?? ""}`);
   const description = data.kind === "task" ? data.task?.id : undefined;

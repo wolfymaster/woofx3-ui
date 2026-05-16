@@ -33,6 +33,19 @@ interface UploadedFiles {
   [path: string]: string;
 }
 
+interface ModuleFunction {
+  _id: string;
+  functionName: string;
+  runtime?: string;
+  qualifiedName: string;
+}
+
+interface ModuleWorkflow {
+  _id: string;
+  definition?: { name?: string };
+  isEnabled: boolean;
+}
+
 function getCommonDirectoryPrefix(paths: string[]): string {
   if (paths.length === 0) {
     return "";
@@ -265,16 +278,8 @@ export default function Modules() {
     api.actionDefinitions.listByModule,
     selectedModule ? { moduleId: selectedModule._id } : "skip",
   );
-  const functions = useQuery(
-    api.moduleFunctions.listByModule,
-    selectedModule ? { moduleId: selectedModule._id } : "skip",
-  );
-  const workflows = useQuery(
-    api.workflows.listByModule,
-    instance && selectedModule?.moduleKey
-      ? { instanceId: instance._id, moduleKey: selectedModule.moduleKey }
-      : "skip",
-  );
+  const functions: ModuleFunction[] = [];
+  const workflows: ModuleWorkflow[] = [];
 
   const handleDelete = (moduleId: Id<"moduleRepository">) => {
     const target = (repoModules || []).find((m) => m._id === moduleId);

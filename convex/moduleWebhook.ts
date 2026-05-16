@@ -87,6 +87,7 @@ const triggerValidator = v.object({
   allowVariants: v.optional(v.boolean()),
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
+  projectionKey: v.optional(v.string()),
 });
 
 const actionValidator = v.object({
@@ -97,6 +98,7 @@ const actionValidator = v.object({
   paramsSchema: v.optional(v.string()),
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
+  projectionKey: v.optional(v.string()),
 });
 
 /*
@@ -189,6 +191,7 @@ type EngineTrigger = {
   event?: string;
   configSchema?: string;
   allowVariants?: boolean;
+  projectionKey?: string;
 };
 
 type EngineAction = {
@@ -196,6 +199,7 @@ type EngineAction = {
   name?: string;
   description?: string;
   paramsSchema?: string;
+  projectionKey?: string;
 };
 
 function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | undefined) {
@@ -212,6 +216,7 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
     supportsTiers: ui.supportsTiers,
     tierLabel: ui.tierLabel,
     allowVariants: t.allowVariants,
+    projectionKey: t.projectionKey,
     moduleId,
   };
 }
@@ -226,6 +231,7 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
     color: ui.color,
     icon: ui.icon,
     configFields: ui.configFields,
+    projectionKey: a.projectionKey,
     moduleId,
   };
 }

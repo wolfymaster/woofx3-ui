@@ -5,7 +5,7 @@ import type { Edge, Node } from "reactflow";
 export interface ProjectionNode extends Node {
   data: {
     kind: "trigger" | "task";
-    eventType?: string;
+    event?: string;
     task?: TaskDefinition;
   };
 }
@@ -24,7 +24,7 @@ export function definitionToReactFlow(def: WorkflowDefinition): {
     id: "__trigger",
     type: "trigger",
     position: { x: 0, y: 0 },
-    data: { kind: "trigger", eventType: def.trigger.eventType },
+    data: { kind: "trigger", event: def.trigger.type === "event" ? def.trigger.event : undefined },
   });
 
   for (const task of def.tasks) {
