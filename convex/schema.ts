@@ -120,6 +120,7 @@ export default defineSchema({
   // chatCommands: chat commands configured per instance
   chatCommands: defineTable({
     instanceId: v.id("instances"),
+    applicationId: v.optional(v.string()), // engine application scope
     command: v.string(), // e.g. "!hello"
     type: v.union(
       v.literal("static"), // fixed text response
@@ -289,6 +290,7 @@ export default defineSchema({
   // scenes: scene configurations for browser sources
   scenes: defineTable({
     instanceId: v.id("instances"),
+    applicationId: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
     width: v.number(),

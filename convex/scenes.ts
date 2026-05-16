@@ -261,6 +261,7 @@ export const upsertFromWebhook = internalMutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
+        applicationId: args.applicationId,
         name: args.name,
         description: args.description || undefined,
         width: layout.width ?? 1920,
@@ -272,6 +273,7 @@ export const upsertFromWebhook = internalMutation({
     } else {
       await ctx.db.insert("scenes", {
         instanceId: args.instanceId,
+        applicationId: args.applicationId,
         name: args.name,
         description: args.description || undefined,
         width: layout.width ?? 1920,

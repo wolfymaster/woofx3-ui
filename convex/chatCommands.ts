@@ -34,6 +34,7 @@ export const list = query({
 export const create = mutation({
   args: {
     instanceId: v.id("instances"),
+    applicationId: v.optional(v.string()),
     command: v.string(),
     type: commandTypeValidator,
     response: v.optional(v.string()),
@@ -68,6 +69,7 @@ export const create = mutation({
 
     return ctx.db.insert("chatCommands", {
       instanceId: args.instanceId,
+      applicationId: args.applicationId,
       command,
       type: args.type,
       response: args.response,
