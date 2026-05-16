@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 export const list = query({
   args: {},
@@ -77,7 +77,7 @@ export const register = mutation({
   },
 });
 
-export const unregister = mutation({
+export const unregister = internalMutation({
   args: { widgetId: v.string() },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -87,6 +87,59 @@ export const unregister = mutation({
 
     if (existing) {
       await ctx.db.delete(existing._id);
+    }
+  },
+});
+
+export const registerFromWebhook = internalMutation({
+  args: {
+    widgetId: v.string(),
+    name: v.string(),
+    directory: v.string(),
+    description: v.optional(v.string()),
+    alertTypes: v.array(v.string()),
+    settings: v.array(
+      v.object({
+        key: v.string(),
+        fieldType: v.string(),
+        label: v.string(),
+        defaultValue: v.any(),
+        options: v.optional(
+          v.array(
+            v.object({
+              label: v.string(),
+              value: v.string(),
+            })
+          )
+        ),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("moduleWidgets")
+      .withIndex("by_widget_id", (q) => q.eq("widgetId", args.widgetId))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        name: args.name,
+        directory: args.directory,
+        description: args.description,
+        alertTypes: args.alertTypes,
+        settings: args.settings,
+      });
+    } else {
+      await ctx.db.insert("moduleWidgets", {
+        moduleId: undefined as any,
+        widgetId: args.widgetId,
+        name: args.name,
+        directory: args.directory,
+        description: args.description,
+        alertTypes: args.alertTypes,
+        settings: args.settings,
+        createdAt: Date.now(),
+      });
     }
   },
 });

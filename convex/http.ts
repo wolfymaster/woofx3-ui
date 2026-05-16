@@ -35,23 +35,14 @@ type WidgetSetting = {
   options?: { label: string; value: string }[];
 };
 
-function parseSettingsSchema(settingsSchema: string | undefined): WidgetSetting[] {
-  if (!settingsSchema) return [];
-  try {
-    const parsed = JSON.parse(settingsSchema);
-    if (Array.isArray(parsed)) {
-      return parsed.map((item: Record<string, unknown>) => ({
-        key: String(item.key ?? ""),
-        fieldType: String(item.fieldType ?? "text"),
-        label: String(item.label ?? item.key ?? ""),
-        defaultValue: item.defaultValue,
-        options: Array.isArray(item.options) ? item.options as WidgetSetting["options"] : undefined,
-      }));
-    }
-    return [];
-  } catch {
-    return [];
-  }
+function parseSettingsSchema(settings: { key: string; fieldType: string; label: string; defaultValue?: unknown; options?: { label: string; value: string }[] }[]): WidgetSetting[] {
+  return settings.map((item) => ({
+    key: item.key,
+    fieldType: item.fieldType,
+    label: item.label,
+    defaultValue: item.defaultValue,
+    options: item.options,
+  }));
 }
 
 const preflightHandler = httpAction(async () => {
@@ -374,32 +365,17 @@ http.route({
 
       case EngineEventType.MODULE_WIDGET_REGISTERED: {
         for (const widget of event.widgets) {
-          const existingWidget = await ctx.db
-            .query("moduleWidgets")
-            .withIndex("by_widget_id", (q) => q.eq("widgetId", widget.id))
-            .first();
-
-          const settings = parseSettingsSchema(widget.settingsSchema);
-          if (existingWidget) {
-            await ctx.db.patch(existingWidget._id, {
-              name: widget.name ?? widget.id,
-              directory: widget.directory ?? "",
-              description: widget.description,
-              alertTypes: widget.alertTypes ?? [],
-              settings,
-            });
-          } else {
-            await ctx.db.insert("moduleWidgets", {
-              moduleId: undefined as any,
-              widgetId: widget.id,
-              name: widget.name ?? widget.id,
-              directory: widget.directory ?? "",
-              description: widget.description,
-              alertTypes: widget.alertTypes ?? [],
-              settings,
-              createdAt: Date.now(),
-            });
-          }
+          const settings = parseSettingsSchema(widget.settings);
+          // Widget registration requires moduleId lookup, so use a mutation
+          // to keep the db access in a proper mutation context
+          await ctx.runMutation(internal.moduleWidgets.registerFromWebhook, {
+            widgetId: widget.id,
+            name: widget.name ?? widget.id,
+            directory: widget.directory ?? "",
+            description: widget.description,
+            alertTypes: widget.alertTypes ?? [],
+            settings,
+          });
         }
         return corsJson({ success: true, type: event.type });
       }
@@ -447,11 +423,6 @@ http.route({
       }
 
       default: {
-        // TypeScript enforces exhaustiveness: adding a new event type to the
-        // shared union forces this branch to update. For unknown runtime
-        // types (e.g. older/newer engines), we just log and acknowledge.
-        const _exhaustive: never = event;
-        void _exhaustive;
         logger.warn("webhook: unhandled event type", { eventType });
         return corsJson({ success: true, type: eventType, handled: false });
       }

@@ -99,7 +99,7 @@ export const requestModuleUninstall = action({
 
     try {
       const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-      await rpc.uninstallModule(module.name, { moduleKey });
+      await rpc.uninstallModule(moduleKey);
       return { moduleKey };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
