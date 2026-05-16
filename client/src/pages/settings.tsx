@@ -16,6 +16,7 @@ import {
   Loader2,
   XCircle,
   AlertTriangle,
+  HardDrive,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ import { $engineUrl } from "@/lib/stores";
 import { useStore } from "@nanostores/react";
 import { api } from "@convex/_generated/api";
 import { useInstance } from "@/hooks/use-instance";
+import { StorageSettingsTab } from "./storage-settings";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
@@ -320,6 +322,10 @@ export default function Settings() {
             <TabsTrigger value="integrations" className="justify-start w-full" data-testid="tab-integrations">
               <Key className="h-4 w-4 mr-2" />
               Integrations
+            </TabsTrigger>
+            <TabsTrigger value="storage" className="justify-start w-full" data-testid="tab-storage">
+              <HardDrive className="h-4 w-4 mr-2" />
+              Storage
             </TabsTrigger>
           </TabsList>
 
@@ -668,6 +674,10 @@ export default function Settings() {
                   </div>
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="storage" className="mt-0">
+              <StorageSettingsTab />
             </TabsContent>
           </div>
         </div>

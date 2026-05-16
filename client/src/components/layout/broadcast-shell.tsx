@@ -20,7 +20,6 @@ import {
   Check,
   Pencil,
   Bug,
-  HardDrive
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
 import { cn } from '@/lib/utils';
@@ -75,7 +74,6 @@ const mainNavItems: NavItem[] = [
   { id: 'alerts', label: 'Alert Log', icon: Bell, href: '/alerts' },
   { id: 'commands', label: 'Commands', icon: MessageSquare, href: '/commands' },
   { id: 'debug', label: 'Debug', icon: Bug, href: '/debug' },
-  { id: 'storage', label: 'Storage', icon: HardDrive, href: '/storage' },
 ];
 
 const utilityItems: NavItem[] = [

@@ -1,91 +1,69 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import type { StorageConfig } from "@woofx3/api";
 
-export const getConfig = query({
+export const getConfig = action({
   args: {
     instanceId: v.id("instances"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<StorageConfig | null> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       return null;
     }
 
-    // Verify the user is a member of this instance
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-
-    const isMember = membership.some((m) => m.instanceId === args.instanceId);
-    if (!isMember) {
+    const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null =
+      await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, {
+        instanceId: args.instanceId,
+        userId,
+      });
+    if (!bundle) {
       return null;
     }
 
-    // Get the instance to find the engine URL
-    const instance = await ctx.db.get(args.instanceId);
-    if (!instance) {
+    if (!bundle.clientId || !bundle.clientSecret) {
       return null;
     }
 
-    if (!instance.clientId || !instance.clientSecret) {
+    try {
+      const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+      const config: StorageConfig = await rpc.getStorageConfig();
+      return config;
+    } catch {
       return null;
     }
-
-    // Call the engine to get storage config
-    const engineApi = createEngineRpcSession<EngineApi>(
-      instance.url,
-      instance.clientId,
-      instance.clientSecret
-    );
-
-    const config = await engineApi.getStorageConfig();
-    return config;
   },
 });
 
-export const setConfig = mutation({
+export const setConfig = action({
   args: {
     instanceId: v.id("instances"),
     config: v.record(v.string(), v.any()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ success: boolean }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
     }
 
-    // Verify the user is a member of this instance
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-
-    const isMember = membership.some((m) => m.instanceId === args.instanceId);
-    if (!isMember) {
-      throw new Error("Not a member of this instance");
+    const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null =
+      await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, {
+        instanceId: args.instanceId,
+        userId,
+      });
+    if (!bundle) {
+      throw new Error("Not authorized");
     }
 
-    // Get the instance to find the engine URL
-    const instance = await ctx.db.get(args.instanceId);
-    if (!instance) {
-      throw new Error("Instance not found");
-    }
-
-    if (!instance.clientId || !instance.clientSecret) {
+    if (!bundle.clientId || !bundle.clientSecret) {
       throw new Error("Instance not registered with engine");
     }
 
-    // Call the engine to set storage config
-    const engineApi = createEngineRpcSession<EngineApi>(
-      instance.url,
-      instance.clientId,
-      instance.clientSecret
-    );
-
-    await engineApi.setStorageConfig(args.config as any);
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    await rpc.setStorageConfig(args.config as unknown as StorageConfig);
 
     return { success: true };
   },
