@@ -22,6 +22,7 @@ import type * as dashboardLayouts from "../dashboardLayouts.js";
 import type * as debug from "../debug.js";
 import type * as engineAlerts from "../engineAlerts.js";
 import type * as engineHealth from "../engineHealth.js";
+import type * as engineSyncInternal from "../engineSyncInternal.js";
 import type * as folders from "../folders.js";
 import type * as http from "../http.js";
 import type * as instanceLiveState from "../instanceLiveState.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   debug: typeof debug;
   engineAlerts: typeof engineAlerts;
   engineHealth: typeof engineHealth;
+  engineSyncInternal: typeof engineSyncInternal;
   folders: typeof folders;
   http: typeof http;
   instanceLiveState: typeof instanceLiveState;
