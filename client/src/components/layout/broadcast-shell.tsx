@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useStore } from '@nanostores/react';
-import { useQuery as useConvexQuery } from 'convex/react';
+import { useAction } from 'convex/react';
 import {
   LayoutDashboard,
   Puzzle,
@@ -89,10 +89,31 @@ interface StreamStatusProps {
 
 function StreamStatus({ accountId = 'default' }: StreamStatusProps) {
   const { instance } = useInstance();
-  const status = useConvexQuery(
-    api.streamStatus.getStreamStatus,
-    instance ? { instanceId: instance._id } : 'skip',
-  );
+  const getStreamStatus = useAction(api.streamStatus.getStreamStatus);
+  const [status, setStatus] = useState<{ isLive: boolean; uptime: string; viewerCount: number } | null>(null);
+
+  useEffect(() => {
+    if (!instance) {
+      setStatus(null);
+      return;
+    }
+    const instanceId = instance._id;
+    let cancelled = false;
+    async function poll() {
+      try {
+        const result = await getStreamStatus({ instanceId });
+        if (!cancelled) setStatus(result);
+      } catch {
+        if (!cancelled) setStatus(null);
+      }
+    }
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [instance, getStreamStatus]);
 
   const isLive = status?.isLive ?? false;
   const uptime = status?.uptime ?? '00:00:00';
