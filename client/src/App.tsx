@@ -21,6 +21,8 @@ import ModuleDetail from "@/pages/module-detail";
 import ModuleInstall from "@/pages/module-install";
 import Modules from "@/pages/modules";
 import AlertLog from "@/pages/alert-log";
+import DebugTools from "@/pages/debug-tools";
+import StorageSettings from "@/pages/storage-settings";
 import Commands from "@/pages/commands";
 import NotFound from "@/pages/not-found";
 import SceneEditor from "@/pages/scene-editor";
@@ -126,6 +128,8 @@ function AppRoutes() {
                   <Route path="/scenes" component={Scenes} />
                   <Route path="/scenes/:id" component={SceneEditor} />
                   <Route path="/alerts" component={AlertLog} />
+                  <Route path="/debug" component={DebugTools} />
+                  <Route path="/storage" component={StorageSettings} />
                   <Route path="/commands" component={Commands} />
                   <Route path="/team" component={Team} />
                   <Route path="/settings" component={Settings} />
