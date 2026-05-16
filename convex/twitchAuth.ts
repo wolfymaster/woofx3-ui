@@ -1,15 +1,16 @@
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 
 const TEN_MINUTES = 10 * 60 * 1000;
 const FIVE_MINUTES = 5 * 60 * 1000;
 
 export const storeState = internalMutation({
-  args: { state: v.string(), redirectTo: v.string() },
-  handler: async (ctx, { state, redirectTo }) => {
+  args: { state: v.string(), redirectTo: v.string(), instanceId: v.optional(v.id("instances")) },
+  handler: async (ctx, { state, redirectTo, instanceId }) => {
     await ctx.db.insert("twitchOAuthState", {
       state,
       redirectTo,
+      instanceId,
       createdAt: Date.now(),
     });
   },
@@ -105,6 +106,30 @@ export const deletePendingAuth = internalMutation({
     const record = await ctx.db
       .query("twitchPendingAuth")
       .withIndex("by_token", (q) => q.eq("token", token))
+      .first();
+
+    if (record) {
+      await ctx.db.delete(record._id);
+    }
+  },
+});
+
+export const getStateRecord = internalQuery({
+  args: { state: v.string() },
+  handler: async (ctx, { state }) => {
+    return ctx.db
+      .query("twitchOAuthState")
+      .withIndex("by_state", (q) => q.eq("state", state))
+      .first();
+  },
+});
+
+export const deleteState = internalMutation({
+  args: { state: v.string() },
+  handler: async (ctx, { state }) => {
+    const record = await ctx.db
+      .query("twitchOAuthState")
+      .withIndex("by_state", (q) => q.eq("state", state))
       .first();
 
     if (record) {
