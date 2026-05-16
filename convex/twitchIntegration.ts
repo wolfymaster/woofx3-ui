@@ -1,5 +1,12 @@
 import { v } from "convex/values";
-import { query, mutation, internalMutation } from "./_generated/server";
+import {
+  query,
+  action,
+  internalQuery,
+  internalMutation,
+  internalAction,
+} from "./_generated/server";
+import { internal } from "./_generated/api";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
 export const upsertPlatformLink = internalMutation({
@@ -8,6 +15,7 @@ export const upsertPlatformLink = internalMutation({
     platform: v.string(),
     platformUserId: v.string(),
     platformUsername: v.string(),
+    profileImageUrl: v.optional(v.string()),
     channelId: v.string(),
     accessToken: v.string(),
     refreshToken: v.string(),
@@ -29,20 +37,40 @@ export const upsertPlatformLink = internalMutation({
   },
 });
 
-export const syncToEngine = internalMutation({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
+export const getLinkAndInstance = internalQuery({
+  args: {
+    instanceId: v.id("instances"),
+    platform: v.string(),
+  },
+  handler: async (ctx, { instanceId, platform }) => {
     const link = await ctx.db
       .query("platformLinks")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .filter((q) => q.eq(q.field("platform"), "twitch"))
+      .filter((q) => q.eq(q.field("platform"), platform))
       .first();
+    const instance = await ctx.db.get(instanceId);
+    return { link, instance };
+  },
+});
+
+export const deletePlatformLink = internalMutation({
+  args: { linkId: v.id("platformLinks") },
+  handler: async (ctx, { linkId }) => {
+    await ctx.db.delete(linkId);
+  },
+});
+
+export const syncToEngine = internalAction({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const { link, instance } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
+      instanceId,
+      platform: "twitch",
+    });
 
     if (!link) {
       throw new Error("No Twitch platform link found for instance");
     }
-
-    const instance = await ctx.db.get(instanceId);
     if (!instance) {
       throw new Error("Instance not found");
     }
@@ -61,32 +89,29 @@ export const syncToEngine = internalMutation({
       accessToken: link.accessToken,
       refreshToken: link.refreshToken,
       expiresIn: Math.max(0, Math.floor((link.expiresAt - Date.now()) / 1000)),
-      tokenType: "Bearer" as const,
+      obtainmentTimestamp: Date.now(),
       scope: link.scopes,
-      obtainMethod: "code" as const,
     };
 
     await engine.setTwitchToken(token, link.connectedByUserId ?? undefined);
   },
 });
 
-export const disconnect = mutation({
+export const disconnect = action({
   args: {
     instanceId: v.id("instances"),
     platform: v.string(),
   },
   handler: async (ctx, { instanceId, platform }) => {
-    const link = await ctx.db
-      .query("platformLinks")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .filter((q) => q.eq(q.field("platform"), platform))
-      .first();
+    const { link, instance } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
+      instanceId,
+      platform,
+    });
 
     if (!link) {
       return { ok: true };
     }
 
-    const instance = await ctx.db.get(instanceId);
     if (instance?.clientId && instance?.clientSecret) {
       try {
         const engine = createEngineRpcSession<EngineApi>(
@@ -100,7 +125,7 @@ export const disconnect = mutation({
       }
     }
 
-    await ctx.db.delete(link._id);
+    await ctx.runMutation(internal.twitchIntegration.deletePlatformLink, { linkId: link._id });
     return { ok: true };
   },
 });

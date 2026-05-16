@@ -81,6 +81,7 @@ export default defineSchema({
     platform: v.string(),
     platformUserId: v.string(),
     platformUsername: v.string(),
+    profileImageUrl: v.optional(v.string()),
     channelId: v.string(),
     accessToken: v.string(),
     refreshToken: v.string(),

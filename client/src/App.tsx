@@ -130,7 +130,7 @@ function AppRoutes() {
                   <Route path="/debug" component={DebugTools} />
                   <Route path="/commands" component={Commands} />
                   <Route path="/team" component={Team} />
-                  <Route path="/settings" component={Settings} />
+                  <Route path="/settings/:tab?" component={Settings} />
                   <Route component={NotFound} />
                 </Switch>
               </ErrorBoundary>

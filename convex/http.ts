@@ -119,12 +119,13 @@ http.route({
       return errorRedirect(siteUrl, "missing_params", `code=${!!code} state=${!!state}`);
     }
 
-    const redirectTo = await ctx.runMutation(internal.twitchAuth.validateAndConsumeState, { state });
-    if (!redirectTo) {
+    const stateResult = await ctx.runMutation(internal.twitchAuth.validateAndConsumeState, { state });
+    if (!stateResult) {
       return errorRedirect(siteUrl, "invalid_state", "state not found or expired");
     }
+    const { redirectTo, instanceId } = stateResult;
 
-    logger.info("state valid, exchanging code");
+    logger.info("state valid, exchanging code", { isIntegration: !!instanceId });
 
     const tokenRes = await fetch("https://id.twitch.tv/oauth2/token", {
       method: "POST",
@@ -163,6 +164,38 @@ http.route({
     assert(data?.length > 0, "Twitch returned empty user data");
     const twitchUser = data[0];
     logger.info("got twitch user", { login: twitchUser.login, id: twitchUser.id });
+
+    if (instanceId) {
+      const expiresAt = Date.now() + (tokenData.expires_in * 1000);
+      const scopes = Array.isArray(tokenData.scope) ? tokenData.scope : tokenData.scope.split(" ");
+
+      await ctx.runMutation(internal.twitchIntegration.upsertPlatformLink, {
+        instanceId,
+        platform: "twitch",
+        platformUserId: twitchUser.id,
+        platformUsername: twitchUser.display_name || twitchUser.login,
+        profileImageUrl: twitchUser.profile_image_url ?? undefined,
+        channelId: twitchUser.id,
+        accessToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+        expiresAt,
+        scopes,
+      });
+
+      try {
+        await ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId });
+        logger.info("engine sync completed for integration");
+      } catch (err) {
+        logger.error("engine sync failed for integration", { error: String(err) });
+      }
+
+      const dest = `${siteUrl}/auth/twitch/callback?mode=connect&redirect_to=${encodeURIComponent(redirectTo)}`;
+      logger.info("redirecting to frontend after integration", { dest });
+      return new Response(null, {
+        status: 302,
+        headers: { Location: dest },
+      });
+    }
 
     const token = await ctx.runMutation(internal.twitchAuth.storePendingAuth, {
       twitchId: twitchUser.id,
@@ -224,112 +257,6 @@ http.route({
   }),
 });
 
-http.route({
-  path: "/api/integrations/twitch/callback",
-  method: "GET",
-  handler: httpAction(async (ctx, request) => {
-    assert(process.env.SITE_URL, "SITE_URL env var is not set");
-    assert(process.env.AUTH_TWITCH_ID, "AUTH_TWITCH_ID env var is not set");
-    assert(process.env.AUTH_TWITCH_SECRET, "AUTH_TWITCH_SECRET env var is not set");
-    assert(process.env.AUTH_TWITCH_REDIRECT_URI, "AUTH_TWITCH_REDIRECT_URI env var is not set");
-
-    const siteUrl = process.env.SITE_URL;
-    const url = new URL(request.url);
-    const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
-
-    logger.info("integration callback received", { hasCode: !!code, hasState: !!state });
-
-    if (!code || !state) {
-      return errorRedirect(siteUrl, "missing_params", `code=${!!code} state=${!!state}`);
-    }
-
-    const stateRecord = await ctx.runQuery(internal.twitchAuth.getStateRecord, { state });
-    if (!stateRecord) {
-      return errorRedirect(siteUrl, "invalid_state", "state not found or expired");
-    }
-
-    await ctx.runMutation(internal.twitchAuth.deleteState, { state });
-
-    const { redirectTo, instanceId } = stateRecord;
-    if (!instanceId) {
-      return errorRedirect(siteUrl, "invalid_state", "instanceId missing from state");
-    }
-
-    if (Date.now() - stateRecord.createdAt > 10 * 60 * 1000) {
-      return errorRedirect(siteUrl, "invalid_state", "state expired");
-    }
-
-    logger.info("state valid, exchanging code for integration");
-
-    const tokenRes = await fetch("https://id.twitch.tv/oauth2/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: process.env.AUTH_TWITCH_ID,
-        client_secret: process.env.AUTH_TWITCH_SECRET,
-        code,
-        grant_type: "authorization_code",
-        redirect_uri: process.env.AUTH_TWITCH_REDIRECT_URI,
-      }),
-    });
-
-    if (!tokenRes.ok) {
-      const body = await tokenRes.text();
-      return errorRedirect(siteUrl, "token_exchange_failed", `HTTP ${tokenRes.status}: ${body}`);
-    }
-
-    const tokenData = await tokenRes.json();
-    assert(tokenData.access_token, `no access_token in response: ${JSON.stringify(tokenData)}`);
-    logger.info("token exchange ok for integration");
-
-    const userRes = await fetch("https://api.twitch.tv/helix/users", {
-      headers: {
-        Authorization: `Bearer ${tokenData.access_token}`,
-        "Client-Id": process.env.AUTH_TWITCH_ID,
-      },
-    });
-
-    if (!userRes.ok) {
-      const body = await userRes.text();
-      return errorRedirect(siteUrl, "profile_fetch_failed", `HTTP ${userRes.status}: ${body}`);
-    }
-
-    const { data } = await userRes.json();
-    assert(data?.length > 0, "Twitch returned empty user data");
-    const twitchUser = data[0];
-    logger.info("got twitch user for integration", { login: twitchUser.login, id: twitchUser.id });
-
-    const expiresAt = Date.now() + (tokenData.expires_in * 1000);
-    const scopes = Array.isArray(tokenData.scope) ? tokenData.scope : tokenData.scope.split(" ");
-
-    await ctx.runMutation(internal.twitchIntegration.upsertPlatformLink, {
-      instanceId,
-      platform: "twitch",
-      platformUserId: twitchUser.id,
-      platformUsername: twitchUser.display_name || twitchUser.login,
-      channelId: twitchUser.id,
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token,
-      expiresAt,
-      scopes,
-    });
-
-    try {
-      await ctx.runMutation(internal.twitchIntegration.syncToEngine, { instanceId });
-      logger.info("engine sync completed for integration");
-    } catch (err) {
-      logger.error("engine sync failed for integration", { error: String(err) });
-    }
-
-    const dest = `${siteUrl}/auth/twitch/callback?mode=connect&redirect_to=${encodeURIComponent(redirectTo)}`;
-    logger.info("redirecting to frontend after integration", { dest });
-    return new Response(null, {
-      status: 302,
-      headers: { Location: dest },
-    });
-  }),
-});
 
 http.route({ path: "/api/webhooks/woofx3/alerts", method: "OPTIONS", handler: preflightHandler });
 http.route({

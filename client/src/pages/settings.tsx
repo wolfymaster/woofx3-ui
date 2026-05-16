@@ -38,6 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useLocation, useParams } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
@@ -240,8 +241,28 @@ function EngineSettingsTab() {
 
 type UserPreferences = { email: boolean; push: boolean; workflow: boolean; marketing: boolean };
 
+const SETTINGS_TABS = [
+  "profile",
+  "appearance",
+  "notifications",
+  "security",
+  "engine",
+  "integrations",
+  "storage",
+] as const;
+type SettingsTab = (typeof SETTINGS_TABS)[number];
+const DEFAULT_TAB: SettingsTab = "profile";
+
 export default function Settings() {
   const { theme, setTheme, preset, presets, setPreset } = useTheme();
+  const params = useParams<{ tab?: string }>();
+  const [, navigate] = useLocation();
+  const activeTab: SettingsTab = SETTINGS_TABS.includes(params.tab as SettingsTab)
+    ? (params.tab as SettingsTab)
+    : DEFAULT_TAB;
+  const handleTabChange = (value: string) => {
+    navigate(`/settings/${value}`);
+  };
   const queryClient = useQueryClient();
   const { instance } = useInstance();
   const { isConnected, twitchLink, isLoading: twitchLoading } = useTwitchIntegration(instance?._id);
@@ -299,7 +320,7 @@ export default function Settings() {
     <div className="p-6 lg:p-8 max-w-[1000px] mx-auto">
       <PageHeader title="Settings" description="Manage your account and application preferences." />
 
-      <Tabs defaultValue="profile" className="space-y-6" orientation="vertical">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6" orientation="vertical">
         <div className="flex flex-col md:flex-row gap-6">
           <TabsList className="flex-col h-auto justify-start bg-transparent p-0 w-full md:w-48 shrink-0">
             <TabsTrigger value="profile" className="justify-start w-full" data-testid="tab-profile">

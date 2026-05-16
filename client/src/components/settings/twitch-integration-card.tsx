@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useMutation } from "convex/react";
+import { useAction } from "convex/react";
 import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,12 +16,17 @@ import {
 import { Loader2, Unlink } from "lucide-react";
 import type { Id } from "@convex/_generated/dataModel";
 
+const CONVEX_SITE_URL =
+  (import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ??
+  (import.meta.env.VITE_CONVEX_URL as string).replace(/\.convex\.cloud$/, ".convex.site");
+
 interface TwitchIntegrationCardProps {
   instanceId: Id<"instances"> | undefined;
   isConnected: boolean;
   twitchLink?: {
     platformUsername: string;
     platformUserId: string;
+    profileImageUrl?: string;
   } | null;
   isLoading: boolean;
 }
@@ -34,12 +39,12 @@ export function TwitchIntegrationCard({
 }: TwitchIntegrationCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const disconnect = useMutation(api.twitchIntegration.disconnect);
+  const disconnect = useAction(api.twitchIntegration.disconnect);
 
   const handleConnect = () => {
     if (!instanceId) return;
-    const redirectTo = encodeURIComponent("/settings?tab=integrations");
-    window.location.href = `/api/integrations/twitch/start?instanceId=${instanceId}&redirect_to=${redirectTo}`;
+    const redirectTo = encodeURIComponent("/settings/integrations");
+    window.location.href = `${CONVEX_SITE_URL}/api/integrations/twitch/start?instanceId=${instanceId}&redirect_to=${redirectTo}`;
   };
 
   const handleDisconnect = async () => {
@@ -78,7 +83,9 @@ export function TwitchIntegrationCard({
         <div className="flex items-center justify-between p-4 rounded-lg border">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${twitchLink.platformUsername}`} />
+              {twitchLink.profileImageUrl ? (
+                <AvatarImage src={twitchLink.profileImageUrl} alt={twitchLink.platformUsername} />
+              ) : null}
               <AvatarFallback className="bg-purple-600 text-white">
                 {twitchLink.platformUsername.charAt(0).toUpperCase()}
               </AvatarFallback>
