@@ -127,16 +127,20 @@ export const enableTriggerForInstance = internalMutation({
   args: {
     instanceId: v.id("instances"),
     triggerId: v.string(),
+    moduleId: v.optional(v.id("moduleRepository")),
   },
-  handler: async (ctx, { instanceId, triggerId }) => {
+  handler: async (ctx, { instanceId, triggerId, moduleId }) => {
     const existing = await ctx.db
       .query("instanceEnabledTriggers")
       .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
       .first();
     if (existing) {
+      if (moduleId && existing.moduleId !== moduleId) {
+        await ctx.db.patch(existing._id, { moduleId });
+      }
       return existing._id;
     }
-    return ctx.db.insert("instanceEnabledTriggers", { instanceId, triggerId });
+    return ctx.db.insert("instanceEnabledTriggers", { instanceId, triggerId, moduleId });
   },
 });
 
@@ -160,16 +164,20 @@ export const enableActionForInstance = internalMutation({
   args: {
     instanceId: v.id("instances"),
     actionId: v.string(),
+    moduleId: v.optional(v.id("moduleRepository")),
   },
-  handler: async (ctx, { instanceId, actionId }) => {
+  handler: async (ctx, { instanceId, actionId, moduleId }) => {
     const existing = await ctx.db
       .query("instanceEnabledActions")
       .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
       .first();
     if (existing) {
+      if (moduleId && existing.moduleId !== moduleId) {
+        await ctx.db.patch(existing._id, { moduleId });
+      }
       return existing._id;
     }
-    return ctx.db.insert("instanceEnabledActions", { instanceId, actionId });
+    return ctx.db.insert("instanceEnabledActions", { instanceId, actionId, moduleId });
   },
 });
 
@@ -206,7 +214,10 @@ export const devEnableAllDefinitionsForInstance = internalMutation({
         await ctx.db.insert("instanceEnabledTriggers", {
           instanceId,
           triggerId: d.slug,
+          moduleId: d.moduleId,
         });
+      } else if (d.moduleId && existing.moduleId !== d.moduleId) {
+        await ctx.db.patch(existing._id, { moduleId: d.moduleId });
       }
     }
 
@@ -220,7 +231,10 @@ export const devEnableAllDefinitionsForInstance = internalMutation({
         await ctx.db.insert("instanceEnabledActions", {
           instanceId,
           actionId: d.slug,
+          moduleId: d.moduleId,
         });
+      } else if (d.moduleId && existing.moduleId !== d.moduleId) {
+        await ctx.db.patch(existing._id, { moduleId: d.moduleId });
       }
     }
   },

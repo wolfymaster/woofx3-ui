@@ -1,30 +1,28 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import JSZip from "jszip";
-import {
-  ArrowLeft,
-  Bell,
-  Check,
-  CheckCircle2,
-  Download,
-  FileCode,
-  Loader2,
-  Puzzle,
-  Trash2,
-  Upload,
-  Workflow as WorkflowIcon,
-  XCircle,
-  Zap,
-} from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { CheckCircle2, FileCode, Loader2, Upload, XCircle } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
-import { ModulesSidebar, type ModuleListItem } from "@/components/modules/modules-sidebar";
+import {
+  type ModuleDetailAction,
+  type ModuleDetailFunction,
+  type ModuleDetailMeta,
+  ModuleDetailPanel,
+  type ModuleDetailTrigger,
+  type ModuleDetailWidget,
+} from "@/components/modules/module-detail-panel";
+import {
+  type MarketplaceListItem,
+  type ModuleListItem,
+  ModulesSidebar,
+  type SelectedModule,
+} from "@/components/modules/modules-sidebar";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useInstance } from "@/hooks/use-instance";
 import { cn } from "@/lib/utils";
@@ -33,18 +31,22 @@ interface UploadedFiles {
   [path: string]: string;
 }
 
-interface ModuleFunction {
-  _id: string;
-  functionName: string;
-  runtime?: string;
-  qualifiedName: string;
-}
-
-interface ModuleWorkflow {
-  _id: string;
-  definition?: { name?: string };
-  isEnabled: boolean;
-}
+type MarketplaceDetail = {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  author: string;
+  category: string;
+  tags: string[];
+  iconUrl?: string;
+  readme?: string;
+  triggers: Array<{ slug: string; name: string; description: string; color: string; icon?: string }>;
+  actions: Array<{ slug: string; name: string; description: string; color: string; icon?: string }>;
+  functions: Array<{ qualifiedName: string; runtime?: string }>;
+  widgets: Array<{ slug: string; name: string }>;
+  counts: { triggers: number; actions: number; functions: number; widgets: number };
+};
 
 function getCommonDirectoryPrefix(paths: string[]): string {
   if (paths.length === 0) {
@@ -64,25 +66,14 @@ function getCommonDirectoryPrefix(paths: string[]): string {
 function toSnakeCase(str: string): string {
   return str
     .replace(/([a-z])([A-Z])/g, "$1_$2")
-    .replace(/[\s\-]+/g, "_")
+    .replace(/[\s-]+/g, "_")
     .toLowerCase();
 }
 
-const categoryIcons: Record<string, React.ReactNode> = {
-  Chat: <Bell className="h-4 w-4" />,
-  Alerts: <Bell className="h-4 w-4" />,
-  Media: <Puzzle className="h-4 w-4" />,
-  Audio: <Puzzle className="h-4 w-4" />,
-  Automation: <Zap className="h-4 w-4" />,
-  Integrations: <Puzzle className="h-4 w-4" />,
-  Effects: <Puzzle className="h-4 w-4" />,
-  Utilities: <Puzzle className="h-4 w-4" />,
-};
-
 export default function Modules() {
-  const [, navigate] = useLocation();
+  const [, _navigate] = useLocation();
   const { instance } = useInstance();
-  const [selectedModule, setSelectedModule] = useState<ModuleListItem | null>(null);
+  const [selectedModule, setSelectedModule] = useState<SelectedModule | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<{
     _id: Id<"moduleRepository">;
     name: string;
@@ -101,10 +92,91 @@ export default function Modules() {
   const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
   const uploadAndDeliver = useMutation(api.moduleRepository.uploadAndDeliver);
 
+  const installMarketplaceModule = useAction(api.marketplace.installModule);
+  const getMarketplaceModule = useAction(api.marketplace.getModule);
+
   const installEvent = useQuery(
     api.transientEvents.get,
-    instance && pendingModuleKey ? { instanceId: instance._id, correlationKey: pendingModuleKey } : "skip",
+    instance && pendingModuleKey ? { instanceId: instance._id, correlationKey: pendingModuleKey } : "skip"
   );
+
+  const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
+
+  // Marketplace detail state (only relevant when source === "marketplace")
+  const [marketplaceDetail, setMarketplaceDetail] = useState<MarketplaceDetail | null>(null);
+  const [marketplaceDetailLoading, setMarketplaceDetailLoading] = useState(false);
+  const [marketplaceDetailError, setMarketplaceDetailError] = useState<string | null>(null);
+
+  // Fetch marketplace detail when a marketplace module is selected
+  useEffect(() => {
+    if (selectedModule?.source !== "marketplace") {
+      setMarketplaceDetail(null);
+      setMarketplaceDetailError(null);
+      return;
+    }
+    const marketplaceId = selectedModule.marketplaceId;
+    setMarketplaceDetailLoading(true);
+    setMarketplaceDetailError(null);
+    setMarketplaceDetail(null);
+    let cancelled = false;
+    void getMarketplaceModule({ marketplaceModuleId: marketplaceId })
+      .then((detail) => {
+        if (!cancelled) {
+          setMarketplaceDetail(detail);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setMarketplaceDetailError(err instanceof Error ? err.message : "Failed to load module details.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setMarketplaceDetailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedModule, getMarketplaceModule]);
+
+  // Resolve installed-side detail (triggers/actions) only when a real installed module is selected.
+  const selectedInstalled = selectedModule?.source === "installed" ? selectedModule.module : null;
+  const installedTriggers = useQuery(
+    api.triggerDefinitions.listByModule,
+    selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
+  );
+  const installedActions = useQuery(
+    api.actionDefinitions.listByModule,
+    selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
+  );
+
+  // When a marketplace install completes, swap to the new installed module so the user stays put.
+  useEffect(() => {
+    if (selectedModule?.source !== "marketplace") {
+      return;
+    }
+    if (installEvent?.status !== "success" || !pendingModuleKey) {
+      return;
+    }
+    const installed = (repoModules || []).find((m) => m.moduleKey === pendingModuleKey);
+    if (!installed) {
+      return;
+    }
+    const moduleListItem: ModuleListItem = {
+      _id: installed._id,
+      name: installed.name,
+      description: installed.description,
+      version: installed.version,
+      tags: installed.tags,
+      author: installed.author ?? "",
+      category: installed.category ?? "Utilities",
+      moduleKey: installed.moduleKey,
+      isInstalled: installed.status === "installed",
+      status: installed.status,
+    };
+    setSelectedModule({ source: "installed", module: moduleListItem });
+  }, [installEvent, pendingModuleKey, repoModules, selectedModule]);
 
   useEffect(() => {
     if (installEvent?.status === "success") {
@@ -178,26 +250,36 @@ export default function Modules() {
     }
   }, []);
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current = 0;
-    setIsDragging(false);
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current = 0;
+      setIsDragging(false);
 
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-    if (!file.name.endsWith(".zip")) {
-      setInstallError("Please drop a .zip file.");
-      return;
-    }
-    await processZipFile(file);
-  }, [processZipFile]);
+      const file = e.dataTransfer.files[0];
+      if (!file) {
+        return;
+      }
+      if (!file.name.endsWith(".zip")) {
+        setInstallError("Please drop a .zip file.");
+        return;
+      }
+      await processZipFile(file);
+    },
+    [processZipFile]
+  );
 
-  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    await processZipFile(file);
-  }, [processZipFile]);
+  const handleFileUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        return;
+      }
+      await processZipFile(file);
+    },
+    [processZipFile]
+  );
 
   const handleInstall = useCallback(async () => {
     if (!instance || !uploadedFiles) {
@@ -223,8 +305,10 @@ export default function Modules() {
         headers: { "Content-Type": "application/zip" },
         body: zipBlob,
       });
-      if (!uploadResult.ok) throw new Error("Upload failed");
-      const { storageId } = await uploadResult.json() as { storageId: Id<"_storage"> };
+      if (!uploadResult.ok) {
+        throw new Error("Upload failed");
+      }
+      const { storageId } = (await uploadResult.json()) as { storageId: Id<"_storage"> };
 
       const manifestContent =
         uploadedFiles["manifest.json"] ||
@@ -232,7 +316,9 @@ export default function Modules() {
 
       let manifest: Record<string, unknown> = {};
       if (manifestContent) {
-        try { manifest = JSON.parse(manifestContent); } catch {}
+        try {
+          manifest = JSON.parse(manifestContent);
+        } catch {}
       }
 
       const name = (manifest.name as string) || uploadedFiles[0]?.split("/")[0] || "Unknown Module";
@@ -243,7 +329,9 @@ export default function Modules() {
       const moduleId = (manifest.id as string) || toSnakeCase(name);
       const zipArrayBuffer = await zipBlob.arrayBuffer();
       const hashBuffer = await crypto.subtle.digest("SHA-256", zipArrayBuffer);
-      const hashHex = Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      const hashHex = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
       const shortHash = hashHex.slice(0, 7);
       const moduleKey = `${moduleId}:${version}:${shortHash}`;
 
@@ -264,26 +352,31 @@ export default function Modules() {
     }
   }, [instance, uploadedFiles, generateUploadUrl, uploadAndDeliver]);
 
-  const repoModules = useQuery(
-    api.moduleRepository.list,
-    instance ? { instanceId: instance._id } : "skip",
-  );
-  const isLoading = !instance || repoModules === undefined;
+  const handleMarketplaceInstall = useCallback(async () => {
+    if (!instance || selectedModule?.source !== "marketplace") {
+      return;
+    }
+    setIsInstalling(true);
+    setInstallError(null);
+    try {
+      const { moduleKey } = await installMarketplaceModule({
+        instanceId: instance._id,
+        marketplaceModuleId: selectedModule.marketplaceId,
+      });
+      setPendingModuleKey(moduleKey);
+    } catch (err) {
+      setInstallError(err instanceof Error ? err.message : "Failed to install marketplace module.");
+      setIsInstalling(false);
+    }
+  }, [instance, selectedModule, installMarketplaceModule]);
 
-  const triggers = useQuery(
-    api.triggerDefinitions.listByModule,
-    selectedModule ? { moduleId: selectedModule._id } : "skip",
-  );
-  const actions = useQuery(
-    api.actionDefinitions.listByModule,
-    selectedModule ? { moduleId: selectedModule._id } : "skip",
-  );
-  const functions: ModuleFunction[] = [];
-  const workflows: ModuleWorkflow[] = [];
+  const isLoading = !instance || repoModules === undefined;
 
   const handleDelete = (moduleId: Id<"moduleRepository">) => {
     const target = (repoModules || []).find((m) => m._id === moduleId);
-    if (!target) return;
+    if (!target) {
+      return;
+    }
     setUninstallTarget({
       _id: moduleId,
       name: target.name,
@@ -303,218 +396,171 @@ export default function Modules() {
     setPendingModuleKey(null);
   };
 
+  // Build the props for ModuleDetailPanel based on the selected source.
+  const detailProps = useMemo(() => {
+    if (!selectedModule) {
+      return null;
+    }
+    if (selectedModule.source === "installed") {
+      const m = selectedModule.module;
+      const meta: ModuleDetailMeta = {
+        name: m.name,
+        description: m.description,
+        version: m.version,
+        author: m.author,
+        category: m.category,
+        tags: m.tags,
+        isInstalled: m.isInstalled,
+      };
+      const triggers: ModuleDetailTrigger[] | undefined = installedTriggers?.map((t) => ({
+        key: t._id,
+        name: t.name,
+        description: t.description,
+        color: t.color,
+      }));
+      const actions: ModuleDetailAction[] | undefined = installedActions?.map((a) => ({
+        key: a._id,
+        name: a.name,
+        description: a.description,
+        color: a.color,
+      }));
+      const functions: ModuleDetailFunction[] = [];
+      return { meta, triggers, actions, functions, widgets: undefined as ModuleDetailWidget[] | undefined };
+    }
+    // marketplace
+    if (!marketplaceDetail) {
+      const placeholder: ModuleDetailMeta = {
+        name: "Loading…",
+        description: "",
+        version: "",
+        author: "",
+        category: "Utilities",
+        tags: [],
+        isInstalled: false,
+      };
+      return {
+        meta: placeholder,
+        triggers: undefined,
+        actions: undefined,
+        functions: undefined,
+        widgets: undefined,
+      };
+    }
+    const installed = (repoModules || []).some((r) => {
+      if (!r.moduleKey) {
+        return false;
+      }
+      const parts = r.moduleKey.split(":");
+      return parts[0] === marketplaceDetail.id && parts[1] === marketplaceDetail.version;
+    });
+    const meta: ModuleDetailMeta = {
+      name: marketplaceDetail.name,
+      description: marketplaceDetail.description,
+      version: marketplaceDetail.version,
+      author: marketplaceDetail.author,
+      category: marketplaceDetail.category,
+      tags: marketplaceDetail.tags,
+      isInstalled: installed,
+      iconUrl: marketplaceDetail.iconUrl,
+      readme: marketplaceDetail.readme,
+    };
+    return {
+      meta,
+      triggers: marketplaceDetail.triggers.map((t) => ({
+        key: t.slug,
+        name: t.name,
+        description: t.description,
+        color: t.color,
+      })),
+      actions: marketplaceDetail.actions.map((a) => ({
+        key: a.slug,
+        name: a.name,
+        description: a.description,
+        color: a.color,
+      })),
+      functions: marketplaceDetail.functions,
+      widgets: marketplaceDetail.widgets,
+    };
+  }, [selectedModule, installedTriggers, installedActions, marketplaceDetail, repoModules]);
+
+  const _unused: MarketplaceListItem | null = null;
+  void _unused;
+
   return (
     <div className="flex h-[calc(100vh-4rem)]">
-      <ModulesSidebar
-        selectedModuleId={selectedModule?._id ?? null}
-        onSelectModule={(module) => setSelectedModule(module)}
-      />
+      <ModulesSidebar selected={selectedModule} onSelectModule={(s) => setSelectedModule(s)} />
 
       <div className="flex-1 overflow-auto">
-        {selectedModule ? (
-          <div className="p-6">
-            <div className="flex items-center gap-4 mb-6">
-              <Button variant="ghost" size="icon" onClick={() => setSelectedModule(null)}>
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-xl font-semibold">{selectedModule.name}</h2>
-                  {categoryIcons[selectedModule.category] && (
-                    <span className="text-primary">{categoryIcons[selectedModule.category]}</span>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">{selectedModule.description}</p>
+        {selectedModule && detailProps ? (
+          <>
+            {selectedModule.source === "marketplace" && marketplaceDetailError ? (
+              <div className="p-6">
+                <Card className="max-w-xl">
+                  <CardContent className="pt-6 space-y-3">
+                    <div className="flex items-center gap-2 text-destructive">
+                      <XCircle className="h-4 w-4" />
+                      <span className="font-medium">Failed to load module</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground break-words">{marketplaceDetailError}</p>
+                    <Button variant="outline" size="sm" onClick={() => setSelectedModule(null)}>
+                      Back
+                    </Button>
+                  </CardContent>
+                </Card>
               </div>
-              {selectedModule.isInstalled ? (
-                <Button variant="destructive" size="sm" onClick={() => handleDelete(selectedModule._id)}>
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Remove
-                </Button>
-              ) : (
-                <Button size="sm" onClick={() => setIsDragging(true)}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Install
-                </Button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Version</span>
-                    <span>{selectedModule.version}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Author</span>
-                    <span>{selectedModule.author || "Unknown"}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Category</span>
-                    <Badge variant="outline" className="text-xs">{selectedModule.category}</Badge>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Status</span>
-                    <Badge variant={selectedModule.isInstalled ? "secondary" : "outline"} className="text-xs">
-                      {selectedModule.isInstalled ? (
-                        <><Check className="h-3 w-3 mr-1" />Installed</>
-                      ) : "Not installed"}
-                    </Badge>
-                  </div>
-                  {selectedModule.tags.length > 0 && (
-                    <div className="pt-2">
-                      <span className="text-sm text-muted-foreground">Tags</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {selectedModule.tags.slice(0, 4).map((tag) => (
-                          <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                        ))}
+            ) : (
+              <ModuleDetailPanel
+                module={detailProps.meta}
+                triggers={detailProps.triggers}
+                actions={detailProps.actions}
+                functions={detailProps.functions}
+                widgets={detailProps.widgets}
+                loading={selectedModule.source === "marketplace" && marketplaceDetailLoading}
+                onBack={() => setSelectedModule(null)}
+                onRemove={
+                  selectedModule.source === "installed" ? () => handleDelete(selectedModule.module._id) : undefined
+                }
+                onInstall={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
+                isInstalling={isInstalling}
+                installDisabled={detailProps.meta.isInstalled}
+                installDisabledReason={detailProps.meta.isInstalled ? "Already installed" : undefined}
+              />
+            )}
+            {selectedModule.source === "marketplace" && (isInstalling || installEvent || installError) && (
+              <div className="px-6 pb-6">
+                <Card className="max-w-xl">
+                  <CardContent className="pt-6">
+                    {installEvent?.status === "success" ? (
+                      <div className="flex items-center gap-3 text-green-500">
+                        <CheckCircle2 className="h-5 w-5" />
+                        <span>Module installed successfully!</span>
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Bell className="h-4 w-4" />
-                    Triggers
-                    {triggers && <Badge variant="secondary" className="text-xs">{triggers.length}</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {triggers === undefined ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  ) : triggers.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No triggers</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {triggers.slice(0, 5).map((trigger) => (
-                        <div key={trigger._id} className="flex items-start gap-2">
-                          <div
-                            className="h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs"
-                            style={{ backgroundColor: `${trigger.color}20`, color: trigger.color }}
-                          >
-                            <Puzzle className="h-3 w-3" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{trigger.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{trigger.description}</p>
-                          </div>
+                    ) : isInstalling ? (
+                      <div className="flex items-center gap-3 text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>{installEvent?.message ?? "Installing from marketplace..."}</span>
+                      </div>
+                    ) : installError ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm text-destructive">
+                          <XCircle className="h-4 w-4 shrink-0" />
+                          <span>Install failed</span>
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    Actions
-                    {actions && <Badge variant="secondary" className="text-xs">{actions.length}</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {actions === undefined ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  ) : actions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No actions</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {actions.slice(0, 5).map((action) => (
-                        <div key={action._id} className="flex items-start gap-2">
-                          <div
-                            className="h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs"
-                            style={{ backgroundColor: `${action.color}20`, color: action.color }}
-                          >
-                            <Zap className="h-3 w-3" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{action.name}</p>
-                            <p className="text-xs text-muted-foreground truncate">{action.description}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <FileCode className="h-4 w-4" />
-                    Functions
-                    {functions && <Badge variant="secondary" className="text-xs">{functions.length}</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {functions === undefined ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  ) : functions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No functions</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {functions.slice(0, 5).map((fn) => (
-                        <div key={fn._id} className="flex items-start gap-2">
-                          <div className="h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs bg-muted text-muted-foreground">
-                            <FileCode className="h-3 w-3" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">{fn.functionName}</p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {fn.runtime ? `${fn.runtime} · ` : ""}{fn.qualifiedName}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <WorkflowIcon className="h-4 w-4" />
-                    Workflows
-                    {workflows && <Badge variant="secondary" className="text-xs">{workflows.length}</Badge>}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {workflows === undefined ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                  ) : workflows.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No workflows</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {workflows.slice(0, 5).map((wf) => (
-                        <div key={wf._id} className="flex items-start gap-2">
-                          <div className="h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs bg-muted text-muted-foreground">
-                            <WorkflowIcon className="h-3 w-3" />
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">
-                              {wf.definition?.name ?? "Unnamed workflow"}
-                            </p>
-                            <p className="text-xs text-muted-foreground truncate">
-                              {wf.isEnabled ? "Enabled" : "Disabled"}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-muted-foreground"
+                          onClick={() => setShowErrorDetails(true)}
+                        >
+                          Show details
+                        </Button>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </>
         ) : (
           <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
             {uploadedFiles ? (
@@ -526,7 +572,9 @@ export default function Modules() {
                       {Object.keys(uploadedFiles).length} files extracted from zip
                     </p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={clearUpload}>Cancel</Button>
+                  <Button variant="outline" size="sm" onClick={clearUpload}>
+                    Cancel
+                  </Button>
                 </div>
 
                 <Card className="max-w-md">
@@ -539,12 +587,14 @@ export default function Modules() {
                     ) : (
                       <>
                         <div className="space-y-3 mb-4">
-                          {Object.keys(uploadedFiles).slice(0, 5).map((path) => (
-                            <div key={path} className="flex items-center gap-2 text-sm">
-                              <FileCode className="h-4 w-4 text-muted-foreground" />
-                              <span className="truncate">{path}</span>
-                            </div>
-                          ))}
+                          {Object.keys(uploadedFiles)
+                            .slice(0, 5)
+                            .map((path) => (
+                              <div key={path} className="flex items-center gap-2 text-sm">
+                                <FileCode className="h-4 w-4 text-muted-foreground" />
+                                <span className="truncate">{path}</span>
+                              </div>
+                            ))}
                           {Object.keys(uploadedFiles).length > 5 && (
                             <p className="text-sm text-muted-foreground">
                               ...and {Object.keys(uploadedFiles).length - 5} more files
@@ -553,9 +603,15 @@ export default function Modules() {
                         </div>
                         <Button className="w-full" onClick={handleInstall} disabled={isInstalling}>
                           {isInstalling ? (
-                            <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Installing...</>
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Installing...
+                            </>
                           ) : (
-                            <><Upload className="h-4 w-4 mr-2" />Upload and Install</>
+                            <>
+                              <Upload className="h-4 w-4 mr-2" />
+                              Upload and Install
+                            </>
                           )}
                         </Button>
                         {installError && (
@@ -581,10 +637,7 @@ export default function Modules() {
               </div>
             ) : (
               <>
-                <PageHeader
-                  title="Modules"
-                  description="Browse and manage your stream automation modules."
-                />
+                <PageHeader title="Modules" description="Browse and manage your stream automation modules." />
 
                 {isLoading ? (
                   <div className="flex items-center justify-center min-h-[40vh]">
@@ -604,7 +657,9 @@ export default function Modules() {
                     >
                       <CardContent className="pt-12 pb-12">
                         <div className="flex flex-col items-center justify-center">
-                          <Upload className={cn("h-16 w-16 mb-4", isDragging ? "text-primary" : "text-muted-foreground")} />
+                          <Upload
+                            className={cn("h-16 w-16 mb-4", isDragging ? "text-primary" : "text-muted-foreground")}
+                          />
                           <h3 className="text-lg font-semibold mb-2">
                             {isDragging ? "Drop to upload" : "Select a module or Upload Module Zip"}
                           </h3>
@@ -612,14 +667,12 @@ export default function Modules() {
                             Drag and drop a module zip file here, or choose a module from the sidebar.
                           </p>
                           <label>
-                            <input
-                              type="file"
-                              accept=".zip"
-                              onChange={handleFileUpload}
-                              className="hidden"
-                            />
+                            <input type="file" accept=".zip" onChange={handleFileUpload} className="hidden" />
                             <Button asChild>
-                              <span><Upload className="h-4 w-4 mr-2" />Choose Zip File</span>
+                              <span>
+                                <Upload className="h-4 w-4 mr-2" />
+                                Choose Zip File
+                              </span>
                             </Button>
                           </label>
                         </div>
@@ -644,9 +697,7 @@ export default function Modules() {
           <DialogHeader>
             <DialogTitle>Install Failed</DialogTitle>
           </DialogHeader>
-          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">
-            {installError}
-          </pre>
+          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{installError}</pre>
         </DialogContent>
       </Dialog>
 
@@ -654,7 +705,9 @@ export default function Modules() {
         <UninstallModuleDialog
           open={uninstallTarget !== null}
           onOpenChange={(open) => {
-            if (!open) setUninstallTarget(null);
+            if (!open) {
+              setUninstallTarget(null);
+            }
           }}
           instanceId={instance._id}
           module={uninstallTarget}

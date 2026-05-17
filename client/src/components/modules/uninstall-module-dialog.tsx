@@ -21,7 +21,11 @@ const ENGINE_RESPONSE_TIMEOUT_MS = 60_000;
 type ConflictResource = {
   resourceType?: string;
   resourceId?: string;
+  // Canonical id (machine-readable, e.g. "twitch_platform:trigger:twitch.channel.cheer").
+  // Kept around for diagnostics; not the primary label.
   resourceName?: string;
+  // Human-friendly name resolved by the engine (e.g. "Channel Cheer").
+  resourceDisplayName?: string;
 };
 
 type UninstallDialogModule = {
@@ -218,17 +222,23 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
                     </span>
                   </div>
                   <ul className="space-y-1 pl-1">
-                    {items.map((item, idx) => (
-                      <li
-                        key={`${type}-${item.resourceId ?? idx}`}
-                        className="text-sm border-l-2 border-border pl-3 py-1"
-                      >
-                        <div className="font-medium">{item.resourceName ?? item.resourceId ?? "(unnamed)"}</div>
-                        {item.resourceId && item.resourceName && (
-                          <div className="text-xs text-muted-foreground font-mono">{item.resourceId}</div>
-                        )}
-                      </li>
-                    ))}
+                    {items.map((item, idx) => {
+                      const primaryLabel =
+                        item.resourceDisplayName ?? item.resourceName ?? item.resourceId ?? "(unnamed)";
+                      const showCanonical =
+                        !!item.resourceName && item.resourceName !== primaryLabel;
+                      return (
+                        <li
+                          key={`${type}-${item.resourceId ?? idx}`}
+                          className="text-sm border-l-2 border-border pl-3 py-1"
+                        >
+                          <div className="font-medium">{primaryLabel}</div>
+                          {showCanonical && (
+                            <div className="text-xs text-muted-foreground font-mono">{item.resourceName}</div>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}

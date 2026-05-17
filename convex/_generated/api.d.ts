@@ -44,6 +44,7 @@ import type * as lib_storage_r2Adapter from "../lib/storage/r2Adapter.js";
 import type * as lib_storage_types from "../lib/storage/types.js";
 import type * as lib_teamAccess from "../lib/teamAccess.js";
 import type * as logger from "../logger.js";
+import type * as marketplace from "../marketplace.js";
 import type * as migrations_backfillAccountMembers from "../migrations/backfillAccountMembers.js";
 import type * as migrations_backfillAssetKeys from "../migrations/backfillAssetKeys.js";
 import type * as moduleAssets from "../moduleAssets.js";
@@ -117,6 +118,7 @@ declare const fullApi: ApiFromModules<{
   "lib/storage/types": typeof lib_storage_types;
   "lib/teamAccess": typeof lib_teamAccess;
   logger: typeof logger;
+  marketplace: typeof marketplace;
   "migrations/backfillAccountMembers": typeof migrations_backfillAccountMembers;
   "migrations/backfillAssetKeys": typeof migrations_backfillAssetKeys;
   moduleAssets: typeof moduleAssets;

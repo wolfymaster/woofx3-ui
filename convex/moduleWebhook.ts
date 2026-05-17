@@ -7,6 +7,7 @@ async function enableTriggerForInstance(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   triggerId: string,
+  moduleId: Id<"moduleRepository"> | undefined,
 ) {
   const existing = await ctx.db
     .query("instanceEnabledTriggers")
@@ -15,7 +16,13 @@ async function enableTriggerForInstance(
     )
     .first();
   if (!existing) {
-    await ctx.db.insert("instanceEnabledTriggers", { instanceId, triggerId });
+    await ctx.db.insert("instanceEnabledTriggers", { instanceId, triggerId, moduleId });
+    return;
+  }
+  // Patch moduleId when a later webhook supplies it for a row that was previously
+  // written without one (race: MODULE_TRIGGER_REGISTERED can land before MODULE_INSTALLED).
+  if (moduleId && existing.moduleId !== moduleId) {
+    await ctx.db.patch(existing._id, { moduleId });
   }
 }
 
@@ -23,6 +30,7 @@ async function enableActionForInstance(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   actionId: string,
+  moduleId: Id<"moduleRepository"> | undefined,
 ) {
   const existing = await ctx.db
     .query("instanceEnabledActions")
@@ -31,7 +39,11 @@ async function enableActionForInstance(
     )
     .first();
   if (!existing) {
-    await ctx.db.insert("instanceEnabledActions", { instanceId, actionId });
+    await ctx.db.insert("instanceEnabledActions", { instanceId, actionId, moduleId });
+    return;
+  }
+  if (moduleId && existing.moduleId !== moduleId) {
+    await ctx.db.patch(existing._id, { moduleId });
   }
 }
 
@@ -299,7 +311,7 @@ export const processModuleInstalled = internalMutation({
       } else {
         await ctx.db.insert("triggerDefinitions", row);
       }
-      await enableTriggerForInstance(ctx, instanceId, row.slug);
+      await enableTriggerForInstance(ctx, instanceId, row.slug, moduleId);
     }
 
     for (const action of actions) {
@@ -313,7 +325,7 @@ export const processModuleInstalled = internalMutation({
       } else {
         await ctx.db.insert("actionDefinitions", row);
       }
-      await enableActionForInstance(ctx, instanceId, row.slug);
+      await enableActionForInstance(ctx, instanceId, row.slug, moduleId);
     }
   },
 });
@@ -389,7 +401,7 @@ export const processRegisteredDefinitions = internalMutation({
       } else {
         await ctx.db.insert("triggerDefinitions", row);
       }
-      await enableTriggerForInstance(ctx, instanceId, row.slug);
+      await enableTriggerForInstance(ctx, instanceId, row.slug, moduleId);
     }
 
     for (const action of actions) {
@@ -403,7 +415,7 @@ export const processRegisteredDefinitions = internalMutation({
       } else {
         await ctx.db.insert("actionDefinitions", row);
       }
-      await enableActionForInstance(ctx, instanceId, row.slug);
+      await enableActionForInstance(ctx, instanceId, row.slug, moduleId);
     }
   },
 });
@@ -462,12 +474,38 @@ export const processModuleDeleted = internalMutation({
       if (record.archiveKey) {
         await ctx.storage.delete(record.archiveKey as Id<"_storage">);
       }
+
+      // Authoritative cleanup: walk the (instance, module) join rows directly.
+      // This catches enablements even when the corresponding triggerDefinitions
+      // row was inserted with a stale or missing moduleId (e.g. registration
+      // webhook landed before the moduleRepository record existed).
+      const enabledTriggerRows = await ctx.db
+        .query("instanceEnabledTriggers")
+        .withIndex("by_instance_module", (q) =>
+          q.eq("instanceId", instanceId).eq("moduleId", record._id),
+        )
+        .collect();
+      const enabledActionRows = await ctx.db
+        .query("instanceEnabledActions")
+        .withIndex("by_instance_module", (q) =>
+          q.eq("instanceId", instanceId).eq("moduleId", record._id),
+        )
+        .collect();
+      for (const row of enabledTriggerRows) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of enabledActionRows) {
+        await ctx.db.delete(row._id);
+      }
+
+      // Clean global UI catalog rows. Best-effort: any def whose moduleId points
+      // at this record gets removed. Orphan defs (moduleId unset) survive here
+      // but no longer render because their instanceEnabled join row is gone.
       const triggers = await ctx.db
         .query("triggerDefinitions")
         .withIndex("by_module", (q) => q.eq("moduleId", record._id))
         .collect();
       for (const trigger of triggers) {
-        await disableTriggerForInstance(ctx, instanceId, trigger.slug);
         await ctx.db.delete(trigger._id);
       }
       const actions = await ctx.db
@@ -475,9 +513,9 @@ export const processModuleDeleted = internalMutation({
         .withIndex("by_module", (q) => q.eq("moduleId", record._id))
         .collect();
       for (const action of actions) {
-        await disableActionForInstance(ctx, instanceId, action.slug);
         await ctx.db.delete(action._id);
       }
+
       await ctx.runMutation(internal.moduleFunctions.cascadeOnModuleDelete, {
         instanceId,
         moduleId: record._id,

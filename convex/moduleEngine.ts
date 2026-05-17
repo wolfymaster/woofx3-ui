@@ -11,7 +11,7 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
  * but which haven't made it into @woofx3/api yet. Remove each entry as the
  * shared interface catches up.
  */
-interface LocalEngineApi extends EngineApi {
+export interface LocalEngineApi extends EngineApi {
   setEngineModuleState(name: string, state: string): Promise<unknown>;
 }
 
@@ -147,10 +147,7 @@ export const setEngineModuleState = action({
  */
 export const sendChatMessage = action({
   args: { instanceId: v.id("instances"), message: v.string() },
-  handler: async (
-    ctx,
-    { instanceId, message }
-  ): Promise<{ success: boolean; messageId: string }> => {
+  handler: async (ctx, { instanceId, message }): Promise<{ success: boolean; messageId: string }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
