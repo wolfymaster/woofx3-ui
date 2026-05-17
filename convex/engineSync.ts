@@ -32,8 +32,7 @@ export const runSync = internalAction({
       trigger,
     });
 
-    const newApi = (): EngineApi =>
-      createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const newApi = (): EngineApi => createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
 
     let runErrored = false;
     let runError: string | undefined;

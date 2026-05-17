@@ -34,7 +34,7 @@ export function computeNextEligibleAt(
   now: number,
   syncIntervalMs: number,
   jitterMs: number,
-  rand: () => number = Math.random,
+  rand: () => number = Math.random
 ): number {
   const jitter = Math.floor((rand() * 2 - 1) * jitterMs);
   return now + syncIntervalMs + jitter;
@@ -47,7 +47,7 @@ export function computeNextEligibleAt(
 export function computeBackoffMs(
   syncIntervalMs: number,
   consecutiveErrorCount: number,
-  config: typeof ENGINE_SYNC_CONFIG = ENGINE_SYNC_CONFIG,
+  config: typeof ENGINE_SYNC_CONFIG = ENGINE_SYNC_CONFIG
 ): number {
   const multiplier = config.backoffMultiplier ** Math.min(consecutiveErrorCount, config.maxConsecutiveErrors);
   return Math.min(syncIntervalMs * multiplier, config.maxBackoffMs);
@@ -61,7 +61,7 @@ export function computeNextEligibleAtAfterError(
   syncIntervalMs: number,
   consecutiveErrorCount: number,
   config: typeof ENGINE_SYNC_CONFIG = ENGINE_SYNC_CONFIG,
-  rand: () => number = Math.random,
+  rand: () => number = Math.random
 ): number {
   const backoff = computeBackoffMs(syncIntervalMs, consecutiveErrorCount, config);
   const jitter = Math.floor((rand() * 2 - 1) * config.jitterMs);
