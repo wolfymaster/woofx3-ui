@@ -6,6 +6,7 @@ import {
   computeNextEligibleAt,
   computeNextEligibleAtAfterError,
 } from "./lib/engineSync/config";
+import { canAccessAccount } from "./lib/teamAccess";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
 // pre-spec deployment. Safe to delete after the first prod deploy.
@@ -538,5 +539,47 @@ export const findInstancesMissingSyncRow = internalQuery({
       }
     }
     return missing;
+  },
+});
+
+/** Returns the syncState + most recent + recent 5 runs for a given instance. */
+export const getSyncStateForUser = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }) => {
+    const inst = await ctx.db.get(instanceId);
+    if (!inst) {
+      return null;
+    }
+    const allowed = await canAccessAccount(ctx, inst.accountId, userId);
+    if (!allowed) {
+      return null;
+    }
+    const syncState = await ctx.db
+      .query("instanceSync")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    const recentRuns = await ctx.db
+      .query("syncRuns")
+      .withIndex("by_instance_recent", (q) => q.eq("instanceId", instanceId))
+      .order("desc")
+      .take(5);
+    const currentRun = recentRuns.find((r) => r.status === "running") ?? null;
+    return { syncState, currentRun, recentRuns };
+  },
+});
+
+/** Throws if user can't access; otherwise returns nothing. */
+export const assertCanSyncInstance = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }) => {
+    const inst = await ctx.db.get(instanceId);
+    if (!inst) {
+      throw new Error("Instance not found");
+    }
+    const allowed = await canAccessAccount(ctx, inst.accountId, userId);
+    if (!allowed) {
+      throw new Error("Not authorized for this instance");
+    }
+    return true;
   },
 });
