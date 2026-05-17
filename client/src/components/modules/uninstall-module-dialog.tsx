@@ -18,6 +18,13 @@ import { Button } from "@/components/ui/button";
 
 const ENGINE_RESPONSE_TIMEOUT_MS = 60_000;
 
+type UsedByEntry = {
+  sourceType?: string;
+  sourceId?: string;
+  sourceName?: string;
+  context?: string;
+};
+
 type ConflictResource = {
   resourceType?: string;
   resourceId?: string;
@@ -26,6 +33,7 @@ type ConflictResource = {
   resourceName?: string;
   // Human-friendly name resolved by the engine (e.g. "Channel Cheer").
   resourceDisplayName?: string;
+  usedBy?: UsedByEntry[];
 };
 
 type UninstallDialogModule = {
@@ -227,6 +235,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
                         item.resourceDisplayName ?? item.resourceName ?? item.resourceId ?? "(unnamed)";
                       const showCanonical =
                         !!item.resourceName && item.resourceName !== primaryLabel;
+                      const usedBy = item.usedBy ?? [];
                       return (
                         <li
                           key={`${type}-${item.resourceId ?? idx}`}
@@ -235,6 +244,32 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
                           <div className="font-medium">{primaryLabel}</div>
                           {showCanonical && (
                             <div className="text-xs text-muted-foreground font-mono">{item.resourceName}</div>
+                          )}
+                          {usedBy.length > 0 && (
+                            <div className="mt-1.5 pl-3">
+                              <div className="text-xs text-muted-foreground">Used by:</div>
+                              <ul className="mt-1 space-y-1">
+                                {usedBy.map((user, userIdx) => {
+                                  const userLabel = user.sourceName ?? user.sourceId ?? "(unnamed)";
+                                  return (
+                                    <li
+                                      key={`${type}-${item.resourceId ?? idx}-user-${user.sourceId ?? userIdx}`}
+                                      className="flex items-center gap-2 text-xs"
+                                    >
+                                      {user.sourceType && (
+                                        <Badge variant="secondary" className="capitalize">
+                                          {user.sourceType}
+                                        </Badge>
+                                      )}
+                                      <span>{userLabel}</span>
+                                      {user.context && (
+                                        <span className="text-muted-foreground">(as {user.context})</span>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            </div>
                           )}
                         </li>
                       );
