@@ -1,33 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { api } from "@convex/_generated/api";
+import { useStore } from "@nanostores/react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAction, useMutation as useConvexMutation } from "convex/react";
 import {
-  User,
+  AlertTriangle,
   Bell,
-  Palette,
-  Shield,
-  Key,
-  Moon,
-  Sun,
-  Monitor,
   Check,
   CheckCircle2,
-  Server,
-  Loader2,
-  XCircle,
-  AlertTriangle,
   HardDrive,
+  Key,
+  Loader2,
+  Monitor,
+  Moon,
+  Palette,
+  Server,
+  Shield,
+  Sun,
+  User,
+  XCircle,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useParams } from "wouter";
+import { PageHeader } from "@/components/layout/page-header";
+import { EngineSyncCard } from "@/components/settings/engine-sync-card";
+import { TwitchIntegrationCard } from "@/components/settings/twitch-integration-card";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,16 +34,21 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useLocation, useParams } from "wouter";
-import { PageHeader } from "@/components/layout/page-header";
-import { useTheme } from "@/hooks/use-theme";
-import { cn } from "@/lib/utils";
-import { $engineUrl } from "@/lib/stores";
-import { useStore } from "@nanostores/react";
-import { api } from "@convex/_generated/api";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInstance } from "@/hooks/use-instance";
+import { useTheme } from "@/hooks/use-theme";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
-import { TwitchIntegrationCard } from "@/components/settings/twitch-integration-card";
+import { $engineUrl } from "@/lib/stores";
+import { cn } from "@/lib/utils";
 import { StorageSettingsTab } from "./storage-settings";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
@@ -156,86 +157,89 @@ function EngineSettingsTab() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Engine Configuration</CardTitle>
-        <CardDescription>
-          Endpoint for the selected instance ({instance.name}). Each instance has its own engine URL.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-2">
-          <Label htmlFor="engine-url">Engine URL</Label>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              id="engine-url"
-              placeholder="localhost:8080 or https://api.example.com"
-              value={urlDraft}
-              onChange={(e) => setUrlDraft(e.target.value)}
-              onBlur={() => {
-                void persistEngineUrl();
-              }}
-              className="flex-1 min-w-[200px]"
-              data-testid="input-engine-url"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={savingUrl || !effectiveUrl}
-              onClick={() => {
-                void persistEngineUrl();
-              }}
-              data-testid="button-save-engine-url"
-            >
-              {savingUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save URL"}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleTestConnection}
-              disabled={!effectiveUrl || status === "testing"}
-              data-testid="button-test-connection"
-            >
-              {status === "testing" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {status === "success" && <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />}
-              {status === "error" && <XCircle className="h-4 w-4 mr-2 text-destructive" />}
-              {status === "idle" && <Server className="h-4 w-4 mr-2" />}
-              {status === "testing"
-                ? "Testing..."
-                : status === "success"
-                  ? "Connected"
-                  : status === "error"
-                    ? "Failed"
-                    : "Test Connection"}
-            </Button>
-          </div>
-          {saveError && <p className="text-xs text-destructive">{saveError}</p>}
-          {status === "error" && errorMsg && <p className="text-xs text-destructive">{errorMsg}</p>}
-          {status === "success" && <p className="text-xs text-green-500">Engine is reachable.</p>}
-          <p className="text-xs text-muted-foreground">
-            The hostname and port (or full URL) where this instance&apos;s backend API is running. If no protocol is
-            specified, the current page&apos;s protocol will be used.
-          </p>
-        </div>
-        <Separator />
-        <div className="grid gap-2">
-          <Label>Registration Status</Label>
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-            <div className={`h-2 w-2 rounded-full ${instance?.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
-            <p className="text-sm text-muted-foreground">
-              {instance?.clientId
-                ? "Registered with engine"
-                : "Not registered — re-run onboarding or register from here."}
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Engine Configuration</CardTitle>
+          <CardDescription>
+            Endpoint for the selected instance ({instance.name}). Each instance has its own engine URL.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-2">
+            <Label htmlFor="engine-url">Engine URL</Label>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                id="engine-url"
+                placeholder="localhost:8080 or https://api.example.com"
+                value={urlDraft}
+                onChange={(e) => setUrlDraft(e.target.value)}
+                onBlur={() => {
+                  void persistEngineUrl();
+                }}
+                className="flex-1 min-w-[200px]"
+                data-testid="input-engine-url"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={savingUrl || !effectiveUrl}
+                onClick={() => {
+                  void persistEngineUrl();
+                }}
+                data-testid="button-save-engine-url"
+              >
+                {savingUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save URL"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleTestConnection}
+                disabled={!effectiveUrl || status === "testing"}
+                data-testid="button-test-connection"
+              >
+                {status === "testing" && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {status === "success" && <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />}
+                {status === "error" && <XCircle className="h-4 w-4 mr-2 text-destructive" />}
+                {status === "idle" && <Server className="h-4 w-4 mr-2" />}
+                {status === "testing"
+                  ? "Testing..."
+                  : status === "success"
+                    ? "Connected"
+                    : status === "error"
+                      ? "Failed"
+                      : "Test Connection"}
+              </Button>
+            </div>
+            {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+            {status === "error" && errorMsg && <p className="text-xs text-destructive">{errorMsg}</p>}
+            {status === "success" && <p className="text-xs text-green-500">Engine is reachable.</p>}
+            <p className="text-xs text-muted-foreground">
+              The hostname and port (or full URL) where this instance&apos;s backend API is running. If no protocol is
+              specified, the current page&apos;s protocol will be used.
             </p>
           </div>
-        </div>
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-          <div className="h-2 w-2 rounded-full bg-green-500" />
-          <p className="text-sm text-muted-foreground">
-            Saving the engine URL updates this instance and reconnects the live engine connection.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+          <Separator />
+          <div className="grid gap-2">
+            <Label>Registration Status</Label>
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+              <div className={`h-2 w-2 rounded-full ${instance?.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
+              <p className="text-sm text-muted-foreground">
+                {instance?.clientId
+                  ? "Registered with engine"
+                  : "Not registered — re-run onboarding or register from here."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+            <div className="h-2 w-2 rounded-full bg-green-500" />
+            <p className="text-sm text-muted-foreground">
+              Saving the engine URL updates this instance and reconnects the live engine connection.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+      <EngineSyncCard instanceId={instance._id} />
+    </div>
   );
 }
 

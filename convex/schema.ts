@@ -141,11 +141,7 @@ export default defineSchema({
     applicationId: v.optional(v.string()),
     engineCommandId: v.optional(v.string()),
     command: v.string(),
-    type: v.union(
-      v.literal("static"),
-      v.literal("dynamic"),
-      v.literal("function")
-    ),
+    type: v.union(v.literal("static"), v.literal("dynamic"), v.literal("function")),
     typeValue: v.optional(v.string()),
     response: v.optional(v.string()),
     template: v.optional(v.string()),
@@ -366,7 +362,9 @@ export default defineSchema({
     sceneWidgets: v.optional(v.array(v.any())),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_instance", ["instanceId"]),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_scene_id", ["instanceId", "engineSceneId"]),
 
   // sceneSlots: named slots within a scene
   sceneSlots: defineTable({
@@ -673,8 +671,7 @@ export default defineSchema({
       })
     ),
     updatedAt: v.number(),
-  })
-    .index("by_user_instance", ["userId", "instanceId"]),
+  }).index("by_user_instance", ["userId", "instanceId"]),
 
   // debugEventHistory: history of simulated Twitch events for debugging
   debugEventHistory: defineTable({
@@ -688,4 +685,55 @@ export default defineSchema({
   })
     .index("by_user_instance", ["userId", "instanceId"])
     .index("by_sent_at", ["sentAt"]),
+
+  // instanceSync: per-instance sync schedule and state. Driven by the
+  // engine-sync sweep cron. One row per instance; created lazily on first
+  // sweep eligibility check.
+  instanceSync: defineTable({
+    instanceId: v.id("instances"),
+    lastSyncedAt: v.number(),
+    nextEligibleAt: v.number(),
+    status: v.union(v.literal("idle"), v.literal("running"), v.literal("success"), v.literal("error")),
+    lastError: v.string(),
+    lastDurationMs: v.number(),
+    consecutiveErrorCount: v.number(),
+    syncIntervalMs: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_next_eligible", ["nextEligibleAt"]),
+
+  // syncRuns: append-only audit log of each engine-sync run. Doubles as the
+  // live-progress feed when status="running".
+  syncRuns: defineTable({
+    instanceId: v.id("instances"),
+    trigger: v.union(v.literal("scheduled"), v.literal("manual")),
+    status: v.union(v.literal("running"), v.literal("success"), v.literal("error")),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    steps: v.array(
+      v.object({
+        name: v.union(v.literal("commands"), v.literal("modules"), v.literal("workflows"), v.literal("scenes")),
+        status: v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error")),
+        itemsProcessed: v.number(),
+        error: v.optional(v.string()),
+        startedAt: v.optional(v.number()),
+        completedAt: v.optional(v.number()),
+      })
+    ),
+    error: v.optional(v.string()),
+  })
+    .index("by_instance_recent", ["instanceId", "startedAt"])
+    .index("by_started_at", ["startedAt"]),
+
+  // installedModules: which modules are currently installed per instance.
+  // Mirrors the engine's `listEngineModules()` response.
+  installedModules: defineTable({
+    instanceId: v.id("instances"),
+    name: v.string(),
+    version: v.string(),
+    state: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_name", ["instanceId", "name"]),
 });
