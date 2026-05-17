@@ -1,11 +1,7 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import {
-  ENGINE_SYNC_CONFIG,
-  computeNextEligibleAt,
-  computeNextEligibleAtAfterError,
-} from "./lib/engineSync/config";
+import { internalMutation, internalQuery } from "./_generated/server";
+import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { canAccessAccount } from "./lib/teamAccess";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
@@ -207,9 +203,7 @@ export const reconcileWorkflows = internalMutation({
     for (const u of upserts) {
       const existing = await ctx.db
         .query("workflows")
-        .withIndex("by_engine_id", (q) =>
-          q.eq("instanceId", instanceId).eq("engineWorkflowId", u.engineWorkflowId)
-        )
+        .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", u.engineWorkflowId))
         .first();
       if (existing) {
         await ctx.db.patch(existing._id, {
@@ -279,9 +273,7 @@ export const reconcileScenes = internalMutation({
     for (const u of upserts) {
       const existing = await ctx.db
         .query("scenes")
-        .withIndex("by_engine_scene_id", (q) =>
-          q.eq("instanceId", instanceId).eq("engineSceneId", u.engineSceneId)
-        )
+        .withIndex("by_engine_scene_id", (q) => q.eq("instanceId", instanceId).eq("engineSceneId", u.engineSceneId))
         .first();
       if (existing) {
         await ctx.db.patch(existing._id, {
@@ -402,16 +394,9 @@ export const startRun = internalMutation({
 export const updateRunStep = internalMutation({
   args: {
     runId: v.id("syncRuns"),
-    stepName: v.union(
-      v.literal("commands"),
-      v.literal("modules"),
-      v.literal("workflows"),
-      v.literal("scenes"),
-    ),
+    stepName: v.union(v.literal("commands"), v.literal("modules"), v.literal("workflows"), v.literal("scenes")),
     patch: v.object({
-      status: v.optional(
-        v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error"))
-      ),
+      status: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error"))),
       itemsProcessed: v.optional(v.number()),
       error: v.optional(v.string()),
       startedAt: v.optional(v.number()),
@@ -581,5 +566,26 @@ export const assertCanSyncInstance = internalQuery({
       throw new Error("Not authorized for this instance");
     }
     return true;
+  },
+});
+
+/**
+ * Delete syncRuns rows older than `runHistoryRetentionMs`. Runs on a daily
+ * cron. Bounded by `.take(200)` per invocation so a single run can't blow
+ * past Convex per-mutation limits — the next day's run picks up any
+ * remainder.
+ */
+export const cleanupOldRuns = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = Date.now() - ENGINE_SYNC_CONFIG.runHistoryRetentionMs;
+    const old = await ctx.db
+      .query("syncRuns")
+      .withIndex("by_started_at", (q) => q.lt("startedAt", cutoff))
+      .take(200);
+    for (const r of old) {
+      await ctx.db.delete(r._id);
+    }
+    return old.length;
   },
 });

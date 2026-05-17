@@ -141,11 +141,7 @@ export default defineSchema({
     applicationId: v.optional(v.string()),
     engineCommandId: v.optional(v.string()),
     command: v.string(),
-    type: v.union(
-      v.literal("static"),
-      v.literal("dynamic"),
-      v.literal("function")
-    ),
+    type: v.union(v.literal("static"), v.literal("dynamic"), v.literal("function")),
     typeValue: v.optional(v.string()),
     response: v.optional(v.string()),
     template: v.optional(v.string()),
@@ -697,12 +693,7 @@ export default defineSchema({
     instanceId: v.id("instances"),
     lastSyncedAt: v.number(),
     nextEligibleAt: v.number(),
-    status: v.union(
-      v.literal("idle"),
-      v.literal("running"),
-      v.literal("success"),
-      v.literal("error"),
-    ),
+    status: v.union(v.literal("idle"), v.literal("running"), v.literal("success"), v.literal("error")),
     lastError: v.string(),
     lastDurationMs: v.number(),
     consecutiveErrorCount: v.number(),
@@ -721,18 +712,8 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     steps: v.array(
       v.object({
-        name: v.union(
-          v.literal("commands"),
-          v.literal("modules"),
-          v.literal("workflows"),
-          v.literal("scenes"),
-        ),
-        status: v.union(
-          v.literal("pending"),
-          v.literal("running"),
-          v.literal("success"),
-          v.literal("error"),
-        ),
+        name: v.union(v.literal("commands"), v.literal("modules"), v.literal("workflows"), v.literal("scenes")),
+        status: v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error")),
         itemsProcessed: v.number(),
         error: v.optional(v.string()),
         startedAt: v.optional(v.number()),
@@ -740,7 +721,9 @@ export default defineSchema({
       })
     ),
     error: v.optional(v.string()),
-  }).index("by_instance_recent", ["instanceId", "startedAt"]),
+  })
+    .index("by_instance_recent", ["instanceId", "startedAt"])
+    .index("by_started_at", ["startedAt"]),
 
   // installedModules: which modules are currently installed per instance.
   // Mirrors the engine's `listEngineModules()` response.

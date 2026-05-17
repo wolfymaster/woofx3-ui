@@ -13,10 +13,8 @@ crons.interval(
   internal.workflowInternal.sweepExpiredPending
 );
 
-crons.interval(
-  "engine sync sweep",
-  { minutes: ENGINE_SYNC_CONFIG.sweepIntervalMinutes },
-  internal.engineSync.sweep
-);
+crons.interval("engine sync sweep", { minutes: ENGINE_SYNC_CONFIG.sweepIntervalMinutes }, internal.engineSync.sweep);
+
+crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engineSyncInternal.cleanupOldRuns);
 
 export default crons;
