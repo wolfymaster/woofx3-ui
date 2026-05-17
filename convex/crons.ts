@@ -1,5 +1,6 @@
 import { cronJobs } from "convex/server";
 import { internal } from "./_generated/api";
+import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 
 const crons = cronJobs();
 
@@ -10,6 +11,12 @@ crons.interval(
   "sweep expired workflow pending operations",
   { minutes: 1 },
   internal.workflowInternal.sweepExpiredPending
+);
+
+crons.interval(
+  "engine sync sweep",
+  { minutes: ENGINE_SYNC_CONFIG.sweepIntervalMinutes },
+  internal.engineSync.sweep
 );
 
 export default crons;

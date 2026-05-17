@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { SYNC_STEPS } from "./lib/engineSync/steps";
 
 /**
@@ -83,5 +84,54 @@ export const runSync = internalAction({
     });
 
     return { runId, status: runErrored ? "error" : "success" } as const;
+  },
+});
+
+export const sweep = internalAction({
+  args: {},
+  handler: async (ctx): Promise<{ scheduled: number; deferred: number; seeded: number }> => {
+    const now = Date.now();
+    const batchSize = ENGINE_SYNC_CONFIG.sweepBatchSize;
+    const inactivityCutoff = now - ENGINE_SYNC_CONFIG.inactivityThresholdMs;
+
+    // 1) Seed instanceSync rows for any instances missing one.
+    const missing: Array<Id<"instances">> = await ctx.runQuery(
+      internal.engineSyncInternal.findInstancesMissingSyncRow,
+      {
+        limit: batchSize,
+      }
+    );
+    for (const instanceId of missing) {
+      await ctx.runMutation(internal.engineSyncInternal.ensureInstanceSyncRow, { instanceId });
+    }
+
+    // 2) Pull candidates and partition into schedule vs defer.
+    const candidates = await ctx.runQuery(internal.engineSyncInternal.findEligibleCandidates, {
+      now,
+      limit: batchSize,
+    });
+
+    let scheduled = 0;
+    let deferred = 0;
+    for (const c of candidates) {
+      if (c.status === "running") {
+        continue;
+      }
+      if (c.lastActive < inactivityCutoff) {
+        await ctx.runMutation(internal.engineSyncInternal.deferIdleInstance, {
+          syncRowId: c.syncRowId,
+          now,
+        });
+        deferred++;
+        continue;
+      }
+      await ctx.scheduler.runAfter(0, internal.engineSync.runSync, {
+        instanceId: c.instanceId,
+        trigger: "scheduled",
+      });
+      scheduled++;
+    }
+
+    return { scheduled, deferred, seeded: missing.length };
   },
 });

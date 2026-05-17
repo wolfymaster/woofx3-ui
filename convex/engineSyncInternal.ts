@@ -470,3 +470,73 @@ export const finalizeRun = internalMutation({
     });
   },
 });
+
+/**
+ * Return up to `limit` instanceSync rows whose nextEligibleAt has passed,
+ * joined with each owning instance's `lastEngineActivityAt`. The action
+ * partitions these into "schedule" (active) vs "defer" (idle) buckets.
+ */
+export const findEligibleCandidates = internalQuery({
+  args: { now: v.number(), limit: v.number() },
+  handler: async (ctx, { now, limit }) => {
+    const rows = await ctx.db
+      .query("instanceSync")
+      .withIndex("by_next_eligible", (q) => q.lte("nextEligibleAt", now))
+      .take(limit * 4);
+    const result: Array<{
+      syncRowId: Id<"instanceSync">;
+      instanceId: Id<"instances">;
+      status: "idle" | "running" | "success" | "error";
+      lastActive: number;
+    }> = [];
+    for (const r of rows) {
+      const inst = await ctx.db.get(r.instanceId);
+      if (!inst) {
+        continue;
+      }
+      result.push({
+        syncRowId: r._id,
+        instanceId: r.instanceId,
+        status: r.status,
+        lastActive: inst.lastEngineActivityAt ?? 0,
+      });
+      if (result.length >= limit) {
+        break;
+      }
+    }
+    return result;
+  },
+});
+
+/** Push out nextEligibleAt for idle (no-activity) instances so we don't churn every tick. */
+export const deferIdleInstance = internalMutation({
+  args: { syncRowId: v.id("instanceSync"), now: v.number() },
+  handler: async (ctx, { syncRowId, now }) => {
+    await ctx.db.patch(syncRowId, {
+      nextEligibleAt: now + ENGINE_SYNC_CONFIG.inactivityThresholdMs,
+    });
+  },
+});
+
+/**
+ * Find instances that have no instanceSync row at all. We seed a row for them
+ * during sweep so they enter the regular cadence.
+ */
+export const findInstancesMissingSyncRow = internalQuery({
+  args: { limit: v.number() },
+  handler: async (ctx, { limit }) => {
+    const rows = await ctx.db.query("instanceSync").take(1000);
+    const haveSync = new Set(rows.map((r) => r.instanceId));
+    const instances = await ctx.db.query("instances").take(limit * 4);
+    const missing: Array<Id<"instances">> = [];
+    for (const inst of instances) {
+      if (!haveSync.has(inst._id)) {
+        missing.push(inst._id);
+        if (missing.length >= limit) {
+          break;
+        }
+      }
+    }
+    return missing;
+  },
+});
