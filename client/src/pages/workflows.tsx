@@ -2,21 +2,9 @@ import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { useAction, useQuery } from "convex/react";
-import {
-  ArrowLeft,
-  Code,
-  Loader2,
-  MoreVertical,
-  Plus,
-  Save,
-  Trash2,
-  Workflow as WorkflowIcon,
-} from "lucide-react";
+import { ArrowLeft, Code, Loader2, MoreVertical, Plus, Save, Trash2, Workflow as WorkflowIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
-import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
-import StepListEditor from "@/components/workflows/step-list-editor";
-import { WorkflowsSidebar, type WorkflowListItem } from "@/components/workflows/workflows-sidebar";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertDialog,
@@ -38,6 +26,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
+import StepListEditor from "@/components/workflows/step-list-editor";
+import { type WorkflowListItem, WorkflowsSidebar } from "@/components/workflows/workflows-sidebar";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
@@ -50,8 +41,9 @@ function workflowName(row: WorkflowRow): string {
 
 export default function Workflows() {
   const params = useParams<{ id?: string }>();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const engineWorkflowIdFromUrl = params?.id;
+  const isCreateRoute = location === "/workflows/new";
 
   const { toast } = useToast();
   const { instance } = useInstance();
@@ -61,10 +53,7 @@ export default function Workflows() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showJson, setShowJson] = useState(false);
 
-  const workflows = useQuery(
-    api.workflows.list,
-    instance ? { instanceId: instance._id as Id<"instances"> } : "skip"
-  );
+  const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
 
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
   const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
@@ -75,9 +64,7 @@ export default function Workflows() {
   const [editedTitle, setEditedTitle] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  const selectedWorkflowData = workflows?.find(
-    (w) => w.engineWorkflowId === selectedWorkflow?.engineWorkflowId
-  );
+  const selectedWorkflowData = workflows?.find((w) => w.engineWorkflowId === selectedWorkflow?.engineWorkflowId);
 
   useEffect(() => {
     if (engineWorkflowIdFromUrl && workflows) {
@@ -302,7 +289,7 @@ export default function Workflows() {
               <div className="flex items-center justify-center min-h-[40vh]">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : workflows.length === 0 ? (
+            ) : workflows.length === 0 && !isCreateRoute ? (
               <div className="mt-8 text-center">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
                   <WorkflowIcon className="h-8 w-8 text-muted-foreground" />
@@ -318,10 +305,7 @@ export default function Workflows() {
               </div>
             ) : (
               <>
-                <PageHeader
-                  title="Create a new workflow"
-                  description="Choose what triggers your workflow"
-                />
+                <PageHeader title="Create a new workflow" description="Choose what triggers your workflow" />
                 <BasicWorkflowEditor />
               </>
             )}

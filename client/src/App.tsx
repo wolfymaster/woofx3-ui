@@ -10,26 +10,25 @@ import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/hooks/use-theme";
+import AlertLog from "@/pages/alert-log";
 import Assets from "@/pages/assets";
-import Login from "@/pages/auth/login";
 import AcceptInvite from "@/pages/auth/accept-invite";
+import Login from "@/pages/auth/login";
 import Onboarding from "@/pages/auth/onboarding";
 import Register from "@/pages/auth/register";
 import TwitchCallback from "@/pages/auth/twitch-callback";
+import Commands from "@/pages/commands";
 import Dashboard from "@/pages/dashboard";
+import DebugTools from "@/pages/debug-tools";
 import ModuleDetail from "@/pages/module-detail";
 import ModuleInstall from "@/pages/module-install";
 import Modules from "@/pages/modules";
-import AlertLog from "@/pages/alert-log";
-import DebugTools from "@/pages/debug-tools";
-import Commands from "@/pages/commands";
 import NotFound from "@/pages/not-found";
 import SceneEditor from "@/pages/scene-editor";
 import Scenes from "@/pages/scenes";
 import Settings from "@/pages/settings";
 import Team from "@/pages/team";
 import Workflows from "@/pages/workflows";
-import WorkflowsNew from "@/pages/workflows-new";
 import { queryClient } from "./lib/queryClient";
 
 console.log("url", import.meta.env.VITE_CONVEX_URL);
@@ -120,7 +119,7 @@ function AppRoutes() {
                   <Route path="/modules/install" component={ModuleInstall} />
                   <Route path="/modules/:id" component={ModuleDetail} />
                   <Route path="/workflows" component={Workflows} />
-                  <Route path="/workflows/new" component={WorkflowsNew} />
+                  <Route path="/workflows/new" component={Workflows} />
                   <Route path="/workflows/:id" component={Workflows} />
                   <Route path="/workflows/:id/edit" component={Workflows} />
                   <Route path="/assets" component={Assets} />
