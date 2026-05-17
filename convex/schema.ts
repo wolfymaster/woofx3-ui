@@ -366,7 +366,9 @@ export default defineSchema({
     sceneWidgets: v.optional(v.array(v.any())),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_instance", ["instanceId"]),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_scene_id", ["instanceId", "engineSceneId"]),
 
   // sceneSlots: named slots within a scene
   sceneSlots: defineTable({

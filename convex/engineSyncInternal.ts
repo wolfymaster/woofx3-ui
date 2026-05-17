@@ -238,3 +238,75 @@ export const reconcileWorkflows = internalMutation({
     return { itemsProcessed: upserts.length };
   },
 });
+
+/**
+ * Reconcile the local `scenes` mirror against a full snapshot returned by
+ * the engine's `getScenes()` (paginated). The engine is the source of
+ * truth: rows whose `engineSceneId` is present in `engineIds` are upserted
+ * with the supplied fields; rows with an `engineSceneId` that no longer
+ * appears are deleted. Legacy rows without an `engineSceneId` (created via
+ * the older webhook path that keyed by name) are left alone.
+ *
+ * The engine's `Scene` shape (see `@woofx3/api`) is minimal: `id`, `name`,
+ * `accountId`, `widgets`, `createdAt`. Convex stores additional UI-only
+ * fields (description, layout dimensions, sceneWidgets) that are populated
+ * via webhooks; this reconciler does not touch those fields and only
+ * patches what the engine actually returns.
+ */
+export const reconcileScenes = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    engineIds: v.array(v.string()),
+    upserts: v.array(
+      v.object({
+        engineSceneId: v.string(),
+        name: v.string(),
+        widgets: v.optional(v.array(v.any())),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, applicationId, engineIds, upserts }) => {
+    const now = Date.now();
+
+    for (const u of upserts) {
+      const existing = await ctx.db
+        .query("scenes")
+        .withIndex("by_engine_scene_id", (q) =>
+          q.eq("instanceId", instanceId).eq("engineSceneId", u.engineSceneId)
+        )
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          applicationId,
+          name: u.name,
+          widgets: u.widgets,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.insert("scenes", {
+          instanceId,
+          applicationId,
+          engineSceneId: u.engineSceneId,
+          name: u.name,
+          widgets: u.widgets,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    const liveIds = new Set(engineIds);
+    const local = await ctx.db
+      .query("scenes")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const row of local) {
+      if (row.engineSceneId && !liveIds.has(row.engineSceneId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: upserts.length };
+  },
+});
