@@ -1,4 +1,5 @@
 import { internal } from "../../../_generated/api";
+import type { EngineApi } from "../../engineInstanceUrl";
 import { ENGINE_SYNC_CONFIG } from "../config";
 import type { SyncStep, SyncStepContext } from "../steps";
 
@@ -18,11 +19,14 @@ import type { SyncStep, SyncStepContext } from "../steps";
  */
 export const scenesStep: SyncStep = {
   name: "scenes",
-  run: async ({ ctx, api, instanceId, applicationId }: SyncStepContext) => {
-    type ScPage = Awaited<ReturnType<typeof api.getScenes>>;
+  run: async ({ ctx, newApi, instanceId, applicationId }: SyncStepContext) => {
+    type ScPage = Awaited<ReturnType<EngineApi["getScenes"]>>;
     const all: ScPage["scenes"] = [];
     let page = 1;
     while (true) {
+      // Each page is a separate engine RPC — capnweb sessions are single-use,
+      // so we must open a fresh session per page.
+      const api = newApi();
       const res = (await api.getScenes({
         accountId: applicationId,
         page,

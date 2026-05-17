@@ -16,7 +16,8 @@ import type { SyncStep, SyncStepContext } from "../steps";
  */
 export const commandsStep: SyncStep = {
   name: "commands",
-  run: async ({ ctx, api, instanceId, applicationId }: SyncStepContext) => {
+  run: async ({ ctx, newApi, instanceId, applicationId }: SyncStepContext) => {
+    const api = newApi();
     const snapshots = await api.listCommands();
     const safe = (snapshots ?? []).map((s) => ({
       engineCommandId: s.id,

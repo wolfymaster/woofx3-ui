@@ -1,5 +1,11 @@
 import { v } from "convex/values";
-import { internalMutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import {
+  ENGINE_SYNC_CONFIG,
+  computeNextEligibleAt,
+  computeNextEligibleAtAfterError,
+} from "./lib/engineSync/config";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
 // pre-spec deployment. Safe to delete after the first prod deploy.
@@ -308,5 +314,159 @@ export const reconcileScenes = internalMutation({
     }
 
     return { itemsProcessed: upserts.length };
+  },
+});
+
+/** Fetch the instance bundle needed to open a capnweb session. */
+export const getInstanceBundle = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const inst = await ctx.db.get(instanceId);
+    if (!inst) {
+      return null;
+    }
+    if (!inst.clientId || !inst.clientSecret || !inst.applicationId) {
+      return null;
+    }
+    return {
+      url: inst.url,
+      clientId: inst.clientId,
+      clientSecret: inst.clientSecret,
+      applicationId: inst.applicationId,
+      lastEngineActivityAt: inst.lastEngineActivityAt ?? 0,
+    };
+  },
+});
+
+/** Ensure an instanceSync row exists for this instance; return it. */
+export const ensureInstanceSyncRow = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<Doc<"instanceSync">> => {
+    const existing = await ctx.db
+      .query("instanceSync")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (existing) {
+      return existing;
+    }
+    const now = Date.now();
+    const id = await ctx.db.insert("instanceSync", {
+      instanceId,
+      lastSyncedAt: 0,
+      nextEligibleAt: now,
+      status: "idle",
+      lastError: "",
+      lastDurationMs: 0,
+      consecutiveErrorCount: 0,
+      syncIntervalMs: ENGINE_SYNC_CONFIG.defaultSyncIntervalMs,
+    });
+    const row = await ctx.db.get(id);
+    if (!row) {
+      throw new Error("ensureInstanceSyncRow: insert lost");
+    }
+    return row;
+  },
+});
+
+/** Start a syncRuns row in "running" state and mark instanceSync.status="running". */
+export const startRun = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    trigger: v.union(v.literal("scheduled"), v.literal("manual")),
+  },
+  handler: async (ctx, { instanceId, trigger }): Promise<Id<"syncRuns">> => {
+    const now = Date.now();
+    const sync = await ctx.db
+      .query("instanceSync")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (sync) {
+      await ctx.db.patch(sync._id, { status: "running", lastError: "" });
+    }
+    return ctx.db.insert("syncRuns", {
+      instanceId,
+      trigger,
+      status: "running",
+      startedAt: now,
+      steps: [
+        { name: "commands", status: "pending", itemsProcessed: 0 },
+        { name: "modules", status: "pending", itemsProcessed: 0 },
+        { name: "workflows", status: "pending", itemsProcessed: 0 },
+        { name: "scenes", status: "pending", itemsProcessed: 0 },
+      ],
+    });
+  },
+});
+
+export const updateRunStep = internalMutation({
+  args: {
+    runId: v.id("syncRuns"),
+    stepName: v.union(
+      v.literal("commands"),
+      v.literal("modules"),
+      v.literal("workflows"),
+      v.literal("scenes"),
+    ),
+    patch: v.object({
+      status: v.optional(
+        v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error"))
+      ),
+      itemsProcessed: v.optional(v.number()),
+      error: v.optional(v.string()),
+      startedAt: v.optional(v.number()),
+      completedAt: v.optional(v.number()),
+    }),
+  },
+  handler: async (ctx, { runId, stepName, patch }) => {
+    const run = await ctx.db.get(runId);
+    if (!run) {
+      return;
+    }
+    const steps = run.steps.map((s) => (s.name === stepName ? { ...s, ...patch } : s));
+    await ctx.db.patch(runId, { steps });
+  },
+});
+
+/** Finalize a run: set syncRuns terminal status + update instanceSync. */
+export const finalizeRun = internalMutation({
+  args: {
+    runId: v.id("syncRuns"),
+    instanceId: v.id("instances"),
+    status: v.union(v.literal("success"), v.literal("error")),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, { runId, instanceId, status, error }) => {
+    const now = Date.now();
+    const run = await ctx.db.get(runId);
+    if (!run) {
+      return;
+    }
+    await ctx.db.patch(runId, {
+      status,
+      completedAt: now,
+      error: error ?? undefined,
+    });
+
+    const sync = await ctx.db
+      .query("instanceSync")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (!sync) {
+      return;
+    }
+    const durationMs = now - run.startedAt;
+    const isSuccess = status === "success";
+    const consecutive = isSuccess ? 0 : sync.consecutiveErrorCount + 1;
+    const nextEligibleAt = isSuccess
+      ? computeNextEligibleAt(now, sync.syncIntervalMs, ENGINE_SYNC_CONFIG.jitterMs)
+      : computeNextEligibleAtAfterError(now, sync.syncIntervalMs, consecutive);
+    await ctx.db.patch(sync._id, {
+      status,
+      lastSyncedAt: now,
+      lastDurationMs: durationMs,
+      consecutiveErrorCount: consecutive,
+      lastError: error ?? "",
+      nextEligibleAt,
+    });
   },
 });

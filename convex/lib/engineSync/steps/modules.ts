@@ -15,7 +15,8 @@ import type { SyncStep, SyncStepContext } from "../steps";
  */
 export const modulesStep: SyncStep = {
   name: "modules",
-  run: async ({ ctx, api, instanceId }: SyncStepContext) => {
+  run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
+    const api = newApi();
     const snapshots = await api.listEngineModules();
     const safe = (snapshots ?? [])
       .filter((m) => !!m.name)

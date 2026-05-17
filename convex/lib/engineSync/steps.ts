@@ -10,7 +10,13 @@ export type SyncStepName = "commands" | "modules" | "workflows" | "scenes";
 
 export interface SyncStepContext {
   ctx: ActionCtx;
-  api: EngineApi;
+  /**
+   * Factory that opens a fresh capnweb HTTP batch RPC session. capnweb
+   * sessions are single-use — the entire batch is sent on the first
+   * `await`, so each engine round-trip (including each page of a
+   * paginated read) MUST call `newApi()` to obtain a new stub.
+   */
+  newApi: () => EngineApi;
   instanceId: Id<"instances">;
   applicationId: string;
 }
