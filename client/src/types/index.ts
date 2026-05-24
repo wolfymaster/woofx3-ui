@@ -123,7 +123,7 @@ export interface Scene {
 
 export interface Widget {
   id: string;
-  type: 'text' | 'image' | 'video' | 'shape' | 'timer' | 'chat' | 'alert' | 'custom';
+  widgetCanonicalId: string;
   name: string;
   position: { x: number; y: number };
   size: { width: number; height: number };
@@ -132,7 +132,7 @@ export interface Widget {
   zIndex: number;
   locked: boolean;
   visible: boolean;
-  properties: Record<string, unknown>;
+  settings: Record<string, unknown>;
 }
 
 export interface ThemePreset {

@@ -7,36 +7,29 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
-  Save,
-  Play,
-  Undo2,
-  Redo2,
-  ChevronLeft,
-  Layers,
-  Settings,
-  Grid,
-  Eye,
-  EyeOff,
-  Lock,
-  Unlock,
-  Trash2,
-  Type,
-  Image,
-  Square,
-  Timer,
-  MessageSquare,
-  Bell,
-  Code,
-  Move,
-  ZoomIn,
-  ZoomOut,
-  Maximize,
-  AlignLeft,
   AlignCenter,
+  AlignLeft,
   AlignRight,
   ArrowUpDown,
-  Plus,
+  ChevronLeft,
   Copy,
+  Eye,
+  EyeOff,
+  Grid,
+  Layers,
+  Lock,
+  Maximize,
+  Plus,
+  Play,
+  Redo2,
+  Save,
+  Settings,
+  Square,
+  Trash2,
+  Undo2,
+  Unlock,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -69,16 +62,6 @@ import {
 } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import type { Widget, Scene } from '@/types';
-
-const widgetTypes = [
-  { type: 'text', label: 'Text', icon: Type },
-  { type: 'image', label: 'Image', icon: Image },
-  { type: 'shape', label: 'Shape', icon: Square },
-  { type: 'timer', label: 'Timer', icon: Timer },
-  { type: 'chat', label: 'Chat Box', icon: MessageSquare },
-  { type: 'alert', label: 'Alert Box', icon: Bell },
-  { type: 'custom', label: 'Custom HTML', icon: Code },
-];
 
 const defaultScene: Scene = {
   id: '',
@@ -116,8 +99,6 @@ function SortableLayerItem({ widget, isSelected, onSelect, onToggleVisibility, o
     transition,
   };
 
-  const WidgetIcon = widgetTypes.find(w => w.type === widget.type)?.icon || Square;
-
   return (
     <div
       ref={setNodeRef}
@@ -133,7 +114,7 @@ function SortableLayerItem({ widget, isSelected, onSelect, onToggleVisibility, o
       <div {...attributes} {...listeners} className="cursor-grab touch-none">
         <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
       </div>
-      <WidgetIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+      <Square className="h-4 w-4 text-muted-foreground shrink-0" />
       <span className={cn('flex-1 text-sm truncate', !widget.visible && 'text-muted-foreground line-through')}>
         {widget.name}
       </span>
@@ -222,8 +203,6 @@ function CanvasWidget({ widget, isSelected, scale, onSelect, onMove, onResize }:
     };
   }, [isDragging, isResizing, scale, onMove, onResize]);
 
-  const WidgetIcon = widgetTypes.find(w => w.type === widget.type)?.icon || Square;
-
   if (!widget.visible) return null;
 
   return (
@@ -246,39 +225,11 @@ function CanvasWidget({ widget, isSelected, scale, onSelect, onMove, onResize }:
       onMouseDown={handleMouseDown}
       data-testid={`canvas-widget-${widget.id}`}
     >
-      <div className={cn(
-        'w-full h-full rounded-md flex items-center justify-center overflow-hidden',
-        widget.type === 'text' && 'text-white',
-        widget.type === 'shape' && 'bg-white/20',
-        widget.type !== 'text' && widget.type !== 'shape' && 'bg-white/10 border border-dashed border-white/30'
-      )}
-      style={{
-        backgroundColor: widget.type === 'shape' ? (widget.properties.fill as string) : undefined,
-        borderRadius: widget.type === 'shape' ? (widget.properties.borderRadius as number) : undefined,
-      }}>
-        {widget.type === 'text' ? (
-          <div
-            className="w-full h-full flex items-center"
-            style={{
-              fontSize: (widget.properties.fontSize as number) || 24,
-              fontFamily: (widget.properties.fontFamily as string) || 'Inter',
-              color: (widget.properties.color as string) || '#ffffff',
-              textAlign: (widget.properties.align as 'left' | 'center' | 'right') || 'left',
-              padding: '8px',
-            }}
-          >
-            {(widget.properties.text as string) || 'Text Widget'}
-          </div>
-        ) : widget.type === 'image' ? (
-          <div className="w-full h-full bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
-            <Image className="h-8 w-8 text-muted-foreground/50" />
-          </div>
-        ) : (
-          <div className="text-center">
-            <WidgetIcon className="h-6 w-6 mx-auto mb-1 text-white/50" />
-            <span className="text-xs text-white/50">{widget.name}</span>
-          </div>
-        )}
+      <div className="w-full h-full rounded-md flex items-center justify-center overflow-hidden bg-white/10 border border-dashed border-white/30">
+        <div className="text-center">
+          <Square className="h-6 w-6 mx-auto mb-1 text-white/50" />
+          <span className="text-xs text-white/50">{widget.name}</span>
+        </div>
       </div>
       
       {isSelected && !widget.locked && (
@@ -383,7 +334,7 @@ export default function SceneEditor() {
       ...prev,
       widgets: prev.widgets.map(w => w.id === widgetId ? {
         ...w,
-        properties: { ...w.properties, [key]: value },
+        properties: { ...w.settings, [key]: value },
       } : w),
     }));
   }, []);
@@ -408,19 +359,19 @@ export default function SceneEditor() {
     }));
   }, []);
 
-  const addWidget = useCallback((type: Widget['type']) => {
+  const addWidget = useCallback((canonicalId: string, displayName: string) => {
     const newWidget: Widget = {
       id: `w-${Date.now()}`,
-      type,
-      name: `New ${type.charAt(0).toUpperCase() + type.slice(1)}`,
+      widgetCanonicalId: canonicalId,
+      name: displayName,
       position: { x: 100, y: 100 },
-      size: { width: 200, height: type === 'text' ? 60 : 150 },
+      size: { width: 300, height: 200 },
       rotation: 0,
       opacity: 100,
       zIndex: scene.widgets.length + 1,
       locked: false,
       visible: true,
-      properties: type === 'text' ? { text: 'New Text', fontSize: 24, color: '#ffffff' } : {},
+      settings: {},
     };
     setScene(prev => ({ ...prev, widgets: [...prev.widgets, newWidget] }));
     setSelectedWidgetId(newWidget.id);
@@ -500,22 +451,20 @@ export default function SceneEditor() {
 
       <div className="flex-1 flex overflow-hidden">
         <div className="w-12 bg-sidebar border-r border-sidebar-border flex flex-col items-center py-2 gap-1">
-          {widgetTypes.map(({ type, label, icon: Icon }) => (
-            <Tooltip key={type}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="w-10 h-10"
-                  onClick={() => addWidget(type as Widget['type'])}
-                  data-testid={`button-add-${type}`}
-                >
-                  <Icon className="h-5 w-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">{label}</TooltipContent>
-            </Tooltip>
-          ))}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-10 h-10"
+                disabled
+                data-testid="button-add-widget"
+              >
+                <Plus className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Widgets load from catalog (Task 8)</TooltipContent>
+          </Tooltip>
         </div>
 
         <div className="flex-1 bg-muted/30 relative overflow-auto" onClick={() => setSelectedWidgetId(null)}>
@@ -705,109 +654,17 @@ export default function SceneEditor() {
                         </AccordionContent>
                       </AccordionItem>
 
-                      {selectedWidget.type === 'text' && (
-                        <AccordionItem value="content">
-                          <AccordionTrigger>Text Content</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
-                            <div>
-                              <Label className="text-xs">Text</Label>
-                              <Textarea
-                                value={(selectedWidget.properties.text as string) || ''}
-                                onChange={(e) => updateWidgetProperty(selectedWidget.id, 'text', e.target.value)}
-                                className="resize-none"
-                                rows={3}
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs">Font Size</Label>
-                              <Input
-                                type="number"
-                                value={(selectedWidget.properties.fontSize as number) || 24}
-                                onChange={(e) => updateWidgetProperty(selectedWidget.id, 'fontSize', Number(e.target.value))}
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs">Font Family</Label>
-                              <Select
-                                value={(selectedWidget.properties.fontFamily as string) || 'Inter'}
-                                onValueChange={(v) => updateWidgetProperty(selectedWidget.id, 'fontFamily', v)}
-                              >
-                                <SelectTrigger>
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Inter">Inter</SelectItem>
-                                  <SelectItem value="Roboto">Roboto</SelectItem>
-                                  <SelectItem value="Montserrat">Montserrat</SelectItem>
-                                  <SelectItem value="Open Sans">Open Sans</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label className="text-xs">Color</Label>
-                              <Input
-                                type="color"
-                                value={(selectedWidget.properties.color as string) || '#ffffff'}
-                                onChange={(e) => updateWidgetProperty(selectedWidget.id, 'color', e.target.value)}
-                                className="h-9 p-1"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs">Alignment</Label>
-                              <div className="flex gap-1 mt-1">
-                                <Toggle
-                                  pressed={(selectedWidget.properties.align as string) === 'left'}
-                                  onPressedChange={() => updateWidgetProperty(selectedWidget.id, 'align', 'left')}
-                                  size="sm"
-                                >
-                                  <AlignLeft className="h-4 w-4" />
-                                </Toggle>
-                                <Toggle
-                                  pressed={(selectedWidget.properties.align as string) === 'center'}
-                                  onPressedChange={() => updateWidgetProperty(selectedWidget.id, 'align', 'center')}
-                                  size="sm"
-                                >
-                                  <AlignCenter className="h-4 w-4" />
-                                </Toggle>
-                                <Toggle
-                                  pressed={(selectedWidget.properties.align as string) === 'right'}
-                                  onPressedChange={() => updateWidgetProperty(selectedWidget.id, 'align', 'right')}
-                                  size="sm"
-                                >
-                                  <AlignRight className="h-4 w-4" />
-                                </Toggle>
-                              </div>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      )}
-
-                      {selectedWidget.type === 'shape' && (
-                        <AccordionItem value="content">
-                          <AccordionTrigger>Shape</AccordionTrigger>
-                          <AccordionContent className="space-y-4">
-                            <div>
-                              <Label className="text-xs">Fill Color</Label>
-                              <Input
-                                type="color"
-                                value={(selectedWidget.properties.fill as string) || '#000000'}
-                                onChange={(e) => updateWidgetProperty(selectedWidget.id, 'fill', e.target.value)}
-                                className="h-9 p-1"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-xs">Border Radius</Label>
-                              <Slider
-                                value={[(selectedWidget.properties.borderRadius as number) || 0]}
-                                onValueChange={([v]) => updateWidgetProperty(selectedWidget.id, 'borderRadius', v)}
-                                min={0}
-                                max={50}
-                                step={1}
-                              />
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      )}
+                      <AccordionItem value="widget-info">
+                        <AccordionTrigger>Widget</AccordionTrigger>
+                        <AccordionContent className="space-y-2">
+                          <div>
+                            <Label className="text-xs">Canonical ID</Label>
+                            <p className="text-xs text-muted-foreground font-mono mt-1 break-all">
+                              {selectedWidget.widgetCanonicalId || '—'}
+                            </p>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
                     </Accordion>
 
                     <Separator />
