@@ -258,6 +258,8 @@ export default function SceneEditor() {
   );
   const isLoading = fetchedScene === undefined && !!sceneId;
 
+  const catalogWidgets = useQuery(api.moduleWidgets.list) ?? [];
+
   const [scene, setScene] = useState<Scene>(defaultScene);
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.5);
@@ -334,7 +336,7 @@ export default function SceneEditor() {
       ...prev,
       widgets: prev.widgets.map(w => w.id === widgetId ? {
         ...w,
-        properties: { ...w.settings, [key]: value },
+        settings: { ...w.settings, [key]: value },
       } : w),
     }));
   }, []);
@@ -451,20 +453,33 @@ export default function SceneEditor() {
 
       <div className="flex-1 flex overflow-hidden">
         <div className="w-12 bg-sidebar border-r border-sidebar-border flex flex-col items-center py-2 gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="w-10 h-10"
-                disabled
-                data-testid="button-add-widget"
-              >
-                <Plus className="h-5 w-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Widgets load from catalog (Task 8)</TooltipContent>
-          </Tooltip>
+          {catalogWidgets.length === 0 ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="w-10 h-10" disabled data-testid="button-add-widget">
+                  <Plus className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">No widgets registered yet</TooltipContent>
+            </Tooltip>
+          ) : (
+            catalogWidgets.map((w) => (
+              <Tooltip key={w.widgetId}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="w-10 h-10"
+                    onClick={() => addWidget(w.widgetId, w.name)}
+                    data-testid={`button-add-${w.widgetId}`}
+                  >
+                    <Square className="h-5 w-5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">{w.name}</TooltipContent>
+              </Tooltip>
+            ))
+          )}
         </div>
 
         <div className="flex-1 bg-muted/30 relative overflow-auto" onClick={() => setSelectedWidgetId(null)}>
