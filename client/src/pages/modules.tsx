@@ -256,6 +256,14 @@ export default function Modules() {
     }
   }, [instance, selectedModule, installMarketplaceModule]);
 
+  const installedModuleForMarketplace = useMemo(() => {
+    if (selectedModule?.source !== "marketplace" || !repoModules) {
+      return null;
+    }
+    const mpId = selectedModule.marketplaceId;
+    return repoModules.find((m) => m.moduleKey?.startsWith(mpId + ":")) ?? null;
+  }, [selectedModule, repoModules]);
+
   const isLoading = !instance || repoModules === undefined;
 
   const handleDelete = (moduleId: Id<"moduleRepository">) => {
@@ -414,7 +422,11 @@ export default function Modules() {
                   loading={selectedModule.source === "marketplace" && marketplaceDetailLoading}
                   onBack={() => navigate("/modules")}
                   onRemove={
-                    selectedModule.source === "installed" ? () => handleDelete(selectedModule.module._id) : undefined
+                    selectedModule.source === "installed"
+                      ? () => handleDelete(selectedModule.module._id)
+                      : selectedModule.source === "marketplace" && installedModuleForMarketplace
+                        ? () => handleDelete(installedModuleForMarketplace._id)
+                        : undefined
                   }
                   onInstall={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
                   isInstalling={isInstalling}
