@@ -71,7 +71,7 @@ function getMarketplaceUrl(): string {
   return url.replace(/\/$/, "");
 }
 
-async function marketplaceFetch(path: string): Promise<unknown> {
+export async function marketplaceFetch(path: string): Promise<unknown> {
   const base = getMarketplaceUrl();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MARKETPLACE_TIMEOUT_MS);

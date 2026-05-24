@@ -177,3 +177,23 @@ export const getDeliveryData = internalQuery({
     };
   },
 });
+
+export const resolveModuleForDetail = internalQuery({
+  args: { instanceId: v.id("instances"), moduleId: v.string() },
+  handler: async (ctx, { instanceId, moduleId }) => {
+    try {
+      const byId = await ctx.db.get(moduleId as Id<"moduleRepository">);
+      if (byId && byId.instanceId === instanceId) {
+        return byId;
+      }
+    } catch {
+      // not a valid _id format — fall through to prefix match
+    }
+
+    const all = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    return all.find((m) => m.moduleKey?.startsWith(`${moduleId}:`)) ?? null;
+  },
+});

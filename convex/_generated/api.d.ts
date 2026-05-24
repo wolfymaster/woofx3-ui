@@ -47,6 +47,7 @@ import type * as marketplace from "../marketplace.js";
 import type * as migrations_backfillAccountMembers from "../migrations/backfillAccountMembers.js";
 import type * as migrations_backfillAssetKeys from "../migrations/backfillAssetKeys.js";
 import type * as moduleAssets from "../moduleAssets.js";
+import type * as moduleDetail from "../moduleDetail.js";
 import type * as moduleEngine from "../moduleEngine.js";
 import type * as moduleFunctions from "../moduleFunctions.js";
 import type * as moduleRepository from "../moduleRepository.js";
@@ -120,6 +121,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillAccountMembers": typeof migrations_backfillAccountMembers;
   "migrations/backfillAssetKeys": typeof migrations_backfillAssetKeys;
   moduleAssets: typeof moduleAssets;
+  moduleDetail: typeof moduleDetail;
   moduleEngine: typeof moduleEngine;
   moduleFunctions: typeof moduleFunctions;
   moduleRepository: typeof moduleRepository;

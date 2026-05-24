@@ -1,41 +1,18 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { useAction, useQuery } from "convex/react";
 import { Loader2, Puzzle, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
-import {
-  type ModuleDetailAction,
-  type ModuleDetailFunction,
-  type ModuleDetailMeta,
-  ModuleDetailPanel,
-  type ModuleDetailTrigger,
-  type ModuleDetailWidget,
-} from "@/components/modules/module-detail-panel";
+import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
 import { ModulesSidebar, type SelectedModule } from "@/components/modules/modules-sidebar";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useInstance } from "@/hooks/use-instance";
-
-type MarketplaceDetail = {
-  id: string;
-  name: string;
-  description: string;
-  version: string;
-  author: string;
-  category: string;
-  tags: string[];
-  iconUrl?: string;
-  readme?: string;
-  triggers: Array<{ slug: string; name: string; description: string; color: string; icon?: string }>;
-  actions: Array<{ slug: string; name: string; description: string; color: string; icon?: string }>;
-  functions: Array<{ qualifiedName: string; runtime?: string }>;
-  widgets: Array<{ slug: string; name: string }>;
-  counts: { triggers: number; actions: number; functions: number; widgets: number };
-};
 
 export default function Modules() {
   const { instance } = useInstance();
@@ -87,6 +64,11 @@ export default function Modules() {
     setShowErrorDetails(false);
   }, []);
 
+  const getModuleDetail = useAction(api.moduleDetail.getModuleDetail);
+  const [moduleDetail, setModuleDetail] = useState<ModuleDetailResult | null>(null);
+  const [moduleDetailLoading, setModuleDetailLoading] = useState(false);
+  const [moduleDetailError, setModuleDetailError] = useState<string | null>(null);
+
   const prevSelectedRef = useRef(selectedModule);
   useEffect(() => {
     if (prevSelectedRef.current !== selectedModule) {
@@ -97,7 +79,6 @@ export default function Modules() {
   }, [selectedModule]);
 
   const installMarketplaceModule = useAction(api.marketplace.installModule);
-  const getMarketplaceModule = useAction(api.marketplace.getModule);
 
   const installEvent = useQuery(
     api.transientEvents.get,
@@ -142,63 +123,6 @@ export default function Modules() {
     setSelectedModule({ source: "marketplace", marketplaceId: routeModuleId });
   }, [routeModuleId, repoModules]);
 
-  // Marketplace detail state (only relevant when source === "marketplace")
-  const [marketplaceDetail, setMarketplaceDetail] = useState<MarketplaceDetail | null>(null);
-  const [marketplaceDetailLoading, setMarketplaceDetailLoading] = useState(false);
-  const [marketplaceDetailError, setMarketplaceDetailError] = useState<string | null>(null);
-
-  // Fetch marketplace detail when a marketplace module is selected
-  useEffect(() => {
-    if (selectedModule?.source !== "marketplace") {
-      setMarketplaceDetail(null);
-      setMarketplaceDetailError(null);
-      return;
-    }
-    const marketplaceId = selectedModule.marketplaceId;
-    setMarketplaceDetailLoading(true);
-    setMarketplaceDetailError(null);
-    setMarketplaceDetail(null);
-    let cancelled = false;
-    void getMarketplaceModule({ marketplaceModuleId: marketplaceId })
-      .then((detail) => {
-        if (!cancelled) {
-          setMarketplaceDetail(detail);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setMarketplaceDetailError(err instanceof Error ? err.message : "Failed to load module details.");
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setMarketplaceDetailLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedModule, getMarketplaceModule]);
-
-  // Resolve installed-side detail (triggers/actions) only when a real installed module is selected.
-  const selectedInstalled = selectedModule?.source === "installed" ? selectedModule.module : null;
-  const installedTriggers = useQuery(
-    api.triggerDefinitions.listByModule,
-    selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
-  );
-  const installedActions = useQuery(
-    api.actionDefinitions.listByModule,
-    selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
-  );
-  const installedFunctions = useQuery(
-    api.moduleFunctions.listByModule,
-    selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
-  );
-  const installedWidgets = useQuery(
-    api.moduleWidgets.listByModule,
-    selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
-  );
-
   useEffect(() => {
     if (selectedModule?.source !== "marketplace" || !pendingModuleKey) {
       return;
@@ -237,6 +161,40 @@ export default function Modules() {
     }, 60_000);
     return () => clearTimeout(timer);
   }, [isInstalling, pendingModuleKey]);
+
+  useEffect(() => {
+    if (!selectedModule || !instance) {
+      setModuleDetail(null);
+      return;
+    }
+    const id =
+      selectedModule.source === "marketplace"
+        ? selectedModule.marketplaceId
+        : selectedModule.module._id;
+    setModuleDetailLoading(true);
+    setModuleDetail(null);
+    setModuleDetailError(null);
+    let cancelled = false;
+    void getModuleDetail({ instanceId: instance._id, moduleId: id })
+      .then((detail) => {
+        if (!cancelled) {
+          setModuleDetail(detail);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setModuleDetailError(err instanceof Error ? err.message : "Failed to load module details.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setModuleDetailLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedModule, instance, getModuleDetail]);
 
   const handleMarketplaceInstall = useCallback(async () => {
     if (!instance || selectedModule?.source !== "marketplace") {
@@ -284,101 +242,30 @@ export default function Modules() {
     navigate("/modules");
   };
 
-  // Build the props for ModuleDetailPanel based on the selected source.
   const detailProps = useMemo(() => {
-    if (!selectedModule) {
+    if (!moduleDetail) {
       return null;
     }
-    if (selectedModule.source === "installed") {
-      const m = selectedModule.module;
-      const meta: ModuleDetailMeta = {
-        name: m.name,
-        description: m.description,
-        version: m.version,
-        author: m.author,
-        category: m.category,
-        tags: m.tags,
-        isInstalled: m.isInstalled,
-        identifier: m.moduleKey,
-      };
-      const triggers: ModuleDetailTrigger[] | undefined = installedTriggers?.map((t) => ({
-        key: t._id,
-        name: t.name,
-        description: t.description,
-        color: t.color,
-      }));
-      const actions: ModuleDetailAction[] | undefined = installedActions?.map((a) => ({
-        key: a._id,
-        name: a.name,
-        description: a.description,
-        color: a.color,
-      }));
-      const functions: ModuleDetailFunction[] | undefined = installedFunctions?.map((f) => ({
-        qualifiedName: f.qualifiedName,
-        runtime: f.runtime,
-      }));
-      const widgets: ModuleDetailWidget[] | undefined = installedWidgets?.map((w) => ({
-        slug: w.widgetId,
-        name: w.name,
-      }));
-      return { meta, triggers, actions, functions, widgets };
-    }
-    // marketplace
-    if (!marketplaceDetail) {
-      const placeholder: ModuleDetailMeta = {
-        name: "Loading…",
-        description: "",
-        version: "",
-        author: "",
-        category: "Utilities",
-        tags: [],
-        isInstalled: false,
-      };
-      return {
-        meta: placeholder,
-        triggers: undefined,
-        actions: undefined,
-        functions: undefined,
-        widgets: undefined,
-      };
-    }
-    const installed = (repoModules || []).some((r) => {
-      if (!r.moduleKey) {
-        return false;
-      }
-      const parts = r.moduleKey.split(":");
-      return parts[0] === marketplaceDetail.id && parts[1] === marketplaceDetail.version;
-    });
     const meta: ModuleDetailMeta = {
-      name: marketplaceDetail.name,
-      description: marketplaceDetail.description,
-      version: marketplaceDetail.version,
-      author: marketplaceDetail.author,
-      category: marketplaceDetail.category,
-      tags: marketplaceDetail.tags,
-      isInstalled: installed,
-      iconUrl: marketplaceDetail.iconUrl,
-      readme: marketplaceDetail.readme,
-      identifier: marketplaceDetail.id,
+      name: moduleDetail.name,
+      description: moduleDetail.description,
+      version: moduleDetail.version,
+      author: moduleDetail.author,
+      category: moduleDetail.category,
+      tags: moduleDetail.tags,
+      isInstalled: moduleDetail.isInstalled,
+      iconUrl: moduleDetail.iconUrl,
+      readme: moduleDetail.readme,
+      identifier: moduleDetail.id,
     };
     return {
       meta,
-      triggers: marketplaceDetail.triggers.map((t) => ({
-        key: t.slug,
-        name: t.name,
-        description: t.description,
-        color: t.color,
-      })),
-      actions: marketplaceDetail.actions.map((a) => ({
-        key: a.slug,
-        name: a.name,
-        description: a.description,
-        color: a.color,
-      })),
-      functions: marketplaceDetail.functions,
-      widgets: marketplaceDetail.widgets,
+      triggers: moduleDetail.triggers,
+      actions: moduleDetail.actions,
+      functions: moduleDetail.functions,
+      widgets: moduleDetail.widgets,
     };
-  }, [selectedModule, installedTriggers, installedActions, installedFunctions, installedWidgets, marketplaceDetail, repoModules]);
+  }, [moduleDetail]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] max-w-[1600px] w-full">
@@ -396,7 +283,7 @@ export default function Modules() {
           </div>
         ) : selectedModule && detailProps ? (
           <>
-            {selectedModule.source === "marketplace" && marketplaceDetailError ? (
+            {moduleDetailError ? (
               <div className="p-6 overflow-auto">
                 <Card className="max-w-xl">
                   <CardContent className="pt-6 space-y-3">
@@ -404,7 +291,7 @@ export default function Modules() {
                       <XCircle className="h-4 w-4" />
                       <span className="font-medium">Failed to load module</span>
                     </div>
-                    <p className="text-sm text-muted-foreground break-words">{marketplaceDetailError}</p>
+                    <p className="text-sm text-muted-foreground break-words">{moduleDetailError}</p>
                     <Button variant="outline" size="sm" onClick={() => navigate("/modules")}>
                       Back
                     </Button>
@@ -419,7 +306,7 @@ export default function Modules() {
                   actions={detailProps.actions}
                   functions={detailProps.functions}
                   widgets={detailProps.widgets}
-                  loading={selectedModule.source === "marketplace" && marketplaceDetailLoading}
+                  loading={moduleDetailLoading}
                   onBack={() => navigate("/modules")}
                   onRemove={
                     selectedModule.source === "installed"
