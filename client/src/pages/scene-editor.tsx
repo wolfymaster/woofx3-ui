@@ -1,6 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRoute, useLocation } from 'wouter';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useQuery, useMutation } from "convex/react";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -297,40 +299,53 @@ function CanvasWidget({ widget, isSelected, scale, onSelect, onMove, onResize }:
 export default function SceneEditor() {
   const [, params] = useRoute('/scenes/:id');
   const [, navigate] = useLocation();
-  const queryClient = useQueryClient();
   const sceneId = params?.id;
 
-  const { data: fetchedScene, isLoading } = useQuery({
-    queryKey: ['scene', sceneId],
-    queryFn: (): Promise<Scene | null> => Promise.resolve(null),
-    enabled: !!sceneId,
-  });
+  const fetchedScene = useQuery(
+    api.scenes.get,
+    sceneId ? { sceneId: sceneId as Id<"scenes"> } : "skip",
+  );
+  const isLoading = fetchedScene === undefined && !!sceneId;
 
   const [scene, setScene] = useState<Scene>(defaultScene);
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.5);
   const [showGrid, setShowGrid] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Sync fetched scene to local state when it loads
   useEffect(() => {
     if (fetchedScene) {
-      setScene(fetchedScene);
+      setScene({
+        id: fetchedScene._id as string,
+        name: fetchedScene.name,
+        description: fetchedScene.description ?? '',
+        accountId: fetchedScene.instanceId as string,
+        width: fetchedScene.width ?? 1920,
+        height: fetchedScene.height ?? 1080,
+        backgroundColor: fetchedScene.backgroundColor ?? 'transparent',
+        widgets: (fetchedScene.widgets ?? []) as Widget[],
+        createdAt: new Date(fetchedScene.createdAt).toISOString(),
+        updatedAt: new Date(fetchedScene.updatedAt).toISOString(),
+      });
     }
   }, [fetchedScene]);
 
-  const saveMutation = useMutation({
-    mutationFn: (): Promise<Scene | null> => Promise.resolve(null),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scene', sceneId] });
-    },
-  });
+  const updateScene = useMutation(api.scenes.update);
 
   const handleSave = useCallback(() => {
-    if (sceneId) {
-      saveMutation.mutate();
-    }
-  }, [sceneId, saveMutation]);
+    if (!sceneId) return;
+    setIsSaving(true);
+    updateScene({
+      sceneId: sceneId as Id<"scenes">,
+      name: scene.name,
+      description: scene.description,
+      width: scene.width,
+      height: scene.height,
+      backgroundColor: scene.backgroundColor,
+      widgets: scene.widgets,
+    }).finally(() => setIsSaving(false));
+  }, [sceneId, scene, updateScene]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -474,11 +489,11 @@ export default function SceneEditor() {
           </Button>
           <Button
             onClick={handleSave}
-            disabled={saveMutation.isPending || !sceneId}
+            disabled={isSaving || !sceneId}
             data-testid="button-save-scene"
           >
             <Save className="h-4 w-4 mr-2" />
-            {saveMutation.isPending ? 'Saving...' : 'Save'}
+            {isSaving ? 'Saving...' : 'Save'}
           </Button>
         </div>
       </div>

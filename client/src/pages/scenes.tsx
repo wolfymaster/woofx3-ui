@@ -1,39 +1,25 @@
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { Link, useLocation } from 'wouter';
+import { useState } from "react";
+import { useLocation } from "wouter";
 import {
-  Plus,
-  Search,
-  MoreHorizontal,
-  Trash2,
   Copy,
   Edit3,
   Layers,
-  Play,
   Loader2,
-} from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+  MoreHorizontal,
+  Play,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useMutation, useQuery } from "convex/react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,15 +29,39 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { PageHeader } from '@/components/layout/page-header';
-import { EmptyState } from '@/components/common/empty-state';
-import { ErrorState } from '@/components/common/error-state';
-import { queryClient } from '@/lib/queryClient';
-import type { Scene, PaginatedResponse, CreateSceneInput } from '@/types/scenes';
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { EmptyState } from "@/components/common/empty-state";
+import { PageHeader } from "@/components/layout/page-header";
+
+// Local display shape mapped from Convex doc
+interface SceneDisplay {
+  id: string;
+  name: string;
+  description: string;
+  width: number;
+  height: number;
+  backgroundColor: string;
+  widgetCount: number;
+}
 
 interface SceneCardProps {
-  scene: Scene;
+  scene: SceneDisplay;
   onEdit: (id: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
@@ -59,15 +69,15 @@ interface SceneCardProps {
 
 function SceneCard({ scene, onEdit, onDuplicate, onDelete }: SceneCardProps) {
   return (
-    <Card 
+    <Card
       className="group hover-elevate cursor-pointer overflow-visible"
       onClick={() => onEdit(scene.id)}
       data-testid={`card-scene-${scene.id}`}
     >
       <CardContent className="p-0">
-        <div 
+        <div
           className="aspect-video bg-muted/50 rounded-t-lg flex items-center justify-center relative overflow-hidden"
-          style={{ backgroundColor: scene.backgroundColor !== 'transparent' ? scene.backgroundColor : undefined }}
+          style={{ backgroundColor: scene.backgroundColor !== "transparent" ? scene.backgroundColor : undefined }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
           <Layers className="h-12 w-12 text-muted-foreground/30" />
@@ -76,7 +86,7 @@ function SceneCard({ scene, onEdit, onDuplicate, onDelete }: SceneCardProps) {
               {scene.width}x{scene.height}
             </Badge>
             <Badge variant="secondary" className="text-xs">
-              {scene.widgets.length} widgets
+              {scene.widgetCount} widgets
             </Badge>
           </div>
         </div>
@@ -87,9 +97,7 @@ function SceneCard({ scene, onEdit, onDuplicate, onDelete }: SceneCardProps) {
                 {scene.name}
               </h3>
               {scene.description && (
-                <p className="text-sm text-muted-foreground truncate">
-                  {scene.description}
-                </p>
+                <p className="text-sm text-muted-foreground truncate">{scene.description}</p>
               )}
             </div>
             <div onClick={(e) => e.stopPropagation()}>
@@ -146,41 +154,35 @@ function SceneCardSkeleton() {
 
 export default function Scenes() {
   const [, navigate] = useLocation();
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isCreatingDialog, setIsCreatingDialog] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [newSceneName, setNewSceneName] = useState('');
+  const [newSceneName, setNewSceneName] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const { data: scenesData, isLoading, error, refetch } = useQuery({
-    queryKey: ['scenes'],
-    queryFn: (): Promise<PaginatedResponse<Scene>> => Promise.resolve({ data: [], pagination: { page: 1, pageSize: 20, totalItems: 0, totalPages: 0, hasNext: false, hasPrev: false } }),
-  });
+  const scenesRaw = useQuery(api.scenes.list);
+  const isLoading = scenesRaw === undefined;
 
-  const scenes = scenesData?.data || [];
+  const createScene = useMutation(api.scenes.create);
+  const removeScene = useMutation(api.scenes.remove);
+  const duplicateScene = useMutation(api.scenes.duplicate);
 
-  const createMutation = useMutation({
-    mutationFn: (_data: CreateSceneInput): Promise<Scene> => Promise.reject(new Error('Not implemented')),
-    onSuccess: (newScene) => {
-      queryClient.invalidateQueries({ queryKey: ['scenes'] });
-      setIsCreating(false);
-      setNewSceneName('');
-      navigate(`/scenes/${newScene.id}`);
-    },
-  });
+  const scenes: SceneDisplay[] = (scenesRaw ?? []).map((s) => ({
+    id: s._id as string,
+    name: s.name,
+    description: s.description ?? "",
+    width: s.width ?? 1920,
+    height: s.height ?? 1080,
+    backgroundColor: s.backgroundColor ?? "transparent",
+    widgetCount: (s.widgets ?? []).length,
+  }));
 
-  const deleteMutation = useMutation({
-    mutationFn: (_id: string): Promise<boolean> => Promise.resolve(false),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scenes'] });
-      setDeleteDialogOpen(false);
-      setDeletingId(null);
-    },
-  });
-
-  const filteredScenes = scenes.filter(s =>
-    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredScenes = scenes.filter(
+    (s) =>
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.description.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const handleEdit = (id: string) => {
@@ -188,18 +190,7 @@ export default function Scenes() {
   };
 
   const handleDuplicate = (id: string) => {
-    const scene = scenes.find(s => s.id === id);
-    if (scene) {
-      createMutation.mutate({
-        name: `${scene.name} (Copy)`,
-        description: scene.description,
-        accountId: scene.accountId,
-        width: scene.width,
-        height: scene.height,
-        backgroundColor: scene.backgroundColor,
-        widgets: scene.widgets.map(w => ({ ...w, id: `${w.id}-copy-${Date.now()}` })),
-      });
-    }
+    duplicateScene({ sceneId: id as Id<"scenes"> });
   };
 
   const handleDelete = (id: string) => {
@@ -208,22 +199,29 @@ export default function Scenes() {
   };
 
   const confirmDelete = () => {
-    if (deletingId) {
-      deleteMutation.mutate(deletingId);
-    }
+    if (!deletingId) return;
+    setIsDeleting(true);
+    removeScene({ sceneId: deletingId as Id<"scenes"> })
+      .then(() => {
+        setDeleteDialogOpen(false);
+        setDeletingId(null);
+      })
+      .finally(() => setIsDeleting(false));
   };
 
   const handleCreate = () => {
     if (!newSceneName.trim()) return;
-    
-    createMutation.mutate({
+    setIsCreating(true);
+    createScene({
       name: newSceneName,
-      accountId: 'account-1',
-      width: 1920,
-      height: 1080,
-      backgroundColor: 'transparent',
-      widgets: [],
-    });
+      backgroundColor: "transparent",
+    })
+      .then((newSceneId) => {
+        setIsCreatingDialog(false);
+        setNewSceneName("");
+        navigate(`/scenes/${newSceneId}`);
+      })
+      .finally(() => setIsCreating(false));
   };
 
   return (
@@ -232,7 +230,7 @@ export default function Scenes() {
         title="Scene Editor"
         description="Create and customize HTML overlays for your stream."
         actions={
-          <Dialog open={isCreating} onOpenChange={setIsCreating}>
+          <Dialog open={isCreatingDialog} onOpenChange={setIsCreatingDialog}>
             <DialogTrigger asChild>
               <Button data-testid="button-new-scene">
                 <Plus className="h-4 w-4 mr-2" />
@@ -255,18 +253,19 @@ export default function Scenes() {
                   placeholder="e.g., Game Overlay"
                   className="mt-2"
                   data-testid="input-new-scene-name"
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 />
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreating(false)}>
+                <Button variant="outline" onClick={() => setIsCreatingDialog(false)}>
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleCreate} 
-                  disabled={!newSceneName.trim() || createMutation.isPending} 
+                <Button
+                  onClick={handleCreate}
+                  disabled={!newSceneName.trim() || isCreating}
                   data-testid="button-create-scene"
                 >
-                  {createMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                   Create Scene
                 </Button>
               </DialogFooter>
@@ -288,15 +287,10 @@ export default function Scenes() {
         </div>
       </div>
 
-      {error ? (
-        <ErrorState
-          title="Failed to load scenes"
-          message="An error occurred while fetching the scenes."
-          onRetry={() => refetch()}
-        />
-      ) : isLoading ? (
+      {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: skeleton placeholders
             <SceneCardSkeleton key={i} />
           ))}
         </div>
@@ -304,18 +298,19 @@ export default function Scenes() {
         <EmptyState
           icon={Layers}
           title="No scenes found"
-          description={scenes.length === 0
-            ? "Create your first scene to start building overlays."
-            : "Try adjusting your search."
+          description={
+            scenes.length === 0
+              ? "Create your first scene to start building overlays."
+              : "Try adjusting your search."
           }
           action={{
-            label: 'Create Scene',
-            onClick: () => setIsCreating(true),
+            label: "Create Scene",
+            onClick: () => setIsCreatingDialog(true),
           }}
         />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredScenes.map(scene => (
+          {filteredScenes.map((scene) => (
             <SceneCard
               key={scene.id}
               scene={scene}
@@ -337,11 +332,11 @@ export default function Scenes() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {isDeleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
