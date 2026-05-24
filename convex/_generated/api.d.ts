@@ -33,7 +33,6 @@ import type * as lib_engineInstanceUrl from "../lib/engineInstanceUrl.js";
 import type * as lib_engineSync_config from "../lib/engineSync/config.js";
 import type * as lib_engineSync_steps from "../lib/engineSync/steps.js";
 import type * as lib_engineSync_steps_commands from "../lib/engineSync/steps/commands.js";
-import type * as lib_engineSync_steps_modules from "../lib/engineSync/steps/modules.js";
 import type * as lib_engineSync_steps_scenes from "../lib/engineSync/steps/scenes.js";
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_storage_config from "../lib/storage/config.js";
@@ -107,7 +106,6 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/config": typeof lib_engineSync_config;
   "lib/engineSync/steps": typeof lib_engineSync_steps;
   "lib/engineSync/steps/commands": typeof lib_engineSync_steps_commands;
-  "lib/engineSync/steps/modules": typeof lib_engineSync_steps_modules;
   "lib/engineSync/steps/scenes": typeof lib_engineSync_steps_scenes;
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/storage/config": typeof lib_storage_config;

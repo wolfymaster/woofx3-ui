@@ -7,16 +7,14 @@ async function enableTriggerForInstance(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   triggerId: string,
-  moduleId: Id<"moduleRepository"> | undefined,
+  moduleId: Id<"moduleRepository"> | undefined
 ) {
   const existing = await ctx.db
-    .query("instanceEnabledTriggers")
-    .withIndex("by_instance_trigger", (q) =>
-      q.eq("instanceId", instanceId).eq("triggerId", triggerId),
-    )
+    .query("instanceTriggers")
+    .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
     .first();
   if (!existing) {
-    await ctx.db.insert("instanceEnabledTriggers", { instanceId, triggerId, moduleId });
+    await ctx.db.insert("instanceTriggers", { instanceId, triggerId, moduleId });
     return;
   }
   // Patch moduleId when a later webhook supplies it for a row that was previously
@@ -30,16 +28,14 @@ async function enableActionForInstance(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   actionId: string,
-  moduleId: Id<"moduleRepository"> | undefined,
+  moduleId: Id<"moduleRepository"> | undefined
 ) {
   const existing = await ctx.db
-    .query("instanceEnabledActions")
-    .withIndex("by_instance_action", (q) =>
-      q.eq("instanceId", instanceId).eq("actionId", actionId),
-    )
+    .query("instanceActions")
+    .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
     .first();
   if (!existing) {
-    await ctx.db.insert("instanceEnabledActions", { instanceId, actionId, moduleId });
+    await ctx.db.insert("instanceActions", { instanceId, actionId, moduleId });
     return;
   }
   if (moduleId && existing.moduleId !== moduleId) {
@@ -47,32 +43,20 @@ async function enableActionForInstance(
   }
 }
 
-async function disableTriggerForInstance(
-  ctx: MutationCtx,
-  instanceId: Id<"instances">,
-  triggerId: string,
-) {
+async function disableTriggerForInstance(ctx: MutationCtx, instanceId: Id<"instances">, triggerId: string) {
   const existing = await ctx.db
-    .query("instanceEnabledTriggers")
-    .withIndex("by_instance_trigger", (q) =>
-      q.eq("instanceId", instanceId).eq("triggerId", triggerId),
-    )
+    .query("instanceTriggers")
+    .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
     .first();
   if (existing) {
     await ctx.db.delete(existing._id);
   }
 }
 
-async function disableActionForInstance(
-  ctx: MutationCtx,
-  instanceId: Id<"instances">,
-  actionId: string,
-) {
+async function disableActionForInstance(ctx: MutationCtx, instanceId: Id<"instances">, actionId: string) {
   const existing = await ctx.db
-    .query("instanceEnabledActions")
-    .withIndex("by_instance_action", (q) =>
-      q.eq("instanceId", instanceId).eq("actionId", actionId),
-    )
+    .query("instanceActions")
+    .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
     .first();
   if (existing) {
     await ctx.db.delete(existing._id);
@@ -164,8 +148,7 @@ function pickUi(parsed: unknown): Partial<TriggerUiFields> {
     return {};
   }
   const obj = parsed as Record<string, unknown>;
-  const nested =
-    obj.ui && typeof obj.ui === "object" ? (obj.ui as Record<string, unknown>) : obj;
+  const nested = obj.ui && typeof obj.ui === "object" ? (obj.ui as Record<string, unknown>) : obj;
   return {
     color: typeof nested.color === "string" ? nested.color : undefined,
     icon: typeof nested.icon === "string" ? nested.icon : undefined,
@@ -247,7 +230,6 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
     moduleId,
   };
 }
-
 
 /**
  * Process a module.installed webhook callback from the engine.
@@ -480,16 +462,12 @@ export const processModuleDeleted = internalMutation({
       // row was inserted with a stale or missing moduleId (e.g. registration
       // webhook landed before the moduleRepository record existed).
       const enabledTriggerRows = await ctx.db
-        .query("instanceEnabledTriggers")
-        .withIndex("by_instance_module", (q) =>
-          q.eq("instanceId", instanceId).eq("moduleId", record._id),
-        )
+        .query("instanceTriggers")
+        .withIndex("by_instance_module", (q) => q.eq("instanceId", instanceId).eq("moduleId", record._id))
         .collect();
       const enabledActionRows = await ctx.db
-        .query("instanceEnabledActions")
-        .withIndex("by_instance_module", (q) =>
-          q.eq("instanceId", instanceId).eq("moduleId", record._id),
-        )
+        .query("instanceActions")
+        .withIndex("by_instance_module", (q) => q.eq("instanceId", instanceId).eq("moduleId", record._id))
         .collect();
       for (const row of enabledTriggerRows) {
         await ctx.db.delete(row._id);
@@ -500,7 +478,7 @@ export const processModuleDeleted = internalMutation({
 
       // Clean global UI catalog rows. Best-effort: any def whose moduleId points
       // at this record gets removed. Orphan defs (moduleId unset) survive here
-      // but no longer render because their instanceEnabled join row is gone.
+      // but no longer render because their per-instance join row is gone.
       const triggers = await ctx.db
         .query("triggerDefinitions")
         .withIndex("by_module", (q) => q.eq("moduleId", record._id))

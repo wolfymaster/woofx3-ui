@@ -243,11 +243,11 @@ export default defineSchema({
     .index("by_projection_key", ["projectionKey"])
     .index("by_engine_id", ["engineFunctionId"]),
 
-  // instanceEnabledTriggers: which trigger ids are enabled for a given instance (module lifecycle).
+  // instanceTriggers: which trigger ids are enabled for a given instance (module lifecycle).
   // moduleId is the authoritative link from a module to its per-instance enablements:
   // cleanup on module delete pivots on (instanceId, moduleId) so we don't rely on the
   // global triggerDefinitions.moduleId being correctly populated (which can race during install).
-  instanceEnabledTriggers: defineTable({
+  instanceTriggers: defineTable({
     instanceId: v.id("instances"),
     triggerId: v.string(),
     moduleId: v.optional(v.id("moduleRepository")),
@@ -257,9 +257,9 @@ export default defineSchema({
     .index("by_instance_trigger", ["instanceId", "triggerId"])
     .index("by_instance_module", ["instanceId", "moduleId"]),
 
-  // instanceEnabledActions: which action ids are enabled for a given instance.
-  // See instanceEnabledTriggers for the rationale behind storing moduleId here.
-  instanceEnabledActions: defineTable({
+  // instanceActions: which action ids are enabled for a given instance.
+  // See instanceTriggers for the rationale behind storing moduleId here.
+  instanceActions: defineTable({
     instanceId: v.id("instances"),
     actionId: v.string(),
     moduleId: v.optional(v.id("moduleRepository")),
@@ -269,8 +269,8 @@ export default defineSchema({
     .index("by_instance_action", ["instanceId", "actionId"])
     .index("by_instance_module", ["instanceId", "moduleId"]),
 
-  // instanceEnabledFunctions: which function ids are enabled for a given instance
-  instanceEnabledFunctions: defineTable({
+  // instanceFunctions: which function ids are enabled for a given instance
+  instanceFunctions: defineTable({
     instanceId: v.id("instances"),
     functionId: v.string(), // engine FunctionDefinition.id
     projectionKey: v.optional(v.string()),
@@ -720,7 +720,7 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     steps: v.array(
       v.object({
-        name: v.union(v.literal("commands"), v.literal("modules"), v.literal("workflows"), v.literal("scenes")),
+        name: v.union(v.literal("commands"), v.literal("workflows"), v.literal("scenes")),
         status: v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error")),
         itemsProcessed: v.number(),
         error: v.optional(v.string()),
@@ -732,16 +732,4 @@ export default defineSchema({
   })
     .index("by_instance_recent", ["instanceId", "startedAt"])
     .index("by_started_at", ["startedAt"]),
-
-  // installedModules: which modules are currently installed per instance.
-  // Mirrors the engine's `listEngineModules()` response.
-  installedModules: defineTable({
-    instanceId: v.id("instances"),
-    name: v.string(),
-    version: v.string(),
-    state: v.string(),
-    updatedAt: v.number(),
-  })
-    .index("by_instance", ["instanceId"])
-    .index("by_instance_name", ["instanceId", "name"]),
 });

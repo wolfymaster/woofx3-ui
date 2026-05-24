@@ -131,7 +131,7 @@ export const enableTriggerForInstance = internalMutation({
   },
   handler: async (ctx, { instanceId, triggerId, moduleId }) => {
     const existing = await ctx.db
-      .query("instanceEnabledTriggers")
+      .query("instanceTriggers")
       .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
       .first();
     if (existing) {
@@ -140,7 +140,7 @@ export const enableTriggerForInstance = internalMutation({
       }
       return existing._id;
     }
-    return ctx.db.insert("instanceEnabledTriggers", { instanceId, triggerId, moduleId });
+    return ctx.db.insert("instanceTriggers", { instanceId, triggerId, moduleId });
   },
 });
 
@@ -151,7 +151,7 @@ export const disableTriggerForInstance = internalMutation({
   },
   handler: async (ctx, { instanceId, triggerId }) => {
     const existing = await ctx.db
-      .query("instanceEnabledTriggers")
+      .query("instanceTriggers")
       .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
       .first();
     if (existing) {
@@ -168,7 +168,7 @@ export const enableActionForInstance = internalMutation({
   },
   handler: async (ctx, { instanceId, actionId, moduleId }) => {
     const existing = await ctx.db
-      .query("instanceEnabledActions")
+      .query("instanceActions")
       .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
       .first();
     if (existing) {
@@ -177,7 +177,7 @@ export const enableActionForInstance = internalMutation({
       }
       return existing._id;
     }
-    return ctx.db.insert("instanceEnabledActions", { instanceId, actionId, moduleId });
+    return ctx.db.insert("instanceActions", { instanceId, actionId, moduleId });
   },
 });
 
@@ -188,7 +188,7 @@ export const disableActionForInstance = internalMutation({
   },
   handler: async (ctx, { instanceId, actionId }) => {
     const existing = await ctx.db
-      .query("instanceEnabledActions")
+      .query("instanceActions")
       .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
       .first();
     if (existing) {
@@ -207,11 +207,11 @@ export const devEnableAllDefinitionsForInstance = internalMutation({
     const triggerDefs = await ctx.db.query("triggerDefinitions").collect();
     for (const d of triggerDefs) {
       const existing = await ctx.db
-        .query("instanceEnabledTriggers")
+        .query("instanceTriggers")
         .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", d.slug))
         .first();
       if (!existing) {
-        await ctx.db.insert("instanceEnabledTriggers", {
+        await ctx.db.insert("instanceTriggers", {
           instanceId,
           triggerId: d.slug,
           moduleId: d.moduleId,
@@ -224,11 +224,11 @@ export const devEnableAllDefinitionsForInstance = internalMutation({
     const actionDefs = await ctx.db.query("actionDefinitions").collect();
     for (const d of actionDefs) {
       const existing = await ctx.db
-        .query("instanceEnabledActions")
+        .query("instanceActions")
         .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", d.slug))
         .first();
       if (!existing) {
-        await ctx.db.insert("instanceEnabledActions", {
+        await ctx.db.insert("instanceActions", {
           instanceId,
           actionId: d.slug,
           moduleId: d.moduleId,

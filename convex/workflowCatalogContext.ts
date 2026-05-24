@@ -37,12 +37,12 @@ export async function loadCatalogBundle(
   }
 
   const enabledTriggerRows = await ctx.db
-    .query("instanceEnabledTriggers")
+    .query("instanceTriggers")
     .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
     .collect();
 
   const enabledActionRows = await ctx.db
-    .query("instanceEnabledActions")
+    .query("instanceActions")
     .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
     .collect();
 

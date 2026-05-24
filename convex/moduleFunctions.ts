@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, type MutationCtx, query } from "./_generated/server";
 
 const functionValidator = v.object({
   id: v.string(),
@@ -35,16 +35,14 @@ async function enableFunctionForInstance(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   functionId: string,
-  projectionKey: string | undefined,
+  projectionKey: string | undefined
 ) {
   const existing = await ctx.db
-    .query("instanceEnabledFunctions")
-    .withIndex("by_instance_function", (q) =>
-      q.eq("instanceId", instanceId).eq("functionId", functionId),
-    )
+    .query("instanceFunctions")
+    .withIndex("by_instance_function", (q) => q.eq("instanceId", instanceId).eq("functionId", functionId))
     .first();
   if (!existing) {
-    await ctx.db.insert("instanceEnabledFunctions", {
+    await ctx.db.insert("instanceFunctions", {
       instanceId,
       functionId,
       projectionKey,
@@ -52,16 +50,10 @@ async function enableFunctionForInstance(
   }
 }
 
-async function disableFunctionForInstance(
-  ctx: MutationCtx,
-  instanceId: Id<"instances">,
-  functionId: string,
-) {
+async function disableFunctionForInstance(ctx: MutationCtx, instanceId: Id<"instances">, functionId: string) {
   const existing = await ctx.db
-    .query("instanceEnabledFunctions")
-    .withIndex("by_instance_function", (q) =>
-      q.eq("instanceId", instanceId).eq("functionId", functionId),
-    )
+    .query("instanceFunctions")
+    .withIndex("by_instance_function", (q) => q.eq("instanceId", instanceId).eq("functionId", functionId))
     .first();
   if (existing) {
     await ctx.db.delete(existing._id);
