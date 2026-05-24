@@ -8,6 +8,7 @@ import {
   Puzzle,
   Trash2,
   Workflow as WorkflowIcon,
+  X,
   XCircle,
   Zap,
 } from "lucide-react";
@@ -73,6 +74,7 @@ interface ModuleDetailPanelProps {
   installSucceeded?: boolean;
   installError?: string | null;
   onShowInstallError?: () => void;
+  onDismissError?: () => void;
 }
 
 type TopTab = "details" | "resources";
@@ -107,6 +109,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     installSucceeded,
     installError,
     onShowInstallError,
+    onDismissError,
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
@@ -164,6 +167,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
           installSucceeded={installSucceeded}
           installError={installError}
           onShowInstallError={onShowInstallError}
+          onDismissError={onDismissError}
         />
       ) : (
         <ResourcesTab
@@ -214,6 +218,7 @@ interface DetailsTabProps {
   installSucceeded?: boolean;
   installError?: string | null;
   onShowInstallError?: () => void;
+  onDismissError?: () => void;
 }
 
 function DetailsTab({
@@ -227,6 +232,7 @@ function DetailsTab({
   installSucceeded,
   installError,
   onShowInstallError,
+  onDismissError,
 }: DetailsTabProps) {
   const installButton = module.isInstalled
     ? onRemove && (
@@ -239,10 +245,10 @@ function DetailsTab({
         <Button
           size="sm"
           className="w-full"
-          variant={installError ? "destructive" : "default"}
-          onClick={installError && onShowInstallError ? onShowInstallError : onInstall}
+          variant="default"
+          onClick={onInstall}
           disabled={isInstalling || installDisabled}
-          title={installError ?? installDisabledReason}
+          title={installDisabledReason}
         >
           {isInstalling ? (
             <>
@@ -253,11 +259,6 @@ function DetailsTab({
             <>
               <Check className="h-4 w-4 mr-2 shrink-0" />
               Installed
-            </>
-          ) : installError ? (
-            <>
-              <XCircle className="h-4 w-4 mr-2 shrink-0" />
-              Install failed — details
             </>
           ) : (
             <>
@@ -282,6 +283,26 @@ function DetailsTab({
 
       <div className="col-span-1 space-y-4">
         {installButton}
+        {installError && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2 min-w-0">
+                <XCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+                <p className="text-xs text-destructive break-words">{installError}</p>
+              </div>
+              {onDismissError && (
+                <button
+                  type="button"
+                  onClick={onDismissError}
+                  className="shrink-0 text-destructive/60 hover:text-destructive transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  <span className="sr-only">Dismiss error</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <MetaRow label="Identifier" value={module.identifier ?? "—"} mono />
         <MetaRow label="Version" value={module.version || "—"} />
         <MetaRow label="Author" value={module.author || "Unknown"} />

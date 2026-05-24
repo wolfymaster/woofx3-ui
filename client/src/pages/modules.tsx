@@ -2,7 +2,8 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
 import { Loader2, Puzzle, XCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   type ModuleDetailAction,
@@ -12,7 +13,7 @@ import {
   type ModuleDetailTrigger,
   type ModuleDetailWidget,
 } from "@/components/modules/module-detail-panel";
-import { type ModuleListItem, ModulesSidebar, type SelectedModule } from "@/components/modules/modules-sidebar";
+import { ModulesSidebar, type SelectedModule } from "@/components/modules/modules-sidebar";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -38,6 +39,12 @@ type MarketplaceDetail = {
 
 export default function Modules() {
   const { instance } = useInstance();
+  const [location, navigate] = useLocation();
+  const segments = location.split("/").filter(Boolean);
+  const routeModuleId = segments[0] === "modules" && segments.length >= 2 && segments[1] !== "install" && segments[1] !== "installed"
+    ? segments[1]
+    : undefined;
+
   const [selectedModule, setSelectedModule] = useState<SelectedModule | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<{
     _id: Id<"moduleRepository">;
@@ -45,11 +52,49 @@ export default function Modules() {
     version: string;
     moduleKey?: string;
   } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const isSearching = searchQuery.trim().length > 0;
+
+  const handleSelectModule = useCallback(
+    (selection: SelectedModule | null) => {
+      if (!selection) {
+        navigate("/modules");
+        return;
+      }
+      if (selection.source === "marketplace") {
+        navigate(`/modules/${selection.marketplaceId}`);
+      } else {
+        const mk = selection.module.moduleKey;
+        if (mk) {
+          const parts = mk.split(":");
+          if (parts[0]) {
+            navigate(`/modules/${parts[0]}`);
+            return;
+          }
+        }
+        navigate(`/modules/${selection.module._id}`);
+      }
+    },
+    [navigate]
+  );
 
   const [isInstalling, setIsInstalling] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [pendingModuleKey, setPendingModuleKey] = useState<string | null>(null);
+  const dismissInstallError = useCallback(() => {
+    setInstallError(null);
+    setShowErrorDetails(false);
+  }, []);
+
+  const prevSelectedRef = useRef(selectedModule);
+  useEffect(() => {
+    if (prevSelectedRef.current !== selectedModule) {
+      setInstallError(null);
+      setShowErrorDetails(false);
+      prevSelectedRef.current = selectedModule;
+    }
+  }, [selectedModule]);
 
   const installMarketplaceModule = useAction(api.marketplace.installModule);
   const getMarketplaceModule = useAction(api.marketplace.getModule);
@@ -60,6 +105,42 @@ export default function Modules() {
   );
 
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
+
+  useEffect(() => {
+    if (routeModuleId === undefined) {
+      setSelectedModule(null);
+      return;
+    }
+    if (!repoModules) return;
+
+    const byId = repoModules.find((m) => m._id === routeModuleId);
+    if (byId) {
+      setSelectedModule({
+        source: "installed",
+        module: {
+          _id: byId._id,
+          name: byId.name,
+          description: byId.description,
+          version: byId.version,
+          tags: byId.tags,
+          author: byId.author ?? "",
+          category: byId.category ?? "Utilities",
+          moduleKey: byId.moduleKey,
+          isInstalled: byId.status === "installed",
+          status: byId.status,
+        },
+      });
+      return;
+    }
+
+    const byKey = repoModules.find((m) => m.moduleKey?.startsWith(routeModuleId + ":"));
+    if (byKey) {
+      setSelectedModule({ source: "marketplace", marketplaceId: routeModuleId });
+      return;
+    }
+
+    setSelectedModule({ source: "marketplace", marketplaceId: routeModuleId });
+  }, [routeModuleId, repoModules]);
 
   // Marketplace detail state (only relevant when source === "marketplace")
   const [marketplaceDetail, setMarketplaceDetail] = useState<MarketplaceDetail | null>(null);
@@ -109,33 +190,26 @@ export default function Modules() {
     api.actionDefinitions.listByModule,
     selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
   );
+  const installedFunctions = useQuery(
+    api.moduleFunctions.listByModule,
+    selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
+  );
+  const installedWidgets = useQuery(
+    api.moduleWidgets.listByModule,
+    selectedInstalled ? { moduleId: selectedInstalled._id } : "skip"
+  );
 
-  // When a marketplace install completes, swap to the new installed module so the user stays put.
   useEffect(() => {
-    if (selectedModule?.source !== "marketplace") {
+    if (selectedModule?.source !== "marketplace" || !pendingModuleKey) {
       return;
     }
-    if (installEvent?.status !== "success" || !pendingModuleKey) {
-      return;
+    if (installEvent?.status === "success") {
+      const mpId = pendingModuleKey.split(":")[0];
+      if (mpId) {
+        navigate(`/modules/${mpId}`);
+      }
     }
-    const installed = (repoModules || []).find((m) => m.moduleKey === pendingModuleKey);
-    if (!installed) {
-      return;
-    }
-    const moduleListItem: ModuleListItem = {
-      _id: installed._id,
-      name: installed.name,
-      description: installed.description,
-      version: installed.version,
-      tags: installed.tags,
-      author: installed.author ?? "",
-      category: installed.category ?? "Utilities",
-      moduleKey: installed.moduleKey,
-      isInstalled: installed.status === "installed",
-      status: installed.status,
-    };
-    setSelectedModule({ source: "installed", module: moduleListItem });
-  }, [installEvent, pendingModuleKey, repoModules, selectedModule]);
+  }, [installEvent, pendingModuleKey, selectedModule, navigate]);
 
   useEffect(() => {
     if (installEvent?.status === "success") {
@@ -199,7 +273,7 @@ export default function Modules() {
 
   const handleUninstallSuccess = () => {
     setUninstallTarget(null);
-    setSelectedModule(null);
+    navigate("/modules");
   };
 
   // Build the props for ModuleDetailPanel based on the selected source.
@@ -231,8 +305,15 @@ export default function Modules() {
         description: a.description,
         color: a.color,
       }));
-      const functions: ModuleDetailFunction[] = [];
-      return { meta, triggers, actions, functions, widgets: undefined as ModuleDetailWidget[] | undefined };
+      const functions: ModuleDetailFunction[] | undefined = installedFunctions?.map((f) => ({
+        qualifiedName: f.qualifiedName,
+        runtime: f.runtime,
+      }));
+      const widgets: ModuleDetailWidget[] | undefined = installedWidgets?.map((w) => ({
+        slug: w.widgetId,
+        name: w.name,
+      }));
+      return { meta, triggers, actions, functions, widgets };
     }
     // marketplace
     if (!marketplaceDetail) {
@@ -289,14 +370,23 @@ export default function Modules() {
       functions: marketplaceDetail.functions,
       widgets: marketplaceDetail.widgets,
     };
-  }, [selectedModule, installedTriggers, installedActions, marketplaceDetail, repoModules]);
+  }, [selectedModule, installedTriggers, installedActions, installedFunctions, installedWidgets, marketplaceDetail, repoModules]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] max-w-[1600px] w-full">
-      <ModulesSidebar selected={selectedModule} onSelectModule={(s) => setSelectedModule(s)} />
+      <ModulesSidebar
+        selected={selectedModule}
+        onSelectModule={handleSelectModule}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+      />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {selectedModule && detailProps ? (
+        {isSearching ? (
+          <div className="flex-1 overflow-auto p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
+            <PageHeader title="Search" description={`Results for "${searchQuery}"`} />
+          </div>
+        ) : selectedModule && detailProps ? (
           <>
             {selectedModule.source === "marketplace" && marketplaceDetailError ? (
               <div className="p-6 overflow-auto">
@@ -307,7 +397,7 @@ export default function Modules() {
                       <span className="font-medium">Failed to load module</span>
                     </div>
                     <p className="text-sm text-muted-foreground break-words">{marketplaceDetailError}</p>
-                    <Button variant="outline" size="sm" onClick={() => setSelectedModule(null)}>
+                    <Button variant="outline" size="sm" onClick={() => navigate("/modules")}>
                       Back
                     </Button>
                   </CardContent>
@@ -322,7 +412,7 @@ export default function Modules() {
                   functions={detailProps.functions}
                   widgets={detailProps.widgets}
                   loading={selectedModule.source === "marketplace" && marketplaceDetailLoading}
-                  onBack={() => setSelectedModule(null)}
+                  onBack={() => navigate("/modules")}
                   onRemove={
                     selectedModule.source === "installed" ? () => handleDelete(selectedModule.module._id) : undefined
                   }
@@ -334,6 +424,7 @@ export default function Modules() {
                   installSucceeded={installEvent?.status === "success"}
                   installError={installError}
                   onShowInstallError={() => setShowErrorDetails(true)}
+                  onDismissError={dismissInstallError}
                 />
               </div>
             )}

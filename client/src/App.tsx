@@ -20,7 +20,6 @@ import TwitchCallback from "@/pages/auth/twitch-callback";
 import Commands from "@/pages/commands";
 import Dashboard from "@/pages/dashboard";
 import DebugTools from "@/pages/debug-tools";
-import ModuleDetail from "@/pages/module-detail";
 import ModuleInstall from "@/pages/module-install";
 import Modules from "@/pages/modules";
 import NotFound from "@/pages/not-found";
@@ -114,10 +113,10 @@ function AppRoutes() {
               <ErrorBoundary resetKey={location}>
                 <Switch>
                   <Route path="/" component={Dashboard} />
-                  <Route path="/modules" component={Modules} />
-                  <Route path="/modules/installed" component={Modules} />
                   <Route path="/modules/install" component={ModuleInstall} />
-                  <Route path="/modules/:id" component={ModuleDetail} />
+                  <Route path="/modules/installed" component={Modules} />
+                  <Route path="/modules/:moduleId" component={Modules} />
+                  <Route path="/modules" component={Modules} />
                   <Route path="/workflows" component={Workflows} />
                   <Route path="/workflows/new" component={Workflows} />
                   <Route path="/workflows/:id" component={Workflows} />

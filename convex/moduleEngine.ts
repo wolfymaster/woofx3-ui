@@ -4,7 +4,26 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalAction } from "./_generated/server";
-import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { createEngineRpcSession, engineApiUrl, type EngineApi } from "./lib/engineInstanceUrl";
+
+/**
+ * Map an engine RPC error to a user-friendly message. The capnweb layer throws
+ * bare TypeErrors when the engine is unreachable (`fetch failed`) — we translate
+ * those into a clear "engine URL is wrong or engine is offline" message so the
+ * UI can show something actionable instead of a cryptic JS error.
+ */
+function toFriendlyEngineError(err: unknown, instanceUrl: string): Error {
+  if (err instanceof TypeError && err.message === "fetch failed") {
+    return new Error(
+      `Could not reach the engine at ${engineApiUrl(instanceUrl)}. ` +
+        "Check that the engine is running and the URL in Settings is correct."
+    );
+  }
+  if (err instanceof Error) {
+    return err;
+  }
+  return new Error(String(err));
+}
 
 /**
  * Local extension of the shared EngineApi for methods the engine exposes
@@ -52,7 +71,7 @@ export const listEngineModules = action({
         }));
     } catch (e) {
       console.error("listEngineModules RPC failed:", e);
-      throw new Error(`RPC failed: ${e instanceof Error ? e.message : String(e)}`);
+      throw toFriendlyEngineError(e, bundle.url);
     }
   },
 });
@@ -102,16 +121,16 @@ export const requestModuleUninstall = action({
       await rpc.uninstallModule(moduleKey);
       return { moduleKey };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const friendly = toFriendlyEngineError(err, bundle.url);
       await ctx.runMutation(internal.transientEvents.emit, {
         instanceId,
         correlationKey: moduleKey,
         type: "module.uninstall",
         status: "error",
-        message: `Uninstall request failed: ${message}`,
+        message: friendly.message,
         data: { moduleName: module.name, moduleVersion: module.version },
       });
-      throw err;
+      throw friendly;
     }
   },
 });

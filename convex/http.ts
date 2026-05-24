@@ -1,4 +1,4 @@
-import type { CallbackEnvelope } from "@woofx3/api/webhooks";
+import type { CallbackEnvelope, CallbackEvent } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
@@ -26,6 +26,27 @@ function corsJson(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
+}
+
+/**
+ * Recursively remove any key starting with `$` from objects/arrays.
+ * Convex rejects field names starting with `$` as reserved — the engine
+ * embeds `$ref` inside workflow definition JSON (trigger / task nodes),
+ * so we strip those keys before passing data to any Convex mutation.
+ */
+function stripDollarKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stripDollarKeys);
+  }
+  if (value !== null && typeof value === "object") {
+    const sanitized: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (k.startsWith("$")) continue;
+      sanitized[k] = stripDollarKeys(v);
+    }
+    return sanitized;
+  }
+  return value;
 }
 
 type WidgetSetting = {
@@ -353,8 +374,11 @@ http.route({
     // discriminated CallbackEvent union. We trust the engine's contract and
     // narrow by event.type — anything outside the union falls through to
     // `handled: false` so legacy or future event types are safe to ignore.
+    //
+    // Strip $‑prefixed keys before dispatching — the engine embeds `$ref`
+    // inside workflow definitions and Convex rejects reserved field names.
     const envelope = payload as CallbackEnvelope;
-    const event = envelope.data;
+    const event = stripDollarKeys(envelope.data) as CallbackEvent;
     const eventType = event?.type ?? (payload.type as string | undefined) ?? "";
 
     logger.info("webhook: event received", {
