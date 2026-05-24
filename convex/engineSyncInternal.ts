@@ -246,6 +246,342 @@ export const reconcileScenes = internalMutation({
   },
 });
 
+const DEFAULT_UI_COLOR = "#888888";
+const DEFAULT_TRIGGER_ICON = "Zap";
+
+function parseJsonSafe(raw: string | undefined): unknown {
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+function triggerUiFields(configSchema: string | undefined): {
+  color: string;
+  icon: string;
+  configFields?: unknown[];
+  supportsTiers?: boolean;
+  tierLabel?: string;
+} {
+  const parsed = parseJsonSafe(configSchema);
+  const obj =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  const src = obj.ui && typeof obj.ui === "object" ? (obj.ui as Record<string, unknown>) : obj;
+  return {
+    color: typeof src.color === "string" ? src.color : DEFAULT_UI_COLOR,
+    icon: typeof src.icon === "string" ? src.icon : DEFAULT_TRIGGER_ICON,
+    configFields: Array.isArray(src.configFields) ? src.configFields : undefined,
+    supportsTiers: typeof src.supportsTiers === "boolean" ? src.supportsTiers : undefined,
+    tierLabel: typeof src.tierLabel === "string" ? src.tierLabel : undefined,
+  };
+}
+
+/**
+ * Reconcile `triggerDefinitions` (global UI catalog) and `instanceTriggers`
+ * (per-instance enablement) against a full snapshot from `getTriggers()`.
+ *
+ * `triggerDefinitions` rows are only upserted — never deleted — because the
+ * catalog is global and a trigger absent from one instance may still be
+ * registered elsewhere.
+ *
+ * `instanceTriggers` rows for this instance whose `triggerId` no longer
+ * appears in the engine snapshot are deleted.
+ */
+export const reconcileTriggers = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    snapshots: v.array(
+      v.object({
+        id: v.string(),
+        name: v.optional(v.string()),
+        description: v.optional(v.string()),
+        category: v.optional(v.string()),
+        event: v.optional(v.string()),
+        configSchema: v.optional(v.string()),
+        allowVariants: v.optional(v.boolean()),
+        projectionKey: v.optional(v.string()),
+        createdByType: v.optional(v.string()),
+        createdByRef: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, snapshots }) => {
+    const snapshotIds = new Set(snapshots.map((s) => s.id));
+    let processed = 0;
+
+    for (const snap of snapshots) {
+      let moduleId: Id<"moduleRepository"> | undefined;
+      if (snap.createdByType === "MODULE" && snap.createdByRef) {
+        const mod = await ctx.db
+          .query("moduleRepository")
+          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef!))
+          .first();
+        moduleId = mod?._id;
+      }
+
+      const ui = triggerUiFields(snap.configSchema);
+      const defRow = {
+        slug: snap.id,
+        name: snap.name ?? snap.id,
+        description: snap.description ?? "",
+        category: snap.category ?? "General",
+        event: snap.event || undefined,
+        color: ui.color,
+        icon: ui.icon,
+        configFields: ui.configFields,
+        supportsTiers: ui.supportsTiers,
+        tierLabel: ui.tierLabel,
+        allowVariants: snap.allowVariants,
+        projectionKey: snap.projectionKey,
+        moduleId,
+      };
+      const existingDef = await ctx.db
+        .query("triggerDefinitions")
+        .withIndex("by_slug", (q) => q.eq("slug", defRow.slug))
+        .first();
+      if (existingDef) {
+        await ctx.db.patch(existingDef._id, defRow);
+      } else {
+        await ctx.db.insert("triggerDefinitions", defRow);
+      }
+
+      const existingInst = await ctx.db
+        .query("instanceTriggers")
+        .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", snap.id))
+        .first();
+      if (existingInst) {
+        if (moduleId && existingInst.moduleId !== moduleId) {
+          await ctx.db.patch(existingInst._id, { moduleId, projectionKey: snap.projectionKey });
+        }
+      } else {
+        await ctx.db.insert("instanceTriggers", {
+          instanceId,
+          triggerId: snap.id,
+          moduleId,
+          projectionKey: snap.projectionKey,
+        });
+      }
+
+      processed++;
+    }
+
+    // Delete instanceTriggers rows for this instance no longer in the engine snapshot.
+    const liveInstRows = await ctx.db
+      .query("instanceTriggers")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const row of liveInstRows) {
+      if (!snapshotIds.has(row.triggerId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: processed };
+  },
+});
+
+const DEFAULT_ACTION_ICON = "ArrowRight";
+const DEFAULT_ACTION_CATEGORY = "General";
+
+function actionUiFields(paramsSchema: string | undefined): {
+  color: string;
+  icon: string;
+  configFields?: unknown[];
+} {
+  const parsed = parseJsonSafe(paramsSchema);
+  const obj =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  const src = obj.ui && typeof obj.ui === "object" ? (obj.ui as Record<string, unknown>) : obj;
+  return {
+    color: typeof src.color === "string" ? src.color : DEFAULT_UI_COLOR,
+    icon: typeof src.icon === "string" ? src.icon : DEFAULT_ACTION_ICON,
+    configFields: Array.isArray(src.configFields) ? src.configFields : undefined,
+  };
+}
+
+/**
+ * Reconcile `actionDefinitions` (global UI catalog) and `instanceActions`
+ * (per-instance enablement) against a full snapshot from `getActions()`.
+ *
+ * `actionDefinitions` rows are only upserted — never deleted — because the
+ * catalog is global and an action absent from one instance may still be
+ * registered on another.
+ *
+ * `instanceActions` rows for this instance whose `actionId` no longer
+ * appears in the engine snapshot are deleted.
+ */
+export const reconcileActions = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    snapshots: v.array(
+      v.object({
+        id: v.string(),
+        name: v.optional(v.string()),
+        description: v.optional(v.string()),
+        paramsSchema: v.optional(v.string()),
+        projectionKey: v.optional(v.string()),
+        createdByType: v.optional(v.string()),
+        createdByRef: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, snapshots }) => {
+    const snapshotIds = new Set(snapshots.map((s) => s.id));
+    let processed = 0;
+
+    for (const snap of snapshots) {
+      let moduleId: Id<"moduleRepository"> | undefined;
+      if (snap.createdByType === "MODULE" && snap.createdByRef) {
+        const mod = await ctx.db
+          .query("moduleRepository")
+          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef!))
+          .first();
+        moduleId = mod?._id;
+      }
+
+      const ui = actionUiFields(snap.paramsSchema);
+      const defRow = {
+        slug: snap.id,
+        name: snap.name ?? snap.id,
+        description: snap.description ?? "",
+        category: DEFAULT_ACTION_CATEGORY,
+        color: ui.color,
+        icon: ui.icon,
+        configFields: ui.configFields,
+        projectionKey: snap.projectionKey,
+        moduleId,
+      };
+      const existingDef = await ctx.db
+        .query("actionDefinitions")
+        .withIndex("by_slug", (q) => q.eq("slug", defRow.slug))
+        .first();
+      if (existingDef) {
+        await ctx.db.patch(existingDef._id, defRow);
+      } else {
+        await ctx.db.insert("actionDefinitions", defRow);
+      }
+
+      const existingInst = await ctx.db
+        .query("instanceActions")
+        .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", snap.id))
+        .first();
+      if (existingInst) {
+        if (moduleId && existingInst.moduleId !== moduleId) {
+          await ctx.db.patch(existingInst._id, { moduleId, projectionKey: snap.projectionKey });
+        }
+      } else {
+        await ctx.db.insert("instanceActions", {
+          instanceId,
+          actionId: snap.id,
+          moduleId,
+          projectionKey: snap.projectionKey,
+        });
+      }
+
+      processed++;
+    }
+
+    const liveInstRows = await ctx.db
+      .query("instanceActions")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const row of liveInstRows) {
+      if (!snapshotIds.has(row.actionId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: processed };
+  },
+});
+
+/**
+ * Reconcile `moduleWidgets` against a full snapshot from `getAvailableWidgets()`.
+ *
+ * `moduleWidgets` is a global table (no `instanceId`). Rows are upserted by
+ * `widgetId`. Widgets whose module cannot be resolved in Convex are skipped
+ * (the `MODULE_WIDGET_REGISTERED` webhook covers those when the module
+ * installs). No rows are deleted — `MODULE_WIDGET_DEREGISTERED` webhooks
+ * handle removal.
+ */
+export const reconcileWidgets = internalMutation({
+  args: {
+    snapshots: v.array(
+      v.object({
+        id: v.string(),
+        name: v.string(),
+        directory: v.string(),
+        description: v.optional(v.string()),
+        alertTypes: v.array(v.string()),
+        settings: v.array(
+          v.object({
+            key: v.string(),
+            fieldType: v.string(),
+            label: v.string(),
+            defaultValue: v.any(),
+            options: v.optional(v.array(v.object({ label: v.string(), value: v.string() }))),
+          })
+        ),
+        createdByType: v.string(),
+        createdByRef: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, { snapshots }) => {
+    let processed = 0;
+
+    for (const snap of snapshots) {
+      let moduleId: Id<"moduleRepository"> | undefined;
+      if (snap.createdByType === "MODULE" && snap.createdByRef) {
+        const mod = await ctx.db
+          .query("moduleRepository")
+          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef))
+          .first();
+        moduleId = mod?._id;
+      }
+
+      if (!moduleId) {
+        // moduleId is required on moduleWidgets; skip until the module installs via webhook
+        continue;
+      }
+
+      const existing = await ctx.db
+        .query("moduleWidgets")
+        .withIndex("by_widget_id", (q) => q.eq("widgetId", snap.id))
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          moduleId,
+          name: snap.name,
+          directory: snap.directory,
+          description: snap.description,
+          alertTypes: snap.alertTypes,
+          settings: snap.settings,
+        });
+      } else {
+        await ctx.db.insert("moduleWidgets", {
+          moduleId,
+          widgetId: snap.id,
+          name: snap.name,
+          directory: snap.directory,
+          description: snap.description,
+          alertTypes: snap.alertTypes,
+          settings: snap.settings,
+          createdAt: Date.now(),
+        });
+      }
+
+      processed++;
+    }
+
+    return { itemsProcessed: processed };
+  },
+});
+
 /** Fetch the instance bundle needed to open a capnweb session. */
 export const getInstanceBundle = internalQuery({
   args: { instanceId: v.id("instances") },
@@ -321,6 +657,9 @@ export const startRun = internalMutation({
         { name: "commands", status: "pending", itemsProcessed: 0 },
         { name: "workflows", status: "pending", itemsProcessed: 0 },
         { name: "scenes", status: "pending", itemsProcessed: 0 },
+        { name: "triggers", status: "pending", itemsProcessed: 0 },
+        { name: "actions", status: "pending", itemsProcessed: 0 },
+        { name: "widgets", status: "pending", itemsProcessed: 0 },
       ],
     });
   },
@@ -329,7 +668,14 @@ export const startRun = internalMutation({
 export const updateRunStep = internalMutation({
   args: {
     runId: v.id("syncRuns"),
-    stepName: v.union(v.literal("commands"), v.literal("workflows"), v.literal("scenes")),
+    stepName: v.union(
+      v.literal("commands"),
+      v.literal("workflows"),
+      v.literal("scenes"),
+      v.literal("triggers"),
+      v.literal("actions"),
+      v.literal("widgets")
+    ),
     patch: v.object({
       status: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error"))),
       itemsProcessed: v.optional(v.number()),

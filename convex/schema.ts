@@ -720,7 +720,14 @@ export default defineSchema({
     completedAt: v.optional(v.number()),
     steps: v.array(
       v.object({
-        name: v.union(v.literal("commands"), v.literal("workflows"), v.literal("scenes")),
+        name: v.union(
+          v.literal("commands"),
+          v.literal("workflows"),
+          v.literal("scenes"),
+          v.literal("triggers"),
+          v.literal("actions"),
+          v.literal("widgets")
+        ),
         status: v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error")),
         itemsProcessed: v.number(),
         error: v.optional(v.string()),

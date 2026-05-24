@@ -1,11 +1,14 @@
 import type { Id } from "../../_generated/dataModel";
 import type { ActionCtx } from "../../_generated/server";
 import type { EngineApi } from "../engineInstanceUrl";
+import { actionsStep } from "./steps/actions";
 import { commandsStep } from "./steps/commands";
 import { scenesStep } from "./steps/scenes";
+import { triggersStep } from "./steps/triggers";
+import { widgetsStep } from "./steps/widgets";
 import { workflowsStep } from "./steps/workflows";
 
-export type SyncStepName = "commands" | "workflows" | "scenes";
+export type SyncStepName = "commands" | "workflows" | "scenes" | "triggers" | "actions" | "widgets";
 
 export interface SyncStepContext {
   ctx: ActionCtx;
@@ -25,5 +28,4 @@ export interface SyncStep {
   run(c: SyncStepContext): Promise<{ itemsProcessed: number }>;
 }
 
-// Populated by Tasks 5-8. Order here is the order steps run.
-export const SYNC_STEPS: readonly SyncStep[] = [commandsStep, workflowsStep, scenesStep];
+export const SYNC_STEPS: readonly SyncStep[] = [commandsStep, workflowsStep, scenesStep, triggersStep, actionsStep, widgetsStep];
