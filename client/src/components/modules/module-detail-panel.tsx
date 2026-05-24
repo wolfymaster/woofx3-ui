@@ -8,11 +8,16 @@ import {
   Puzzle,
   Trash2,
   Workflow as WorkflowIcon,
+  XCircle,
   Zap,
 } from "lucide-react";
+import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 export interface ModuleDetailMeta {
   name: string;
@@ -24,6 +29,7 @@ export interface ModuleDetailMeta {
   isInstalled: boolean;
   iconUrl?: string;
   readme?: string;
+  identifier?: string;
 }
 
 export interface ModuleDetailTrigger {
@@ -63,7 +69,14 @@ interface ModuleDetailPanelProps {
   isInstalling?: boolean;
   installDisabled?: boolean;
   installDisabledReason?: string;
+  installProgressMessage?: string | null;
+  installSucceeded?: boolean;
+  installError?: string | null;
+  onShowInstallError?: () => void;
 }
+
+type TopTab = "details" | "resources";
+type ResourceType = "actions" | "triggers" | "workflows" | "widgets" | "functions";
 
 const categoryIcons: Record<string, React.ReactNode> = {
   Chat: <Bell className="h-4 w-4" />,
@@ -90,248 +103,404 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     isInstalling,
     installDisabled,
     installDisabledReason,
+    installProgressMessage,
+    installSucceeded,
+    installError,
+    onShowInstallError,
   } = props;
 
+  const [topTab, setTopTab] = useState<TopTab>("details");
+  const [resourceTab, setResourceTab] = useState<ResourceType>("actions");
+
+  const resourceCounts: Record<ResourceType, number | undefined> = {
+    actions: actions?.length,
+    triggers: triggers?.length,
+    workflows: 0,
+    widgets: widgets?.length,
+    functions: functions?.length,
+  };
+
   return (
-    <div className="p-6">
-      <div className="flex items-center gap-4 mb-6">
-        <Button variant="ghost" size="icon" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold">{module.name}</h2>
-            {categoryIcons[module.category] && <span className="text-primary">{categoryIcons[module.category]}</span>}
+    <div className="flex flex-col h-full">
+      <div className="px-6 pt-6 pb-3 shrink-0">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={onBack}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-semibold">{module.name}</h2>
+              {categoryIcons[module.category] && <span className="text-primary">{categoryIcons[module.category]}</span>}
+            </div>
+            <p className="text-sm text-muted-foreground">{module.description}</p>
           </div>
-          <p className="text-sm text-muted-foreground">{module.description}</p>
         </div>
-        {module.isInstalled
-          ? onRemove && (
-              <Button variant="destructive" size="sm" onClick={onRemove}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Remove
-              </Button>
-            )
-          : onInstall && (
-              <Button
-                size="sm"
-                onClick={onInstall}
-                disabled={isInstalling || installDisabled}
-                title={installDisabledReason}
-              >
-                {isInstalling ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Installing...
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4 mr-2" />
-                    Install
-                  </>
-                )}
-              </Button>
-            )}
+      </div>
+
+      <div className="px-6 border-b shrink-0">
+        <div className="flex gap-6">
+          <TopTabButton active={topTab === "details"} onClick={() => setTopTab("details")}>
+            DETAILS
+          </TopTabButton>
+          <TopTabButton active={topTab === "resources"} onClick={() => setTopTab("resources")}>
+            RESOURCES
+          </TopTabButton>
+        </div>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center min-h-[20vh]">
+        <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
+      ) : topTab === "details" ? (
+        <DetailsTab
+          module={module}
+          onInstall={onInstall}
+          onRemove={onRemove}
+          isInstalling={isInstalling}
+          installDisabled={installDisabled}
+          installDisabledReason={installDisabledReason}
+          installProgressMessage={installProgressMessage}
+          installSucceeded={installSucceeded}
+          installError={installError}
+          onShowInstallError={onShowInstallError}
+        />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Version</span>
-                <span>{module.version}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Author</span>
-                <span>{module.author || "Unknown"}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Category</span>
-                <Badge variant="outline" className="text-xs">
-                  {module.category}
-                </Badge>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <Badge variant={module.isInstalled ? "secondary" : "outline"} className="text-xs">
-                  {module.isInstalled ? (
-                    <>
-                      <Check className="h-3 w-3 mr-1" />
-                      Installed
-                    </>
-                  ) : (
-                    "Not installed"
-                  )}
-                </Badge>
-              </div>
-              {module.tags.length > 0 && (
-                <div className="pt-2">
-                  <span className="text-sm text-muted-foreground">Tags</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {module.tags.slice(0, 4).map((tag) => (
-                      <Badge key={tag} variant="secondary" className="text-xs">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        <ResourcesTab
+          activeType={resourceTab}
+          onSelectType={setResourceTab}
+          counts={resourceCounts}
+          triggers={triggers}
+          actions={actions}
+          functions={functions}
+          widgets={widgets}
+        />
+      )}
+    </div>
+  );
+}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Bell className="h-4 w-4" />
-                Triggers
-                {triggers && (
-                  <Badge variant="secondary" className="text-xs">
-                    {triggers.length}
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {triggers === undefined ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : triggers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No triggers</p>
-              ) : (
-                <div className="space-y-2">
-                  {triggers.slice(0, 5).map((trigger) => (
-                    <div key={trigger.key} className="flex items-start gap-2">
-                      <div
-                        className="h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs"
-                        style={{ backgroundColor: `${trigger.color}20`, color: trigger.color }}
-                      >
-                        <Puzzle className="h-3 w-3" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{trigger.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{trigger.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+function TopTabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "py-3 text-xs font-semibold tracking-wider border-b-2 -mb-px transition-colors",
+        active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Zap className="h-4 w-4" />
-                Actions
-                {actions && (
-                  <Badge variant="secondary" className="text-xs">
-                    {actions.length}
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {actions === undefined ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : actions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No actions</p>
-              ) : (
-                <div className="space-y-2">
-                  {actions.slice(0, 5).map((action) => (
-                    <div key={action.key} className="flex items-start gap-2">
-                      <div
-                        className="h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs"
-                        style={{ backgroundColor: `${action.color}20`, color: action.color }}
-                      >
-                        <Zap className="h-3 w-3" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{action.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{action.description}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+interface DetailsTabProps {
+  module: ModuleDetailMeta;
+  onInstall?: () => void;
+  onRemove?: () => void;
+  isInstalling?: boolean;
+  installDisabled?: boolean;
+  installDisabledReason?: string;
+  installProgressMessage?: string | null;
+  installSucceeded?: boolean;
+  installError?: string | null;
+  onShowInstallError?: () => void;
+}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm flex items-center gap-2">
-                <FileCode className="h-4 w-4" />
-                Functions
-                {functions && (
-                  <Badge variant="secondary" className="text-xs">
-                    {functions.length}
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {functions === undefined ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : functions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No functions</p>
-              ) : (
-                <div className="space-y-2">
-                  {functions.slice(0, 5).map((fn) => (
-                    <div key={fn.qualifiedName} className="flex items-start gap-2">
-                      <div className="h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs bg-muted text-muted-foreground">
-                        <FileCode className="h-3 w-3" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{fn.qualifiedName}</p>
-                        <p className="text-xs text-muted-foreground truncate">{fn.runtime ?? ""}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+function DetailsTab({
+  module,
+  onInstall,
+  onRemove,
+  isInstalling,
+  installDisabled,
+  installDisabledReason,
+  installProgressMessage,
+  installSucceeded,
+  installError,
+  onShowInstallError,
+}: DetailsTabProps) {
+  const installButton = module.isInstalled
+    ? onRemove && (
+        <Button variant="destructive" size="sm" className="w-full" onClick={onRemove}>
+          <Trash2 className="h-4 w-4 mr-2" />
+          Remove
+        </Button>
+      )
+    : onInstall && (
+        <Button
+          size="sm"
+          className="w-full"
+          variant={installError ? "destructive" : "default"}
+          onClick={installError && onShowInstallError ? onShowInstallError : onInstall}
+          disabled={isInstalling || installDisabled}
+          title={installError ?? installDisabledReason}
+        >
+          {isInstalling ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+              <span className="truncate">{installProgressMessage || "Installing..."}</span>
+            </>
+          ) : installSucceeded ? (
+            <>
+              <Check className="h-4 w-4 mr-2 shrink-0" />
+              Installed
+            </>
+          ) : installError ? (
+            <>
+              <XCircle className="h-4 w-4 mr-2 shrink-0" />
+              Install failed — details
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4 mr-2" />
+              Install
+            </>
+          )}
+        </Button>
+      );
 
-          {widgets !== undefined && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <WorkflowIcon className="h-4 w-4" />
-                  Widgets
-                  <Badge variant="secondary" className="text-xs">
-                    {widgets.length}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {widgets.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No widgets</p>
-                ) : (
-                  <div className="space-y-2">
-                    {widgets.slice(0, 5).map((widget) => (
-                      <div key={widget.slug} className="flex items-start gap-2">
-                        <div className="h-6 w-6 rounded flex items-center justify-center shrink-0 text-xs bg-muted text-muted-foreground">
-                          <WorkflowIcon className="h-3 w-3" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium truncate">{widget.name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{widget.slug}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+  return (
+    <div className="flex-1 min-h-0 grid grid-cols-3 gap-6 px-6 py-4">
+      <ScrollArea className="col-span-2 h-full pr-4">
+        <div className="prose prose-sm dark:prose-invert max-w-none">
+          {module.readme ? (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{module.readme}</ReactMarkdown>
+          ) : (
+            <p className="text-sm text-muted-foreground not-prose">No README provided.</p>
           )}
         </div>
-      )}
+      </ScrollArea>
+
+      <div className="col-span-1 space-y-4">
+        {installButton}
+        <MetaRow label="Identifier" value={module.identifier ?? "—"} mono />
+        <MetaRow label="Version" value={module.version || "—"} />
+        <MetaRow label="Author" value={module.author || "Unknown"} />
+        <MetaRow label="Category">
+          <Badge variant="outline" className="text-xs">
+            {module.category}
+          </Badge>
+        </MetaRow>
+        <MetaRow label="Status">
+          <Badge variant={module.isInstalled ? "secondary" : "outline"} className="text-xs">
+            {module.isInstalled ? (
+              <>
+                <Check className="h-3 w-3 mr-1" />
+                Installed
+              </>
+            ) : (
+              "Not installed"
+            )}
+          </Badge>
+        </MetaRow>
+        {module.tags.length > 0 && (
+          <MetaRow label="Tags">
+            <div className="flex flex-wrap gap-1">
+              {module.tags.map((tag) => (
+                <Badge key={tag} variant="secondary" className="text-xs">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          </MetaRow>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MetaRow({
+  label,
+  value,
+  children,
+  mono,
+}: {
+  label: string;
+  value?: string;
+  children?: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className={cn("text-sm mt-1 break-words", mono && "font-mono text-xs")}>{children ?? value}</div>
+    </div>
+  );
+}
+
+const RESOURCE_NAV: Array<{ type: ResourceType; label: string }> = [
+  { type: "actions", label: "Actions" },
+  { type: "functions", label: "Functions" },
+  { type: "triggers", label: "Triggers" },
+  { type: "widgets", label: "Widgets" },
+  { type: "workflows", label: "Workflows" },
+];
+
+interface ResourcesTabProps {
+  activeType: ResourceType;
+  onSelectType: (type: ResourceType) => void;
+  counts: Record<ResourceType, number | undefined>;
+  triggers: ModuleDetailTrigger[] | undefined;
+  actions: ModuleDetailAction[] | undefined;
+  functions: ModuleDetailFunction[] | undefined;
+  widgets: ModuleDetailWidget[] | undefined;
+}
+
+function ResourcesTab(props: ResourcesTabProps) {
+  const { activeType, onSelectType, counts, triggers, actions, functions, widgets } = props;
+  return (
+    <div className="flex-1 min-h-0 grid grid-cols-4 gap-6 px-6 py-4">
+      <div className="col-span-1 space-y-1">
+        {RESOURCE_NAV.map((item) => {
+          const count = counts[item.type];
+          const isActive = activeType === item.type;
+          return (
+            <button
+              type="button"
+              key={item.type}
+              onClick={() => onSelectType(item.type)}
+              className={cn(
+                "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors text-left",
+                isActive
+                  ? "bg-accent text-foreground"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              )}
+            >
+              <span>{item.label}</span>
+              <Badge variant="secondary" className="text-[10px] py-0 px-1.5">
+                {count ?? "—"}
+              </Badge>
+            </button>
+          );
+        })}
+      </div>
+
+      <ScrollArea className="col-span-3 h-full pr-4">
+        {activeType === "actions" && <ActionList items={actions} />}
+        {activeType === "triggers" && <TriggerList items={triggers} />}
+        {activeType === "functions" && <FunctionList items={functions} />}
+        {activeType === "widgets" && <WidgetList items={widgets} />}
+        {activeType === "workflows" && <EmptyState message="This module does not declare any workflows." />}
+      </ScrollArea>
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return <p className="text-sm text-muted-foreground">{message}</p>;
+}
+
+function LoadingState() {
+  return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+}
+
+function TriggerList({ items }: { items: ModuleDetailTrigger[] | undefined }) {
+  if (items === undefined) {
+    return <LoadingState />;
+  }
+  if (items.length === 0) {
+    return <EmptyState message="No triggers" />;
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((trigger) => (
+        <div key={trigger.key} className="flex items-start gap-3 p-3 rounded-md border bg-card">
+          <div
+            className="h-8 w-8 rounded flex items-center justify-center shrink-0"
+            style={{ backgroundColor: `${trigger.color}20`, color: trigger.color }}
+          >
+            <Bell className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{trigger.name}</p>
+            <p className="text-xs text-muted-foreground">{trigger.description}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ActionList({ items }: { items: ModuleDetailAction[] | undefined }) {
+  if (items === undefined) {
+    return <LoadingState />;
+  }
+  if (items.length === 0) {
+    return <EmptyState message="No actions" />;
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((action) => (
+        <div key={action.key} className="flex items-start gap-3 p-3 rounded-md border bg-card">
+          <div
+            className="h-8 w-8 rounded flex items-center justify-center shrink-0"
+            style={{ backgroundColor: `${action.color}20`, color: action.color }}
+          >
+            <Zap className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{action.name}</p>
+            <p className="text-xs text-muted-foreground">{action.description}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FunctionList({ items }: { items: ModuleDetailFunction[] | undefined }) {
+  if (items === undefined) {
+    return <LoadingState />;
+  }
+  if (items.length === 0) {
+    return <EmptyState message="No functions" />;
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((fn) => (
+        <div key={fn.qualifiedName} className="flex items-start gap-3 p-3 rounded-md border bg-card">
+          <div className="h-8 w-8 rounded flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
+            <FileCode className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium font-mono">{fn.qualifiedName}</p>
+            {fn.runtime && <p className="text-xs text-muted-foreground">{fn.runtime}</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WidgetList({ items }: { items: ModuleDetailWidget[] | undefined }) {
+  if (items === undefined) {
+    return <LoadingState />;
+  }
+  if (items.length === 0) {
+    return <EmptyState message="No widgets" />;
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((widget) => (
+        <div key={widget.slug} className="flex items-start gap-3 p-3 rounded-md border bg-card">
+          <div className="h-8 w-8 rounded flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
+            <WorkflowIcon className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{widget.name}</p>
+            <p className="text-xs text-muted-foreground font-mono">{widget.slug}</p>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

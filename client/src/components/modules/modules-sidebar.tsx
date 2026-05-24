@@ -89,7 +89,7 @@ interface ModulesSidebarProps {
 export function ModulesSidebar({ selected, onSelectModule }: ModulesSidebarProps) {
   const { instance } = useInstance();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState<"installed" | "browse">("installed");
+  const [activeTab, setActiveTab] = useState<"browse" | "installed">("browse");
 
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip") as
     | ModuleRepoItem[]
@@ -190,20 +190,7 @@ export function ModulesSidebar({ selected, onSelectModule }: ModulesSidebarProps
     <div className="w-72 shrink-0 border-r bg-background flex flex-col">
       <div className="flex border-b">
         <button
-          onClick={() => setActiveTab("installed")}
-          className={cn(
-            "flex-1 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors",
-            activeTab === "installed"
-              ? "border-primary text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-        >
-          Installed
-          <Badge variant="secondary" className="ml-1.5 text-[10px] py-0 px-1.5">
-            {installedCount}
-          </Badge>
-        </button>
-        <button
+          type="button"
           onClick={() => setActiveTab("browse")}
           className={cn(
             "flex-1 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors",
@@ -215,6 +202,21 @@ export function ModulesSidebar({ selected, onSelectModule }: ModulesSidebarProps
           Browse
           <Badge variant="secondary" className="ml-1.5 text-[10px] py-0 px-1.5">
             {browseCount}
+          </Badge>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("installed")}
+          className={cn(
+            "flex-1 px-3 py-2.5 text-xs font-medium border-b-2 transition-colors",
+            activeTab === "installed"
+              ? "border-primary text-foreground"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+        >
+          Installed
+          <Badge variant="secondary" className="ml-1.5 text-[10px] py-0 px-1.5">
+            {installedCount}
           </Badge>
         </button>
       </div>
