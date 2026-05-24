@@ -17,6 +17,7 @@ import {
   EyeOff,
   Grid,
   Layers,
+  Link,
   Lock,
   Maximize,
   Plus,
@@ -285,6 +286,14 @@ export default function SceneEditor() {
   }, [fetchedScene]);
 
   const updateScene = useMutation(api.scenes.update);
+  const getOrCreateBrowserSourceKey = useMutation(api.browserSource.getOrCreateBrowserSourceKey);
+
+  const handleCopyBrowserSource = useCallback(async () => {
+    if (!sceneId) return;
+    const key = await getOrCreateBrowserSourceKey({ sceneId: sceneId as Id<"scenes"> });
+    const browserSourceUrl = `${window.location.origin}/browser-source/${key}`;
+    await navigator.clipboard.writeText(browserSourceUrl);
+  }, [sceneId, getOrCreateBrowserSourceKey]);
 
   const handleSave = useCallback(() => {
     if (!sceneId) return;
@@ -436,6 +445,20 @@ export default function SceneEditor() {
             <Redo2 className="h-4 w-4" />
           </Button>
           <Separator orientation="vertical" className="h-6 mx-2" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleCopyBrowserSource}
+                disabled={!sceneId}
+                data-testid="button-browser-source"
+              >
+                <Link className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy Browser Source URL</TooltipContent>
+          </Tooltip>
           <Button variant="outline" data-testid="button-preview">
             <Play className="h-4 w-4 mr-2" />
             Preview

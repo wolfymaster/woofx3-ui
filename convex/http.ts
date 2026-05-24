@@ -925,4 +925,80 @@ http.route({
   }),
 });
 
+http.route({
+  pathPrefix: "/browser-source/",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const url = new URL(request.url);
+    const segments = url.pathname.split("/").filter(Boolean);
+    const key = segments[1];
+
+    if (!key) {
+      return new Response("Missing source key", { status: 400 });
+    }
+
+    const sourceKey = await ctx.runQuery(internal.browserSource.getSourceKeyByKey, { key });
+    if (!sourceKey) {
+      return new Response("Invalid source key", { status: 404 });
+    }
+
+    await ctx.runMutation(internal.browserSource.updateSourceKeyLastUsed, {
+      keyId: sourceKey._id,
+      lastUsedAt: Date.now(),
+    });
+
+    const scene = await ctx.runQuery(internal.browserSource.getScene, { sceneId: sourceKey.sceneId });
+    if (!scene) {
+      return new Response("Scene not found", { status: 404 });
+    }
+
+    const widgets: Array<{
+      id: string;
+      widgetCanonicalId: string;
+      position: { x: number; y: number; width: number; height: number };
+      settings: Record<string, unknown>;
+    }> = [];
+
+    try {
+      const parsed = JSON.parse(typeof scene.widgets === "string" ? scene.widgets : JSON.stringify(scene.widgets ?? []));
+      if (Array.isArray(parsed)) {
+        for (const w of parsed) {
+          if (w && w.id && w.widgetCanonicalId && w.position) {
+            widgets.push(w);
+          }
+        }
+      }
+    } catch {
+    }
+
+    const layout = { width: scene.width ?? 1920, height: scene.height ?? 1080 };
+
+    const iframes = widgets
+      .map((w) => {
+        const { x, y, width, height } = w.position;
+        return `<iframe src="/api/widgets/${encodeURIComponent(w.widgetCanonicalId)}/index.html" sandbox="allow-scripts allow-same-origin" style="position:absolute;left:${x}px;top:${y}px;width:${width}px;height:${height}px;border:none;background:transparent;" scrolling="no"></iframe>`;
+      })
+      .join("\n");
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${scene.name}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{background:transparent;overflow:hidden}</style>
+</head>
+<body>
+<div style="position:relative;width:${layout.width}px;height:${layout.height}px;overflow:hidden;">
+${iframes}
+</div>
+</body>
+</html>`;
+
+    return new Response(html, {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  }),
+});
+
 export default http;
