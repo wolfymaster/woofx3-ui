@@ -1,8 +1,9 @@
 /**
- * UI-local scene types used by the scene editor and scene list pages.
- * These describe the visual scene / widget layout the UI owns — they
- * do NOT flow to or from the engine. Engine-side scene data (if any)
- * would live in @woofx3/api.
+ * Scene / widget types used by the scene editor and scene list pages.
+ * Scenes are engine-authoritative: the editor mutates this local shape,
+ * then serializes widgets/layout to JSON and writes through
+ * convex/sceneActions.ts → engine RPC. The Convex `scenes` table is a
+ * read cache populated by engine webhooks.
  */
 
 export interface Widget {
@@ -21,9 +22,9 @@ export interface Widget {
 
 export interface Scene {
   id: string;
+  engineSceneId: string;
   name: string;
   description: string;
-  accountId: string;
   width: number;
   height: number;
   backgroundColor: string;
@@ -35,7 +36,6 @@ export interface Scene {
 export interface CreateSceneInput {
   name: string;
   description?: string;
-  accountId: string;
   width?: number;
   height?: number;
   backgroundColor?: string;

@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { internalMutation, internalQuery, mutation } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { internalMutation, internalQuery, type MutationCtx, mutation } from "./_generated/server";
 
 export const getDefaultScene = internalQuery({
   args: { instanceId: v.string() },
@@ -69,21 +70,10 @@ export const createAlert = internalMutation({
 export const getSourceKeyByKey = internalQuery({
   args: { key: v.string() },
   handler: async (ctx, args) => {
-    console.log("getSourceKeyByKey called with key:", args.key);
-
-    // First, check if the table has ANY records
-    const allKeys = await ctx.db.query("browserSourceKeys").collect();
-    console.log("Total keys in browserSourceKeys table:", allKeys.length);
-    if (allKeys.length > 0) {
-      console.log("First key in DB:", allKeys[0].key);
-    }
-
-    const sourceKey = await ctx.db
+    return await ctx.db
       .query("browserSourceKeys")
       .withIndex("by_key", (q) => q.eq("key", args.key))
       .first();
-    console.log("getSourceKeyByKey result:", sourceKey ? "found" : "not found");
-    return sourceKey;
   },
 });
 
@@ -207,13 +197,33 @@ export const createAlertHistory = internalMutation({
   },
 });
 
+async function requireSceneMembership(ctx: MutationCtx, sceneId: Id<"scenes">) {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new Error("Unauthorized");
+  }
+
+  const scene = await ctx.db.get(sceneId);
+  if (!scene) {
+    throw new Error("Scene not found");
+  }
+
+  const membership = await ctx.db
+    .query("instanceMembers")
+    .withIndex("by_instance_user", (q) => q.eq("instanceId", scene.instanceId).eq("userId", userId))
+    .first();
+
+  if (!membership) {
+    throw new Error("Not authorized");
+  }
+
+  return scene;
+}
+
 export const getOrCreateBrowserSourceKey = mutation({
   args: { sceneId: v.id("scenes") },
   handler: async (ctx, args) => {
-    console.log("getOrCreateBrowserSourceKey called for scene:", args.sceneId);
-
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Unauthorized");
+    const scene = await requireSceneMembership(ctx, args.sceneId);
 
     const existing = await ctx.db
       .query("browserSourceKeys")
@@ -221,15 +231,10 @@ export const getOrCreateBrowserSourceKey = mutation({
       .first();
 
     if (existing) {
-      console.log("getOrCreateBrowserSourceKey returning existing key:", existing.key);
       return existing.key;
     }
 
     const key = crypto.randomUUID().replace(/-/g, "");
-    console.log("getOrCreateBrowserSourceKey creating new key:", key);
-
-    const scene = await ctx.db.get(args.sceneId);
-    if (!scene) throw new Error("Scene not found");
 
     await ctx.db.insert("browserSourceKeys", {
       instanceId: scene.instanceId,
@@ -239,7 +244,55 @@ export const getOrCreateBrowserSourceKey = mutation({
       createdAt: Date.now(),
     });
 
-    console.log("getOrCreateBrowserSourceKey key inserted");
+    return key;
+  },
+});
+
+// Revokes every browser-source key for a scene. Any OBS source pointed at an old
+// URL immediately stops resolving (the /browser-source/{key} lookup 404s).
+export const revokeBrowserSourceKeys = mutation({
+  args: { sceneId: v.id("scenes") },
+  handler: async (ctx, args) => {
+    await requireSceneMembership(ctx, args.sceneId);
+
+    const keys = await ctx.db
+      .query("browserSourceKeys")
+      .withIndex("by_scene", (q) => q.eq("sceneId", args.sceneId))
+      .collect();
+
+    for (const k of keys) {
+      await ctx.db.delete(k._id);
+    }
+
+    return { revoked: keys.length };
+  },
+});
+
+// Revokes existing keys and issues a fresh one. Returns the new key so the
+// caller can re-copy the URL; old URLs stop working.
+export const rotateBrowserSourceKey = mutation({
+  args: { sceneId: v.id("scenes") },
+  handler: async (ctx, args) => {
+    const scene = await requireSceneMembership(ctx, args.sceneId);
+
+    const keys = await ctx.db
+      .query("browserSourceKeys")
+      .withIndex("by_scene", (q) => q.eq("sceneId", args.sceneId))
+      .collect();
+
+    for (const k of keys) {
+      await ctx.db.delete(k._id);
+    }
+
+    const key = crypto.randomUUID().replace(/-/g, "");
+    await ctx.db.insert("browserSourceKeys", {
+      instanceId: scene.instanceId,
+      sceneId: args.sceneId,
+      key,
+      name: `${scene.name} Browser Source`,
+      createdAt: Date.now(),
+    });
+
     return key;
   },
 });

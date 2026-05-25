@@ -23,7 +23,6 @@ import DebugTools from "@/pages/debug-tools";
 import ModuleInstall from "@/pages/module-install";
 import Modules from "@/pages/modules";
 import NotFound from "@/pages/not-found";
-import SceneEditor from "@/pages/scene-editor";
 import Scenes from "@/pages/scenes";
 import Settings from "@/pages/settings";
 import Team from "@/pages/team";
@@ -123,7 +122,7 @@ function AppRoutes() {
                   <Route path="/workflows/:id/edit" component={Workflows} />
                   <Route path="/assets" component={Assets} />
                   <Route path="/scenes" component={Scenes} />
-                  <Route path="/scenes/:id" component={SceneEditor} />
+                  <Route path="/scenes/:id" component={Scenes} />
                   <Route path="/alerts" component={AlertLog} />
                   <Route path="/debug" component={DebugTools} />
                   <Route path="/commands" component={Commands} />

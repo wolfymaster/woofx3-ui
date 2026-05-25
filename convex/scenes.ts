@@ -1,30 +1,101 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query, internalMutation } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, mutation, type QueryCtx, query } from "./_generated/server";
+import { parseSceneLayout, parseSceneWidgets } from "./lib/sceneSerialization";
+
+// Scenes are engine-authoritative. The engine is the source of truth; this table
+// is a read cache populated exclusively by webhook callbacks (upsertFromWebhook /
+// deleteFromWebhook). All UI writes go through convex/sceneActions.ts → engine RPC.
+// There are intentionally NO public create/update/delete mutations here — adding
+// one would create a second write path that fights the webhook writer.
+
+type SceneCache = Doc<"scenes"> & { id: Id<"scenes">; widgets: unknown[] };
+
+function toSceneCache(scene: Doc<"scenes">): SceneCache {
+  return { ...scene, id: scene._id, widgets: scene.widgets ?? [] };
+}
+
+async function membershipFor(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  userId: Id<"users">
+): Promise<Doc<"instanceMembers"> | null> {
+  return await ctx.db
+    .query("instanceMembers")
+    .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
+    .first();
+}
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<SceneCache[]> => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    if (!userId) {
+      return [];
+    }
 
-    const memberships = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+    const membership = await membershipFor(ctx, args.instanceId, userId);
+    if (!membership) {
+      return [];
+    }
 
-    if (memberships.length === 0) return [];
+    const scenes = await ctx.db
+      .query("scenes")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .take(500);
 
-    const instanceIds = memberships.map((m) => m.instanceId);
-    const scenes = await ctx.db.query("scenes").collect();
+    return scenes.map(toSceneCache);
+  },
+});
 
-    return scenes
-      .filter((s) => instanceIds.includes(s.instanceId))
-      .map((s) => ({
-        ...s,
-        id: s._id,
-        widgets: s.widgets ?? [],
-      }));
+export const get = query({
+  args: { sceneId: v.id("scenes") },
+  handler: async (ctx, args): Promise<SceneCache | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+
+    const scene = await ctx.db.get(args.sceneId);
+    if (!scene) {
+      return null;
+    }
+
+    const membership = await membershipFor(ctx, scene.instanceId, userId);
+    if (!membership) {
+      return null;
+    }
+
+    return toSceneCache(scene);
+  },
+});
+
+export const getByEngineSceneId = query({
+  args: { instanceId: v.id("instances"), engineSceneId: v.string() },
+  handler: async (ctx, args): Promise<SceneCache | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+
+    const membership = await membershipFor(ctx, args.instanceId, userId);
+    if (!membership) {
+      return null;
+    }
+
+    const scene = await ctx.db
+      .query("scenes")
+      .withIndex("by_engine_scene_id", (q) =>
+        q.eq("instanceId", args.instanceId).eq("engineSceneId", args.engineSceneId)
+      )
+      .first();
+
+    if (!scene) {
+      return null;
+    }
+
+    return toSceneCache(scene);
   },
 });
 
@@ -32,19 +103,19 @@ export const getBrowserSourceKeys = query({
   args: { sceneId: v.id("scenes") },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) return [];
+    if (!userId) {
+      return [];
+    }
 
     const scene = await ctx.db.get(args.sceneId);
-    if (!scene) return [];
+    if (!scene) {
+      return [];
+    }
 
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", scene.instanceId).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) return [];
+    const membership = await membershipFor(ctx, scene.instanceId, userId);
+    if (!membership) {
+      return [];
+    }
 
     return await ctx.db
       .query("browserSourceKeys")
@@ -53,188 +124,9 @@ export const getBrowserSourceKeys = query({
   },
 });
 
-export const get = query({
-  args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
-
-    const scene = await ctx.db.get(args.sceneId);
-    if (!scene) return null;
-
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", scene.instanceId).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) return null;
-
-    return {
-      ...scene,
-      id: scene._id,
-      widgets: scene.widgets ?? [],
-    };
-  },
-});
-
-export const create = mutation({
-  args: {
-    name: v.string(),
-    description: v.optional(v.string()),
-    width: v.optional(v.number()),
-    height: v.optional(v.number()),
-    backgroundColor: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const memberships = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-
-    if (memberships.length === 0) {
-      throw new Error("No instances found");
-    }
-
-    const instanceId = memberships[0].instanceId;
-    const now = Date.now();
-
-    const sceneId = await ctx.db.insert("scenes", {
-      instanceId,
-      name: args.name,
-      description: args.description,
-      width: args.width ?? 1920,
-      height: args.height ?? 1080,
-      backgroundColor: args.backgroundColor ?? "transparent",
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return sceneId;
-  },
-});
-
-export const updateWidgets = mutation({
-  args: {
-    sceneId: v.id("scenes"),
-    widgets: v.array(v.any()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const scene = await ctx.db.get(args.sceneId);
-    if (!scene) throw new Error("Scene not found");
-
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", scene.instanceId).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) throw new Error("Not authorized");
-
-    await ctx.db.patch(args.sceneId, { widgets: args.widgets, updatedAt: Date.now() });
-  },
-});
-
-export const update = mutation({
-  args: {
-    sceneId: v.id("scenes"),
-    name: v.optional(v.string()),
-    description: v.optional(v.string()),
-    width: v.optional(v.number()),
-    height: v.optional(v.number()),
-    backgroundColor: v.optional(v.string()),
-    widgets: v.optional(v.array(v.any())),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const scene = await ctx.db.get(args.sceneId);
-    if (!scene) throw new Error("Scene not found");
-
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", scene.instanceId).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) throw new Error("Not authorized");
-
-    const { sceneId, ...updates } = args;
-    await ctx.db.patch(sceneId, {
-      ...updates,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
-export const remove = mutation({
-  args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const scene = await ctx.db.get(args.sceneId);
-    if (!scene) throw new Error("Scene not found");
-
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", scene.instanceId).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership || membership.role === "member") {
-      throw new Error("Not authorized");
-    }
-
-    await ctx.db.delete(args.sceneId);
-  },
-});
-
-export const duplicate = mutation({
-  args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    const scene = await ctx.db.get(args.sceneId);
-    if (!scene) throw new Error("Scene not found");
-
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", scene.instanceId).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) throw new Error("Not authorized");
-
-    const now = Date.now();
-    const newSceneId = await ctx.db.insert("scenes", {
-      instanceId: scene.instanceId,
-      name: `${scene.name} (Copy)`,
-      description: scene.description ?? undefined,
-      width: scene.width,
-      height: scene.height,
-      backgroundColor: scene.backgroundColor,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return newSceneId;
-  },
-});
-
+// Populated by the engine SCENE_CREATED / SCENE_UPDATED webhook. Keyed on
+// engineSceneId (the engine's stable identity) via the by_engine_scene_id index,
+// so redelivery is idempotent and renames never create duplicates.
 export const upsertFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
@@ -252,37 +144,52 @@ export const upsertFromWebhook = internalMutation({
   handler: async (ctx, args) => {
     const existing = await ctx.db
       .query("scenes")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .filter((q) => q.eq(q.field("name"), args.name))
+      .withIndex("by_engine_scene_id", (q) =>
+        q.eq("instanceId", args.instanceId).eq("engineSceneId", args.engineSceneId)
+      )
       .first();
 
-    const widgets = JSON.parse(args.widgetsJson || "[]");
-    const layout = JSON.parse(args.layoutJson || "{}");
+    const widgets = parseSceneWidgets(args.widgetsJson);
+    const layout = parseSceneLayout(args.layoutJson);
+
+    const fields = {
+      instanceId: args.instanceId,
+      applicationId: args.applicationId,
+      engineSceneId: args.engineSceneId,
+      name: args.name,
+      description: args.description || undefined,
+      width: layout.width ?? 1920,
+      height: layout.height ?? 1080,
+      backgroundColor: layout.backgroundColor ?? "transparent",
+      widgets,
+      updatedAt: Date.now(),
+    };
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        applicationId: args.applicationId,
-        name: args.name,
-        description: args.description || undefined,
-        width: layout.width ?? 1920,
-        height: layout.height ?? 1080,
-        backgroundColor: layout.backgroundColor ?? "transparent",
-        widgets,
-        updatedAt: Date.now(),
-      });
+      await ctx.db.patch(existing._id, fields);
     } else {
-      await ctx.db.insert("scenes", {
-        instanceId: args.instanceId,
-        applicationId: args.applicationId,
-        name: args.name,
-        description: args.description || undefined,
-        width: layout.width ?? 1920,
-        height: layout.height ?? 1080,
-        backgroundColor: layout.backgroundColor ?? "transparent",
-        widgets,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      });
+      await ctx.db.insert("scenes", { ...fields, createdAt: Date.now() });
+    }
+  },
+});
+
+// Populated by the engine SCENE_DELETED webhook. Deletes the specific scene by
+// engineSceneId — never a positional .first(), which could destroy a sibling.
+export const deleteFromWebhook = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    engineSceneId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const scene = await ctx.db
+      .query("scenes")
+      .withIndex("by_engine_scene_id", (q) =>
+        q.eq("instanceId", args.instanceId).eq("engineSceneId", args.engineSceneId)
+      )
+      .first();
+
+    if (scene) {
+      await ctx.db.delete(scene._id);
     }
   },
 });
@@ -294,19 +201,19 @@ export const generateBrowserSourceKey = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
 
     const scene = await ctx.db.get(args.sceneId);
-    if (!scene) throw new Error("Scene not found");
+    if (!scene) {
+      throw new Error("Scene not found");
+    }
 
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) =>
-        q.eq("instanceId", scene.instanceId).eq("userId", userId),
-      )
-      .first();
-
-    if (!membership) throw new Error("Not authorized");
+    const membership = await membershipFor(ctx, scene.instanceId, userId);
+    if (!membership) {
+      throw new Error("Not authorized");
+    }
 
     const key = `bs_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
@@ -319,22 +226,5 @@ export const generateBrowserSourceKey = mutation({
     });
 
     return { keyId, key };
-  },
-});
-
-export const deleteFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    engineSceneId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const scene = await ctx.db
-      .query("scenes")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .first();
-
-    if (scene) {
-      await ctx.db.delete(scene._id);
-    }
   },
 });

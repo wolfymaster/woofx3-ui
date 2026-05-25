@@ -51,6 +51,11 @@ export default defineSchema({
     lastViewedAt: v.optional(v.number()),
     lastEngineActivityAt: v.optional(v.number()),
     storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),
+    // Cached EngineInfo (getEngineInfo RPC). Read by the public browser-source
+    // page to iframe the engine-rendered overlay. Refreshed on a TTL.
+    engineWidgetAssetBaseUrl: v.optional(v.string()),
+    engineSceneOverlayBaseUrl: v.optional(v.string()),
+    engineInfoFetchedAt: v.optional(v.number()),
   })
     .index("by_account", ["accountId"])
     .index("by_webhook_secret", ["webhookSecret"]),

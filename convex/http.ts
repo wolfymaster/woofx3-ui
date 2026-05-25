@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
+import { buildBrowserSourceHtml, buildBrowserSourcePlaceholderHtml } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { widgetCanonicalKey } from "./lib/widgetKey";
@@ -954,52 +955,39 @@ http.route({
       return new Response("Scene not found", { status: 404 });
     }
 
-    const widgets: Array<{
-      id: string;
-      widgetCanonicalId: string;
-      position: { x: number; y: number; width: number; height: number };
-      settings: Record<string, unknown>;
-    }> = [];
+    const sceneName = scene.name ?? "Scene";
+    const htmlResponse = (body: string) =>
+      new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 
-    try {
-      const parsed = JSON.parse(typeof scene.widgets === "string" ? scene.widgets : JSON.stringify(scene.widgets ?? []));
-      if (Array.isArray(parsed)) {
-        for (const w of parsed) {
-          if (w && w.id && w.widgetCanonicalId && w.position) {
-            widgets.push(w);
-          }
-        }
-      }
-    } catch {
+    // Scenes are engine-authoritative and the engine renders the overlay, so this
+    // page just iframes the engine's per-scene overlay URL. An un-synced scene or
+    // an engine with no overlay base configured renders a transparent placeholder.
+    if (!scene.engineSceneId) {
+      return htmlResponse(
+        buildBrowserSourcePlaceholderHtml({
+          sceneName,
+          reason: "This scene has not finished syncing with the engine yet.",
+        })
+      );
     }
 
-    const layout = { width: scene.width ?? 1920, height: scene.height ?? 1080 };
-
-    const iframes = widgets
-      .map((w) => {
-        const { x, y, width, height } = w.position;
-        return `<iframe src="/api/widgets/${encodeURIComponent(w.widgetCanonicalId)}/index.html" sandbox="allow-scripts allow-same-origin" style="position:absolute;left:${x}px;top:${y}px;width:${width}px;height:${height}px;border:none;background:transparent;" scrolling="no"></iframe>`;
-      })
-      .join("\n");
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${scene.name}</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}body{background:transparent;overflow:hidden}</style>
-</head>
-<body>
-<div style="position:relative;width:${layout.width}px;height:${layout.height}px;overflow:hidden;">
-${iframes}
-</div>
-</body>
-</html>`;
-
-    return new Response(html, {
-      headers: { "Content-Type": "text/html; charset=utf-8" },
+    const engineInfo = await ctx.runAction(internal.engineInfo.getEngineOverlayInfo, {
+      instanceId: scene.instanceId,
     });
+
+    if (!engineInfo?.engineSceneOverlayBaseUrl) {
+      return htmlResponse(
+        buildBrowserSourcePlaceholderHtml({
+          sceneName,
+          reason: "Overlay rendering is not configured for this engine.",
+        })
+      );
+    }
+
+    const base = engineInfo.engineSceneOverlayBaseUrl.replace(/\/+$/, "");
+    const overlayUrl = `${base}/${encodeURIComponent(scene.engineSceneId)}`;
+
+    return htmlResponse(buildBrowserSourceHtml({ sceneName, overlayUrl }));
   }),
 });
 
