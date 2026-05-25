@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { httpAction } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
+import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { logger } from "./logger";
 import "./browserSource";
 import "./obsCommands";
@@ -252,21 +253,11 @@ http.route({
 
     await ctx.runMutation(internal.twitchAuth.storeState, { state, redirectTo, instanceId: instanceId as Id<"instances"> });
 
-    const scopes = [
-      "chat:read",
-      "chat:edit",
-      "user:read:email",
-      "user:bot",
-      "user:write:chat",
-      "user:read:chat",
-      "moderator:read:followers",
-    ];
-
     const params = new URLSearchParams({
       client_id: process.env.AUTH_TWITCH_ID,
       redirect_uri: process.env.AUTH_TWITCH_REDIRECT_URI,
       response_type: "code",
-      scope: scopes.join(" "),
+      scope: TWITCH_INTEGRATION_SCOPES.join(" "),
       state,
     });
 

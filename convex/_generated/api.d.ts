@@ -45,6 +45,7 @@ import type * as lib_storage_localAdapter from "../lib/storage/localAdapter.js";
 import type * as lib_storage_r2Adapter from "../lib/storage/r2Adapter.js";
 import type * as lib_storage_types from "../lib/storage/types.js";
 import type * as lib_teamAccess from "../lib/teamAccess.js";
+import type * as lib_twitchIntegrationScopes from "../lib/twitchIntegrationScopes.js";
 import type * as logger from "../logger.js";
 import type * as marketplace from "../marketplace.js";
 import type * as migrations_backfillAccountMembers from "../migrations/backfillAccountMembers.js";
@@ -123,6 +124,7 @@ declare const fullApi: ApiFromModules<{
   "lib/storage/r2Adapter": typeof lib_storage_r2Adapter;
   "lib/storage/types": typeof lib_storage_types;
   "lib/teamAccess": typeof lib_teamAccess;
+  "lib/twitchIntegrationScopes": typeof lib_twitchIntegrationScopes;
   logger: typeof logger;
   marketplace: typeof marketplace;
   "migrations/backfillAccountMembers": typeof migrations_backfillAccountMembers;
