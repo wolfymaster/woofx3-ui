@@ -250,6 +250,7 @@ export default function Modules() {
       name: moduleDetail.name,
       description: moduleDetail.description,
       version: moduleDetail.version,
+      latestVersion: moduleDetail.latestVersion,
       author: moduleDetail.author,
       category: moduleDetail.category,
       tags: moduleDetail.tags,
@@ -264,6 +265,7 @@ export default function Modules() {
       actions: moduleDetail.actions,
       functions: moduleDetail.functions,
       widgets: moduleDetail.widgets,
+      workflows: moduleDetail.workflows,
     };
   }, [moduleDetail]);
 
@@ -306,6 +308,7 @@ export default function Modules() {
                   actions={detailProps.actions}
                   functions={detailProps.functions}
                   widgets={detailProps.widgets}
+                  workflows={detailProps.workflows}
                   loading={moduleDetailLoading}
                   onBack={() => navigate("/modules")}
                   onRemove={
@@ -316,13 +319,13 @@ export default function Modules() {
                         : undefined
                   }
                   onInstall={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
+                  onUpdate={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
                   isInstalling={isInstalling}
                   installDisabled={detailProps.meta.isInstalled}
                   installDisabledReason={detailProps.meta.isInstalled ? "Already installed" : undefined}
                   installProgressMessage={isInstalling ? (installEvent?.message ?? null) : null}
                   installSucceeded={installEvent?.status === "success"}
                   installError={installError}
-                  onShowInstallError={() => setShowErrorDetails(true)}
                   onDismissError={dismissInstallError}
                 />
               </div>

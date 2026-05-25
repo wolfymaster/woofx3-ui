@@ -18,12 +18,13 @@ import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
+import { cn, isNewerVersion } from "@/lib/utils";
 
 export interface ModuleDetailMeta {
   name: string;
   description: string;
   version: string;
+  latestVersion?: string;
   author: string;
   category: string;
   tags: string[];
@@ -57,23 +58,29 @@ export interface ModuleDetailWidget {
   name: string;
 }
 
+export interface ModuleDetailWorkflow {
+  slug: string;
+  name: string;
+}
+
 interface ModuleDetailPanelProps {
   module: ModuleDetailMeta;
   triggers: ModuleDetailTrigger[] | undefined;
   actions: ModuleDetailAction[] | undefined;
   functions: ModuleDetailFunction[] | undefined;
   widgets?: ModuleDetailWidget[] | undefined;
+  workflows?: ModuleDetailWorkflow[] | undefined;
   loading?: boolean;
   onBack: () => void;
   onInstall?: () => void;
   onRemove?: () => void;
+  onUpdate?: () => void;
   isInstalling?: boolean;
   installDisabled?: boolean;
   installDisabledReason?: string;
   installProgressMessage?: string | null;
   installSucceeded?: boolean;
   installError?: string | null;
-  onShowInstallError?: () => void;
   onDismissError?: () => void;
 }
 
@@ -98,17 +105,18 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     actions,
     functions,
     widgets,
+    workflows,
     loading,
     onBack,
     onInstall,
     onRemove,
+    onUpdate,
     isInstalling,
     installDisabled,
     installDisabledReason,
     installProgressMessage,
     installSucceeded,
     installError,
-    onShowInstallError,
     onDismissError,
   } = props;
 
@@ -118,26 +126,46 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
   const resourceCounts: Record<ResourceType, number | undefined> = {
     actions: actions?.length,
     triggers: triggers?.length,
-    workflows: 0,
+    workflows: workflows?.length,
     widgets: widgets?.length,
     functions: functions?.length,
   };
 
+  const updateAvailable =
+    module.isInstalled && !!module.latestVersion && isNewerVersion(module.latestVersion, module.version);
+
   return (
     <div className="flex flex-col h-full">
-      <div className="px-6 pt-6 pb-3 shrink-0">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={onBack}>
+      <div className="px-6 pt-6 pb-3 shrink-0 space-y-3">
+        <div className="flex items-start gap-4">
+          <Button variant="ghost" size="icon" onClick={onBack} className="shrink-0 mt-0.5">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold">{module.name}</h2>
-              {categoryIcons[module.category] && <span className="text-primary">{categoryIcons[module.category]}</span>}
+              <h2 className="text-xl font-semibold truncate">{module.name}</h2>
+              {categoryIcons[module.category] && <span className="text-primary shrink-0">{categoryIcons[module.category]}</span>}
             </div>
-            <p className="text-sm text-muted-foreground">{module.description}</p>
+            <p className="text-sm text-muted-foreground line-clamp-2">{module.description}</p>
           </div>
+          {!loading && (
+            <ModuleInstallActions
+              module={module}
+              updateAvailable={updateAvailable}
+              onInstall={onInstall}
+              onRemove={onRemove}
+              onUpdate={onUpdate}
+              isInstalling={isInstalling}
+              installDisabled={installDisabled}
+              installDisabledReason={installDisabledReason}
+              installProgressMessage={installProgressMessage}
+              installSucceeded={installSucceeded}
+            />
+          )}
         </div>
+        {!loading && installError && (
+          <InstallErrorBanner error={installError} onDismissError={onDismissError} />
+        )}
       </div>
 
       <div className="px-6 border-b shrink-0">
@@ -156,19 +184,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : topTab === "details" ? (
-        <DetailsTab
-          module={module}
-          onInstall={onInstall}
-          onRemove={onRemove}
-          isInstalling={isInstalling}
-          installDisabled={installDisabled}
-          installDisabledReason={installDisabledReason}
-          installProgressMessage={installProgressMessage}
-          installSucceeded={installSucceeded}
-          installError={installError}
-          onShowInstallError={onShowInstallError}
-          onDismissError={onDismissError}
-        />
+        <DetailsTab module={module} />
       ) : (
         <ResourcesTab
           activeType={resourceTab}
@@ -178,6 +194,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
           actions={actions}
           functions={functions}
           widgets={widgets}
+          workflows={workflows}
         />
       )}
     </div>
@@ -207,68 +224,122 @@ function TopTabButton({
   );
 }
 
-interface DetailsTabProps {
+interface ModuleInstallActionsProps {
   module: ModuleDetailMeta;
+  updateAvailable: boolean;
   onInstall?: () => void;
   onRemove?: () => void;
+  onUpdate?: () => void;
   isInstalling?: boolean;
   installDisabled?: boolean;
   installDisabledReason?: string;
   installProgressMessage?: string | null;
   installSucceeded?: boolean;
-  installError?: string | null;
-  onShowInstallError?: () => void;
-  onDismissError?: () => void;
 }
 
-function DetailsTab({
+function ModuleInstallActions({
   module,
+  updateAvailable,
   onInstall,
   onRemove,
+  onUpdate,
   isInstalling,
   installDisabled,
   installDisabledReason,
   installProgressMessage,
   installSucceeded,
-  installError,
-  onShowInstallError,
-  onDismissError,
-}: DetailsTabProps) {
-  const installButton = module.isInstalled
-    ? onRemove && (
-        <Button variant="destructive" size="sm" className="w-full" onClick={onRemove}>
-          <Trash2 className="h-4 w-4 mr-2" />
-          Remove
-        </Button>
-      )
-    : onInstall && (
+}: ModuleInstallActionsProps) {
+  return (
+    <div className="flex flex-col items-end gap-2 shrink-0">
+      {updateAvailable && onUpdate && (
         <Button
           size="sm"
-          className="w-full"
-          variant="default"
-          onClick={onInstall}
-          disabled={isInstalling || installDisabled}
-          title={installDisabledReason}
+          variant="outline"
+          className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+          onClick={onUpdate}
+          disabled={isInstalling}
+          title={`Update available: v${module.version} → v${module.latestVersion}`}
         >
           {isInstalling ? (
             <>
               <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
-              <span className="truncate">{installProgressMessage || "Installing..."}</span>
-            </>
-          ) : installSucceeded ? (
-            <>
-              <Check className="h-4 w-4 mr-2 shrink-0" />
-              Installed
+              <span className="truncate max-w-[10rem]">{installProgressMessage || "Updating..."}</span>
             </>
           ) : (
             <>
-              <Download className="h-4 w-4 mr-2" />
-              Install
+              <Download className="h-4 w-4 mr-2 shrink-0" />
+              Update to v{module.latestVersion}
             </>
           )}
         </Button>
-      );
+      )}
+      {module.isInstalled
+        ? onRemove && (
+            <Button variant="destructive" size="sm" onClick={onRemove}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remove
+            </Button>
+          )
+        : onInstall && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={onInstall}
+              disabled={isInstalling || installDisabled}
+              title={installDisabledReason}
+            >
+              {isInstalling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+                  <span className="truncate max-w-[10rem]">{installProgressMessage || "Installing..."}</span>
+                </>
+              ) : installSucceeded ? (
+                <>
+                  <Check className="h-4 w-4 mr-2 shrink-0" />
+                  Installed
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Install
+                </>
+              )}
+            </Button>
+          )}
+    </div>
+  );
+}
 
+function InstallErrorBanner({
+  error,
+  onDismissError,
+}: {
+  error: string;
+  onDismissError?: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 ml-12">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-2 min-w-0">
+          <XCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
+          <p className="text-xs text-destructive break-words">{error}</p>
+        </div>
+        {onDismissError && (
+          <button
+            type="button"
+            onClick={onDismissError}
+            className="shrink-0 text-destructive/60 hover:text-destructive transition-colors"
+          >
+            <X className="h-3.5 w-3.5" />
+            <span className="sr-only">Dismiss error</span>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DetailsTab({ module }: { module: ModuleDetailMeta }) {
   return (
     <div className="flex-1 min-h-0 grid grid-cols-3 gap-6 px-6 py-4">
       <ScrollArea className="col-span-2 h-full pr-4">
@@ -282,27 +353,13 @@ function DetailsTab({
       </ScrollArea>
 
       <div className="col-span-1 space-y-4">
-        {installButton}
-        {installError && (
-          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-start gap-2 min-w-0">
-                <XCircle className="h-4 w-4 mt-0.5 shrink-0 text-destructive" />
-                <p className="text-xs text-destructive break-words">{installError}</p>
-              </div>
-              {onDismissError && (
-                <button
-                  type="button"
-                  onClick={onDismissError}
-                  className="shrink-0 text-destructive/60 hover:text-destructive transition-colors"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  <span className="sr-only">Dismiss error</span>
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        {module.isInstalled &&
+          module.latestVersion &&
+          isNewerVersion(module.latestVersion, module.version) && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              Update available: v{module.version} → v{module.latestVersion}
+            </p>
+          )}
         <MetaRow label="Identifier" value={module.identifier ?? "—"} mono />
         <MetaRow label="Version" value={module.version || "—"} />
         <MetaRow label="Author" value={module.author || "Unknown"} />
@@ -374,10 +431,11 @@ interface ResourcesTabProps {
   actions: ModuleDetailAction[] | undefined;
   functions: ModuleDetailFunction[] | undefined;
   widgets: ModuleDetailWidget[] | undefined;
+  workflows: ModuleDetailWorkflow[] | undefined;
 }
 
 function ResourcesTab(props: ResourcesTabProps) {
-  const { activeType, onSelectType, counts, triggers, actions, functions, widgets } = props;
+  const { activeType, onSelectType, counts, triggers, actions, functions, widgets, workflows } = props;
   return (
     <div className="flex-1 min-h-0 grid grid-cols-4 gap-6 px-6 py-4">
       <div className="col-span-1 space-y-1">
@@ -410,7 +468,7 @@ function ResourcesTab(props: ResourcesTabProps) {
         {activeType === "triggers" && <TriggerList items={triggers} />}
         {activeType === "functions" && <FunctionList items={functions} />}
         {activeType === "widgets" && <WidgetList items={widgets} />}
-        {activeType === "workflows" && <EmptyState message="This module does not declare any workflows." />}
+        {activeType === "workflows" && <WorkflowList items={workflows} />}
       </ScrollArea>
     </div>
   );
@@ -519,6 +577,30 @@ function WidgetList({ items }: { items: ModuleDetailWidget[] | undefined }) {
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{widget.name}</p>
             <p className="text-xs text-muted-foreground font-mono">{widget.slug}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkflowList({ items }: { items: ModuleDetailWorkflow[] | undefined }) {
+  if (items === undefined) {
+    return <LoadingState />;
+  }
+  if (items.length === 0) {
+    return <EmptyState message="This module does not declare any workflows." />;
+  }
+  return (
+    <div className="space-y-2">
+      {items.map((workflow) => (
+        <div key={workflow.slug} className="flex items-start gap-3 p-3 rounded-md border bg-card">
+          <div className="h-8 w-8 rounded flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
+            <WorkflowIcon className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">{workflow.name}</p>
+            <p className="text-xs text-muted-foreground font-mono">{workflow.slug}</p>
           </div>
         </div>
       ))}

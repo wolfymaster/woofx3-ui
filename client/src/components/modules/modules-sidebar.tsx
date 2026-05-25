@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useInstance } from "@/hooks/use-instance";
-import { cn } from "@/lib/utils";
+import { cn, isNewerVersion } from "@/lib/utils";
 
 type ModuleRepoItem = {
   _id: Id<"moduleRepository">;
@@ -111,22 +111,30 @@ export function ModulesSidebar({ selected, onSelectModule, searchQuery, onSearch
     }));
   }, [repoModules]);
 
-  const installedKeyPrefixes = useMemo(() => {
-    const set = new Set<string>();
+  const installedVersionsByMarketplaceId = useMemo(() => {
+    const map = new Map<string, string>();
     for (const m of installedModules) {
       if (m.moduleKey) {
         const parts = m.moduleKey.split(":");
-        if (parts.length >= 2) {
-          set.add(`${parts[0]}:${parts[1]}`);
+        if (parts.length >= 2 && parts[0]) {
+          map.set(parts[0], parts[1]);
         }
       }
     }
-    return set;
+    return map;
   }, [installedModules]);
 
   const isInstalledMarketplace = useCallback(
-    (marketplaceId: string, version: string) => installedKeyPrefixes.has(`${marketplaceId}:${version}`),
-    [installedKeyPrefixes]
+    (marketplaceId: string) => installedVersionsByMarketplaceId.has(marketplaceId),
+    [installedVersionsByMarketplaceId]
+  );
+
+  const hasUpdate = useCallback(
+    (marketplaceId: string, marketplaceVersion: string) => {
+      const installedVersion = installedVersionsByMarketplaceId.get(marketplaceId);
+      return installedVersion ? isNewerVersion(marketplaceVersion, installedVersion) : false;
+    },
+    [installedVersionsByMarketplaceId]
   );
 
   const listMarketplace = useAction(api.marketplace.listModules);
@@ -190,6 +198,7 @@ export function ModulesSidebar({ selected, onSelectModule, searchQuery, onSearch
       category: string;
       tags: string[];
       isInstalled: boolean;
+      updateAvailable: boolean;
       iconUrl?: string;
     }> = [];
     const seen = new Set<string>();
@@ -203,7 +212,8 @@ export function ModulesSidebar({ selected, onSelectModule, searchQuery, onSearch
         author: m.author,
         category: m.category,
         tags: m.tags,
-        isInstalled: isInstalledMarketplace(m.id, m.version),
+        isInstalled: isInstalledMarketplace(m.id),
+        updateAvailable: hasUpdate(m.id, m.version),
         iconUrl: m.iconUrl,
       });
       seen.add(m.id);
@@ -221,11 +231,12 @@ export function ModulesSidebar({ selected, onSelectModule, searchQuery, onSearch
         category: m.category,
         tags: m.tags,
         isInstalled: true,
+        updateAvailable: false,
       });
     }
 
     return results;
-  }, [query, marketplaceList, filteredMarketplace, filteredInstalled, isInstalledMarketplace]);
+  }, [query, marketplaceList, filteredMarketplace, filteredInstalled, isInstalledMarketplace, hasUpdate]);
 
   const selectedInstalledId = selected?.source === "installed" ? selected.module._id : null;
   const selectedMarketplaceId = selected?.source === "marketplace" ? selected.marketplaceId : null;
@@ -311,6 +322,14 @@ export function ModulesSidebar({ selected, onSelectModule, searchQuery, onSearch
                                 Installed
                               </Badge>
                             )}
+                            {item.updateAvailable && (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] py-0 px-1 shrink-0 border-amber-500/50 text-amber-600 dark:text-amber-400"
+                              >
+                                Update
+                              </Badge>
+                            )}
                           </div>
                           <span className="text-[11px] text-muted-foreground truncate block">
                             v{item.version} · {item.category}
@@ -373,7 +392,8 @@ export function ModulesSidebar({ selected, onSelectModule, searchQuery, onSearch
               )}
               {filteredMarketplace.map((module) => {
                 const isSelected = selectedMarketplaceId === module.id;
-                const alreadyInstalled = isInstalledMarketplace(module.id, module.version);
+                const alreadyInstalled = isInstalledMarketplace(module.id);
+                const updateAvailable = hasUpdate(module.id, module.version);
                 return (
                   <div
                     key={module.id}
@@ -406,6 +426,14 @@ export function ModulesSidebar({ selected, onSelectModule, searchQuery, onSearch
                         {alreadyInstalled && (
                           <Badge variant="secondary" className="text-[9px] py-0 px-1 shrink-0">
                             Installed
+                          </Badge>
+                        )}
+                        {updateAvailable && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] py-0 px-1 shrink-0 border-amber-500/50 text-amber-600 dark:text-amber-400"
+                          >
+                            Update
                           </Badge>
                         )}
                       </div>

@@ -11,6 +11,8 @@ export interface ModuleDetailResult {
   name: string;
   description: string;
   version: string;
+  /** Latest version available in the marketplace, when the module is published there. */
+  latestVersion?: string;
   author: string;
   category: string;
   tags: string[];
@@ -21,6 +23,7 @@ export interface ModuleDetailResult {
   actions: Array<{ key: string; name: string; description: string; color: string }>;
   functions: Array<{ qualifiedName: string; runtime?: string }>;
   widgets: Array<{ slug: string; name: string }>;
+  workflows: Array<{ slug: string; name: string }>;
 }
 
 export const getModuleDetail = action({
@@ -46,7 +49,15 @@ export const getModuleDetail = action({
         ctx.runQuery(api.moduleFunctions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.moduleWidgets.listByModule, { moduleId: installedModule._id }),
       ]);
-      return formatInstalledDetail(installedModule, triggers, actions, functions, widgets);
+      const detail = formatInstalledDetail(installedModule, triggers, actions, functions, widgets);
+      // The DB is authoritative for installed modules, but we do not store the README. Fetch it
+      // (and the icon / latest version) from the marketplace and merge it in. Only attempt this when
+      // the moduleKey carries a real marketplace id; a marketplace miss must not fail the detail.
+      const marketplaceId = installedModule.moduleKey?.split(":")[0];
+      if (marketplaceId) {
+        await mergeMarketplaceMetadata(detail, marketplaceId);
+      }
+      return detail;
     }
 
     const payload = await marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`);
@@ -84,7 +95,40 @@ function formatInstalledDetail(
     actions: actions.map((a) => ({ key: a.slug, name: a.name, description: a.description, color: a.color })),
     functions: functions.map((f) => ({ qualifiedName: f.qualifiedName, runtime: f.runtime })),
     widgets: widgets.map((w) => ({ slug: w.widgetId, name: w.name })),
+    // The Convex workflows table carries no module link, so a module's declared workflows are not
+    // available from the DB. They are merged in from the marketplace manifest (see mergeMarketplaceMetadata).
+    workflows: [],
   };
+}
+
+async function mergeMarketplaceMetadata(detail: ModuleDetailResult, marketplaceId: string): Promise<void> {
+  try {
+    const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceId)}`);
+    const raw = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const module = raw.module && typeof raw.module === "object" ? (raw.module as Record<string, unknown>) : raw;
+    if (typeof module.readme === "string") {
+      detail.readme = module.readme;
+    }
+    if (typeof module.iconUrl === "string" && !detail.iconUrl) {
+      detail.iconUrl = module.iconUrl;
+    }
+    if (typeof module.version === "string") {
+      detail.latestVersion = module.version;
+    }
+    // Workflows are declared in the manifest, not synced to the Convex workflows table, so the
+    // marketplace manifest is the only source for an installed module's declared workflows.
+    detail.workflows = parseWorkflows(module.workflows);
+  } catch {
+    // Module is not published to the marketplace (e.g. a manual upload). Leave README/latestVersion/
+    // workflows unset — the DB-sourced detail stands on its own.
+  }
+}
+
+function parseWorkflows(value: unknown): Array<{ slug: string; name: string }> {
+  return asArr(value).map((w) => {
+    const o = w && typeof w === "object" ? (w as Record<string, unknown>) : {};
+    return { slug: asStr(o.slug), name: asStr(o.name) };
+  });
 }
 
 function asStr(value: unknown, fallback = ""): string {
@@ -143,6 +187,7 @@ function formatMarketplaceDetail(moduleId: string, payload: unknown): ModuleDeta
       const o = w && typeof w === "object" ? (w as Record<string, unknown>) : {};
       return { slug: asStr(o.slug), name: asStr(o.name) };
     }),
+    workflows: parseWorkflows(module.workflows),
   };
 
   if (typeof module.iconUrl === "string") {
