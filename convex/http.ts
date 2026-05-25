@@ -2,10 +2,12 @@ import type { CallbackEnvelope, CallbackEvent } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
-import { httpAction } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
+import { escapeDollarKeys } from "./lib/dollarKeys";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
+import { widgetCanonicalKey } from "./lib/widgetKey";
 import { logger } from "./logger";
 import "./browserSource";
 import "./obsCommands";
@@ -29,27 +31,6 @@ function corsJson(body: unknown, status = 200): Response {
   });
 }
 
-/**
- * Recursively remove any key starting with `$` from objects/arrays.
- * Convex rejects field names starting with `$` as reserved — the engine
- * embeds `$ref` inside workflow definition JSON (trigger / task nodes),
- * so we strip those keys before passing data to any Convex mutation.
- */
-function stripDollarKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(stripDollarKeys);
-  }
-  if (value !== null && typeof value === "object") {
-    const sanitized: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) {
-      if (k.startsWith("$")) continue;
-      sanitized[k] = stripDollarKeys(v);
-    }
-    return sanitized;
-  }
-  return value;
-}
-
 type WidgetSetting = {
   key: string;
   fieldType: string;
@@ -58,7 +39,15 @@ type WidgetSetting = {
   options?: { label: string; value: string }[];
 };
 
-function parseSettingsSchema(settings: { key: string; fieldType: string; label: string; defaultValue?: unknown; options?: { label: string; value: string }[] }[]): WidgetSetting[] {
+function parseSettingsSchema(
+  settings: {
+    key: string;
+    fieldType: string;
+    label: string;
+    defaultValue?: unknown;
+    options?: { label: string; value: string }[];
+  }[]
+): WidgetSetting[] {
   return settings.map((item) => ({
     key: item.key,
     fieldType: item.fieldType,
@@ -188,7 +177,7 @@ http.route({
     logger.info("got twitch user", { login: twitchUser.login, id: twitchUser.id });
 
     if (instanceId) {
-      const expiresAt = Date.now() + (tokenData.expires_in * 1000);
+      const expiresAt = Date.now() + tokenData.expires_in * 1000;
       const scopes = Array.isArray(tokenData.scope) ? tokenData.scope : tokenData.scope.split(" ");
 
       await ctx.runMutation(internal.twitchIntegration.upsertPlatformLink, {
@@ -251,7 +240,11 @@ http.route({
       return errorRedirect(process.env.SITE_URL ?? "", "missing_params", "instanceId is required");
     }
 
-    await ctx.runMutation(internal.twitchAuth.storeState, { state, redirectTo, instanceId: instanceId as Id<"instances"> });
+    await ctx.runMutation(internal.twitchAuth.storeState, {
+      state,
+      redirectTo,
+      instanceId: instanceId as Id<"instances">,
+    });
 
     const params = new URLSearchParams({
       client_id: process.env.AUTH_TWITCH_ID,
@@ -268,7 +261,6 @@ http.route({
     });
   }),
 });
-
 
 http.route({ path: "/api/webhooks/woofx3/alerts", method: "OPTIONS", handler: preflightHandler });
 http.route({
@@ -366,10 +358,10 @@ http.route({
     // narrow by event.type — anything outside the union falls through to
     // `handled: false` so legacy or future event types are safe to ignore.
     //
-    // Strip $‑prefixed keys before dispatching — the engine embeds `$ref`
+    // Escape $‑prefixed keys before dispatching — the engine embeds `$ref`
     // inside workflow definitions and Convex rejects reserved field names.
     const envelope = payload as CallbackEnvelope;
-    const event = stripDollarKeys(envelope.data) as CallbackEvent;
+    const event = escapeDollarKeys(envelope.data) as CallbackEvent;
     const eventType = event?.type ?? (payload.type as string | undefined) ?? "";
 
     logger.info("webhook: event received", {
@@ -458,15 +450,29 @@ http.route({
       }
 
       case EngineEventType.MODULE_WIDGET_REGISTERED: {
+        // Upsert the widget definition AND place it for this instance
+        // (instanceWidgets join). Built-ins (createdByType "SYSTEM") have no
+        // module — registerFromWebhook resolves moduleId only for MODULE widgets.
+        // Key on the canonical projectionKey, NOT widget.id (the engine omits id
+        // for built-ins, which previously produced a duplicate empty-id row).
         for (const widget of event.widgets) {
           const settings = parseSettingsSchema(widget.settings);
-          // Widget registration requires moduleId lookup, so use a mutation
-          // to keep the db access in a proper mutation context
+          const widgetId = widgetCanonicalKey({
+            projectionKey: widget.projectionKey,
+            createdByRef: widget.createdByRef,
+            manifestId: widget.manifestId,
+            canonicalId: widget.canonicalId,
+            id: widget.id,
+          });
           await ctx.runMutation(internal.moduleWidgets.registerFromWebhook, {
-            widgetId: widget.id,
-            name: widget.name ?? widget.id,
+            instanceId: instance._id,
+            widgetId,
+            name: widget.name ?? widgetId,
             directory: widget.directory ?? "",
             description: widget.description,
+            createdByType: widget.createdByType,
+            createdByRef: widget.createdByRef,
+            projectionKey: widget.projectionKey,
             alertTypes: widget.alertTypes ?? [],
             settings,
           });
@@ -477,7 +483,13 @@ http.route({
       case EngineEventType.MODULE_WIDGET_DEREGISTERED: {
         for (const widget of event.widgets) {
           await ctx.runMutation(internal.moduleWidgets.unregister, {
-            widgetId: widget.id,
+            widgetId: widgetCanonicalKey({
+              projectionKey: widget.projectionKey,
+              createdByRef: widget.createdByRef,
+              manifestId: widget.manifestId,
+              canonicalId: widget.canonicalId,
+              id: widget.id,
+            }),
           });
         }
         return corsJson({ success: true, type: event.type });
@@ -677,8 +689,7 @@ http.route({
       }
 
       case EngineEventType.WIDGET_STATUS_CHANGED: {
-        const correlationKey =
-          event.widgetCanonicalId ?? `${event.moduleId}:${event.instanceId}:${event.key}`;
+        const correlationKey = event.widgetCanonicalId ?? `${event.moduleId}:${event.instanceId}:${event.key}`;
         await ctx.runMutation(internal.transientEvents.emit, {
           instanceId: instance._id,
           correlationKey,

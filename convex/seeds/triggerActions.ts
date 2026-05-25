@@ -6,8 +6,9 @@
  *
  * Idempotent for slugs listed below; other slugs are left untouched.
  */
-import { internalMutation } from "../_generated/server";
+
 import { internal } from "../_generated/api";
+import { internalMutation } from "../_generated/server";
 
 // ---------------------------------------------------------------------------
 // Known built-in slugs — these are the only records managed by this seed.
@@ -50,7 +51,6 @@ const BUILTIN_TRIGGERS = [
     color: "text-blue-500",
     icon: "MessageCircle",
     event: "message.user.twitch",
-    allowVariants: true,
     configFields: [
       { id: "command", label: "Command", type: "text", required: true, placeholder: "!hello" },
       { id: "cooldown", label: "Cooldown", type: "number", unit: "seconds", min: 0, max: 3600, defaultValue: 5 },
@@ -74,7 +74,7 @@ const BUILTIN_TRIGGERS = [
     color: "text-purple-500",
     icon: "Star",
     event: "subscribe.user.twitch",
-    supportsTiers: true,
+    allowVariants: true,
     tierLabel: "subs",
     configFields: [
       {
@@ -107,7 +107,7 @@ const BUILTIN_TRIGGERS = [
     category: "events",
     color: "text-pink-500",
     icon: "Heart",
-    supportsTiers: true,
+    allowVariants: true,
     tierLabel: "dollars",
     configFields: [
       {
@@ -130,7 +130,7 @@ const BUILTIN_TRIGGERS = [
     color: "text-yellow-500",
     icon: "Gift",
     event: "cheer.user.twitch",
-    supportsTiers: true,
+    allowVariants: true,
     tierLabel: "bits",
     configFields: [
       {
@@ -229,9 +229,7 @@ const BUILTIN_ACTIONS = [
     category: "chat",
     color: "text-blue-500",
     icon: "Send",
-    configFields: [
-      { id: "message", label: "Message", type: "text", required: true, placeholder: "Thanks {user}!" },
-    ],
+    configFields: [{ id: "message", label: "Message", type: "text", required: true, placeholder: "Thanks {user}!" }],
   },
   {
     slug: "action-change-scene",
@@ -285,9 +283,7 @@ const BUILTIN_ACTIONS = [
     category: "scene",
     color: "text-pink-500",
     icon: "RefreshCw",
-    configFields: [
-      { id: "widget", label: "Widget Name", type: "text", required: true, placeholder: "Chat Widget" },
-    ],
+    configFields: [{ id: "widget", label: "Widget Name", type: "text", required: true, placeholder: "Chat Widget" }],
   },
   {
     slug: "action-trigger-integration",

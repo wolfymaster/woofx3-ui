@@ -1,4 +1,5 @@
 import { internal } from "../../../_generated/api";
+import { escapeDollarKeys } from "../../dollarKeys";
 import type { EngineApi } from "../../engineInstanceUrl";
 import { ENGINE_SYNC_CONFIG } from "../config";
 import type { SyncStep, SyncStepContext } from "../steps";
@@ -50,7 +51,7 @@ export const workflowsStep: SyncStep = {
       .filter((w) => w.definition !== null)
       .map((w) => ({
         engineWorkflowId: w.id,
-        definition: w.definition,
+        definition: escapeDollarKeys(w.definition),
         isEnabled: w.isEnabled,
       }));
     const engineIds = all.map((w) => w.id);

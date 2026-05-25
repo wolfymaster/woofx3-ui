@@ -1,4 +1,5 @@
 import { internal } from "../../../_generated/api";
+import { widgetCanonicalKey } from "../../widgetKey";
 import type { SyncStep, SyncStepContext } from "../steps";
 
 type WidgetSetting = {
@@ -34,18 +35,20 @@ function parseWidgetSettings(schemaJson: string): WidgetSetting[] {
  * parses each widget's `settingsSchema` JSON string into a structured array,
  * then forwards snapshots to `internal.engineSyncInternal.reconcileWidgets`.
  *
- * `moduleWidgets` is a global table (no `instanceId`). The reconciler upserts
- * by `widgetId` and skips any widget whose module cannot be resolved in
- * Convex (the webhook path will cover those when the module installs).
- * No rows are deleted — `MODULE_WIDGET_DEREGISTERED` webhooks handle removal.
+ * `moduleWidgets` is the global definition catalog (upserted by `widgetId`, never
+ * deleted here — `MODULE_WIDGET_DEREGISTERED` handles removal). Per-instance
+ * placement is reconciled into `instanceWidgets`. Built-in widgets (createdByType
+ * "SYSTEM", no module) are included — they are not skipped.
  */
 export const widgetsStep: SyncStep = {
   name: "widgets",
-  run: async ({ ctx, newApi }: SyncStepContext) => {
+  run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
     const api = newApi();
     const res = await api.getAvailableWidgets();
     const snapshots = (res.widgets ?? []).map((w) => ({
-      id: w.id,
+      // Key on the canonical projectionKey, derived from createdByRef + manifestId
+      // (getAvailableWidgets omits projectionKey). Must match the webhook path's key.
+      id: widgetCanonicalKey({ createdByRef: w.createdByRef, manifestId: w.manifestId, id: w.id }),
       name: w.name,
       directory: w.directory,
       description: w.description || undefined,
@@ -54,6 +57,6 @@ export const widgetsStep: SyncStep = {
       createdByType: w.createdByType,
       createdByRef: w.createdByRef,
     }));
-    return await ctx.runMutation(internal.engineSyncInternal.reconcileWidgets, { snapshots });
+    return await ctx.runMutation(internal.engineSyncInternal.reconcileWidgets, { instanceId, snapshots });
   },
 };

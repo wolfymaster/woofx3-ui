@@ -218,6 +218,8 @@ export default defineSchema({
     icon: v.string(),
     configFields: v.optional(v.array(v.any())),
     projectionKey: v.optional(v.string()),
+    handlerType: v.optional(v.string()),
+    functionCall: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
   })
     .index("by_slug", ["slug"])
@@ -244,30 +246,33 @@ export default defineSchema({
     .index("by_engine_id", ["engineFunctionId"]),
 
   // instanceTriggers: which trigger ids are enabled for a given instance (module lifecycle).
-  // moduleId is the authoritative link from a module to its per-instance enablements:
-  // cleanup on module delete pivots on (instanceId, moduleId) so we don't rely on the
-  // global triggerDefinitions.moduleId being correctly populated (which can race during install).
+  // Provenance (createdByType/createdByRef) is the authoritative link from a source to its
+  // per-instance enablements: cleanup on module delete pivots on (instanceId, createdByRef),
+  // where createdByRef == the module's composite moduleKey (== the delete correlationKey).
+  // Built-ins use createdByType "SYSTEM" / createdByRef "builtin" and survive module deletes.
   instanceTriggers: defineTable({
     instanceId: v.id("instances"),
     triggerId: v.string(),
-    moduleId: v.optional(v.id("moduleRepository")),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_trigger", ["instanceId", "triggerId"])
-    .index("by_instance_module", ["instanceId", "moduleId"]),
+    .index("by_instance_ref", ["instanceId", "createdByRef"]),
 
   // instanceActions: which action ids are enabled for a given instance.
-  // See instanceTriggers for the rationale behind storing moduleId here.
+  // See instanceTriggers for the rationale behind storing provenance here.
   instanceActions: defineTable({
     instanceId: v.id("instances"),
     actionId: v.string(),
-    moduleId: v.optional(v.id("moduleRepository")),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_action", ["instanceId", "actionId"])
-    .index("by_instance_module", ["instanceId", "moduleId"]),
+    .index("by_instance_ref", ["instanceId", "createdByRef"]),
 
   // instanceFunctions: which function ids are enabled for a given instance
   instanceFunctions: defineTable({
@@ -277,6 +282,21 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_function", ["instanceId", "functionId"]),
+
+  // instanceWidgets: which widget ids are placeable for a given instance. Mirrors
+  // instanceFunctions: a thin per-instance join over the moduleWidgets definition
+  // catalog. Provenance keys cleanup on module delete (createdByRef == moduleKey);
+  // built-ins (createdByType "SYSTEM") persist across module uninstalls.
+  instanceWidgets: defineTable({
+    instanceId: v.id("instances"),
+    widgetId: v.string(),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
+    projectionKey: v.optional(v.string()),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_widget", ["instanceId", "widgetId"])
+    .index("by_instance_ref", ["instanceId", "createdByRef"]),
 
   // workflowTemplates: predefined workflow templates for common Twitch events
   workflowTemplates: defineTable({
@@ -478,13 +498,19 @@ export default defineSchema({
     .index("by_canonical_id", ["canonicalId"])
     .index("by_instance_kind", ["instanceId", "kind"]),
 
-  // moduleWidgets: registered widgets from module manifests
+  // moduleWidgets: global widget DEFINITION catalog (module-sourced AND built-in).
+  // moduleId is optional — built-in widgets (createdByType "SYSTEM") have no module.
+  // Per-instance placement lives in instanceWidgets. createdByRef == moduleKey for
+  // module widgets, "builtin" for SYSTEM widgets.
   moduleWidgets: defineTable({
-    moduleId: v.id("moduleRepository"),
+    moduleId: v.optional(v.id("moduleRepository")),
     widgetId: v.string(),
     name: v.string(),
     directory: v.string(),
     description: v.optional(v.string()),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
+    projectionKey: v.optional(v.string()),
     alertTypes: v.array(v.string()),
     settings: v.array(
       v.object({

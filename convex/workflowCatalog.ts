@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { action, internalMutation, query } from "./_generated/server";
+import { canonicalRefFromProjectionKey } from "./lib/canonicalRef";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import type { CatalogBundle } from "./workflowCatalogContext";
 import { loadCatalogBundle } from "./workflowCatalogContext";
@@ -18,8 +19,8 @@ function catalogTriggerRow(def: Doc<"triggerDefinitions">, id: string) {
     event: def.event,
     allowVariants: def.allowVariants,
     configFields: def.configFields,
-    supportsTiers: def.supportsTiers,
-    tierLabel: def.tierLabel,
+    projectionKey: def.projectionKey,
+    canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "trigger"),
     moduleId: def.moduleId,
   };
 }
@@ -33,6 +34,10 @@ function catalogActionRow(def: Doc<"actionDefinitions">, id: string) {
     color: def.color,
     icon: def.icon,
     configFields: def.configFields,
+    projectionKey: def.projectionKey,
+    canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "action"),
+    handlerType: def.handlerType,
+    functionCall: def.functionCall,
     moduleId: def.moduleId,
   };
 }
@@ -127,20 +132,21 @@ export const enableTriggerForInstance = internalMutation({
   args: {
     instanceId: v.id("instances"),
     triggerId: v.string(),
-    moduleId: v.optional(v.id("moduleRepository")),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, triggerId, moduleId }) => {
+  handler: async (ctx, { instanceId, triggerId, createdByType, createdByRef }) => {
     const existing = await ctx.db
       .query("instanceTriggers")
       .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
       .first();
     if (existing) {
-      if (moduleId && existing.moduleId !== moduleId) {
-        await ctx.db.patch(existing._id, { moduleId });
+      if (createdByRef && existing.createdByRef !== createdByRef) {
+        await ctx.db.patch(existing._id, { createdByType, createdByRef });
       }
       return existing._id;
     }
-    return ctx.db.insert("instanceTriggers", { instanceId, triggerId, moduleId });
+    return ctx.db.insert("instanceTriggers", { instanceId, triggerId, createdByType, createdByRef });
   },
 });
 
@@ -164,20 +170,21 @@ export const enableActionForInstance = internalMutation({
   args: {
     instanceId: v.id("instances"),
     actionId: v.string(),
-    moduleId: v.optional(v.id("moduleRepository")),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, actionId, moduleId }) => {
+  handler: async (ctx, { instanceId, actionId, createdByType, createdByRef }) => {
     const existing = await ctx.db
       .query("instanceActions")
       .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
       .first();
     if (existing) {
-      if (moduleId && existing.moduleId !== moduleId) {
-        await ctx.db.patch(existing._id, { moduleId });
+      if (createdByRef && existing.createdByRef !== createdByRef) {
+        await ctx.db.patch(existing._id, { createdByType, createdByRef });
       }
       return existing._id;
     }
-    return ctx.db.insert("instanceActions", { instanceId, actionId, moduleId });
+    return ctx.db.insert("instanceActions", { instanceId, actionId, createdByType, createdByRef });
   },
 });
 
@@ -211,13 +218,7 @@ export const devEnableAllDefinitionsForInstance = internalMutation({
         .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", d.slug))
         .first();
       if (!existing) {
-        await ctx.db.insert("instanceTriggers", {
-          instanceId,
-          triggerId: d.slug,
-          moduleId: d.moduleId,
-        });
-      } else if (d.moduleId && existing.moduleId !== d.moduleId) {
-        await ctx.db.patch(existing._id, { moduleId: d.moduleId });
+        await ctx.db.insert("instanceTriggers", { instanceId, triggerId: d.slug });
       }
     }
 
@@ -228,13 +229,7 @@ export const devEnableAllDefinitionsForInstance = internalMutation({
         .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", d.slug))
         .first();
       if (!existing) {
-        await ctx.db.insert("instanceActions", {
-          instanceId,
-          actionId: d.slug,
-          moduleId: d.moduleId,
-        });
-      } else if (d.moduleId && existing.moduleId !== d.moduleId) {
-        await ctx.db.patch(existing._id, { moduleId: d.moduleId });
+        await ctx.db.insert("instanceActions", { instanceId, actionId: d.slug });
       }
     }
   },

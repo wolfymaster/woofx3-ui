@@ -28,7 +28,7 @@ recognized by `@woofx3/api/ui-schema`:
    ```
 
 2. **Object** — interpreted as `TriggerConfig` (or `ActionConfig`)
-   with `fields`, `supportsTiers`, `tierLabel`. Presentation
+   with `fields`, `allowVariants`, `color`, `icon`. Presentation
    overrides (`color`, `icon`) may appear at the top level **or**
    under a nested `ui` key; the UI checks both locations and prefers
    the top-level value when both are present.

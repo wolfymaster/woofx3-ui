@@ -1,16 +1,16 @@
-import { useState } from "react";
-import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { FileAudio, FileImage, FileVideo, Upload, X } from "lucide-react";
-import { type ConfigField, type TriggerConfigValues } from "@/lib/workflow-presets";
+import { useState } from "react";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
   type FieldDescriptor,
 } from "@/components/common/configuration-form";
-import { AssetLibraryModal } from "./asset-library-modal";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import type { ConfigField, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { Asset } from "@/types";
+import { AssetLibraryModal } from "./asset-library-modal";
 
 // ---------------------------------------------------------------------------
 // Media field — uses AssetLibraryModal, so it lives here as a custom renderer
@@ -106,6 +106,7 @@ interface TriggerConfigFormProps {
 
 const customRenderers: Record<string, CustomFieldRenderer> = {
   media: MediaFieldRenderer,
+  asset: MediaFieldRenderer,
 };
 
 export function TriggerConfigForm({ fields, values, onChange, className }: TriggerConfigFormProps) {

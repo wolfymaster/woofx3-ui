@@ -1,4 +1,3 @@
-
 export interface Module {
   id: string;
   name: string;
@@ -35,7 +34,7 @@ export interface ActionDefinition {
 export interface ParameterDefinition {
   id: string;
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'select' | 'multiselect' | 'file' | 'color' | 'json';
+  type: "string" | "number" | "boolean" | "select" | "multiselect" | "file" | "color" | "json";
   label: string;
   description?: string;
   required: boolean;
@@ -63,7 +62,7 @@ export interface Workflow {
 
 export interface WorkflowNode {
   id: string;
-  type: 'trigger' | 'action' | 'condition' | 'delay';
+  type: "trigger" | "action" | "condition" | "delay";
   moduleId: string;
   definitionId: string;
   position: { x: number; y: number };
@@ -88,7 +87,7 @@ export interface WorkflowEdge {
 export interface Asset {
   id: string;
   name: string;
-  type: 'image' | 'video' | 'audio' | 'font' | 'other';
+  type: "image" | "video" | "audio" | "font" | "other";
   mimeType: string;
   size: number;
   url: string;
@@ -110,9 +109,9 @@ export interface AssetFolder {
 
 export interface Scene {
   id: string;
+  engineSceneId: string;
   name: string;
   description?: string;
-  accountId: string;
   width: number;
   height: number;
   backgroundColor: string;
@@ -172,7 +171,7 @@ export interface ApiError {
   details?: Record<string, unknown>;
 }
 
-export type LoadingState = 'idle' | 'loading' | 'success' | 'error';
+export type LoadingState = "idle" | "loading" | "success" | "error";
 
 export interface NavigationItem {
   id: string;

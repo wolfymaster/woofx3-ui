@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
+import { parseConfigSchemaString } from "./lib/parseConfigSchema";
 import { canAccessAccount } from "./lib/teamAccess";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
@@ -264,19 +265,12 @@ function triggerUiFields(configSchema: string | undefined): {
   color: string;
   icon: string;
   configFields?: unknown[];
-  supportsTiers?: boolean;
-  tierLabel?: string;
 } {
-  const parsed = parseJsonSafe(configSchema);
-  const obj =
-    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  const src = obj.ui && typeof obj.ui === "object" ? (obj.ui as Record<string, unknown>) : obj;
+  const { fields, color, icon } = parseConfigSchemaString(configSchema);
   return {
-    color: typeof src.color === "string" ? src.color : DEFAULT_UI_COLOR,
-    icon: typeof src.icon === "string" ? src.icon : DEFAULT_TRIGGER_ICON,
-    configFields: Array.isArray(src.configFields) ? src.configFields : undefined,
-    supportsTiers: typeof src.supportsTiers === "boolean" ? src.supportsTiers : undefined,
-    tierLabel: typeof src.tierLabel === "string" ? src.tierLabel : undefined,
+    color: color ?? DEFAULT_UI_COLOR,
+    icon: icon ?? DEFAULT_TRIGGER_ICON,
+    configFields: fields.length > 0 ? fields : undefined,
   };
 }
 
@@ -333,8 +327,6 @@ export const reconcileTriggers = internalMutation({
         color: ui.color,
         icon: ui.icon,
         configFields: ui.configFields,
-        supportsTiers: ui.supportsTiers,
-        tierLabel: ui.tierLabel,
         allowVariants: snap.allowVariants,
         projectionKey: snap.projectionKey,
         moduleId,
@@ -354,14 +346,19 @@ export const reconcileTriggers = internalMutation({
         .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", snap.id))
         .first();
       if (existingInst) {
-        if (moduleId && existingInst.moduleId !== moduleId) {
-          await ctx.db.patch(existingInst._id, { moduleId, projectionKey: snap.projectionKey });
+        if (snap.createdByRef && existingInst.createdByRef !== snap.createdByRef) {
+          await ctx.db.patch(existingInst._id, {
+            createdByType: snap.createdByType,
+            createdByRef: snap.createdByRef,
+            projectionKey: snap.projectionKey,
+          });
         }
       } else {
         await ctx.db.insert("instanceTriggers", {
           instanceId,
           triggerId: snap.id,
-          moduleId,
+          createdByType: snap.createdByType,
+          createdByRef: snap.createdByRef,
           projectionKey: snap.projectionKey,
         });
       }
@@ -392,14 +389,11 @@ function actionUiFields(paramsSchema: string | undefined): {
   icon: string;
   configFields?: unknown[];
 } {
-  const parsed = parseJsonSafe(paramsSchema);
-  const obj =
-    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
-  const src = obj.ui && typeof obj.ui === "object" ? (obj.ui as Record<string, unknown>) : obj;
+  const { fields, color, icon } = parseConfigSchemaString(paramsSchema);
   return {
-    color: typeof src.color === "string" ? src.color : DEFAULT_UI_COLOR,
-    icon: typeof src.icon === "string" ? src.icon : DEFAULT_ACTION_ICON,
-    configFields: Array.isArray(src.configFields) ? src.configFields : undefined,
+    color: color ?? DEFAULT_UI_COLOR,
+    icon: icon ?? DEFAULT_ACTION_ICON,
+    configFields: fields.length > 0 ? fields : undefined,
   };
 }
 
@@ -424,6 +418,8 @@ export const reconcileActions = internalMutation({
         description: v.optional(v.string()),
         paramsSchema: v.optional(v.string()),
         projectionKey: v.optional(v.string()),
+        handlerType: v.optional(v.string()),
+        functionCall: v.optional(v.string()),
         createdByType: v.optional(v.string()),
         createdByRef: v.optional(v.string()),
       })
@@ -444,6 +440,7 @@ export const reconcileActions = internalMutation({
       }
 
       const ui = actionUiFields(snap.paramsSchema);
+      const handlerType = snap.handlerType?.trim() || (snap.functionCall?.trim() ? "function" : undefined);
       const defRow = {
         slug: snap.id,
         name: snap.name ?? snap.id,
@@ -453,6 +450,8 @@ export const reconcileActions = internalMutation({
         icon: ui.icon,
         configFields: ui.configFields,
         projectionKey: snap.projectionKey,
+        handlerType,
+        functionCall: snap.functionCall?.trim() || undefined,
         moduleId,
       };
       const existingDef = await ctx.db
@@ -470,14 +469,19 @@ export const reconcileActions = internalMutation({
         .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", snap.id))
         .first();
       if (existingInst) {
-        if (moduleId && existingInst.moduleId !== moduleId) {
-          await ctx.db.patch(existingInst._id, { moduleId, projectionKey: snap.projectionKey });
+        if (snap.createdByRef && existingInst.createdByRef !== snap.createdByRef) {
+          await ctx.db.patch(existingInst._id, {
+            createdByType: snap.createdByType,
+            createdByRef: snap.createdByRef,
+            projectionKey: snap.projectionKey,
+          });
         }
       } else {
         await ctx.db.insert("instanceActions", {
           instanceId,
           actionId: snap.id,
-          moduleId,
+          createdByType: snap.createdByType,
+          createdByRef: snap.createdByRef,
           projectionKey: snap.projectionKey,
         });
       }
@@ -500,16 +504,19 @@ export const reconcileActions = internalMutation({
 });
 
 /**
- * Reconcile `moduleWidgets` against a full snapshot from `getAvailableWidgets()`.
+ * Reconcile the widget definition catalog (`moduleWidgets`) AND per-instance
+ * placement (`instanceWidgets`) against a full snapshot from
+ * `getAvailableWidgets()`.
  *
- * `moduleWidgets` is a global table (no `instanceId`). Rows are upserted by
- * `widgetId`. Widgets whose module cannot be resolved in Convex are skipped
- * (the `MODULE_WIDGET_REGISTERED` webhook covers those when the module
- * installs). No rows are deleted — `MODULE_WIDGET_DEREGISTERED` webhooks
- * handle removal.
+ * Definitions are upserted by `widgetId`; `moduleId` is resolved only for
+ * module-sourced widgets (built-ins have none and are NOT skipped). Per-instance
+ * `instanceWidgets` rows are reconciled for this instance: rows whose `widgetId`
+ * disappears from the snapshot are deleted (the engine is source of truth for the
+ * instance's placeable set). Definition rows are never deleted here.
  */
 export const reconcileWidgets = internalMutation({
   args: {
+    instanceId: v.id("instances"),
     snapshots: v.array(
       v.object({
         id: v.string(),
@@ -531,10 +538,12 @@ export const reconcileWidgets = internalMutation({
       })
     ),
   },
-  handler: async (ctx, { snapshots }) => {
+  handler: async (ctx, { instanceId, snapshots }) => {
+    const snapshotIds = new Set(snapshots.map((s) => s.id));
     let processed = 0;
 
     for (const snap of snapshots) {
+      // Resolve moduleId only for module-sourced widgets; built-ins have none.
       let moduleId: Id<"moduleRepository"> | undefined;
       if (snap.createdByType === "MODULE" && snap.createdByRef) {
         const mod = await ctx.db
@@ -544,38 +553,57 @@ export const reconcileWidgets = internalMutation({
         moduleId = mod?._id;
       }
 
-      if (!moduleId) {
-        // moduleId is required on moduleWidgets; skip until the module installs via webhook
-        continue;
-      }
-
-      const existing = await ctx.db
+      const defRow = {
+        moduleId,
+        widgetId: snap.id,
+        name: snap.name,
+        directory: snap.directory,
+        description: snap.description,
+        createdByType: snap.createdByType,
+        createdByRef: snap.createdByRef,
+        alertTypes: snap.alertTypes,
+        settings: snap.settings,
+      };
+      const existingDef = await ctx.db
         .query("moduleWidgets")
         .withIndex("by_widget_id", (q) => q.eq("widgetId", snap.id))
         .first();
-      if (existing) {
-        await ctx.db.patch(existing._id, {
-          moduleId,
-          name: snap.name,
-          directory: snap.directory,
-          description: snap.description,
-          alertTypes: snap.alertTypes,
-          settings: snap.settings,
-        });
+      if (existingDef) {
+        await ctx.db.patch(existingDef._id, defRow);
       } else {
-        await ctx.db.insert("moduleWidgets", {
-          moduleId,
+        await ctx.db.insert("moduleWidgets", { ...defRow, createdAt: Date.now() });
+      }
+
+      const existingInst = await ctx.db
+        .query("instanceWidgets")
+        .withIndex("by_instance_widget", (q) => q.eq("instanceId", instanceId).eq("widgetId", snap.id))
+        .first();
+      if (!existingInst) {
+        await ctx.db.insert("instanceWidgets", {
+          instanceId,
           widgetId: snap.id,
-          name: snap.name,
-          directory: snap.directory,
-          description: snap.description,
-          alertTypes: snap.alertTypes,
-          settings: snap.settings,
-          createdAt: Date.now(),
+          createdByType: snap.createdByType,
+          createdByRef: snap.createdByRef,
+        });
+      } else if (existingInst.createdByRef !== snap.createdByRef) {
+        await ctx.db.patch(existingInst._id, {
+          createdByType: snap.createdByType,
+          createdByRef: snap.createdByRef,
         });
       }
 
       processed++;
+    }
+
+    // Drop instanceWidgets rows for this instance no longer present in the snapshot.
+    const liveInstRows = await ctx.db
+      .query("instanceWidgets")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const row of liveInstRows) {
+      if (!snapshotIds.has(row.widgetId)) {
+        await ctx.db.delete(row._id);
+      }
     }
 
     return { itemsProcessed: processed };

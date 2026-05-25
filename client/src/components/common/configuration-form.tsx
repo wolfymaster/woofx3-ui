@@ -1,18 +1,15 @@
-import { type ReactNode, useCallback, useMemo, useState } from "react";
-import { useQuery } from "convex/react";
 import { api } from "@convex/_generated/api";
+import type { InternalConfigFieldSource } from "@woofx3/api/ui-schema";
+import { useQuery } from "convex/react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { ConfigFieldDescription, ConfigFieldLabel } from "@/components/common/config-field-label";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { useFieldOptions } from "@/hooks/use-field-options";
 import { useInstance } from "@/hooks/use-instance";
 import { commandNameToSubjectSegment } from "@/lib/command-slug";
 import { cn } from "@/lib/utils";
@@ -35,6 +32,8 @@ export interface FieldDescriptor {
   defaultValue?: unknown;
   /** Hint rendered below the field. */
   hint?: string;
+  description?: string;
+  dataSchema?: string;
   /** Media subtype hint for media-type fields. */
   mediaType?: "image" | "audio" | "video";
   /** Allow arbitrary extra properties for custom field renderers. */
@@ -131,9 +130,7 @@ function RangeFieldRenderer({ field, value, onChange }: FieldRendererProps) {
               min={field.min}
               max={field.max}
               value={configValue.min ?? ""}
-              onChange={(e) =>
-                onChange({ ...configValue, min: e.target.value ? Number(e.target.value) : field.min })
-              }
+              onChange={(e) => onChange({ ...configValue, min: e.target.value ? Number(e.target.value) : field.min })}
               placeholder="Min"
               data-testid={`input-${field.id}-min`}
             />
@@ -145,9 +142,7 @@ function RangeFieldRenderer({ field, value, onChange }: FieldRendererProps) {
               min={field.min}
               max={field.max}
               value={configValue.max ?? ""}
-              onChange={(e) =>
-                onChange({ ...configValue, max: e.target.value ? Number(e.target.value) : field.max })
-              }
+              onChange={(e) => onChange({ ...configValue, max: e.target.value ? Number(e.target.value) : field.max })}
               placeholder="Max"
               data-testid={`input-${field.id}-max`}
             />
@@ -161,9 +156,7 @@ function RangeFieldRenderer({ field, value, onChange }: FieldRendererProps) {
             min={field.min}
             max={field.max}
             value={configValue.value ?? ""}
-            onChange={(e) =>
-              onChange({ ...configValue, value: e.target.value ? Number(e.target.value) : field.min })
-            }
+            onChange={(e) => onChange({ ...configValue, value: e.target.value ? Number(e.target.value) : field.min })}
             placeholder={field.placeholder}
             className="flex-1"
             data-testid={`input-${field.id}`}
@@ -257,9 +250,7 @@ function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererPr
       // the whole dropdown; the helper throws on NATS-reserved chars.
       try {
         out.push({ value: commandNameToSubjectSegment(cmd.command), label: cmd.command });
-      } catch {
-        continue;
-      }
+      } catch {}
     }
     return out;
   }, [commands]);
@@ -307,6 +298,73 @@ function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererPr
   );
 }
 
+function InternalSelectFieldRenderer({
+  field,
+  value,
+  onChange,
+  source,
+}: FieldRendererProps & { source: InternalConfigFieldSource }) {
+  const { instance } = useInstance();
+  const { options, loading, empty } = useFieldOptions(instance?._id, source);
+
+  const disabled = loading || empty;
+  let placeholder: string;
+  if (loading) {
+    placeholder = "Loading options...";
+  } else if (empty) {
+    placeholder = "No options available";
+  } else {
+    placeholder = field.placeholder ?? `Select ${field.label.toLowerCase()}...`;
+  }
+
+  return (
+    <div className="space-y-2">
+      <ConfigFieldLabel
+        label={field.label}
+        required={field.required}
+        hint={field.hint as string | undefined}
+        dataSchema={field.dataSchema as string | undefined}
+      />
+      <Select value={(value as string) ?? ""} onValueChange={onChange} disabled={disabled}>
+        <SelectTrigger data-testid={`select-${field.id}`}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <ConfigFieldDescription description={field.description as string | undefined} />
+    </div>
+  );
+}
+
+function ColorFieldRenderer({ field, value, onChange }: FieldRendererProps) {
+  return (
+    <div className="space-y-2">
+      <ConfigFieldLabel
+        htmlFor={field.id}
+        label={field.label}
+        required={field.required}
+        hint={field.hint as string | undefined}
+        dataSchema={field.dataSchema as string | undefined}
+      />
+      <Input
+        id={field.id}
+        type="color"
+        value={(value as string) || "#000000"}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 w-20"
+        data-testid={`input-${field.id}`}
+      />
+      <ConfigFieldDescription description={field.description as string | undefined} />
+    </div>
+  );
+}
+
 function ToggleFieldRenderer({ field, value, onChange }: FieldRendererProps) {
   return (
     <div className="space-y-1">
@@ -335,6 +393,7 @@ const builtinRenderers: Record<string, React.ComponentType<FieldRendererProps>> 
   textarea: TextareaFieldRenderer,
   select: SelectFieldRenderer,
   toggle: ToggleFieldRenderer,
+  color: ColorFieldRenderer,
 };
 
 // ---------------------------------------------------------------------------
@@ -400,7 +459,7 @@ export function ConfigurationForm({
       setValidationError(null);
       onChange({ ...values, [fieldId]: value });
     },
-    [values, onChange],
+    [values, onChange]
   );
 
   const handleSubmit = useCallback(() => {
@@ -433,24 +492,32 @@ export function ConfigurationForm({
         const source = (field as { source?: { kind?: unknown } }).source;
         if (source && source.kind === "commands") {
           return (
-            <CommandsSelectFieldRenderer
+            <CommandsSelectFieldRenderer key={field.id} field={field} value={fieldValue} onChange={changeHandler} />
+          );
+        }
+        if (source && source.kind === "internal") {
+          return (
+            <InternalSelectFieldRenderer
               key={field.id}
               field={field}
               value={fieldValue}
               onChange={changeHandler}
+              source={source as InternalConfigFieldSource}
             />
           );
         }
 
-        // Check custom renderers first
-        if (customRenderers?.[field.type]) {
+        const rendererType = field.type === "asset" ? "media" : field.type;
+        if (customRenderers?.[rendererType]) {
           return (
-            <div key={field.id}>{customRenderers[field.type]({ field, value: fieldValue, onChange: changeHandler })}</div>
+            <div key={field.id}>
+              {customRenderers[rendererType]({ field, value: fieldValue, onChange: changeHandler })}
+            </div>
           );
         }
 
-        // Fallback to builtins
-        const BuiltinRenderer = builtinRenderers[field.type];
+        const BuiltinRenderer =
+          builtinRenderers[field.type] ?? (field.type === "asset" ? builtinRenderers.media : undefined);
         if (BuiltinRenderer) {
           return <BuiltinRenderer key={field.id} field={field} value={fieldValue} onChange={changeHandler} />;
         }

@@ -31,6 +31,7 @@ import StepListEditor from "@/components/workflows/step-list-editor";
 import { type WorkflowListItem, WorkflowsSidebar } from "@/components/workflows/workflows-sidebar";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 
 type WorkflowRow = Doc<"workflows">;
 
@@ -128,7 +129,7 @@ export default function Workflows() {
       await updateFromDefinition({
         instanceId: instance._id as Id<"instances">,
         engineWorkflowId: selectedWorkflow.engineWorkflowId,
-        definition: currentDefinition,
+        definition: escapeDollarKeys(currentDefinition) as WorkflowDefinition,
       });
       toast({ title: "Workflow saved" });
     } catch (err) {
@@ -168,11 +169,11 @@ export default function Workflows() {
       return;
     }
     try {
-      const def = selectedWorkflowData.definition as WorkflowDefinition;
+      const def = unescapeDollarKeys(selectedWorkflowData.definition) as WorkflowDefinition;
       await updateFromDefinition({
         instanceId: instance._id as Id<"instances">,
         engineWorkflowId: selectedWorkflow.engineWorkflowId,
-        definition: { ...def, name: trimmed },
+        definition: escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition,
       });
       setSelectedWorkflow({ ...selectedWorkflow, name: trimmed });
       toast({ title: "Workflow name updated" });

@@ -1,82 +1,14 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { useMemo } from "react";
-import type { ConfigFieldSource } from "@woofx3/api/ui-schema";
 import { useInstance } from "@/hooks/use-instance";
+import { parseConfigFields } from "@/lib/parse-config-fields";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
-import type { ActionPreset, ConfigField, FieldType, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
-
-const FIELD_TYPES: FieldType[] = ["number", "range", "text", "select", "media", "toggle"];
-
-function isFieldType(value: unknown): value is FieldType {
-  return typeof value === "string" && (FIELD_TYPES as readonly string[]).includes(value);
-}
-
-// Narrow a raw object to a ConfigFieldSource discriminated-union member.
-// Unknown kinds are dropped rather than passed through so the renderer never
-// has to guard against partially-typed values.
-function parseConfigFieldSource(raw: unknown): ConfigFieldSource | undefined {
-  if (!raw || typeof raw !== "object") {
-    return undefined;
-  }
-  const kind = (raw as { kind?: unknown }).kind;
-  if (kind === "commands") {
-    return { kind: "commands" };
-  }
-  return undefined;
-}
-
-function normalizeConfigFields(raw: unknown): ConfigField[] {
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  const out: ConfigField[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== "object") {
-      continue;
-    }
-    const o = item as Record<string, unknown>;
-    const id = typeof o.id === "string" ? o.id : null;
-    const label = typeof o.label === "string" ? o.label : null;
-    const type = o.type;
-    if (!id || !label || !isFieldType(type)) {
-      continue;
-    }
-    const field: ConfigField = {
-      id,
-      label,
-      type,
-      required: o.required === true,
-      placeholder: typeof o.placeholder === "string" ? o.placeholder : undefined,
-      unit: typeof o.unit === "string" ? o.unit : undefined,
-      min: typeof o.min === "number" ? o.min : undefined,
-      max: typeof o.max === "number" ? o.max : undefined,
-      defaultValue: o.defaultValue,
-      mediaType:
-        o.mediaType === "image" || o.mediaType === "audio" || o.mediaType === "video" ? o.mediaType : undefined,
-    };
-    if (Array.isArray(o.options)) {
-      field.options = o.options
-        .filter(
-          (opt): opt is { value: string; label: string } =>
-            !!opt &&
-            typeof opt === "object" &&
-            typeof (opt as { value?: unknown }).value === "string" &&
-            typeof (opt as { label?: unknown }).label === "string"
-        )
-        .map((opt) => ({ value: opt.value, label: opt.label }));
-    }
-    const source = parseConfigFieldSource(o.source);
-    if (source) {
-      field.source = source;
-    }
-    out.push(field);
-  }
-  return out;
-}
+import type { ActionPreset, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
 
 type CatalogTriggerRow = {
   id: string;
+  canonicalRef?: string;
   name: string;
   description: string;
   category: string;
@@ -85,12 +17,13 @@ type CatalogTriggerRow = {
   event?: string;
   allowVariants?: boolean;
   configFields?: unknown;
-  supportsTiers?: boolean;
-  tierLabel?: string;
 };
 
 type CatalogActionRow = {
   id: string;
+  canonicalRef?: string;
+  handlerType?: string;
+  functionCall?: string;
   name: string;
   description: string;
   category: string;
@@ -101,17 +34,17 @@ type CatalogActionRow = {
 
 function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
-  const fields = normalizeConfigFields(row.configFields);
+  const fields = parseConfigFields(row.configFields);
   let config: TriggerConfig | undefined;
-  if (fields.length > 0 || row.supportsTiers) {
+  if (fields.length > 0 || row.allowVariants) {
     config = {
       fields,
-      supportsTiers: row.supportsTiers,
-      tierLabel: typeof row.tierLabel === "string" ? row.tierLabel : undefined,
+      allowVariants: row.allowVariants === true,
     };
   }
   return {
     id: row.id,
+    canonicalRef: row.canonicalRef,
     name: row.name,
     description: row.description,
     icon,
@@ -124,9 +57,13 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
 
 function toActionPreset(row: CatalogActionRow): ActionPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
-  const fields = normalizeConfigFields(row.configFields);
+  const fields = parseConfigFields(row.configFields);
+  const handlerType = row.handlerType?.trim() || (row.functionCall?.trim() ? "function" : undefined);
   return {
     id: row.id,
+    canonicalRef: row.canonicalRef,
+    handlerType,
+    functionCall: row.functionCall?.trim() || undefined,
     name: row.name,
     description: row.description,
     icon,

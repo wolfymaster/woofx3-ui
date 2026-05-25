@@ -2,25 +2,38 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import { parseConfigSchemaString } from "./lib/parseConfigSchema";
+
+// Provenance from the engine: createdByRef == the module's composite moduleKey
+// (or "builtin" for SYSTEM resources). Drives cascade-on-delete; replaces moduleId.
+type Provenance = { createdByType?: string; createdByRef?: string };
 
 async function enableTriggerForInstance(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   triggerId: string,
-  moduleId: Id<"moduleRepository"> | undefined
+  provenance: Provenance
 ) {
   const existing = await ctx.db
     .query("instanceTriggers")
     .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId).eq("triggerId", triggerId))
     .first();
   if (!existing) {
-    await ctx.db.insert("instanceTriggers", { instanceId, triggerId, moduleId });
+    await ctx.db.insert("instanceTriggers", {
+      instanceId,
+      triggerId,
+      createdByType: provenance.createdByType,
+      createdByRef: provenance.createdByRef,
+    });
     return;
   }
-  // Patch moduleId when a later webhook supplies it for a row that was previously
-  // written without one (race: MODULE_TRIGGER_REGISTERED can land before MODULE_INSTALLED).
-  if (moduleId && existing.moduleId !== moduleId) {
-    await ctx.db.patch(existing._id, { moduleId });
+  // Backfill provenance when a later webhook supplies it for a row written without
+  // it (race: MODULE_TRIGGER_REGISTERED can land before MODULE_INSTALLED).
+  if (provenance.createdByRef && existing.createdByRef !== provenance.createdByRef) {
+    await ctx.db.patch(existing._id, {
+      createdByType: provenance.createdByType,
+      createdByRef: provenance.createdByRef,
+    });
   }
 }
 
@@ -28,18 +41,26 @@ async function enableActionForInstance(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   actionId: string,
-  moduleId: Id<"moduleRepository"> | undefined
+  provenance: Provenance
 ) {
   const existing = await ctx.db
     .query("instanceActions")
     .withIndex("by_instance_action", (q) => q.eq("instanceId", instanceId).eq("actionId", actionId))
     .first();
   if (!existing) {
-    await ctx.db.insert("instanceActions", { instanceId, actionId, moduleId });
+    await ctx.db.insert("instanceActions", {
+      instanceId,
+      actionId,
+      createdByType: provenance.createdByType,
+      createdByRef: provenance.createdByRef,
+    });
     return;
   }
-  if (moduleId && existing.moduleId !== moduleId) {
-    await ctx.db.patch(existing._id, { moduleId });
+  if (provenance.createdByRef && existing.createdByRef !== provenance.createdByRef) {
+    await ctx.db.patch(existing._id, {
+      createdByType: provenance.createdByType,
+      createdByRef: provenance.createdByRef,
+    });
   }
 }
 
@@ -91,6 +112,7 @@ const actionValidator = v.object({
   name: v.optional(v.string()),
   description: v.optional(v.string()),
   call: v.optional(v.string()),
+  type: v.optional(v.string()),
   paramsSchema: v.optional(v.string()),
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
@@ -113,8 +135,6 @@ type TriggerUiFields = {
   color: string;
   icon: string;
   configFields?: unknown[];
-  supportsTiers?: boolean;
-  tierLabel?: string;
 };
 
 type ActionUiFields = {
@@ -140,41 +160,21 @@ function parseJsonSafe(raw: string | undefined): unknown {
  * top-level keys (or a nested `ui` object). Missing keys are left `undefined`
  * so callers can layer their own defaults.
  */
-function pickUi(parsed: unknown): Partial<TriggerUiFields> {
-  if (Array.isArray(parsed)) {
-    return { configFields: parsed };
-  }
-  if (!parsed || typeof parsed !== "object") {
-    return {};
-  }
-  const obj = parsed as Record<string, unknown>;
-  const nested = obj.ui && typeof obj.ui === "object" ? (obj.ui as Record<string, unknown>) : obj;
-  return {
-    color: typeof nested.color === "string" ? nested.color : undefined,
-    icon: typeof nested.icon === "string" ? nested.icon : undefined,
-    configFields: Array.isArray(nested.configFields) ? nested.configFields : undefined,
-    supportsTiers: typeof nested.supportsTiers === "boolean" ? nested.supportsTiers : undefined,
-    tierLabel: typeof nested.tierLabel === "string" ? nested.tierLabel : undefined,
-  };
-}
-
 function triggerUi(configSchema: string | undefined): TriggerUiFields {
-  const picked = pickUi(parseJsonSafe(configSchema));
+  const { fields, color, icon } = parseConfigSchemaString(configSchema);
   return {
-    color: picked.color ?? DEFAULT_UI_COLOR,
-    icon: picked.icon ?? DEFAULT_TRIGGER_ICON,
-    configFields: picked.configFields,
-    supportsTiers: picked.supportsTiers,
-    tierLabel: picked.tierLabel,
+    color: color ?? DEFAULT_UI_COLOR,
+    icon: icon ?? DEFAULT_TRIGGER_ICON,
+    configFields: fields.length > 0 ? fields : undefined,
   };
 }
 
 function actionUi(paramsSchema: string | undefined): ActionUiFields {
-  const picked = pickUi(parseJsonSafe(paramsSchema));
+  const { fields, color, icon } = parseConfigSchemaString(paramsSchema);
   return {
-    color: picked.color ?? DEFAULT_UI_COLOR,
-    icon: picked.icon ?? DEFAULT_ACTION_ICON,
-    configFields: picked.configFields,
+    color: color ?? DEFAULT_UI_COLOR,
+    icon: icon ?? DEFAULT_ACTION_ICON,
+    configFields: fields.length > 0 ? fields : undefined,
   };
 }
 
@@ -193,6 +193,8 @@ type EngineAction = {
   id: string;
   name?: string;
   description?: string;
+  call?: string;
+  type?: string;
   paramsSchema?: string;
   projectionKey?: string;
 };
@@ -208,8 +210,6 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
     color: ui.color,
     icon: ui.icon,
     configFields: ui.configFields,
-    supportsTiers: ui.supportsTiers,
-    tierLabel: ui.tierLabel,
     allowVariants: t.allowVariants,
     projectionKey: t.projectionKey,
     moduleId,
@@ -218,6 +218,7 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
 
 function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | undefined) {
   const ui = actionUi(a.paramsSchema);
+  const handlerType = a.type?.trim() || (a.call?.trim() ? "function" : undefined);
   return {
     slug: a.id,
     name: a.name ?? a.id,
@@ -227,6 +228,8 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
     icon: ui.icon,
     configFields: ui.configFields,
     projectionKey: a.projectionKey,
+    handlerType,
+    functionCall: a.call?.trim() || undefined,
     moduleId,
   };
 }
@@ -293,7 +296,10 @@ export const processModuleInstalled = internalMutation({
       } else {
         await ctx.db.insert("triggerDefinitions", row);
       }
-      await enableTriggerForInstance(ctx, instanceId, row.slug, moduleId);
+      await enableTriggerForInstance(ctx, instanceId, row.slug, {
+        createdByType: trigger.createdByType,
+        createdByRef: trigger.createdByRef,
+      });
     }
 
     for (const action of actions) {
@@ -307,7 +313,10 @@ export const processModuleInstalled = internalMutation({
       } else {
         await ctx.db.insert("actionDefinitions", row);
       }
-      await enableActionForInstance(ctx, instanceId, row.slug, moduleId);
+      await enableActionForInstance(ctx, instanceId, row.slug, {
+        createdByType: action.createdByType,
+        createdByRef: action.createdByRef,
+      });
     }
   },
 });
@@ -383,7 +392,10 @@ export const processRegisteredDefinitions = internalMutation({
       } else {
         await ctx.db.insert("triggerDefinitions", row);
       }
-      await enableTriggerForInstance(ctx, instanceId, row.slug, moduleId);
+      await enableTriggerForInstance(ctx, instanceId, row.slug, {
+        createdByType: trigger.createdByType,
+        createdByRef: trigger.createdByRef,
+      });
     }
 
     for (const action of actions) {
@@ -397,7 +409,10 @@ export const processRegisteredDefinitions = internalMutation({
       } else {
         await ctx.db.insert("actionDefinitions", row);
       }
-      await enableActionForInstance(ctx, instanceId, row.slug, moduleId);
+      await enableActionForInstance(ctx, instanceId, row.slug, {
+        createdByType: action.createdByType,
+        createdByRef: action.createdByRef,
+      });
     }
   },
 });
@@ -457,22 +472,29 @@ export const processModuleDeleted = internalMutation({
         await ctx.storage.delete(record.archiveKey as Id<"_storage">);
       }
 
-      // Authoritative cleanup: walk the (instance, module) join rows directly.
-      // This catches enablements even when the corresponding triggerDefinitions
-      // row was inserted with a stale or missing moduleId (e.g. registration
-      // webhook landed before the moduleRepository record existed).
+      // Authoritative cleanup: walk the per-instance join rows by provenance.
+      // createdByRef == the module's composite moduleKey == correlationKey, so this
+      // catches every enablement for this module regardless of catalog moduleId
+      // races. Built-ins (createdByRef "builtin") are never matched, so they survive.
       const enabledTriggerRows = await ctx.db
         .query("instanceTriggers")
-        .withIndex("by_instance_module", (q) => q.eq("instanceId", instanceId).eq("moduleId", record._id))
+        .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", correlationKey))
         .collect();
       const enabledActionRows = await ctx.db
         .query("instanceActions")
-        .withIndex("by_instance_module", (q) => q.eq("instanceId", instanceId).eq("moduleId", record._id))
+        .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", correlationKey))
+        .collect();
+      const enabledWidgetRows = await ctx.db
+        .query("instanceWidgets")
+        .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", correlationKey))
         .collect();
       for (const row of enabledTriggerRows) {
         await ctx.db.delete(row._id);
       }
       for (const row of enabledActionRows) {
+        await ctx.db.delete(row._id);
+      }
+      for (const row of enabledWidgetRows) {
         await ctx.db.delete(row._id);
       }
 
@@ -492,6 +514,13 @@ export const processModuleDeleted = internalMutation({
         .collect();
       for (const action of actions) {
         await ctx.db.delete(action._id);
+      }
+      const widgetDefs = await ctx.db
+        .query("moduleWidgets")
+        .withIndex("by_module", (q) => q.eq("moduleId", record._id))
+        .collect();
+      for (const widget of widgetDefs) {
+        await ctx.db.delete(widget._id);
       }
 
       await ctx.runMutation(internal.moduleFunctions.cascadeOnModuleDelete, {

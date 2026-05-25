@@ -1,12 +1,8 @@
-import type { ConditionConfig, TaskDefinition, WorkflowDefinition } from "@woofx3/api";
-import type {
-  ActionPreset,
-  ConfigField,
-  ConfigValue,
-  TierConfig,
-  TriggerConfigValues,
-  TriggerPreset,
-} from "./workflow-presets";
+import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
+import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { TaskDefinition, TriggerConfig as WorkflowTriggerConfig } from "@woofx3/api/workflow-definition";
+import { isCommandsSource } from "@/lib/parse-config-fields";
+import type { ActionPreset, ConfigValue, TriggerConfigValues, TriggerPreset, TriggerVariant } from "./workflow-presets";
 
 type TriggerWithEvent = TriggerPreset & { event?: string };
 
@@ -17,132 +13,161 @@ function triggerBaseEvent(t: TriggerWithEvent): string {
   return t.event;
 }
 
-// Parameterized triggers expose a ConfigField with a dynamic `source` — the
-// picked value is appended to the base event, yielding the concrete NATS
-// subject the engine will subscribe to (e.g. `chat.command.hello`). The rule
-// is intentionally generic: any single dynamic-source field works, so future
-// triggers can reuse the pattern without special-casing the builder.
-function assembleEventType(trigger: TriggerWithEvent, config: TriggerConfigValues): string {
-  const base = triggerBaseEvent(trigger);
-  const fields: ConfigField[] = trigger.config?.fields ?? [];
-  const dynamic = fields.filter((f) => f.source !== undefined);
-  if (dynamic.length === 0) {
-    return base;
-  }
-  if (dynamic.length > 1) {
-    throw new Error(`trigger "${trigger.id}": multiple dynamic-source fields not yet supported`);
-  }
-  const field = dynamic[0];
-  const value = config[field.id];
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`trigger "${trigger.id}": config field "${field.id}" missing or not a string`);
-  }
-  return `${base}.${value}`;
+function commandsSourceFields(fields: ConfigField[]): ConfigField[] {
+  return fields.filter((f) => isCommandsSource(f));
 }
 
-function configValuesToConditions(values: TriggerConfigValues, trigger: TriggerWithEvent): ConditionConfig[] {
-  // Preset trigger config fields that aren't "amount" are used as trigger-level
-  // conditions. Amount is handled per-tier via buildTieredDefinition. Dynamic-
-  // source fields are consumed by assembleEventType to build the subject, so
-  // they must not also appear as payload conditions.
-  const fields: ConfigField[] = trigger.config?.fields ?? [];
-  const dynamicIds = new Set(fields.filter((f) => f.source !== undefined).map((f) => f.id));
+function assembleEventType(trigger: TriggerWithEvent, config: TriggerConfigValues): string {
+  const base = triggerBaseEvent(trigger);
+  const commandFields = commandsSourceFields(trigger.config?.fields ?? []);
+  if (commandFields.length === 0) {
+    return base;
+  }
+  const parts: string[] = [base];
+  for (const field of commandFields) {
+    const value = config[field.id];
+    if (typeof value !== "string" || value.length === 0) {
+      throw new Error(`trigger "${trigger.id}": config field "${field.id}" missing or not a string`);
+    }
+    parts.push(value);
+  }
+  return parts.join(".");
+}
+
+export function fieldValuesToConditions(fields: ConfigField[], values: TriggerConfigValues): ConditionConfig[] {
   const out: ConditionConfig[] = [];
-  for (const [key, raw] of Object.entries(values)) {
-    if (key === "amount") {
+  for (const field of fields) {
+    if (isCommandsSource(field)) {
       continue;
     }
-    if (dynamicIds.has(key)) {
-      continue;
-    }
+    const raw = values[field.id];
     if (raw === null || raw === undefined || raw === "") {
       continue;
     }
+    if (field.type === "range" && typeof raw === "object" && "type" in raw) {
+      const cv = raw as ConfigValue;
+      const path = field.eventPath ?? field.id;
+      if (cv.type === "range" && cv.min !== undefined && cv.max !== undefined) {
+        out.push({
+          field: `\${trigger.data.${path}}`,
+          operator: "between",
+          value: [cv.min, cv.max],
+        });
+      } else if (cv.type === "single" && cv.value !== undefined) {
+        out.push({
+          field: `\${trigger.data.${path}}`,
+          operator: field.operator ?? "eq",
+          value: cv.value,
+        });
+      }
+      continue;
+    }
+    const path = field.eventPath ?? field.id;
     out.push({
-      field: `\${trigger.data.${key}}`,
-      operator: "eq",
+      field: `\${trigger.data.${path}}`,
+      operator: field.operator ?? "eq",
       value: raw as unknown,
     });
   }
   return out;
 }
 
+function buildTriggerBlock(
+  trigger: TriggerWithEvent,
+  values: TriggerConfigValues,
+  triggerRef?: string
+): WorkflowTriggerConfig {
+  const block: WorkflowTriggerConfig & { $ref?: string } = {
+    type: "event",
+    event: assembleEventType(trigger, values),
+    conditions: fieldValuesToConditions(trigger.config?.fields ?? [], values),
+  };
+  if (triggerRef) {
+    block.$ref = triggerRef;
+  }
+  return block;
+}
+
+/** Engine task shape includes graph metadata and function dispatch fields. */
+type WorkflowActionTask = TaskDefinition & { $ref?: string; function?: string };
+
+function buildActionTask(
+  action: ActionPreset,
+  parameters: TriggerConfigValues,
+  taskId = "action-1"
+): WorkflowActionTask {
+  const handlerType = action.handlerType ?? (action.functionCall ? "function" : undefined);
+  if (!handlerType) {
+    throw new Error(
+      `action "${action.name}" (${action.id}) is missing handlerType — re-sync the catalog or reinstall the module`
+    );
+  }
+  const task: WorkflowActionTask = {
+    id: taskId,
+    type: "action",
+    action: handlerType,
+    parameters: { ...parameters },
+  };
+  if (action.functionCall) {
+    task.function = action.functionCall;
+  }
+  if (action.canonicalRef) {
+    task.$ref = action.canonicalRef;
+  }
+  return task;
+}
+
+function resolveTriggerRef(trigger: TriggerWithEvent, triggerRef?: string): string | undefined {
+  return triggerRef ?? trigger.canonicalRef;
+}
+
 export function buildDefinitionFromPresets(
   trigger: TriggerWithEvent,
   action: ActionPreset,
   triggerConfig: TriggerConfigValues,
-  actionConfig: TriggerConfigValues
+  actionConfig: TriggerConfigValues,
+  triggerRef?: string
 ): Omit<WorkflowDefinition, "id"> {
   return {
     name: `${trigger.name} → ${action.name}`,
     description: `When ${trigger.description.toLowerCase()}, ${action.description.toLowerCase()}.`,
-    trigger: {
-      type: "event",
-      event: assembleEventType(trigger, triggerConfig),
-      conditions: configValuesToConditions(triggerConfig, trigger),
-    },
-    tasks: [
-      {
-        id: "action-1",
-        type: "action",
-        action: action.id,
-        parameters: { ...actionConfig },
-      },
-    ],
+    trigger: buildTriggerBlock(trigger, triggerConfig, resolveTriggerRef(trigger, triggerRef)),
+    tasks: [buildActionTask(action, actionConfig)],
   };
 }
 
-function amountToCondition(amount: ConfigValue | undefined): ConditionConfig | null {
-  if (!amount) {
-    return null;
+export function buildDefinitionForVariant(
+  trigger: TriggerWithEvent,
+  variant: TriggerVariant,
+  triggerRef?: string
+): Omit<WorkflowDefinition, "id"> {
+  if (!variant.action) {
+    throw new Error("variant action is required");
   }
-  if (amount.type === "single" && amount.value !== undefined) {
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: canonical engine selector syntax
-    return { field: "${trigger.data.amount}", operator: "eq", value: amount.value };
-  }
-  if (amount.type === "range" && amount.min !== undefined && amount.max !== undefined) {
-    return {
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: canonical engine selector syntax
-      field: "${trigger.data.amount}",
-      operator: "between",
-      value: [amount.min, amount.max],
-    };
-  }
-  return null;
-}
-
-export function buildTieredDefinition(trigger: TriggerWithEvent, tiers: TierConfig[]): Omit<WorkflowDefinition, "id"> {
-  const tasks: TaskDefinition[] = [];
-  tiers.forEach((tier, i) => {
-    if (!tier.action) {
-      return;
-    }
-    const checkId = `tier-${i + 1}-check`;
-    const actionId = `tier-${i + 1}-action`;
-    const cond = amountToCondition(tier.values.amount as ConfigValue | undefined);
-    tasks.push({
-      id: checkId,
-      type: "condition",
-      conditions: cond ? [cond] : [],
-      onTrue: [actionId],
-    });
-    tasks.push({
-      id: actionId,
-      type: "action",
-      action: tier.action.id,
-      dependsOn: [checkId],
-      parameters: { ...tier.actionConfig },
-    });
-  });
-
-  // Tiered triggers share a single subject across all variants, so the
-  // dynamic-source value is pulled from the first tier's config; picking any
-  // tier would yield the same subject.
-  const firstTierValues = tiers[0]?.values ?? {};
+  const workflowName = variant.displayName.trim()
+    ? `${variant.displayName} → ${variant.action.name}`
+    : `${trigger.name} → ${variant.action.name}`;
   return {
-    name: `${trigger.name} — tiered`,
-    description: `Multi-tier ${trigger.name.toLowerCase()} automation.`,
-    trigger: { type: "event", event: assembleEventType(trigger, firstTierValues), conditions: [] },
-    tasks,
+    name: workflowName,
+    description: `When ${trigger.description.toLowerCase()}, ${variant.action.description.toLowerCase()}.`,
+    trigger: buildTriggerBlock(trigger, variant.values, resolveTriggerRef(trigger, triggerRef)),
+    tasks: [buildActionTask(variant.action, variant.actionConfig)],
   };
+}
+
+export function buildDefinitionsForVariants(
+  trigger: TriggerWithEvent,
+  variants: TriggerVariant[],
+  triggerRef?: string
+): Omit<WorkflowDefinition, "id">[] {
+  return variants.filter((v) => v.action).map((v) => buildDefinitionForVariant(trigger, v, triggerRef));
+}
+
+/** @deprecated Use buildDefinitionsForVariants — one workflow per variant with trigger.conditions */
+export function buildTieredDefinition(
+  trigger: TriggerWithEvent,
+  variants: TriggerVariant[],
+  triggerRef?: string
+): Omit<WorkflowDefinition, "id">[] {
+  return buildDefinitionsForVariants(trigger, variants, triggerRef);
 }

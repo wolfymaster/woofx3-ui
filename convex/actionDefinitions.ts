@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { query, internalMutation } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 
 export const list = query({
   args: {},
@@ -28,6 +28,8 @@ export const upsert = internalMutation({
     icon: v.string(),
     configFields: v.optional(v.array(v.any())),
     projectionKey: v.optional(v.string()),
+    handlerType: v.optional(v.string()),
+    functionCall: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
   },
   handler: async (ctx, args) => {

@@ -1,5 +1,43 @@
 import { v } from "convex/values";
-import { internalMutation, mutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { internalMutation, type MutationCtx, mutation, query } from "./_generated/server";
+
+type WidgetProvenance = {
+  createdByType?: string;
+  createdByRef?: string;
+  projectionKey?: string;
+};
+
+// Per-instance placement enablement (mirrors enableFunctionForInstance). Upserts
+// the instanceWidgets join row and backfills provenance onto an existing row.
+async function enableWidgetForInstance(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  widgetId: string,
+  provenance: WidgetProvenance
+) {
+  const existing = await ctx.db
+    .query("instanceWidgets")
+    .withIndex("by_instance_widget", (q) => q.eq("instanceId", instanceId).eq("widgetId", widgetId))
+    .first();
+  if (!existing) {
+    await ctx.db.insert("instanceWidgets", {
+      instanceId,
+      widgetId,
+      createdByType: provenance.createdByType,
+      createdByRef: provenance.createdByRef,
+      projectionKey: provenance.projectionKey,
+    });
+    return;
+  }
+  if (provenance.createdByRef && existing.createdByRef !== provenance.createdByRef) {
+    await ctx.db.patch(existing._id, {
+      createdByType: provenance.createdByType,
+      createdByRef: provenance.createdByRef,
+      projectionKey: provenance.projectionKey,
+    });
+  }
+}
 
 export const list = query({
   args: {},
@@ -93,10 +131,16 @@ export const unregister = internalMutation({
 
 export const registerFromWebhook = internalMutation({
   args: {
+    // Present from the MODULE_WIDGET_REGISTERED webhook so the widget is placed
+    // for the delivering instance. The engine-sync reconcile also passes it.
+    instanceId: v.optional(v.id("instances")),
     widgetId: v.string(),
     name: v.string(),
     directory: v.string(),
     description: v.optional(v.string()),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
+    projectionKey: v.optional(v.string()),
     alertTypes: v.array(v.string()),
     settings: v.array(
       v.object({
@@ -116,29 +160,44 @@ export const registerFromWebhook = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
+    // Resolve moduleId only for module-sourced widgets (built-ins have none).
+    let moduleId: Id<"moduleRepository"> | undefined;
+    if (args.createdByType === "MODULE" && args.createdByRef) {
+      const mod = await ctx.db
+        .query("moduleRepository")
+        .withIndex("by_module_key", (q) => q.eq("moduleKey", args.createdByRef as string))
+        .first();
+      moduleId = mod?._id;
+    }
+
+    const def = {
+      moduleId,
+      widgetId: args.widgetId,
+      name: args.name,
+      directory: args.directory,
+      description: args.description,
+      createdByType: args.createdByType,
+      createdByRef: args.createdByRef,
+      projectionKey: args.projectionKey,
+      alertTypes: args.alertTypes,
+      settings: args.settings,
+    };
+
     const existing = await ctx.db
       .query("moduleWidgets")
       .withIndex("by_widget_id", (q) => q.eq("widgetId", args.widgetId))
       .first();
-
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        name: args.name,
-        directory: args.directory,
-        description: args.description,
-        alertTypes: args.alertTypes,
-        settings: args.settings,
-      });
+      await ctx.db.patch(existing._id, def);
     } else {
-      await ctx.db.insert("moduleWidgets", {
-        moduleId: undefined as any,
-        widgetId: args.widgetId,
-        name: args.name,
-        directory: args.directory,
-        description: args.description,
-        alertTypes: args.alertTypes,
-        settings: args.settings,
-        createdAt: Date.now(),
+      await ctx.db.insert("moduleWidgets", { ...def, createdAt: Date.now() });
+    }
+
+    if (args.instanceId) {
+      await enableWidgetForInstance(ctx, args.instanceId, args.widgetId, {
+        createdByType: args.createdByType,
+        createdByRef: args.createdByRef,
+        projectionKey: args.projectionKey,
       });
     }
   },

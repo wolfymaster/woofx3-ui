@@ -6,11 +6,13 @@ import {
   ArrowRight,
   ChevronLeft,
   Clock,
+  Columns,
   GitBranch,
   GripVertical,
   Maximize2,
   Plus,
   Redo2,
+  Rows3,
   Save,
   Search,
   Settings2,
@@ -19,8 +21,6 @@ import {
   Zap,
   ZoomIn,
   ZoomOut,
-  Columns,
-  Rows3,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
@@ -65,10 +65,11 @@ import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import { $currentInstanceId } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import { definitionToReactFlow, type ProjectionNode, type LayoutDirection } from "@/lib/workflow-projection";
+import { definitionToReactFlow, type LayoutDirection, type ProjectionNode } from "@/lib/workflow-projection";
 
 type NodeKind = "trigger" | "action" | "condition" | "delay" | "wait" | "workflow" | "log";
 
@@ -390,7 +391,7 @@ export default function WorkflowBuilder() {
   const [layoutDirection, setLayoutDirection] = useState<LayoutDirection>("vertical");
   useEffect(() => {
     if (workflow?.definition) {
-      setDefinition(workflow.definition as WorkflowDefinition);
+      setDefinition(unescapeDollarKeys(workflow.definition) as WorkflowDefinition);
     }
   }, [workflow?.definition]);
 
@@ -426,7 +427,7 @@ export default function WorkflowBuilder() {
       await updateFromDefinition({
         instanceId: instanceId as never,
         engineWorkflowId: definition.id,
-        definition,
+        definition: escapeDollarKeys(definition) as WorkflowDefinition,
       });
       toast({ title: "Workflow saved" });
       void updateProjection({
@@ -589,11 +590,7 @@ export default function WorkflowBuilder() {
             onClick={() => setLayoutDirection((prev) => (prev === "horizontal" ? "vertical" : "horizontal"))}
             title={layoutDirection === "horizontal" ? "Switch to vertical layout" : "Switch to horizontal layout"}
           >
-            {layoutDirection === "horizontal" ? (
-              <Rows3 className="h-4 w-4" />
-            ) : (
-              <Columns className="h-4 w-4" />
-            )}
+            {layoutDirection === "horizontal" ? <Rows3 className="h-4 w-4" /> : <Columns className="h-4 w-4" />}
           </Button>
           <Separator orientation="vertical" className="h-6 mx-2" />
           <Button variant="outline" onClick={() => setShowPreview(true)} data-testid="button-preview-json">

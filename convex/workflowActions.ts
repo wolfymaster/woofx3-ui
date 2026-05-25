@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
+import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
 const CORRELATION_TIMEOUT_MS = 10_000;
@@ -78,9 +79,10 @@ export const createFromDefinition = action({
     });
 
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const engineDefinition = unescapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">;
     await rpc.createWorkflow({
       accountId: bundle.applicationId,
-      definition: definition as Omit<WorkflowDefinition, "id">,
+      definition: engineDefinition,
       correlationKey,
     });
 
@@ -111,8 +113,9 @@ export const updateFromDefinition = action({
     });
 
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const engineDefinition = unescapeDollarKeys(definition) as WorkflowDefinition;
     await rpc.updateWorkflow(engineWorkflowId, {
-      definition: definition as WorkflowDefinition,
+      definition: engineDefinition,
       correlationKey,
     });
 

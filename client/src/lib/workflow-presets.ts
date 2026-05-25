@@ -1,9 +1,6 @@
 import type { ConfigField, ConfigFieldType, TriggerConfig } from "@woofx3/api/ui-schema";
 import type { LucideIcon } from "lucide-react";
 
-// ConfigField / TriggerConfig are the shared parsed shape of configSchema.
-// Re-export them here so UI code keeps the same import site; additional
-// UI-only types (TriggerPreset, ConfigValue, etc.) remain defined below.
 export type { ConfigField, TriggerConfig };
 export type FieldType = ConfigFieldType;
 
@@ -19,23 +16,28 @@ export interface TriggerConfigValues {
 }
 
 export interface TriggerPreset {
+  /** Engine row id (UUID) — used for instance enablement only. */
   id: string;
+  /** Canonical trigger ref for workflow JSON `$ref` (e.g. `twitch_platform:trigger:cheer.user.twitch`). */
+  canonicalRef?: string;
   name: string;
   description: string;
   icon: LucideIcon;
   category: string;
   color: string;
-  /**
-   * Engine event type this trigger fires on (e.g. "cheer.user.twitch"). Required
-   * to build canonical WorkflowDefinition JSON from a preset; surfaced from
-   * the Convex catalog via `useWorkflowCatalog`.
-   */
   event?: string;
   config?: TriggerConfig;
 }
 
 export interface ActionPreset {
+  /** Engine row id (UUID) — used for instance enablement only. */
   id: string;
+  /** Canonical action ref for workflow JSON `$ref` (e.g. `twitch_platform:action:twitch.chat.send`). */
+  canonicalRef?: string;
+  /** Workflow engine handler name (e.g. `function`, `alert`). */
+  handlerType?: string;
+  /** Canonical function id when `handlerType` is `function`. */
+  functionCall?: string;
   name: string;
   description: string;
   icon: LucideIcon;
@@ -46,15 +48,19 @@ export interface ActionPreset {
   };
 }
 
-export interface TierConfig {
+export interface TriggerVariant {
   id: string;
+  /** User-visible label for this binding (defaults from trigger name + config values). */
+  displayName: string;
+  /** When true, changing trigger field values does not overwrite displayName. */
+  displayNameCustomized?: boolean;
   values: TriggerConfigValues;
   action: ActionPreset | null;
   actionConfig: TriggerConfigValues;
 }
 
-// Trigger and action presets are now loaded dynamically from Convex via useWorkflowCatalog().
-// See convex/workflowCatalog.ts and client/src/hooks/use-workflow-catalog.ts.
+/** @deprecated Use TriggerVariant */
+export type TierConfig = TriggerVariant;
 
 export function getDefaultConfigValues(fields: ConfigField[]): TriggerConfigValues {
   const values: TriggerConfigValues = {};
@@ -90,8 +96,3 @@ export function formatConfigValue(value: ConfigValue | number | string | boolean
 
   return `${value}${unit ? ` ${unit}` : ""}`;
 }
-
-// Canonical WorkflowDefinition generation lives in workflow-presets-json.ts.
-// The legacy ReactFlow-shaped generators were removed as part of the JSON-first
-// refactor — the engine is now the authority for workflow structure and mints
-// its own ids on creation.

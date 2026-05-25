@@ -14,8 +14,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { $currentInstanceId } from "@/lib/stores";
-import { definitionToTree, treeToDefinition, type StepNode, type WorkflowTree } from "@/lib/workflow-tree";
+import { definitionToTree, type StepNode, treeToDefinition, type WorkflowTree } from "@/lib/workflow-tree";
 import { StepNodeCard } from "./step-node";
 
 interface InsertButtonProps {
@@ -34,15 +35,9 @@ function InsertButton({ onInsert, label }: InsertButtonProps) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center">
-          <DropdownMenuItem onClick={() => onInsert("action")}>
-            Action
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onInsert("condition")}>
-            Condition
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => onInsert("wait")}>
-            Wait
-          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsert("action")}>Action</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsert("condition")}>Condition</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsert("wait")}>Wait</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -85,7 +80,13 @@ function StepList({ steps, selectedId, onSelect, onInsert, depth = 0 }: StepList
                         type === "action"
                           ? { type: "action", id: `step-${Date.now()}`, action: "", parameters: {} }
                           : type === "condition"
-                            ? { type: "condition", id: `step-${Date.now()}`, conditions: [], thenBranch: [], elseBranch: [] }
+                            ? {
+                                type: "condition",
+                                id: `step-${Date.now()}`,
+                                conditions: [],
+                                thenBranch: [],
+                                elseBranch: [],
+                              }
                             : { type: "wait", id: `step-${Date.now()}`, wait: { type: "event", event: "" } };
                       const newThenBranch = [...step.thenBranch];
                       newThenBranch.splice(idx, 0, newStep);
@@ -101,7 +102,13 @@ function StepList({ steps, selectedId, onSelect, onInsert, depth = 0 }: StepList
                           type === "action"
                             ? { type: "action", id: `step-${Date.now()}`, action: "", parameters: {} }
                             : type === "condition"
-                              ? { type: "condition", id: `step-${Date.now()}`, conditions: [], thenBranch: [], elseBranch: [] }
+                              ? {
+                                  type: "condition",
+                                  id: `step-${Date.now()}`,
+                                  conditions: [],
+                                  thenBranch: [],
+                                  elseBranch: [],
+                                }
                               : { type: "wait", id: `step-${Date.now()}`, wait: { type: "event", event: "" } };
                         step.thenBranch = [newStep];
                       }}
@@ -125,7 +132,13 @@ function StepList({ steps, selectedId, onSelect, onInsert, depth = 0 }: StepList
                         type === "action"
                           ? { type: "action", id: `step-${Date.now()}`, action: "", parameters: {} }
                           : type === "condition"
-                            ? { type: "condition", id: `step-${Date.now()}`, conditions: [], thenBranch: [], elseBranch: [] }
+                            ? {
+                                type: "condition",
+                                id: `step-${Date.now()}`,
+                                conditions: [],
+                                thenBranch: [],
+                                elseBranch: [],
+                              }
                             : { type: "wait", id: `step-${Date.now()}`, wait: { type: "event", event: "" } };
                       const newElseBranch = [...step.elseBranch];
                       newElseBranch.splice(idx, 0, newStep);
@@ -141,7 +154,13 @@ function StepList({ steps, selectedId, onSelect, onInsert, depth = 0 }: StepList
                           type === "action"
                             ? { type: "action", id: `step-${Date.now()}`, action: "", parameters: {} }
                             : type === "condition"
-                              ? { type: "condition", id: `step-${Date.now()}`, conditions: [], thenBranch: [], elseBranch: [] }
+                              ? {
+                                  type: "condition",
+                                  id: `step-${Date.now()}`,
+                                  conditions: [],
+                                  thenBranch: [],
+                                  elseBranch: [],
+                                }
                               : { type: "wait", id: `step-${Date.now()}`, wait: { type: "event", event: "" } };
                         step.elseBranch = [newStep];
                       }}
@@ -178,7 +197,7 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
 
   useEffect(() => {
     if (workflow?.definition) {
-      setTree(definitionToTree(workflow.definition as WorkflowDefinition));
+      setTree(definitionToTree(unescapeDollarKeys(workflow.definition) as WorkflowDefinition));
     }
   }, [workflow?.definition]);
 
@@ -236,10 +255,7 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
                 isSelected={selectedNodeId === "__trigger"}
                 onSelect={() => setSelectedNodeId("__trigger")}
               />
-              <InsertButton
-                onInsert={(type) => handleInsertStep(0, type)}
-                label="Add step after trigger"
-              />
+              <InsertButton onInsert={(type) => handleInsertStep(0, type)} label="Add step after trigger" />
               <StepList
                 steps={tree.steps}
                 selectedId={selectedNodeId}
@@ -258,9 +274,7 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
           </SheetHeader>
           <div className="mt-6">
             {selectedNode && (
-              <pre className="text-xs bg-muted p-3 rounded overflow-auto">
-                {JSON.stringify(selectedNode, null, 2)}
-              </pre>
+              <pre className="text-xs bg-muted p-3 rounded overflow-auto">{JSON.stringify(selectedNode, null, 2)}</pre>
             )}
           </div>
         </SheetContent>

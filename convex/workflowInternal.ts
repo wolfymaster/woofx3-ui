@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { escapeDollarKeys } from "./lib/dollarKeys";
 
 /**
  * Record a pending engine round-trip so the webhook handler can correlate
@@ -90,6 +91,7 @@ export const upsertFromWebhook = internalMutation({
     isEnabled: v.boolean(),
   },
   handler: async (ctx, { instanceId, applicationId, engineWorkflowId, definition, isEnabled }) => {
+    const storedDefinition = escapeDollarKeys(definition);
     const existing = await ctx.db
       .query("workflows")
       .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", engineWorkflowId))
@@ -97,7 +99,7 @@ export const upsertFromWebhook = internalMutation({
     const now = Date.now();
     if (existing) {
       await ctx.db.patch(existing._id, {
-        definition,
+        definition: storedDefinition,
         isEnabled,
         applicationId,
         updatedAt: now,
@@ -108,7 +110,7 @@ export const upsertFromWebhook = internalMutation({
       instanceId,
       applicationId,
       engineWorkflowId,
-      definition,
+      definition: storedDefinition,
       isEnabled,
       createdAt: now,
       updatedAt: now,

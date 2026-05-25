@@ -17,15 +17,20 @@ export const actionsStep: SyncStep = {
   run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
     const api = newApi();
     const raw = await api.getActions();
-    const snapshots = (raw ?? []).map((a) => ({
-      id: a.id,
-      name: a.name,
-      description: a.description,
-      paramsSchema: a.paramsSchema,
-      projectionKey: a.projectionKey,
-      createdByType: a.createdByType,
-      createdByRef: a.createdByRef,
-    }));
+    const snapshots = (raw ?? []).map((a) => {
+      const row = a as typeof a & { type?: string };
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        paramsSchema: row.paramsSchema,
+        projectionKey: row.projectionKey,
+        handlerType: row.type,
+        functionCall: row.call,
+        createdByType: row.createdByType,
+        createdByRef: row.createdByRef,
+      };
+    });
     return await ctx.runMutation(internal.engineSyncInternal.reconcileActions, {
       instanceId,
       snapshots,
