@@ -19,7 +19,7 @@ import Register from "@/pages/auth/register";
 import TwitchCallback from "@/pages/auth/twitch-callback";
 import Commands from "@/pages/commands";
 import Dashboard from "@/pages/dashboard";
-import DebugTools from "@/pages/debug-tools";
+import Debug from "@/pages/debug";
 import ModuleInstall from "@/pages/module-install";
 import Modules from "@/pages/modules";
 import NotFound from "@/pages/not-found";
@@ -124,7 +124,7 @@ function AppRoutes() {
                   <Route path="/scenes" component={Scenes} />
                   <Route path="/scenes/:id" component={Scenes} />
                   <Route path="/alerts" component={AlertLog} />
-                  <Route path="/debug" component={DebugTools} />
+                  <Route path="/debug" component={Debug} />
                   <Route path="/commands" component={Commands} />
                   <Route path="/team" component={Team} />
                   <Route path="/settings/:tab?" component={Settings} />
