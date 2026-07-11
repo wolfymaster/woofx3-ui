@@ -266,6 +266,9 @@ export default function Modules() {
       functions: moduleDetail.functions,
       widgets: moduleDetail.widgets,
       workflows: moduleDetail.workflows,
+      moduleDbId: moduleDetail.moduleDbId as Id<"moduleRepository"> | undefined,
+      manifestSettings: moduleDetail.manifestSettings,
+      manifestResourceKinds: moduleDetail.manifestResourceKinds,
     };
   }, [moduleDetail]);
 
@@ -311,6 +314,10 @@ export default function Modules() {
                   workflows={detailProps.workflows}
                   loading={moduleDetailLoading}
                   onBack={() => navigate("/modules")}
+                  instanceId={instance?._id}
+                  moduleDbId={detailProps.moduleDbId}
+                  manifestSettings={detailProps.manifestSettings}
+                  manifestResourceKinds={detailProps.manifestResourceKinds}
                   onRemove={
                     selectedModule.source === "installed"
                       ? () => handleDelete(selectedModule.module._id)

@@ -5,6 +5,7 @@ import {
   Download,
   FileCode,
   Loader2,
+  Plus,
   Puzzle,
   Trash2,
   Workflow as WorkflowIcon,
@@ -15,8 +16,15 @@ import {
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { Id } from "@convex/_generated/dataModel";
+import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
+import { api } from "@convex/_generated/api";
+import { useAction, useQuery } from "convex/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn, isNewerVersion } from "@/lib/utils";
 
@@ -82,9 +90,13 @@ interface ModuleDetailPanelProps {
   installSucceeded?: boolean;
   installError?: string | null;
   onDismissError?: () => void;
+  instanceId?: Id<"instances">;
+  moduleDbId?: Id<"moduleRepository">;
+  manifestSettings?: ManifestSettingField[];
+  manifestResourceKinds?: ManifestResourceKind[];
 }
 
-type TopTab = "details" | "resources";
+type TopTab = "details" | "definitions" | "settings" | "resources";
 type ResourceType = "actions" | "triggers" | "workflows" | "widgets" | "functions";
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -118,6 +130,10 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     installSucceeded,
     installError,
     onDismissError,
+    instanceId,
+    moduleDbId,
+    manifestSettings,
+    manifestResourceKinds,
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
@@ -173,9 +189,19 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
           <TopTabButton active={topTab === "details"} onClick={() => setTopTab("details")}>
             DETAILS
           </TopTabButton>
-          <TopTabButton active={topTab === "resources"} onClick={() => setTopTab("resources")}>
-            RESOURCES
+          <TopTabButton active={topTab === "definitions"} onClick={() => setTopTab("definitions")}>
+            DEFINITIONS
           </TopTabButton>
+          {module.isInstalled && (
+            <>
+              <TopTabButton active={topTab === "settings"} onClick={() => setTopTab("settings")}>
+                SETTINGS
+              </TopTabButton>
+              <TopTabButton active={topTab === "resources"} onClick={() => setTopTab("resources")}>
+                RESOURCES
+              </TopTabButton>
+            </>
+          )}
         </div>
       </div>
 
@@ -185,7 +211,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
         </div>
       ) : topTab === "details" ? (
         <DetailsTab module={module} />
-      ) : (
+      ) : topTab === "definitions" ? (
         <ResourcesTab
           activeType={resourceTab}
           onSelectType={setResourceTab}
@@ -195,6 +221,19 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
           functions={functions}
           widgets={widgets}
           workflows={workflows}
+        />
+      ) : topTab === "settings" ? (
+        <SettingsTab
+          instanceId={instanceId}
+          moduleId={module.identifier ?? ""}
+          manifestSettings={manifestSettings ?? []}
+        />
+      ) : (
+        <ManageResourcesTab
+          instanceId={instanceId}
+          moduleDbId={moduleDbId}
+          moduleName={module.identifier ?? ""}
+          manifestResourceKinds={manifestResourceKinds ?? []}
         />
       )}
     </div>
@@ -605,5 +644,394 @@ function WorkflowList({ items }: { items: ModuleDetailWorkflow[] | undefined }) 
         </div>
       ))}
     </div>
+  );
+}
+
+// --- Settings Tab ---
+
+interface SettingsTabProps {
+  instanceId?: Id<"instances">;
+  moduleId: string;
+  manifestSettings: ManifestSettingField[];
+}
+
+function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProps) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [loadedValues, setLoadedValues] = useState<Record<string, string> | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+
+  const getSettingsAction = useAction(api.moduleSettingsActions.getModuleSettings);
+  const updateSettingAction = useAction(api.moduleSettingsActions.updateModuleSetting);
+
+  const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  function loadSettings() {
+    if (!instanceId || !moduleId) {
+      return;
+    }
+    setLoadState("loading");
+    setLoadError(null);
+    void getSettingsAction({ instanceId, moduleId })
+      .then((settings) => {
+        const map: Record<string, string> = {};
+        for (const s of settings) {
+          map[s.key] = s.value;
+        }
+        setLoadedValues(map);
+        setValues(map);
+        setLoadState("loaded");
+      })
+      .catch((err) => {
+        setLoadError(err instanceof Error ? err.message : "Failed to load settings.");
+        setLoadState("error");
+      });
+  }
+
+  if (loadState === "idle" && instanceId) {
+    loadSettings();
+  }
+
+  if (manifestSettings.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">No Settings Found</p>
+      </div>
+    );
+  }
+
+  if (loadState === "loading") {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (loadState === "error") {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-sm text-destructive">{loadError}</p>
+      </div>
+    );
+  }
+
+  async function handleSave(key: string) {
+    if (!instanceId) {
+      return;
+    }
+    setSaving(key);
+    setSaveError(null);
+    setSaveSuccess(null);
+    try {
+      await updateSettingAction({ instanceId, moduleId, key, value: values[key] ?? "" });
+      setSaveSuccess(key);
+      setTimeout(() => setSaveSuccess(null), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save setting.");
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  return (
+    <ScrollArea className="flex-1">
+      <div className="px-6 py-4 space-y-6 max-w-xl">
+        {saveError && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            {saveError}
+          </div>
+        )}
+        {manifestSettings.map((field) => {
+          const currentValue = values[field.id] ?? loadedValues?.[field.id] ?? field.default ?? "";
+          const isDirty = currentValue !== (loadedValues?.[field.id] ?? field.default ?? "");
+          return (
+            <div key={field.id} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor={`setting-${field.id}`} className="text-sm font-medium">
+                  {field.name}
+                  {field.required && <span className="text-destructive ml-1">*</span>}
+                </Label>
+                <Button
+                  size="sm"
+                  variant={saveSuccess === field.id ? "secondary" : "outline"}
+                  className="h-7 px-3 text-xs"
+                  disabled={!isDirty || saving === field.id}
+                  onClick={() => void handleSave(field.id)}
+                >
+                  {saving === field.id ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : saveSuccess === field.id ? (
+                    <>
+                      <Check className="h-3 w-3 mr-1" />
+                      Saved
+                    </>
+                  ) : (
+                    "Save"
+                  )}
+                </Button>
+              </div>
+              {field.description && (
+                <p className="text-xs text-muted-foreground">{field.description}</p>
+              )}
+              <Input
+                id={`setting-${field.id}`}
+                type={field.type === "number" ? "number" : "text"}
+                value={currentValue}
+                onChange={(e) => setValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
+                className="font-mono text-sm"
+              />
+            </div>
+          );
+        })}
+      </div>
+    </ScrollArea>
+  );
+}
+
+// --- Manage Resources Tab ---
+
+interface ManageResourcesTabProps {
+  instanceId?: Id<"instances">;
+  moduleDbId?: Id<"moduleRepository">;
+  moduleName: string;
+  manifestResourceKinds: ManifestResourceKind[];
+}
+
+function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResourceKinds }: ManageResourcesTabProps) {
+  const [createDialogKind, setCreateDialogKind] = useState<ManifestResourceKind | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ canonicalId: string; kind: string; resourceInstanceId: string; displayName: string } | null>(null);
+  const [opError, setOpError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const instances = useQuery(
+    api.moduleResourceInstances.listByModule,
+    instanceId && moduleDbId ? { instanceId, moduleId: moduleDbId } : "skip"
+  );
+
+  const createAction = useAction(api.moduleResourceActions.createResourceInstance);
+  const deleteAction = useAction(api.moduleResourceActions.deleteResourceInstance);
+
+  if (manifestResourceKinds.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">No Resources Found</p>
+      </div>
+    );
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget || !instanceId) {
+      return;
+    }
+    setDeleting(deleteTarget.canonicalId);
+    setOpError(null);
+    try {
+      await deleteAction({
+        instanceId,
+        moduleName,
+        kind: deleteTarget.kind,
+        resourceInstanceId: deleteTarget.resourceInstanceId,
+      });
+      setDeleteTarget(null);
+    } catch (err) {
+      setOpError(err instanceof Error ? err.message : "Failed to delete resource.");
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  return (
+    <div className="flex-1 min-h-0 overflow-auto px-6 py-4 space-y-6">
+      {opError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive flex items-center justify-between">
+          <span>{opError}</span>
+          <button type="button" onClick={() => setOpError(null)} className="text-destructive/60 hover:text-destructive ml-2">
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
+
+      {manifestResourceKinds.map((kind) => {
+        const kindInstances = (instances ?? []).filter((i) => i.kind === kind.kind);
+        return (
+          <section key={kind.kind}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-sm font-semibold">{kind.name}</h3>
+                {kind.description && (
+                  <p className="text-xs text-muted-foreground">{kind.description}</p>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1.5"
+                onClick={() => { setCreateDialogKind(kind); setOpError(null); }}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New
+              </Button>
+            </div>
+
+            {instances === undefined ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : kindInstances.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No instances yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {kindInstances.map((inst) => (
+                  <div key={inst._id} className="flex items-center gap-3 p-3 rounded-md border bg-card">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{inst.displayName}</p>
+                      <p className="text-xs text-muted-foreground font-mono truncate">{inst.canonicalId}</p>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                      disabled={deleting === inst.canonicalId}
+                      onClick={() => setDeleteTarget({
+                        canonicalId: inst.canonicalId,
+                        kind: inst.kind,
+                        resourceInstanceId: inst.resourceInstanceId,
+                        displayName: inst.displayName,
+                      })}
+                    >
+                      {deleting === inst.canonicalId
+                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        : <Trash2 className="h-3.5 w-3.5" />
+                      }
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      })}
+
+      {createDialogKind && instanceId && (
+        <CreateResourceDialog
+          kind={createDialogKind}
+          instanceId={instanceId}
+          moduleName={moduleName}
+          onClose={() => setCreateDialogKind(null)}
+          onCreate={async (resourceInstanceId, displayName) => {
+            await createAction({ instanceId, moduleName, kind: createDialogKind.kind, resourceInstanceId, displayName });
+          }}
+        />
+      )}
+
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) { setDeleteTarget(null); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Resource</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure you want to delete <span className="font-medium text-foreground">{deleteTarget?.displayName}</span>?
+            This will also remove its stored value and cannot be undone.
+          </p>
+          <p className="text-xs font-mono text-muted-foreground mt-1">{deleteTarget?.canonicalId}</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!!deleting}
+              onClick={() => void handleDelete()}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+interface CreateResourceDialogProps {
+  kind: ManifestResourceKind;
+  instanceId: Id<"instances">;
+  moduleName: string;
+  onClose: () => void;
+  onCreate: (resourceInstanceId: string, displayName: string) => Promise<void>;
+}
+
+function CreateResourceDialog({ kind, onClose, onCreate }: CreateResourceDialogProps) {
+  const [resourceInstanceId, setResourceInstanceId] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleCreate() {
+    if (!resourceInstanceId.trim() || !displayName.trim()) {
+      return;
+    }
+    setCreating(true);
+    setError(null);
+    try {
+      await onCreate(resourceInstanceId.trim(), displayName.trim());
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create resource.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) { onClose(); } }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New {kind.name}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          {error && (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              {error}
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="new-resource-id">ID</Label>
+            <Input
+              id="new-resource-id"
+              placeholder="e.g. death_count"
+              value={resourceInstanceId}
+              onChange={(e) => setResourceInstanceId(e.target.value)}
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              Stable identifier used in workflows and actions. Cannot be changed.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-resource-name">Display Name</Label>
+            <Input
+              id="new-resource-name"
+              placeholder="e.g. Death Count"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={!resourceInstanceId.trim() || !displayName.trim() || creating}
+            onClick={() => void handleCreate()}
+          >
+            {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+            Create
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

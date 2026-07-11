@@ -6,6 +6,22 @@ import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { marketplaceFetch } from "./marketplace";
 
+export interface ManifestSettingField {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  required: boolean;
+  default?: string;
+}
+
+export interface ManifestResourceKind {
+  kind: string;
+  name: string;
+  description: string;
+  valueSchema?: Record<string, unknown>;
+}
+
 export interface ModuleDetailResult {
   id: string;
   name: string;
@@ -24,6 +40,12 @@ export interface ModuleDetailResult {
   functions: Array<{ qualifiedName: string; runtime?: string }>;
   widgets: Array<{ slug: string; name: string }>;
   workflows: Array<{ slug: string; name: string }>;
+  /** Convex _id of the installed module, only present for installed modules. */
+  moduleDbId?: string;
+  /** Module-level settings declared in the manifest. */
+  manifestSettings: ManifestSettingField[];
+  /** Runtime instance types declared in the manifest. */
+  manifestResourceKinds: ManifestResourceKind[];
 }
 
 export const getModuleDetail = action({
@@ -43,13 +65,29 @@ export const getModuleDetail = action({
     });
 
     if (installedModule) {
-      const [triggers, actions, functions, widgets] = await Promise.all([
+      const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+      const moduleName = installedModule.name;
+
+      const [triggers, actions, functions, widgets, liveManifest] = await Promise.all([
         ctx.runQuery(api.triggerDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.actionDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.moduleFunctions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.moduleWidgets.listByModule, { moduleId: installedModule._id }),
+        instance
+          ? fetch(`${instance.url}/modules/${encodeURIComponent(moduleName)}/manifest`)
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+          : Promise.resolve(null),
       ]);
-      const detail = formatInstalledDetail(installedModule, triggers, actions, functions, widgets);
+
+      const detail = formatInstalledDetail(
+        installedModule,
+        triggers,
+        actions,
+        functions,
+        widgets,
+        liveManifest ?? installedModule.manifest
+      );
       // The DB is authoritative for installed modules, but we do not store the README. Fetch it
       // (and the icon / latest version) from the marketplace and merge it in. Only attempt this when
       // the moduleKey carries a real marketplace id; a marketplace miss must not fail the detail.
@@ -65,8 +103,40 @@ export const getModuleDetail = action({
   },
 });
 
+function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
+  const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
+  return asArr(raw.settings).map((s) => {
+    const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
+    return {
+      id: asStr(o.id),
+      name: asStr(o.name),
+      description: asStr(o.description),
+      type: asStr(o.type, "string"),
+      required: typeof o.required === "boolean" ? o.required : false,
+      ...(o.default !== undefined ? { default: String(o.default) } : {}),
+    };
+  }).filter((s) => s.id);
+}
+
+function parseManifestResourceKinds(manifest: unknown): ManifestResourceKind[] {
+  const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
+  return asArr(raw.resources).map((r) => {
+    const o = r && typeof r === "object" ? (r as Record<string, unknown>) : {};
+    const entry: ManifestResourceKind = {
+      kind: asStr(o.kind),
+      name: asStr(o.name),
+      description: asStr(o.description),
+    };
+    if (o.valueSchema && typeof o.valueSchema === "object") {
+      entry.valueSchema = o.valueSchema as Record<string, unknown>;
+    }
+    return entry;
+  }).filter((r) => r.kind);
+}
+
 function formatInstalledDetail(
   module: {
+    _id: string;
     name: string;
     description: string;
     version: string;
@@ -79,7 +149,8 @@ function formatInstalledDetail(
   triggers: Array<{ slug: string; name: string; description: string; color: string }>,
   actions: Array<{ slug: string; name: string; description: string; color: string }>,
   functions: Array<{ qualifiedName: string; runtime: string }>,
-  widgets: Array<{ widgetId: string; name: string }>
+  widgets: Array<{ widgetId: string; name: string }>,
+  manifest: unknown
 ): ModuleDetailResult {
   const mpId = module.moduleKey?.split(":")[0] ?? module.name;
   return {
@@ -91,6 +162,9 @@ function formatInstalledDetail(
     category: module.category ?? "Utilities",
     tags: module.tags,
     isInstalled: module.status === "installed",
+    moduleDbId: module._id,
+    manifestSettings: parseManifestSettings(manifest),
+    manifestResourceKinds: parseManifestResourceKinds(manifest),
     triggers: triggers.map((t) => ({ key: t.slug, name: t.name, description: t.description, color: t.color })),
     actions: actions.map((a) => ({ key: a.slug, name: a.name, description: a.description, color: a.color })),
     functions: functions.map((f) => ({ qualifiedName: f.qualifiedName, runtime: f.runtime })),
@@ -157,6 +231,8 @@ function formatMarketplaceDetail(moduleId: string, payload: unknown): ModuleDeta
     category: asStr(module.category, "Utilities"),
     tags: asStrArr(module.tags),
     isInstalled: false,
+    manifestSettings: [],
+    manifestResourceKinds: [],
     triggers: asArr(module.triggers).map((t) => {
       const o = t && typeof t === "object" ? (t as Record<string, unknown>) : {};
       return {

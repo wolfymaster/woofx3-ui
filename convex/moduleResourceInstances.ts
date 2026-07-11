@@ -21,6 +21,16 @@ export const listForInstance = query({
   },
 });
 
+export const listByModule = query({
+  args: { instanceId: v.id("instances"), moduleId: v.id("moduleRepository") },
+  handler: async (ctx, { moduleId }) => {
+    return ctx.db
+      .query("moduleResourceInstances")
+      .withIndex("by_module", (q) => q.eq("moduleId", moduleId))
+      .collect();
+  },
+});
+
 export const listByKind = query({
   args: { instanceId: v.id("instances"), kind: v.string() },
   handler: async (ctx, { instanceId, kind }) => {
@@ -105,3 +115,4 @@ export const cascadeOnModuleDelete = internalMutation({
     }
   },
 });
+
