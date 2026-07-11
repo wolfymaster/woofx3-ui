@@ -9,6 +9,8 @@ import {
   Clock,
   ToggleLeft,
   ToggleRight,
+  Shield,
+  X,
 } from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
@@ -66,6 +68,7 @@ interface CommandFormState {
   functionId: string;
   cooldown: number;
   enabled: boolean;
+  allowedUsers: string[];
 }
 
 const defaultFormState: CommandFormState = {
@@ -76,6 +79,7 @@ const defaultFormState: CommandFormState = {
   functionId: "",
   cooldown: 5,
   enabled: true,
+  allowedUsers: [],
 };
 
 function typeBadgeVariant(type: CommandType): "default" | "secondary" | "outline" {
@@ -148,6 +152,7 @@ export default function Commands() {
   const [deleteId, setDeleteId] = useState<Id<"chatCommands"> | null>(null);
   const [formState, setFormState] = useState<CommandFormState>(defaultFormState);
   const [formError, setFormError] = useState<string | null>(null);
+  const [userInput, setUserInput] = useState("");
 
   const commandsRaw = useQuery(
     api.chatCommands.list,
@@ -170,6 +175,7 @@ export default function Commands() {
     setEditingId(null);
     setFormState(defaultFormState);
     setFormError(null);
+    setUserInput("");
     setDialogOpen(true);
   }
 
@@ -183,9 +189,28 @@ export default function Commands() {
       functionId: cmd.functionId ?? "",
       cooldown: cmd.cooldown,
       enabled: cmd.enabled,
+      allowedUsers: cmd.permissions?.allowedUsers ?? [],
     });
     setFormError(null);
+    setUserInput("");
     setDialogOpen(true);
+  }
+
+  function addAllowedUser() {
+    const name = userInput.trim().toLowerCase().replace(/^@/, "");
+    if (!name) {
+      return;
+    }
+    if (formState.allowedUsers.includes(name)) {
+      setUserInput("");
+      return;
+    }
+    setFormState((s) => ({ ...s, allowedUsers: [...s.allowedUsers, name] }));
+    setUserInput("");
+  }
+
+  function removeAllowedUser(name: string) {
+    setFormState((s) => ({ ...s, allowedUsers: s.allowedUsers.filter((u) => u !== name) }));
   }
 
   async function handleSave() {
@@ -212,6 +237,8 @@ export default function Commands() {
     }
 
     try {
+      const permissions = { allowedUsers: formState.allowedUsers };
+
       if (editingId) {
         await updateCommand({
           commandId: editingId,
@@ -222,6 +249,7 @@ export default function Commands() {
           functionId: formState.type === "function" ? formState.functionId : undefined,
           cooldown: formState.cooldown,
           enabled: formState.enabled,
+          permissions,
         });
       } else if (instance) {
         await createCommand({
@@ -233,6 +261,7 @@ export default function Commands() {
           functionId: formState.type === "function" ? formState.functionId : undefined,
           cooldown: formState.cooldown,
           enabled: formState.enabled,
+          permissions,
         });
       }
       setDialogOpen(false);
@@ -377,7 +406,7 @@ export default function Commands() {
 
       {/* Create / Edit dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit Command" : "New Command"}</DialogTitle>
           </DialogHeader>
@@ -466,6 +495,54 @@ export default function Commands() {
                 value={formState.cooldown}
                 onChange={(e) => setFormState((s) => ({ ...s, cooldown: Number(e.target.value) }))}
               />
+            </div>
+
+            <div className="grid gap-3">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Permissions</span>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="cmd-allowed-users">Allowed Users</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="cmd-allowed-users"
+                    placeholder="username"
+                    value={userInput}
+                    onChange={(e) => setUserInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addAllowedUser();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" onClick={addAllowedUser}>
+                    Add
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to allow everyone. Users are matched case-insensitively.
+                </p>
+                {formState.allowedUsers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {formState.allowedUsers.map((user) => (
+                      <Badge key={user} variant="secondary" className="gap-1 pr-1">
+                        {user}
+                        <button
+                          type="button"
+                          onClick={() => removeAllowedUser(user)}
+                          className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                          aria-label={`Remove ${user}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-2">

@@ -154,6 +154,11 @@ export default defineSchema({
     cooldown: v.number(),
     priority: v.optional(v.number()),
     enabled: v.boolean(),
+    // permissions.allowedUsers: if non-empty, only these Twitch usernames (lowercased) may trigger the command.
+    // Empty or absent means everyone is allowed.
+    permissions: v.optional(v.object({
+      allowedUsers: v.array(v.string()),
+    })),
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),
   }).index("by_instance", ["instanceId"]),

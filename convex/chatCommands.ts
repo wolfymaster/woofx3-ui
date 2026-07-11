@@ -43,6 +43,7 @@ export const create = mutation({
     functionId: v.optional(v.string()),
     cooldown: v.number(),
     enabled: v.boolean(),
+    permissions: v.optional(v.object({ allowedUsers: v.array(v.string()) })),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
@@ -77,6 +78,7 @@ export const create = mutation({
       functionId: args.functionId,
       cooldown: args.cooldown,
       enabled: args.enabled,
+      permissions: args.permissions,
       createdAt: Date.now(),
     });
   },
@@ -97,6 +99,7 @@ export const update = mutation({
     functionId: v.optional(v.string()),
     cooldown: v.optional(v.number()),
     enabled: v.optional(v.boolean()),
+    permissions: v.optional(v.object({ allowedUsers: v.array(v.string()) })),
   },
   handler: async (ctx, { commandId, ...updates }) => {
     const userId = await getAuthUserId(ctx);
