@@ -20,9 +20,22 @@ const BASE_STYLE =
   "*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:transparent;overflow:hidden}";
 
 /**
- * Wraps the engine overlay URL in a full-bleed sandboxed iframe. The iframe is
- * cross-origin (engine domain) so `allow-scripts` is granted WITHOUT
- * `allow-same-origin` — widget scripts run but cannot reach this page's origin.
+ * Wraps the engine overlay URL in a full-bleed sandboxed iframe.
+ *
+ * Sandbox flags: `allow-scripts allow-same-origin`.
+ *  - `allow-scripts` lets the overlay run JavaScript.
+ *  - `allow-same-origin` preserves the overlay's own origin (the engine
+ *    host), which the overlay needs to nest its widget iframes and inject
+ *    `widgetHost` into them. Without it, the overlay gets an opaque origin
+ *    and any nested widget iframe — even with its own `allow-same-origin` —
+ *    ends up cross-origin from its parent, so `iframe.contentWindow.widgetHost`
+ *    assignment throws DOMException and widget events never reach widget code.
+ *
+ * `allow-same-origin` here does NOT grant the overlay access to this Convex
+ * page's origin: the engine and Convex live on different hosts, so the
+ * browser's same-origin policy still keeps the engine out of Convex
+ * cookies/storage. It only stops the browser from minting a fresh opaque
+ * origin for the overlay iframe.
  */
 export function buildBrowserSourceHtml(params: { sceneName: string; overlayUrl: string }): string {
   const title = escapeHtml(params.sceneName);
@@ -36,7 +49,7 @@ export function buildBrowserSourceHtml(params: { sceneName: string; overlayUrl: 
 <style>${BASE_STYLE}iframe{position:fixed;inset:0;width:100%;height:100%;border:none;background:transparent}</style>
 </head>
 <body>
-<iframe src="${src}" sandbox="allow-scripts" scrolling="no" allowtransparency="true"></iframe>
+<iframe src="${src}" sandbox="allow-scripts allow-same-origin" scrolling="no" allowtransparency="true"></iframe>
 </body>
 </html>`;
 }
