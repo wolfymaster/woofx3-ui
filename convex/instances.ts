@@ -49,6 +49,20 @@ export const getInternal = internalQuery({
   },
 });
 
+/**
+ * Instance ids registered with an engine (clientId/clientSecret present).
+ * Used by scheduled sweeps that need to visit every reachable instance.
+ * Bounded take(), not collect() — this repo's tables are small today but the
+ * convention avoids an unbounded read as the fleet grows.
+ */
+export const listRegisteredIds = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const instances = await ctx.db.query("instances").take(1000);
+    return instances.filter((i) => i.clientId && i.clientSecret).map((i) => i._id);
+  },
+});
+
 export const create = mutation({
   args: {
     accountId: v.id("accounts"),

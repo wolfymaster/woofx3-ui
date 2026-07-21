@@ -17,4 +17,9 @@ crons.interval("engine sync sweep", { minutes: ENGINE_SYNC_CONFIG.sweepIntervalM
 
 crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engineSyncInternal.cleanupOldRuns);
 
+// Self-heals instanceLiveState if the engine's STREAM_ONLINE/OFFLINE webhook
+// stops delivering (EventSub lapses, engine restarts) — runs regardless of
+// whether anyone has the dashboard open.
+crons.interval("stream live state sweep", { minutes: 2 }, internal.streamStatus.sweepLiveState);
+
 export default crons;

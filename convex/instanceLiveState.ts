@@ -21,10 +21,7 @@ export const onStreamOnline = internalMutation({
     gameName: v.optional(v.string()),
     viewerCount: v.optional(v.number()),
   },
-  handler: async (
-    ctx,
-    { instanceId, applicationId, twitchUserId, startedAt, streamTitle, gameName, viewerCount },
-  ) => {
+  handler: async (ctx, { instanceId, applicationId, twitchUserId, startedAt, streamTitle, gameName, viewerCount }) => {
     const existing = await ctx.db
       .query("instanceLiveState")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -40,6 +37,47 @@ export const onStreamOnline = internalMutation({
       gameName,
       viewerCount,
       lastUpdateSource: "webhook" as const,
+      lastUpdatedAt: Date.now(),
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, patch);
+    } else {
+      await ctx.db.insert("instanceLiveState", patch);
+    }
+  },
+});
+
+// Reconciles instanceLiveState from a live engine poll (see streamStatus.ts).
+// Exists because the STREAM_ONLINE/OFFLINE webhook path can silently stop
+// delivering (EventSub subscription lapses, the engine's twitch listener
+// restarts, etc.) and leave this table stuck on a stale event indefinitely.
+export const recordPoll = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    isLive: v.boolean(),
+    twitchUserId: v.optional(v.string()),
+    startedAt: v.optional(v.string()),
+    streamTitle: v.optional(v.string()),
+    gameName: v.optional(v.string()),
+    viewerCount: v.optional(v.number()),
+  },
+  handler: async (ctx, { instanceId, isLive, twitchUserId, startedAt, streamTitle, gameName, viewerCount }) => {
+    const existing = await ctx.db
+      .query("instanceLiveState")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+
+    const patch = {
+      instanceId,
+      applicationId: existing?.applicationId,
+      twitchUserId,
+      isLive,
+      startedAt: isLive ? startedAt : undefined,
+      streamTitle: isLive ? streamTitle : undefined,
+      gameName: isLive ? gameName : undefined,
+      viewerCount: isLive ? viewerCount : undefined,
+      lastUpdateSource: "poll" as const,
       lastUpdatedAt: Date.now(),
     };
 
