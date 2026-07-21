@@ -1,9 +1,25 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { getInstanceMembership } from "./lib/teamAccess";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, type QueryCtx, query } from "./_generated/server";
 
-const commandTypeValidator = v.union(v.literal("static"), v.literal("dynamic"), v.literal("function"));
+// Chat commands are engine-authoritative (see docs/services/commands-ui.md in
+// the woofx3 engine repo). This table is a read cache populated by
+// convex/chatCommandActions.ts (immediately, from the RPC's own response) and
+// by the command.* webhooks / the periodic engine-sync "commands" step (for
+// changes made elsewhere). There are intentionally NO public create/update/
+// delete mutations here — writes go through chatCommandActions.ts → engine RPC.
+
+async function membershipFor(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  userId: Id<"users">
+): Promise<Doc<"instanceMembers"> | null> {
+  return await ctx.db
+    .query("instanceMembers")
+    .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
+    .first();
+}
 
 /**
  * List all chat commands for an instance.
@@ -16,7 +32,7 @@ export const list = query({
       return [];
     }
 
-    const membership = await getInstanceMembership(ctx, instanceId, userId);
+    const membership = await membershipFor(ctx, instanceId, userId);
     if (!membership) {
       return [];
     }
@@ -24,154 +40,117 @@ export const list = query({
     return ctx.db
       .query("chatCommands")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .take(200);
+      .take(500);
   },
 });
 
 /**
- * Create a new chat command.
+ * Functions exposed by installed modules, available to populate a
+ * "function"-type command's dropdown. Sourced from the `moduleFunctions`
+ * catalog (kept in sync by the MODULE_FUNCTION_REGISTERED/_DEREGISTERED
+ * webhooks — see convex/moduleFunctions.ts), filtered to functions actually
+ * enabled for this instance via the `instanceFunctions` join.
  */
-export const create = mutation({
+export const listAvailableFunctions = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+
+    const membership = await membershipFor(ctx, instanceId, userId);
+    if (!membership) {
+      return [];
+    }
+
+    const enabled = await ctx.db
+      .query("instanceFunctions")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    const enabledIds = new Set(enabled.map((r) => r.functionId));
+
+    const all = await ctx.db.query("moduleFunctions").collect();
+    return all
+      .filter((fn) => enabledIds.has(fn.engineFunctionId))
+      .map((fn) => ({
+        id: fn.engineFunctionId,
+        moduleId: fn.moduleId,
+        moduleName: fn.moduleName,
+        manifestId: fn.manifestId ?? fn.engineFunctionId,
+        name: fn.functionName,
+        qualifiedName: fn.qualifiedName,
+        runtime: fn.runtime,
+      }));
+  },
+});
+
+// Populated by convex/chatCommandActions.ts (own RPC response) and the
+// command.created / command.updated webhooks. Keyed on engineCommandId via
+// the by_engine_command_id index, so redelivery is idempotent.
+export const upsertFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.optional(v.string()),
-    engineCommandId: v.optional(v.string()),
+    applicationId: v.string(),
+    engineCommandId: v.string(),
     command: v.string(),
-    type: commandTypeValidator,
-    response: v.optional(v.string()),
-    template: v.optional(v.string()),
-    functionId: v.optional(v.string()),
+    type: v.union(v.literal("text"), v.literal("function")),
+    typeValue: v.string(),
     cooldown: v.number(),
+    priority: v.number(),
     enabled: v.boolean(),
-    permissions: v.optional(v.object({ allowedUsers: v.array(v.string()) })),
+    visibility: v.union(v.literal("public"), v.literal("restricted")),
+    groupIds: v.array(v.string()),
+    usernames: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-
-    const membership = await getInstanceMembership(ctx, args.instanceId, userId);
-    if (!membership) {
-      throw new Error("Not authorized");
-    }
-
-    const command = args.command.startsWith("!") ? args.command : `!${args.command}`;
-
     const existing = await ctx.db
       .query("chatCommands")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .take(200);
+      .withIndex("by_engine_command_id", (q) =>
+        q.eq("instanceId", args.instanceId).eq("engineCommandId", args.engineCommandId)
+      )
+      .first();
 
-    if (existing.some((c) => c.command.toLowerCase() === command.toLowerCase())) {
-      throw new Error(`Command "${command}" already exists`);
-    }
-
-    return ctx.db.insert("chatCommands", {
-      instanceId: args.instanceId,
+    const fields = {
       applicationId: args.applicationId,
-      engineCommandId: args.engineCommandId,
-      command,
+      command: args.command,
       type: args.type,
-      response: args.response,
-      template: args.template,
-      functionId: args.functionId,
+      typeValue: args.typeValue,
       cooldown: args.cooldown,
+      priority: args.priority,
       enabled: args.enabled,
-      permissions: args.permissions,
-      createdAt: Date.now(),
-    });
+      visibility: args.visibility,
+      groupIds: args.groupIds,
+      usernames: args.usernames,
+      updatedAt: Date.now(),
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, fields);
+    } else {
+      await ctx.db.insert("chatCommands", {
+        instanceId: args.instanceId,
+        engineCommandId: args.engineCommandId,
+        ...fields,
+        createdAt: Date.now(),
+      });
+    }
   },
 });
 
-/**
- * Update an existing chat command.
- */
-export const update = mutation({
+// Populated by convex/chatCommandActions.ts and the command.deleted webhook.
+export const deleteFromWebhook = internalMutation({
   args: {
-    commandId: v.id("chatCommands"),
-    applicationId: v.optional(v.string()),
-    engineCommandId: v.optional(v.string()),
-    command: v.optional(v.string()),
-    type: v.optional(commandTypeValidator),
-    response: v.optional(v.string()),
-    template: v.optional(v.string()),
-    functionId: v.optional(v.string()),
-    cooldown: v.optional(v.number()),
-    enabled: v.optional(v.boolean()),
-    permissions: v.optional(v.object({ allowedUsers: v.array(v.string()) })),
+    instanceId: v.id("instances"),
+    engineCommandId: v.string(),
   },
-  handler: async (ctx, { commandId, ...updates }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
+  handler: async (ctx, { instanceId, engineCommandId }) => {
+    const existing = await ctx.db
+      .query("chatCommands")
+      .withIndex("by_engine_command_id", (q) => q.eq("instanceId", instanceId).eq("engineCommandId", engineCommandId))
+      .first();
+    if (existing) {
+      await ctx.db.delete(existing._id);
     }
-
-    const existing = await ctx.db.get(commandId);
-    if (!existing) {
-      throw new Error("Command not found");
-    }
-
-    const membership = await getInstanceMembership(ctx, existing.instanceId, userId);
-    if (!membership) {
-      throw new Error("Not authorized");
-    }
-
-    // Normalize command name if provided
-    if (updates.command) {
-      updates.command = updates.command.startsWith("!") ? updates.command : `!${updates.command}`;
-    }
-
-    await ctx.db.patch(commandId, updates);
-  },
-});
-
-/**
- * Delete a chat command.
- */
-export const remove = mutation({
-  args: { commandId: v.id("chatCommands") },
-  handler: async (ctx, { commandId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-
-    const existing = await ctx.db.get(commandId);
-    if (!existing) {
-      throw new Error("Command not found");
-    }
-
-    const membership = await getInstanceMembership(ctx, existing.instanceId, userId);
-    if (!membership) {
-      throw new Error("Not authorized");
-    }
-
-    await ctx.db.delete(commandId);
-  },
-});
-
-/**
- * Toggle a command's enabled state.
- */
-export const toggleEnabled = mutation({
-  args: { commandId: v.id("chatCommands") },
-  handler: async (ctx, { commandId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-
-    const existing = await ctx.db.get(commandId);
-    if (!existing) {
-      throw new Error("Command not found");
-    }
-
-    const membership = await getInstanceMembership(ctx, existing.instanceId, userId);
-    if (!membership) {
-      throw new Error("Not authorized");
-    }
-
-    await ctx.db.patch(commandId, { enabled: !existing.enabled });
   },
 });

@@ -23,15 +23,13 @@ export const dropAllInstanceSync = internalMutation({
 /**
  * Reconcile the local `chatCommands` mirror against a full snapshot
  * returned by the engine's `listCommands()`. The engine is the source of
- * truth: rows whose `engineCommandId` is present in the snapshot are
- * upserted; rows with an `engineCommandId` that no longer appears are
- * deleted. Rows that have no `engineCommandId` at all (locally-created
- * but never pushed to the engine) are left alone.
+ * truth: every row is upserted by `engineCommandId`; rows whose
+ * `engineCommandId` no longer appears in the snapshot are deleted.
  *
  * The engine's `CommandSnapshot` (see `@woofx3/api`) carries the
- * type-discriminated payload in a single `typeValue` string. The legacy
- * Convex-side fields `response` / `template` / `functionId` are not
- * sourced from the engine and are not touched by this reconciler.
+ * type-discriminated payload in a single `typeValue` string, plus the
+ * `visibility`/`groupIds`/`usernames` permission fields — see
+ * docs/services/commands-ui.md in the woofx3 engine repo.
  */
 export const reconcileCommands = internalMutation({
   args: {
@@ -41,11 +39,14 @@ export const reconcileCommands = internalMutation({
       v.object({
         engineCommandId: v.string(),
         command: v.string(),
-        type: v.union(v.literal("static"), v.literal("dynamic"), v.literal("function")),
+        type: v.union(v.literal("text"), v.literal("function")),
         typeValue: v.string(),
         cooldown: v.number(),
         priority: v.number(),
         enabled: v.boolean(),
+        visibility: v.union(v.literal("public"), v.literal("restricted")),
+        groupIds: v.array(v.string()),
+        usernames: v.array(v.string()),
       })
     ),
   },
@@ -58,9 +59,7 @@ export const reconcileCommands = internalMutation({
 
     const existingByEngineId = new Map<string, (typeof existing)[number]>();
     for (const row of existing) {
-      if (row.engineCommandId) {
-        existingByEngineId.set(row.engineCommandId, row);
-      }
+      existingByEngineId.set(row.engineCommandId, row);
     }
 
     const snapshotIds = new Set(snapshots.map((s) => s.engineCommandId));
@@ -68,39 +67,137 @@ export const reconcileCommands = internalMutation({
 
     for (const snap of snapshots) {
       const found = existingByEngineId.get(snap.engineCommandId);
+      const fields = {
+        applicationId,
+        command: snap.command,
+        type: snap.type,
+        typeValue: snap.typeValue,
+        cooldown: snap.cooldown,
+        priority: snap.priority,
+        enabled: snap.enabled,
+        visibility: snap.visibility,
+        groupIds: snap.groupIds,
+        usernames: snap.usernames,
+        updatedAt: now,
+      };
       if (found) {
-        await ctx.db.patch(found._id, {
-          applicationId,
-          command: snap.command,
-          type: snap.type,
-          typeValue: snap.typeValue,
-          cooldown: snap.cooldown,
-          priority: snap.priority,
-          enabled: snap.enabled,
-          updatedAt: now,
-        });
+        await ctx.db.patch(found._id, fields);
       } else {
         await ctx.db.insert("chatCommands", {
           instanceId,
-          applicationId,
           engineCommandId: snap.engineCommandId,
-          command: snap.command,
-          type: snap.type,
-          typeValue: snap.typeValue,
-          cooldown: snap.cooldown,
-          priority: snap.priority,
-          enabled: snap.enabled,
+          ...fields,
           createdAt: now,
-          updatedAt: now,
         });
       }
       processed++;
     }
 
     // Delete rows whose engineCommandId disappeared from the engine.
-    // Rows with no engineCommandId (locally-created, never pushed) are skipped.
     for (const row of existing) {
-      if (row.engineCommandId && !snapshotIds.has(row.engineCommandId)) {
+      if (!snapshotIds.has(row.engineCommandId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: processed };
+  },
+});
+
+/**
+ * Reconcile the local `chatCommandGroups` mirror (plus the full
+ * `chatCommandGroupMembers` roster per group) against a full snapshot
+ * returned by the engine's `listGroups()` + `listGroupMembers(groupId)`.
+ * The engine is the source of truth: groups are upserted by
+ * `engineGroupId`; groups that disappeared are deleted along with their
+ * membership rows. Each group's membership rows are full-replaced (the
+ * engine's `listGroupMembers` returns the complete live roster, not a diff).
+ */
+export const reconcileGroups = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    snapshots: v.array(
+      v.object({
+        engineGroupId: v.string(),
+        name: v.string(),
+        description: v.string(),
+        engineCreatedAt: v.string(),
+        members: v.array(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, applicationId, snapshots }) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("chatCommandGroups")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+
+    const existingByEngineId = new Map<string, (typeof existing)[number]>();
+    for (const row of existing) {
+      existingByEngineId.set(row.engineGroupId, row);
+    }
+
+    const snapshotIds = new Set(snapshots.map((s) => s.engineGroupId));
+    let processed = 0;
+
+    for (const snap of snapshots) {
+      const found = existingByEngineId.get(snap.engineGroupId);
+      const fields = {
+        applicationId,
+        name: snap.name,
+        description: snap.description,
+        engineCreatedAt: snap.engineCreatedAt,
+        updatedAt: now,
+      };
+      if (found) {
+        await ctx.db.patch(found._id, fields);
+      } else {
+        await ctx.db.insert("chatCommandGroups", {
+          instanceId,
+          engineGroupId: snap.engineGroupId,
+          ...fields,
+          createdAt: now,
+        });
+      }
+
+      // Full-replace membership for this group.
+      const existingMembers = await ctx.db
+        .query("chatCommandGroupMembers")
+        .withIndex("by_group", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", snap.engineGroupId))
+        .collect();
+      const existingUsernames = new Set(existingMembers.map((m) => m.username));
+      const liveUsernames = new Set(snap.members);
+
+      for (const username of snap.members) {
+        if (!existingUsernames.has(username)) {
+          await ctx.db.insert("chatCommandGroupMembers", {
+            instanceId,
+            engineGroupId: snap.engineGroupId,
+            username,
+          });
+        }
+      }
+      for (const member of existingMembers) {
+        if (!liveUsernames.has(member.username)) {
+          await ctx.db.delete(member._id);
+        }
+      }
+
+      processed++;
+    }
+
+    // Delete groups (and their membership rows) whose engineGroupId disappeared.
+    for (const row of existing) {
+      if (!snapshotIds.has(row.engineGroupId)) {
+        const orphanMembers = await ctx.db
+          .query("chatCommandGroupMembers")
+          .withIndex("by_group", (q) => q.eq("instanceId", instanceId).eq("engineGroupId", row.engineGroupId))
+          .collect();
+        for (const m of orphanMembers) {
+          await ctx.db.delete(m._id);
+        }
         await ctx.db.delete(row._id);
       }
     }
@@ -610,6 +707,108 @@ export const reconcileWidgets = internalMutation({
   },
 });
 
+/**
+ * Reconcile the `moduleFunctions` catalog (global) AND `instanceFunctions`
+ * (per-instance enablement) against a full snapshot from the engine's
+ * `listAvailableFunctions()`. Self-healing counterpart to the
+ * MODULE_FUNCTION_REGISTERED/_DEREGISTERED webhooks (convex/moduleFunctions.ts):
+ * those give near-instant updates on (de)registration, this step recovers
+ * modules whose registration webhook was missed or predates that path.
+ *
+ * `listAvailableFunctions()` carries `moduleName` but no stable module key/id
+ * that maps onto `moduleRepository`, so `moduleId` is resolved by matching
+ * `moduleName` against this instance's installed modules — best-effort, and
+ * left untouched (falls back to whatever the MODULE_FUNCTION_REGISTERED
+ * webhook already resolved) when an existing row already has one.
+ *
+ * Definition rows are only upserted — never deleted — matching the other
+ * catalogs (triggerDefinitions/actionDefinitions/moduleWidgets); only this
+ * instance's `instanceFunctions` enablement rows are pruned.
+ */
+export const reconcileFunctions = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    snapshots: v.array(
+      v.object({
+        engineFunctionId: v.string(),
+        moduleName: v.string(),
+        manifestId: v.string(),
+        name: v.string(),
+        qualifiedName: v.string(),
+        runtime: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, snapshots }) => {
+    const modulesForInstance = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    const moduleIdByName = new Map(modulesForInstance.map((m) => [m.name, m._id]));
+
+    const snapshotIds = new Set(snapshots.map((s) => s.engineFunctionId));
+    let processed = 0;
+
+    for (const snap of snapshots) {
+      const existing = await ctx.db
+        .query("moduleFunctions")
+        .withIndex("by_engine_id", (q) => q.eq("engineFunctionId", snap.engineFunctionId))
+        .first();
+
+      const moduleId = existing?.moduleId ?? moduleIdByName.get(snap.moduleName);
+
+      const fields = {
+        moduleId,
+        moduleName: snap.moduleName,
+        manifestId: snap.manifestId,
+        functionName: snap.name,
+        qualifiedName: snap.qualifiedName,
+        runtime: snap.runtime,
+      };
+
+      if (existing) {
+        await ctx.db.patch(existing._id, fields);
+      } else {
+        await ctx.db.insert("moduleFunctions", {
+          engineFunctionId: snap.engineFunctionId,
+          fileName: "",
+          entryPoint: "",
+          ...fields,
+        });
+      }
+
+      const existingInst = await ctx.db
+        .query("instanceFunctions")
+        .withIndex("by_instance_function", (q) =>
+          q.eq("instanceId", instanceId).eq("functionId", snap.engineFunctionId)
+        )
+        .first();
+      if (!existingInst) {
+        await ctx.db.insert("instanceFunctions", {
+          instanceId,
+          functionId: snap.engineFunctionId,
+          projectionKey: snap.qualifiedName,
+        });
+      }
+
+      processed++;
+    }
+
+    // Disable instanceFunctions rows for this instance no longer in the engine snapshot.
+    const liveInstRows = await ctx.db
+      .query("instanceFunctions")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const row of liveInstRows) {
+      if (!snapshotIds.has(row.functionId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: processed };
+  },
+});
+
 /** Fetch the instance bundle needed to open a capnweb session. */
 export const getInstanceBundle = internalQuery({
   args: { instanceId: v.id("instances") },
@@ -683,6 +882,8 @@ export const startRun = internalMutation({
       startedAt: now,
       steps: [
         { name: "commands", status: "pending", itemsProcessed: 0 },
+        { name: "groups", status: "pending", itemsProcessed: 0 },
+        { name: "functions", status: "pending", itemsProcessed: 0 },
         { name: "workflows", status: "pending", itemsProcessed: 0 },
         { name: "scenes", status: "pending", itemsProcessed: 0 },
         { name: "triggers", status: "pending", itemsProcessed: 0 },
@@ -698,6 +899,8 @@ export const updateRunStep = internalMutation({
     runId: v.id("syncRuns"),
     stepName: v.union(
       v.literal("commands"),
+      v.literal("groups"),
+      v.literal("functions"),
       v.literal("workflows"),
       v.literal("scenes"),
       v.literal("triggers"),

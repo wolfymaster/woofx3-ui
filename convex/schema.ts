@@ -140,28 +140,58 @@ export default defineSchema({
     createdBy: v.id("users"),
   }).index("by_instance", ["instanceId"]),
 
-  // chatCommands: chat commands configured per instance
+  // chatCommands: engine-authoritative read cache of chat commands. The engine
+  // (Woofx3EngineApi createCommand/updateCommand/deleteCommand + listCommands)
+  // is the source of truth; this table is populated by convex/chatCommandActions.ts
+  // (immediately, from the RPC's own response) and by the command.* webhooks /
+  // the periodic engine-sync "commands" step (for changes made elsewhere).
+  // See docs/services/commands-ui.md in the woofx3 engine repo for the full contract.
   chatCommands: defineTable({
     instanceId: v.id("instances"),
-    applicationId: v.optional(v.string()),
-    engineCommandId: v.optional(v.string()),
-    command: v.string(),
-    type: v.union(v.literal("static"), v.literal("dynamic"), v.literal("function")),
-    typeValue: v.optional(v.string()),
-    response: v.optional(v.string()),
-    template: v.optional(v.string()),
-    functionId: v.optional(v.string()),
-    cooldown: v.number(),
-    priority: v.optional(v.number()),
+    applicationId: v.string(),
+    engineCommandId: v.string(),
+    command: v.string(), // without the "!" prefix
+    type: v.union(v.literal("text"), v.literal("function")),
+    typeValue: v.string(), // response text ("text") or qualified function name ("function")
+    cooldown: v.number(), // seconds, 0 = never throttle
+    priority: v.number(),
     enabled: v.boolean(),
-    // permissions.allowedUsers: if non-empty, only these Twitch usernames (lowercased) may trigger the command.
-    // Empty or absent means everyone is allowed.
-    permissions: v.optional(v.object({
-      allowedUsers: v.array(v.string()),
-    })),
+    visibility: v.union(v.literal("public"), v.literal("restricted")),
+    groupIds: v.array(v.string()), // chatCommandGroups.engineGroupId values
+    usernames: v.array(v.string()), // lowercased chat usernames granted direct access
     createdAt: v.number(),
-    updatedAt: v.optional(v.number()),
-  }).index("by_instance", ["instanceId"]),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_command_id", ["instanceId", "engineCommandId"]),
+
+  // chatCommandGroups: engine-authoritative read cache of "user groups" (roles)
+  // that gate restricted commands. Mirrors GroupSnapshot from the engine's
+  // listGroups()/createGroup()/updateGroup()/deleteGroup().
+  chatCommandGroups: defineTable({
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    engineGroupId: v.string(),
+    name: v.string(),
+    description: v.string(),
+    engineCreatedAt: v.string(), // ISO 8601, as returned by the engine
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_group_id", ["instanceId", "engineGroupId"]),
+
+  // chatCommandGroupMembers: read cache of group membership (by lowercased
+  // username, per the engine's addUserToGroup/removeUserFromGroup/listGroupMembers).
+  // Reconciled wholesale per-group by the "groups" engine-sync step and kept live
+  // by the group.member_added / group.member_removed webhooks.
+  chatCommandGroupMembers: defineTable({
+    instanceId: v.id("instances"),
+    engineGroupId: v.string(),
+    username: v.string(),
+  })
+    .index("by_group", ["instanceId", "engineGroupId"])
+    .index("by_group_username", ["instanceId", "engineGroupId", "username"]),
 
   // moduleRepository: directory of all available modules (seeded by admins or uploaded)
   moduleRepository: defineTable({
@@ -758,6 +788,8 @@ export default defineSchema({
       v.object({
         name: v.union(
           v.literal("commands"),
+          v.literal("groups"),
+          v.literal("functions"),
           v.literal("workflows"),
           v.literal("scenes"),
           v.literal("triggers"),

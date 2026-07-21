@@ -3,12 +3,22 @@ import type { ActionCtx } from "../../_generated/server";
 import type { EngineApi } from "../engineInstanceUrl";
 import { actionsStep } from "./steps/actions";
 import { commandsStep } from "./steps/commands";
+import { functionsStep } from "./steps/functions";
+import { groupsStep } from "./steps/groups";
 import { scenesStep } from "./steps/scenes";
 import { triggersStep } from "./steps/triggers";
 import { widgetsStep } from "./steps/widgets";
 import { workflowsStep } from "./steps/workflows";
 
-export type SyncStepName = "commands" | "workflows" | "scenes" | "triggers" | "actions" | "widgets";
+export type SyncStepName =
+  | "commands"
+  | "groups"
+  | "functions"
+  | "workflows"
+  | "scenes"
+  | "triggers"
+  | "actions"
+  | "widgets";
 
 export interface SyncStepContext {
   ctx: ActionCtx;
@@ -28,4 +38,13 @@ export interface SyncStep {
   run(c: SyncStepContext): Promise<{ itemsProcessed: number }>;
 }
 
-export const SYNC_STEPS: readonly SyncStep[] = [commandsStep, workflowsStep, scenesStep, triggersStep, actionsStep, widgetsStep];
+export const SYNC_STEPS: readonly SyncStep[] = [
+  commandsStep,
+  groupsStep,
+  functionsStep,
+  workflowsStep,
+  scenesStep,
+  triggersStep,
+  actionsStep,
+  widgetsStep,
+];

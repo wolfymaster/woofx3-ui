@@ -8,11 +8,6 @@ import type { SyncStep, SyncStepContext } from "../steps";
  * `internal.engineSyncInternal.reconcileCommands`. The engine is the
  * source of truth: locally-cached rows are upserted by `engineCommandId`
  * and rows whose engine id disappears are deleted.
- *
- * The engine's `CommandSnapshot` (see `@woofx3/api`) keeps the
- * type-discriminated payload in a single `typeValue` string. Legacy
- * Convex-side fields (`response` / `template` / `functionId`) are not
- * part of the snapshot and are intentionally not mapped here.
  */
 export const commandsStep: SyncStep = {
   name: "commands",
@@ -27,6 +22,9 @@ export const commandsStep: SyncStep = {
       cooldown: s.cooldown,
       priority: s.priority,
       enabled: s.enabled,
+      visibility: s.visibility,
+      groupIds: s.groupIds ?? [],
+      usernames: s.usernames ?? [],
     }));
     return await ctx.runMutation(internal.engineSyncInternal.reconcileCommands, {
       instanceId,

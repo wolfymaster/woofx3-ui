@@ -571,6 +571,72 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      case EngineEventType.COMMAND_CREATED:
+      case EngineEventType.COMMAND_UPDATED: {
+        await ctx.runMutation(internal.chatCommands.upsertFromWebhook, {
+          instanceId: instance._id,
+          applicationId: event.command.applicationId,
+          engineCommandId: event.command.id,
+          command: event.command.command,
+          type: event.command.type,
+          typeValue: event.command.typeValue,
+          cooldown: event.command.cooldown,
+          priority: event.command.priority,
+          enabled: event.command.enabled,
+          visibility: event.command.visibility,
+          groupIds: event.command.groupIds ?? [],
+          usernames: event.command.usernames ?? [],
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.COMMAND_DELETED: {
+        await ctx.runMutation(internal.chatCommands.deleteFromWebhook, {
+          instanceId: instance._id,
+          engineCommandId: event.commandId,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.GROUP_CREATED:
+      case EngineEventType.GROUP_UPDATED: {
+        await ctx.runMutation(internal.chatCommandGroups.upsertFromWebhook, {
+          instanceId: instance._id,
+          applicationId: event.group.applicationId,
+          engineGroupId: event.group.id,
+          name: event.group.name,
+          description: event.group.description,
+          engineCreatedAt: event.group.createdAt,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.GROUP_DELETED: {
+        await ctx.runMutation(internal.chatCommandGroups.deleteFromWebhook, {
+          instanceId: instance._id,
+          engineGroupId: event.groupId,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.GROUP_MEMBER_ADDED: {
+        await ctx.runMutation(internal.chatCommandGroups.addMemberFromWebhook, {
+          instanceId: instance._id,
+          engineGroupId: event.groupId,
+          username: event.username,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.GROUP_MEMBER_REMOVED: {
+        await ctx.runMutation(internal.chatCommandGroups.removeMemberFromWebhook, {
+          instanceId: instance._id,
+          engineGroupId: event.groupId,
+          username: event.username,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       case EngineEventType.MODULE_TRIGGER_DEREGISTERED: {
         await ctx.runMutation(internal.moduleWebhook.processDeregisteredDefinitions, {
           instanceId: instance._id,
