@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useStore } from '@nanostores/react';
-import { useAction } from 'convex/react';
+import { useAction, useQuery } from 'convex/react';
 import {
   LayoutDashboard,
   Puzzle,
@@ -81,41 +81,50 @@ const utilityItems: NavItem[] = [
   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ];
 
-interface StreamStatusProps {
-  accountId?: string;
+function formatUptime(startedAt: string, now: number): string {
+  const startedAtMs = Date.parse(startedAt);
+  const elapsedSec = Number.isFinite(startedAtMs) ? Math.max(0, Math.floor((now - startedAtMs) / 1000)) : 0;
+  const hh = Math.floor(elapsedSec / 3600);
+  const mm = Math.floor((elapsedSec % 3600) / 60);
+  const ss = elapsedSec % 60;
+  return [hh, mm, ss].map((n) => n.toString().padStart(2, '0')).join(':');
 }
 
-function StreamStatus({ accountId = 'default' }: StreamStatusProps) {
+function StreamStatus() {
   const { instance } = useInstance();
-  const getStreamStatus = useAction(api.streamStatus.getStreamStatus);
-  const [status, setStatus] = useState<{ isLive: boolean; uptime: string; viewerCount: number } | null>(null);
+  const liveState = useQuery(api.instanceLiveState.getForInstance, instance ? { instanceId: instance._id } : 'skip');
+  const pollLiveState = useAction(api.streamStatus.pollLiveState);
+  const [now, setNow] = useState(() => Date.now());
 
+  const isLive = liveState?.isLive ?? false;
+
+  // instanceLiveState is normally kept fresh by STREAM_ONLINE/OFFLINE webhook
+  // pushes, and self-heals in the background via the `stream live state sweep`
+  // cron (convex/crons.ts) even with no dashboard open. This one-shot poll on
+  // load is just for instant freshness the moment someone opens the app,
+  // rather than waiting for the next cron tick.
   useEffect(() => {
     if (!instance) {
-      setStatus(null);
       return;
     }
-    const instanceId = instance._id;
-    let cancelled = false;
-    async function poll() {
-      try {
-        const result = await getStreamStatus({ instanceId });
-        if (!cancelled) setStatus(result);
-      } catch {
-        if (!cancelled) setStatus(null);
-      }
-    }
-    poll();
-    const interval = setInterval(poll, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [instance, getStreamStatus]);
+    void pollLiveState({ instanceId: instance._id });
+  }, [instance, pollLiveState]);
 
-  const isLive = status?.isLive ?? false;
-  const uptime = status?.uptime ?? '00:00:00';
-  const viewers = status?.viewerCount ?? 0;
+  useEffect(() => {
+    if (!isLive) {
+      return;
+    }
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [isLive]);
+
+  const uptime = useMemo(() => {
+    if (!isLive || !liveState?.startedAt) {
+      return '00:00:00';
+    }
+    return formatUptime(liveState.startedAt, now);
+  }, [isLive, liveState?.startedAt, now]);
+  const viewers = liveState?.viewerCount ?? 0;
 
   return (
     <div className="flex items-center gap-3">
@@ -168,7 +177,6 @@ function AppHeader() {
   const unreadCount = notifications.filter(n => !n.read).length;
   const displayName = (user as any)?.name || 'User';
   const instanceDisplayName = instance?.name || 'No Instance';
-  const instanceId = instance?._id || 'default';
   const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
 
   const openCommandPalette = useCallback(() => {
@@ -227,7 +235,7 @@ function AppHeader() {
         <Separator orientation="vertical" className="h-6 hidden md:block" />
 
         <div className="hidden md:block">
-          <StreamStatus accountId={instanceId} />
+          <StreamStatus />
         </div>
       </div>
 
