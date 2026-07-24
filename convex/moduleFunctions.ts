@@ -4,15 +4,41 @@ import { internalMutation, type MutationCtx, query } from "./_generated/server";
 
 const functionValidator = v.object({
   id: v.string(),
+  // Not used to build qualifiedName — see canonicalFunctionId below for why —
+  // but the raw webhook payload includes them and Convex validators reject
+  // unlisted extra fields, so they must stay declared here even though we
+  // ignore their values.
   canonicalId: v.optional(v.string()),
-  projectionKey: v.optional(v.string()),
   moduleId: v.optional(v.string()),
+  projectionKey: v.optional(v.string()),
   manifestId: v.optional(v.string()),
   name: v.optional(v.string()),
   fileName: v.optional(v.string()),
   entryPoint: v.optional(v.string()),
   runtime: v.optional(v.string()),
 });
+
+// Barkloader's ModuleRegistry::get_function resolves the invoke path as
+// `{moduleId}:function:{manifestId}` (colon-separated, literal "function"
+// middle segment). `moduleId` here is the manifest's own declared `id` field
+// (module_manifest.rs::compute_module_key: `{id}:{version}:{hash}`) — NOT
+// the engine's `FunctionDefinition.moduleId`/`AvailableFunction.moduleId`,
+// which is a DB row UUID (commands.ts's listAvailableFunctions sets it from
+// `m.id`, not the manifest id — confirmed wrong by testing against a real
+// engine). moduleKey (which we already store per-module in moduleRepository)
+// is built from that same manifest id as its first colon segment, so derive
+// the canonical id from moduleKey instead of trusting any engine-supplied
+// "moduleId" field.
+function canonicalFunctionId(moduleKey: string, manifestId: string): string {
+  const engineModuleId = moduleKey.split(":")[0];
+  if (engineModuleId) {
+    return `${engineModuleId}:function:${manifestId}`;
+  }
+  // No moduleKey to derive from — fall back to the manifestId alone rather
+  // than crash. Not expected in practice since moduleKey is required to
+  // look up the moduleRepository row in the first place.
+  return manifestId;
+}
 
 export const list = query({
   args: {},
@@ -91,6 +117,7 @@ export const upsertFromWebhook = internalMutation({
     }
 
     for (const fn of functions) {
+      const manifestId = fn.manifestId ?? fn.id;
       const row = {
         moduleId,
         engineFunctionId: fn.id,
@@ -98,7 +125,7 @@ export const upsertFromWebhook = internalMutation({
         manifestId: fn.manifestId,
         moduleName,
         functionName: fn.name ?? fn.manifestId ?? fn.id,
-        qualifiedName: `${moduleName}/${fn.manifestId ?? fn.name ?? fn.id}`,
+        qualifiedName: canonicalFunctionId(moduleKey, manifestId),
         fileName: fn.fileName ?? "",
         entryPoint: fn.entryPoint ?? "",
         runtime: fn.runtime ?? "",

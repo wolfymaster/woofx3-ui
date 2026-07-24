@@ -58,6 +58,7 @@ export const createCommand = action({
     visibility: visibilityValidator,
     groupIds: v.optional(v.array(v.string())),
     usernames: v.optional(v.array(v.string())),
+    argumentPattern: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ engineCommandId: string }> => {
     const bundle = await requireInstanceContext(ctx, args.instanceId);
@@ -74,6 +75,7 @@ export const createCommand = action({
       visibility: args.visibility,
       groupIds: args.groupIds,
       usernames: args.usernames,
+      argumentPattern: args.argumentPattern,
       correlationKey,
     });
 
@@ -90,6 +92,7 @@ export const createCommand = action({
       visibility: result.visibility,
       groupIds: result.groupIds ?? [],
       usernames: result.usernames ?? [],
+      argumentPattern: result.argumentPattern,
     });
 
     return { engineCommandId: result.id };
@@ -109,6 +112,7 @@ export const updateCommand = action({
     visibility: visibilityValidator,
     groupIds: v.optional(v.array(v.string())),
     usernames: v.optional(v.array(v.string())),
+    argumentPattern: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ engineCommandId: string }> => {
     const bundle = await requireInstanceContext(ctx, args.instanceId);
@@ -125,6 +129,7 @@ export const updateCommand = action({
       visibility: args.visibility,
       groupIds: args.groupIds,
       usernames: args.usernames,
+      argumentPattern: args.argumentPattern,
       correlationKey,
     });
 
@@ -141,6 +146,7 @@ export const updateCommand = action({
       visibility: result.visibility,
       groupIds: result.groupIds ?? [],
       usernames: result.usernames ?? [],
+      argumentPattern: result.argumentPattern,
     });
 
     return { engineCommandId: result.id };

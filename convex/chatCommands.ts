@@ -102,6 +102,7 @@ export const upsertFromWebhook = internalMutation({
     visibility: v.union(v.literal("public"), v.literal("restricted")),
     groupIds: v.array(v.string()),
     usernames: v.array(v.string()),
+    argumentPattern: v.string(),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -122,6 +123,7 @@ export const upsertFromWebhook = internalMutation({
       visibility: args.visibility,
       groupIds: args.groupIds,
       usernames: args.usernames,
+      argumentPattern: args.argumentPattern,
       updatedAt: Date.now(),
     };
 

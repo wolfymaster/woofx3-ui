@@ -47,6 +47,7 @@ export const reconcileCommands = internalMutation({
         visibility: v.union(v.literal("public"), v.literal("restricted")),
         groupIds: v.array(v.string()),
         usernames: v.array(v.string()),
+        argumentPattern: v.string(),
       })
     ),
   },
@@ -78,6 +79,7 @@ export const reconcileCommands = internalMutation({
         visibility: snap.visibility,
         groupIds: snap.groupIds,
         usernames: snap.usernames,
+        argumentPattern: snap.argumentPattern,
         updatedAt: now,
       };
       if (found) {
@@ -734,7 +736,6 @@ export const reconcileFunctions = internalMutation({
         moduleName: v.string(),
         manifestId: v.string(),
         name: v.string(),
-        qualifiedName: v.string(),
         runtime: v.string(),
       })
     ),
@@ -745,6 +746,7 @@ export const reconcileFunctions = internalMutation({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
     const moduleIdByName = new Map(modulesForInstance.map((m) => [m.name, m._id]));
+    const moduleKeyByName = new Map(modulesForInstance.map((m) => [m.name, m.moduleKey]));
 
     const snapshotIds = new Set(snapshots.map((s) => s.engineFunctionId));
     let processed = 0;
@@ -757,12 +759,23 @@ export const reconcileFunctions = internalMutation({
 
       const moduleId = existing?.moduleId ?? moduleIdByName.get(snap.moduleName);
 
+      // barkloader's ModuleRegistry resolves the invoke path as
+      // `{engine moduleId}:function:{manifestId}`, where the engine moduleId
+      // is the manifest's own declared `id` field — NOT this RPC's
+      // AvailableFunction.moduleId (a DB row UUID, confirmed wrong against a
+      // real engine) and NOT the display-name-based `snap.qualifiedName`
+      // this RPC returns. moduleKey (module_manifest.rs::compute_module_key:
+      // `{id}:{version}:{hash}`) is built from that same manifest id, so
+      // derive it from moduleKey's first segment instead. See
+      // docs/services/commands-ui.md in the woofx3 engine repo.
+      const moduleKey = moduleKeyByName.get(snap.moduleName);
+      const engineModuleId = moduleKey?.split(":")[0];
       const fields = {
         moduleId,
         moduleName: snap.moduleName,
         manifestId: snap.manifestId,
         functionName: snap.name,
-        qualifiedName: snap.qualifiedName,
+        qualifiedName: engineModuleId ? `${engineModuleId}:function:${snap.manifestId}` : snap.manifestId,
         runtime: snap.runtime,
       };
 
@@ -784,10 +797,12 @@ export const reconcileFunctions = internalMutation({
         )
         .first();
       if (!existingInst) {
+        // AvailableFunction (this RPC's response type) carries no
+        // projectionKey — that's a webhook-only (FunctionDefinition) field.
+        // Leave unset here rather than reuse the invocation-path qualifiedName.
         await ctx.db.insert("instanceFunctions", {
           instanceId,
           functionId: snap.engineFunctionId,
-          projectionKey: snap.qualifiedName,
         });
       }
 

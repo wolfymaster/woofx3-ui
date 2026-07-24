@@ -25,6 +25,7 @@ export const commandsStep: SyncStep = {
       visibility: s.visibility,
       groupIds: s.groupIds ?? [],
       usernames: s.usernames ?? [],
+      argumentPattern: s.argumentPattern ?? "",
     }));
     return await ctx.runMutation(internal.engineSyncInternal.reconcileCommands, {
       instanceId,

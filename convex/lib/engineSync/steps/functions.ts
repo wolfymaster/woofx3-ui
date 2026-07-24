@@ -13,6 +13,17 @@ import type { SyncStep, SyncStepContext } from "../steps";
  * module (re)registers, while this step is the self-healing fallback for
  * modules that were installed before that webhook path existed, or whose
  * registration webhook was missed.
+ *
+ * Both `f.qualifiedName` AND `f.moduleId` from this RPC are intentionally
+ * dropped, not forwarded — `qualifiedName` is display-name-based and doesn't
+ * resolve in barkloader's ModuleRegistry, and `f.moduleId` is actually the
+ * module's database row UUID (commands.ts's listAvailableFunctions sets it
+ * from `m.id`), not the manifest-declared module id barkloader's registry
+ * key actually uses. reconcileFunctions rebuilds the canonical id from the
+ * module's `moduleKey` (already stored per-module in moduleRepository,
+ * looked up by `moduleName`) instead — moduleKey's first colon segment is
+ * built from that same manifest id at install time. See
+ * docs/services/commands-ui.md in the woofx3 engine repo.
  */
 export const functionsStep: SyncStep = {
   name: "functions",
@@ -23,7 +34,6 @@ export const functionsStep: SyncStep = {
       moduleName: f.moduleName,
       manifestId: f.manifestId,
       name: f.name,
-      qualifiedName: f.qualifiedName,
       runtime: f.runtime,
     }));
     return await ctx.runMutation(internal.engineSyncInternal.reconcileFunctions, {

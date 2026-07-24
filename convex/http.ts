@@ -320,6 +320,14 @@ http.route({
   }),
 });
 
+function extractApplicationId(event: unknown): string | undefined {
+  if (event && typeof event === "object" && "applicationId" in event) {
+    const value = (event as { applicationId?: unknown }).applicationId;
+    return typeof value === "string" ? value : undefined;
+  }
+  return undefined;
+}
+
 http.route({ path: "/api/webhooks/woofx3", method: "OPTIONS", handler: preflightHandler });
 http.route({
   path: "/api/webhooks/woofx3",
@@ -369,6 +377,15 @@ http.route({
       instanceId: instance._id,
       type: eventType,
       payload: JSON.stringify(payload),
+    });
+
+    await ctx.runMutation(internal.engineEventLog.record, {
+      instanceId: instance._id,
+      applicationId: extractApplicationId(envelope.data),
+      eventType,
+      payload: JSON.stringify(envelope.data ?? null),
+      envelopeId: typeof envelope.id === "string" ? envelope.id : undefined,
+      engineEventTime: typeof envelope.time === "string" ? envelope.time : undefined,
     });
 
     if (!event || typeof event !== "object" || !event.type) {
@@ -586,6 +603,7 @@ http.route({
           visibility: event.command.visibility,
           groupIds: event.command.groupIds ?? [],
           usernames: event.command.usernames ?? [],
+          argumentPattern: event.command.argumentPattern ?? "",
         });
         return corsJson({ success: true, type: event.type });
       }

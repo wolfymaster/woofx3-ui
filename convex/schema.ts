@@ -153,6 +153,13 @@ export default defineSchema({
     command: v.string(), // without the "!" prefix
     type: v.union(v.literal("text"), v.literal("function")),
     typeValue: v.string(), // response text ("text") or qualified function name ("function")
+    // "{variable}" placeholders parsed out of user input after the command
+    // word, e.g. "{songTitle}" — extracted values are merged into the
+    // function's invoke payload (or usable in a "text" response). Empty
+    // string = no named arguments. See CommandSnapshot.argumentPattern in
+    // @woofx3/api for the full extraction rule. Optional to accommodate rows
+    // written before this field existed; treat missing as "".
+    argumentPattern: v.optional(v.string()),
     cooldown: v.number(), // seconds, 0 = never throttle
     priority: v.number(),
     enabled: v.boolean(),
@@ -747,18 +754,30 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user_instance", ["userId", "instanceId"]),
 
-  // debugEventHistory: history of simulated Twitch events for debugging
-  debugEventHistory: defineTable({
-    userId: v.id("users"),
+  // engineEventLog: audit trail of every engine webhook event received
+  // (source: "webhook", written by the POST /api/webhooks/woofx3 handler in
+  // http.ts) plus every manual re-fire of a logged event from the Debug page
+  // (source: "retrigger", written by engineEventLog.retrigger). payload is a
+  // JSON string of the raw, unescaped event data — never structured v.any(),
+  // since the engine embeds $ref keys that Convex rejects on structured
+  // fields (see lib/dollarKeys.ts).
+  engineEventLog: defineTable({
     instanceId: v.id("instances"),
+    applicationId: v.optional(v.string()),
     eventType: v.string(),
-    payload: v.any(),
-    sentAt: v.number(),
-    success: v.boolean(),
+    payload: v.string(),
+    source: v.union(v.literal("webhook"), v.literal("retrigger")),
+    envelopeId: v.optional(v.string()), // CloudEvents `id` — webhook rows only
+    engineEventTime: v.optional(v.string()), // CloudEvents `time` — webhook rows only
+    userId: v.optional(v.id("users")), // who fired it — retrigger rows only
+    retriggerOfId: v.optional(v.id("engineEventLog")), // retrigger rows only
+    success: v.optional(v.boolean()), // retrigger rows only
     errorMessage: v.optional(v.string()),
+    receivedAt: v.number(),
   })
-    .index("by_user_instance", ["userId", "instanceId"])
-    .index("by_sent_at", ["sentAt"]),
+    .index("by_instance_received_at", ["instanceId", "receivedAt"])
+    .index("by_instance_type_received_at", ["instanceId", "eventType", "receivedAt"])
+    .index("by_received_at", ["receivedAt"]),
 
   // instanceSync: per-instance sync schedule and state. Driven by the
   // engine-sync sweep cron. One row per instance; created lazily on first

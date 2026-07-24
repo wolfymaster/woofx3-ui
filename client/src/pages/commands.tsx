@@ -110,6 +110,26 @@ function truncate(text: string, max = 60): string {
   return `${text.slice(0, max)}...`;
 }
 
+// Everything up to the first space is the command word; everything after is
+// the argumentPattern (e.g. "sr {songTitle}" -> command "sr", pattern
+// "{songTitle}"). See CommandSnapshot.argumentPattern in @woofx3/api for the
+// extraction rule the engine applies at chat-message time.
+function splitCommandInput(raw: string): { command: string; argumentPattern: string } {
+  const trimmed = raw.trim().replace(/^!/, "");
+  const spaceIndex = trimmed.indexOf(" ");
+  if (spaceIndex === -1) {
+    return { command: trimmed, argumentPattern: "" };
+  }
+  return {
+    command: trimmed.slice(0, spaceIndex),
+    argumentPattern: trimmed.slice(spaceIndex + 1).trim(),
+  };
+}
+
+function joinCommandInput(command: string, argumentPattern: string): string {
+  return argumentPattern ? `${command} ${argumentPattern}` : command;
+}
+
 function CommandTableSkeleton() {
   return (
     <Card>
@@ -258,7 +278,7 @@ function CommandsTab({
   function openEditDialog(cmd: CommandDoc) {
     setEditing(cmd);
     setFormState({
-      command: cmd.command,
+      command: joinCommandInput(cmd.command, cmd.argumentPattern ?? ""),
       type: cmd.type,
       typeValue: cmd.typeValue,
       cooldown: cmd.cooldown,
@@ -305,7 +325,7 @@ function CommandsTab({
   async function handleSave() {
     setFormError(null);
 
-    const command = formState.command.trim().replace(/^!/, "");
+    const { command, argumentPattern } = splitCommandInput(formState.command);
     if (!command) {
       setFormError("Command name is required.");
       return;
@@ -335,6 +355,7 @@ function CommandsTab({
           visibility: formState.visibility,
           groupIds: formState.groupIds,
           usernames: formState.usernames,
+          argumentPattern,
         });
         toast({ title: "Command updated" });
       } else {
@@ -349,6 +370,7 @@ function CommandsTab({
           visibility: formState.visibility,
           groupIds: formState.groupIds,
           usernames: formState.usernames,
+          argumentPattern,
         });
         toast({ title: "Command created" });
       }
@@ -395,6 +417,7 @@ function CommandsTab({
         visibility: cmd.visibility,
         groupIds: cmd.groupIds,
         usernames: cmd.usernames,
+        argumentPattern: cmd.argumentPattern ?? "",
       });
     } catch (err: unknown) {
       toast({
@@ -449,7 +472,12 @@ function CommandsTab({
             <TableBody>
               {sortedCommands.map((cmd) => (
                 <TableRow key={cmd._id}>
-                  <TableCell className="font-mono font-medium">!{cmd.command}</TableCell>
+                  <TableCell className="font-mono font-medium">
+                    !{cmd.command}
+                    {cmd.argumentPattern ? (
+                      <span className="text-muted-foreground font-normal"> {cmd.argumentPattern}</span>
+                    ) : null}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={cmd.type === "function" ? "outline" : "default"} className="capitalize">
                       {cmd.type}
@@ -545,12 +573,17 @@ function CommandsTab({
                 </span>
                 <Input
                   id="cmd-name"
-                  placeholder="hello"
+                  placeholder="sr {songTitle}"
                   className="pl-6 font-mono"
                   value={formState.command}
                   onChange={(e) => setFormState((s) => ({ ...s, command: e.target.value }))}
                 />
               </div>
+              <p className="text-xs text-muted-foreground">
+                Everything up to the first space is the command name. Add {"{variableName}"} after it to capture the
+                rest of the message as an argument — e.g. "sr {"{songTitle}"}" passes what the user types after !sr as
+                songTitle.
+              </p>
             </div>
 
             <div className="grid gap-2">
