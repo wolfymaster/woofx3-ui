@@ -7,6 +7,8 @@ import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import { buildBrowserSourceHtml, buildBrowserSourcePlaceholderHtml } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
+import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
+import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { widgetCanonicalKey } from "./lib/widgetKey";
 import { logger } from "./logger";
@@ -263,6 +265,166 @@ http.route({
   }),
 });
 
+function moduleIntegrationErrorRedirect(
+  siteUrl: string,
+  redirectTo: string,
+  integration: string,
+  message: string
+): Response {
+  logger.error("module integration oauth failed", { integration, message });
+  const params = new URLSearchParams({ integration, status: "error", message });
+  return new Response(null, {
+    status: 302,
+    headers: { Location: `${siteUrl}${redirectTo}?${params}` },
+  });
+}
+
+http.route({
+  path: "/api/integrations/spotify/start",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    assert(process.env.SPOTIFY_REDIRECT_URI, "SPOTIFY_REDIRECT_URI env var is not set");
+    const siteUrl = process.env.SITE_URL ?? "";
+
+    const url = new URL(request.url);
+    const instanceId = url.searchParams.get("instanceId");
+    const moduleId = url.searchParams.get("moduleId");
+    const redirectTo = url.searchParams.get("redirect_to") ?? "/modules";
+
+    if (!instanceId || !moduleId) {
+      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "instanceId and moduleId are required");
+    }
+
+    let clientId: string;
+    try {
+      clientId = await ctx.runAction(internal.spotifyIntegration.resolveClientId, {
+        instanceId: instanceId as Id<"instances">,
+        moduleId,
+      });
+    } catch (err) {
+      return moduleIntegrationErrorRedirect(
+        siteUrl,
+        redirectTo,
+        "spotify",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+
+    const state = crypto.randomUUID();
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = await computeCodeChallenge(codeVerifier);
+
+    await ctx.runMutation(internal.moduleIntegrationState.storeState, {
+      state,
+      instanceId: instanceId as Id<"instances">,
+      moduleId,
+      integration: "spotify",
+      redirectTo,
+      data: { clientId, codeVerifier },
+    });
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      response_type: "code",
+      redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+      scope: SPOTIFY_INTEGRATION_SCOPES.join(" "),
+      state,
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
+    });
+
+    logger.info("redirecting to spotify for integration", { state, redirectTo, instanceId, moduleId });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `https://accounts.spotify.com/authorize?${params}` },
+    });
+  }),
+});
+
+http.route({
+  path: "/api/integrations/spotify/callback",
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    assert(process.env.SPOTIFY_REDIRECT_URI, "SPOTIFY_REDIRECT_URI env var is not set");
+    const siteUrl = process.env.SITE_URL ?? "";
+
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+
+    if (!code || !state) {
+      // No redirectTo is known without a valid state row — /modules is the
+      // best available fallback destination.
+      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "spotify", "missing code or state");
+    }
+
+    const stateResult = await ctx.runMutation(internal.moduleIntegrationState.validateAndConsumeState, { state });
+    if (!stateResult || stateResult.integration !== "spotify") {
+      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "spotify", "state not found or expired");
+    }
+    const { instanceId, moduleId, redirectTo, data } = stateResult;
+    const { clientId, codeVerifier } = (data ?? {}) as { clientId?: string; codeVerifier?: string };
+    if (!clientId || !codeVerifier) {
+      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "malformed OAuth state");
+    }
+
+    const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+        client_id: clientId,
+        code_verifier: codeVerifier,
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const body = await tokenRes.text();
+      return moduleIntegrationErrorRedirect(
+        siteUrl,
+        redirectTo,
+        "spotify",
+        `token exchange failed: HTTP ${tokenRes.status}: ${body}`
+      );
+    }
+
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token || !tokenData.refresh_token) {
+      return moduleIntegrationErrorRedirect(
+        siteUrl,
+        redirectTo,
+        "spotify",
+        `no access_token/refresh_token in token response: ${JSON.stringify(tokenData)}`
+      );
+    }
+
+    try {
+      await ctx.runAction(internal.spotifyIntegration.writeOAuthResult, {
+        instanceId,
+        moduleId,
+        clientId,
+        authToken: tokenData.access_token,
+        refreshToken: tokenData.refresh_token,
+      });
+    } catch (err) {
+      return moduleIntegrationErrorRedirect(
+        siteUrl,
+        redirectTo,
+        "spotify",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+
+    logger.info("spotify integration connected", { instanceId, moduleId });
+    return new Response(null, {
+      status: 302,
+      headers: { Location: `${siteUrl}${redirectTo}?integration=spotify&status=connected` },
+    });
+  }),
+});
+
 http.route({ path: "/api/webhooks/woofx3/alerts", method: "OPTIONS", handler: preflightHandler });
 http.route({
   path: "/api/webhooks/woofx3/alerts",
@@ -398,7 +560,7 @@ http.route({
 
     switch (event.type) {
       case EngineEventType.MODULE_INSTALLED: {
-        await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
+        const moduleDbId = await ctx.runMutation(internal.moduleWebhook.processModuleInstalled, {
           instanceId: instance._id,
           correlationKey: event.moduleKey,
           moduleName: event.moduleName,
@@ -408,6 +570,14 @@ http.route({
           // events.
           triggers: [],
           actions: [],
+        });
+        // Neither install path (marketplace or direct zip upload) reliably has
+        // the manifest in hand at this point, so fetch the engine's
+        // authoritative copy out-of-band rather than block the webhook response.
+        await ctx.scheduler.runAfter(0, internal.moduleManifestSync.syncManifest, {
+          instanceId: instance._id,
+          moduleDbId,
+          manifestModuleId: event.moduleKey.split(":")[0],
         });
         return corsJson({ success: true, type: event.type });
       }

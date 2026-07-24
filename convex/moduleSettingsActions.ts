@@ -2,8 +2,10 @@
 
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { action } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action } from "./_generated/server";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
 export interface ModuleSettingValue {
   id: string;
@@ -11,6 +13,20 @@ export interface ModuleSettingValue {
   key: string;
   value: string;
   valueType: string;
+}
+
+export async function requireEngineInstance(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<{ url: string; clientId: string; clientSecret: string }> {
+  const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+  if (!instance) {
+    throw new Error("Instance not found");
+  }
+  if (!instance.clientId || !instance.clientSecret) {
+    throw new Error("Instance is not registered with the engine");
+  }
+  return { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
 }
 
 export const getModuleSettings = action({
@@ -23,19 +39,13 @@ export const getModuleSettings = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const instance: { url: string } | null = await ctx.runQuery(internal.instances.getInternal, { instanceId });
-    if (!instance) {
-      throw new Error("Instance not found");
-    }
-    const resp = await fetch(
-      `${instance.url}/modules/${encodeURIComponent(moduleId)}/settings`
-    );
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
-      throw new Error(`Failed to fetch module settings: ${resp.status} ${text}`);
-    }
-    const data = await resp.json() as { settings?: ModuleSettingValue[] };
-    return data.settings ?? [];
+    const instance = await requireEngineInstance(ctx, instanceId);
+    const result = await createEngineRpcSession<EngineApi>(
+      instance.url,
+      instance.clientId,
+      instance.clientSecret
+    ).getModuleSettings(moduleId);
+    return result.settings;
   },
 });
 
@@ -51,22 +61,11 @@ export const updateModuleSetting = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const instance: { url: string } | null = await ctx.runQuery(internal.instances.getInternal, { instanceId });
-    if (!instance) {
-      throw new Error("Instance not found");
-    }
-    const resp = await fetch(
-      `${instance.url}/modules/${encodeURIComponent(moduleId)}/settings/${encodeURIComponent(key)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value }),
-      }
-    );
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => "");
-      throw new Error(`Failed to update module setting: ${resp.status} ${text}`);
-    }
-    return resp.json() as Promise<ModuleSettingValue>;
+    const instance = await requireEngineInstance(ctx, instanceId);
+    return createEngineRpcSession<EngineApi>(
+      instance.url,
+      instance.clientId,
+      instance.clientSecret
+    ).updateModuleSetting(moduleId, key, value);
   },
 });

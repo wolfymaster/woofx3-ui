@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { useAction, useQuery } from "convex/react";
-import { Loader2, Puzzle, XCircle } from "lucide-react";
+import { Check, Loader2, Puzzle, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
@@ -21,6 +21,27 @@ export default function Modules() {
   const routeModuleId = segments[0] === "modules" && segments.length >= 2 && segments[1] !== "install" && segments[1] !== "installed"
     ? segments[1]
     : undefined;
+
+  const [oauthResult, setOauthResult] = useState<{ integration: string; status: string; message: string | null } | null>(
+    () => {
+      const params = new URLSearchParams(window.location.search);
+      const integration = params.get("integration");
+      const status = params.get("status");
+      if (!integration || !status) {
+        return null;
+      }
+      return { integration, status, message: params.get("message") };
+    }
+  );
+
+  const oauthUrlStrippedRef = useRef(false);
+  useEffect(() => {
+    if (!oauthResult || oauthUrlStrippedRef.current) {
+      return;
+    }
+    oauthUrlStrippedRef.current = true;
+    navigate(location, { replace: true });
+  }, [location, navigate, oauthResult]);
 
   const [selectedModule, setSelectedModule] = useState<SelectedModule | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<{
@@ -304,37 +325,62 @@ export default function Modules() {
                 </Card>
               </div>
             ) : (
-              <div className="flex-1 min-h-0">
-                <ModuleDetailPanel
-                  module={detailProps.meta}
-                  triggers={detailProps.triggers}
-                  actions={detailProps.actions}
-                  functions={detailProps.functions}
-                  widgets={detailProps.widgets}
-                  workflows={detailProps.workflows}
-                  loading={moduleDetailLoading}
-                  onBack={() => navigate("/modules")}
-                  instanceId={instance?._id}
-                  moduleDbId={detailProps.moduleDbId}
-                  manifestSettings={detailProps.manifestSettings}
-                  manifestResourceKinds={detailProps.manifestResourceKinds}
-                  onRemove={
-                    selectedModule.source === "installed"
-                      ? () => handleDelete(selectedModule.module._id)
-                      : selectedModule.source === "marketplace" && installedModuleForMarketplace
-                        ? () => handleDelete(installedModuleForMarketplace._id)
-                        : undefined
-                  }
-                  onInstall={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
-                  onUpdate={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
-                  isInstalling={isInstalling}
-                  installDisabled={detailProps.meta.isInstalled}
-                  installDisabledReason={detailProps.meta.isInstalled ? "Already installed" : undefined}
-                  installProgressMessage={isInstalling ? (installEvent?.message ?? null) : null}
-                  installSucceeded={installEvent?.status === "success"}
-                  installError={installError}
-                  onDismissError={dismissInstallError}
-                />
+              <div className="flex-1 min-h-0 flex flex-col">
+                {oauthResult && (
+                  <div
+                    className={`mx-6 mt-4 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs ${
+                      oauthResult.status === "connected"
+                        ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600"
+                        : "border-destructive/30 bg-destructive/5 text-destructive"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {oauthResult.status === "connected" ? (
+                        <Check className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      {oauthResult.status === "connected"
+                        ? `${oauthResult.integration} connected successfully.`
+                        : (oauthResult.message ?? `Failed to connect ${oauthResult.integration}.`)}
+                    </span>
+                    <button type="button" onClick={() => setOauthResult(null)} className="shrink-0">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+                <div className="flex-1 min-h-0">
+                  <ModuleDetailPanel
+                    module={detailProps.meta}
+                    triggers={detailProps.triggers}
+                    actions={detailProps.actions}
+                    functions={detailProps.functions}
+                    widgets={detailProps.widgets}
+                    workflows={detailProps.workflows}
+                    loading={moduleDetailLoading}
+                    onBack={() => navigate("/modules")}
+                    instanceId={instance?._id}
+                    moduleDbId={detailProps.moduleDbId}
+                    manifestSettings={detailProps.manifestSettings}
+                    manifestResourceKinds={detailProps.manifestResourceKinds}
+                    onRemove={
+                      selectedModule.source === "installed"
+                        ? () => handleDelete(selectedModule.module._id)
+                        : selectedModule.source === "marketplace" && installedModuleForMarketplace
+                          ? () => handleDelete(installedModuleForMarketplace._id)
+                          : undefined
+                    }
+                    onInstall={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
+                    onUpdate={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
+                    isInstalling={isInstalling}
+                    installDisabled={detailProps.meta.isInstalled}
+                    installDisabledReason={detailProps.meta.isInstalled ? "Already installed" : undefined}
+                    installProgressMessage={isInstalling ? (installEvent?.message ?? null) : null}
+                    installSucceeded={installEvent?.status === "success"}
+                    installError={installError}
+                    onDismissError={dismissInstallError}
+                  />
+                </div>
               </div>
             )}
           </>

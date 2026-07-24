@@ -6,6 +6,10 @@ import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { marketplaceFetch } from "./marketplace";
 
+export type ManifestSettingAction =
+  | { kind: "internal"; request: { event: string; payload?: Record<string, unknown> }; timeoutMs?: number }
+  | { kind: "integration"; integration: string };
+
 export interface ManifestSettingField {
   id: string;
   name: string;
@@ -13,6 +17,8 @@ export interface ManifestSettingField {
   type: string;
   required: boolean;
   default?: string;
+  /** Present only when `type === "button"`. */
+  action?: ManifestSettingAction;
 }
 
 export interface ManifestResourceKind {
@@ -65,19 +71,11 @@ export const getModuleDetail = action({
     });
 
     if (installedModule) {
-      const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
-      const moduleName = installedModule.name;
-
-      const [triggers, actions, functions, widgets, liveManifest] = await Promise.all([
+      const [triggers, actions, functions, widgets] = await Promise.all([
         ctx.runQuery(api.triggerDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.actionDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.moduleFunctions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.moduleWidgets.listByModule, { moduleId: installedModule._id }),
-        instance
-          ? fetch(`${instance.url}/modules/${encodeURIComponent(moduleName)}/manifest`)
-              .then((r) => (r.ok ? r.json() : null))
-              .catch(() => null)
-          : Promise.resolve(null),
       ]);
 
       const detail = formatInstalledDetail(
@@ -86,7 +84,7 @@ export const getModuleDetail = action({
         actions,
         functions,
         widgets,
-        liveManifest ?? installedModule.manifest
+        installedModule.manifest
       );
       // The DB is authoritative for installed modules, but we do not store the README. Fetch it
       // (and the icon / latest version) from the marketplace and merge it in. Only attempt this when
@@ -103,10 +101,36 @@ export const getModuleDetail = action({
   },
 });
 
+function parseManifestSettingAction(value: unknown): ManifestSettingAction | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const o = value as Record<string, unknown>;
+  if (o.kind === "integration" && typeof o.integration === "string") {
+    return { kind: "integration", integration: o.integration };
+  }
+  if (o.kind === "internal" && o.request && typeof o.request === "object") {
+    const req = o.request as Record<string, unknown>;
+    if (typeof req.event !== "string") {
+      return undefined;
+    }
+    return {
+      kind: "internal",
+      request: {
+        event: req.event,
+        ...(req.payload && typeof req.payload === "object" ? { payload: req.payload as Record<string, unknown> } : {}),
+      },
+      ...(typeof o.timeoutMs === "number" ? { timeoutMs: o.timeoutMs } : {}),
+    };
+  }
+  return undefined;
+}
+
 function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
   const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
   return asArr(raw.settings).map((s) => {
     const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
+    const action = parseManifestSettingAction(o.action);
     return {
       id: asStr(o.id),
       name: asStr(o.name),
@@ -114,6 +138,7 @@ function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
       type: asStr(o.type, "string"),
       required: typeof o.required === "boolean" ? o.required : false,
       ...(o.default !== undefined ? { default: String(o.default) } : {}),
+      ...(action ? { action } : {}),
     };
   }).filter((s) => s.id);
 }

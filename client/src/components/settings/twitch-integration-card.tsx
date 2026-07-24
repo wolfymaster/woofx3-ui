@@ -15,10 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Loader2, Unlink } from "lucide-react";
 import type { Id } from "@convex/_generated/dataModel";
-
-const CONVEX_SITE_URL =
-  (import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ??
-  (import.meta.env.VITE_CONVEX_URL as string).replace(/\.convex\.cloud$/, ".convex.site");
+import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 
 interface TwitchIntegrationCardProps {
   instanceId: Id<"instances"> | undefined;

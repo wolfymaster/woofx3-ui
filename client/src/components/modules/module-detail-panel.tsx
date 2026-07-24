@@ -26,6 +26,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
+import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 import { cn, isNewerVersion } from "@/lib/utils";
 
 export interface ModuleDetailMeta {
@@ -745,6 +747,9 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
           </div>
         )}
         {manifestSettings.map((field) => {
+          if (field.type === "button") {
+            return <SettingButtonRow key={field.id} instanceId={instanceId} moduleId={moduleId} field={field} />;
+          }
           const currentValue = values[field.id] ?? loadedValues?.[field.id] ?? field.default ?? "";
           const isDirty = currentValue !== (loadedValues?.[field.id] ?? field.default ?? "");
           return (
@@ -788,6 +793,87 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
         })}
       </div>
     </ScrollArea>
+  );
+}
+
+interface SettingButtonRowProps {
+  instanceId?: Id<"instances">;
+  moduleId: string;
+  field: ManifestSettingField;
+}
+
+function SettingButtonRow({ instanceId, moduleId, field }: SettingButtonRowProps) {
+  if (field.action?.kind === "internal") {
+    return <InternalSettingButton instanceId={instanceId} field={field} action={field.action} />;
+  }
+  if (field.action?.kind === "integration") {
+    return <IntegrationSettingButton instanceId={instanceId} moduleId={moduleId} field={field} action={field.action} />;
+  }
+  return null;
+}
+
+function InternalSettingButton({
+  instanceId,
+  field,
+  action,
+}: {
+  instanceId?: Id<"instances">;
+  field: ManifestSettingField;
+  action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "internal" }>;
+}) {
+  const { trigger, status, message } = useInternalSettingAction(instanceId, action.request, action.timeoutMs);
+  return (
+    <div className="space-y-2">
+      <Button size="sm" variant="outline" disabled={status === "pending"} onClick={trigger}>
+        {status === "pending" && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
+        {field.name}
+      </Button>
+      {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+      {status === "success" && message && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-600">
+          {message}
+        </div>
+      )}
+      {status === "error" && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+          {message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IntegrationSettingButton({
+  instanceId,
+  moduleId,
+  field,
+  action,
+}: {
+  instanceId?: Id<"instances">;
+  moduleId: string;
+  field: ManifestSettingField;
+  action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "integration" }>;
+}) {
+  const handleClick = () => {
+    if (!instanceId) {
+      return;
+    }
+    // The current path already deep-links back to this module (modules.tsx
+    // resolves /modules/:id via routeModuleId), so redirecting to it as-is
+    // — plus whatever result params the callback appends — is enough.
+    const url = new URL(`${CONVEX_SITE_URL}/api/integrations/${action.integration}/start`);
+    url.searchParams.set("instanceId", instanceId);
+    url.searchParams.set("moduleId", moduleId);
+    url.searchParams.set("redirect_to", window.location.pathname);
+    window.location.href = url.toString();
+  };
+  return (
+    <div className="space-y-2">
+      <Button size="sm" variant="outline" disabled={!instanceId} onClick={handleClick}>
+        {field.name}
+      </Button>
+      {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+    </div>
   );
 }
 

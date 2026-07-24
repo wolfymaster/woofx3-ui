@@ -41,8 +41,12 @@ export const get = query({
 
 /**
  * Upload the zip to storage and deliver it to the engine.
- * No moduleRepository record is created — that only happens on successful install
- * via the webhook callback. Errors are communicated via transientEvents.
+ * Creates (or refreshes) a moduleRepository record in "pending" status so the
+ * manifest we already parsed client-side is persisted immediately — the engine's
+ * module.installed webhook carries no manifest, so this is the only point where
+ * settings/resource declarations are captured. processModuleInstalled flips the
+ * status to "installed" without touching the manifest field. Errors are
+ * communicated via transientEvents.
  */
 export const uploadAndDeliver = mutation({
   args: {
@@ -60,6 +64,30 @@ export const uploadAndDeliver = mutation({
     if (!userId) {
       throw new Error("Not authenticated");
     }
+
+    const existing = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_name_version", (q) => q.eq("name", args.name).eq("version", args.version))
+      .first();
+
+    const fields = {
+      instanceId: args.instanceId,
+      moduleKey: args.moduleKey,
+      name: args.name,
+      description: args.description,
+      version: args.version,
+      tags: args.tags,
+      manifest: args.manifest,
+      archiveKey: args.archiveKey,
+      status: "pending" as const,
+      statusMessage: undefined,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, fields);
+    } else {
+      await ctx.db.insert("moduleRepository", fields);
+    }
+
     await ctx.scheduler.runAfter(0, internal.moduleEngine.deliverZipToInstance, {
       instanceId: args.instanceId,
       moduleKey: args.moduleKey,
@@ -152,6 +180,21 @@ export const deleteRepositoryRecord = internalMutation({
     }
 
     await ctx.db.delete(args.moduleId);
+  },
+});
+
+/**
+ * Internal-only: overwrite a moduleRepository record's cached manifest.
+ * Called after install confirmation once the engine's authoritative manifest
+ * (fetched via getModuleManifest) is available — see moduleManifestSync.ts.
+ */
+export const setManifest = internalMutation({
+  args: {
+    moduleId: v.id("moduleRepository"),
+    manifest: v.any(),
+  },
+  handler: async (ctx, { moduleId, manifest }) => {
+    await ctx.db.patch(moduleId, { manifest });
   },
 });
 

@@ -7,10 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-
-const CONVEX_SITE_URL =
-  (import.meta.env.VITE_CONVEX_SITE_URL as string | undefined) ??
-  (import.meta.env.VITE_CONVEX_URL as string).replace(/\.convex\.cloud$/, ".convex.site");
+import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 
 function getLoginNextPath(): string {
   if (typeof window === "undefined") {

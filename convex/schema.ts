@@ -389,7 +389,11 @@ export default defineSchema({
     completedAt: v.number(),
   }).index("by_correlation", ["correlationKey"]),
 
-  // twitchOAuthState: short-lived CSRF state for Twitch OAuth flow
+  // twitchOAuthState: short-lived CSRF state for Twitch OAuth flow.
+  // Twitch-specific today (login bridge + account-level integration-connect).
+  // TODO: when a second login-bridge platform is added (YouTube, Kick, etc.),
+  // generalize this the same way platformLinks already has a `platform` field,
+  // rather than adding a parallel per-platform state table.
   twitchOAuthState: defineTable({
     state: v.string(),
     redirectTo: v.string(),
@@ -412,6 +416,23 @@ export default defineSchema({
     scopes: v.optional(v.array(v.string())),
     createdAt: v.number(),
   }).index("by_token", ["token"]),
+
+  // moduleIntegrationState: short-lived, one-time-use state for a module
+  // setting's "integration" button (see moduleDetail.ts's ManifestSettingAction).
+  // Generic across integration *types*, not just OAuth — `data` is opaque here
+  // and interpreted only by whichever integration populated it (e.g. Spotify's
+  // OAuth-with-PKCE flow stores { clientId, codeVerifier }). Distinct from
+  // twitchOAuthState: this is module-scoped (instanceId + moduleId), not the
+  // account-level login-bridge case.
+  moduleIntegrationState: defineTable({
+    state: v.string(),
+    instanceId: v.id("instances"),
+    moduleId: v.string(),
+    integration: v.string(),
+    redirectTo: v.string(),
+    data: v.any(),
+    createdAt: v.number(),
+  }).index("by_state", ["state"]),
 
   // licenses: entitlements per account
   licenses: defineTable({

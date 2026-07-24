@@ -236,7 +236,13 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
 
 /**
  * Process a module.installed webhook callback from the engine.
- * Creates the moduleRepository record and emits a success transient event.
+ * Flips the "pending" moduleRepository record created by uploadAndDeliver to
+ * "installed", leaving its manifest untouched. Marketplace installs don't
+ * create a pending record up front (no client-parsed manifest exists for
+ * them), so that path falls back to inserting a manifest-less row here —
+ * http.ts schedules moduleManifestSync.syncManifest right after this
+ * returns, which fetches the engine's authoritative manifest and backfills
+ * it regardless of which path was taken.
  */
 export const processModuleInstalled = internalMutation({
   args: {
@@ -318,6 +324,8 @@ export const processModuleInstalled = internalMutation({
         createdByRef: action.createdByRef,
       });
     }
+
+    return moduleId;
   },
 });
 
@@ -419,7 +427,9 @@ export const processRegisteredDefinitions = internalMutation({
 
 /**
  * Process a module.install_failed webhook callback from the engine.
- * Emits a transient error event only — no moduleRepository record is created.
+ * Flips the "pending" moduleRepository record created by uploadAndDeliver to
+ * "failed" (if one exists — marketplace installs don't create one up front),
+ * then emits a transient error event.
  */
 export const processModuleInstallFailed = internalMutation({
   args: {
@@ -431,6 +441,14 @@ export const processModuleInstallFailed = internalMutation({
   },
   handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion, statusMessage }) => {
     const failMessage = statusMessage ?? "Module installation failed on the engine.";
+
+    const record = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_module_key", (q) => q.eq("moduleKey", correlationKey))
+      .first();
+    if (record) {
+      await ctx.db.patch(record._id, { status: "failed" as const, statusMessage: failMessage });
+    }
 
     await ctx.runMutation(internal.transientEvents.emit, {
       instanceId,
