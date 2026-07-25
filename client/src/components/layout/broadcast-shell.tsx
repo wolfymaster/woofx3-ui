@@ -22,7 +22,7 @@ import {
   Bug,
 } from 'lucide-react';
 import { Link, useLocation } from 'wouter';
-import { cn } from '@/lib/utils';
+import { cn, formatUptime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -80,15 +80,6 @@ const utilityItems: NavItem[] = [
   { id: 'team', label: 'Team', icon: Users, href: '/team' },
   { id: 'settings', label: 'Settings', icon: Settings, href: '/settings' },
 ];
-
-function formatUptime(startedAt: string, now: number): string {
-  const startedAtMs = Date.parse(startedAt);
-  const elapsedSec = Number.isFinite(startedAtMs) ? Math.max(0, Math.floor((now - startedAtMs) / 1000)) : 0;
-  const hh = Math.floor(elapsedSec / 3600);
-  const mm = Math.floor((elapsedSec % 3600) / 60);
-  const ss = elapsedSec % 60;
-  return [hh, mm, ss].map((n) => n.toString().padStart(2, '0')).join(':');
-}
 
 function StreamStatus() {
   const { instance } = useInstance();

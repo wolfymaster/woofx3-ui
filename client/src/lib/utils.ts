@@ -30,3 +30,12 @@ export function isNewerVersion(candidate: string, baseline: string): boolean {
   }
   return false
 }
+
+export function formatUptime(startedAt: string, now: number): string {
+  const startedAtMs = Date.parse(startedAt)
+  const elapsedSec = Number.isFinite(startedAtMs) ? Math.max(0, Math.floor((now - startedAtMs) / 1000)) : 0
+  const hh = Math.floor(elapsedSec / 3600)
+  const mm = Math.floor((elapsedSec % 3600) / 60)
+  const ss = elapsedSec % 60
+  return [hh, mm, ss].map((n) => n.toString().padStart(2, "0")).join(":")
+}
