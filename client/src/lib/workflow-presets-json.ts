@@ -2,7 +2,15 @@ import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { TaskDefinition, TriggerConfig as WorkflowTriggerConfig } from "@woofx3/api/workflow-definition";
 import { isCommandsSource } from "@/lib/parse-config-fields";
-import type { ActionPreset, ConfigValue, TriggerConfigValues, TriggerPreset, TriggerVariant } from "./workflow-presets";
+import type { ActionNode } from "@/lib/workflow-tree";
+import {
+  type ActionPreset,
+  type ConfigValue,
+  getDefaultConfigValues,
+  type TriggerConfigValues,
+  type TriggerPreset,
+  type TriggerVariant,
+} from "./workflow-presets";
 
 type TriggerWithEvent = TriggerPreset & { event?: string };
 
@@ -72,6 +80,47 @@ export function fieldValuesToConditions(fields: ConfigField[], values: TriggerCo
   return out;
 }
 
+function conditionEventPath(condition: ConditionConfig): string | undefined {
+  return /^\$\{trigger\.data\.(.+)\}$/.exec(condition.field)?.[1];
+}
+
+/**
+ * Inverse of a single field's forward encoding in fieldValuesToConditions. Returns `undefined`
+ * when no condition was ever emitted for this field — distinct from an explicit falsy/zero value.
+ */
+export function decodeConditionValue(
+  field: ConfigField,
+  conditions: ConditionConfig[]
+): TriggerConfigValues[string] | undefined {
+  if (isCommandsSource(field)) {
+    return undefined;
+  }
+  const path = field.eventPath ?? field.id;
+  const condition = conditions.find((c) => conditionEventPath(c) === path);
+  if (!condition) {
+    return undefined;
+  }
+  if (field.type === "range") {
+    if (condition.operator === "between" && Array.isArray(condition.value) && condition.value.length === 2) {
+      return { type: "range", min: condition.value[0] as number, max: condition.value[1] as number };
+    }
+    return { type: "single", value: condition.value as number };
+  }
+  return condition.value as TriggerConfigValues[string];
+}
+
+/** Inverse of fieldValuesToConditions — recovers editable field values from a trigger's stored conditions. */
+export function conditionsToFieldValues(fields: ConfigField[], conditions: ConditionConfig[]): TriggerConfigValues {
+  const values = getDefaultConfigValues(fields);
+  for (const field of fields) {
+    const decoded = decodeConditionValue(field, conditions);
+    if (decoded !== undefined) {
+      values[field.id] = decoded;
+    }
+  }
+  return values;
+}
+
 function buildTriggerBlock(
   trigger: TriggerWithEvent,
   values: TriggerConfigValues,
@@ -119,6 +168,34 @@ function buildActionTask(
 
 function resolveTriggerRef(trigger: TriggerWithEvent, triggerRef?: string): string | undefined {
   return triggerRef ?? trigger.canonicalRef;
+}
+
+/**
+ * Builds a fresh ActionNode for a newly-inserted step, from a catalog
+ * ActionPreset the user picked in the action picker. Mirrors buildActionTask's
+ * preset -> wire-field mapping (action/function/ref), pre-filled with the
+ * preset's default config values so the step is immediately meaningful.
+ */
+export function presetToActionNode(preset: ActionPreset, id: string): ActionNode {
+  const handlerType = preset.handlerType ?? (preset.functionCall ? "function" : undefined);
+  if (!handlerType) {
+    throw new Error(
+      `action "${preset.name}" (${preset.id}) is missing handlerType — re-sync the catalog or reinstall the module`
+    );
+  }
+  const node: ActionNode = {
+    type: "action",
+    id,
+    action: handlerType,
+    parameters: getDefaultConfigValues(preset.config?.fields ?? []),
+  };
+  if (preset.functionCall) {
+    node.function = preset.functionCall;
+  }
+  if (preset.canonicalRef) {
+    node.ref = preset.canonicalRef;
+  }
+  return node;
 }
 
 export function buildDefinitionFromPresets(

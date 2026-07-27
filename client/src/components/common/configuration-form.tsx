@@ -1,18 +1,20 @@
 import { api } from "@convex/_generated/api";
 import type { InternalConfigFieldSource } from "@woofx3/api/ui-schema";
 import { useQuery } from "convex/react";
+import { Braces } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ConfigFieldDescription, ConfigFieldLabel } from "@/components/common/config-field-label";
+import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { useFieldOptions } from "@/hooks/use-field-options";
 import { useInstance } from "@/hooks/use-instance";
 import { commandNameToSubjectSegment } from "@/lib/command-slug";
 import { cn } from "@/lib/utils";
+import type { VariableOption } from "@/lib/workflow-variables";
 
 // ---------------------------------------------------------------------------
 // Field descriptor — intentionally a superset of workflow-presets ConfigField
@@ -164,45 +166,6 @@ function RangeFieldRenderer({ field, value, onChange }: FieldRendererProps) {
           {field.unit && <span className="text-sm text-muted-foreground whitespace-nowrap">{field.unit}</span>}
         </div>
       )}
-      {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
-    </div>
-  );
-}
-
-function TextFieldRenderer({ field, value, onChange }: FieldRendererProps) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={field.id}>
-        {field.label}
-        {field.required && <span className="text-destructive ml-0.5">*</span>}
-      </Label>
-      <Input
-        id={field.id}
-        value={(value as string) ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={field.placeholder}
-        data-testid={`input-${field.id}`}
-      />
-      {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
-    </div>
-  );
-}
-
-function TextareaFieldRenderer({ field, value, onChange }: FieldRendererProps) {
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={field.id}>
-        {field.label}
-        {field.required && <span className="text-destructive ml-0.5">*</span>}
-      </Label>
-      <Textarea
-        id={field.id}
-        value={(value as string) ?? ""}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={field.placeholder}
-        rows={3}
-        data-testid={`textarea-${field.id}`}
-      />
       {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
     </div>
   );
@@ -389,12 +352,82 @@ function ToggleFieldRenderer({ field, value, onChange }: FieldRendererProps) {
 const builtinRenderers: Record<string, React.ComponentType<FieldRendererProps>> = {
   number: NumberFieldRenderer,
   range: RangeFieldRenderer,
-  text: TextFieldRenderer,
-  textarea: TextareaFieldRenderer,
   select: SelectFieldRenderer,
   toggle: ToggleFieldRenderer,
   color: ColorFieldRenderer,
 };
+
+// ---------------------------------------------------------------------------
+// Variable references (${stepId.field}) — every field type can be pointed at a
+// previous step's output instead of holding a fixed value. text/textarea handle this
+// inline (VariableAwareInput lets literal text and ${} references mix freely); every
+// other type gets a toggle that swaps its normal typed control for a raw ${} input.
+// ---------------------------------------------------------------------------
+
+/** What a field reverts to when toggled out of variable mode — mirrors workflow-presets.ts's
+ * getDefaultConfigValues, kept separate since this component has no workflow-specific import. */
+function defaultValueForField(field: FieldDescriptor): unknown {
+  if (field.defaultValue !== undefined) {
+    return field.defaultValue;
+  }
+  if (field.type === "range") {
+    return { type: "single", value: field.min ?? 1 };
+  }
+  if (field.type === "number") {
+    return field.min ?? 0;
+  }
+  if (field.type === "toggle") {
+    return false;
+  }
+  return "";
+}
+
+function isVariableReference(value: unknown): value is string {
+  return typeof value === "string" && value.trim().startsWith("${");
+}
+
+function VariableToggleWrapper({
+  field,
+  value,
+  onChange,
+  availableVariables,
+  children,
+}: FieldRendererProps & { availableVariables: VariableOption[]; children: ReactNode }) {
+  const variableMode = isVariableReference(value);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => onChange(variableMode ? defaultValueForField(field) : "")}
+        className="absolute right-0 top-0 text-muted-foreground hover:text-foreground"
+        title={variableMode ? "Use a fixed value" : "Reference a variable instead"}
+        data-testid={`button-toggle-variable-${field.id}`}
+      >
+        <Braces className="h-3.5 w-3.5" />
+      </button>
+      {variableMode ? (
+        <div className="space-y-2 pr-6">
+          <Label>
+            {field.label}
+            {field.required && <span className="text-destructive ml-0.5">*</span>}
+          </Label>
+          <VariableAwareInput
+            value={value as string}
+            onChange={onChange}
+            availableVariables={availableVariables}
+            placeholder="${stepId.field}"
+            className="font-mono text-xs"
+            data-testid={`input-variable-${field.id}`}
+          />
+          {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
+        </div>
+      ) : (
+        <div className="pr-6">{children}</div>
+      )}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -440,6 +473,10 @@ export interface ConfigurationFormProps {
   submitLabel?: string;
   /** Map of field type → custom renderer for types not handled by builtins (e.g. "media"). */
   customRenderers?: Record<string, CustomFieldRenderer>;
+  /** Variables offered for ${stepId.field} references — see computeAvailableVariables.
+   * Omit outside a workflow-builder context (e.g. module settings); the ${} affordances
+   * still work without it, they just won't have anything to suggest. */
+  availableVariables?: VariableOption[];
   className?: string;
 }
 
@@ -450,6 +487,7 @@ export function ConfigurationForm({
   onSubmit,
   submitLabel = "Save",
   customRenderers,
+  availableVariables = [],
   className,
 }: ConfigurationFormProps) {
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -487,39 +525,93 @@ export function ConfigurationForm({
         const fieldValue = values[field.id];
         const changeHandler = (v: unknown) => handleFieldChange(field.id, v);
 
+        // text/textarea mix literal text and ${} references freely in one string, so they
+        // never need the toggle below — VariableAwareInput handles both at once.
+        if (field.type === "text" || field.type === "textarea") {
+          return (
+            <div key={field.id} className="space-y-2">
+              <Label htmlFor={field.id}>
+                {field.label}
+                {field.required && <span className="text-destructive ml-0.5">*</span>}
+              </Label>
+              <VariableAwareInput
+                id={field.id}
+                value={(fieldValue as string) ?? ""}
+                onChange={changeHandler}
+                placeholder={field.placeholder}
+                multiline={field.type === "textarea"}
+                availableVariables={availableVariables}
+                data-testid={`input-${field.id}`}
+              />
+              {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
+            </div>
+          );
+        }
+
         // Dynamic-source fields (e.g. chat commands) short-circuit the type
         // lookup: the source dictates the renderer regardless of `type`.
         const source = (field as { source?: { kind?: unknown } }).source;
         if (source && source.kind === "commands") {
           return (
-            <CommandsSelectFieldRenderer key={field.id} field={field} value={fieldValue} onChange={changeHandler} />
-          );
-        }
-        if (source && source.kind === "internal") {
-          return (
-            <InternalSelectFieldRenderer
+            <VariableToggleWrapper
               key={field.id}
               field={field}
               value={fieldValue}
               onChange={changeHandler}
-              source={source as InternalConfigFieldSource}
-            />
+              availableVariables={availableVariables}
+            >
+              <CommandsSelectFieldRenderer field={field} value={fieldValue} onChange={changeHandler} />
+            </VariableToggleWrapper>
+          );
+        }
+        if (source && source.kind === "internal") {
+          return (
+            <VariableToggleWrapper
+              key={field.id}
+              field={field}
+              value={fieldValue}
+              onChange={changeHandler}
+              availableVariables={availableVariables}
+            >
+              <InternalSelectFieldRenderer
+                field={field}
+                value={fieldValue}
+                onChange={changeHandler}
+                source={source as InternalConfigFieldSource}
+              />
+            </VariableToggleWrapper>
           );
         }
 
         const rendererType = field.type === "asset" ? "media" : field.type;
         if (customRenderers?.[rendererType]) {
           return (
-            <div key={field.id}>
+            <VariableToggleWrapper
+              key={field.id}
+              field={field}
+              value={fieldValue}
+              onChange={changeHandler}
+              availableVariables={availableVariables}
+            >
               {customRenderers[rendererType]({ field, value: fieldValue, onChange: changeHandler })}
-            </div>
+            </VariableToggleWrapper>
           );
         }
 
         const BuiltinRenderer =
           builtinRenderers[field.type] ?? (field.type === "asset" ? builtinRenderers.media : undefined);
         if (BuiltinRenderer) {
-          return <BuiltinRenderer key={field.id} field={field} value={fieldValue} onChange={changeHandler} />;
+          return (
+            <VariableToggleWrapper
+              key={field.id}
+              field={field}
+              value={fieldValue}
+              onChange={changeHandler}
+              availableVariables={availableVariables}
+            >
+              <BuiltinRenderer field={field} value={fieldValue} onChange={changeHandler} />
+            </VariableToggleWrapper>
+          );
         }
 
         // Unknown field type

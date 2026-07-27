@@ -264,6 +264,10 @@ export default defineSchema({
     color: v.string(),
     icon: v.string(),
     configFields: v.optional(v.array(v.any())),
+    // ConfigField-shaped declarations describing this action's return value
+    // (e.g. an increment action's {next, previous, step}). UI-only — backs
+    // the workflow builder's ${stepId.field} variable autocomplete.
+    outputFields: v.optional(v.array(v.any())),
     projectionKey: v.optional(v.string()),
     handlerType: v.optional(v.string()),
     functionCall: v.optional(v.string()),

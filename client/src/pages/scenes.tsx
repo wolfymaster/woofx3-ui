@@ -11,7 +11,7 @@ export default function Scenes() {
   const engineSceneId = params?.id ?? null;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="flex h-full overflow-hidden">
       <ScenesSidebar selectedEngineSceneId={engineSceneId} onSelect={(id) => navigate(`/scenes/${id}`)} />
 
       <div className="flex-1 overflow-hidden">

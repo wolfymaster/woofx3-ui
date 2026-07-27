@@ -1,14 +1,20 @@
-import { FileAudio, FileImage, FileVideo, Upload, X } from "lucide-react";
+import { api } from "@convex/_generated/api";
+import { useAction, useQuery } from "convex/react";
+import { FileAudio, FileImage, FileVideo, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
   type FieldDescriptor,
 } from "@/components/common/configuration-form";
+import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useInstance } from "@/hooks/use-instance";
 import type { ConfigField, TriggerConfigValues } from "@/lib/workflow-presets";
+import type { VariableOption } from "@/lib/workflow-variables";
 import type { Asset } from "@/types";
 import { AssetLibraryModal } from "./asset-library-modal";
 
@@ -94,6 +100,100 @@ const MediaFieldRenderer: CustomFieldRenderer = ({ field, value, onChange }) => 
 };
 
 // ---------------------------------------------------------------------------
+// Resource-ref field — module-declared "kind" picker (e.g. counters). Lists
+// live instances from Convex (kept in sync via engine webhook, no round trip
+// needed) and lets the user create a new one through the same REST-proxy
+// action the module management page uses. Lives here rather than in the
+// generic ConfigurationForm because it needs instance/Convex context.
+// ---------------------------------------------------------------------------
+
+const ResourceRefFieldRenderer: CustomFieldRenderer = ({ field, value, onChange }) => {
+  const { instance } = useInstance();
+  const instanceId = instance?._id;
+  const resourceKind = typeof field.resourceKind === "string" ? field.resourceKind : undefined;
+  const moduleName = typeof field.moduleName === "string" ? field.moduleName : undefined;
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const instances = useQuery(
+    api.moduleResourceInstances.listByKind,
+    instanceId && resourceKind ? { instanceId, kind: resourceKind } : "skip"
+  );
+  const createAction = useAction(api.moduleResourceActions.createResourceInstance);
+
+  const options = instances ?? [];
+  const loading = !!instanceId && !!resourceKind && instances === undefined;
+  const empty = !loading && options.length === 0;
+
+  let placeholder: string;
+  if (!instanceId || !resourceKind) {
+    placeholder = "No instance selected";
+  } else if (loading) {
+    placeholder = "Loading...";
+  } else if (empty) {
+    placeholder = `No ${field.label.toLowerCase()} yet — create one`;
+  } else {
+    placeholder = field.placeholder ?? `Select ${field.label.toLowerCase()}...`;
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label>
+        {field.label}
+        {field.required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      <div className="flex items-center gap-2">
+        <Select
+          value={(value as string) ?? ""}
+          onValueChange={onChange}
+          disabled={!instanceId || !resourceKind || loading}
+        >
+          <SelectTrigger className="flex-1" data-testid={`select-${field.id}`}>
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((opt) => (
+              <SelectItem key={opt.canonicalId} value={opt.canonicalId}>
+                {opt.displayName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5 shrink-0"
+          disabled={!instanceId || !resourceKind || !moduleName}
+          onClick={() => setCreateOpen(true)}
+          data-testid={`button-new-${field.id}`}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New
+        </Button>
+      </div>
+      {field.hint && <p className="text-xs text-muted-foreground">{field.hint as string}</p>}
+
+      {createOpen && instanceId && resourceKind && moduleName && (
+        <CreateResourceDialog
+          kind={{ kind: resourceKind, name: field.label }}
+          onClose={() => setCreateOpen(false)}
+          onCreate={async (resourceInstanceId, displayName) => {
+            const created = await createAction({
+              instanceId,
+              moduleName,
+              kind: resourceKind,
+              resourceInstanceId,
+              displayName,
+            });
+            onChange(created.canonicalId);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // TriggerConfigForm — thin wrapper around ConfigurationForm
 // ---------------------------------------------------------------------------
 
@@ -101,15 +201,18 @@ interface TriggerConfigFormProps {
   fields: ConfigField[];
   values: TriggerConfigValues;
   onChange: (values: TriggerConfigValues) => void;
+  /** Variables offered for ${stepId.field} references — see computeAvailableVariables. */
+  availableVariables?: VariableOption[];
   className?: string;
 }
 
 const customRenderers: Record<string, CustomFieldRenderer> = {
   media: MediaFieldRenderer,
   asset: MediaFieldRenderer,
+  resource_ref: ResourceRefFieldRenderer,
 };
 
-export function TriggerConfigForm({ fields, values, onChange, className }: TriggerConfigFormProps) {
+export function TriggerConfigForm({ fields, values, onChange, availableVariables, className }: TriggerConfigFormProps) {
   return (
     <ConfigurationForm
       // ConfigField has a narrower, intentional shape (see workflow-presets);
@@ -120,6 +223,7 @@ export function TriggerConfigForm({ fields, values, onChange, className }: Trigg
       values={values as Record<string, unknown>}
       onChange={(v) => onChange(v as TriggerConfigValues)}
       customRenderers={customRenderers}
+      availableVariables={availableVariables}
       className={className}
     />
   );

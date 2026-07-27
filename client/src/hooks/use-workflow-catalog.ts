@@ -2,11 +2,11 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { useMemo } from "react";
 import { useInstance } from "@/hooks/use-instance";
-import { parseConfigFields } from "@/lib/parse-config-fields";
+import { parseConfigFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { ActionPreset, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
 
-type CatalogTriggerRow = {
+export type CatalogTriggerRow = {
   id: string;
   canonicalRef?: string;
   name: string;
@@ -17,9 +17,11 @@ type CatalogTriggerRow = {
   event?: string;
   allowVariants?: boolean;
   configFields?: unknown;
+  moduleId?: string;
+  moduleName?: string;
 };
 
-type CatalogActionRow = {
+export type CatalogActionRow = {
   id: string;
   canonicalRef?: string;
   handlerType?: string;
@@ -30,11 +32,15 @@ type CatalogActionRow = {
   color: string;
   icon: string;
   configFields?: unknown;
+  /** ConfigField-shaped declarations describing this action's return value (e.g. {next, previous, step}). */
+  outputFields?: unknown;
+  moduleId?: string;
+  moduleName?: string;
 };
 
 function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
-  const fields = parseConfigFields(row.configFields);
+  const fields = withModuleName(parseConfigFields(row.configFields), row.moduleName);
   let config: TriggerConfig | undefined;
   if (fields.length > 0 || row.allowVariants) {
     config = {
@@ -57,7 +63,9 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
 
 function toActionPreset(row: CatalogActionRow): ActionPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
-  const fields = parseConfigFields(row.configFields);
+  const fields = withModuleName(parseConfigFields(row.configFields), row.moduleName);
+  // Output declarations reuse the same ConfigField shape/parser as input fields.
+  const outputs = parseConfigFields(row.outputFields);
   const handlerType = row.handlerType?.trim() || (row.functionCall?.trim() ? "function" : undefined);
   return {
     id: row.id,
@@ -69,7 +77,10 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
     icon,
     category: row.category,
     color: row.color,
-    config: fields.length > 0 ? { fields } : undefined,
+    config:
+      fields.length > 0 || outputs.length > 0
+        ? { fields, outputs: outputs.length > 0 ? outputs : undefined }
+        : undefined,
   };
 }
 

@@ -294,7 +294,7 @@ export default function Modules() {
   }, [moduleDetail]);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] max-w-[1600px] w-full">
+    <div className="flex h-full overflow-hidden max-w-[1600px] w-full">
       <ModulesSidebar
         selected={selectedModule}
         onSelectModule={handleSelectModule}

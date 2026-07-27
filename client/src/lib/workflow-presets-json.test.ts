@@ -3,6 +3,7 @@ import type { ActionPreset, TriggerPreset, TriggerVariant } from "./workflow-pre
 import {
   buildDefinitionFromPresets,
   buildDefinitionsForVariants,
+  conditionsToFieldValues,
   fieldValuesToConditions,
 } from "./workflow-presets-json";
 
@@ -203,5 +204,33 @@ describe("fieldValuesToConditions", () => {
       operator: "between",
       value: [10, 20],
     });
+  });
+});
+
+describe("conditionsToFieldValues", () => {
+  test("recovers a scalar field value from its condition", () => {
+    const fields = [{ id: "amount", label: "Minimum bits", type: "number" as const, eventPath: "amount" }];
+    const values = conditionsToFieldValues(fields, [{ field: "${trigger.data.amount}", operator: "gte", value: 100 }]);
+    expect(values.amount).toBe(100);
+  });
+
+  test("recovers a range field value from a between condition", () => {
+    const fields = [{ id: "amount", label: "Amount", type: "range" as const, eventPath: "amount" }];
+    const values = conditionsToFieldValues(fields, [
+      { field: "${trigger.data.amount}", operator: "between", value: [10, 20] },
+    ]);
+    expect(values.amount).toEqual({ type: "range", min: 10, max: 20 });
+  });
+
+  test("falls back to defaults when no matching condition exists", () => {
+    const fields = [{ id: "amount", label: "Minimum bits", type: "number" as const, eventPath: "amount", min: 5 }];
+    const values = conditionsToFieldValues(fields, []);
+    expect(values.amount).toBe(5);
+  });
+
+  test("round-trips through fieldValuesToConditions", () => {
+    const fields = [{ id: "rewardId", label: "Reward", type: "select" as const, eventPath: "rewardId" }];
+    const conditions = fieldValuesToConditions(fields, { rewardId: "abc" });
+    expect(conditionsToFieldValues(fields, conditions)).toEqual({ rewardId: "abc" });
   });
 });

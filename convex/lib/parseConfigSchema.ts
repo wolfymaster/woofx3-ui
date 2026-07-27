@@ -67,7 +67,14 @@ function parseConfigField(item: unknown): Record<string, unknown> | null {
     operator: typeof o.operator === "string" ? o.operator : undefined,
     mediaType: o.mediaType === "image" || o.mediaType === "audio" || o.mediaType === "video" ? o.mediaType : undefined,
     kinds: Array.isArray(o.kinds) ? o.kinds.filter((k): k is string => typeof k === "string") : undefined,
-    resourceKind: typeof o.kind === "string" && type === "resource_ref" ? o.kind : undefined,
+    resourceKind:
+      type === "resource_ref"
+        ? typeof o.resourceKind === "string"
+          ? o.resourceKind
+          : typeof o.kind === "string"
+            ? o.kind
+            : undefined
+        : undefined,
   };
   if (Array.isArray(o.options)) {
     field.options = o.options.filter(

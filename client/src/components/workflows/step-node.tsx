@@ -1,5 +1,8 @@
 import { ArrowRight, Clock, GitBranch, Zap } from "lucide-react";
+import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { cn } from "@/lib/utils";
+import { actionNodeLabel, triggerNodeLabel } from "@/lib/workflow-node-label";
+import { actionNodeSummary, triggerNodeSummary } from "@/lib/workflow-node-summary";
 import type { StepNode, TriggerNode } from "@/lib/workflow-tree";
 
 interface StepNodeProps {
@@ -7,6 +10,9 @@ interface StepNodeProps {
   isSelected: boolean;
   onSelect: () => void;
   depth?: number;
+  catalogTriggers: CatalogTriggerRow[];
+  catalogActions: CatalogActionRow[];
+  resourceLabels?: Map<string, string>;
 }
 
 const NODE_STYLES = {
@@ -32,12 +38,16 @@ const NODE_STYLES = {
   },
 };
 
-function getNodeLabel(node: StepNode | TriggerNode): string {
+function getNodeLabel(
+  node: StepNode | TriggerNode,
+  catalogTriggers: CatalogTriggerRow[],
+  catalogActions: CatalogActionRow[]
+): string {
   if (node.type === "trigger") {
-    return node.event || "Trigger";
+    return triggerNodeLabel(node, catalogTriggers);
   }
   if (node.type === "action") {
-    return node.action || "Action";
+    return actionNodeLabel(node, catalogActions);
   }
   if (node.type === "condition") {
     const cond = node.conditions[0];
@@ -53,6 +63,39 @@ function getNodeLabel(node: StepNode | TriggerNode): string {
     return "Wait";
   }
   return "Unknown";
+}
+
+function formatConditionValue(value: unknown): string {
+  return Array.isArray(value) ? value.join(" – ") : String(value);
+}
+
+function getNodeSummary(
+  node: StepNode | TriggerNode,
+  catalogTriggers: CatalogTriggerRow[],
+  catalogActions: CatalogActionRow[],
+  resourceLabels?: Map<string, string>
+): string[] {
+  if (node.type === "trigger") {
+    return triggerNodeSummary(node, catalogTriggers, resourceLabels);
+  }
+  if (node.type === "action") {
+    return actionNodeSummary(node, catalogActions, resourceLabels);
+  }
+  if (node.type === "condition") {
+    // The first condition is already shown in the title; list any additional ones here.
+    return node.conditions.slice(1).map((c) => `${c.field} ${c.operator} ${formatConditionValue(c.value)}`);
+  }
+  if (node.type === "wait") {
+    const parts: string[] = [];
+    if (node.wait.timeout) {
+      parts.push(`Timeout: ${node.wait.timeout}`);
+    }
+    for (const c of node.wait.conditions ?? []) {
+      parts.push(`${c.field} ${c.operator} ${formatConditionValue(c.value)}`);
+    }
+    return parts;
+  }
+  return [];
 }
 
 function getNodeIcon(node: StepNode | TriggerNode) {
@@ -71,10 +114,22 @@ function getNodeIcon(node: StepNode | TriggerNode) {
   return ArrowRight;
 }
 
-export function StepNodeCard({ node, isSelected, onSelect, depth = 0 }: StepNodeProps) {
+export function StepNodeCard({
+  node,
+  isSelected,
+  onSelect,
+  depth = 0,
+  catalogTriggers,
+  catalogActions,
+  resourceLabels,
+}: StepNodeProps) {
   const styles = NODE_STYLES[node.type as keyof typeof NODE_STYLES] ?? NODE_STYLES.action;
   const Icon = getNodeIcon(node);
-  const label = getNodeLabel(node);
+  const label = getNodeLabel(node, catalogTriggers, catalogActions);
+  // Trigger/action labels are already friendly catalog names; the kind prefix is only
+  // useful for condition/wait nodes, which have no catalog-backed display name.
+  const showKindPrefix = node.type === "condition" || node.type === "wait";
+  const summary = getNodeSummary(node, catalogTriggers, catalogActions, resourceLabels);
 
   return (
     <div
@@ -93,9 +148,16 @@ export function StepNodeCard({ node, isSelected, onSelect, depth = 0 }: StepNode
           <Icon className="h-5 w-5" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate">
-            {styles.label} {label}
-          </p>
+          <p className="text-sm font-semibold truncate">{showKindPrefix ? `${styles.label} ${label}` : label}</p>
+          {summary.length > 0 && (
+            <div className="mt-0.5 space-y-0.5">
+              {summary.map((line) => (
+                <p key={line} className="text-xs text-muted-foreground truncate">
+                  {line}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

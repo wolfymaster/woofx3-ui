@@ -605,7 +605,7 @@ export default function ModuleInstall() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-6.5rem)]">
+    <div className="flex flex-col h-full overflow-hidden">
       <div className="border-b bg-background shrink-0">
         <div className="p-6 max-w-[1600px] mx-auto">
           <PageHeader 

@@ -114,6 +114,7 @@ const actionValidator = v.object({
   call: v.optional(v.string()),
   type: v.optional(v.string()),
   paramsSchema: v.optional(v.string()),
+  outputSchema: v.optional(v.string()),
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
   projectionKey: v.optional(v.string()),
@@ -141,6 +142,7 @@ type ActionUiFields = {
   color: string;
   icon: string;
   configFields?: unknown[];
+  outputFields?: unknown[];
 };
 
 function parseJsonSafe(raw: string | undefined): unknown {
@@ -169,12 +171,17 @@ function triggerUi(configSchema: string | undefined): TriggerUiFields {
   };
 }
 
-function actionUi(paramsSchema: string | undefined): ActionUiFields {
+function actionUi(paramsSchema: string | undefined, outputSchema: string | undefined): ActionUiFields {
   const { fields, color, icon } = parseConfigSchemaString(paramsSchema);
+  // Output fields reuse the same ConfigField-shaped parser as input schema
+  // fields — only id/label/type/description end up meaningful for outputs,
+  // but the shape (and its parsing) is identical.
+  const { fields: outputFields } = parseConfigSchemaString(outputSchema);
   return {
     color: color ?? DEFAULT_UI_COLOR,
     icon: icon ?? DEFAULT_ACTION_ICON,
     configFields: fields.length > 0 ? fields : undefined,
+    outputFields: outputFields.length > 0 ? outputFields : undefined,
   };
 }
 
@@ -196,6 +203,7 @@ type EngineAction = {
   call?: string;
   type?: string;
   paramsSchema?: string;
+  outputSchema?: string;
   projectionKey?: string;
 };
 
@@ -217,7 +225,7 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
 }
 
 function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | undefined) {
-  const ui = actionUi(a.paramsSchema);
+  const ui = actionUi(a.paramsSchema, a.outputSchema);
   const handlerType = a.type?.trim() || (a.call?.trim() ? "function" : undefined);
   return {
     slug: a.id,
@@ -227,6 +235,7 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
     color: ui.color,
     icon: ui.icon,
     configFields: ui.configFields,
+    outputFields: ui.outputFields,
     projectionKey: a.projectionKey,
     handlerType,
     functionCall: a.call?.trim() || undefined,

@@ -36,7 +36,13 @@ describe("parseConfigFields", () => {
     expect(f.type).toBe("toggle");
   });
 
-  test("maps resource_ref kind field", () => {
+  test("maps resource_ref field's resourceKind property (actual engine wire shape)", () => {
+    const [f] = parseConfigFields([{ id: "counter", label: "Counter", type: "resource_ref", resourceKind: "counter" }]);
+    expect(f.type).toBe("resource_ref");
+    expect(f.resourceKind).toBe("counter");
+  });
+
+  test("falls back to a resource_ref field's kind property", () => {
     const [f] = parseConfigFields([{ id: "counter", label: "Counter", type: "resource_ref", kind: "counter" }]);
     expect(f.type).toBe("resource_ref");
     expect(f.resourceKind).toBe("counter");

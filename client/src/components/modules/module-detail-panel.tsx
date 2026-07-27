@@ -26,6 +26,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 import { cn, isNewerVersion } from "@/lib/utils";
@@ -917,9 +918,7 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
     try {
       await deleteAction({
         instanceId,
-        moduleName,
-        kind: deleteTarget.kind,
-        resourceInstanceId: deleteTarget.resourceInstanceId,
+        canonicalId: deleteTarget.canonicalId,
       });
       setDeleteTarget(null);
     } catch (err) {
@@ -1002,8 +1001,6 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
       {createDialogKind && instanceId && (
         <CreateResourceDialog
           kind={createDialogKind}
-          instanceId={instanceId}
-          moduleName={moduleName}
           onClose={() => setCreateDialogKind(null)}
           onCreate={async (resourceInstanceId, displayName) => {
             await createAction({ instanceId, moduleName, kind: createDialogKind.kind, resourceInstanceId, displayName });
@@ -1040,84 +1037,3 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
   );
 }
 
-interface CreateResourceDialogProps {
-  kind: ManifestResourceKind;
-  instanceId: Id<"instances">;
-  moduleName: string;
-  onClose: () => void;
-  onCreate: (resourceInstanceId: string, displayName: string) => Promise<void>;
-}
-
-function CreateResourceDialog({ kind, onClose, onCreate }: CreateResourceDialogProps) {
-  const [resourceInstanceId, setResourceInstanceId] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleCreate() {
-    if (!resourceInstanceId.trim() || !displayName.trim()) {
-      return;
-    }
-    setCreating(true);
-    setError(null);
-    try {
-      await onCreate(resourceInstanceId.trim(), displayName.trim());
-      onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create resource.");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open) { onClose(); } }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New {kind.name}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-              {error}
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="new-resource-id">ID</Label>
-            <Input
-              id="new-resource-id"
-              placeholder="e.g. death_count"
-              value={resourceInstanceId}
-              onChange={(e) => setResourceInstanceId(e.target.value)}
-              className="font-mono"
-            />
-            <p className="text-xs text-muted-foreground">
-              Stable identifier used in workflows and actions. Cannot be changed.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-resource-name">Display Name</Label>
-            <Input
-              id="new-resource-name"
-              placeholder="e.g. Death Count"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-            />
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!resourceInstanceId.trim() || !displayName.trim() || creating}
-            onClick={() => void handleCreate()}
-          >
-            {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-            Create
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

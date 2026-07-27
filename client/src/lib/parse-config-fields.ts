@@ -98,7 +98,14 @@ export function parseConfigField(item: unknown): ConfigField | null {
         : undefined,
     mediaType: o.mediaType === "image" || o.mediaType === "audio" || o.mediaType === "video" ? o.mediaType : undefined,
     kinds: Array.isArray(o.kinds) ? o.kinds.filter((k): k is string => typeof k === "string") : undefined,
-    resourceKind: typeof o.kind === "string" && type === "resource_ref" ? o.kind : undefined,
+    resourceKind:
+      type === "resource_ref"
+        ? typeof o.resourceKind === "string"
+          ? o.resourceKind
+          : typeof o.kind === "string"
+            ? o.kind
+            : undefined
+        : undefined,
   };
   if (Array.isArray(o.options)) {
     field.options = o.options
@@ -130,6 +137,19 @@ export function parseConfigFields(raw: unknown): ConfigField[] {
     }
   }
   return out;
+}
+
+/**
+ * resource_ref fields need the owning module's engine-facing name to create
+ * new instances (POST /modules/{moduleName}/resources/{kind}). ConfigField
+ * itself carries no module link, so it rides along as an extra property
+ * picked up by ConfigurationForm's FieldDescriptor catch-all.
+ */
+export function withModuleName(fields: ConfigField[], moduleName: string | undefined): ConfigField[] {
+  if (!moduleName) {
+    return fields;
+  }
+  return fields.map((field) => (field.type === "resource_ref" ? { ...field, moduleName } : field));
 }
 
 export function parseConfigSchemaPayload(parsed: unknown): {

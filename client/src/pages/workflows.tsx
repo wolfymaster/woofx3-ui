@@ -25,6 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
 import StepListEditor from "@/components/workflows/step-list-editor";
@@ -198,7 +199,7 @@ export default function Workflows() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)]">
+    <div className="flex h-full overflow-hidden">
       <WorkflowsSidebar
         selectedWorkflowId={selectedWorkflow?.engineWorkflowId ?? null}
         onSelectWorkflow={handleSelectWorkflow}
@@ -285,32 +286,34 @@ export default function Workflows() {
             </Sheet>
           </div>
         ) : (
-          <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
-            {workflows === undefined ? (
-              <div className="flex items-center justify-center min-h-[40vh]">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : workflows.length === 0 && !isCreateRoute ? (
-              <div className="mt-8 text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-                  <WorkflowIcon className="h-8 w-8 text-muted-foreground" />
+          <ScrollArea className="h-full">
+            <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+              {workflows === undefined ? (
+                <div className="flex items-center justify-center min-h-[40vh]">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                 </div>
-                <h3 className="text-lg font-semibold mb-2">No workflows yet</h3>
-                <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
-                  Create your first workflow to start automating your stream.
-                </p>
-                <Button onClick={() => navigate("/workflows/new")}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Workflow
-                </Button>
-              </div>
-            ) : (
-              <>
-                <PageHeader title="Create a new workflow" description="Choose what triggers your workflow" />
-                <BasicWorkflowEditor />
-              </>
-            )}
-          </div>
+              ) : workflows.length === 0 && !isCreateRoute ? (
+                <div className="mt-8 text-center">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
+                    <WorkflowIcon className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">No workflows yet</h3>
+                  <p className="text-sm text-muted-foreground max-w-sm mx-auto mb-6">
+                    Create your first workflow to start automating your stream.
+                  </p>
+                  <Button onClick={() => navigate("/workflows/new")}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Workflow
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <PageHeader title="Create a new workflow" description="Choose what triggers your workflow" />
+                  <BasicWorkflowEditor />
+                </>
+              )}
+            </div>
+          </ScrollArea>
         )}
       </div>
 

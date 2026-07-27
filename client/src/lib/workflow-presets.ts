@@ -45,6 +45,10 @@ export interface ActionPreset {
   color: string;
   config?: {
     fields: ConfigField[];
+    /** ConfigField-shaped declarations describing this action's return value (e.g. {next, previous, step}).
+     * Only `id`/`label`/`type`/`description` are meaningful here — backs the workflow builder's
+     * ${stepId.field} variable autocomplete. */
+    outputs?: ConfigField[];
   };
 }
 
