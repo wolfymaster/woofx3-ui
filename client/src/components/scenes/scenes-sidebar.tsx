@@ -1,22 +1,13 @@
 import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
-import { Layers, Loader2, Plus, Search } from "lucide-react";
+import { useQuery } from "convex/react";
+import { Layers, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
-import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { CreateSceneDialog } from "./create-scene-dialog";
 
 interface ScenesSidebarProps {
   selectedEngineSceneId: string | null;
@@ -25,14 +16,10 @@ interface ScenesSidebarProps {
 
 export function ScenesSidebar({ selectedEngineSceneId, onSelect }: ScenesSidebarProps) {
   const { instance } = useInstance();
-  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [newSceneName, setNewSceneName] = useState("");
-  const [isCreating, setIsCreating] = useState(false);
 
   const scenesRaw = useQuery(api.scenes.list, instance ? { instanceId: instance._id } : "skip");
-  const createScene = useAction(api.sceneActions.createScene);
 
   const scenes = (scenesRaw ?? [])
     .filter((s): s is typeof s & { engineSceneId: string } => typeof s.engineSceneId === "string")
@@ -45,31 +32,6 @@ export function ScenesSidebar({ selectedEngineSceneId, onSelect }: ScenesSidebar
     }));
 
   const filtered = scenes.filter((s) => s.name.toLowerCase().includes(searchQuery.toLowerCase()));
-
-  const handleCreate = async () => {
-    if (!newSceneName.trim() || !instance) {
-      return;
-    }
-    setIsCreating(true);
-    try {
-      const { engineSceneId } = await createScene({
-        instanceId: instance._id,
-        name: newSceneName.trim(),
-        layoutJson: JSON.stringify({ width: 1920, height: 1080, backgroundColor: "transparent" }),
-      });
-      setCreateOpen(false);
-      setNewSceneName("");
-      onSelect(engineSceneId);
-    } catch (err) {
-      toast({
-        title: "Create failed",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
-    } finally {
-      setIsCreating(false);
-    }
-  };
 
   return (
     <div className="w-72 shrink-0 border-r bg-background flex flex-col">
@@ -136,39 +98,7 @@ export function ScenesSidebar({ selectedEngineSceneId, onSelect }: ScenesSidebar
         </div>
       </ScrollArea>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Scene</DialogTitle>
-            <DialogDescription>Enter a name for your new scene. You can customize it after creation.</DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Label htmlFor="scene-name">Scene Name</Label>
-            <Input
-              id="scene-name"
-              value={newSceneName}
-              onChange={(e) => setNewSceneName(e.target.value)}
-              placeholder="e.g., Game Overlay"
-              className="mt-2"
-              data-testid="input-new-scene-name"
-              onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={!newSceneName.trim() || isCreating}
-              data-testid="button-create-scene"
-            >
-              {isCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Scene
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateSceneDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={onSelect} />
     </div>
   );
 }
