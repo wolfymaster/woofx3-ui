@@ -24,6 +24,7 @@ import type { Scene, Widget } from "@/types";
 import { CanvasWidgetHandle } from "./canvas-widget-handle";
 import { LiveScenePreview } from "./live-scene-preview";
 import { WidgetCatalogSidebar } from "./widget-catalog-sidebar";
+import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
 
 interface WidgetSettingField {
@@ -264,6 +265,17 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     [mutateScene]
   );
 
+  // Deselects only when the click landed directly on one of the canvas's own
+  // background layers (checked via target === currentTarget at each layer,
+  // rather than relying on descendants to stopPropagation) — a click that
+  // bubbled up from a widget handle or the live preview never matches this,
+  // so selecting a widget can't be undone by the same click that made it.
+  const handleDeselectClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      setSelectedWidgetId(null);
+    }
+  }, []);
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -422,7 +434,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
 
         {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background click deselects widgets */}
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only canvas surface */}
-        <div className="flex-1 bg-muted/30 relative overflow-auto" onClick={() => setSelectedWidgetId(null)}>
+        <div className="flex-1 bg-muted/30 relative overflow-auto" onClick={handleDeselectClick}>
           <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-card rounded-md border p-1 z-10">
             <Button
               variant="ghost"
@@ -450,7 +462,11 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             </Button>
           </div>
 
-          <div className="absolute inset-0 flex items-center justify-center p-8">
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background click deselects widgets */}
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only canvas surface */}
+          <div className="absolute inset-0 flex items-center justify-center p-8" onClick={handleDeselectClick}>
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background click deselects widgets */}
+            {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only canvas surface */}
             <div
               className="relative bg-black/80 shadow-2xl"
               style={{
@@ -461,8 +477,11 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                   : "none",
                 backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
               }}
+              onClick={handleDeselectClick}
               data-testid="scene-canvas"
             >
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background click deselects widgets */}
+              {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only canvas surface */}
               <div
                 style={{
                   transform: `scale(${zoom})`,
@@ -470,7 +489,11 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                   width: scene.width,
                   height: scene.height,
                 }}
+                onClick={handleDeselectClick}
               >
+                {scene.widgets.map((widget) => (
+                  <WidgetFallbackBackground key={widget.id} widget={widget} />
+                ))}
                 <LiveScenePreview
                   instanceId={instanceId}
                   engineSceneId={engineSceneId}

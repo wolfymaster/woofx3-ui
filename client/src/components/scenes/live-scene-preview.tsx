@@ -56,7 +56,10 @@ export function LiveScenePreview({ instanceId, engineSceneId, width, height }: L
 
   if (!overlayBaseUrl) {
     return (
-      <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-center text-xs text-white/50">
+      <div
+        className="absolute inset-0 z-[1] flex items-center justify-center bg-black/40 text-center text-xs text-white/50"
+        style={{ width, height }}
+      >
         {overlayBaseUrl === null ? "Overlay rendering is not configured for this engine." : "Loading preview…"}
       </div>
     );
@@ -79,7 +82,7 @@ export function LiveScenePreview({ instanceId, engineSceneId, width, height }: L
       title="Scene preview"
       sandbox="allow-scripts allow-same-origin"
       scrolling="no"
-      className="absolute inset-0 border-none bg-transparent pointer-events-none"
+      className="absolute inset-0 z-[1] border-none bg-transparent pointer-events-none"
       style={{ width, height }}
       data-testid="live-scene-preview"
     />

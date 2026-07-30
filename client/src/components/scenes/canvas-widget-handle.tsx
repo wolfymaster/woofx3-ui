@@ -90,7 +90,9 @@ export function CanvasWidgetHandle({ widget, isSelected, scale, onSelect, onMove
         width: widget.size.width,
         height: widget.size.height,
         opacity: widget.opacity / 100,
-        zIndex: widget.zIndex,
+        // +10 keeps every handle above LiveScenePreview's iframe (z-index 1) and the
+        // fallback layer (z-index 0) regardless of the widget's own stacking order.
+        zIndex: widget.zIndex + 10,
       }}
       onMouseDown={handleMouseDown}
       onMouseEnter={() => setIsHovered(true)}
