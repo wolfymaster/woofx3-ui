@@ -53,35 +53,15 @@ import { StorageSettingsTab } from "./storage-settings";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
-function isValidAssetBaseUrl(value: string): boolean {
-  if (!value) {
-    return true;
-  }
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
-
 function EngineSettingsTab() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const testConnectionAction = useAction(api.engineHealth.testConnection);
   const updateInstance = useConvexMutation(api.instances.update);
-  const getEngineInfoAction = useAction(api.engineInfo.getEngineInfo);
-  const setAssetsBaseUrlAction = useAction(api.engineInfo.setAssetsBaseUrl);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingUrl, setSavingUrl] = useState(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [assetsBaseUrlLoading, setAssetsBaseUrlLoading] = useState(true);
-  const [assetsBaseUrlDraft, setAssetsBaseUrlDraft] = useState("");
-  const [assetsBaseUrlSaved, setAssetsBaseUrlSaved] = useState("");
-  const [assetsBaseUrlSaving, setAssetsBaseUrlSaving] = useState(false);
-  const [assetsBaseUrlError, setAssetsBaseUrlError] = useState<string | null>(null);
 
   const fallbackUrl = useStore($engineUrl);
 
@@ -114,61 +94,6 @@ function EngineSettingsTab() {
       setSavingUrl(false);
     }
   }, [instance, urlDraft, updateInstance]);
-
-  useEffect(() => {
-    if (!instance) {
-      setAssetsBaseUrlLoading(false);
-      return;
-    }
-    let cancelled = false;
-    setAssetsBaseUrlLoading(true);
-    getEngineInfoAction({ instanceId: instance._id })
-      .then((info) => {
-        if (cancelled) {
-          return;
-        }
-        const value = info?.assetsBaseUrl ?? "";
-        setAssetsBaseUrlDraft(value);
-        setAssetsBaseUrlSaved(value);
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setAssetsBaseUrlLoading(false);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [instance, getEngineInfoAction]);
-
-  const persistAssetsBaseUrl = useCallback(async () => {
-    setAssetsBaseUrlError(null);
-    if (!instance) {
-      return;
-    }
-    const trimmed = assetsBaseUrlDraft.trim();
-    if (!isValidAssetBaseUrl(trimmed)) {
-      setAssetsBaseUrlError("Enter a valid http:// or https:// URL, or leave blank.");
-      return;
-    }
-    if (trimmed === assetsBaseUrlSaved) {
-      return;
-    }
-    setAssetsBaseUrlSaving(true);
-    try {
-      const result = await setAssetsBaseUrlAction({ instanceId: instance._id, value: trimmed });
-      if (!result.success) {
-        setAssetsBaseUrlError("Failed to save workflow asset base URL.");
-        return;
-      }
-      setAssetsBaseUrlSaved(trimmed);
-      setAssetsBaseUrlDraft(trimmed);
-    } catch (e) {
-      setAssetsBaseUrlError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setAssetsBaseUrlSaving(false);
-    }
-  }, [instance, assetsBaseUrlDraft, assetsBaseUrlSaved, setAssetsBaseUrlAction]);
 
   const handleTestConnection = useCallback(async () => {
     if (!effectiveUrl) {
@@ -291,40 +216,6 @@ function EngineSettingsTab() {
             <p className="text-xs text-muted-foreground">
               The hostname and port (or full URL) where this instance&apos;s backend API is running. If no protocol is
               specified, the current page&apos;s protocol will be used.
-            </p>
-          </div>
-          <Separator />
-          <div className="grid gap-2">
-            <Label htmlFor="assets-base-url">Workflow asset base URL</Label>
-            <div className="flex flex-wrap gap-2">
-              <Input
-                id="assets-base-url"
-                placeholder="https://cdn.example.com/assets"
-                value={assetsBaseUrlDraft}
-                onChange={(e) => setAssetsBaseUrlDraft(e.target.value)}
-                onBlur={() => {
-                  void persistAssetsBaseUrl();
-                }}
-                disabled={assetsBaseUrlLoading}
-                className="flex-1 min-w-[200px]"
-                data-testid="input-assets-base-url"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={assetsBaseUrlLoading || assetsBaseUrlSaving}
-                onClick={() => {
-                  void persistAssetsBaseUrl();
-                }}
-                data-testid="button-save-assets-base-url"
-              >
-                {assetsBaseUrlSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save URL"}
-              </Button>
-            </div>
-            {assetsBaseUrlError && <p className="text-xs text-destructive">{assetsBaseUrlError}</p>}
-            <p className="text-xs text-muted-foreground">
-              URL prefix the workflow engine uses to resolve <code>${"{woofx3_asset_url}"}</code> in workflow steps
-              (e.g. alert media/audio). Leave blank to use the engine&apos;s default asset server.
             </p>
           </div>
           <Separator />

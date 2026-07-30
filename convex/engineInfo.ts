@@ -14,12 +14,12 @@ const ENGINE_INFO_TTL_MS = 5 * 60 * 1000;
 export const cacheEngineInfo = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    widgetAssetBaseUrl: v.string(),
+    streamwareBaseUrl: v.string(),
     engineSceneOverlayBaseUrl: v.string(),
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.instanceId, {
-      engineWidgetAssetBaseUrl: args.widgetAssetBaseUrl,
+      engineStreamwareBaseUrl: args.streamwareBaseUrl,
       engineSceneOverlayBaseUrl: args.engineSceneOverlayBaseUrl,
       engineInfoFetchedAt: Date.now(),
     });
@@ -27,7 +27,7 @@ export const cacheEngineInfo = internalMutation({
 });
 
 export type EngineOverlayInfo = {
-  widgetAssetBaseUrl: string;
+  streamwareBaseUrl: string;
   engineSceneOverlayBaseUrl: string;
 } | null;
 
@@ -50,7 +50,7 @@ export const getEngineOverlayInfo = internalAction({
 
     if (fresh) {
       return {
-        widgetAssetBaseUrl: instance.engineWidgetAssetBaseUrl ?? "",
+        streamwareBaseUrl: instance.engineStreamwareBaseUrl ?? "",
         engineSceneOverlayBaseUrl: instance.engineSceneOverlayBaseUrl ?? "",
       };
     }
@@ -64,12 +64,12 @@ export const getEngineOverlayInfo = internalAction({
 
     await ctx.runMutation(internal.engineInfo.cacheEngineInfo, {
       instanceId: args.instanceId as Id<"instances">,
-      widgetAssetBaseUrl: info.widgetAssetBaseUrl,
+      streamwareBaseUrl: info.streamwareBaseUrl,
       engineSceneOverlayBaseUrl: info.engineSceneOverlayBaseUrl,
     });
 
     return {
-      widgetAssetBaseUrl: info.widgetAssetBaseUrl,
+      streamwareBaseUrl: info.streamwareBaseUrl,
       engineSceneOverlayBaseUrl: info.engineSceneOverlayBaseUrl,
     };
   },
@@ -109,7 +109,7 @@ export const getEngineInfo = action({
   },
 });
 
-export const setAssetsBaseUrl = action({
+export const setStreamwareBaseUrl = action({
   args: {
     instanceId: v.id("instances"),
     value: v.string(),
@@ -136,6 +136,6 @@ export const setAssetsBaseUrl = action({
     }
 
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    return await rpc.setAssetsBaseUrl(args.value);
+    return await rpc.setStreamwareBaseUrl(args.value);
   },
 });

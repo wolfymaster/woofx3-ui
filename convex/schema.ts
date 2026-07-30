@@ -53,7 +53,7 @@ export default defineSchema({
     storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),
     // Cached EngineInfo (getEngineInfo RPC). Read by the public browser-source
     // page to iframe the engine-rendered overlay. Refreshed on a TTL.
-    engineWidgetAssetBaseUrl: v.optional(v.string()),
+    engineStreamwareBaseUrl: v.optional(v.string()),
     engineSceneOverlayBaseUrl: v.optional(v.string()),
     engineInfoFetchedAt: v.optional(v.number()),
   })

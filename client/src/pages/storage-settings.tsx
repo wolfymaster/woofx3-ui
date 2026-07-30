@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { api } from "@convex/_generated/api";
 import { useAction } from "convex/react";
 import { HardDrive, Save } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { api } from "@convex/_generated/api";
 import { useInstance } from "@/hooks/use-instance";
 
 interface StorageConfig {
@@ -20,19 +20,37 @@ interface StorageConfig {
   forcePathStyle?: boolean;
   maxFileSize?: number;
   allowedExtensions?: string[];
-  publicUrlPrefix?: string;
+}
+
+function isValidBaseUrl(value: string): boolean {
+  if (!value) {
+    return true;
+  }
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export function StorageSettingsTab() {
   const { instance } = useInstance();
   const getConfig = useAction(api.storage.getConfig);
   const setConfig = useAction(api.storage.setConfig);
+  const getEngineInfo = useAction(api.engineInfo.getEngineInfo);
+  const setStreamwareBaseUrl = useAction(api.engineInfo.setStreamwareBaseUrl);
 
   const [config, setConfigState] = useState<StorageConfig>({
     provider: "file",
     maxFileSize: 100,
     allowedExtensions: ["png", "jpg", "jpeg", "gif", "webp", "mp4", "webm"],
   });
+  // The engine's single streamwareBaseUrl (widget assets, ${woofx3_asset_url} in
+  // workflow steps, and scene overlays) — a separate engine RPC from
+  // getStorageConfig/setStorageConfig, not part of the engine's StorageConfig.
+  const [streamwareBaseUrl, setStreamwareBaseUrlState] = useState("");
+  const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -40,15 +58,19 @@ export function StorageSettingsTab() {
     if (!instance) return;
     setIsLoading(true);
     try {
-      const result = await getConfig({ instanceId: instance._id });
+      const [result, engineInfo] = await Promise.all([
+        getConfig({ instanceId: instance._id }),
+        getEngineInfo({ instanceId: instance._id }),
+      ]);
       if (result) {
         setConfigState(result as unknown as StorageConfig);
       }
+      setStreamwareBaseUrlState(engineInfo?.streamwareBaseUrl ?? "");
     } catch {
     } finally {
       setIsLoading(false);
     }
-  }, [instance, getConfig]);
+  }, [instance, getConfig, getEngineInfo]);
 
   useEffect(() => {
     loadConfig();
@@ -56,9 +78,19 @@ export function StorageSettingsTab() {
 
   const handleSave = async () => {
     if (!instance) return;
+    setBaseUrlError(null);
+    const trimmedBaseUrl = streamwareBaseUrl.trim();
+    if (!isValidBaseUrl(trimmedBaseUrl)) {
+      setBaseUrlError("Enter a valid http:// or https:// URL, or leave blank.");
+      return;
+    }
     setIsSaving(true);
     try {
-      await setConfig({ instanceId: instance._id, config: config as unknown as Record<string, unknown> });
+      await Promise.all([
+        setConfig({ instanceId: instance._id, config: config as unknown as Record<string, unknown> }),
+        setStreamwareBaseUrl({ instanceId: instance._id, value: trimmedBaseUrl }),
+      ]);
+      setStreamwareBaseUrlState(trimmedBaseUrl);
     } finally {
       setIsSaving(false);
     }
@@ -175,13 +207,19 @@ export function StorageSettingsTab() {
             />
           </div>
           <div>
-            <Label htmlFor="public-url">Public URL Prefix</Label>
+            <Label htmlFor="public-url">Streamware base URL</Label>
             <Input
               id="public-url"
-              value={config.publicUrlPrefix || ""}
-              onChange={(e) => updateConfig({ publicUrlPrefix: e.target.value })}
-              placeholder="https://cdn.example.com/"
+              value={streamwareBaseUrl}
+              onChange={(e) => setStreamwareBaseUrlState(e.target.value)}
+              placeholder="https://cdn.example.com"
+              data-testid="input-streamware-base-url"
             />
+            {baseUrlError && <p className="mt-1 text-xs text-destructive">{baseUrlError}</p>}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Base URL the engine uses to serve widget assets, resolve <code>${"{woofx3_asset_url}"}</code> in workflow
+              steps, and host scene overlays. Leave blank to use the engine&apos;s default.
+            </p>
           </div>
         </div>
       </Card>
