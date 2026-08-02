@@ -710,6 +710,84 @@ export const reconcileWidgets = internalMutation({
 });
 
 /**
+ * Reconcile `moduleResourceInstances` against a full snapshot from the
+ * engine's `listAllResourceInstances()`. Self-healing counterpart to
+ * `moduleResourceInstances.upsertFromWebhook`/`deleteFromWebhook` — a single
+ * per-instance table (unlike widgets' catalog/join split), keyed on
+ * `canonicalId`, resolving the owning module the same way the webhook path
+ * does (via `moduleKey`, since the engine's own moduleId UUID isn't
+ * indexable here).
+ */
+export const reconcileResourceInstances = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    snapshots: v.array(
+      v.object({
+        id: v.string(),
+        moduleId: v.string(),
+        moduleName: v.string(),
+        kind: v.string(),
+        instanceId: v.string(),
+        displayName: v.string(),
+        canonicalId: v.string(),
+        moduleKey: v.string(),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, snapshots }) => {
+    const snapshotCanonicalIds = new Set(snapshots.map((s) => s.canonicalId));
+    let processed = 0;
+
+    for (const snap of snapshots) {
+      const moduleRecord = await ctx.db
+        .query("moduleRepository")
+        .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.moduleKey))
+        .first();
+      if (!moduleRecord) {
+        continue;
+      }
+
+      const row = {
+        instanceId,
+        moduleId: moduleRecord._id,
+        engineInstanceId: snap.id,
+        resourceInstanceId: snap.instanceId,
+        moduleName: snap.moduleName,
+        kind: snap.kind,
+        displayName: snap.displayName,
+        canonicalId: snap.canonicalId,
+      };
+
+      const existing = await ctx.db
+        .query("moduleResourceInstances")
+        .withIndex("by_canonical_id", (q) => q.eq("canonicalId", snap.canonicalId))
+        .first();
+      if (existing) {
+        await ctx.db.patch(existing._id, row);
+      } else {
+        await ctx.db.insert("moduleResourceInstances", row);
+      }
+
+      processed++;
+    }
+
+    // Drop moduleResourceInstances rows for this instance no longer present
+    // in the snapshot (deleted on the engine but a delete webhook was missed).
+    const liveRows = await ctx.db
+      .query("moduleResourceInstances")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const row of liveRows) {
+      if (!snapshotCanonicalIds.has(row.canonicalId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: processed };
+  },
+});
+
+/**
  * Reconcile the `moduleFunctions` catalog (global) AND `instanceFunctions`
  * (per-instance enablement) against a full snapshot from the engine's
  * `listAvailableFunctions()`. Self-healing counterpart to the
@@ -904,6 +982,7 @@ export const startRun = internalMutation({
         { name: "triggers", status: "pending", itemsProcessed: 0 },
         { name: "actions", status: "pending", itemsProcessed: 0 },
         { name: "widgets", status: "pending", itemsProcessed: 0 },
+        { name: "resources", status: "pending", itemsProcessed: 0 },
       ],
     });
   },
@@ -920,7 +999,8 @@ export const updateRunStep = internalMutation({
       v.literal("scenes"),
       v.literal("triggers"),
       v.literal("actions"),
-      v.literal("widgets")
+      v.literal("widgets"),
+      v.literal("resources")
     ),
     patch: v.object({
       status: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error"))),

@@ -5,6 +5,7 @@ import { actionsStep } from "./steps/actions";
 import { commandsStep } from "./steps/commands";
 import { functionsStep } from "./steps/functions";
 import { groupsStep } from "./steps/groups";
+import { resourcesStep } from "./steps/resources";
 import { scenesStep } from "./steps/scenes";
 import { triggersStep } from "./steps/triggers";
 import { widgetsStep } from "./steps/widgets";
@@ -18,7 +19,8 @@ export type SyncStepName =
   | "scenes"
   | "triggers"
   | "actions"
-  | "widgets";
+  | "widgets"
+  | "resources";
 
 export interface SyncStepContext {
   ctx: ActionCtx;
@@ -47,4 +49,5 @@ export const SYNC_STEPS: readonly SyncStep[] = [
   triggersStep,
   actionsStep,
   widgetsStep,
+  resourcesStep,
 ];

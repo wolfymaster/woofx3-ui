@@ -851,7 +851,8 @@ export default defineSchema({
           v.literal("scenes"),
           v.literal("triggers"),
           v.literal("actions"),
-          v.literal("widgets")
+          v.literal("widgets"),
+          v.literal("resources")
         ),
         status: v.union(v.literal("pending"), v.literal("running"), v.literal("success"), v.literal("error")),
         itemsProcessed: v.number(),

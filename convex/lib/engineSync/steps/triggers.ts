@@ -21,7 +21,6 @@ export const triggersStep: SyncStep = {
       id: t.id,
       name: t.name,
       description: t.description,
-      category: t.category,
       event: t.event,
       configSchema: t.configSchema,
       allowVariants: t.allowVariants,

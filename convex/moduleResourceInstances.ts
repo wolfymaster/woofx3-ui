@@ -3,12 +3,13 @@ import { internalMutation, query } from "./_generated/server";
 
 const resourceInstanceValidator = v.object({
   id: v.string(),
-  moduleId: v.string(), // engine UUID — looked up to convex moduleRepository._id
+  moduleId: v.string(), // engine UUID — not indexable in Convex, moduleKey is used instead
   moduleName: v.string(),
   kind: v.string(),
   instanceId: v.string(), // manifest-local instance id
   displayName: v.string(),
   canonicalId: v.string(),
+  moduleKey: v.string(), // owning module's stable composite key — resolves moduleRepository._id
 });
 
 export const listForInstance = query({
@@ -57,10 +58,12 @@ export const upsertFromWebhook = internalMutation({
     instance: resourceInstanceValidator,
   },
   handler: async (ctx, { instanceId, instance }) => {
-    // Resolve module by name — engine emits a UUID we can't index on directly.
+    // Resolve by moduleKey (mirrors reconcileWidgets) — the engine's own moduleId
+    // UUID isn't indexable here, and moduleName alone is ambiguous across
+    // instances/reinstalls that share a name.
     const moduleRecord = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_name_version", (q) => q.eq("name", instance.moduleName))
+      .withIndex("by_module_key", (q) => q.eq("moduleKey", instance.moduleKey))
       .first();
 
     if (!moduleRecord) {
@@ -115,4 +118,3 @@ export const cascadeOnModuleDelete = internalMutation({
     }
   },
 });
-
