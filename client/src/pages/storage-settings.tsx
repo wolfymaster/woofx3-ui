@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { useAction } from "convex/react";
-import { HardDrive, Save } from "lucide-react";
+import { Save } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,18 +39,22 @@ export function StorageSettingsTab() {
   const getConfig = useAction(api.storage.getConfig);
   const setConfig = useAction(api.storage.setConfig);
   const getEngineInfo = useAction(api.engineInfo.getEngineInfo);
-  const setStreamwareBaseUrl = useAction(api.engineInfo.setStreamwareBaseUrl);
+  const setOverlayPublicUrl = useAction(api.engineInfo.setOverlayPublicUrl);
 
   const [config, setConfigState] = useState<StorageConfig>({
     provider: "file",
     maxFileSize: 100,
     allowedExtensions: ["png", "jpg", "jpeg", "gif", "webp", "mp4", "webm"],
   });
-  // The engine's single streamwareBaseUrl (widget assets, ${woofx3_asset_url} in
-  // workflow steps, and scene overlays) — a separate engine RPC from
-  // getStorageConfig/setStorageConfig, not part of the engine's StorageConfig.
-  const [streamwareBaseUrl, setStreamwareBaseUrlState] = useState("");
-  const [baseUrlError, setBaseUrlError] = useState<string | null>(null);
+  // Public base URL the api's overlay gateway is reachable at — covers both
+  // overlay access (what mintOverlayToken/rotateOverlayToken/listOverlayTokens
+  // compose the browser-source and scene-preview URLs from) and asset
+  // resolution (widgets, module assets, uploads all proxy through the same
+  // /overlay/ surface). A separate engine RPC from getStorageConfig/
+  // setStorageConfig, not part of the engine's StorageConfig — that's purely
+  // about which backend barkloader writes bytes to, not public reachability.
+  const [overlayPublicUrl, setOverlayPublicUrlState] = useState("");
+  const [overlayUrlError, setOverlayUrlError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -65,7 +69,7 @@ export function StorageSettingsTab() {
       if (result) {
         setConfigState(result as unknown as StorageConfig);
       }
-      setStreamwareBaseUrlState(engineInfo?.streamwareBaseUrl ?? "");
+      setOverlayPublicUrlState(engineInfo?.overlayPublicUrl ?? "");
     } catch {
     } finally {
       setIsLoading(false);
@@ -78,19 +82,19 @@ export function StorageSettingsTab() {
 
   const handleSave = async () => {
     if (!instance) return;
-    setBaseUrlError(null);
-    const trimmedBaseUrl = streamwareBaseUrl.trim();
-    if (!isValidBaseUrl(trimmedBaseUrl)) {
-      setBaseUrlError("Enter a valid http:// or https:// URL, or leave blank.");
+    setOverlayUrlError(null);
+    const trimmedOverlayUrl = overlayPublicUrl.trim();
+    if (!isValidBaseUrl(trimmedOverlayUrl)) {
+      setOverlayUrlError("Enter a valid http:// or https:// URL, or leave blank.");
       return;
     }
     setIsSaving(true);
     try {
       await Promise.all([
         setConfig({ instanceId: instance._id, config: config as unknown as Record<string, unknown> }),
-        setStreamwareBaseUrl({ instanceId: instance._id, value: trimmedBaseUrl }),
+        setOverlayPublicUrl({ instanceId: instance._id, value: trimmedOverlayUrl }),
       ]);
-      setStreamwareBaseUrlState(trimmedBaseUrl);
+      setOverlayPublicUrlState(trimmedOverlayUrl);
     } finally {
       setIsSaving(false);
     }
@@ -206,19 +210,27 @@ export function StorageSettingsTab() {
               onChange={(e) => updateConfig({ maxFileSize: parseInt(e.target.value, 10) })}
             />
           </div>
+        </div>
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="text-lg font-medium mb-4">Overlay Public URL</h2>
+        <div className="space-y-4">
           <div>
-            <Label htmlFor="public-url">Streamware base URL</Label>
+            <Label htmlFor="overlay-public-url">Public URL</Label>
             <Input
-              id="public-url"
-              value={streamwareBaseUrl}
-              onChange={(e) => setStreamwareBaseUrlState(e.target.value)}
-              placeholder="https://cdn.example.com"
-              data-testid="input-streamware-base-url"
+              id="overlay-public-url"
+              value={overlayPublicUrl}
+              onChange={(e) => setOverlayPublicUrlState(e.target.value)}
+              placeholder="https://api.example.com"
+              data-testid="input-overlay-public-url"
             />
-            {baseUrlError && <p className="mt-1 text-xs text-destructive">{baseUrlError}</p>}
+            {overlayUrlError && <p className="mt-1 text-xs text-destructive">{overlayUrlError}</p>}
             <p className="mt-1 text-xs text-muted-foreground">
-              Base URL the engine uses to serve widget assets, resolve <code>${"{woofx3_asset_url}"}</code> in workflow
-              steps, and host scene overlays. Leave blank to use the engine&apos;s default.
+              Public base URL the engine's overlay surface is reachable at — used for browser-source and scene-preview
+              links (<code>{"{url}/overlay/{token}/"}</code>) and for every widget/module asset URL. Point this at
+              wherever the engine's API service sits behind a tunnel or reverse proxy. Leave blank to use the
+              engine&apos;s default.
             </p>
           </div>
         </div>

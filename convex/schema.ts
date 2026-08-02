@@ -478,7 +478,11 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_scene", ["sceneId"]),
 
-  // browserSourceKeys: unique opaque keys for browser sources
+  // browserSourceKeys: unique opaque keys for browser sources. Each row is
+  // backed by an engine-minted overlay token (see overlayTokenRoutes on the
+  // engine) — `key` stays Convex's own opaque public identity (what users
+  // paste into OBS via /browser-source/{key}), while `engineTokenId` and
+  // `overlayUrl` cache what it actually resolves to under the hood.
   browserSourceKeys: defineTable({
     instanceId: v.id("instances"),
     sceneId: v.id("scenes"),
@@ -486,10 +490,19 @@ export default defineSchema({
     name: v.string(),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
+    // "obs" (default when absent, for rows predating this field) = the
+    // public OBS browser-source URL. "preview" = the Scene Manager's
+    // internal live-canvas preview — kept as a separate row so
+    // rotating/revoking one never disturbs the other.
+    purpose: v.optional(v.union(v.literal("obs"), v.literal("preview"))),
+    engineTokenId: v.optional(v.string()),
+    overlayUrl: v.optional(v.string()),
   })
     .index("by_instance", ["instanceId"])
     .index("by_key", ["key"])
-    .index("by_scene", ["sceneId"]),
+    .index("by_scene", ["sceneId"])
+    .index("by_scene_purpose", ["sceneId", "purpose"])
+    .index("by_engine_token_id", ["engineTokenId"]),
 
   // alertDescriptors: alert type configuration per slot
   alertDescriptors: defineTable({

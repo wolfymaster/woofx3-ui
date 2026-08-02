@@ -1,7 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, type MutationCtx, mutation } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
+import { type ActionCtx, action, internalMutation, internalQuery } from "./_generated/server";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
 export const getDefaultScene = internalQuery({
   args: { instanceId: v.string() },
@@ -197,100 +199,385 @@ export const createAlertHistory = internalMutation({
   },
 });
 
-async function requireSceneMembership(ctx: MutationCtx, sceneId: Id<"scenes">) {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new Error("Unauthorized");
-  }
+type SceneResolution = { status: "not_found" } | { status: "unauthorized" } | { status: "ok"; scene: Doc<"scenes"> };
 
-  const scene = await ctx.db.get(sceneId);
-  if (!scene) {
-    throw new Error("Scene not found");
-  }
+export const resolveSceneForAction = internalQuery({
+  args: { sceneId: v.id("scenes"), userId: v.id("users") },
+  handler: async (ctx, { sceneId, userId }): Promise<SceneResolution> => {
+    const scene = await ctx.db.get(sceneId);
+    if (!scene) {
+      return { status: "not_found" };
+    }
+    const membership = await ctx.db
+      .query("instanceMembers")
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", scene.instanceId).eq("userId", userId))
+      .first();
+    if (!membership) {
+      return { status: "unauthorized" };
+    }
+    return { status: "ok", scene };
+  },
+});
 
-  const membership = await ctx.db
-    .query("instanceMembers")
-    .withIndex("by_instance_user", (q) => q.eq("instanceId", scene.instanceId).eq("userId", userId))
-    .first();
-
-  if (!membership) {
-    throw new Error("Not authorized");
-  }
-
-  return scene;
+// A row's `purpose` is undefined on rows created before that field existed —
+// treated as "obs" (the only purpose that existed back then).
+function matchesPurpose(row: Doc<"browserSourceKeys">, purpose: "obs" | "preview"): boolean {
+  return purpose === "obs" ? row.purpose === "obs" || row.purpose === undefined : row.purpose === purpose;
 }
 
-export const getOrCreateBrowserSourceKey = mutation({
-  args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    const scene = await requireSceneMembership(ctx, args.sceneId);
+export const getKeyForScenePurpose = internalQuery({
+  args: { sceneId: v.id("scenes"), purpose: v.union(v.literal("obs"), v.literal("preview")) },
+  handler: async (ctx, { sceneId, purpose }) => {
+    const rows = await ctx.db
+      .query("browserSourceKeys")
+      .withIndex("by_scene", (q) => q.eq("sceneId", sceneId))
+      .collect();
+    return rows.find((row) => matchesPurpose(row, purpose)) ?? null;
+  },
+});
 
-    const existing = await ctx.db
+export const insertKey = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    sceneId: v.id("scenes"),
+    key: v.string(),
+    name: v.string(),
+    purpose: v.union(v.literal("obs"), v.literal("preview")),
+    engineTokenId: v.string(),
+    overlayUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert("browserSourceKeys", { ...args, createdAt: Date.now() });
+  },
+});
+
+export const patchKeyToken = internalMutation({
+  args: { keyId: v.id("browserSourceKeys"), engineTokenId: v.string(), overlayUrl: v.string() },
+  handler: async (ctx, { keyId, engineTokenId, overlayUrl }) => {
+    await ctx.db.patch(keyId, { engineTokenId, overlayUrl });
+  },
+});
+
+// Deletes any existing row(s) for (sceneId, purpose) — including legacy rows
+// with no purpose set, when purpose is "obs" — then inserts the replacement.
+// Used by rotate, where the old key must stop resolving the moment the new
+// one exists.
+export const replaceKeyForScenePurpose = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    sceneId: v.id("scenes"),
+    purpose: v.union(v.literal("obs"), v.literal("preview")),
+    key: v.string(),
+    name: v.string(),
+    engineTokenId: v.string(),
+    overlayUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
       .query("browserSourceKeys")
       .withIndex("by_scene", (q) => q.eq("sceneId", args.sceneId))
+      .collect();
+    for (const row of rows) {
+      if (matchesPurpose(row, args.purpose)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+    await ctx.db.insert("browserSourceKeys", {
+      instanceId: args.instanceId,
+      sceneId: args.sceneId,
+      key: args.key,
+      name: args.name,
+      purpose: args.purpose,
+      engineTokenId: args.engineTokenId,
+      overlayUrl: args.overlayUrl,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+export const deleteKeys = internalMutation({
+  args: { keyIds: v.array(v.id("browserSourceKeys")) },
+  handler: async (ctx, { keyIds }) => {
+    for (const keyId of keyIds) {
+      await ctx.db.delete(keyId);
+    }
+  },
+});
+
+// Best-effort consistency for the OVERLAY_TOKEN_REVOKED webhook — a token
+// might be revoked through a channel other than this file's own
+// revokeOverlayToken/rotateOverlayToken calls (e.g. a direct engine-side
+// operator action). Clears the cached overlayUrl so the next
+// /browser-source/{key} load shows a "not ready" placeholder instead of
+// iframing a dead token, without deleting the row itself (the key stays
+// reusable — the next getOrCreateBrowserSourceKey/getOrCreatePreviewUrl call
+// mints a fresh token in its place).
+export const clearOverlayUrlByTokenId = internalMutation({
+  args: { engineTokenId: v.string() },
+  handler: async (ctx, { engineTokenId }) => {
+    const row = await ctx.db
+      .query("browserSourceKeys")
+      .withIndex("by_engine_token_id", (q) => q.eq("engineTokenId", engineTokenId))
       .first();
+    if (row) {
+      await ctx.db.patch(row._id, { overlayUrl: undefined });
+    }
+  },
+});
+
+// Busts every cached overlayUrl for an instance — called after
+// setOverlayPublicUrl changes what every URL should resolve to. Every
+// browser-source/preview row was minted against whatever overlayPublicUrl
+// was in effect at the time and never re-checks it, so without this they'd
+// keep serving the old host indefinitely. Returns the engineTokenIds that
+// were cleared so the caller can revoke them on the engine (the old tokens
+// stay technically valid otherwise — a stale-but-working URL on the old
+// host, not just a stale UI). Only clears overlayUrl, not the row itself —
+// the next getOrCreateBrowserSourceKey/getOrCreatePreviewUrl call mints a
+// fresh token in its place, transparently, with the same public `key`.
+export const bustOverlayUrlCacheForInstance = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<string[]> => {
+    const rows = await ctx.db
+      .query("browserSourceKeys")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    const revokedTokenIds: string[] = [];
+    for (const row of rows) {
+      if (row.overlayUrl === undefined) {
+        continue;
+      }
+      await ctx.db.patch(row._id, { overlayUrl: undefined });
+      if (row.engineTokenId) {
+        revokedTokenIds.push(row.engineTokenId);
+      }
+    }
+    return revokedTokenIds;
+  },
+});
+
+async function requireInstanceForScene(
+  ctx: ActionCtx,
+  scene: Doc<"scenes">
+): Promise<{ url: string; clientId: string; clientSecret: string }> {
+  const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: scene.instanceId });
+  if (!instance?.clientId || !instance.clientSecret) {
+    throw new Error("Instance is not registered with the engine");
+  }
+  return { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
+}
+
+// Mints (or reuses) a "preview"-purpose overlay token for the Scene
+// Manager's live canvas preview — a separate row/token from the "obs"
+// purpose above, so rotating or revoking the public OBS URL never disturbs
+// (or is disturbed by) this internal preview. Returns null rather than
+// throwing on any not-ready condition (unauthenticated caller, missing
+// scene, or a scene that hasn't synced with the engine yet) since this only
+// ever backs a passive preview surface, never a user-initiated action.
+export const getOrCreatePreviewUrl = action({
+  args: { sceneId: v.id("scenes") },
+  handler: async (ctx, { sceneId }): Promise<string | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    const resolved: SceneResolution = await ctx.runQuery(internal.browserSource.resolveSceneForAction, {
+      sceneId,
+      userId,
+    });
+    if (resolved.status !== "ok") {
+      return null;
+    }
+    const { scene } = resolved;
+    const engineSceneId = scene.engineSceneId;
+    if (!engineSceneId) {
+      return null;
+    }
+
+    const existing = await ctx.runQuery(internal.browserSource.getKeyForScenePurpose, {
+      sceneId,
+      purpose: "preview",
+    });
+    if (existing?.overlayUrl) {
+      return existing.overlayUrl;
+    }
+
+    const instance = await requireInstanceForScene(ctx, scene);
+    const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+    const minted = await rpc.mintOverlayToken({
+      sceneId: engineSceneId,
+      label: "Scene Manager Preview",
+    });
 
     if (existing) {
+      await ctx.runMutation(internal.browserSource.patchKeyToken, {
+        keyId: existing._id,
+        engineTokenId: minted.tokenId,
+        overlayUrl: minted.url,
+      });
+    } else {
+      await ctx.runMutation(internal.browserSource.insertKey, {
+        instanceId: scene.instanceId,
+        sceneId,
+        key: crypto.randomUUID().replace(/-/g, ""),
+        name: `${scene.name} Preview`,
+        purpose: "preview",
+        engineTokenId: minted.tokenId,
+        overlayUrl: minted.url,
+      });
+    }
+    return minted.url;
+  },
+});
+
+// Mints (or reuses) the engine overlay token backing this scene's public OBS
+// browser-source URL. `key` — Convex's own opaque public identity — never
+// changes across a "get" call; only rotate/revoke touch it. Legacy rows
+// (pre-dating engineTokenId/overlayUrl) are backfilled in place on next
+// access rather than forcing a migration or breaking existing OBS URLs.
+export const getOrCreateBrowserSourceKey = action({
+  args: { sceneId: v.id("scenes") },
+  handler: async (ctx, { sceneId }): Promise<string> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Unauthorized");
+    }
+    const resolved: SceneResolution = await ctx.runQuery(internal.browserSource.resolveSceneForAction, {
+      sceneId,
+      userId,
+    });
+    if (resolved.status === "not_found") {
+      throw new Error("Scene not found");
+    }
+    if (resolved.status === "unauthorized") {
+      throw new Error("Not authorized");
+    }
+    const { scene } = resolved;
+
+    const existing = await ctx.runQuery(internal.browserSource.getKeyForScenePurpose, { sceneId, purpose: "obs" });
+    if (existing?.overlayUrl) {
+      return existing.key;
+    }
+
+    if (!scene.engineSceneId) {
+      throw new Error("This scene has not finished syncing with the engine yet");
+    }
+    const instance = await requireInstanceForScene(ctx, scene);
+    const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+    const minted = await rpc.mintOverlayToken({
+      sceneId: scene.engineSceneId,
+      label: `${scene.name} Browser Source`,
+    });
+
+    if (existing) {
+      await ctx.runMutation(internal.browserSource.patchKeyToken, {
+        keyId: existing._id,
+        engineTokenId: minted.tokenId,
+        overlayUrl: minted.url,
+      });
       return existing.key;
     }
 
     const key = crypto.randomUUID().replace(/-/g, "");
-
-    await ctx.db.insert("browserSourceKeys", {
+    await ctx.runMutation(internal.browserSource.insertKey, {
       instanceId: scene.instanceId,
-      sceneId: args.sceneId,
+      sceneId,
       key,
       name: `${scene.name} Browser Source`,
-      createdAt: Date.now(),
+      purpose: "obs",
+      engineTokenId: minted.tokenId,
+      overlayUrl: minted.url,
     });
-
     return key;
   },
 });
 
-// Revokes every browser-source key for a scene. Any OBS source pointed at an old
-// URL immediately stops resolving (the /browser-source/{key} lookup 404s).
-export const revokeBrowserSourceKeys = mutation({
+// Revokes every "obs"-purpose browser-source key for a scene (best-effort on
+// the engine — always deletes locally even if the engine call fails). Any
+// OBS source pointed at an old URL immediately stops resolving.
+export const revokeBrowserSourceKeys = action({
   args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    await requireSceneMembership(ctx, args.sceneId);
+  handler: async (ctx, { sceneId }): Promise<{ revoked: number }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Unauthorized");
+    }
+    const resolved: SceneResolution = await ctx.runQuery(internal.browserSource.resolveSceneForAction, {
+      sceneId,
+      userId,
+    });
+    if (resolved.status === "not_found") {
+      throw new Error("Scene not found");
+    }
+    if (resolved.status === "unauthorized") {
+      throw new Error("Not authorized");
+    }
+    const { scene } = resolved;
 
-    const keys = await ctx.db
-      .query("browserSourceKeys")
-      .withIndex("by_scene", (q) => q.eq("sceneId", args.sceneId))
-      .collect();
-
-    for (const k of keys) {
-      await ctx.db.delete(k._id);
+    const existing = await ctx.runQuery(internal.browserSource.getKeyForScenePurpose, { sceneId, purpose: "obs" });
+    if (!existing) {
+      return { revoked: 0 };
     }
 
-    return { revoked: keys.length };
+    if (existing.engineTokenId) {
+      const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: scene.instanceId });
+      if (instance?.clientId && instance.clientSecret) {
+        try {
+          const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+          await rpc.revokeOverlayToken({ tokenId: existing.engineTokenId });
+        } catch {
+          // best-effort — still delete the Convex row below
+        }
+      }
+    }
+
+    await ctx.runMutation(internal.browserSource.deleteKeys, { keyIds: [existing._id] });
+    return { revoked: 1 };
   },
 });
 
-// Revokes existing keys and issues a fresh one. Returns the new key so the
-// caller can re-copy the URL; old URLs stop working.
-export const rotateBrowserSourceKey = mutation({
+// Revokes the existing "obs" key (atomically, via the engine's rotate RPC
+// when a token already exists) and issues a fresh one. Returns the new key
+// so the caller can re-copy the URL; the old URL stops working immediately.
+export const rotateBrowserSourceKey = action({
   args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    const scene = await requireSceneMembership(ctx, args.sceneId);
-
-    const keys = await ctx.db
-      .query("browserSourceKeys")
-      .withIndex("by_scene", (q) => q.eq("sceneId", args.sceneId))
-      .collect();
-
-    for (const k of keys) {
-      await ctx.db.delete(k._id);
+  handler: async (ctx, { sceneId }): Promise<string> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Unauthorized");
+    }
+    const resolved: SceneResolution = await ctx.runQuery(internal.browserSource.resolveSceneForAction, {
+      sceneId,
+      userId,
+    });
+    if (resolved.status === "not_found") {
+      throw new Error("Scene not found");
+    }
+    if (resolved.status === "unauthorized") {
+      throw new Error("Not authorized");
+    }
+    const { scene } = resolved;
+    if (!scene.engineSceneId) {
+      throw new Error("This scene has not finished syncing with the engine yet");
     }
 
+    const instance = await requireInstanceForScene(ctx, scene);
+    const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+
+    const existing = await ctx.runQuery(internal.browserSource.getKeyForScenePurpose, { sceneId, purpose: "obs" });
+    const minted = existing?.engineTokenId
+      ? await rpc.rotateOverlayToken({ tokenId: existing.engineTokenId })
+      : await rpc.mintOverlayToken({ sceneId: scene.engineSceneId, label: `${scene.name} Browser Source` });
+
     const key = crypto.randomUUID().replace(/-/g, "");
-    await ctx.db.insert("browserSourceKeys", {
+    await ctx.runMutation(internal.browserSource.replaceKeyForScenePurpose, {
       instanceId: scene.instanceId,
-      sceneId: args.sceneId,
+      sceneId,
+      purpose: "obs",
       key,
       name: `${scene.name} Browser Source`,
-      createdAt: Date.now(),
+      engineTokenId: minted.tokenId,
+      overlayUrl: minted.url,
     });
 
     return key;

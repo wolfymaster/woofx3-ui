@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { Grid, Link, Maximize, MoreVertical, Save, Settings, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
@@ -79,8 +79,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const updateSceneAction = useAction(api.sceneActions.updateScene);
   const deleteSceneAction = useAction(api.sceneActions.deleteScene);
   const createSceneAction = useAction(api.sceneActions.createScene);
-  const getOrCreateBrowserSourceKey = useMutation(api.browserSource.getOrCreateBrowserSourceKey);
-  const rotateBrowserSourceKey = useMutation(api.browserSource.rotateBrowserSourceKey);
+  const getOrCreateBrowserSourceKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
+  const rotateBrowserSourceKey = useAction(api.browserSource.rotateBrowserSourceKey);
 
   const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
 
@@ -494,12 +494,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 {scene.widgets.map((widget) => (
                   <WidgetFallbackBackground key={widget.id} widget={widget} />
                 ))}
-                <LiveScenePreview
-                  instanceId={instanceId}
-                  engineSceneId={engineSceneId}
-                  width={scene.width}
-                  height={scene.height}
-                />
+                <LiveScenePreview sceneId={convexSceneId} width={scene.width} height={scene.height} />
                 {scene.widgets.map((widget) => (
                   <CanvasWidgetHandle
                     key={widget.id}

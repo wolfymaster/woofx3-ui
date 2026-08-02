@@ -962,6 +962,17 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      case EngineEventType.OVERLAY_TOKEN_REVOKED: {
+        // Best-effort cache invalidation — see clearOverlayUrlByTokenId's doc
+        // comment. woofx3-ui's own revoke/rotate calls (convex/browserSource.ts)
+        // already keep their own cache correct; this only matters when a
+        // token is revoked through some other channel.
+        await ctx.runMutation(internal.browserSource.clearOverlayUrlByTokenId, {
+          engineTokenId: event.tokenId,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       case EngineEventType.STREAM_ONLINE: {
         await ctx.runMutation(internal.instanceLiveState.onStreamOnline, {
           instanceId: instance._id,
@@ -1214,8 +1225,10 @@ http.route({
       new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 
     // Scenes are engine-authoritative and the engine renders the overlay, so this
-    // page just iframes the engine's per-scene overlay URL. An un-synced scene or
-    // an engine with no overlay base configured renders a transparent placeholder.
+    // page just iframes the engine-minted overlay-token URL cached on the source
+    // key (see convex/browserSource.ts's getOrCreateBrowserSourceKey — it mints
+    // via the engine's overlayTokenRoutes at key-creation time, not here, so
+    // this stays a single fast lookup on every OBS page load).
     if (!scene.engineSceneId) {
       return htmlResponse(
         buildBrowserSourcePlaceholderHtml({
@@ -1225,23 +1238,16 @@ http.route({
       );
     }
 
-    const engineInfo = await ctx.runAction(internal.engineInfo.getEngineOverlayInfo, {
-      instanceId: scene.instanceId,
-    });
-
-    if (!engineInfo?.engineSceneOverlayBaseUrl) {
+    if (!sourceKey.overlayUrl) {
       return htmlResponse(
         buildBrowserSourcePlaceholderHtml({
           sceneName,
-          reason: "Overlay rendering is not configured for this engine.",
+          reason: "This browser source hasn't finished setting up yet — reopen it from the scene editor.",
         })
       );
     }
 
-    const base = engineInfo.engineSceneOverlayBaseUrl.replace(/\/+$/, "");
-    const overlayUrl = `${base}/${encodeURIComponent(scene.engineSceneId)}`;
-
-    return htmlResponse(buildBrowserSourceHtml({ sceneName, overlayUrl }));
+    return htmlResponse(buildBrowserSourceHtml({ sceneName, overlayUrl: sourceKey.overlayUrl }));
   }),
 });
 
