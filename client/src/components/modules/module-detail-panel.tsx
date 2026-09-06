@@ -1,3 +1,7 @@
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
+import { useAction, useQuery } from "convex/react";
 import {
   ArrowLeft,
   Bell,
@@ -13,20 +17,16 @@ import {
   XCircle,
   Zap,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Id } from "@convex/_generated/dataModel";
-import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
-import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
+import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 import { cn, isNewerVersion } from "@/lib/utils";
@@ -163,7 +163,9 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-semibold truncate">{module.name}</h2>
-              {categoryIcons[module.category] && <span className="text-primary shrink-0">{categoryIcons[module.category]}</span>}
+              {categoryIcons[module.category] && (
+                <span className="text-primary shrink-0">{categoryIcons[module.category]}</span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground line-clamp-2">{module.description}</p>
           </div>
@@ -182,9 +184,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
             />
           )}
         </div>
-        {!loading && installError && (
-          <InstallErrorBanner error={installError} onDismissError={onDismissError} />
-        )}
+        {!loading && installError && <InstallErrorBanner error={installError} onDismissError={onDismissError} />}
       </div>
 
       <div className="px-6 border-b shrink-0">
@@ -212,32 +212,41 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-      ) : topTab === "details" ? (
-        <DetailsTab module={module} />
-      ) : topTab === "definitions" ? (
-        <ResourcesTab
-          activeType={resourceTab}
-          onSelectType={setResourceTab}
-          counts={resourceCounts}
-          triggers={triggers}
-          actions={actions}
-          functions={functions}
-          widgets={widgets}
-          workflows={workflows}
-        />
-      ) : topTab === "settings" ? (
-        <SettingsTab
-          instanceId={instanceId}
-          moduleId={module.identifier ?? ""}
-          manifestSettings={manifestSettings ?? []}
-        />
       ) : (
-        <ManageResourcesTab
-          instanceId={instanceId}
-          moduleDbId={moduleDbId}
-          moduleName={module.identifier ?? ""}
-          manifestResourceKinds={manifestResourceKinds ?? []}
-        />
+        <div className="flex-1 min-h-0 flex gap-6 px-6 py-4 overflow-hidden">
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+            {topTab === "details" ? (
+              <DetailsTab module={module} />
+            ) : topTab === "definitions" ? (
+              <ResourcesTab
+                activeType={resourceTab}
+                onSelectType={setResourceTab}
+                counts={resourceCounts}
+                triggers={triggers}
+                actions={actions}
+                functions={functions}
+                widgets={widgets}
+                workflows={workflows}
+              />
+            ) : topTab === "settings" ? (
+              <SettingsTab
+                instanceId={instanceId}
+                moduleId={module.identifier ?? ""}
+                manifestSettings={manifestSettings ?? []}
+              />
+            ) : (
+              <ManageResourcesTab
+                instanceId={instanceId}
+                moduleDbId={moduleDbId}
+                moduleName={module.identifier ?? ""}
+                manifestResourceKinds={manifestResourceKinds ?? []}
+              />
+            )}
+          </div>
+          <div className="w-56 shrink-0">
+            <ModuleMetaRail module={module} />
+          </div>
+        </div>
       )}
     </div>
   );
@@ -352,13 +361,7 @@ function ModuleInstallActions({
   );
 }
 
-function InstallErrorBanner({
-  error,
-  onDismissError,
-}: {
-  error: string;
-  onDismissError?: () => void;
-}) {
+function InstallErrorBanner({ error, onDismissError }: { error: string; onDismissError?: () => void }) {
   return (
     <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 ml-12">
       <div className="flex items-start justify-between gap-2">
@@ -383,57 +386,58 @@ function InstallErrorBanner({
 
 function DetailsTab({ module }: { module: ModuleDetailMeta }) {
   return (
-    <div className="flex-1 min-h-0 grid grid-cols-3 gap-6 px-6 py-4">
-      <ScrollArea className="col-span-2 h-full pr-4">
-        <div className="prose prose-sm dark:prose-invert max-w-none">
-          {module.readme ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{module.readme}</ReactMarkdown>
-          ) : (
-            <p className="text-sm text-muted-foreground not-prose">No README provided.</p>
-          )}
-        </div>
-      </ScrollArea>
-
-      <div className="col-span-1 space-y-4">
-        {module.isInstalled &&
-          module.latestVersion &&
-          isNewerVersion(module.latestVersion, module.version) && (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              Update available: v{module.version} → v{module.latestVersion}
-            </p>
-          )}
-        <MetaRow label="Identifier" value={module.identifier ?? "—"} mono />
-        <MetaRow label="Version" value={module.version || "—"} />
-        <MetaRow label="Author" value={module.author || "Unknown"} />
-        <MetaRow label="Category">
-          <Badge variant="outline" className="text-xs">
-            {module.category}
-          </Badge>
-        </MetaRow>
-        <MetaRow label="Status">
-          <Badge variant={module.isInstalled ? "secondary" : "outline"} className="text-xs">
-            {module.isInstalled ? (
-              <>
-                <Check className="h-3 w-3 mr-1" />
-                Installed
-              </>
-            ) : (
-              "Not installed"
-            )}
-          </Badge>
-        </MetaRow>
-        {module.tags.length > 0 && (
-          <MetaRow label="Tags">
-            <div className="flex flex-wrap gap-1">
-              {module.tags.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
-            </div>
-          </MetaRow>
+    <ScrollArea className="flex-1 h-full pr-4">
+      {module.identifier && <h3 className="text-xl font-bold font-mono mb-4">{module.identifier}</h3>}
+      <div className="prose prose-sm dark:prose-invert max-w-none">
+        {module.readme ? (
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{module.readme}</ReactMarkdown>
+        ) : (
+          <p className="text-sm text-muted-foreground not-prose">No README provided.</p>
         )}
       </div>
+    </ScrollArea>
+  );
+}
+
+function ModuleMetaRail({ module }: { module: ModuleDetailMeta }) {
+  return (
+    <div className="space-y-4">
+      {module.isInstalled && module.latestVersion && isNewerVersion(module.latestVersion, module.version) && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Update available: v{module.version} → v{module.latestVersion}
+        </p>
+      )}
+      <MetaRow label="Identifier" value={module.identifier ?? "—"} mono />
+      <MetaRow label="Version" value={module.version || "—"} />
+      <MetaRow label="Author" value={module.author || "Unknown"} />
+      <MetaRow label="Category">
+        <Badge variant="outline" className="text-xs">
+          {module.category}
+        </Badge>
+      </MetaRow>
+      <MetaRow label="Status">
+        <Badge variant={module.isInstalled ? "secondary" : "outline"} className="text-xs">
+          {module.isInstalled ? (
+            <>
+              <Check className="h-3 w-3 mr-1" />
+              Installed
+            </>
+          ) : (
+            "Not installed"
+          )}
+        </Badge>
+      </MetaRow>
+      {module.tags.length > 0 && (
+        <MetaRow label="Tags">
+          <div className="flex flex-wrap gap-1">
+            {module.tags.map((tag) => (
+              <Badge key={tag} variant="secondary" className="text-xs">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        </MetaRow>
+      )}
     </div>
   );
 }
@@ -479,7 +483,7 @@ interface ResourcesTabProps {
 function ResourcesTab(props: ResourcesTabProps) {
   const { activeType, onSelectType, counts, triggers, actions, functions, widgets, workflows } = props;
   return (
-    <div className="flex-1 min-h-0 grid grid-cols-4 gap-6 px-6 py-4">
+    <div className="flex-1 min-h-0 grid grid-cols-4 gap-6">
       <div className="col-span-1 space-y-1">
         {RESOURCE_NAV.map((item) => {
           const count = counts[item.type];
@@ -741,7 +745,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
 
   return (
     <ScrollArea className="flex-1">
-      <div className="px-6 py-4 space-y-6 max-w-xl">
+      <div className="space-y-6 max-w-xl">
         {saveError && (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
             {saveError}
@@ -779,9 +783,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
                   )}
                 </Button>
               </div>
-              {field.description && (
-                <p className="text-xs text-muted-foreground">{field.description}</p>
-              )}
+              {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
               <Input
                 id={`setting-${field.id}`}
                 type={field.type === "number" ? "number" : "text"}
@@ -880,6 +882,38 @@ function IntegrationSettingButton({
 
 // --- Manage Resources Tab ---
 
+type ResourceKindSection = {
+  kind: string;
+  name: string;
+  description?: string;
+  creatable: boolean;
+};
+
+function buildResourceKindSections(
+  manifestKinds: ManifestResourceKind[],
+  instances: Array<{ kind: string }>
+): ResourceKindSection[] {
+  const byKind = new Map<string, ResourceKindSection>();
+  for (const kind of manifestKinds) {
+    byKind.set(kind.kind, {
+      kind: kind.kind,
+      name: kind.name || kind.kind,
+      description: kind.description,
+      creatable: true,
+    });
+  }
+  for (const inst of instances) {
+    if (!byKind.has(inst.kind)) {
+      byKind.set(inst.kind, {
+        kind: inst.kind,
+        name: inst.kind,
+        creatable: false,
+      });
+    }
+  }
+  return Array.from(byKind.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 interface ManageResourcesTabProps {
   instanceId?: Id<"instances">;
   moduleDbId?: Id<"moduleRepository">;
@@ -889,9 +923,16 @@ interface ManageResourcesTabProps {
 
 function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResourceKinds }: ManageResourcesTabProps) {
   const [createDialogKind, setCreateDialogKind] = useState<ManifestResourceKind | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{ canonicalId: string; kind: string; resourceInstanceId: string; displayName: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    canonicalId: string;
+    kind: string;
+    resourceInstanceId: string;
+    displayName: string;
+  } | null>(null);
   const [opError, setOpError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const instances = useQuery(
     api.moduleResourceInstances.listByModule,
@@ -900,14 +941,36 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
 
   const createAction = useAction(api.moduleResourceActions.createResourceInstance);
   const deleteAction = useAction(api.moduleResourceActions.deleteResourceInstance);
+  const syncAction = useAction(api.moduleResourceActions.syncResourceInstancesForModule);
 
-  if (manifestResourceKinds.length === 0) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">No Resources Found</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (!instanceId || !moduleDbId) {
+      setSyncError(null);
+      return;
+    }
+    let cancelled = false;
+    setSyncing(true);
+    setSyncError(null);
+    void syncAction({ instanceId, moduleDbId })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setSyncError(err instanceof Error ? err.message : "Failed to sync resource instances from the engine.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSyncing(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [instanceId, moduleDbId, syncAction]);
+
+  const kindSections = useMemo(
+    () => buildResourceKindSections(manifestResourceKinds, instances ?? []),
+    [manifestResourceKinds, instances]
+  );
 
   async function handleDelete() {
     if (!deleteTarget || !instanceId) {
@@ -921,6 +984,9 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
         canonicalId: deleteTarget.canonicalId,
       });
       setDeleteTarget(null);
+      if (moduleDbId) {
+        await syncAction({ instanceId, moduleDbId });
+      }
     } catch (err) {
       setOpError(err instanceof Error ? err.message : "Failed to delete resource.");
     } finally {
@@ -928,105 +994,149 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
     }
   }
 
+  if (!instanceId || !moduleDbId) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">Install this module to manage its resource instances.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex-1 min-h-0 overflow-auto px-6 py-4 space-y-6">
-      {opError && (
+    <div className="flex-1 min-h-0 overflow-auto space-y-6">
+      <div>
+        <h3 className="text-sm font-semibold">Runtime instances</h3>
+        <p className="text-xs text-muted-foreground">User-created instances of this module&apos;s resource kinds.</p>
+      </div>
+
+      {(opError || syncError) && (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive flex items-center justify-between">
-          <span>{opError}</span>
-          <button type="button" onClick={() => setOpError(null)} className="text-destructive/60 hover:text-destructive ml-2">
+          <span>{opError ?? syncError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setOpError(null);
+              setSyncError(null);
+            }}
+            className="text-destructive/60 hover:text-destructive ml-2"
+          >
             <X className="h-3 w-3" />
           </button>
         </div>
       )}
 
-      {manifestResourceKinds.map((kind) => {
-        const kindInstances = (instances ?? []).filter((i) => i.kind === kind.kind);
-        return (
-          <section key={kind.kind}>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-semibold">{kind.name}</h3>
-                {kind.description && (
-                  <p className="text-xs text-muted-foreground">{kind.description}</p>
-                )}
+      {instances === undefined || (syncing && instances.length === 0 && kindSections.length === 0) ? (
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      ) : kindSections.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No resource instances for this module, and its manifest does not declare any resource kinds.
+        </p>
+      ) : (
+        kindSections.map((section) => {
+          const kindInstances = (instances ?? []).filter((i) => i.kind === section.kind);
+          const manifestKind = manifestResourceKinds.find((k) => k.kind === section.kind) ?? null;
+          return (
+            <div key={section.kind}>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="text-sm font-medium">{section.name}</h4>
+                  {section.description ? <p className="text-xs text-muted-foreground">{section.description}</p> : null}
+                </div>
+                {section.creatable && manifestKind ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 gap-1.5"
+                    onClick={() => {
+                      setCreateDialogKind(manifestKind);
+                      setOpError(null);
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    New
+                  </Button>
+                ) : null}
               </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1.5"
-                onClick={() => { setCreateDialogKind(kind); setOpError(null); }}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                New
-              </Button>
-            </div>
 
-            {instances === undefined ? (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : kindInstances.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No instances yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {kindInstances.map((inst) => (
-                  <div key={inst._id} className="flex items-center gap-3 p-3 rounded-md border bg-card">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{inst.displayName}</p>
-                      <p className="text-xs text-muted-foreground font-mono truncate">{inst.canonicalId}</p>
+              {kindInstances.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No instances yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {kindInstances.map((inst) => (
+                    <div key={inst._id} className="flex items-center gap-3 p-3 rounded-md border bg-card">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{inst.displayName}</p>
+                        <p className="text-xs text-muted-foreground font-mono truncate">{inst.canonicalId}</p>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                        disabled={deleting === inst.canonicalId}
+                        onClick={() =>
+                          setDeleteTarget({
+                            canonicalId: inst.canonicalId,
+                            kind: inst.kind,
+                            resourceInstanceId: inst.resourceInstanceId,
+                            displayName: inst.displayName,
+                          })
+                        }
+                      >
+                        {deleting === inst.canonicalId ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </Button>
                     </div>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-                      disabled={deleting === inst.canonicalId}
-                      onClick={() => setDeleteTarget({
-                        canonicalId: inst.canonicalId,
-                        kind: inst.kind,
-                        resourceInstanceId: inst.resourceInstanceId,
-                        displayName: inst.displayName,
-                      })}
-                    >
-                      {deleting === inst.canonicalId
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <Trash2 className="h-3.5 w-3.5" />
-                      }
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        );
-      })}
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })
+      )}
 
       {createDialogKind && instanceId && (
         <CreateResourceDialog
           kind={createDialogKind}
           onClose={() => setCreateDialogKind(null)}
           onCreate={async (resourceInstanceId, displayName) => {
-            await createAction({ instanceId, moduleName, kind: createDialogKind.kind, resourceInstanceId, displayName });
+            await createAction({
+              instanceId,
+              moduleName,
+              kind: createDialogKind.kind,
+              resourceInstanceId,
+              displayName,
+            });
+            await syncAction({ instanceId, moduleDbId });
           }}
         />
       )}
 
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) { setDeleteTarget(null); } }}>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete Resource</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Are you sure you want to delete <span className="font-medium text-foreground">{deleteTarget?.displayName}</span>?
-            This will also remove its stored value and cannot be undone.
+            Are you sure you want to delete{" "}
+            <span className="font-medium text-foreground">{deleteTarget?.displayName}</span>? This will also remove its
+            stored value and cannot be undone.
           </p>
           <p className="text-xs font-mono text-muted-foreground mt-1">{deleteTarget?.canonicalId}</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>
               Cancel
             </Button>
-            <Button
-              variant="destructive"
-              disabled={!!deleting}
-              onClick={() => void handleDelete()}
-            >
+            <Button variant="destructive" disabled={!!deleting} onClick={() => void handleDelete()}>
               {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
               Delete
             </Button>
@@ -1036,4 +1146,3 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
     </div>
   );
 }
-

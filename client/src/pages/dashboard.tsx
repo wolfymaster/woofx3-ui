@@ -1,412 +1,137 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { api } from "@convex/_generated/api";
+import type { Doc } from "@convex/_generated/dataModel";
+import { useMutation, useQuery } from "convex/react";
+import { Check, LayoutGrid, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
+import { StatusBarCenterPortal } from "@/components/layout/status-bar-slot";
 import {
-  GripVertical,
-  Plus,
-  RotateCcw,
-  Maximize2,
-  Minimize2,
-  X,
-  Loader2,
-  AlertCircle,
-} from 'lucide-react';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
+import { Carousel, type CarouselApi, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import {
-  Panel,
-  PanelGroup,
-  PanelResizeHandle,
-} from 'react-resizable-panels';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
-import { api } from '@convex/_generated/api';
-import { useInstance } from '@/hooks/use-instance';
-import { ChatModule } from '@/components/dashboard/chat-module';
-import { WorkflowRunsModule } from '@/components/dashboard/workflow-runs-module';
-import { EventFeedModule } from '@/components/dashboard/event-feed-module';
-import { MacroPadModule } from '@/components/dashboard/macro-pad-module';
-import { StreamStatusWidget } from '@/components/dashboard/widgets/stream-status';
-import { RecentEventsWidget } from '@/components/dashboard/widgets/recent-events';
-import { QuickActionsWidget } from '@/components/dashboard/widgets/quick-actions';
-import { AlertQueueWidget } from '@/components/dashboard/widgets/alert-queue';
-import type { DashboardModule } from '@woofx3/api';
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useInstance } from "@/hooks/use-instance";
+import { widgetSlotId } from "@/lib/dashboard-widgets/types";
+import { cn } from "@/lib/utils";
 
-// Registry of available module components
-const moduleComponents: Record<string, React.ComponentType<{ config?: Record<string, unknown>; onConfigChange?: (config: Record<string, unknown>) => void }>> = {
-  'chat': ChatModule,
-  'workflow-runs': WorkflowRunsModule,
-  'event-feed': EventFeedModule,
-  'macro-pad': MacroPadModule,
-  'stream-status': StreamStatusWidget,
-  'recent-events': RecentEventsWidget,
-  'quick-actions': QuickActionsWidget,
-  'alert-queue': AlertQueueWidget,
-};
-
-const moduleLabels: Record<string, string> = {
-  'chat': 'Chat Client',
-  'workflow-runs': 'Workflow Runs',
-  'event-feed': 'Event Feed',
-  'macro-pad': 'Macro Pad',
-  'stream-status': 'Stream Status',
-  'recent-events': 'Recent Events',
-  'quick-actions': 'Quick Actions',
-  'alert-queue': 'Alert Queue',
-};
-
-const defaultModules: DashboardModule[] = [
-  { id: 'mod-1', type: 'stream-status', title: 'Stream Status' },
-  { id: 'mod-2', type: 'recent-events', title: 'Recent Events' },
-  { id: 'mod-3', type: 'quick-actions', title: 'Quick Actions' },
-  { id: 'mod-4', type: 'chat', title: 'Chat Client' },
-];
-
-interface ModulePanelProps {
-  module: DashboardModule;
-  onRemove: (id: string) => void;
-  isMaximized: boolean;
-  onToggleMaximize: (id: string) => void;
-  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
-}
-
-function ModulePanel({ module, onRemove, isMaximized, onToggleMaximize, onConfigChange }: ModulePanelProps) {
-  const Component = moduleComponents[module.type];
-
-  if (!Component) {
-    return (
-      <Card className="h-full flex flex-col overflow-hidden" data-testid={`panel-${module.id}`}>
-        <div className="flex items-center justify-center h-full text-muted-foreground">
-          Unknown module type: {module.type}
-        </div>
-      </Card>
-    );
-  }
-
-  return (
-    <Card className="h-full flex flex-col overflow-hidden" data-testid={`panel-${module.id}`}>
-      <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-muted/30 shrink-0">
-        <div className="flex items-center gap-2">
-          <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
-          <span className="text-xs font-medium text-muted-foreground">{module.title}</span>
-        </div>
-        <div className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={() => onToggleMaximize(module.id)}
-          >
-            {isMaximized ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-muted-foreground hover:text-destructive"
-            onClick={() => onRemove(module.id)}
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <Component 
-          config={module.config} 
-          onConfigChange={onConfigChange ? (config) => onConfigChange(module.id, config) : undefined}
-        />
-      </div>
-    </Card>
-  );
-}
-
-function ResizeHandle({ direction = 'horizontal' }: { direction?: 'horizontal' | 'vertical' }) {
-  return (
-    <PanelResizeHandle 
-      className={cn(
-        "relative flex items-center justify-center group",
-        "data-[resize-handle-state=hover]:bg-primary/10",
-        "data-[resize-handle-state=drag]:bg-primary/20",
-        "transition-colors",
-        direction === 'horizontal' ? "w-2 mx-0.5 cursor-col-resize" : "h-2 my-0.5 cursor-row-resize"
-      )}
-    >
-      <div className={cn(
-        "rounded-full bg-border group-hover:bg-primary/50 transition-colors",
-        direction === 'horizontal' ? "w-0.5 h-8" : "h-0.5 w-8"
-      )} />
-    </PanelResizeHandle>
-  );
-}
-
-function ThreePanelLayout({ 
-  modules, 
-  onRemove, 
-  onToggleMaximize,
-  onConfigChange
-}: { 
-  modules: DashboardModule[];
-  onRemove: (id: string) => void;
-  onToggleMaximize: (id: string) => void;
-  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
-}) {
-  return (
-    <PanelGroup direction="horizontal" autoSaveId="dashboard-h">
-      <Panel minSize={20} defaultSize={40}>
-        <ModulePanel 
-          module={modules[0]}
-          onRemove={onRemove}
-          isMaximized={false}
-          onToggleMaximize={onToggleMaximize}
-          onConfigChange={onConfigChange}
-        />
-      </Panel>
-      <ResizeHandle direction="horizontal" />
-      <Panel minSize={30} defaultSize={60}>
-        <PanelGroup direction="vertical" autoSaveId="dashboard-v">
-          <Panel minSize={30} defaultSize={50}>
-            <ModulePanel 
-              module={modules[1]}
-              onRemove={onRemove}
-              isMaximized={false}
-              onToggleMaximize={onToggleMaximize}
-              onConfigChange={onConfigChange}
-            />
-          </Panel>
-          <ResizeHandle direction="vertical" />
-          <Panel minSize={30} defaultSize={50}>
-            <ModulePanel 
-              module={modules[2]}
-              onRemove={onRemove}
-              isMaximized={false}
-              onToggleMaximize={onToggleMaximize}
-              onConfigChange={onConfigChange}
-            />
-          </Panel>
-        </PanelGroup>
-      </Panel>
-    </PanelGroup>
-  );
-}
-
-function TwoPanelLayout({ 
-  modules, 
-  onRemove, 
-  onToggleMaximize,
-  onConfigChange
-}: { 
-  modules: DashboardModule[];
-  onRemove: (id: string) => void;
-  onToggleMaximize: (id: string) => void;
-  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
-}) {
-  return (
-    <PanelGroup direction="horizontal" autoSaveId="dashboard-2">
-      <Panel minSize={20} defaultSize={50}>
-        <ModulePanel 
-          module={modules[0]}
-          onRemove={onRemove}
-          isMaximized={false}
-          onToggleMaximize={onToggleMaximize}
-          onConfigChange={onConfigChange}
-        />
-      </Panel>
-      <ResizeHandle direction="horizontal" />
-      <Panel minSize={20} defaultSize={50}>
-        <ModulePanel 
-          module={modules[1]}
-          onRemove={onRemove}
-          isMaximized={false}
-          onToggleMaximize={onToggleMaximize}
-          onConfigChange={onConfigChange}
-        />
-      </Panel>
-    </PanelGroup>
-  );
-}
-
-function OnePanelLayout({ 
-  modules, 
-  onRemove, 
-  onToggleMaximize,
-  onConfigChange
-}: { 
-  modules: DashboardModule[];
-  onRemove: (id: string) => void;
-  onToggleMaximize: (id: string) => void;
-  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
-}) {
-  return (
-    <ModulePanel 
-      module={modules[0]}
-      onRemove={onRemove}
-      isMaximized={false}
-      onToggleMaximize={onToggleMaximize}
-      onConfigChange={onConfigChange}
-    />
-  );
-}
-
-function FourPanelLayout({ 
-  modules, 
-  onRemove, 
-  onToggleMaximize,
-  onConfigChange
-}: { 
-  modules: DashboardModule[];
-  onRemove: (id: string) => void;
-  onToggleMaximize: (id: string) => void;
-  onConfigChange?: (moduleId: string, config: Record<string, unknown>) => void;
-}) {
-  return (
-    <PanelGroup direction="horizontal" autoSaveId="dashboard-4h">
-      <Panel minSize={25} defaultSize={50}>
-        <PanelGroup direction="vertical" autoSaveId="dashboard-4v1">
-          <Panel minSize={30} defaultSize={50}>
-            <ModulePanel 
-              module={modules[0]}
-              onRemove={onRemove}
-              isMaximized={false}
-              onToggleMaximize={onToggleMaximize}
-              onConfigChange={onConfigChange}
-            />
-          </Panel>
-          <ResizeHandle direction="vertical" />
-          <Panel minSize={30} defaultSize={50}>
-            <ModulePanel 
-              module={modules[1]}
-              onRemove={onRemove}
-              isMaximized={false}
-              onToggleMaximize={onToggleMaximize}
-              onConfigChange={onConfigChange}
-            />
-          </Panel>
-        </PanelGroup>
-      </Panel>
-      <ResizeHandle direction="horizontal" />
-      <Panel minSize={25} defaultSize={50}>
-        <PanelGroup direction="vertical" autoSaveId="dashboard-4v2">
-          <Panel minSize={30} defaultSize={50}>
-            <ModulePanel 
-              module={modules[2]}
-              onRemove={onRemove}
-              isMaximized={false}
-              onToggleMaximize={onToggleMaximize}
-              onConfigChange={onConfigChange}
-            />
-          </Panel>
-          <ResizeHandle direction="vertical" />
-          <Panel minSize={30} defaultSize={50}>
-            <ModulePanel 
-              module={modules[3]}
-              onRemove={onRemove}
-              isMaximized={false}
-              onToggleMaximize={onToggleMaximize}
-              onConfigChange={onConfigChange}
-            />
-          </Panel>
-        </PanelGroup>
-      </Panel>
-    </PanelGroup>
-  );
-}
+type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
+type DashboardPanelWidget = DashboardPanel["widgets"][number];
 
 export default function Dashboard() {
   const { instance, isLoading: instanceLoading } = useInstance();
 
-  // Load layout from Convex
-  const savedModules = useQuery(
-    api.dashboardLayouts.getLayout,
-    instance ? { instanceId: instance._id } : 'skip'
-  );
+  const panels = useQuery(api.dashboardLayouts.getPanels, instance ? { instanceId: instance._id } : "skip");
+  const addPanel = useMutation(api.dashboardLayouts.addPanel);
+  const removePanel = useMutation(api.dashboardLayouts.removePanel);
+  const renamePanel = useMutation(api.dashboardLayouts.renamePanel);
+  const setPanelWidgets = useMutation(api.dashboardLayouts.setPanelWidgets);
 
-  // Save layout to Convex
-  const saveLayout = useMutation(api.dashboardLayouts.saveLayout);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftWidgets, setDraftWidgets] = useState<Record<string, DashboardPanelWidget[]> | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [carouselApi, setCarouselApi] = useState<CarouselApi>();
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renamingPanelId, setRenamingPanelId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const wheelCooldownRef = useRef(false);
 
-  // Local state initialized from Convex data
-  const [modules, setModules] = useState<DashboardModule[]>([]);
-  const [maximizedId, setMaximizedId] = useState<string | null>(null);
-  const [hasInitialized, setHasInitialized] = useState(false);
-
-  // Sync from Convex when data loads
   useEffect(() => {
-    if (savedModules !== undefined && !hasInitialized) {
-      setModules(savedModules.length > 0 ? savedModules : defaultModules);
-      setHasInitialized(true);
+    if (!carouselApi) {
+      return;
     }
-  }, [savedModules, hasInitialized]);
-
-  // Save to Convex when modules change (debounced)
-  useEffect(() => {
-    if (!hasInitialized || !instance) return;
-
-    const timeout = setTimeout(() => {
-      saveLayout({ instanceId: instance._id, modules });
-    }, 1000);
-
-    return () => clearTimeout(timeout);
-  }, [modules, hasInitialized, instance?._id]);
-
-  const isLoading = instanceLoading || savedModules === undefined;
-  const error = null;
-
-  const handleRemoveModule = useCallback((id: string) => {
-    setModules(prev => prev.filter(m => m.id !== id));
-    if (maximizedId === id) {
-      setMaximizedId(null);
-    }
-  }, [maximizedId]);
-
-  const handleAddModule = useCallback((type: string) => {
-    const newModule: DashboardModule = {
-      id: `mod-${Date.now()}`,
-      type,
-      title: moduleLabels[type],
+    const onSelect = () => setActiveIndex(carouselApi.selectedScrollSnap());
+    carouselApi.on("select", onSelect);
+    return () => {
+      carouselApi.off("select", onSelect);
     };
-    setModules(prev => [...prev, newModule]);
-  }, []);
+  }, [carouselApi]);
 
-  const handleResetLayout = useCallback(() => {
-    setModules(defaultModules);
-    setMaximizedId(null);
-    // Clear panel resize state from localStorage
-    localStorage.removeItem('dashboard-h');
-    localStorage.removeItem('dashboard-v');
-    localStorage.removeItem('dashboard-2');
-    localStorage.removeItem('dashboard-4h');
-    localStorage.removeItem('dashboard-4v1');
-    localStorage.removeItem('dashboard-4v2');
-  }, []);
+  // Mouse-wheel/trackpad navigation — one pane per gesture, same jump the tabs
+  // do (not a free-scrolling drag), and no native scrollbar since Embla moves
+  // panes via transform rather than actual overflow scrolling.
+  useEffect(() => {
+    if (!carouselApi) {
+      return;
+    }
+    const container = carouselApi.rootNode();
 
-  const handleToggleMaximize = useCallback((id: string) => {
-    setMaximizedId(prev => prev === id ? null : id);
-  }, []);
+    // True if some scrollable ancestor of `target` (up to `container`, e.g. a
+    // widget's internal chat/list scroll area) still has room to consume this
+    // vertical scroll — if so we back off and let it scroll normally instead
+    // of hijacking the gesture for pane navigation.
+    const verticalScrollHandledByAncestor = (target: EventTarget | null, deltaY: number): boolean => {
+      let node = target instanceof HTMLElement ? target : null;
+      while (node && node !== container) {
+        const style = getComputedStyle(node);
+        const canScrollY = /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight;
+        if (canScrollY) {
+          const atBottom = node.scrollTop + node.clientHeight >= node.scrollHeight - 1;
+          const atTop = node.scrollTop <= 0;
+          if ((deltaY > 0 && !atBottom) || (deltaY < 0 && !atTop)) {
+            return true;
+          }
+        }
+        node = node.parentElement;
+      }
+      return false;
+    };
 
-  const handleModuleConfigChange = useCallback((moduleId: string, config: Record<string, unknown>) => {
-    setModules(prev => prev.map(m => m.id === moduleId ? { ...m, config } : m));
-  }, []);
+    const handleWheel = (event: WheelEvent) => {
+      const horizontal = Math.abs(event.deltaX) > Math.abs(event.deltaY);
+      const delta = horizontal ? event.deltaX : event.deltaY;
+      if (Math.abs(delta) < 10) {
+        return;
+      }
+      if (!horizontal && verticalScrollHandledByAncestor(event.target, delta)) {
+        return;
+      }
+      event.preventDefault();
+      if (wheelCooldownRef.current) {
+        return;
+      }
+      wheelCooldownRef.current = true;
+      if (delta > 0) {
+        carouselApi.scrollNext();
+      } else {
+        carouselApi.scrollPrev();
+      }
+      setTimeout(() => {
+        wheelCooldownRef.current = false;
+      }, 500);
+    };
 
-  const availableModuleTypes = Object.keys(moduleLabels);
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener("wheel", handleWheel);
+    };
+  }, [carouselApi]);
 
-  // Error state (unused with Convex but kept for future use)
-  if (error) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <AlertCircle className="h-12 w-12 mx-auto text-destructive mb-4" />
-          <h2 className="text-lg font-semibold mb-2">Failed to Load Dashboard</h2>
-          <p className="text-sm text-muted-foreground mb-4">
-            Unable to load dashboard layout.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (panels && activeIndex >= panels.length) {
+      setActiveIndex(Math.max(0, panels.length - 1));
+    }
+  }, [panels, activeIndex]);
 
-  // Show loading state while fetching layout
+  const isLoading = instanceLoading || (!!instance && panels === undefined);
+
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -415,136 +140,299 @@ export default function Dashboard() {
     );
   }
 
-  if (maximizedId) {
-    const maximizedModule = modules.find(m => m.id === maximizedId);
-    if (maximizedModule) {
-      return (
-        <div className="h-full flex flex-col p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h1 className="text-lg font-semibold">{maximizedModule.title}</h1>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => setMaximizedId(null)}
-            >
-              <Minimize2 className="h-4 w-4 mr-2" />
-              Exit Fullscreen
-            </Button>
-          </div>
-          <div className="flex-1 min-h-0">
-            <ModulePanel 
-              module={maximizedModule}
-              onRemove={handleRemoveModule}
-              isMaximized={true}
-              onToggleMaximize={handleToggleMaximize}
-            />
-          </div>
-        </div>
-      );
-    }
-  }
-
-  if (modules.length === 0) {
+  if (!instance || !panels || panels.length === 0) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-8">
-        <div className="text-center max-w-md">
-          <h2 className="text-xl font-semibold mb-2">Your Dashboard is Empty</h2>
-          <p className="text-muted-foreground mb-6">
-            Add modules to customize your dashboard layout. You can resize and arrange them as you like.
-          </p>
-          <div className="flex items-center justify-center gap-2 flex-wrap">
-            {availableModuleTypes.map(type => (
-              <Button 
-                key={type}
-                variant="outline"
-                onClick={() => handleAddModule(type)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add {moduleLabels[type]}
-              </Button>
-            ))}
-          </div>
-          <Button 
-            variant="ghost" 
-            className="mt-4"
-            onClick={handleResetLayout}
-          >
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Reset to Default
-          </Button>
-        </div>
-      </div>
+      <DashboardLayoutPicker
+        onSelect={(layoutId) => {
+          if (instance) {
+            void addPanel({ instanceId: instance._id, layoutId });
+          }
+        }}
+      />
     );
   }
 
+  const handleSelectTab = (value: string) => {
+    const index = Number(value);
+    setActiveIndex(index);
+    carouselApi?.scrollTo(index);
+  };
+
+  const handleAddPanel = async (layoutId: string) => {
+    const panelCountBeforeAdd = panels.length;
+    await addPanel({ instanceId: instance._id, layoutId });
+    setAddPanelOpen(false);
+    requestAnimationFrame(() => carouselApi?.scrollTo(panelCountBeforeAdd));
+  };
+
+  const handleConfirmRemovePanel = async () => {
+    if (!removeTarget) {
+      return;
+    }
+    await removePanel({ instanceId: instance._id, panelId: removeTarget.id });
+    setRemoveTarget(null);
+  };
+
+  const startRenamingPanel = (panelId: string, currentName: string) => {
+    setRenamingPanelId(panelId);
+    setRenameValue(currentName);
+    setTimeout(() => {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }, 0);
+  };
+
+  const commitRenamePanel = async (panelId: string) => {
+    setRenamingPanelId(null);
+    const trimmed = renameValue.trim();
+    const panel = panels.find((p) => p.id === panelId);
+    if (!trimmed || !panel || trimmed === panel.name) {
+      return;
+    }
+    await renamePanel({ instanceId: instance._id, panelId, name: trimmed });
+  };
+
+  const enterEditMode = () => {
+    const snapshot: Record<string, DashboardPanelWidget[]> = {};
+    for (const panel of panels) {
+      snapshot[panel.id] = panel.widgets;
+    }
+    setDraftWidgets(snapshot);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdits = () => {
+    setDraftWidgets(null);
+    setIsEditing(false);
+  };
+
+  const handleSaveEdits = async () => {
+    if (draftWidgets) {
+      const currentPanelIds = new Set(panels.map((panel) => panel.id));
+      await Promise.all(
+        Object.entries(draftWidgets)
+          .filter(([panelId]) => currentPanelIds.has(panelId))
+          .map(([panelId, widgets]) => setPanelWidgets({ instanceId: instance._id, panelId, widgets }))
+      );
+    }
+    setDraftWidgets(null);
+    setIsEditing(false);
+  };
+
+  const setDraftWidgetsForPanel = (panelId: string, widgets: DashboardPanelWidget[]) => {
+    setDraftWidgets((prev) => ({ ...prev, [panelId]: widgets }));
+  };
+
+  // Zones can hold more than one widget now (stacked, resizable), so
+  // add/remove keep the rest of that zone's widgets evenly re-split — only
+  // an explicit drag (handleResizeWidgets) sets custom sizes after that.
+  const handleAssignWidget = (
+    panelId: string,
+    currentWidgets: DashboardPanelWidget[],
+    zoneId: string,
+    type: string
+  ) => {
+    const otherWidgets = currentWidgets.filter((widget) => widget.zoneId !== zoneId);
+    const zoneWidgets = currentWidgets.filter((widget) => widget.zoneId === zoneId);
+    const evenSize = 100 / (zoneWidgets.length + 1);
+    const resizedZoneWidgets = zoneWidgets.map((widget) => ({ ...widget, size: evenSize }));
+    const newWidget: DashboardPanelWidget = { zoneId, slotId: crypto.randomUUID(), type, size: evenSize };
+    setDraftWidgetsForPanel(panelId, [...otherWidgets, ...resizedZoneWidgets, newWidget]);
+  };
+
+  const handleRemoveWidget = (
+    panelId: string,
+    currentWidgets: DashboardPanelWidget[],
+    zoneId: string,
+    slotId: string
+  ) => {
+    const otherWidgets = currentWidgets.filter((widget) => widget.zoneId !== zoneId);
+    const remainingZoneWidgets = currentWidgets.filter(
+      (widget) => widget.zoneId === zoneId && widgetSlotId(widget) !== slotId
+    );
+    const evenSize = remainingZoneWidgets.length > 0 ? 100 / remainingZoneWidgets.length : undefined;
+    const resizedZoneWidgets = remainingZoneWidgets.map((widget) => ({ ...widget, size: evenSize }));
+    setDraftWidgetsForPanel(panelId, [...otherWidgets, ...resizedZoneWidgets]);
+  };
+
+  const handleWidgetConfigChange = (
+    panelId: string,
+    currentWidgets: DashboardPanelWidget[],
+    zoneId: string,
+    slotId: string,
+    type: string,
+    config: Record<string, unknown>
+  ) => {
+    const widgets = currentWidgets.map((widget) =>
+      widget.zoneId === zoneId && widgetSlotId(widget) === slotId ? { ...widget, type, config } : widget
+    );
+    setDraftWidgetsForPanel(panelId, widgets);
+  };
+
+  const handleResizeWidgets = (
+    panelId: string,
+    currentWidgets: DashboardPanelWidget[],
+    zoneId: string,
+    sizes: number[]
+  ) => {
+    let index = 0;
+    const widgets = currentWidgets.map((widget) => {
+      if (widget.zoneId !== zoneId) {
+        return widget;
+      }
+      const size = sizes[index];
+      index += 1;
+      return size == null ? widget : { ...widget, size };
+    });
+    setDraftWidgetsForPanel(panelId, widgets);
+  };
+
   return (
     <div className="h-full flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-        <h1 className="text-lg font-semibold">Dashboard</h1>
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" data-testid="button-add-module">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Module
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {availableModuleTypes.map(type => (
-                <DropdownMenuItem 
-                  key={type}
-                  onClick={() => handleAddModule(type)}
-                >
-                  {moduleLabels[type]}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={handleResetLayout}
-            data-testid="button-reset-layout"
-          >
-            <RotateCcw className="h-4 w-4" />
+      <StatusBarCenterPortal>
+        <Tabs value={String(activeIndex)} onValueChange={handleSelectTab}>
+          <TabsList className="h-6 p-0.5 bg-transparent">
+            {panels.map((panel, index) =>
+              renamingPanelId === panel.id ? (
+                <input
+                  key={panel.id}
+                  ref={renameInputRef}
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={() => void commitRenamePanel(panel.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void commitRenamePanel(panel.id);
+                    } else if (e.key === "Escape") {
+                      setRenamingPanelId(null);
+                    }
+                  }}
+                  className="h-5 w-20 px-2 rounded-sm bg-background border border-primary text-[11px] outline-none"
+                  data-testid={`input-rename-panel-${panel.id}`}
+                />
+              ) : (
+                <ContextMenu key={panel.id}>
+                  <ContextMenuTrigger asChild>
+                    <TabsTrigger
+                      value={String(index)}
+                      className={cn(
+                        "h-5 px-2 text-[11px]",
+                        // ContextMenuTrigger's asChild also writes `data-state` (open/closed) onto
+                        // this same element, clobbering the Tabs primitive's own active/inactive
+                        // data-state — so drive the active style from React state instead.
+                        index === activeIndex && "bg-muted text-foreground shadow-sm"
+                      )}
+                      data-testid={`tab-panel-${panel.id}`}
+                    >
+                      {panel.name}
+                    </TabsTrigger>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    {!isEditing && (
+                      <>
+                        <ContextMenuItem onClick={enterEditMode} data-testid="button-toggle-edit">
+                          <LayoutGrid className="h-3.5 w-3.5 mr-2" />
+                          Edit
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                      </>
+                    )}
+                    <ContextMenuItem
+                      onClick={() => startRenamingPanel(panel.id, panel.name)}
+                      data-testid={`button-rename-panel-${panel.id}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-2" />
+                      Rename
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={() => setAddPanelOpen(true)} data-testid="button-add-panel">
+                      <Plus className="h-3.5 w-3.5 mr-2" />
+                      Add Panel
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onClick={() => setRemoveTarget({ id: panel.id, name: panel.name })}
+                      disabled={panels.length <= 1}
+                      className="text-destructive focus:text-destructive"
+                      data-testid={`button-remove-panel-${panel.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 mr-2" />
+                      Delete
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              )
+            )}
+          </TabsList>
+        </Tabs>
+      </StatusBarCenterPortal>
+
+      {isEditing && (
+        <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-border shrink-0">
+          <Button variant="ghost" size="sm" onClick={handleCancelEdits} data-testid="button-cancel-edit">
+            <X className="h-4 w-4 mr-2" />
+            Cancel
+          </Button>
+          <Button size="sm" onClick={() => void handleSaveEdits()} data-testid="button-save-edit">
+            <Check className="h-4 w-4 mr-2" />
+            Save
           </Button>
         </div>
-      </div>
+      )}
 
-      <div className="flex-1 min-h-0 p-4">
-        {modules.length === 1 && (
-          <OnePanelLayout 
-            modules={modules}
-            onRemove={handleRemoveModule}
-            onToggleMaximize={handleToggleMaximize}
-            onConfigChange={handleModuleConfigChange}
-          />
-        )}
-        {modules.length === 2 && (
-          <TwoPanelLayout 
-            modules={modules}
-            onRemove={handleRemoveModule}
-            onToggleMaximize={handleToggleMaximize}
-            onConfigChange={handleModuleConfigChange}
-          />
-        )}
-        {modules.length === 3 && (
-          <ThreePanelLayout 
-            modules={modules}
-            onRemove={handleRemoveModule}
-            onToggleMaximize={handleToggleMaximize}
-            onConfigChange={handleModuleConfigChange}
-          />
-        )}
-        {modules.length >= 4 && (
-          <FourPanelLayout 
-            modules={modules.slice(0, 4)}
-            onRemove={handleRemoveModule}
-            onToggleMaximize={handleToggleMaximize}
-            onConfigChange={handleModuleConfigChange}
-          />
-        )}
-      </div>
+      <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
+        <CarouselContent>
+          {panels.map((panel) => {
+            const currentWidgets = (isEditing && draftWidgets?.[panel.id]) || panel.widgets;
+            const effectivePanel = isEditing ? { ...panel, widgets: currentWidgets } : panel;
+
+            return (
+              <CarouselItem key={panel.id} className="h-full pl-0">
+                <DashboardCanvas
+                  panel={effectivePanel}
+                  isEditing={isEditing}
+                  onAssignWidget={(zoneId, type) => handleAssignWidget(panel.id, currentWidgets, zoneId, type)}
+                  onRemoveWidget={(zoneId, slotId) => handleRemoveWidget(panel.id, currentWidgets, zoneId, slotId)}
+                  onWidgetConfigChange={(zoneId, slotId, type, config) =>
+                    handleWidgetConfigChange(panel.id, currentWidgets, zoneId, slotId, type, config)
+                  }
+                  onResizeWidgets={(zoneId, sizes) => handleResizeWidgets(panel.id, currentWidgets, zoneId, sizes)}
+                />
+              </CarouselItem>
+            );
+          })}
+        </CarouselContent>
+      </Carousel>
+
+      <Dialog open={addPanelOpen} onOpenChange={setAddPanelOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Add Dashboard Panel</DialogTitle>
+          </DialogHeader>
+          <DashboardLayoutPicker onSelect={handleAddPanel} />
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!removeTarget} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove "{removeTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the panel and any widgets placed on it. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmRemovePanel}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Remove Panel
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

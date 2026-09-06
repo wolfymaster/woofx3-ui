@@ -213,16 +213,22 @@ export const getApplicationForInstance = internalQuery({
   },
 });
 
+// Public — deliberately omits accessToken/refreshToken. Only
+// convex/platformRealtime.ts's internal-only getTwitchLink reads those, for
+// server-side EventSub subscription calls that never send the token to the
+// browser.
 export const getPlatformLinks = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
 
-    return ctx.db
+    const links = await ctx.db
       .query("platformLinks")
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
       .collect();
+
+    return links.map(({ accessToken: _accessToken, refreshToken: _refreshToken, ...rest }) => rest);
   },
 });
 

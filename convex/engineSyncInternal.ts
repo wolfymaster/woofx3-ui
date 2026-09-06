@@ -738,11 +738,24 @@ export const reconcileResourceInstances = internalMutation({
     const snapshotCanonicalIds = new Set(snapshots.map((s) => s.canonicalId));
     let processed = 0;
 
+    const modulesForInstance = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    const byModuleKey = new Map(modulesForInstance.filter((m) => m.moduleKey).map((m) => [m.moduleKey as string, m]));
+    const byName = new Map(modulesForInstance.map((m) => [m.name, m]));
+
     for (const snap of snapshots) {
-      const moduleRecord = await ctx.db
-        .query("moduleRepository")
-        .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.moduleKey))
-        .first();
+      let moduleRecord = snap.moduleKey ? byModuleKey.get(snap.moduleKey) : undefined;
+      if (!moduleRecord && snap.moduleKey) {
+        const prefix = snap.moduleKey.split(":")[0];
+        if (prefix) {
+          moduleRecord = modulesForInstance.find((m) => m.moduleKey?.startsWith(`${prefix}:`));
+        }
+      }
+      if (!moduleRecord && snap.moduleName) {
+        moduleRecord = byName.get(snap.moduleName);
+      }
       if (!moduleRecord) {
         continue;
       }

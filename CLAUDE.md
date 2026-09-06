@@ -212,3 +212,11 @@ Tasks for this project are tracked in the **Notion Backlog** (database ID: `272a
 - **Project: UI** tasks belong to this repo (`woofx3-ui`). All other project tags (API, Barkloader, Wooflow, Module, Tauri, Shared, etc.) belong to the woofx3 engine project at `~/code/wolfymaster/woofx3/api`.
 - Available Project tags: API, Barkloader, Db, Module, Shared, Tauri, Treats, Twitch, UI, Website, Wooflow, WoofWoofWoof.
 - **Task descriptions must be detailed.** When creating backlog tasks, include enough context for an agent to implement the work without additional conversation. This means: background context explaining *why* the task exists, implementation details (relevant files, functions, data flow), code samples or pseudocode where helpful, examples of expected behavior or UI, edge cases and constraints, and any supplemental details that aid implementation.
+
+<!-- convex-ai-start -->
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
+<!-- convex-ai-end -->

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { parseConfigSchemaString } from "./lib/parseConfigSchema";
 
@@ -481,6 +481,90 @@ export const processModuleInstallFailed = internalMutation({
  * name+version if the engine didn't echo a version or the key doesn't match.
  * Falls back to deleting any record with the same name when version is absent.
  */
+/**
+ * Cascade-delete a confirmed-gone module: storage blob, per-instance join
+ * rows (matched by createdByRef == the module's moduleKey), global UI
+ * catalog defs, and module-owned functions/assets/resource instances.
+ *
+ * Shared by the module.deleted webhook path (which locates the record by
+ * the engine-echoed moduleKey) and uninstall reconciliation (which already
+ * holds the record because it was looked up by moduleId — see
+ * `reconcileUninstalledModule` below, used when the webhook never arrives).
+ */
+async function cascadeDeleteModuleRecord(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  record: Doc<"moduleRepository">
+) {
+  if (record.archiveKey) {
+    await ctx.storage.delete(record.archiveKey as Id<"_storage">);
+  }
+
+  // Authoritative cleanup: walk the per-instance join rows by provenance.
+  // createdByRef == the module's composite moduleKey, so this catches every
+  // enablement for this module regardless of catalog moduleId races.
+  // Built-ins (createdByRef "builtin") are never matched, so they survive.
+  const createdByRef = record.moduleKey ?? record._id;
+  const enabledTriggerRows = await ctx.db
+    .query("instanceTriggers")
+    .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", createdByRef))
+    .collect();
+  const enabledActionRows = await ctx.db
+    .query("instanceActions")
+    .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", createdByRef))
+    .collect();
+  const enabledWidgetRows = await ctx.db
+    .query("instanceWidgets")
+    .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", createdByRef))
+    .collect();
+  for (const row of enabledTriggerRows) {
+    await ctx.db.delete(row._id);
+  }
+  for (const row of enabledActionRows) {
+    await ctx.db.delete(row._id);
+  }
+  for (const row of enabledWidgetRows) {
+    await ctx.db.delete(row._id);
+  }
+
+  // Clean global UI catalog rows. Best-effort: any def whose moduleId points
+  // at this record gets removed. Orphan defs (moduleId unset) survive here
+  // but no longer render because their per-instance join row is gone.
+  const triggers = await ctx.db
+    .query("triggerDefinitions")
+    .withIndex("by_module", (q) => q.eq("moduleId", record._id))
+    .collect();
+  for (const trigger of triggers) {
+    await ctx.db.delete(trigger._id);
+  }
+  const actions = await ctx.db
+    .query("actionDefinitions")
+    .withIndex("by_module", (q) => q.eq("moduleId", record._id))
+    .collect();
+  for (const action of actions) {
+    await ctx.db.delete(action._id);
+  }
+  const widgetDefs = await ctx.db
+    .query("moduleWidgets")
+    .withIndex("by_module", (q) => q.eq("moduleId", record._id))
+    .collect();
+  for (const widget of widgetDefs) {
+    await ctx.db.delete(widget._id);
+  }
+
+  await ctx.runMutation(internal.moduleFunctions.cascadeOnModuleDelete, {
+    instanceId,
+    moduleId: record._id,
+  });
+  await ctx.runMutation(internal.moduleAssets.cascadeOnModuleDelete, {
+    moduleId: record._id,
+  });
+  await ctx.runMutation(internal.moduleResourceInstances.cascadeOnModuleDelete, {
+    moduleId: record._id,
+  });
+  await ctx.db.delete(record._id);
+}
+
 export const processModuleDeleted = internalMutation({
   args: {
     instanceId: v.id("instances"),
@@ -495,72 +579,7 @@ export const processModuleDeleted = internalMutation({
       .first();
 
     if (record) {
-      if (record.archiveKey) {
-        await ctx.storage.delete(record.archiveKey as Id<"_storage">);
-      }
-
-      // Authoritative cleanup: walk the per-instance join rows by provenance.
-      // createdByRef == the module's composite moduleKey == correlationKey, so this
-      // catches every enablement for this module regardless of catalog moduleId
-      // races. Built-ins (createdByRef "builtin") are never matched, so they survive.
-      const enabledTriggerRows = await ctx.db
-        .query("instanceTriggers")
-        .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", correlationKey))
-        .collect();
-      const enabledActionRows = await ctx.db
-        .query("instanceActions")
-        .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", correlationKey))
-        .collect();
-      const enabledWidgetRows = await ctx.db
-        .query("instanceWidgets")
-        .withIndex("by_instance_ref", (q) => q.eq("instanceId", instanceId).eq("createdByRef", correlationKey))
-        .collect();
-      for (const row of enabledTriggerRows) {
-        await ctx.db.delete(row._id);
-      }
-      for (const row of enabledActionRows) {
-        await ctx.db.delete(row._id);
-      }
-      for (const row of enabledWidgetRows) {
-        await ctx.db.delete(row._id);
-      }
-
-      // Clean global UI catalog rows. Best-effort: any def whose moduleId points
-      // at this record gets removed. Orphan defs (moduleId unset) survive here
-      // but no longer render because their per-instance join row is gone.
-      const triggers = await ctx.db
-        .query("triggerDefinitions")
-        .withIndex("by_module", (q) => q.eq("moduleId", record._id))
-        .collect();
-      for (const trigger of triggers) {
-        await ctx.db.delete(trigger._id);
-      }
-      const actions = await ctx.db
-        .query("actionDefinitions")
-        .withIndex("by_module", (q) => q.eq("moduleId", record._id))
-        .collect();
-      for (const action of actions) {
-        await ctx.db.delete(action._id);
-      }
-      const widgetDefs = await ctx.db
-        .query("moduleWidgets")
-        .withIndex("by_module", (q) => q.eq("moduleId", record._id))
-        .collect();
-      for (const widget of widgetDefs) {
-        await ctx.db.delete(widget._id);
-      }
-
-      await ctx.runMutation(internal.moduleFunctions.cascadeOnModuleDelete, {
-        instanceId,
-        moduleId: record._id,
-      });
-      await ctx.runMutation(internal.moduleAssets.cascadeOnModuleDelete, {
-        moduleId: record._id,
-      });
-      await ctx.runMutation(internal.moduleResourceInstances.cascadeOnModuleDelete, {
-        moduleId: record._id,
-      });
-      await ctx.db.delete(record._id);
+      await cascadeDeleteModuleRecord(ctx, instanceId, record);
     }
 
     await ctx.runMutation(internal.transientEvents.emit, {
@@ -569,6 +588,46 @@ export const processModuleDeleted = internalMutation({
       type: "module.uninstall",
       status: "success",
       message: `Module ${moduleName}${moduleVersion ? `@${moduleVersion}` : ""} removed.`,
+      data: { moduleName, moduleVersion },
+    });
+  },
+});
+
+/**
+ * Reconcile a moduleRepository record after confirming directly with the
+ * engine (via listEngineModules) that the module is no longer installed
+ * there. This covers the case where the module.deleted webhook never
+ * arrives at Convex — dropped delivery, a slow background delete that
+ * outlasts the engine's single retry, or a Convex-side exception on the
+ * first attempt — leaving the UI waiting on a transient event that will
+ * never come even though the engine has already finished the uninstall.
+ *
+ * Looked up by moduleId (not moduleKey) because the caller already holds
+ * the record directly, so this is immune to the moduleKey-mismatch cases
+ * that can make the webhook's `by_module_key` lookup miss.
+ */
+export const reconcileUninstalledModule = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    moduleId: v.id("moduleRepository"),
+    correlationKey: v.string(),
+  },
+  handler: async (ctx, { instanceId, moduleId, correlationKey }) => {
+    const record = await ctx.db.get(moduleId);
+    if (!record) {
+      return;
+    }
+
+    const moduleName = record.name;
+    const moduleVersion = record.version;
+    await cascadeDeleteModuleRecord(ctx, instanceId, record);
+
+    await ctx.runMutation(internal.transientEvents.emit, {
+      instanceId,
+      correlationKey,
+      type: "module.uninstall",
+      status: "success",
+      message: `Module ${moduleName}@${moduleVersion} removed.`,
       data: { moduleName, moduleVersion },
     });
   },

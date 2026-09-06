@@ -71,11 +71,19 @@ export const getModuleDetail = action({
     });
 
     if (installedModule) {
-      const [triggers, actions, functions, widgets] = await Promise.all([
+      // The DB is authoritative for installed modules, but we do not store the README. Fetch it
+      // (and the icon / latest version / workflows) from the marketplace alongside the DB queries —
+      // run concurrently rather than after, since the external marketplace call can take seconds
+      // (up to MARKETPLACE_TIMEOUT_MS) and gains nothing from waiting on the DB queries first. Only
+      // attempted when the moduleKey carries a real marketplace id; a marketplace miss must not fail
+      // the detail.
+      const marketplaceId = installedModule.moduleKey?.split(":")[0];
+      const [triggers, actions, functions, widgets, marketplaceMeta] = await Promise.all([
         ctx.runQuery(api.triggerDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.actionDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.moduleFunctions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(api.moduleWidgets.listByModule, { moduleId: installedModule._id }),
+        marketplaceId ? fetchMarketplaceMetadata(marketplaceId) : Promise.resolve(null),
       ]);
 
       const detail = formatInstalledDetail(
@@ -86,12 +94,8 @@ export const getModuleDetail = action({
         widgets,
         installedModule.manifest
       );
-      // The DB is authoritative for installed modules, but we do not store the README. Fetch it
-      // (and the icon / latest version) from the marketplace and merge it in. Only attempt this when
-      // the moduleKey carries a real marketplace id; a marketplace miss must not fail the detail.
-      const marketplaceId = installedModule.moduleKey?.split(":")[0];
-      if (marketplaceId) {
-        await mergeMarketplaceMetadata(detail, marketplaceId);
+      if (marketplaceMeta) {
+        applyMarketplaceMetadata(detail, marketplaceMeta);
       }
       return detail;
     }
@@ -128,35 +132,39 @@ function parseManifestSettingAction(value: unknown): ManifestSettingAction | und
 
 function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
   const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
-  return asArr(raw.settings).map((s) => {
-    const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
-    const action = parseManifestSettingAction(o.action);
-    return {
-      id: asStr(o.id),
-      name: asStr(o.name),
-      description: asStr(o.description),
-      type: asStr(o.type, "string"),
-      required: typeof o.required === "boolean" ? o.required : false,
-      ...(o.default !== undefined ? { default: String(o.default) } : {}),
-      ...(action ? { action } : {}),
-    };
-  }).filter((s) => s.id);
+  return asArr(raw.settings)
+    .map((s) => {
+      const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
+      const action = parseManifestSettingAction(o.action);
+      return {
+        id: asStr(o.id),
+        name: asStr(o.name),
+        description: asStr(o.description),
+        type: asStr(o.type, "string"),
+        required: typeof o.required === "boolean" ? o.required : false,
+        ...(o.default !== undefined ? { default: String(o.default) } : {}),
+        ...(action ? { action } : {}),
+      };
+    })
+    .filter((s) => s.id);
 }
 
 function parseManifestResourceKinds(manifest: unknown): ManifestResourceKind[] {
   const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
-  return asArr(raw.resources).map((r) => {
-    const o = r && typeof r === "object" ? (r as Record<string, unknown>) : {};
-    const entry: ManifestResourceKind = {
-      kind: asStr(o.kind),
-      name: asStr(o.name),
-      description: asStr(o.description),
-    };
-    if (o.valueSchema && typeof o.valueSchema === "object") {
-      entry.valueSchema = o.valueSchema as Record<string, unknown>;
-    }
-    return entry;
-  }).filter((r) => r.kind);
+  return asArr(raw.resources)
+    .map((r) => {
+      const o = r && typeof r === "object" ? (r as Record<string, unknown>) : {};
+      const entry: ManifestResourceKind = {
+        kind: asStr(o.kind),
+        name: asStr(o.name),
+        description: asStr(o.description),
+      };
+      if (o.valueSchema && typeof o.valueSchema === "object") {
+        entry.valueSchema = o.valueSchema as Record<string, unknown>;
+      }
+      return entry;
+    })
+    .filter((r) => r.kind);
 }
 
 function formatInstalledDetail(
@@ -200,27 +208,49 @@ function formatInstalledDetail(
   };
 }
 
-async function mergeMarketplaceMetadata(detail: ModuleDetailResult, marketplaceId: string): Promise<void> {
+interface MarketplaceMergeData {
+  readme?: string;
+  iconUrl?: string;
+  latestVersion?: string;
+  // Workflows are declared in the manifest, not synced to the Convex workflows table, so the
+  // marketplace manifest is the only source for an installed module's declared workflows.
+  workflows: Array<{ slug: string; name: string }>;
+}
+
+async function fetchMarketplaceMetadata(marketplaceId: string): Promise<MarketplaceMergeData | null> {
   try {
     const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceId)}`);
     const raw = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
     const module = raw.module && typeof raw.module === "object" ? (raw.module as Record<string, unknown>) : raw;
+    const data: MarketplaceMergeData = { workflows: parseWorkflows(module.workflows) };
     if (typeof module.readme === "string") {
-      detail.readme = module.readme;
+      data.readme = module.readme;
     }
-    if (typeof module.iconUrl === "string" && !detail.iconUrl) {
-      detail.iconUrl = module.iconUrl;
+    if (typeof module.iconUrl === "string") {
+      data.iconUrl = module.iconUrl;
     }
     if (typeof module.version === "string") {
-      detail.latestVersion = module.version;
+      data.latestVersion = module.version;
     }
-    // Workflows are declared in the manifest, not synced to the Convex workflows table, so the
-    // marketplace manifest is the only source for an installed module's declared workflows.
-    detail.workflows = parseWorkflows(module.workflows);
+    return data;
   } catch {
-    // Module is not published to the marketplace (e.g. a manual upload). Leave README/latestVersion/
-    // workflows unset — the DB-sourced detail stands on its own.
+    // Module is not published to the marketplace (e.g. a manual upload), or the marketplace is
+    // unreachable — the DB-sourced detail stands on its own.
+    return null;
   }
+}
+
+function applyMarketplaceMetadata(detail: ModuleDetailResult, meta: MarketplaceMergeData): void {
+  if (meta.readme !== undefined) {
+    detail.readme = meta.readme;
+  }
+  if (meta.iconUrl !== undefined && !detail.iconUrl) {
+    detail.iconUrl = meta.iconUrl;
+  }
+  if (meta.latestVersion !== undefined) {
+    detail.latestVersion = meta.latestVersion;
+  }
+  detail.workflows = meta.workflows;
 }
 
 function parseWorkflows(value: unknown): Array<{ slug: string; name: string }> {
@@ -244,8 +274,7 @@ function asArr(value: unknown): unknown[] {
 
 function formatMarketplaceDetail(moduleId: string, payload: unknown): ModuleDetailResult {
   const raw = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-  const module =
-    raw.module && typeof raw.module === "object" ? (raw.module as Record<string, unknown>) : raw;
+  const module = raw.module && typeof raw.module === "object" ? (raw.module as Record<string, unknown>) : raw;
 
   const result: ModuleDetailResult = {
     id: asStr(module.id, moduleId),

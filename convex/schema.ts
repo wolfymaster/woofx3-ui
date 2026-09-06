@@ -2,6 +2,32 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// Shared shape for dashboardLayouts.panels (and its legacy `pages` alias below).
+const dashboardPanelValidator = v.array(
+  v.object({
+    id: v.string(),
+    name: v.string(),
+    layoutId: v.string(),
+    widgets: v.array(
+      v.object({
+        zoneId: v.string(),
+        // Identifies one widget within a zone now that a zone can hold more
+        // than one (stacked, resizable). Optional because rows saved before
+        // multi-widget zones only ever had one widget per zoneId — those are
+        // still valid without it; client/src/lib/dashboard-widgets/types.ts's
+        // widgetSlotId() falls back to zoneId for that legacy shape.
+        slotId: v.optional(v.string()),
+        type: v.string(),
+        config: v.optional(v.any()),
+        // Percentage (0-100) of the zone's stack this widget occupies.
+        // Undefined means "split evenly" — computed client-side, not stored
+        // until the user actually drags a resize handle.
+        size: v.optional(v.number()),
+      })
+    ),
+  })
+);
+
 export default defineSchema({
   ...authTables,
 
@@ -221,17 +247,34 @@ export default defineSchema({
     .index("by_name_version", ["name", "version"])
     .index("by_module_key", ["moduleKey"]),
 
-  // dashboardLayouts: dashboard widget configuration per user/instance
+  // moduleCatalogFeatured: admin-curated set of marketplace modules to surface in the storefront's featured strip
+  moduleCatalogFeatured: defineTable({
+    moduleKey: v.string(), // marketplace MarketplaceModuleSummary.id
+    sortOrder: v.number(),
+  }).index("by_module_key", ["moduleKey"]),
+
+  // dashboardLayouts: the dashboard canvas panels for a user/instance. Each panel
+  // picks a predefined layout (client/src/lib/dashboard-layouts.ts) and places
+  // widgets (client/src/components/dashboard/widget-catalog.ts) into its zones.
+  // No panels yet means the canvas shows the layout picker.
+  // `pages`/`layoutId`/`modules`/`columnSizes` are legacy fields from earlier
+  // iterations of this table (pre-rename or pre-multi-panel) and are
+  // optional/unread now — kept so existing rows stay valid.
   dashboardLayouts: defineTable({
     instanceId: v.id("instances"),
     userId: v.id("users"),
-    modules: v.array(
-      v.object({
-        id: v.string(),
-        type: v.string(),
-        title: v.string(),
-        config: v.optional(v.any()),
-      })
+    panels: v.optional(dashboardPanelValidator),
+    pages: v.optional(dashboardPanelValidator),
+    layoutId: v.optional(v.string()),
+    modules: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          type: v.string(),
+          title: v.string(),
+          config: v.optional(v.any()),
+        })
+      )
     ),
     columnSizes: v.optional(v.array(v.number())),
   }).index("by_instance_user", ["instanceId", "userId"]),

@@ -1,4 +1,6 @@
 import { v } from "convex/values";
+import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
 
 const resourceInstanceValidator = v.object({
@@ -52,44 +54,136 @@ export const getByCanonicalId = query({
   },
 });
 
+/**
+ * Resolve owning moduleRepository row for a resource-instance snapshot.
+ * Prefer exact moduleKey; fall back to marketplace-id prefix or name within
+ * the Convex instance so webhook/sync rows are not silently dropped when the
+ * engine's stored moduleKey drifted from Convex.
+ */
+async function resolveOwningModule(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  moduleKey: string,
+  moduleName: string
+): Promise<Doc<"moduleRepository"> | null> {
+  if (moduleKey) {
+    const byKey = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_module_key", (q) => q.eq("moduleKey", moduleKey))
+      .first();
+    if (byKey) {
+      return byKey;
+    }
+  }
+
+  const forInstance = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .collect();
+
+  if (moduleKey) {
+    const prefix = moduleKey.split(":")[0];
+    if (prefix) {
+      const byPrefix = forInstance.find((m) => m.moduleKey?.startsWith(`${prefix}:`));
+      if (byPrefix) {
+        return byPrefix;
+      }
+    }
+  }
+
+  if (moduleName) {
+    const byName = forInstance.find((m) => m.name === moduleName);
+    if (byName) {
+      return byName;
+    }
+  }
+
+  return null;
+}
+
+async function upsertRow(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  moduleRecordId: Id<"moduleRepository">,
+  instance: {
+    id: string;
+    instanceId: string;
+    moduleName: string;
+    kind: string;
+    displayName: string;
+    canonicalId: string;
+  }
+) {
+  const row = {
+    instanceId,
+    moduleId: moduleRecordId,
+    engineInstanceId: instance.id,
+    resourceInstanceId: instance.instanceId,
+    moduleName: instance.moduleName,
+    kind: instance.kind,
+    displayName: instance.displayName,
+    canonicalId: instance.canonicalId,
+  };
+
+  const existing = await ctx.db
+    .query("moduleResourceInstances")
+    .withIndex("by_canonical_id", (q) => q.eq("canonicalId", instance.canonicalId))
+    .first();
+  if (existing) {
+    await ctx.db.patch(existing._id, row);
+  } else {
+    await ctx.db.insert("moduleResourceInstances", row);
+  }
+}
+
 export const upsertFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
     instance: resourceInstanceValidator,
   },
   handler: async (ctx, { instanceId, instance }) => {
-    // Resolve by moduleKey (mirrors reconcileWidgets) — the engine's own moduleId
-    // UUID isn't indexable here, and moduleName alone is ambiguous across
-    // instances/reinstalls that share a name.
-    const moduleRecord = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_module_key", (q) => q.eq("moduleKey", instance.moduleKey))
-      .first();
-
+    const moduleRecord = await resolveOwningModule(ctx, instanceId, instance.moduleKey, instance.moduleName);
     if (!moduleRecord) {
       return;
     }
+    await upsertRow(ctx, instanceId, moduleRecord._id, instance);
+  },
+});
 
-    const row = {
-      instanceId,
-      moduleId: moduleRecord._id,
-      engineInstanceId: instance.id,
-      resourceInstanceId: instance.instanceId,
-      moduleName: instance.moduleName,
-      kind: instance.kind,
-      displayName: instance.displayName,
-      canonicalId: instance.canonicalId,
-    };
-
-    const existing = await ctx.db
-      .query("moduleResourceInstances")
-      .withIndex("by_canonical_id", (q) => q.eq("canonicalId", instance.canonicalId))
-      .first();
-    if (existing) {
-      await ctx.db.patch(existing._id, row);
-    } else {
-      await ctx.db.insert("moduleResourceInstances", row);
+/**
+ * Upsert engine-listed instances for a known moduleRepository row, then prune
+ * stale rows for that module. Used by the RESOURCES tab so engine Postgres
+ * rows appear even when create webhooks never reached Convex.
+ */
+export const reconcileForModule = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    moduleId: v.id("moduleRepository"),
+    instances: v.array(resourceInstanceValidator),
+  },
+  handler: async (ctx, { instanceId, moduleId, instances }) => {
+    const moduleRecord = await ctx.db.get(moduleId);
+    if (!moduleRecord || moduleRecord.instanceId !== instanceId) {
+      return { itemsProcessed: 0 };
     }
+
+    const seen = new Set<string>();
+    for (const instance of instances) {
+      seen.add(instance.canonicalId);
+      await upsertRow(ctx, instanceId, moduleId, instance);
+    }
+
+    const liveRows = await ctx.db
+      .query("moduleResourceInstances")
+      .withIndex("by_module", (q) => q.eq("moduleId", moduleId))
+      .collect();
+    for (const row of liveRows) {
+      if (!seen.has(row.canonicalId)) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
+    return { itemsProcessed: instances.length };
   },
 });
 

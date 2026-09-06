@@ -66,6 +66,7 @@ function groupConflicts(conflicts: ConflictResource[]): Array<[string, ConflictR
 
 export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, onSuccess }: Props) {
   const requestModuleUninstall = useAction(api.moduleEngine.requestModuleUninstall);
+  const reconcileUninstall = useAction(api.moduleEngine.reconcileUninstall);
   const [phase, setPhase] = useState<Phase>("confirm");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -117,20 +118,40 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
   }, [pendingKey, uninstallEvent, onOpenChange, onSuccess]);
 
   useEffect(() => {
-    if (phase !== "awaiting-engine" || !pendingKey) {
+    if (phase !== "awaiting-engine" || !pendingKey || !module) {
       return;
     }
-    const timer = setTimeout(() => {
-      setErrorMessage(
-        "The engine did not respond within 60 seconds. The uninstall may still complete in the background."
-      );
+    const key = pendingKey;
+    const timer = setTimeout(async () => {
+      // No module.deleted/module.delete_failed webhook arrived in time — ask
+      // the engine directly whether it's still installed rather than leaving
+      // the dialog (and the stale Convex record) stuck on a webhook that may
+      // never come.
+      try {
+        const result = await reconcileUninstall({ instanceId, moduleId: module._id, correlationKey: key });
+        if (!result.stillInstalled) {
+          setPendingKey(null);
+          onOpenChange(false);
+          if (onSuccess) {
+            onSuccess();
+          }
+          return;
+        }
+        setErrorMessage(
+          "The engine did not confirm removal within 60 seconds, and the module is still installed. Try again."
+        );
+      } catch {
+        setErrorMessage(
+          "The engine did not respond within 60 seconds. The uninstall may still complete in the background."
+        );
+      }
       setPhase("error");
       setPendingKey(null);
     }, ENGINE_RESPONSE_TIMEOUT_MS);
     return () => {
       clearTimeout(timer);
     };
-  }, [phase, pendingKey]);
+  }, [phase, pendingKey, module, instanceId, reconcileUninstall, onOpenChange, onSuccess]);
 
   const handleConfirm = useCallback(async () => {
     if (!module) {
@@ -233,8 +254,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
                     {items.map((item, idx) => {
                       const primaryLabel =
                         item.resourceDisplayName ?? item.resourceName ?? item.resourceId ?? "(unnamed)";
-                      const showCanonical =
-                        !!item.resourceName && item.resourceName !== primaryLabel;
+                      const showCanonical = !!item.resourceName && item.resourceName !== primaryLabel;
                       const usedBy = item.usedBy ?? [];
                       return (
                         <li
