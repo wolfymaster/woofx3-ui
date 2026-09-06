@@ -223,11 +223,22 @@ export const getPlatformLinks = query({
     const userId = await getAuthUserId(ctx);
     if (!userId) return [];
 
+    // Same membership gate as `get` above: an instance id is not a secret, so
+    // without this any signed-in user could enumerate another tenant's linked
+    // channel, its platform user id, and which scopes it granted.
+    const membership = await ctx.db
+      .query("instanceMembers")
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
+      .first();
+    if (!membership) return [];
+
     const links = await ctx.db
       .query("platformLinks")
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
       .collect();
 
+    // Tokens never leave the backend — every caller that needs one goes
+    // through platformRealtime.ensureFreshTwitchToken instead.
     return links.map(({ accessToken: _accessToken, refreshToken: _refreshToken, ...rest }) => rest);
   },
 });
