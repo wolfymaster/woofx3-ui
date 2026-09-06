@@ -1,4 +1,5 @@
-import { Activity, Grid3x3, NotebookPen, Radio, Tv, Workflow, Zap } from "lucide-react";
+import { Activity, Grid3x3, MessagesSquare, NotebookPen, Radio, Tv, Workflow, Zap } from "lucide-react";
+import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-panel";
 import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
@@ -29,6 +30,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: Zap,
     category: "stream",
     component: LiveEventsWidget,
+  },
+  {
+    type: "activity",
+    label: "Activity",
+    description: "Live events, pinned notes, and saved highlights in one tabbed card.",
+    icon: MessagesSquare,
+    category: "stream",
+    component: ActivityPanelWidget,
   },
   {
     type: "stream-preview",
