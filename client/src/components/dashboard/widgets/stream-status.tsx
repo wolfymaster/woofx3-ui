@@ -1,27 +1,13 @@
-import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
 import { Clock, Radio, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useInstance } from "@/hooks/use-instance";
+import { useLiveState } from "@/hooks/use-live-state";
 import { formatUptime } from "@/lib/utils";
 
 export function StreamStatusWidget() {
-  const { instance } = useInstance();
-  const liveState = useQuery(api.instanceLiveState.getForInstance, instance ? { instanceId: instance._id } : "skip");
-  const pollLiveState = useAction(api.streamStatus.pollLiveState);
+  const liveState = useLiveState();
   const [now, setNow] = useState(() => Date.now());
 
   const isLive = liveState?.isLive ?? false;
-
-  // instanceLiveState is kept fresh by STREAM_ONLINE/OFFLINE webhook pushes and
-  // the "stream live state sweep" cron (convex/crons.ts); this one-shot poll on
-  // mount just gets instant freshness rather than waiting for the next tick.
-  useEffect(() => {
-    if (!instance) {
-      return;
-    }
-    void pollLiveState({ instanceId: instance._id });
-  }, [instance, pollLiveState]);
 
   useEffect(() => {
     if (!isLive) {

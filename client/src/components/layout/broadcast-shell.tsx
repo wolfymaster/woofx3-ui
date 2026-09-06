@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import {
   Activity,
   Bell,
@@ -45,6 +45,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useEngineHealth } from "@/hooks/use-engine-health";
 import { useInstance } from "@/hooks/use-instance";
+import { useLiveState } from "@/hooks/use-live-state";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
 import { useTheme } from "@/hooks/use-theme";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
@@ -162,25 +163,11 @@ function InstanceBar() {
 }
 
 function StatusBar() {
-  const { instance } = useInstance();
   const { connected } = useEngineHealth();
-  const liveState = useQuery(api.instanceLiveState.getForInstance, instance ? { instanceId: instance._id } : "skip");
-  const pollLiveState = useAction(api.streamStatus.pollLiveState);
+  const liveState = useLiveState();
   const [now, setNow] = useState(() => Date.now());
 
   const isLive = liveState?.isLive ?? false;
-
-  // instanceLiveState is normally kept fresh by STREAM_ONLINE/OFFLINE webhook
-  // pushes, and self-heals in the background via the `stream live state sweep`
-  // cron (convex/crons.ts) even with no dashboard open. This one-shot poll on
-  // load is just for instant freshness the moment someone opens the app,
-  // rather than waiting for the next cron tick.
-  useEffect(() => {
-    if (!instance) {
-      return;
-    }
-    void pollLiveState({ instanceId: instance._id });
-  }, [instance, pollLiveState]);
 
   useEffect(() => {
     if (!isLive) {

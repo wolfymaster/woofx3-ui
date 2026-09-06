@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useInstance } from "@/hooks/use-instance";
+import { useLiveState } from "@/hooks/use-live-state";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -307,7 +308,7 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
   const { instance } = useInstance();
   const { toast } = useToast();
 
-  const liveState = useQuery(api.instanceLiveState.getForInstance, instance ? { instanceId: instance._id } : "skip");
+  const liveState = useLiveState();
   const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
   const goals = useQuery(api.streamGoals.list, instance ? { instanceId: instance._id } : "skip");
   const createClip = useAction(api.twitchClips.createClip);

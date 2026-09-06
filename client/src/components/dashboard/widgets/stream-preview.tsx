@@ -4,6 +4,7 @@ import { Maximize2, Radio } from "lucide-react";
 import { useEffect, useState } from "react";
 import { StreamPlayerDialog } from "@/components/dashboard/stream-player-dialog";
 import { useInstance } from "@/hooks/use-instance";
+import { useLiveState } from "@/hooks/use-live-state";
 
 // Twitch's live-preview CDN image, refreshed periodically via a cache-busting
 // query param (Twitch itself only regenerates the underlying image every few
@@ -13,7 +14,7 @@ const THUMBNAIL_REFRESH_MS = 60_000;
 
 export function StreamPreviewWidget() {
   const { instance } = useInstance();
-  const liveState = useQuery(api.instanceLiveState.getForInstance, instance ? { instanceId: instance._id } : "skip");
+  const liveState = useLiveState();
   const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
   const [enlarged, setEnlarged] = useState(false);
   const [thumbnailTick, setThumbnailTick] = useState(0);

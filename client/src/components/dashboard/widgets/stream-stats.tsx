@@ -1,8 +1,6 @@
-import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
 import { Clock, Gamepad2, Gift, Heart, Radio, UserPlus, Users, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useInstance } from "@/hooks/use-instance";
+import { useLiveState } from "@/hooks/use-live-state";
 import type { PlatformEvent, PlatformEventType } from "@/lib/platforms/types";
 import { usePlatformEvents } from "@/lib/platforms/use-platform-events";
 import { formatUptime } from "@/lib/utils";
@@ -39,9 +37,7 @@ function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: stri
 }
 
 export function StreamStatsWidget() {
-  const { instance } = useInstance();
-  const liveState = useQuery(api.instanceLiveState.getForInstance, instance ? { instanceId: instance._id } : "skip");
-  const pollLiveState = useAction(api.streamStatus.pollLiveState);
+  const liveState = useLiveState();
   const [now, setNow] = useState(() => Date.now());
   const [tallies, setTallies] = useState<SessionTallies>(EMPTY_TALLIES);
 
@@ -57,13 +53,6 @@ export function StreamStatsWidget() {
     setTalliedSession(startedAt);
     setTallies(EMPTY_TALLIES);
   }
-
-  useEffect(() => {
-    if (!instance) {
-      return;
-    }
-    void pollLiveState({ instanceId: instance._id });
-  }, [instance, pollLiveState]);
 
   useEffect(() => {
     if (!isLive) {
