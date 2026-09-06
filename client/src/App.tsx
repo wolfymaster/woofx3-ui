@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { ConvexProvider, ConvexReactClient, useConvexAuth, useQuery } from "convex/react";
+import { ConvexProvider, useConvexAuth, useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
@@ -27,11 +27,10 @@ import Scenes from "@/pages/scenes";
 import Settings from "@/pages/settings";
 import Team from "@/pages/team";
 import Workflows from "@/pages/workflows";
+import { convexClient as convex } from "./lib/convexClient";
 import { queryClient } from "./lib/queryClient";
 
 console.log("url", import.meta.env.VITE_CONVEX_URL);
-
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
 
 function SplashScreen() {
   return (
