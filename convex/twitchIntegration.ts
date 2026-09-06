@@ -1,12 +1,6 @@
 import { v } from "convex/values";
-import {
-  query,
-  action,
-  internalQuery,
-  internalMutation,
-  internalAction,
-} from "./_generated/server";
 import { internal } from "./_generated/api";
+import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
 export const upsertPlatformLink = internalMutation({
@@ -130,16 +124,3 @@ export const disconnect = action({
   },
 });
 
-export const getStatus = query({
-  args: {
-    instanceId: v.id("instances"),
-    platform: v.string(),
-  },
-  handler: async (ctx, { instanceId, platform }) => {
-    return ctx.db
-      .query("platformLinks")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .filter((q) => q.eq(q.field("platform"), platform))
-      .first();
-  },
-});
