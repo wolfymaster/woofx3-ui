@@ -2,29 +2,33 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// One placed widget on a dashboard panel. Exported so convex/dashboardLayouts.ts's
+// setPanelWidgets argument validator is literally the same shape the table stores —
+// they drifted apart once before, and a mutation validator that is missing a field
+// the client sends rejects the whole write at the argument boundary.
+export const dashboardPanelWidgetValidator = v.object({
+  zoneId: v.string(),
+  // Identifies one widget within a zone now that a zone can hold more
+  // than one (stacked, resizable). Optional because rows saved before
+  // multi-widget zones only ever had one widget per zoneId — those are
+  // still valid without it; client/src/lib/dashboard-widgets/types.ts's
+  // widgetSlotId() falls back to zoneId for that legacy shape.
+  slotId: v.optional(v.string()),
+  type: v.string(),
+  config: v.optional(v.any()),
+  // Percentage (0-100) of the zone's stack this widget occupies.
+  // Undefined means "split evenly" — computed client-side, not stored
+  // until the user actually drags a resize handle.
+  size: v.optional(v.number()),
+});
+
 // Shared shape for dashboardLayouts.panels (and its legacy `pages` alias below).
 const dashboardPanelValidator = v.array(
   v.object({
     id: v.string(),
     name: v.string(),
     layoutId: v.string(),
-    widgets: v.array(
-      v.object({
-        zoneId: v.string(),
-        // Identifies one widget within a zone now that a zone can hold more
-        // than one (stacked, resizable). Optional because rows saved before
-        // multi-widget zones only ever had one widget per zoneId — those are
-        // still valid without it; client/src/lib/dashboard-widgets/types.ts's
-        // widgetSlotId() falls back to zoneId for that legacy shape.
-        slotId: v.optional(v.string()),
-        type: v.string(),
-        config: v.optional(v.any()),
-        // Percentage (0-100) of the zone's stack this widget occupies.
-        // Undefined means "split evenly" — computed client-side, not stored
-        // until the user actually drags a resize handle.
-        size: v.optional(v.number()),
-      })
-    ),
+    widgets: v.array(dashboardPanelWidgetValidator),
   })
 );
 
@@ -818,22 +822,6 @@ export default defineSchema({
   })
     .index("by_instance_correlation", ["instanceId", "correlationKey"])
     .index("by_expires_at", ["expiresAt"]),
-
-  // userDashboardLayouts: per-user, per-instance dashboard widget layout persistence
-  userDashboardLayouts: defineTable({
-    userId: v.id("users"),
-    instanceId: v.id("instances"),
-    layout: v.array(
-      v.object({
-        id: v.string(),
-        type: v.string(),
-        position: v.object({ x: v.number(), y: v.number() }),
-        size: v.object({ width: v.number(), height: v.number() }),
-        config: v.optional(v.any()),
-      })
-    ),
-    updatedAt: v.number(),
-  }).index("by_user_instance", ["userId", "instanceId"]),
 
   // engineEventLog: audit trail of every engine webhook event received
   // (source: "webhook", written by the POST /api/webhooks/woofx3 handler in

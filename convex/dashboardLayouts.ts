@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import { dashboardPanelWidgetValidator } from "./schema";
 
 type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
 
@@ -130,13 +131,7 @@ export const setPanelWidgets = mutation({
   args: {
     instanceId: v.id("instances"),
     panelId: v.string(),
-    widgets: v.array(
-      v.object({
-        zoneId: v.string(),
-        type: v.string(),
-        config: v.optional(v.any()),
-      })
-    ),
+    widgets: v.array(dashboardPanelWidgetValidator),
   },
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
