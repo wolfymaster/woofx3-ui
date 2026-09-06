@@ -297,6 +297,17 @@ export default defineSchema({
     sortOrder: v.number(),
   }).index("by_instance", ["instanceId"]),
 
+  // dashboardNotes: freeform scratch text behind the dashboard's Notes rail
+  // widget. Per user and per instance — notes are private working memory
+  // ("remember to thank the raider"), not shared channel state, so an account
+  // shared with a moderator does not hand them the owner's notes.
+  dashboardNotes: defineTable({
+    instanceId: v.id("instances"),
+    userId: v.id("users"),
+    content: v.string(),
+    updatedAt: v.number(),
+  }).index("by_instance_user", ["instanceId", "userId"]),
+
   // triggerDefinitions: UI metadata only; at most one row per stable trigger id (matches engine / module id)
   triggerDefinitions: defineTable({
     slug: v.string(), // stable id, e.g. twitch.channel.follow (namespaced by module)

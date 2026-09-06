@@ -6,6 +6,7 @@ import { Check, LayoutGrid, Loader2, PanelTop, Pencil, Plus, Trash2, X } from "l
 import { useEffect, useRef, useState } from "react";
 import { CommandBar } from "@/components/dashboard/command-bar";
 import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
+import { WidgetRail } from "@/components/dashboard/widget-rail";
 import { StatusBarCenterPortal } from "@/components/layout/status-bar-slot";
 import {
   AlertDialog,
@@ -292,165 +293,169 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="h-full flex flex-col">
-      <StatusBarCenterPortal>
-        <Tabs value={String(activeIndex)} onValueChange={handleSelectTab}>
-          <TabsList className="h-6 p-0.5 bg-transparent">
-            {panels.map((panel, index) =>
-              renamingPanelId === panel.id ? (
-                <input
-                  key={panel.id}
-                  ref={renameInputRef}
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={() => void commitRenamePanel(panel.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void commitRenamePanel(panel.id);
-                    } else if (e.key === "Escape") {
-                      setRenamingPanelId(null);
-                    }
-                  }}
-                  className="h-5 w-20 px-2 rounded-sm bg-background border border-primary text-[11px] outline-none"
-                  data-testid={`input-rename-panel-${panel.id}`}
-                />
-              ) : (
-                <ContextMenu key={panel.id}>
-                  <ContextMenuTrigger asChild>
-                    <TabsTrigger
-                      value={String(index)}
-                      className={cn(
-                        "h-5 px-2 text-[11px]",
-                        // ContextMenuTrigger's asChild also writes `data-state` (open/closed) onto
-                        // this same element, clobbering the Tabs primitive's own active/inactive
-                        // data-state — so drive the active style from React state instead.
-                        index === activeIndex && "bg-muted text-foreground shadow-sm"
+    <div className="h-full flex">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <StatusBarCenterPortal>
+          <Tabs value={String(activeIndex)} onValueChange={handleSelectTab}>
+            <TabsList className="h-6 p-0.5 bg-transparent">
+              {panels.map((panel, index) =>
+                renamingPanelId === panel.id ? (
+                  <input
+                    key={panel.id}
+                    ref={renameInputRef}
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={() => void commitRenamePanel(panel.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void commitRenamePanel(panel.id);
+                      } else if (e.key === "Escape") {
+                        setRenamingPanelId(null);
+                      }
+                    }}
+                    className="h-5 w-20 px-2 rounded-sm bg-background border border-primary text-[11px] outline-none"
+                    data-testid={`input-rename-panel-${panel.id}`}
+                  />
+                ) : (
+                  <ContextMenu key={panel.id}>
+                    <ContextMenuTrigger asChild>
+                      <TabsTrigger
+                        value={String(index)}
+                        className={cn(
+                          "h-5 px-2 text-[11px]",
+                          // ContextMenuTrigger's asChild also writes `data-state` (open/closed) onto
+                          // this same element, clobbering the Tabs primitive's own active/inactive
+                          // data-state — so drive the active style from React state instead.
+                          index === activeIndex && "bg-muted text-foreground shadow-sm"
+                        )}
+                        data-testid={`tab-panel-${panel.id}`}
+                      >
+                        {panel.name}
+                      </TabsTrigger>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      {!isEditing && (
+                        <>
+                          <ContextMenuItem onClick={enterEditMode} data-testid="button-toggle-edit">
+                            <LayoutGrid className="h-3.5 w-3.5 mr-2" />
+                            Edit
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                        </>
                       )}
-                      data-testid={`tab-panel-${panel.id}`}
-                    >
-                      {panel.name}
-                    </TabsTrigger>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent>
-                    {!isEditing && (
-                      <>
-                        <ContextMenuItem onClick={enterEditMode} data-testid="button-toggle-edit">
-                          <LayoutGrid className="h-3.5 w-3.5 mr-2" />
-                          Edit
-                        </ContextMenuItem>
-                        <ContextMenuSeparator />
-                      </>
-                    )}
-                    {commandBarHidden && (
-                      <>
-                        <ContextMenuItem
-                          onClick={() => $commandBarHidden.set(false)}
-                          data-testid="button-show-command-bar"
-                        >
-                          <PanelTop className="h-3.5 w-3.5 mr-2" />
-                          Show Command Bar
-                        </ContextMenuItem>
-                        <ContextMenuSeparator />
-                      </>
-                    )}
-                    <ContextMenuItem
-                      onClick={() => startRenamingPanel(panel.id, panel.name)}
-                      data-testid={`button-rename-panel-${panel.id}`}
-                    >
-                      <Pencil className="h-3.5 w-3.5 mr-2" />
-                      Rename
-                    </ContextMenuItem>
-                    <ContextMenuItem onClick={() => setAddPanelOpen(true)} data-testid="button-add-panel">
-                      <Plus className="h-3.5 w-3.5 mr-2" />
-                      Add Panel
-                    </ContextMenuItem>
-                    <ContextMenuSeparator />
-                    <ContextMenuItem
-                      onClick={() => setRemoveTarget({ id: panel.id, name: panel.name })}
-                      disabled={panels.length <= 1}
-                      className="text-destructive focus:text-destructive"
-                      data-testid={`button-remove-panel-${panel.id}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 mr-2" />
-                      Delete
-                    </ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              )
-            )}
-          </TabsList>
-        </Tabs>
-      </StatusBarCenterPortal>
+                      {commandBarHidden && (
+                        <>
+                          <ContextMenuItem
+                            onClick={() => $commandBarHidden.set(false)}
+                            data-testid="button-show-command-bar"
+                          >
+                            <PanelTop className="h-3.5 w-3.5 mr-2" />
+                            Show Command Bar
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                        </>
+                      )}
+                      <ContextMenuItem
+                        onClick={() => startRenamingPanel(panel.id, panel.name)}
+                        data-testid={`button-rename-panel-${panel.id}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5 mr-2" />
+                        Rename
+                      </ContextMenuItem>
+                      <ContextMenuItem onClick={() => setAddPanelOpen(true)} data-testid="button-add-panel">
+                        <Plus className="h-3.5 w-3.5 mr-2" />
+                        Add Panel
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem
+                        onClick={() => setRemoveTarget({ id: panel.id, name: panel.name })}
+                        disabled={panels.length <= 1}
+                        className="text-destructive focus:text-destructive"
+                        data-testid={`button-remove-panel-${panel.id}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        Delete
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                )
+              )}
+            </TabsList>
+          </Tabs>
+        </StatusBarCenterPortal>
 
-      {isEditing && (
-        <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-border shrink-0">
-          <Button variant="ghost" size="sm" onClick={handleCancelEdits} data-testid="button-cancel-edit">
-            <X className="h-4 w-4 mr-2" />
-            Cancel
-          </Button>
-          <Button size="sm" onClick={() => void handleSaveEdits()} data-testid="button-save-edit">
-            <Check className="h-4 w-4 mr-2" />
-            Save
-          </Button>
-        </div>
-      )}
+        {isEditing && (
+          <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-border shrink-0">
+            <Button variant="ghost" size="sm" onClick={handleCancelEdits} data-testid="button-cancel-edit">
+              <X className="h-4 w-4 mr-2" />
+              Cancel
+            </Button>
+            <Button size="sm" onClick={() => void handleSaveEdits()} data-testid="button-save-edit">
+              <Check className="h-4 w-4 mr-2" />
+              Save
+            </Button>
+          </div>
+        )}
 
-      {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
+        {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
 
-      <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
-        <CarouselContent>
-          {panels.map((panel) => {
-            const currentWidgets = (isEditing && draftWidgets?.[panel.id]) || panel.widgets;
-            const effectivePanel = isEditing ? { ...panel, widgets: currentWidgets } : panel;
+        <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
+          <CarouselContent>
+            {panels.map((panel) => {
+              const currentWidgets = (isEditing && draftWidgets?.[panel.id]) || panel.widgets;
+              const effectivePanel = isEditing ? { ...panel, widgets: currentWidgets } : panel;
 
-            return (
-              <CarouselItem key={panel.id} className="h-full pl-0">
-                <DashboardCanvas
-                  panel={effectivePanel}
-                  isEditing={isEditing}
-                  onAssignWidget={(zoneId, type) => handleAssignWidget(panel.id, currentWidgets, zoneId, type)}
-                  onRemoveWidget={(zoneId, slotId) => handleRemoveWidget(panel.id, currentWidgets, zoneId, slotId)}
-                  onWidgetConfigChange={(zoneId, slotId, type, config) =>
-                    handleWidgetConfigChange(panel.id, currentWidgets, zoneId, slotId, type, config)
-                  }
-                  onResizeWidgets={(zoneId, sizes) => handleResizeWidgets(panel.id, currentWidgets, zoneId, sizes)}
-                />
-              </CarouselItem>
-            );
-          })}
-        </CarouselContent>
-      </Carousel>
+              return (
+                <CarouselItem key={panel.id} className="h-full pl-0">
+                  <DashboardCanvas
+                    panel={effectivePanel}
+                    isEditing={isEditing}
+                    onAssignWidget={(zoneId, type) => handleAssignWidget(panel.id, currentWidgets, zoneId, type)}
+                    onRemoveWidget={(zoneId, slotId) => handleRemoveWidget(panel.id, currentWidgets, zoneId, slotId)}
+                    onWidgetConfigChange={(zoneId, slotId, type, config) =>
+                      handleWidgetConfigChange(panel.id, currentWidgets, zoneId, slotId, type, config)
+                    }
+                    onResizeWidgets={(zoneId, sizes) => handleResizeWidgets(panel.id, currentWidgets, zoneId, sizes)}
+                  />
+                </CarouselItem>
+              );
+            })}
+          </CarouselContent>
+        </Carousel>
 
-      <Dialog open={addPanelOpen} onOpenChange={setAddPanelOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Add Dashboard Panel</DialogTitle>
-          </DialogHeader>
-          <DashboardLayoutPicker onSelect={handleAddPanel} />
-        </DialogContent>
-      </Dialog>
+        <Dialog open={addPanelOpen} onOpenChange={setAddPanelOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Add Dashboard Panel</DialogTitle>
+            </DialogHeader>
+            <DashboardLayoutPicker onSelect={handleAddPanel} />
+          </DialogContent>
+        </Dialog>
 
-      <AlertDialog open={!!removeTarget} onOpenChange={(open) => !open && setRemoveTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remove "{removeTarget?.name}"?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This removes the panel and any widgets placed on it. This can't be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmRemovePanel}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Remove Panel
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <AlertDialog open={!!removeTarget} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove "{removeTarget?.name}"?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This removes the panel and any widgets placed on it. This can't be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleConfirmRemovePanel}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remove Panel
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+
+      <WidgetRail />
     </div>
   );
 }

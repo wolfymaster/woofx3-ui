@@ -21,6 +21,7 @@ import type * as chatCommandGroups from "../chatCommandGroups.js";
 import type * as chatCommands from "../chatCommands.js";
 import type * as crons from "../crons.js";
 import type * as dashboardLayouts from "../dashboardLayouts.js";
+import type * as dashboardNotes from "../dashboardNotes.js";
 import type * as debug from "../debug.js";
 import type * as engineAlerts from "../engineAlerts.js";
 import type * as engineEventLog from "../engineEventLog.js";
@@ -126,6 +127,7 @@ declare const fullApi: ApiFromModules<{
   chatCommands: typeof chatCommands;
   crons: typeof crons;
   dashboardLayouts: typeof dashboardLayouts;
+  dashboardNotes: typeof dashboardNotes;
   debug: typeof debug;
   engineAlerts: typeof engineAlerts;
   engineEventLog: typeof engineEventLog;
