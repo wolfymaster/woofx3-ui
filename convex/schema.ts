@@ -283,6 +283,20 @@ export default defineSchema({
     columnSizes: v.optional(v.array(v.number())),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
+  // streamGoals: the dashboard command bar's goal cards (Bits / Subs / Followers, ...).
+  // Manually entered and manually advanced — the engine reports no running
+  // follower/sub/bits totals today (instanceLiveState carries only live state,
+  // title, game, and viewer count), so there is nothing to derive these from.
+  // Scoped per instance rather than per user: a goal is the channel's, and
+  // everyone sharing the account should see the same progress.
+  streamGoals: defineTable({
+    instanceId: v.id("instances"),
+    label: v.string(),
+    current: v.number(),
+    target: v.number(),
+    sortOrder: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
   // triggerDefinitions: UI metadata only; at most one row per stable trigger id (matches engine / module id)
   triggerDefinitions: defineTable({
     slug: v.string(), // stable id, e.g. twitch.channel.follow (namespaced by module)

@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   sidebarCollapsed: 'streamdeck-sidebar-collapsed',
   engineUrl: 'streamdeck-engine-url',
   currentInstanceId: 'woofx3-current-instance-id',
+  commandBarHidden: 'woofx3-command-bar-hidden',
 };
 
 function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -32,6 +33,13 @@ function persistValue<T>(key: string, value: T): void {
 const initialInstanceId = getStoredValue<string | null>(STORAGE_KEYS.currentInstanceId, null);
 export const $currentInstanceId = atom<string | null>(initialInstanceId);
 $currentInstanceId.subscribe((value) => persistValue(STORAGE_KEYS.currentInstanceId, value));
+
+// Dashboard command bar visibility. Its close button hides the whole bar (not
+// just decorative) — per-browser rather than per-instance, since it's a
+// chrome preference, and restored from the panel tab's context menu.
+const initialCommandBarHidden = getStoredValue(STORAGE_KEYS.commandBarHidden, false);
+export const $commandBarHidden = atom<boolean>(initialCommandBarHidden);
+$commandBarHidden.subscribe((value) => persistValue(STORAGE_KEYS.commandBarHidden, value));
 
 const initialSidebarCollapsed = getStoredValue(STORAGE_KEYS.sidebarCollapsed, false);
 export const $sidebarCollapsed = atom<boolean>(initialSidebarCollapsed);

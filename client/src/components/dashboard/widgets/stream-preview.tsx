@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { Maximize2, Radio } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { StreamPlayerDialog } from "@/components/dashboard/stream-player-dialog";
 import { useInstance } from "@/hooks/use-instance";
 
 // Twitch's live-preview CDN image, refreshed periodically via a cache-busting
@@ -39,7 +39,6 @@ export function StreamPreviewWidget() {
   }
 
   const login = twitchLink.platformUsername.toLowerCase();
-  const parentHost = typeof window !== "undefined" ? window.location.hostname : "";
 
   return (
     <>
@@ -81,23 +80,7 @@ export function StreamPreviewWidget() {
         )}
       </div>
 
-      <Dialog open={enlarged} onOpenChange={setEnlarged}>
-        <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden">
-          <DialogHeader className="sr-only">
-            <DialogTitle>{liveState?.streamTitle ?? "Stream preview"}</DialogTitle>
-          </DialogHeader>
-          <div className="aspect-video w-full bg-black">
-            {enlarged && (
-              <iframe
-                src={`https://player.twitch.tv/?channel=${login}&parent=${parentHost}&muted=true`}
-                title="Twitch stream player"
-                className="w-full h-full"
-                allowFullScreen
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <StreamPlayerDialog open={enlarged} onOpenChange={setEnlarged} channel={login} title={liveState?.streamTitle} />
     </>
   );
 }
