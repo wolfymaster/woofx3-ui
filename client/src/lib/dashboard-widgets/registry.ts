@@ -1,5 +1,6 @@
-import { Activity, Grid3x3, MessagesSquare, NotebookPen, Radio, Tv, Workflow, Zap } from "lucide-react";
+import { Activity, Grid3x3, Megaphone, MessagesSquare, NotebookPen, Radio, Tv, Workflow, Zap } from "lucide-react";
 import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-panel";
+import { BroadcastControlsWidget } from "@/components/dashboard/widgets/broadcast-controls";
 import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
@@ -46,6 +47,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: Tv,
     category: "stream",
     component: StreamPreviewWidget,
+  },
+  {
+    type: "broadcast-controls",
+    label: "Broadcast Controls",
+    description: "Send an announcement or a shoutout, and see what's pinned.",
+    icon: Megaphone,
+    category: "stream",
+    component: BroadcastControlsWidget,
   },
   {
     type: "workflow-runs",
