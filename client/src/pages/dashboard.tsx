@@ -1,8 +1,10 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
+import { useStore } from "@nanostores/react";
 import { useMutation, useQuery } from "convex/react";
-import { Check, LayoutGrid, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, LayoutGrid, Loader2, PanelTop, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { CommandBar } from "@/components/dashboard/command-bar";
 import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
 import { StatusBarCenterPortal } from "@/components/layout/status-bar-slot";
 import {
@@ -28,6 +30,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInstance } from "@/hooks/use-instance";
 import { widgetSlotId } from "@/lib/dashboard-widgets/types";
+import { $commandBarHidden } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
 type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
@@ -35,6 +38,7 @@ type DashboardPanelWidget = DashboardPanel["widgets"][number];
 
 export default function Dashboard() {
   const { instance, isLoading: instanceLoading } = useInstance();
+  const commandBarHidden = useStore($commandBarHidden);
 
   const panels = useQuery(api.dashboardLayouts.getPanels, instance ? { instanceId: instance._id } : "skip");
   const addPanel = useMutation(api.dashboardLayouts.addPanel);
@@ -338,6 +342,18 @@ export default function Dashboard() {
                         <ContextMenuSeparator />
                       </>
                     )}
+                    {commandBarHidden && (
+                      <>
+                        <ContextMenuItem
+                          onClick={() => $commandBarHidden.set(false)}
+                          data-testid="button-show-command-bar"
+                        >
+                          <PanelTop className="h-3.5 w-3.5 mr-2" />
+                          Show Command Bar
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                      </>
+                    )}
                     <ContextMenuItem
                       onClick={() => startRenamingPanel(panel.id, panel.name)}
                       data-testid={`button-rename-panel-${panel.id}`}
@@ -379,6 +395,8 @@ export default function Dashboard() {
           </Button>
         </div>
       )}
+
+      {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
 
       <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
         <CarouselContent>
