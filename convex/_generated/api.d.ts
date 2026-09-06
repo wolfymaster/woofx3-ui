@@ -11,6 +11,7 @@
 import type * as accountMembers from "../accountMembers.js";
 import type * as accounts from "../accounts.js";
 import type * as actionDefinitions from "../actionDefinitions.js";
+import type * as activityPanel from "../activityPanel.js";
 import type * as alertDescriptors from "../alertDescriptors.js";
 import type * as alertLog from "../alertLog.js";
 import type * as assets from "../assets.js";
@@ -114,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   accountMembers: typeof accountMembers;
   accounts: typeof accounts;
   actionDefinitions: typeof actionDefinitions;
+  activityPanel: typeof activityPanel;
   alertDescriptors: typeof alertDescriptors;
   alertLog: typeof alertLog;
   assets: typeof assets;

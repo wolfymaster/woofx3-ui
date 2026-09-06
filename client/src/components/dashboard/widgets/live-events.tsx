@@ -1,8 +1,9 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
-import { Gift, Heart, Radio, UserPlus, Zap } from "lucide-react";
+import { Gift, Heart, Radio, Star, UserPlus, Zap } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useInstance } from "@/hooks/use-instance";
+import type { DashboardWidgetProps } from "@/lib/dashboard-widgets/types";
 import type { PlatformEvent, PlatformEventType } from "@/lib/platforms/types";
 import { usePlatformEvents } from "@/lib/platforms/use-platform-events";
 import { cn } from "@/lib/utils";
@@ -44,7 +45,15 @@ function EventDetail({ event }: { event: PlatformEvent }) {
   return null;
 }
 
-export function LiveEventsWidget() {
+interface LiveEventsWidgetProps extends DashboardWidgetProps {
+  /** When set, each row gets a save-as-highlight action. Omitted on the standalone
+   * widget — only the Activity panel has somewhere to put a saved highlight. */
+  onSaveHighlight?: (event: PlatformEvent) => void;
+  /** The Activity panel's tab bar already names this feed, so it hides the widget's own header. */
+  hideHeader?: boolean;
+}
+
+export function LiveEventsWidget({ onSaveHighlight, hideHeader }: LiveEventsWidgetProps = {}) {
   const { instance } = useInstance();
   const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
   const [events, setEvents] = useState<PlatformEvent[]>([]);
@@ -68,13 +77,15 @@ export function LiveEventsWidget() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <span className="text-sm font-semibold">Live Events</span>
-        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-          Live
-        </span>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
+          <span className="text-sm font-semibold">Live Events</span>
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+            Live
+          </span>
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 overflow-auto p-2 space-y-0.5">
         {events.length === 0 ? (
@@ -98,7 +109,20 @@ export function LiveEventsWidget() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm font-medium truncate">{event.userName}</span>
-                    <span className="text-[10px] text-muted-foreground shrink-0">{formatTimeAgo(event.timestamp)}</span>
+                    <span className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[10px] text-muted-foreground">{formatTimeAgo(event.timestamp)}</span>
+                      {onSaveHighlight && (
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-primary"
+                          onClick={() => onSaveHighlight(event)}
+                          aria-label={`Save ${event.userName}'s ${display.label} as a highlight`}
+                          data-testid={`button-save-highlight-${event.id}`}
+                        >
+                          <Star className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </span>
                   </div>
                   <EventDetail event={event} />
                 </div>

@@ -279,6 +279,32 @@ export default defineSchema({
     columnSizes: v.optional(v.array(v.number())),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
+  // pinnedMessages: notes the dashboard's Activity panel keeps visible — a
+  // raid to shout out, a link to repeat. Composed by hand rather than pinned
+  // off a real chat message: no addressable chat-message record exists on this
+  // side today (the engine webhook path carries lifecycle events, not chat,
+  // and the browser's direct EventSub feed carries no chat either).
+  pinnedMessages: defineTable({
+    instanceId: v.id("instances"),
+    authorName: v.optional(v.string()),
+    content: v.string(),
+    pinnedAt: v.number(),
+    pinnedByUserId: v.id("users"),
+  }).index("by_instance_pinned_at", ["instanceId", "pinnedAt"]),
+
+  // streamHighlights: moments saved off the live event feed (a big cheer, a
+  // raid) so they survive the feed scrolling away. Curated, not derived —
+  // saved explicitly from the Activity panel's Events tab.
+  streamHighlights: defineTable({
+    instanceId: v.id("instances"),
+    kind: v.string(), // PlatformEventType, or "note" for a hand-written one
+    userName: v.string(),
+    detail: v.optional(v.string()),
+    amount: v.optional(v.number()),
+    occurredAt: v.number(),
+    savedByUserId: v.id("users"),
+  }).index("by_instance_occurred_at", ["instanceId", "occurredAt"]),
+
   // triggerDefinitions: UI metadata only; at most one row per stable trigger id (matches engine / module id)
   triggerDefinitions: defineTable({
     slug: v.string(), // stable id, e.g. twitch.channel.follow (namespaced by module)
