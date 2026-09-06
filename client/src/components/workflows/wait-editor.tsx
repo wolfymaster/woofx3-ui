@@ -1,7 +1,9 @@
 import type { AggregationConfig, WaitConfig } from "@woofx3/api";
+import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { VariableOption } from "@/lib/workflow-variables";
 import { ConditionEditor } from "./condition-editor";
 
 const DEFAULT_AGGREGATION: AggregationConfig = { strategy: "count", threshold: 1 };
@@ -9,9 +11,11 @@ const DEFAULT_AGGREGATION: AggregationConfig = { strategy: "count", threshold: 1
 interface WaitEditorProps {
   wait: WaitConfig;
   onChange: (wait: WaitConfig) => void;
+  /** Offered when the user types "${" in the event, sum-field, or match-condition inputs. */
+  availableVariables?: VariableOption[];
 }
 
-export function WaitEditor({ wait, onChange }: WaitEditorProps) {
+export function WaitEditor({ wait, onChange, availableVariables = [] }: WaitEditorProps) {
   const isAggregation = wait.type === "aggregation";
 
   return (
@@ -40,12 +44,13 @@ export function WaitEditor({ wait, onChange }: WaitEditorProps) {
 
       <div className="space-y-2">
         <Label htmlFor="wait-event">Event</Label>
-        <Input
+        <VariableAwareInput
           id="wait-event"
           value={wait.event}
-          onChange={(e) => onChange({ ...wait, event: e.target.value })}
+          onChange={(event) => onChange({ ...wait, event })}
           placeholder="chat.command.hug"
           className="font-mono text-xs"
+          availableVariables={availableVariables}
           data-testid="input-wait-event"
         />
         <p className="text-xs text-muted-foreground">
@@ -100,17 +105,18 @@ export function WaitEditor({ wait, onChange }: WaitEditorProps) {
           {wait.aggregation?.strategy === "sum" && (
             <div className="space-y-2 col-span-2">
               <Label htmlFor="wait-aggregation-field">Field to sum</Label>
-              <Input
+              <VariableAwareInput
                 id="wait-aggregation-field"
                 value={wait.aggregation?.field ?? ""}
-                onChange={(e) =>
+                onChange={(field) =>
                   onChange({
                     ...wait,
-                    aggregation: { ...(wait.aggregation ?? DEFAULT_AGGREGATION), field: e.target.value },
+                    aggregation: { ...(wait.aggregation ?? DEFAULT_AGGREGATION), field },
                   })
                 }
                 placeholder="${trigger.data.amount}"
                 className="font-mono text-xs"
+                availableVariables={availableVariables}
                 data-testid="input-wait-aggregation-field"
               />
             </div>
@@ -168,6 +174,7 @@ export function WaitEditor({ wait, onChange }: WaitEditorProps) {
           conditions={wait.conditions ?? []}
           onChange={(conditions) => onChange({ ...wait, conditions: conditions.length > 0 ? conditions : undefined })}
           addLabel="Add match condition"
+          availableVariables={availableVariables}
         />
       </div>
     </div>

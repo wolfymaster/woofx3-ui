@@ -205,6 +205,31 @@ describe("computeAvailableVariables", () => {
     expect(options.some((o) => o.value.startsWith("${then-child.") || o.value.startsWith("${else-child."))).toBe(false);
   });
 
+  // Conditions and waits are addressed by the same walk as actions — the editor now asks for
+  // their variables too, so the target being a non-action step has to work.
+  test("a condition step sees the trigger and upstream action outputs", () => {
+    const cond: StepNode = {
+      type: "condition",
+      id: "big-cheer",
+      conditions: [],
+      thenBranch: [],
+      elseBranch: [],
+    };
+    const tree: WorkflowTree = { trigger, steps: [increment, cond] };
+    const options = computeAvailableVariables(tree, "big-cheer", actionCatalog, triggerCatalog);
+    expect(options).toContainEqual({ value: "${trigger.data.user}", label: "Cheerer", group: "Trigger" });
+    expect(options).toContainEqual({ value: "${increment.next}", label: "New value", group: "Increment Counter" });
+    // Its own result isn't available to itself.
+    expect(options.some((o) => o.value === "${big-cheer.result}")).toBe(false);
+  });
+
+  test("a wait step sees upstream action outputs", () => {
+    const wait: StepNode = { type: "wait", id: "hold", wait: { type: "event", event: "" } };
+    const tree: WorkflowTree = { trigger, steps: [increment, wait] };
+    const options = computeAvailableVariables(tree, "hold", actionCatalog, triggerCatalog);
+    expect(options).toContainEqual({ value: "${increment.next}", label: "New value", group: "Increment Counter" });
+  });
+
   test("a step in one branch does not see a sibling branch's steps", () => {
     const thenChild: StepNode = { type: "action", id: "then-child", action: "function", parameters: {} };
     const elseChild: StepNode = { type: "action", id: "else-child", action: "function", parameters: {} };
