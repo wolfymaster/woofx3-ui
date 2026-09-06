@@ -25,8 +25,6 @@ interface BrowserEngineApi extends RpcTarget, Woofx3EngineApi {
   setEngineModuleState(name: string, state: string): Promise<{ success: boolean }>;
 }
 
-const POLL_INTERVAL_CHAT = 3000;
-const POLL_INTERVAL_EVENTS = 5000;
 const POLL_INTERVAL_RUNS = 10000;
 
 export class BrowserTransport implements WoofxTransport {
@@ -86,57 +84,16 @@ export class BrowserTransport implements WoofxTransport {
     }
   }
 
-  async sendChatMessage(instanceId: string, message: string): Promise<void> {
-    await this.getApi().sendChatMessage(instanceId, message);
+  subscribeChatMessages(_instanceId: string, _callback: (msg: ChatMessage) => void): () => void {
+    // Engine no longer exposes getChatMessages / sendChatMessage. Keep the
+    // transport method so dashboard widgets compile; inbound chat will need
+    // a different delivery path (e.g. webhooks) before this can do work.
+    return () => {};
   }
 
-  subscribeChatMessages(instanceId: string, callback: (msg: ChatMessage) => void): () => void {
-    const api = this.session?.api;
-    if (!api) {
-      return () => {};
-    }
-
-    let lastId: string | null = null;
-    const interval = setInterval(async () => {
-      try {
-        const messages = await api.getChatMessages(instanceId, 50);
-        const newMessages = lastId ? messages.filter((m) => m.id > lastId!) : messages;
-        if (newMessages.length > 0) {
-          lastId = newMessages[newMessages.length - 1].id;
-          newMessages.forEach((m) => callback(m as unknown as ChatMessage));
-        }
-      } catch {
-        // Silently ignore connection errors during polling
-      }
-    }, POLL_INTERVAL_CHAT);
-
-    return () => clearInterval(interval);
-  }
-
-  subscribeStreamEvents(instanceId: string, callback: (event: StreamEvent) => void): () => void {
-    const api = this.session?.api;
-    if (!api) {
-      return () => {};
-    }
-
-    let lastId: string | null = null;
-    const interval = setInterval(async () => {
-      try {
-        const events = await api.getStreamEvents({
-          accountId: instanceId,
-          limit: 20,
-        });
-        const newEvents = lastId ? events.filter((e) => e.id > lastId!) : events;
-        if (newEvents.length > 0) {
-          lastId = newEvents[newEvents.length - 1].id;
-          newEvents.forEach((e) => callback(e as unknown as StreamEvent));
-        }
-      } catch {
-        // Silently ignore
-      }
-    }, POLL_INTERVAL_EVENTS);
-
-    return () => clearInterval(interval);
+  subscribeStreamEvents(_instanceId: string, _callback: (event: StreamEvent) => void): () => void {
+    // Engine no longer exposes getStreamEvents for browser polling.
+    return () => {};
   }
 
   subscribeWorkflowRuns(instanceId: string, callback: (run: WorkflowRun) => void): () => void {
@@ -148,7 +105,9 @@ export class BrowserTransport implements WoofxTransport {
     const interval = setInterval(async () => {
       try {
         const runs = await api.getWorkflowRuns({ accountId: instanceId });
-        runs.forEach((r) => callback(r as unknown as WorkflowRun));
+        for (const r of runs) {
+          callback(r as unknown as WorkflowRun);
+        }
       } catch {
         // Silently ignore
       }

@@ -88,8 +88,7 @@ export interface WoofxTransport {
   // Stream status (one-off polling)
   getStreamStatus(instanceId: string): Promise<StreamStatus>;
 
-  // Chat
-  sendChatMessage(instanceId: string, message: string): Promise<void>;
+  // Chat (inbound subscription only — outbound send was removed from the engine)
   subscribeChatMessages(instanceId: string, callback: (msg: ChatMessage) => void): () => void;
 
   // Stream events

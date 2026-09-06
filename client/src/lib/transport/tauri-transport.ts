@@ -36,11 +36,6 @@ export class TauriTransport implements WoofxTransport {
     throw new Error("TauriTransport not yet implemented");
   }
 
-  async sendChatMessage(instanceId: string, message: string): Promise<void> {
-    // TODO: invoke('send_chat_message', { instanceId, message })
-    throw new Error("TauriTransport not yet implemented");
-  }
-
   subscribeChatMessages(instanceId: string, callback: (msg: ChatMessage) => void): () => void {
     // TODO: Tauri event listener on 'chat-message' events emitted from Rust
     throw new Error("TauriTransport not yet implemented");
