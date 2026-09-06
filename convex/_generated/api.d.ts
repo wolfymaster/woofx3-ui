@@ -44,6 +44,7 @@ import type * as lib_engineSync_steps_actions from "../lib/engineSync/steps/acti
 import type * as lib_engineSync_steps_commands from "../lib/engineSync/steps/commands.js";
 import type * as lib_engineSync_steps_functions from "../lib/engineSync/steps/functions.js";
 import type * as lib_engineSync_steps_groups from "../lib/engineSync/steps/groups.js";
+import type * as lib_engineSync_steps_resources from "../lib/engineSync/steps/resources.js";
 import type * as lib_engineSync_steps_scenes from "../lib/engineSync/steps/scenes.js";
 import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/triggers.js";
 import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widgets.js";
@@ -68,6 +69,7 @@ import type * as migrations_backfillAssetKeys from "../migrations/backfillAssetK
 import type * as moduleAssets from "../moduleAssets.js";
 import type * as moduleDetail from "../moduleDetail.js";
 import type * as moduleEngine from "../moduleEngine.js";
+import type * as moduleFeatured from "../moduleFeatured.js";
 import type * as moduleFunctions from "../moduleFunctions.js";
 import type * as moduleIntegrationState from "../moduleIntegrationState.js";
 import type * as moduleManifestSync from "../moduleManifestSync.js";
@@ -79,6 +81,7 @@ import type * as moduleWebhook from "../moduleWebhook.js";
 import type * as moduleWidgets from "../moduleWidgets.js";
 import type * as obsCommands from "../obsCommands.js";
 import type * as obsSceneConfigs from "../obsSceneConfigs.js";
+import type * as platformRealtime from "../platformRealtime.js";
 import type * as registration from "../registration.js";
 import type * as sceneActions from "../sceneActions.js";
 import type * as sceneSlots from "../sceneSlots.js";
@@ -144,6 +147,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/commands": typeof lib_engineSync_steps_commands;
   "lib/engineSync/steps/functions": typeof lib_engineSync_steps_functions;
   "lib/engineSync/steps/groups": typeof lib_engineSync_steps_groups;
+  "lib/engineSync/steps/resources": typeof lib_engineSync_steps_resources;
   "lib/engineSync/steps/scenes": typeof lib_engineSync_steps_scenes;
   "lib/engineSync/steps/triggers": typeof lib_engineSync_steps_triggers;
   "lib/engineSync/steps/widgets": typeof lib_engineSync_steps_widgets;
@@ -168,6 +172,7 @@ declare const fullApi: ApiFromModules<{
   moduleAssets: typeof moduleAssets;
   moduleDetail: typeof moduleDetail;
   moduleEngine: typeof moduleEngine;
+  moduleFeatured: typeof moduleFeatured;
   moduleFunctions: typeof moduleFunctions;
   moduleIntegrationState: typeof moduleIntegrationState;
   moduleManifestSync: typeof moduleManifestSync;
@@ -179,6 +184,7 @@ declare const fullApi: ApiFromModules<{
   moduleWidgets: typeof moduleWidgets;
   obsCommands: typeof obsCommands;
   obsSceneConfigs: typeof obsSceneConfigs;
+  platformRealtime: typeof platformRealtime;
   registration: typeof registration;
   sceneActions: typeof sceneActions;
   sceneSlots: typeof sceneSlots;
