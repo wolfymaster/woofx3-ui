@@ -19,7 +19,7 @@ interface StepConfigPanelProps {
   catalogActions: CatalogActionRow[];
   catalogLoading: boolean;
   existingStepIds: ReadonlySet<string>;
-  /** Variables the currently-selected action step can reference — see computeAvailableVariables. */
+  /** Variables the currently-selected step can reference — see computeAvailableVariables. */
   availableVariables: VariableOption[];
   onUpdateTriggerConditions: (conditions: ConditionConfig[]) => void;
   onUpdateActionParameters: (id: string, parameters: Record<string, unknown>) => void;
@@ -152,9 +152,11 @@ function ActionConfigPanel({
 
 function ConditionConfigPanel({
   node,
+  availableVariables,
   onUpdateConditionConditions,
 }: {
   node: ConditionNode;
+  availableVariables: VariableOption[];
   onUpdateConditionConditions: (id: string, conditions: ConditionConfig[]) => void;
 }) {
   return (
@@ -165,6 +167,7 @@ function ConditionConfigPanel({
       <ConditionEditor
         conditions={node.conditions}
         onChange={(conditions) => onUpdateConditionConditions(node.id, conditions)}
+        availableVariables={availableVariables}
       />
     </div>
   );
@@ -172,12 +175,20 @@ function ConditionConfigPanel({
 
 function WaitConfigPanel({
   node,
+  availableVariables,
   onUpdateWaitConfig,
 }: {
   node: WaitNode;
+  availableVariables: VariableOption[];
   onUpdateWaitConfig: (id: string, wait: WaitConfig) => void;
 }) {
-  return <WaitEditor wait={node.wait} onChange={(wait) => onUpdateWaitConfig(node.id, wait)} />;
+  return (
+    <WaitEditor
+      wait={node.wait}
+      onChange={(wait) => onUpdateWaitConfig(node.id, wait)}
+      availableVariables={availableVariables}
+    />
+  );
 }
 
 export function StepConfigPanel({
@@ -214,7 +225,15 @@ export function StepConfigPanel({
     );
   }
   if (node.type === "condition") {
-    return <ConditionConfigPanel node={node} onUpdateConditionConditions={onUpdateConditionConditions} />;
+    return (
+      <ConditionConfigPanel
+        node={node}
+        availableVariables={availableVariables}
+        onUpdateConditionConditions={onUpdateConditionConditions}
+      />
+    );
   }
-  return <WaitConfigPanel node={node} onUpdateWaitConfig={onUpdateWaitConfig} />;
+  return (
+    <WaitConfigPanel node={node} availableVariables={availableVariables} onUpdateWaitConfig={onUpdateWaitConfig} />
+  );
 }
