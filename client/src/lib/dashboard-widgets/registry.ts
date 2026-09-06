@@ -1,7 +1,9 @@
-import { Grid3x3, Radio, Tv, Workflow, Zap } from "lucide-react";
+import { Activity, Grid3x3, NotebookPen, Radio, Tv, Workflow, Zap } from "lucide-react";
 import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
+import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
+import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
 import { StreamStatusWidget } from "@/components/dashboard/widgets/stream-status";
 import { WorkflowRunsModule } from "@/components/dashboard/widgets/workflow-runs";
 import type { DashboardWidgetCategory, DashboardWidgetDefinition } from "./types";
@@ -45,6 +47,22 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     component: WorkflowRunsModule,
   },
   {
+    type: "stream-stats",
+    label: "Stream Stats",
+    description: "Viewers, uptime, category, and what's come in since the page loaded.",
+    icon: Activity,
+    category: "utility",
+    component: StreamStatsWidget,
+  },
+  {
+    type: "notes",
+    label: "Notes",
+    description: "A scratch pad for this stream — private to you, saved as you type.",
+    icon: NotebookPen,
+    category: "utility",
+    component: NotesWidget,
+  },
+  {
     type: "macro-pad",
     label: "Macro Pad",
     description: "One-click buttons for chat commands, workflows, and HTTP requests.",
@@ -61,6 +79,7 @@ export function getDashboardWidget(type: string): DashboardWidgetDefinition | un
 export const dashboardWidgetCategoryLabels: Record<DashboardWidgetCategory, string> = {
   stream: "Stream",
   automation: "Automation",
+  utility: "Utility",
 };
 
 export function dashboardWidgetsByCategory(): Array<{
@@ -68,7 +87,7 @@ export function dashboardWidgetsByCategory(): Array<{
   label: string;
   widgets: DashboardWidgetDefinition[];
 }> {
-  const categories: DashboardWidgetCategory[] = ["stream", "automation"];
+  const categories: DashboardWidgetCategory[] = ["stream", "automation", "utility"];
   return categories.map((category) => ({
     category,
     label: dashboardWidgetCategoryLabels[category],
