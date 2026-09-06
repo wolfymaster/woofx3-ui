@@ -1,13 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Play, AlertCircle, CheckCircle2, RefreshCw, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
-import { transport } from '@/lib/transport';
-import type { WorkflowRun } from '@/lib/transport';
-import { useInstance } from '@/hooks/use-instance';
+import { AlertCircle, CheckCircle2, Loader2, Play, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useInstance } from "@/hooks/use-instance";
+import type { WorkflowRun } from "@/lib/transport";
+import { transport } from "@/lib/transport";
+import { cn } from "@/lib/utils";
 
 function formatDuration(start: Date, end?: Date): string {
   const ms = (end ?? new Date()).getTime() - start.getTime();
@@ -23,12 +22,15 @@ function formatTimeAgo(date: Date): string {
   return `${Math.floor(seconds / 3600)}h ago`;
 }
 
-const statusConfig: Record<string, { icon: typeof Loader2; color: string; bg: string; label: string; animate: boolean }> = {
-  pending:   { icon: Loader2,      color: 'text-blue-400',  bg: 'bg-blue-400/10',  label: 'Pending',   animate: true },
-  running:   { icon: Loader2,      color: 'text-blue-500',  bg: 'bg-blue-500/10',  label: 'Running',   animate: true },
-  completed: { icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10', label: 'Success',   animate: false },
-  failed:    { icon: AlertCircle,  color: 'text-red-500',   bg: 'bg-red-500/10',   label: 'Failed',    animate: false },
-  cancelled: { icon: AlertCircle,  color: 'text-gray-500',  bg: 'bg-gray-500/10',  label: 'Cancelled', animate: false },
+const statusConfig: Record<
+  string,
+  { icon: typeof Loader2; color: string; bg: string; label: string; animate: boolean }
+> = {
+  pending: { icon: Loader2, color: "text-blue-400", bg: "bg-blue-400/10", label: "Pending", animate: true },
+  running: { icon: Loader2, color: "text-blue-500", bg: "bg-blue-500/10", label: "Running", animate: true },
+  completed: { icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10", label: "Success", animate: false },
+  failed: { icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10", label: "Failed", animate: false },
+  cancelled: { icon: AlertCircle, color: "text-gray-500", bg: "bg-gray-500/10", label: "Cancelled", animate: false },
 };
 
 function WorkflowRunItem({ run }: { run: WorkflowRun }) {
@@ -40,13 +42,13 @@ function WorkflowRunItem({ run }: { run: WorkflowRun }) {
       className="flex items-center gap-3 p-2.5 rounded-md hover:bg-muted/50 transition-colors"
       data-testid={`workflow-run-${run.id}`}
     >
-      <div className={cn('h-8 w-8 rounded-md flex items-center justify-center shrink-0', config.bg)}>
-        <StatusIcon className={cn('h-4 w-4', config.color, config.animate && 'animate-spin')} />
+      <div className={cn("h-8 w-8 rounded-md flex items-center justify-center shrink-0", config.bg)}>
+        <StatusIcon className={cn("h-4 w-4", config.color, config.animate && "animate-spin")} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{run.workflowName}</p>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span>{run.triggeredBy ?? 'manual'}</span>
+          <span>{run.triggeredBy ?? "manual"}</span>
           <span>·</span>
           <span>{formatTimeAgo(run.startedAt)}</span>
           {run.completedAt && (
@@ -57,22 +59,9 @@ function WorkflowRunItem({ run }: { run: WorkflowRun }) {
           )}
         </div>
       </div>
-      <Badge variant="secondary" className={cn('text-[10px] shrink-0', config.color)}>
+      <Badge variant="secondary" className={cn("text-[10px] shrink-0", config.color)}>
         {config.label}
       </Badge>
-    </div>
-  );
-}
-
-function WorkflowRunSkeleton() {
-  return (
-    <div className="flex items-center gap-3 p-2.5">
-      <Skeleton className="h-8 w-8 rounded-md" />
-      <div className="flex-1">
-        <Skeleton className="h-4 w-32 mb-1" />
-        <Skeleton className="h-3 w-24" />
-      </div>
-      <Skeleton className="h-5 w-16" />
     </div>
   );
 }
@@ -86,7 +75,10 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Subscribe to workflow runs via transport
+  // Subscribe to workflow runs via transport. Depends on instance?._id (not
+  // the instance object) to avoid re-subscribing on every reference change;
+  // refreshKey is a deliberate re-run trigger for the manual refresh button.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useEffect(() => {
     if (!instance) return;
     const instanceId = instance._id;
@@ -112,14 +104,17 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold">Workflow Runs</span>
           <Badge variant="secondary" className="text-xs">
-            {runs.filter((r) => r.status === 'running' || r.status === 'pending').length} active
+            {runs.filter((r) => r.status === "running" || r.status === "pending").length} active
           </Badge>
         </div>
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() => { setRuns([]); setRefreshKey((k) => k + 1); }}
+          onClick={() => {
+            setRuns([]);
+            setRefreshKey((k) => k + 1);
+          }}
         >
           <RefreshCw className="h-4 w-4" />
         </Button>
@@ -130,14 +125,10 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
           {runs.length === 0 ? (
             <div className="py-8 text-center">
               <Play className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
-              <p className="text-sm text-muted-foreground">
-                {instance ? 'No recent runs' : 'No instance connected'}
-              </p>
+              <p className="text-sm text-muted-foreground">{instance ? "No recent runs" : "No instance connected"}</p>
             </div>
           ) : (
-            runs.map((run) => (
-              <WorkflowRunItem key={run.id} run={run} />
-            ))
+            runs.map((run) => <WorkflowRunItem key={run.id} run={run} />)
           )}
         </div>
       </ScrollArea>

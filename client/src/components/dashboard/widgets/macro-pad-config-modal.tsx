@@ -1,11 +1,6 @@
-import { useState, useEffect } from 'react';
-import {
-  MessageSquare,
-  Workflow as WorkflowIcon,
-  Globe,
-  X,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Globe, MessageSquare, Workflow as WorkflowIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,19 +8,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import type { MacroButton } from './macro-pad-module';
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import type { MacroButton } from "./macro-pad";
+
 /**
  * Minimal shape the picker needs — only `id` + `name` are read. Sourced from
  * `api.moduleEngine.listWorkflows`, which projects the engine's
@@ -41,45 +31,42 @@ interface MacroConfigModalProps {
   onSave: (macro: MacroButton) => void;
 }
 
-export function MacroConfigModal({
-  open,
-  onOpenChange,
-  macro,
-  workflows,
-  onSave,
-}: MacroConfigModalProps) {
-  const [label, setLabel] = useState('');
-  const [icon, setIcon] = useState<string>('');
-  const [type, setType] = useState<'chat-command' | 'trigger-workflow' | 'http-request'>('chat-command');
-  const [command, setCommand] = useState('');
-  const [workflowId, setWorkflowId] = useState('');
-  const [httpUrl, setHttpUrl] = useState('');
-  const [httpMethod, setHttpMethod] = useState<'GET' | 'POST' | 'PUT' | 'DELETE'>('GET');
-  const [httpHeaders, setHttpHeaders] = useState('');
-  const [httpBody, setHttpBody] = useState('');
+export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave }: MacroConfigModalProps) {
+  const [label, setLabel] = useState("");
+  const [icon, setIcon] = useState<string>("");
+  const [type, setType] = useState<"chat-command" | "trigger-workflow" | "http-request">("chat-command");
+  const [command, setCommand] = useState("");
+  const [workflowId, setWorkflowId] = useState("");
+  const [httpUrl, setHttpUrl] = useState("");
+  const [httpMethod, setHttpMethod] = useState<"GET" | "POST" | "PUT" | "DELETE">("GET");
+  const [httpHeaders, setHttpHeaders] = useState("");
+  const [httpBody, setHttpBody] = useState("");
 
+  // `open` deliberately triggers the reset branch even when `macro` (e.g.
+  // repeatedly null for "Add Macro") doesn't change identity between opens.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: open is a deliberate re-run trigger for the form reset
   useEffect(() => {
     if (macro) {
       setLabel(macro.label);
-      setIcon(macro.icon || '');
+      setIcon(macro.icon || "");
       setType(macro.type);
-      setCommand(macro.config.command || '');
-      setWorkflowId(macro.config.workflowId || '');
-      setHttpUrl(macro.config.url || '');
-      setHttpMethod(macro.config.method || 'GET');
+      setCommand(macro.config.command || "");
+      setWorkflowId(macro.config.workflowId || "");
+      setHttpUrl(macro.config.url || "");
+      setHttpMethod(macro.config.method || "GET");
       setHttpHeaders(JSON.stringify(macro.config.headers || {}, null, 2));
-      setHttpBody(macro.config.body || '');
+      setHttpBody(macro.config.body || "");
     } else {
       // Reset to defaults
-      setLabel('');
-      setIcon('');
-      setType('chat-command');
-      setCommand('');
-      setWorkflowId('');
-      setHttpUrl('');
-      setHttpMethod('GET');
-      setHttpHeaders('');
-      setHttpBody('');
+      setLabel("");
+      setIcon("");
+      setType("chat-command");
+      setCommand("");
+      setWorkflowId("");
+      setHttpUrl("");
+      setHttpMethod("GET");
+      setHttpHeaders("");
+      setHttpBody("");
     }
   }, [macro, open]);
 
@@ -94,9 +81,9 @@ export function MacroConfigModal({
       icon: icon || undefined,
       type,
       config: {
-        ...(type === 'chat-command' && { command }),
-        ...(type === 'trigger-workflow' && { workflowId }),
-        ...(type === 'http-request' && {
+        ...(type === "chat-command" && { command }),
+        ...(type === "trigger-workflow" && { workflowId }),
+        ...(type === "http-request" && {
           url: httpUrl,
           method: httpMethod,
           headers: httpHeaders ? JSON.parse(httpHeaders) : {},
@@ -109,19 +96,17 @@ export function MacroConfigModal({
   };
 
   const iconOptions = [
-    { value: 'message', label: 'Message', icon: MessageSquare },
-    { value: 'workflow', label: 'Workflow', icon: WorkflowIcon },
-    { value: 'globe', label: 'Globe', icon: Globe },
+    { value: "message", label: "Message", icon: MessageSquare },
+    { value: "workflow", label: "Workflow", icon: WorkflowIcon },
+    { value: "globe", label: "Globe", icon: Globe },
   ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{macro ? 'Edit Macro' : 'Add Macro'}</DialogTitle>
-          <DialogDescription>
-            Configure a macro button that can execute actions when pressed.
-          </DialogDescription>
+          <DialogTitle>{macro ? "Edit Macro" : "Add Macro"}</DialogTitle>
+          <DialogDescription>Configure a macro button that can execute actions when pressed.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -188,9 +173,7 @@ export function MacroConfigModal({
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  The chat command to send when this macro is executed.
-                </p>
+                <p className="text-xs text-muted-foreground">The chat command to send when this macro is executed.</p>
               </div>
             </TabsContent>
 
@@ -209,9 +192,7 @@ export function MacroConfigModal({
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground">
-                  The workflow to trigger when this macro is executed.
-                </p>
+                <p className="text-xs text-muted-foreground">The workflow to trigger when this macro is executed.</p>
               </div>
             </TabsContent>
 
@@ -271,7 +252,7 @@ export function MacroConfigModal({
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={!label.trim()}>
-            {macro ? 'Save Changes' : 'Add Macro'}
+            {macro ? "Save Changes" : "Add Macro"}
           </Button>
         </DialogFooter>
       </DialogContent>

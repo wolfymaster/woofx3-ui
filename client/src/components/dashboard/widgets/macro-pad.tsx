@@ -1,13 +1,12 @@
-import { useState, useCallback, useEffect } from "react";
+import { api } from "@convex/_generated/api";
 import { useAction } from "convex/react";
-import { Plus, Edit, Trash2, Pencil, MessageSquare, Workflow, Globe, Loader2 } from "lucide-react";
+import { Edit, Globe, Loader2, MessageSquare, Pencil, Plus, Trash2, Workflow } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-import { transport } from "@/lib/transport";
 import { useInstance } from "@/hooks/use-instance";
-import { api } from "@convex/_generated/api";
-import { MacroConfigModal } from "./macro-config-modal";
+import { cn } from "@/lib/utils";
+import { MacroConfigModal } from "./macro-pad-config-modal";
 
 export interface MacroButton {
   id: string;
@@ -43,6 +42,7 @@ export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) 
   const listEngineWorkflows = useAction(api.moduleEngine.listWorkflows);
 
   // Load workflows via Convex
+  // biome-ignore lint/correctness/useExhaustiveDependencies: depends on instance?._id (not the instance object) so it doesn't re-fetch on every reference change
   useEffect(() => {
     if (!instance) return;
     listEngineWorkflows({ instanceId: instance._id }).then(setWorkflows).catch(console.error);
