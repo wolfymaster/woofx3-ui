@@ -15,6 +15,7 @@ export const TWITCH_INTEGRATION_SCOPES = [
   "channel:read:redemptions",
   "channel:read:subscriptions",
   "clips:edit",
+  "moderator:manage:announcements",
   "moderator:manage:blocked_terms",
   "moderator:manage:shoutouts",
   "moderator:manage:banned_users",

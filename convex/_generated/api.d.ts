@@ -95,6 +95,7 @@ import type * as streamStatus from "../streamStatus.js";
 import type * as transientEvents from "../transientEvents.js";
 import type * as triggerDefinitions from "../triggerDefinitions.js";
 import type * as twitchAuth from "../twitchAuth.js";
+import type * as twitchBroadcast from "../twitchBroadcast.js";
 import type * as twitchIntegration from "../twitchIntegration.js";
 import type * as users from "../users.js";
 import type * as webhookAuth from "../webhookAuth.js";
@@ -199,6 +200,7 @@ declare const fullApi: ApiFromModules<{
   transientEvents: typeof transientEvents;
   triggerDefinitions: typeof triggerDefinitions;
   twitchAuth: typeof twitchAuth;
+  twitchBroadcast: typeof twitchBroadcast;
   twitchIntegration: typeof twitchIntegration;
   users: typeof users;
   webhookAuth: typeof webhookAuth;
