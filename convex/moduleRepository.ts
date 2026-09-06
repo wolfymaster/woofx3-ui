@@ -39,6 +39,13 @@ export const get = query({
   },
 });
 
+export const getInternal = internalQuery({
+  args: { moduleId: v.id("moduleRepository") },
+  handler: async (ctx, args) => {
+    return ctx.db.get(args.moduleId);
+  },
+});
+
 /**
  * Upload the zip to storage and deliver it to the engine.
  * Creates (or refreshes) a moduleRepository record in "pending" status so the

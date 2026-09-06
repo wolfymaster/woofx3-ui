@@ -4,7 +4,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action, internalAction } from "./_generated/server";
-import { createEngineRpcSession, engineApiUrl, type EngineApi } from "./lib/engineInstanceUrl";
+import { createEngineRpcSession, type EngineApi, engineApiUrl } from "./lib/engineInstanceUrl";
 
 /**
  * Map an engine RPC error to a user-friendly message. The capnweb layer throws
@@ -23,6 +23,19 @@ function toFriendlyEngineError(err: unknown, instanceUrl: string): Error {
     return err;
   }
   return new Error(String(err));
+}
+
+/**
+ * The engine throws this synchronously (before any webhook fires) when
+ * uninstallModule can't resolve the moduleKey to an installed module. That
+ * means the engine already has no record of it — our moduleRepository row is
+ * stale, most likely from a prior uninstall that succeeded on the engine but
+ * whose webhook never landed (or a manual removal on the engine side). Treat
+ * it as "already gone" and reconcile rather than surfacing a failure the user
+ * can't act on.
+ */
+function isModuleNotFoundOnEngine(err: unknown): boolean {
+  return err instanceof Error && /no module found for moduleKey/i.test(err.message);
 }
 
 /**
@@ -121,6 +134,19 @@ export const requestModuleUninstall = action({
       await rpc.uninstallModule(moduleKey);
       return { moduleKey };
     } catch (err) {
+      if (isModuleNotFoundOnEngine(err)) {
+        // The engine has no record of this module, so there's nothing left to
+        // uninstall — reconcile by cascade-deleting our stale record and
+        // reporting success, same as a normal module.deleted webhook would.
+        await ctx.runMutation(internal.moduleWebhook.processModuleDeleted, {
+          instanceId,
+          correlationKey: moduleKey,
+          moduleName: module.name,
+          moduleVersion: module.version,
+        });
+        return { moduleKey };
+      }
+
       const friendly = toFriendlyEngineError(err, bundle.url);
       await ctx.runMutation(internal.transientEvents.emit, {
         instanceId,
@@ -132,6 +158,53 @@ export const requestModuleUninstall = action({
       });
       throw friendly;
     }
+  },
+});
+
+/**
+ * Reconcile an uninstall the UI gave up waiting on (client-side timeout with
+ * no module.deleted/module.delete_failed webhook received). Asks the engine
+ * directly whether the module is still installed rather than trusting a
+ * webhook that may have been dropped in transit, arrived after a transient
+ * Convex-side failure, or simply outlasted the engine's single delivery
+ * retry — all of which otherwise leave the record stuck in Convex even
+ * though the engine finished the removal.
+ */
+export const reconcileUninstall = action({
+  args: { instanceId: v.id("instances"), moduleId: v.id("moduleRepository"), correlationKey: v.string() },
+  handler: async (ctx, { instanceId, moduleId, correlationKey }): Promise<{ stillInstalled: boolean }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const bundle = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, { instanceId, userId });
+    if (!bundle) {
+      throw new Error("Not authorized or instance not found");
+    }
+    if (!bundle.clientId || !bundle.clientSecret) {
+      throw new Error("Instance is not registered with the engine");
+    }
+
+    const module = await ctx.runQuery(api.moduleRepository.get, { moduleId });
+    if (!module) {
+      // Already reconciled (or removed) by the time we got here.
+      return { stillInstalled: false };
+    }
+
+    const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const engineModules = await rpc.listEngineModules();
+    const stillInstalled = (engineModules ?? []).some((m) => m.name === module.name);
+
+    if (!stillInstalled) {
+      await ctx.runMutation(internal.moduleWebhook.reconcileUninstalledModule, {
+        instanceId,
+        moduleId,
+        correlationKey,
+      });
+    }
+
+    return { stillInstalled };
   },
 });
 
@@ -156,32 +229,6 @@ export const setEngineModuleState = action({
 
     await rpc.setEngineModuleState(name, state);
     return { success: true };
-  },
-});
-
-/**
- * Send a chat message via the engine. Proxies to rpc.sendChatMessage which
- * takes (accountId, message) — we pass instanceId as the accountId since
- * the engine's concept of "account" maps 1:1 to a Convex instance today.
- */
-export const sendChatMessage = action({
-  args: { instanceId: v.id("instances"), message: v.string() },
-  handler: async (ctx, { instanceId, message }): Promise<{ success: boolean; messageId: string }> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-
-    const bundle = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, { instanceId, userId });
-    if (!bundle) {
-      throw new Error("Not authorized or instance not found");
-    }
-    if (!bundle.clientId || !bundle.clientSecret) {
-      throw new Error("Instance is not registered with the engine");
-    }
-
-    const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    return rpc.sendChatMessage(instanceId, message);
   },
 });
 
