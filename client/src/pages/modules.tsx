@@ -2,37 +2,68 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { useAction, useQuery } from "convex/react";
-import { Check, Loader2, Puzzle, X, XCircle } from "lucide-react";
+import { Check, Loader2, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
-import { PageHeader } from "@/components/layout/page-header";
+import { useLocation, useSearch } from "wouter";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
-import { ModulesSidebar, type SelectedModule } from "@/components/modules/modules-sidebar";
+import { ModuleSidebar } from "@/components/modules/module-sidebar";
+import { ModuleStore } from "@/components/modules/module-store";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useInstance } from "@/hooks/use-instance";
+import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
+
+interface ModuleListItem {
+  _id: Id<"moduleRepository">;
+  name: string;
+  description: string;
+  version: string;
+  tags: string[];
+  author: string;
+  category: string;
+  moduleKey?: string;
+  isInstalled: boolean;
+  status?: "pending" | "delivering" | "installed" | "failed";
+}
+
+type SelectedModule =
+  | { source: "installed"; module: ModuleListItem }
+  | { source: "marketplace"; marketplaceId: string };
 
 export default function Modules() {
   const { instance } = useInstance();
   const [location, navigate] = useLocation();
   const segments = location.split("/").filter(Boolean);
-  const routeModuleId = segments[0] === "modules" && segments.length >= 2 && segments[1] !== "install" && segments[1] !== "installed"
-    ? segments[1]
-    : undefined;
+  const routeModuleId =
+    segments[0] === "modules" && segments.length >= 2 && segments[1] !== "install" && segments[1] !== "installed"
+      ? segments[1]
+      : undefined;
 
-  const [oauthResult, setOauthResult] = useState<{ integration: string; status: string; message: string | null } | null>(
-    () => {
-      const params = new URLSearchParams(window.location.search);
-      const integration = params.get("integration");
-      const status = params.get("status");
-      if (!integration || !status) {
-        return null;
-      }
-      return { integration, status, message: params.get("message") };
-    }
+  const searchString = useSearch();
+  const selectedCategory = new URLSearchParams(searchString).get("category") || "all";
+  const handleSelectCategory = useCallback(
+    (category: string) => {
+      navigate(category === "all" ? "/modules" : `/modules?category=${encodeURIComponent(category)}`);
+    },
+    [navigate]
   );
+  const catalog = useMarketplaceCatalog();
+
+  const [oauthResult, setOauthResult] = useState<{
+    integration: string;
+    status: string;
+    message: string | null;
+  } | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const integration = params.get("integration");
+    const status = params.get("status");
+    if (!integration || !status) {
+      return null;
+    }
+    return { integration, status, message: params.get("message") };
+  });
 
   const oauthUrlStrippedRef = useRef(false);
   useEffect(() => {
@@ -50,32 +81,6 @@ export default function Modules() {
     version: string;
     moduleKey?: string;
   } | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const isSearching = searchQuery.trim().length > 0;
-
-  const handleSelectModule = useCallback(
-    (selection: SelectedModule | null) => {
-      if (!selection) {
-        navigate("/modules");
-        return;
-      }
-      if (selection.source === "marketplace") {
-        navigate(`/modules/${selection.marketplaceId}`);
-      } else {
-        const mk = selection.module.moduleKey;
-        if (mk) {
-          const parts = mk.split(":");
-          if (parts[0]) {
-            navigate(`/modules/${parts[0]}`);
-            return;
-          }
-        }
-        navigate(`/modules/${selection.module._id}`);
-      }
-    },
-    [navigate]
-  );
-
   const [isInstalling, setIsInstalling] = useState(false);
   const [installError, setInstallError] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
@@ -107,6 +112,22 @@ export default function Modules() {
   );
 
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
+
+  const handleSelectInstalled = useCallback(
+    (moduleId: Id<"moduleRepository">) => {
+      const target = (repoModules || []).find((m) => m._id === moduleId);
+      const mk = target?.moduleKey;
+      if (mk) {
+        const parts = mk.split(":");
+        if (parts[0]) {
+          navigate(`/modules/${parts[0]}`);
+          return;
+        }
+      }
+      navigate(`/modules/${moduleId}`);
+    },
+    [navigate, repoModules]
+  );
 
   useEffect(() => {
     if (routeModuleId === undefined) {
@@ -183,20 +204,29 @@ export default function Modules() {
     return () => clearTimeout(timer);
   }, [isInstalling, pendingModuleKey]);
 
+  // A stable primitive (not the selectedModule object itself, which gets a new reference on every
+  // reactive repoModules update even when the logical selection hasn't changed) — keeps the fetch
+  // below from re-running the slow getModuleDetail action on every unrelated moduleRepository write.
+  const detailModuleId = useMemo(
+    () =>
+      selectedModule
+        ? selectedModule.source === "marketplace"
+          ? selectedModule.marketplaceId
+          : selectedModule.module._id
+        : null,
+    [selectedModule]
+  );
+
   useEffect(() => {
-    if (!selectedModule || !instance) {
+    if (!detailModuleId || !instance) {
       setModuleDetail(null);
       return;
     }
-    const id =
-      selectedModule.source === "marketplace"
-        ? selectedModule.marketplaceId
-        : selectedModule.module._id;
     setModuleDetailLoading(true);
     setModuleDetail(null);
     setModuleDetailError(null);
     let cancelled = false;
-    void getModuleDetail({ instanceId: instance._id, moduleId: id })
+    void getModuleDetail({ instanceId: instance._id, moduleId: detailModuleId })
       .then((detail) => {
         if (!cancelled) {
           setModuleDetail(detail);
@@ -215,7 +245,7 @@ export default function Modules() {
     return () => {
       cancelled = true;
     };
-  }, [selectedModule, instance, getModuleDetail]);
+  }, [detailModuleId, instance, getModuleDetail]);
 
   const handleMarketplaceInstall = useCallback(async () => {
     if (!instance || selectedModule?.source !== "marketplace") {
@@ -242,8 +272,6 @@ export default function Modules() {
     const mpId = selectedModule.marketplaceId;
     return repoModules.find((m) => m.moduleKey?.startsWith(mpId + ":")) ?? null;
   }, [selectedModule, repoModules]);
-
-  const isLoading = !instance || repoModules === undefined;
 
   const handleDelete = (moduleId: Id<"moduleRepository">) => {
     const target = (repoModules || []).find((m) => m._id === moduleId);
@@ -293,21 +321,40 @@ export default function Modules() {
     };
   }, [moduleDetail]);
 
+  // Installed-module metadata is already loaded locally (it's the same data the sidebar renders),
+  // so the panel header can show immediately on click instead of waiting on getModuleDetail — avoids
+  // a flash back to the storefront grid while the richer detail (triggers/readme/etc.) is still loading.
+  const fallbackMeta: ModuleDetailMeta | null = useMemo(() => {
+    if (selectedModule?.source !== "installed") {
+      return null;
+    }
+    const m = selectedModule.module;
+    return {
+      name: m.name,
+      description: m.description,
+      version: m.version,
+      author: m.author,
+      category: m.category,
+      tags: m.tags,
+      isInstalled: m.isInstalled,
+      identifier: m.moduleKey?.split(":")[0],
+    };
+  }, [selectedModule]);
+
+  const meta = detailProps?.meta ?? fallbackMeta;
+
   return (
     <div className="flex h-full overflow-hidden max-w-[1600px] w-full">
-      <ModulesSidebar
-        selected={selectedModule}
-        onSelectModule={handleSelectModule}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+      <ModuleSidebar
+        catalog={catalog.list}
+        selectedCategory={selectedCategory}
+        onSelectCategory={handleSelectCategory}
+        selectedId={selectedModule?.source === "installed" ? selectedModule.module._id : null}
+        onSelectModule={handleSelectInstalled}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {isSearching ? (
-          <div className="flex-1 overflow-auto p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
-            <PageHeader title="Search" description={`Results for "${searchQuery}"`} />
-          </div>
-        ) : selectedModule && detailProps ? (
+        {selectedModule ? (
           <>
             {moduleDetailError ? (
               <div className="p-6 overflow-auto">
@@ -324,7 +371,7 @@ export default function Modules() {
                   </CardContent>
                 </Card>
               </div>
-            ) : (
+            ) : meta ? (
               <div className="flex-1 min-h-0 flex flex-col">
                 {oauthResult && (
                   <div
@@ -351,18 +398,18 @@ export default function Modules() {
                 )}
                 <div className="flex-1 min-h-0">
                   <ModuleDetailPanel
-                    module={detailProps.meta}
-                    triggers={detailProps.triggers}
-                    actions={detailProps.actions}
-                    functions={detailProps.functions}
-                    widgets={detailProps.widgets}
-                    workflows={detailProps.workflows}
-                    loading={moduleDetailLoading}
+                    module={meta}
+                    triggers={detailProps?.triggers}
+                    actions={detailProps?.actions}
+                    functions={detailProps?.functions}
+                    widgets={detailProps?.widgets}
+                    workflows={detailProps?.workflows}
+                    loading={moduleDetailLoading || !detailProps}
                     onBack={() => navigate("/modules")}
                     instanceId={instance?._id}
-                    moduleDbId={detailProps.moduleDbId}
-                    manifestSettings={detailProps.manifestSettings}
-                    manifestResourceKinds={detailProps.manifestResourceKinds}
+                    moduleDbId={detailProps?.moduleDbId}
+                    manifestSettings={detailProps?.manifestSettings}
+                    manifestResourceKinds={detailProps?.manifestResourceKinds}
                     onRemove={
                       selectedModule.source === "installed"
                         ? () => handleDelete(selectedModule.module._id)
@@ -373,8 +420,8 @@ export default function Modules() {
                     onInstall={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
                     onUpdate={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
                     isInstalling={isInstalling}
-                    installDisabled={detailProps.meta.isInstalled}
-                    installDisabledReason={detailProps.meta.isInstalled ? "Already installed" : undefined}
+                    installDisabled={meta.isInstalled}
+                    installDisabledReason={meta.isInstalled ? "Already installed" : undefined}
                     installProgressMessage={isInstalling ? (installEvent?.message ?? null) : null}
                     installSucceeded={installEvent?.status === "success"}
                     installError={installError}
@@ -382,27 +429,14 @@ export default function Modules() {
                   />
                 </div>
               </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
             )}
           </>
         ) : (
-          <div className="flex-1 overflow-auto p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
-            <PageHeader title="Modules" description="Browse and manage your stream automation modules." />
-
-            {isLoading ? (
-              <div className="flex items-center justify-center min-h-[40vh]">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="mt-8 flex flex-col items-center justify-center text-center min-h-[40vh]">
-                <Puzzle className="h-16 w-16 mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-semibold mb-2">Select a module</h3>
-                <p className="text-sm text-muted-foreground max-w-md">
-                  Choose a module from the sidebar to view its details, available triggers and actions, and installation
-                  status.
-                </p>
-              </div>
-            )}
-          </div>
+          <ModuleStore catalog={catalog} selectedCategory={selectedCategory} onSelectCategory={handleSelectCategory} />
         )}
       </div>
 
