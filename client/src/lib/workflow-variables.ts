@@ -93,6 +93,12 @@ export interface VariableOption {
   label: string;
   /** Which step (or "Trigger") this option came from, for grouping in the picker. */
   group: string;
+  /** Declared type of the referenced value, e.g. "string" | "number" | "boolean".
+   *  Comes from the catalog's own field definition — the engine already ships
+   *  it, so nothing here has to guess or maintain a parallel schema. */
+  type?: string;
+  /** Prose from the catalog field, when the module author wrote any. */
+  description?: string;
 }
 
 /**
@@ -146,6 +152,8 @@ export function computeAvailableVariables(
         value: `\${trigger.data.${field.eventPath}}`,
         label: field.label,
         group: "Trigger",
+        type: field.type,
+        description: field.description,
       });
     }
   }
@@ -161,6 +169,8 @@ export function computeAvailableVariables(
           value: `\${${step.id}.${field.id}}`,
           label: field.label,
           group,
+          type: field.type,
+          description: field.description,
         });
       }
     } else if (step.type === "condition") {
@@ -168,6 +178,8 @@ export function computeAvailableVariables(
         value: `\${${step.id}.result}`,
         label: "Condition result",
         group: "Condition",
+        type: "boolean",
+        description: "Whether this condition matched.",
       });
     }
   }

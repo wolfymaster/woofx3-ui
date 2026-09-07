@@ -73,7 +73,9 @@ export function VariableAwareInput({
       (opt) =>
         opt.label.toLowerCase().includes(q) ||
         opt.value.toLowerCase().includes(q) ||
-        opt.group.toLowerCase().includes(q)
+        opt.group.toLowerCase().includes(q) ||
+        (opt.type?.toLowerCase().includes(q) ?? false) ||
+        (opt.description?.toLowerCase().includes(q) ?? false)
     );
   }, [trigger, availableVariables]);
 
@@ -162,10 +164,20 @@ export function VariableAwareInput({
             }}
             data-testid={`variable-option-${option.value}`}
           >
-            <span className="font-mono text-xs text-muted-foreground">{option.value}</span>
+            <span className="flex w-full items-center gap-2">
+              <span className="font-mono text-xs text-muted-foreground truncate">{option.value}</span>
+              {option.type && (
+                <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                  {option.type}
+                </span>
+              )}
+            </span>
             <span>
               {option.label} <span className="text-xs text-muted-foreground">— {option.group}</span>
             </span>
+            {option.description && (
+              <span className="text-xs text-muted-foreground line-clamp-2">{option.description}</span>
+            )}
           </button>
         ))}
       </PopoverContent>
