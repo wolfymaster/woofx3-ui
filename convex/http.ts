@@ -794,6 +794,7 @@ http.route({
           engineGroupId: event.group.id,
           name: event.group.name,
           description: event.group.description,
+          isBuiltIn: event.group.isBuiltIn,
           engineCreatedAt: event.group.createdAt,
         });
         return corsJson({ success: true, type: event.type });

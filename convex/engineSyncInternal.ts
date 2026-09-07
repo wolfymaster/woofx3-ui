@@ -124,6 +124,7 @@ export const reconcileGroups = internalMutation({
         engineGroupId: v.string(),
         name: v.string(),
         description: v.string(),
+        isBuiltIn: v.optional(v.boolean()),
         engineCreatedAt: v.string(),
         members: v.array(v.string()),
       })
@@ -150,6 +151,7 @@ export const reconcileGroups = internalMutation({
         applicationId,
         name: snap.name,
         description: snap.description,
+        isBuiltIn: snap.isBuiltIn ?? false,
         engineCreatedAt: snap.engineCreatedAt,
         updatedAt: now,
       };

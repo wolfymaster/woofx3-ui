@@ -978,6 +978,13 @@ function GroupsTab({
 
   const usageCount = deleteTarget ? (usageByGroupId.get(deleteTarget.engineGroupId) ?? 0) : 0;
 
+  // Built-in groups are seeded by the engine and cannot be renamed or deleted.
+  // Membership of all but "everyone" is owned by the platform membership sync,
+  // so a hand edit is reverted on that chatter's next message — the UI offers a
+  // read-only roster instead of an editor that silently loses writes.
+  const builtInGroups = useMemo(() => groups.filter((g) => g.isBuiltIn), [groups]);
+  const customGroups = useMemo(() => groups.filter((g) => !g.isBuiltIn), [groups]);
+
   return (
     <div>
       <div className="flex items-center justify-end mb-6">
@@ -1026,53 +1033,41 @@ function GroupsTab({
           action={{ label: "Add Group", onClick: openCreateDialog }}
         />
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Used by</TableHead>
-                <TableHead className="w-[160px]">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {groups.map((group) => (
-                <TableRow key={group._id}>
-                  <TableCell className="font-medium">{group.name}</TableCell>
-                  <TableCell className="text-muted-foreground max-w-[320px]">
-                    {group.description ? truncate(group.description) : <span className="italic">—</span>}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary">
-                      {usageByGroupId.get(group.engineGroupId) ?? 0} command
-                      {(usageByGroupId.get(group.engineGroupId) ?? 0) === 1 ? "" : "s"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => setMembersTarget(group)}>
-                        <Users className="h-3.5 w-3.5 mr-1.5" />
-                        Members
-                      </Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(group)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => setDeleteTarget(group)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+        <div className="space-y-8">
+          {builtInGroups.length > 0 && (
+            <section>
+              <div className="mb-2">
+                <h3 className="text-sm font-semibold">Built-in</h3>
+                <p className="text-xs text-muted-foreground">
+                  Seeded automatically and kept up to date from chat. They can't be renamed, deleted, or edited by hand.
+                </p>
+              </div>
+              <GroupTable groups={builtInGroups} usageByGroupId={usageByGroupId} onViewMembers={setMembersTarget} />
+            </section>
+          )}
+
+          <section>
+            {builtInGroups.length > 0 && (
+              <div className="mb-2">
+                <h3 className="text-sm font-semibold">Custom</h3>
+                <p className="text-xs text-muted-foreground">Groups you create and whose members you manage.</p>
+              </div>
+            )}
+            {customGroups.length === 0 ? (
+              <Card className="p-6 text-center text-sm text-muted-foreground">
+                No custom groups yet. Create one to grant a set of usernames access to restricted commands.
+              </Card>
+            ) : (
+              <GroupTable
+                groups={customGroups}
+                usageByGroupId={usageByGroupId}
+                onViewMembers={setMembersTarget}
+                onEdit={openEditDialog}
+                onDelete={setDeleteTarget}
+              />
+            )}
+          </section>
+        </div>
       )}
 
       {/* Create / Edit dialog */}
@@ -1161,8 +1156,9 @@ function GroupsTab({
           <DialogHeader>
             <DialogTitle>{membersTarget?.name} members</DialogTitle>
             <DialogDescription>
-              Manage which Twitch usernames belong to this group. Membership is by username — there's no separate user
-              picker.
+              {membersTarget?.isBuiltIn
+                ? "Membership of this group is kept up to date from chat automatically. It's shown here for reference and can't be edited — a manual change would be reverted on that user's next message."
+                : "Manage which chat usernames belong to this group. Membership is by username — there's no separate user picker."}
             </DialogDescription>
           </DialogHeader>
           {membersTarget && instanceId && <GroupMembersEditor instanceId={instanceId} group={membersTarget} />}
@@ -1177,7 +1173,97 @@ function GroupsTab({
   );
 }
 
+/**
+ * One group table. Edit and delete are rendered only when a handler is passed,
+ * which is how built-in groups lose those affordances: the engine refuses both
+ * for them, and a button that always fails is worse than no button.
+ */
+function GroupTable({
+  groups,
+  usageByGroupId,
+  onViewMembers,
+  onEdit,
+  onDelete,
+}: {
+  groups: GroupDoc[];
+  usageByGroupId: Map<string, number>;
+  onViewMembers: (group: GroupDoc) => void;
+  onEdit?: (group: GroupDoc) => void;
+  onDelete?: (group: GroupDoc) => void;
+}) {
+  const editable = !!onEdit && !!onDelete;
+
+  return (
+    <Card>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Name</TableHead>
+            <TableHead>Description</TableHead>
+            <TableHead>Used by</TableHead>
+            <TableHead className={editable ? "w-[160px]" : "w-[120px]"}>Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groups.map((group) => {
+            const usage = usageByGroupId.get(group.engineGroupId) ?? 0;
+            // "everyone" matches every user implicitly through a wildcard and
+            // has no membership rows at all, so a roster view would be an
+            // empty list implying nobody is in it.
+            const hasRoster = group.name !== "everyone";
+            return (
+              <TableRow key={group._id} data-testid={`group-row-${group.engineGroupId}`}>
+                <TableCell className="font-medium">{group.name}</TableCell>
+                <TableCell className="text-muted-foreground max-w-[320px]">
+                  {group.description ? truncate(group.description) : <span className="italic">—</span>}
+                </TableCell>
+                <TableCell>
+                  <Badge variant="secondary">
+                    {usage} command{usage === 1 ? "" : "s"}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    {hasRoster ? (
+                      <Button variant="ghost" size="sm" onClick={() => onViewMembers(group)}>
+                        <Users className="h-3.5 w-3.5 mr-1.5" />
+                        {editable ? "Members" : "View"}
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground italic px-2">Everyone</span>
+                    )}
+                    {onEdit && (
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(group)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => onDelete(group)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
 function GroupMembersEditor({ instanceId, group }: { instanceId: Id<"instances">; group: GroupDoc }) {
+  // Built-in rosters are owned by the platform membership sync. The engine
+  // would accept a write here and then overwrite it on the chatter's next
+  // message, so the editing affordances are withheld rather than offered and
+  // silently undone.
+  const readOnly = !!group.isBuiltIn;
   const { toast } = useToast();
   const [usernameInput, setUsernameInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -1227,22 +1313,24 @@ function GroupMembersEditor({ instanceId, group }: { instanceId: Id<"instances">
 
   return (
     <div className="grid gap-3 py-2">
-      <div className="flex gap-2">
-        <Input
-          placeholder="username"
-          value={usernameInput}
-          onChange={(e) => setUsernameInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              handleAdd();
-            }
-          }}
-        />
-        <Button type="button" variant="outline" onClick={handleAdd} disabled={pending}>
-          Add
-        </Button>
-      </div>
+      {!readOnly && (
+        <div className="flex gap-2">
+          <Input
+            placeholder="username"
+            value={usernameInput}
+            onChange={(e) => setUsernameInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleAdd();
+              }
+            }}
+          />
+          <Button type="button" variant="outline" onClick={handleAdd} disabled={pending}>
+            Add
+          </Button>
+        </div>
+      )}
 
       <div className="max-h-64 overflow-y-auto">
         {members === undefined ? (
@@ -1252,21 +1340,25 @@ function GroupMembersEditor({ instanceId, group }: { instanceId: Id<"instances">
             ))}
           </div>
         ) : members.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic py-2">No members yet.</p>
+          <p className="text-sm text-muted-foreground italic py-2">
+            {readOnly ? "Nobody in this group right now." : "No members yet."}
+          </p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {members.map((username) => (
-              <Badge key={username} variant="secondary" className="gap-1 pr-1">
+              <Badge key={username} variant="secondary" className={readOnly ? "" : "gap-1 pr-1"}>
                 {username}
-                <button
-                  type="button"
-                  onClick={() => handleRemove(username)}
-                  className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
-                  aria-label={`Remove ${username}`}
-                  disabled={pending}
-                >
-                  <X className="h-3 w-3" />
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(username)}
+                    className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
+                    aria-label={`Remove ${username}`}
+                    disabled={pending}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
               </Badge>
             ))}
           </div>

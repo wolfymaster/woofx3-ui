@@ -199,6 +199,7 @@ export const createGroup = action({
       engineGroupId: result.id,
       name: result.name,
       description: result.description,
+      isBuiltIn: result.isBuiltIn,
       engineCreatedAt: result.createdAt,
     });
 
@@ -230,6 +231,7 @@ export const updateGroup = action({
       engineGroupId: result.id,
       name: result.name,
       description: result.description,
+      isBuiltIn: result.isBuiltIn,
       engineCreatedAt: result.createdAt,
     });
 

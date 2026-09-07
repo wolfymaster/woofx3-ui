@@ -211,6 +211,12 @@ export default defineSchema({
     engineGroupId: v.string(),
     name: v.string(),
     description: v.string(),
+    // Built-in groups are seeded by the engine for every application and
+    // cannot be renamed or deleted; membership of all but "everyone" is owned
+    // by the platform membership sync, so editing it by hand is overwritten on
+    // the chatter's next message. Optional to accommodate rows cached before
+    // this field existed; treat missing as false.
+    isBuiltIn: v.optional(v.boolean()),
     engineCreatedAt: v.string(), // ISO 8601, as returned by the engine
     createdAt: v.number(),
     updatedAt: v.number(),
