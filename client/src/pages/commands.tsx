@@ -62,7 +62,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { sortGroups } from "@/lib/group-display";
+import { groupLabel, sortGroups } from "@/lib/group-display";
 import { cn } from "@/lib/utils";
 
 type CommandDoc = Doc<"chatCommands">;
@@ -837,7 +837,7 @@ function GroupMultiSelect({
                         onSelect={() => onToggle(group.engineGroupId)}
                       >
                         <Check className={cn("h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
-                        {group.name}
+                        {groupLabel(group)}
                       </CommandItem>
                     );
                   })}
@@ -854,7 +854,7 @@ function GroupMultiSelect({
                         onSelect={() => onToggle(group.engineGroupId)}
                       >
                         <Check className={cn("h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
-                        {group.name}
+                        {groupLabel(group)}
                       </CommandItem>
                     );
                   })}
@@ -868,7 +868,10 @@ function GroupMultiSelect({
         <div className="flex flex-wrap gap-1.5">
           {selected.map((id) => (
             <Badge key={id} variant="secondary" className="gap-1 pr-1">
-              {groupsById.get(id)?.name ?? id}
+              {(() => {
+                const g = groupsById.get(id);
+                return g ? groupLabel(g) : id;
+              })()}
               <button
                 type="button"
                 onClick={() => onToggle(id)}
@@ -1251,7 +1254,7 @@ function GroupTable({
             const hasRoster = group.name !== "everyone";
             return (
               <TableRow key={group._id} data-testid={`group-row-${group.engineGroupId}`}>
-                <TableCell className="font-medium">{group.name}</TableCell>
+                <TableCell className="font-medium">{groupLabel(group)}</TableCell>
                 <TableCell className="text-muted-foreground max-w-[320px]">
                   {group.description ? truncate(group.description) : <span className="italic">—</span>}
                 </TableCell>

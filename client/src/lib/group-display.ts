@@ -51,3 +51,46 @@ export function compareGroups(a: OrderableGroup, b: OrderableGroup): number {
 export function sortGroups<T extends OrderableGroup>(groups: readonly T[]): T[] {
   return [...groups].sort(compareGroups);
 }
+
+/**
+ * Human label for a built-in group name.
+ *
+ * The engine names built-ins as identifiers — `vip`, `everyone`, and (once
+ * woofx3#22 lands) `subscriber_tier2`. Rendering those raw gives a list of
+ * lowercase tokens, and tier groups would read as identifiers outright.
+ *
+ * Custom groups are returned untouched: the operator chose that name and
+ * title-casing someone's "OG regulars" would be presumptuous.
+ */
+const BUILT_IN_LABELS: Record<string, string> = {
+  everyone: "Everyone",
+  subscriber: "Subscriber",
+  vip: "VIP",
+  moderator: "Moderator",
+  broadcaster: "Broadcaster",
+  follower: "Follower",
+};
+
+/** `subscriber_tier2` / `subscriber-tier2` → base + tier number. */
+const TIER_PATTERN = /^([a-z]+)[_-]tier[_-]?(\d+)$/;
+
+export function groupLabel(group: OrderableGroup): string {
+  if (!(group.isBuiltIn ?? false)) {
+    return group.name;
+  }
+
+  const known = BUILT_IN_LABELS[group.name];
+  if (known) {
+    return known;
+  }
+
+  const tier = TIER_PATTERN.exec(group.name);
+  if (tier) {
+    const base = BUILT_IN_LABELS[tier[1]] ?? tier[1].charAt(0).toUpperCase() + tier[1].slice(1);
+    return `${base} — Tier ${tier[2]}`;
+  }
+
+  // An unrecognised built-in still beats a raw token, but stays close to the
+  // engine's own name so it remains greppable against the catalog.
+  return group.name.charAt(0).toUpperCase() + group.name.slice(1);
+}

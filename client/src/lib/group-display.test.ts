@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { BUILT_IN_GROUP_ORDER, sortGroups } from "./group-display";
+import { BUILT_IN_GROUP_ORDER, groupLabel, sortGroups } from "./group-display";
 
 const g = (name: string, isBuiltIn = false) => ({ name, isBuiltIn });
 
@@ -43,5 +43,29 @@ describe("sortGroups", () => {
 
   it("keeps the catalog order in sync with the engine's seeded list", () => {
     expect(BUILT_IN_GROUP_ORDER).toEqual(["everyone", "subscriber", "vip", "moderator", "broadcaster"]);
+  });
+});
+
+describe("groupLabel", () => {
+  it("leaves custom group names exactly as the operator typed them", () => {
+    expect(groupLabel({ name: "OG regulars" })).toBe("OG regulars");
+    expect(groupLabel({ name: "vip", isBuiltIn: false })).toBe("vip");
+  });
+
+  it("labels the known built-ins, including the acronym", () => {
+    expect(groupLabel(g("everyone", true))).toBe("Everyone");
+    expect(groupLabel(g("vip", true))).toBe("VIP");
+    expect(groupLabel(g("moderator", true))).toBe("Moderator");
+    expect(groupLabel(g("follower", true))).toBe("Follower");
+  });
+
+  it("reads subscriber tiers as English", () => {
+    expect(groupLabel(g("subscriber_tier1", true))).toBe("Subscriber — Tier 1");
+    expect(groupLabel(g("subscriber_tier2", true))).toBe("Subscriber — Tier 2");
+    expect(groupLabel(g("subscriber-tier3", true))).toBe("Subscriber — Tier 3");
+  });
+
+  it("degrades to capitalisation for an unrecognised built-in", () => {
+    expect(groupLabel(g("artist", true))).toBe("Artist");
   });
 });
