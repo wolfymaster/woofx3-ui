@@ -62,6 +62,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { sortGroups } from "@/lib/group-display";
 import { cn } from "@/lib/utils";
 
 type CommandDoc = Doc<"chatCommands">;
@@ -804,6 +805,10 @@ function GroupMultiSelect({
 }) {
   const [open, setOpen] = useState(false);
   const groupsById = useMemo(() => new Map(groups.map((g) => [g.engineGroupId, g])), [groups]);
+  // Mirrors the Groups tab's split, so "which of these did I create?" is
+  // answerable while granting rather than only while managing.
+  const builtIn = useMemo(() => sortGroups(groups.filter((g) => g.isBuiltIn)), [groups]);
+  const custom = useMemo(() => sortGroups(groups.filter((g) => !g.isBuiltIn)), [groups]);
 
   return (
     <div className="grid gap-2">
@@ -820,22 +825,41 @@ function GroupMultiSelect({
           <ComboBox>
             <CommandInput placeholder="Search groups..." />
             <CommandList>
-              <CommandEmpty>No groups yet. Create one in the Groups tab.</CommandEmpty>
-              <CommandGroup>
-                {groups.map((group) => {
-                  const isSelected = selected.includes(group.engineGroupId);
-                  return (
-                    <CommandItem
-                      key={group.engineGroupId}
-                      value={group.name}
-                      onSelect={() => onToggle(group.engineGroupId)}
-                    >
-                      <Check className={cn("h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
-                      {group.name}
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
+              <CommandEmpty>No matching groups.</CommandEmpty>
+              {builtIn.length > 0 && (
+                <CommandGroup heading="Built-in">
+                  {builtIn.map((group) => {
+                    const isSelected = selected.includes(group.engineGroupId);
+                    return (
+                      <CommandItem
+                        key={group.engineGroupId}
+                        value={group.name}
+                        onSelect={() => onToggle(group.engineGroupId)}
+                      >
+                        <Check className={cn("h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
+                        {group.name}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              )}
+              {custom.length > 0 && (
+                <CommandGroup heading="Custom">
+                  {custom.map((group) => {
+                    const isSelected = selected.includes(group.engineGroupId);
+                    return (
+                      <CommandItem
+                        key={group.engineGroupId}
+                        value={group.name}
+                        onSelect={() => onToggle(group.engineGroupId)}
+                      >
+                        <Check className={cn("h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
+                        {group.name}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              )}
             </CommandList>
           </ComboBox>
         </PopoverContent>
@@ -929,6 +953,20 @@ function GroupsTab({
       setFormError("Group name is required.");
       return;
     }
+    // `groups` is unique on (application_id, name) in the engine, and the
+    // built-ins already occupy everyone/subscriber/vip/moderator/broadcaster.
+    // Without this the create is still refused, but as a raw constraint error.
+    const clash = groups.find(
+      (g) => g.name.toLowerCase() === name.toLowerCase() && g.engineGroupId !== editing?.engineGroupId
+    );
+    if (clash) {
+      setFormError(
+        clash.isBuiltIn
+          ? `"${clash.name}" is a built-in group. Pick a different name.`
+          : `A group called "${clash.name}" already exists.`
+      );
+      return;
+    }
     if (!instanceId) {
       return;
     }
@@ -982,8 +1020,8 @@ function GroupsTab({
   // Membership of all but "everyone" is owned by the platform membership sync,
   // so a hand edit is reverted on that chatter's next message — the UI offers a
   // read-only roster instead of an editor that silently loses writes.
-  const builtInGroups = useMemo(() => groups.filter((g) => g.isBuiltIn), [groups]);
-  const customGroups = useMemo(() => groups.filter((g) => !g.isBuiltIn), [groups]);
+  const builtInGroups = useMemo(() => sortGroups(groups.filter((g) => g.isBuiltIn)), [groups]);
+  const customGroups = useMemo(() => sortGroups(groups.filter((g) => !g.isBuiltIn)), [groups]);
 
   return (
     <div>
@@ -1028,8 +1066,8 @@ function GroupsTab({
       ) : groups.length === 0 ? (
         <EmptyState
           icon={Users}
-          title="No groups yet"
-          description="Create a group to grant a set of usernames access to restricted commands."
+          title="No groups found"
+          description="Built-in groups are seeded by the engine for every application, so this usually means the instance hasn't synced yet. Create a custom group, or check the engine connection in Settings."
           action={{ label: "Add Group", onClick: openCreateDialog }}
         />
       ) : (
