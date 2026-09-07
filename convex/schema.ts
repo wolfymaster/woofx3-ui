@@ -140,36 +140,6 @@ export default defineSchema({
     connectedByUserId: v.optional(v.string()),
   }).index("by_instance", ["instanceId"]),
 
-  // folders: virtual organizational folders for assets per instance
-  folders: defineTable({
-    instanceId: v.id("instances"),
-    name: v.string(),
-    parentId: v.optional(v.id("folders")),
-    createdAt: v.number(),
-    createdBy: v.id("users"),
-  }).index("by_instance", ["instanceId"]),
-
-  // assets: uploaded files (images/audio/video) — supports multiple storage backends
-  assets: defineTable({
-    instanceId: v.id("instances"),
-    name: v.string(),
-    type: v.union(v.literal("image"), v.literal("audio"), v.literal("video")),
-    // Virtual folder this asset belongs to (null/absent = root)
-    folderId: v.optional(v.id("folders")),
-    // Legacy field — present only on records created before the adapter migration.
-    // Run convex/migrations/backfillAssetKeys to populate fileKey/storageProvider
-    // on these records, then this field can be removed.
-    storageId: v.optional(v.id("_storage")),
-    // Provider-agnostic file key (storageId string for Convex, object key for R2/local)
-    fileKey: v.optional(v.string()),
-    // Which storage backend holds this file
-    storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),
-    mimeType: v.string(),
-    size: v.number(),
-    createdAt: v.number(),
-    createdBy: v.id("users"),
-  }).index("by_instance", ["instanceId"]),
-
   // chatCommands: engine-authoritative read cache of chat commands. The engine
   // (Woofx3EngineApi createCommand/updateCommand/deleteCommand + listCommands)
   // is the source of truth; this table is populated by convex/chatCommandActions.ts
