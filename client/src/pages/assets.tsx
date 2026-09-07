@@ -58,6 +58,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toggle } from "@/components/ui/toggle";
 import { useInstance } from "@/hooks/use-instance";
+import { useResourceUpload } from "@/hooks/use-resource-upload";
 import { type Resource, useResources } from "@/hooks/use-resources";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -228,20 +229,14 @@ interface UploadModalProps {
 }
 
 /**
- * Three steps per file: ask the engine for a grant, PUT the bytes straight at
- * storage, then report completion. The grant is provider-agnostic, so this
- * never branches on whether S3 or local disk is configured — it replays
- * exactly the headers it was handed.
+ * Wraps the shared upload hook in a dialog. The grant → PUT → complete
+ * sequence lives in useResourceUpload so this page and the asset picker
+ * cannot drift apart.
  */
 function UploadResourcesModal({ open, onOpenChange, instanceId, parentId, onUploaded }: UploadModalProps) {
   const { toast } = useToast();
-  const requestUpload = useAction(api.resources.requestUpload);
-  const completeUpload = useAction(api.resources.completeUpload);
-  const requestProcessing = useAction(api.resources.requestProcessing);
-
+  const { upload, isUploading, progress } = useResourceUpload(instanceId);
   const [isDragging, setIsDragging] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [progress, setProgress] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = useCallback(
@@ -249,58 +244,21 @@ function UploadResourcesModal({ open, onOpenChange, instanceId, parentId, onUplo
       if (!files || files.length === 0) {
         return;
       }
-      setIsUploading(true);
-      let uploaded = 0;
       try {
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          setProgress(`Uploading ${file.name} (${i + 1}/${files.length})…`);
-
-          const grant = await requestUpload({
-            instanceId,
-            name: file.name,
-            contentType: file.type || "application/octet-stream",
-            parentId,
-            size: file.size,
-          });
-
-          const headers = new Headers();
-          for (const header of grant.headers) {
-            headers.set(header.name, header.value);
-          }
-
-          const response = await fetch(grant.uploadUrl, { method: grant.method, headers, body: file });
-          if (!response.ok) {
-            throw new Error(`${file.name}: upload failed (${response.status})`);
-          }
-
-          const resource = await completeUpload({ instanceId, resourceId: grant.resource.id, size: file.size });
-          uploaded += 1;
-
-          // Fire-and-forget: thumbnailing is asynchronous, and a resource the
-          // utility cannot render (audio) keeps a null thumbnail rather than
-          // failing, so a rejection here must not fail the upload.
-          if (resource.kind === "image" || resource.kind === "video") {
-            void requestProcessing({ instanceId, resourceId: resource.id, utility: "thumbnail" }).catch(() => {});
-          }
-        }
+        await upload(files, parentId);
         onOpenChange(false);
       } catch (err: unknown) {
         toast({
-          title: uploaded > 0 ? `Uploaded ${uploaded}, then failed` : "Upload failed",
+          title: "Upload failed",
           description: err instanceof Error ? err.message : String(err),
           variant: "destructive",
         });
       } finally {
-        setIsUploading(false);
-        setProgress("");
         // Even a partial batch changed the listing.
-        if (uploaded > 0) {
-          onUploaded();
-        }
+        onUploaded();
       }
     },
-    [instanceId, parentId, requestUpload, completeUpload, requestProcessing, onOpenChange, onUploaded, toast]
+    [upload, parentId, onOpenChange, onUploaded, toast]
   );
 
   return (

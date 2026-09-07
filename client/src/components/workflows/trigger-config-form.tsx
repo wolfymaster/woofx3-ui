@@ -15,8 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useInstance } from "@/hooks/use-instance";
 import type { ConfigField, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
-import type { Asset } from "@/types";
-import { AssetLibraryModal } from "./asset-library-modal";
+import { AssetLibraryModal, type SelectedAsset } from "./asset-library-modal";
 
 // ---------------------------------------------------------------------------
 // Media field — uses AssetLibraryModal, so it lives here as a custom renderer
@@ -37,7 +36,7 @@ const MediaFieldRenderer: CustomFieldRenderer = ({ field, value, onChange }) => 
   const assetValue = value as MediaFieldValue | null;
   const filterTypes = field.mediaType ? [field.mediaType] : undefined;
 
-  const handleSelect = (asset: Asset) => {
+  const handleSelect = (asset: SelectedAsset) => {
     onChange({
       id: asset.id,
       name: asset.name,
