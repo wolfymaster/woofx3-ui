@@ -1,6 +1,7 @@
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import { Square } from "lucide-react";
 import { useMemo } from "react";
+import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface WidgetCatalogSidebarProps {
@@ -26,7 +27,7 @@ export function WidgetCatalogSidebar({ catalogWidgets, onAdd }: WidgetCatalogSid
   }, [catalogWidgets]);
 
   return (
-    <div className="w-64 shrink-0 border-r bg-background flex flex-col">
+    <div className={SIDEBAR_RAIL}>
       <div className="h-12 flex items-center px-3 border-b shrink-0">
         <span className="text-sm font-medium">Widgets</span>
       </div>

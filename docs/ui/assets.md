@@ -1,6 +1,6 @@
 # Assets
 
-**Route:** `/assets`  
+**Route:** `/stream/assets`  
 **Primary file:** `client/src/pages/assets.tsx`
 
 ## Purpose

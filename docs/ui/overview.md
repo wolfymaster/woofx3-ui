@@ -17,7 +17,23 @@ The SPA is built with **React 18**, **Vite**, and **Wouter** for client-side rou
 
 **AuthGuard** redirects unauthenticated users to `/auth/login`. **OnboardingGuard** loads `accounts.getMyAccount` and `instances.listForCurrentUser`; if there is no account or no instances, it sends the user to `/auth/onboarding`.
 
-Protected routes render inside **`BroadcastShell`** (`client/src/components/layout/broadcast-shell.tsx`): primary nav (Dashboard, Modules, Workflows, Assets, Scenes), utility links (Team, Settings), instance switcher, command palette hook, and stream status UI (currently a placeholder that does not yet call the real transport).
+Protected routes render inside **`BroadcastShell`** (`client/src/components/layout/broadcast-shell.tsx`): primary nav, utility links (Team, Admin), instance switcher, command palette hook, and stream status UI (currently a placeholder that does not yet call the real transport).
+
+## Navigation structure
+
+The menu is declared in one place — `client/src/components/layout/nav-config.ts`. Sections with `children` own a URL prefix and render a left sidebar (`section-sidebar.tsx`) beside the page; sections without children are a single route. Every rail — the subnav and the per-page list sidebars (modules, widget catalog) — shares one width and surface through `SIDEBAR_RAIL` in `sidebar-rail.ts`, so the rail does not change size or color between pages. The subnav collapses to icons only via the button at its foot — the state lives in the `$sidebarCollapsed` Nanostore, so it persists per browser and is shared by every section.
+
+| Section | Route prefix | Sub-items |
+|---------|--------------|-----------|
+| Dashboard | `/` | — |
+| Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Assets, Workflows |
+| Modules | `/modules` | — (the page renders its own category sidebar) |
+| Help | `/help` | Learning, Debug, Logs, Submit Feedback |
+| Admin | `/admin` | Engine, Integrations, Storage, Appearance |
+
+Admin and Team are not in the primary nav — they are the icon buttons in the header's utility cluster (`UTILITY_SECTIONS`), but Admin renders the same section sidebar as Stream and Help.
+
+`/stream`, `/help`, and `/admin` redirect to their first sub-item. Counters, Timers, Queues, Learning, and Submit Feedback are placeholder screens — no engine surface backs them yet. The pre-restructure top-level paths (`/alerts`, `/commands`, `/assets`, `/scenes`, `/scenes/:id`, `/workflows`, `/workflows/:id`, `/debug`, `/settings/:tab`) redirect to their new homes.
 
 **Error boundaries** reset on `location` change so a bad screen does not brick the whole app.
 
@@ -43,6 +59,6 @@ When you touch a screen, check imports: `from "convex/react"` vs `@/lib/transpor
 - [Workflows](./workflows.md)
 - [Assets](./assets.md)
 - [Scenes](./scenes.md)
-- [Settings & team](./settings-team.md)
+- [Admin & team](./admin-team.md)
 - [Auth & onboarding](./auth-onboarding.md)
 - [Convex & HTTP surface](./convex-surface.md)

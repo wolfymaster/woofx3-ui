@@ -1,25 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import { useMutation } from "convex/react";
-import {
-  Activity,
-  Bell,
-  Bug,
-  Check,
-  ChevronDown,
-  Command,
-  FolderOpen,
-  Layers,
-  LayoutDashboard,
-  MessageSquare,
-  MonitorPlay,
-  Pencil,
-  Puzzle,
-  Search,
-  Settings,
-  Users,
-  Workflow,
-} from "lucide-react";
+import { Activity, Bell, Check, ChevronDown, Command, MonitorPlay, Pencil, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -51,30 +33,9 @@ import { useTheme } from "@/hooks/use-theme";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn, formatUptime } from "@/lib/utils";
 import { CommandPalette } from "./command-palette";
+import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "./nav-config";
+import { SectionSidebar } from "./section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
-
-interface NavItem {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  href: string;
-}
-
-const mainNavItems: NavItem[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/" },
-  { id: "modules", label: "Modules", icon: Puzzle, href: "/modules" },
-  { id: "workflows", label: "Workflows", icon: Workflow, href: "/workflows" },
-  { id: "assets", label: "Assets", icon: FolderOpen, href: "/assets" },
-  { id: "scenes", label: "Scenes", icon: Layers, href: "/scenes" },
-  { id: "alerts", label: "Alert Log", icon: Bell, href: "/alerts" },
-  { id: "commands", label: "Commands", icon: MessageSquare, href: "/commands" },
-  { id: "debug", label: "Debug", icon: Bug, href: "/debug" },
-];
-
-const utilityItems: NavItem[] = [
-  { id: "team", label: "Team", icon: Users, href: "/team" },
-  { id: "settings", label: "Settings", icon: Settings, href: "/settings" },
-];
 
 function InstanceBar() {
   const { instance, instances, setInstance } = useInstance();
@@ -238,8 +199,8 @@ function AppHeader() {
   return (
     <header className="h-14 bg-card border-b border-border flex items-center px-4 gap-3 shrink-0">
       <nav className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
-        {mainNavItems.map((item) => {
-          const isActive = item.href === "/" ? location === "/" : location.startsWith(item.href);
+        {MAIN_NAV_SECTIONS.map((item) => {
+          const isActive = isSectionActive(item, location);
 
           return (
             <Link key={item.id} href={item.href}>
@@ -250,7 +211,7 @@ function AppHeader() {
                 data-testid={`nav-${item.id}`}
               >
                 <item.icon className="h-4 w-4" />
-                <span className="hidden xl:inline">{item.label}</span>
+                <span className="hidden sm:inline">{item.label}</span>
               </Button>
             </Link>
           );
@@ -259,8 +220,8 @@ function AppHeader() {
 
       <div className="flex items-center gap-2 shrink-0">
         <div className="hidden md:flex items-center gap-1">
-          {utilityItems.map((item) => {
-            const isActive = location === item.href;
+          {UTILITY_SECTIONS.map((item) => {
+            const isActive = isSectionActive(item, location);
 
             return (
               <Link key={item.id} href={item.href}>
@@ -343,7 +304,7 @@ function AppHeader() {
               <Link href="/team">Team Settings</Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/settings">Preferences</Link>
+              <Link href="/admin">Admin</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => signOut()} className="text-destructive focus:text-destructive">
@@ -362,6 +323,8 @@ interface BroadcastShellProps {
 
 export function BroadcastShell({ children }: BroadcastShellProps) {
   const commandPaletteOpen = useStore($commandPaletteOpen);
+  const [location] = useLocation();
+  const activeSection = findActiveSection(location);
   useSyncEngineTransport();
 
   useEffect(() => {
@@ -382,7 +345,12 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
         <InstanceBar />
         <AppHeader />
 
-        <main className="flex-1 overflow-auto">{children}</main>
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {activeSection?.children && (
+            <SectionSidebar title={activeSection.label} items={activeSection.children} location={location} />
+          )}
+          <main className="flex-1 overflow-auto">{children}</main>
+        </div>
 
         <StatusBar />
 

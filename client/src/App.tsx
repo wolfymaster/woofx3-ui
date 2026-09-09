@@ -10,7 +10,11 @@ import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/hooks/use-theme";
-import AlertLog from "@/pages/alert-log";
+import AdminAppearance from "@/pages/admin/appearance";
+import AdminEngine from "@/pages/admin/engine";
+import AdminIntegrations from "@/pages/admin/integrations";
+import AdminStorage from "@/pages/admin/storage";
+import Alerts from "@/pages/alerts";
 import Assets from "@/pages/assets";
 import AcceptInvite from "@/pages/auth/accept-invite";
 import Login from "@/pages/auth/login";
@@ -18,14 +22,20 @@ import Onboarding from "@/pages/auth/onboarding";
 import Register from "@/pages/auth/register";
 import TwitchCallback from "@/pages/auth/twitch-callback";
 import Commands from "@/pages/commands";
+import Counters from "@/pages/counters";
 import Dashboard from "@/pages/dashboard";
 import Debug from "@/pages/debug";
+import Feedback from "@/pages/feedback";
+import Learning from "@/pages/learning";
+import Logs from "@/pages/logs";
 import ModuleInstall from "@/pages/module-install";
 import Modules from "@/pages/modules";
 import NotFound from "@/pages/not-found";
+import Queues from "@/pages/queues";
 import Scenes from "@/pages/scenes";
-import Settings from "@/pages/settings";
+
 import Team from "@/pages/team";
+import Timers from "@/pages/timers";
 import Workflows from "@/pages/workflows";
 import { convexClient as convex } from "./lib/convexClient";
 import { queryClient } from "./lib/queryClient";
@@ -82,6 +92,20 @@ function OnboardingGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/** Legacy `/settings/:tab` values that still map onto an Admin screen. */
+const ADMIN_PATHS = new Set(["engine", "integrations", "storage", "appearance"]);
+
+// Wouter has no <Redirect> component; navigate in an effect instead.
+function Redirect({ to }: { to: string }) {
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    navigate(to, { replace: true });
+  }, [navigate, to]);
+
+  return null;
+}
+
 function ThemeInitializer({ children }: { children: React.ReactNode }) {
   useTheme();
   return <>{children}</>;
@@ -111,22 +135,81 @@ function AppRoutes() {
               <ErrorBoundary resetKey={location}>
                 <Switch>
                   <Route path="/" component={Dashboard} />
+
+                  {/* Stream section */}
+                  <Route path="/stream">
+                    <Redirect to="/stream/alerts" />
+                  </Route>
+                  <Route path="/stream/alerts" component={Alerts} />
+                  <Route path="/stream/alerts/:group" component={Alerts} />
+                  <Route path="/stream/commands" component={Commands} />
+                  <Route path="/stream/counters" component={Counters} />
+                  <Route path="/stream/timers" component={Timers} />
+                  <Route path="/stream/queues" component={Queues} />
+                  <Route path="/stream/scenes" component={Scenes} />
+                  <Route path="/stream/scenes/:id" component={Scenes} />
+                  <Route path="/stream/assets" component={Assets} />
+                  <Route path="/stream/workflows" component={Workflows} />
+                  <Route path="/stream/workflows/new" component={Workflows} />
+                  <Route path="/stream/workflows/:id" component={Workflows} />
+                  <Route path="/stream/workflows/:id/edit" component={Workflows} />
+
+                  {/* Modules section */}
                   <Route path="/modules/install" component={ModuleInstall} />
                   <Route path="/modules/installed" component={Modules} />
                   <Route path="/modules/:moduleId" component={Modules} />
                   <Route path="/modules" component={Modules} />
-                  <Route path="/workflows" component={Workflows} />
-                  <Route path="/workflows/new" component={Workflows} />
-                  <Route path="/workflows/:id" component={Workflows} />
-                  <Route path="/workflows/:id/edit" component={Workflows} />
-                  <Route path="/assets" component={Assets} />
-                  <Route path="/scenes" component={Scenes} />
-                  <Route path="/scenes/:id" component={Scenes} />
-                  <Route path="/alerts" component={AlertLog} />
-                  <Route path="/debug" component={Debug} />
-                  <Route path="/commands" component={Commands} />
+
+                  {/* Help section */}
+                  <Route path="/help">
+                    <Redirect to="/help/learning" />
+                  </Route>
+                  <Route path="/help/learning" component={Learning} />
+                  <Route path="/help/debug" component={Debug} />
+                  <Route path="/help/logs" component={Logs} />
+                  <Route path="/help/feedback" component={Feedback} />
+
+                  {/* Admin section */}
+                  <Route path="/admin">
+                    <Redirect to="/admin/engine" />
+                  </Route>
+                  <Route path="/admin/engine" component={AdminEngine} />
+                  <Route path="/admin/integrations" component={AdminIntegrations} />
+                  <Route path="/admin/storage" component={AdminStorage} />
+                  <Route path="/admin/appearance" component={AdminAppearance} />
+
                   <Route path="/team" component={Team} />
-                  <Route path="/settings/:tab?" component={Settings} />
+
+                  {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}
+                  <Route path="/alerts">
+                    <Redirect to="/stream/alerts" />
+                  </Route>
+                  <Route path="/commands">
+                    <Redirect to="/stream/commands" />
+                  </Route>
+                  <Route path="/assets">
+                    <Redirect to="/stream/assets" />
+                  </Route>
+                  <Route path="/workflows">
+                    <Redirect to="/stream/workflows" />
+                  </Route>
+                  <Route path="/workflows/:id">{(params) => <Redirect to={`/stream/workflows/${params.id}`} />}</Route>
+                  <Route path="/workflows/:id/edit">
+                    {(params) => <Redirect to={`/stream/workflows/${params.id}/edit`} />}
+                  </Route>
+                  <Route path="/scenes">
+                    <Redirect to="/stream/scenes" />
+                  </Route>
+                  <Route path="/scenes/:id">{(params) => <Redirect to={`/stream/scenes/${params.id}`} />}</Route>
+                  <Route path="/debug">
+                    <Redirect to="/help/debug" />
+                  </Route>
+                  <Route path="/settings/:tab?">
+                    {(params) => (
+                      <Redirect to={ADMIN_PATHS.has(params.tab ?? "") ? `/admin/${params.tab}` : "/admin/engine"} />
+                    )}
+                  </Route>
+
                   <Route component={NotFound} />
                 </Switch>
               </ErrorBoundary>
