@@ -1,7 +1,7 @@
 # Scenes and overlays
 
-**Routes:** `/scenes`, `/scenes/:id` (both render the same master-detail page)  
-**Primary files:** `client/src/pages/scenes.tsx` (shell), `client/src/components/scenes/scenes-sidebar.tsx` (list), `client/src/components/scenes/scene-canvas-editor.tsx` (canvas)  
+**Routes:** `/stream/scenes` (table listing), `/stream/scenes/:id` (editor)
+**Primary files:** `client/src/pages/scenes.tsx` (listing + route split), `client/src/components/scenes/scene-canvas-editor.tsx` (editor), `client/src/components/scenes/widget-catalog-sidebar.tsx` (widget rail)
 **Convex:** `convex/scenes.ts`, `convex/sceneActions.ts`, `convex/moduleWidgets.ts`, `convex/browserSource.ts`  
 **HTTP:** `convex/http.ts` — `/browser-source/{key}` (HTML renderer), `/api/browser-source/{key}/claim` (JSON)
 
@@ -21,18 +21,33 @@ Because writes round-trip through the engine, the UI is **eventually consistent*
 
 **Authorization:** scene actions and cache queries gate on instance membership (any role) — consistent with the engine having no user/role concept.
 
-## Layout (master-detail, like Workflows / Modules)
+## Layout
 
-`scenes.tsx` is a two-pane shell — `flex h-[calc(100vh-4rem)]` with a `w-72` left sidebar and a `flex-1` detail pane. Selection is **URL-driven**: `/scenes/:id` where `:id` is the `engineSceneId`. There is **no separate list page and no layers/properties side panels**.
+`scenes.tsx` picks one of two screens from the route — there is no master-detail shell and no scene-list rail.
 
-- **`ScenesSidebar`** (`components/scenes/scenes-sidebar.tsx`): "New Scene" button + search + a `ScrollArea` list of scenes by name (`{w}x{h} · N widgets` subtitle, `bg-accent` selected). Lists only engine-synced scenes (those with an `engineSceneId`). Create goes through `useAction(api.sceneActions.createScene)` then selects the new scene.
-- **`SceneCanvasEditor`** (`components/scenes/scene-canvas-editor.tsx`): the detail pane for the selected scene. Mounted with `key={engineSceneId}` so switching scenes resets local edit state. Shows a "waiting for sync" state until the cache row for a just-created scene arrives.
+- **`/stream/scenes` — the listing.** A Commands-style table (`PageHeader`, search, **New Scene**, one `Card` table) with columns scene (name + description), canvas size, widget count, and actions. Row click or the pencil opens the editor; the trash deletes through `sceneActions.deleteScene` behind a confirm. A scene the engine has not acknowledged yet (no `engineSceneId`) still gets a row, marked **Syncing** with its actions disabled, rather than being hidden.
+- **`/stream/scenes/:id` — the editor.** `SceneCanvasEditor`, mounted with `key={engineSceneId}` so switching scenes resets local edit state. It shows a "waiting for sync" state until the cache row for a just-created scene arrives.
 
-The detail pane has three regions and **no persistent side panels**:
+The rail only appears once a scene is selected, and it belongs to the editor: `WidgetCatalogSidebar` lists every widget that can be added, grouped by module, and clicking one drops it on the canvas. It uses the shared `SIDEBAR_RAIL` style, so it is the same width and surface as the section subnav on other pages.
 
-1. **Header** — editable name, dimensions badge, a **scene-settings popover** (gear: description, width/height, background), the **browser-source dropdown** (Copy / Rotate), Save (dirty-gated), and a `⋮` menu (Duplicate / Delete scene, via `sceneActions`).
-2. **Widget bar** — a horizontal `Widgets` bar listing **installed widgets** from `useQuery(api.moduleWidgets.list)`; clicking one adds it to the canvas. When a widget is selected it also shows that widget's name, a **settings popover** (gear → form rendered from the widget's `settings` schema), and a delete button.
-3. **Canvas** — `flex-1` zoomable surface with absolute-positioned placeholder boxes (the engine renders real widgets in the overlay; this is a layout surface). Drag to move, corner handle to resize; clicking the background deselects.
+The editor has three regions:
+
+1. **Header** — back to the listing, editable name, a **scene-settings popover** (gear: description, width/height, background), the **browser-source dropdown** (Copy / Rotate), Save (dirty-gated), and a `⋮` menu (Duplicate / Delete scene, via `sceneActions`).
+2. **Widget catalog rail** — installed widgets from `useQuery(api.sceneWidgets.listForInstance)`; clicking one adds it to the canvas.
+3. **Canvas** — `flex-1` zoomable surface with absolute-positioned placeholder boxes (the engine renders real widgets in the overlay; this is a layout surface). Drag to move, corner handle to resize; clicking the background deselects. Zoom in/out and fit sit in the bottom-left corner (the canvas has no grid overlay — the width and height live in the scene-settings popover). Selecting a widget opens its settings panel on the right.
+
+### Preview vs. browser source
+
+Both surfaces render the **same engine overlay**, from the same `scene.publicUrl` setting (Admin → Storage → "Scene Manager Public URL"): the engine mints `{publicUrl}/scene/{engineSceneId}?token={token}` and that is what actually draws the widgets. They differ only in how they reach it.
+
+- **Canvas preview** — `browserSource.getOrCreatePreviewUrl` returns that engine URL and `LiveScenePreview` embeds it **directly**. The editor is an authenticated view of the instance, so it has no reason to hide the engine URL from itself, and going direct keeps the frame's ancestor chain to two sites. That matters: a third site in the chain makes every request from inside the overlay cross-site, which drops Scene Manager's `SameSite=Strict` session cookie — the cookie authorizing the widget frames (`/scene/{id}/widget/{instanceId}`) and the SSE stream (`/events`). A UI and an engine sharing a registrable domain (`ui.x.tv` / `scenes.x.tv`) stay same-site, and the overlay renders.
+- **Browser source** — `/browser-source/{key}` wraps the same engine URL in a page served from the Convex site, because a public OBS URL *should* keep the engine URL and token out of reach; the opaque key is what you revoke or rotate.
+
+Each has its own overlay token, so rotating the public browser-source URL never disturbs the preview.
+
+A cached URL that is not the current `{publicUrl}/scene/{engineSceneId}?token=…` shape — anything minted before Scene Manager replaced streamware's overlay path — is treated as a cache miss and re-minted (`convex/lib/sceneOverlayUrl.ts`), and `/browser-source/{key}` shows its placeholder rather than framing a dead URL.
+
+**Local Network Access.** Both iframes carry `allow="local-network-access"`. When an engine hostname resolves to a LAN address (split-horizon DNS in dev — `streamware.dev.woofx3.tv` → `192.168.0.x`), Chrome treats the load as a public page reaching the local network and gates it behind a permission whose default allowlist is `self`; without the attribute it is auto-denied with no prompt and the overlay silently renders nothing. OBS does not enforce this, which is why a browser source can work while the same URL fails in a tab. The attribute is inert once the engine resolves to a public address.
 
 Saves go through `useAction(api.sceneActions.updateScene)` (`widgetsJson` + `layoutJson`); a dirty flag drives the Save button and protects in-flight edits from the post-save webhook re-push.
 

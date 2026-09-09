@@ -2,10 +2,9 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
-import { Grid, Link, Maximize, MoreVertical, Save, Settings, Trash2, ZoomIn, ZoomOut } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ArrowLeft, Link, Maximize, MoreVertical, Save, Settings, Trash2, ZoomIn, ZoomOut } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,9 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import type { Scene, Widget } from "@/types";
 import { CanvasWidgetHandle } from "./canvas-widget-handle";
 import { LiveScenePreview } from "./live-scene-preview";
@@ -47,13 +46,23 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const [scene, setScene] = useState<Scene | null>(null);
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(0.5);
-  const [showGrid, setShowGrid] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   // Local edits must survive the SCENE_UPDATED webhook re-push after a save.
   const [isDirty, setIsDirty] = useState(false);
+  // Bumped after every save to remount the preview against the newly saved scene.
+  const [previewReloads, setPreviewReloads] = useState(0);
+  // `updatedAt` of the snapshot a save was made against. A save clears isDirty as
+  // soon as the engine accepts it, but the engine's SCENE_UPDATED echo takes a
+  // moment to travel back through the webhook into this query — and until it
+  // lands, the query is still serving the PRE-save snapshot. Adopting that would
+  // roll the editor back to before the save and then forward again when the echo
+  // arrives: a just-added widget disappears and returns, and the settings panel
+  // bound to it flashes shut and open. Snapshots at or below the watermark are
+  // that stale pre-save state; the echo is the first one above it.
+  const echoWatermark = useRef(0);
 
   useEffect(() => {
-    if (fetchedScene && !isDirty) {
+    if (fetchedScene && !isDirty && fetchedScene.updatedAt > echoWatermark.current) {
       setScene({
         id: fetchedScene._id as string,
         engineSceneId: fetchedScene.engineSceneId ?? "",
@@ -83,8 +92,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   }, []);
 
   const copyKeyToClipboard = useCallback(async (key: string) => {
-    const siteUrl = import.meta.env.VITE_CONVEX_SITE_URL ?? window.location.origin;
-    const browserSourceUrl = `${siteUrl.replace(/\/+$/, "")}/browser-source/${key}`;
+    const browserSourceUrl = browserSourceUrlForKey(key);
     await navigator.clipboard.writeText(browserSourceUrl);
     return browserSourceUrl;
   }, []);
@@ -123,42 +131,63 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     }
   }, [convexSceneId, rotateBrowserSourceKey, copyKeyToClipboard, toast]);
 
+  // Takes the scene to persist rather than reading state, so a caller that just
+  // built the next scene (addWidget) can save it without waiting for a re-render.
+  const persistScene = useCallback(
+    async (next: Scene, { silent = false }: { silent?: boolean } = {}) => {
+      setIsSaving(true);
+      // Everything this query serves until the echo lands describes the scene as
+      // it was before this save.
+      echoWatermark.current = fetchedScene?.updatedAt ?? echoWatermark.current;
+      try {
+        await updateSceneAction({
+          instanceId,
+          engineSceneId,
+          name: next.name,
+          description: next.description,
+          widgetsJson: JSON.stringify(next.widgets),
+          layoutJson: JSON.stringify({
+            width: next.width,
+            height: next.height,
+            backgroundColor: next.backgroundColor,
+          }),
+        });
+        setIsDirty(false);
+        // The engine renders the overlay from the scene config it reads when the
+        // page loads, and its event stream carries only event deliveries — never
+        // config changes. Nothing the editor saves shows up until the preview
+        // reloads, so remount it on every successful save.
+        setPreviewReloads((n) => n + 1);
+        if (!silent) {
+          toast({ title: "Scene saved" });
+        }
+        return true;
+      } catch (err) {
+        toast({
+          title: "Save failed",
+          description: err instanceof Error ? err.message : String(err),
+          variant: "destructive",
+        });
+        return false;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [instanceId, engineSceneId, updateSceneAction, toast, fetchedScene?.updatedAt]
+  );
+
   const handleSave = useCallback(async () => {
     if (!scene) {
       return;
     }
-    setIsSaving(true);
-    try {
-      await updateSceneAction({
-        instanceId,
-        engineSceneId,
-        name: scene.name,
-        description: scene.description,
-        widgetsJson: JSON.stringify(scene.widgets),
-        layoutJson: JSON.stringify({
-          width: scene.width,
-          height: scene.height,
-          backgroundColor: scene.backgroundColor,
-        }),
-      });
-      setIsDirty(false);
-      toast({ title: "Scene saved" });
-    } catch (err) {
-      toast({
-        title: "Save failed",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [scene, instanceId, engineSceneId, updateSceneAction, toast]);
+    await persistScene(scene);
+  }, [scene, persistScene]);
 
   const handleDeleteScene = useCallback(async () => {
     try {
       await deleteSceneAction({ instanceId, engineSceneId });
       toast({ title: "Scene deleted" });
-      navigate("/scenes");
+      navigate("/stream/scenes");
     } catch (err) {
       toast({
         title: "Delete failed",
@@ -185,7 +214,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         }),
       });
       toast({ title: "Scene duplicated" });
-      navigate(`/scenes/${newId}`);
+      navigate(`/stream/scenes/${newId}`);
     } catch (err) {
       toast({
         title: "Duplicate failed",
@@ -231,6 +260,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
 
   const addWidget = useCallback(
     (canonicalId: string, displayName: string) => {
+      if (!scene) {
+        return;
+      }
       const newWidget: Widget = {
         id: `w-${Date.now()}`,
         widgetCanonicalId: canonicalId,
@@ -239,15 +271,23 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         size: { width: 300, height: 200 },
         rotation: 0,
         opacity: 100,
-        zIndex: (scene?.widgets.length ?? 0) + 1,
+        zIndex: scene.widgets.length + 1,
         locked: false,
         visible: true,
         settings: {},
       };
-      mutateScene((prev) => ({ ...prev, widgets: [...prev.widgets, newWidget] }));
+      const next: Scene = { ...scene, widgets: [...scene.widgets, newWidget] };
+
+      setIsDirty(true);
+      setScene(next);
       setSelectedWidgetId(newWidget.id);
+
+      // Persist immediately: the preview is the engine's own overlay, so a widget
+      // that exists only in local state renders nothing at all. This save (and the
+      // preview remount it triggers) is what makes adding a widget show the widget.
+      void persistScene(next, { silent: true });
     },
-    [scene?.widgets.length, mutateScene]
+    [scene, persistScene]
   );
 
   const deleteWidget = useCallback(
@@ -258,12 +298,17 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     [mutateScene]
   );
 
-  // Deselects only when the click landed directly on one of the canvas's own
-  // background layers (checked via target === currentTarget at each layer,
-  // rather than relying on descendants to stopPropagation) — a click that
-  // bubbled up from a widget handle or the live preview never matches this,
-  // so selecting a widget can't be undone by the same click that made it.
-  const handleDeselectClick = useCallback((e: React.MouseEvent) => {
+  // Deselects on mousedown, not click, and only when the press landed directly on
+  // one of the canvas's own background layers.
+  //
+  // Click is the wrong event here: pressing a widget selects it on mousedown and
+  // starts a drag, and the drag moves the widget out from under the cursor — so
+  // mousedown and mouseup land on different elements and the browser dispatches
+  // the resulting click on their common ancestor, which IS one of these background
+  // layers. That made every press-and-twitch on a widget select it and immediately
+  // deselect it: the settings panel flashed open and shut. Mousedown carries no
+  // such ambiguity, and widget handles already stop it propagating.
+  const handleBackgroundMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
       setSelectedWidgetId(null);
     }
@@ -296,15 +341,15 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       {/* Header */}
       <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/stream/scenes")} title="Back to scenes">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
           <Input
             value={scene.name}
             onChange={(e) => mutateScene((prev) => ({ ...prev, name: e.target.value }))}
             className="font-semibold border-none bg-transparent focus-visible:ring-0 w-56"
             data-testid="input-scene-name"
           />
-          <Badge variant="secondary" className="shrink-0">
-            {scene.width}x{scene.height}
-          </Badge>
         </div>
         <div className="flex items-center gap-2">
           {/* Scene settings */}
@@ -421,13 +466,12 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         </div>
       </div>
 
-      {/* Body: widget catalog | canvas | widget settings */}
-      <div className="flex-1 flex overflow-hidden">
+      {/* Body: widget catalog | canvas, with the widget inspector floating over the canvas */}
+      <div className="relative flex-1 flex overflow-hidden">
         <WidgetCatalogSidebar catalogWidgets={catalogWidgets} onAdd={addWidget} />
 
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background click deselects widgets */}
-        {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only canvas surface */}
-        <div className="flex-1 bg-muted/30 relative overflow-auto" onClick={handleDeselectClick}>
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
+        <div className="flex-1 bg-muted/30 relative overflow-auto" onMouseDown={handleBackgroundMouseDown}>
           <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-card rounded-md border p-1 z-10">
             <Button
               variant="ghost"
@@ -447,34 +491,27 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
               <ZoomIn className="h-4 w-4" />
             </Button>
             <Separator orientation="vertical" className="h-6" />
-            <Toggle pressed={showGrid} onPressedChange={setShowGrid} size="sm" data-testid="button-toggle-grid">
-              <Grid className="h-4 w-4" />
-            </Toggle>
             <Button variant="ghost" size="icon" onClick={() => setZoom(0.5)} data-testid="button-fit">
               <Maximize className="h-4 w-4" />
             </Button>
           </div>
 
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background click deselects widgets */}
-          {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only canvas surface */}
-          <div className="absolute inset-0 flex items-center justify-center p-8" onClick={handleDeselectClick}>
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background click deselects widgets */}
-            {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only canvas surface */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
+          <div
+            className="absolute inset-0 flex items-center justify-center p-8"
+            onMouseDown={handleBackgroundMouseDown}
+          >
+            {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
             <div
               className="relative bg-black/80 shadow-2xl"
               style={{
                 width: scene.width * zoom,
                 height: scene.height * zoom,
-                backgroundImage: showGrid
-                  ? "radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px)"
-                  : "none",
-                backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
               }}
-              onClick={handleDeselectClick}
+              onMouseDown={handleBackgroundMouseDown}
               data-testid="scene-canvas"
             >
-              {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background click deselects widgets */}
-              {/* biome-ignore lint/a11y/useKeyWithClickEvents: pointer-only canvas surface */}
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
               <div
                 style={{
                   transform: `scale(${zoom})`,
@@ -482,12 +519,17 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                   width: scene.width,
                   height: scene.height,
                 }}
-                onClick={handleDeselectClick}
+                onMouseDown={handleBackgroundMouseDown}
               >
                 {scene.widgets.map((widget) => (
                   <WidgetFallbackBackground key={widget.id} widget={widget} />
                 ))}
-                <LiveScenePreview sceneId={convexSceneId} width={scene.width} height={scene.height} />
+                <LiveScenePreview
+                  sceneId={convexSceneId}
+                  width={scene.width}
+                  height={scene.height}
+                  reloadToken={previewReloads}
+                />
                 {scene.widgets.map((widget) => (
                   <CanvasWidgetHandle
                     key={widget.id}
@@ -504,13 +546,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
           </div>
         </div>
 
+        {/* Floated rather than docked as a flex sibling: as a sibling it took width
+            from the canvas, so selecting a widget resized the canvas and shifted the
+            whole scene under the cursor mid-click. Overlaying leaves the canvas
+            exactly where it was. */}
         {selectedWidget && (
-          <WidgetSettingsPanel
-            widget={selectedWidget}
-            fields={selectedWidgetFields}
-            onChangeSetting={(key, value) => updateWidgetProperty(selectedWidget.id, key, value)}
-            onDelete={() => deleteWidget(selectedWidget.id)}
-          />
+          <div className="absolute inset-y-0 right-0 z-20 flex shadow-xl">
+            <WidgetSettingsPanel
+              widget={selectedWidget}
+              fields={selectedWidgetFields}
+              onChangeSetting={(key, value) => updateWidgetProperty(selectedWidget.id, key, value)}
+              onDelete={() => deleteWidget(selectedWidget.id)}
+            />
+          </div>
         )}
       </div>
     </div>
