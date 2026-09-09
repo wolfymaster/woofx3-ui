@@ -55,7 +55,10 @@ export function DashboardLayoutPicker({ onSelect }: DashboardLayoutPickerProps) 
       <div className="text-center max-w-md mb-8">
         <LayoutTemplate className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
         <h2 className="text-xl font-semibold mb-2">Choose a Dashboard Layout</h2>
-        <p className="text-muted-foreground">Pick a starting layout for your dashboard. You can change this later.</p>
+        <p className="text-muted-foreground">
+          Pick the arrangement of widget areas for this page. A page keeps the layout it was created with — to use a
+          different one, delete the page and add a new one.
+        </p>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full max-w-2xl">
         {dashboardLayouts.map((layout) => (
