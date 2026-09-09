@@ -69,7 +69,7 @@ async function resolveOwningModule(
   if (moduleKey) {
     const byKey = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_module_key", (q) => q.eq("moduleKey", moduleKey))
+      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", moduleKey))
       .first();
     if (byKey) {
       return byKey;

@@ -45,15 +45,19 @@ export const getByCanonicalId = query({
 
 export const upsertFromWebhook = internalMutation({
   args: {
+    // The delivering instance, from the webhook's Bearer token. Required to
+    // resolve the owning module: moduleKey and name+version are both shared
+    // between tenants that installed the same module.
+    instanceId: v.id("instances"),
     moduleKey: v.string(),
     moduleName: v.string(),
     version: v.string(),
     assets: v.array(assetValidator),
   },
-  handler: async (ctx, { moduleKey, moduleName, version, assets }) => {
+  handler: async (ctx, { instanceId, moduleKey, moduleName, version, assets }) => {
     const moduleRecord = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_module_key", (q) => q.eq("moduleKey", moduleKey))
+      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", moduleKey))
       .first();
 
     const moduleId =
@@ -61,7 +65,9 @@ export const upsertFromWebhook = internalMutation({
       (
         await ctx.db
           .query("moduleRepository")
-          .withIndex("by_name_version", (q) => q.eq("name", moduleName).eq("version", version))
+          .withIndex("by_instance_name_version", (q) =>
+            q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", version)
+          )
           .first()
       )?._id;
 

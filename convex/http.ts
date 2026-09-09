@@ -864,6 +864,7 @@ http.route({
 
       case EngineEventType.MODULE_ASSET_REGISTERED: {
         await ctx.runMutation(internal.moduleAssets.upsertFromWebhook, {
+          instanceId: instance._id,
           moduleKey: event.moduleKey,
           moduleName: event.moduleName,
           version: event.version,

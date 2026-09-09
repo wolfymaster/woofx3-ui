@@ -411,7 +411,9 @@ export const reconcileTriggers = internalMutation({
       if (snap.createdByType === "MODULE" && snap.createdByRef) {
         const mod = await ctx.db
           .query("moduleRepository")
-          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef!))
+          .withIndex("by_instance_module_key", (q) =>
+            q.eq("instanceId", instanceId).eq("moduleKey", snap.createdByRef!)
+          )
           .first();
         moduleId = mod?._id;
       }
@@ -533,7 +535,9 @@ export const reconcileActions = internalMutation({
       if (snap.createdByType === "MODULE" && snap.createdByRef) {
         const mod = await ctx.db
           .query("moduleRepository")
-          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef!))
+          .withIndex("by_instance_module_key", (q) =>
+            q.eq("instanceId", instanceId).eq("moduleKey", snap.createdByRef!)
+          )
           .first();
         moduleId = mod?._id;
       }
@@ -647,7 +651,7 @@ export const reconcileWidgets = internalMutation({
       if (snap.createdByType === "MODULE" && snap.createdByRef) {
         const mod = await ctx.db
           .query("moduleRepository")
-          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef))
+          .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", snap.createdByRef))
           .first();
         moduleId = mod?._id;
       }

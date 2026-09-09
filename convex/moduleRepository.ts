@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 
 export const list = query({
@@ -46,6 +46,83 @@ export const getInternal = internalQuery({
   },
 });
 
+const AUDIT_ROW_LIMIT = 5000;
+
+/**
+ * Read-only audit: module identities held by more than one instance.
+ *
+ * Before the lookups here and in moduleWebhook were instance-scoped, a webhook
+ * could resolve another tenant's row by `moduleKey` or `name`+`version` and
+ * patch, re-key or cascade-delete it. Scoping stops new collisions but repairs
+ * nothing already cross-wired, and once an `instanceId` has been overwritten
+ * there is no way to infer the original owner automatically. So this reports
+ * rather than repairs — run it to find out whether a repair is needed at all:
+ *
+ *   bunx convex run moduleRepository:auditCrossTenantCollisions
+ *
+ * A clean deployment returns three empty arrays.
+ */
+export const auditCrossTenantCollisions = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const rows = await ctx.db.query("moduleRepository").take(AUDIT_ROW_LIMIT);
+
+    const byModuleKey: ModuleGroups = {};
+    const byNameVersion: ModuleGroups = {};
+    for (const row of rows) {
+      if (row.moduleKey) {
+        push(byModuleKey, row.moduleKey, row);
+      }
+      push(byNameVersion, `${row.name}@${row.version}`, row);
+    }
+
+    return {
+      truncated: rows.length === AUDIT_ROW_LIMIT,
+      sharedModuleKeys: collisions(byModuleKey),
+      sharedNameVersions: collisions(byNameVersion),
+      // Rows with no owner predate per-instance scoping (or are admin seeds).
+      // They can never match an instance-scoped lookup, so they are inert —
+      // listed so they can be attributed or dropped deliberately.
+      unownedRows: rows.filter((r) => !r.instanceId).map((r) => ({ _id: r._id, name: r.name, version: r.version })),
+    };
+  },
+});
+
+type ModuleGroups = Record<string, Doc<"moduleRepository">[]>;
+
+interface ModuleCollision {
+  key: string;
+  instanceIds: Array<Id<"instances"> | null>;
+  moduleRowIds: Array<Id<"moduleRepository">>;
+}
+
+function push(groups: ModuleGroups, key: string, row: Doc<"moduleRepository">) {
+  const existing = groups[key];
+  if (existing) {
+    existing.push(row);
+    return;
+  }
+  groups[key] = [row];
+}
+
+/** Groups whose rows span more than one owning instance. */
+function collisions(groups: ModuleGroups): ModuleCollision[] {
+  const result: ModuleCollision[] = [];
+  for (const [key, group] of Object.entries(groups)) {
+    const instanceIds: Array<Id<"instances"> | null> = [];
+    for (const row of group) {
+      const owner = row.instanceId ?? null;
+      if (!instanceIds.includes(owner)) {
+        instanceIds.push(owner);
+      }
+    }
+    if (instanceIds.length > 1) {
+      result.push({ key, instanceIds, moduleRowIds: group.map((r) => r._id) });
+    }
+  }
+  return result;
+}
+
 /**
  * Upload the zip to storage and deliver it to the engine.
  * Creates (or refreshes) a moduleRepository record in "pending" status so the
@@ -72,9 +149,14 @@ export const uploadAndDeliver = mutation({
       throw new Error("Not authenticated");
     }
 
+    // Scoped to the instance: an unscoped match would patch another tenant's
+    // row — including its instanceId — and hand this module's identity over to
+    // the uploader.
     const existing = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_name_version", (q) => q.eq("name", args.name).eq("version", args.version))
+      .withIndex("by_instance_name_version", (q) =>
+        q.eq("instanceId", args.instanceId).eq("name", args.name).eq("version", args.version)
+      )
       .first();
 
     const fields = {
