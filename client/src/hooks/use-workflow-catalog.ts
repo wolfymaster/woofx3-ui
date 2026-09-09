@@ -19,6 +19,8 @@ export type CatalogTriggerRow = {
   configFields?: unknown;
   /** DataShapeField[] naming what `trigger.data` carries when this trigger fires. */
   emits?: unknown;
+  /** Engine classification, e.g. ["platform.twitch"] — groups entries by source. */
+  taxonomy?: string[];
   moduleId?: string;
   moduleName?: string;
 };
@@ -36,6 +38,8 @@ export type CatalogActionRow = {
   configFields?: unknown;
   /** DataShapeField[] naming what this action's function hands back (e.g. {next, previous}). */
   returns?: unknown;
+  /** See CatalogTriggerRow.taxonomy. */
+  taxonomy?: string[];
   moduleId?: string;
   moduleName?: string;
 };

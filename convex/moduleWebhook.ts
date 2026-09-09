@@ -106,6 +106,7 @@ const triggerValidator = v.object({
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
   projectionKey: v.optional(v.string()),
+  taxonomy: v.optional(v.array(v.string())),
 });
 
 const actionValidator = v.object({
@@ -119,6 +120,7 @@ const actionValidator = v.object({
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
   projectionKey: v.optional(v.string()),
+  taxonomy: v.optional(v.array(v.string())),
 });
 
 /*
@@ -199,6 +201,7 @@ type EngineTrigger = {
   emits?: string;
   allowVariants?: boolean;
   projectionKey?: string;
+  taxonomy?: string[];
 };
 
 type EngineAction = {
@@ -210,6 +213,7 @@ type EngineAction = {
   paramsSchema?: string;
   returns?: string;
   projectionKey?: string;
+  taxonomy?: string[];
 };
 
 function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | undefined) {
@@ -226,6 +230,7 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
     emits: ui.emits,
     allowVariants: t.allowVariants,
     projectionKey: t.projectionKey,
+    taxonomy: t.taxonomy,
     moduleId,
   };
 }
@@ -243,6 +248,7 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
     configFields: ui.configFields,
     returns: ui.returns,
     projectionKey: a.projectionKey,
+    taxonomy: a.taxonomy,
     handlerType,
     functionCall: a.call?.trim() || undefined,
     moduleId,

@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, mutation, query } from "./_generated/server";
+import { resolveModuleIdByRef } from "./lib/moduleKey";
 
 type WidgetProvenance = {
   createdByType?: string;
@@ -131,14 +132,7 @@ export const registerFromWebhook = internalMutation({
   },
   handler: async (ctx, args) => {
     // Resolve moduleId only for module-sourced widgets (built-ins have none).
-    let moduleId: Id<"moduleRepository"> | undefined;
-    if (args.createdByType === "MODULE" && args.createdByRef) {
-      const mod = await ctx.db
-        .query("moduleRepository")
-        .withIndex("by_module_key", (q) => q.eq("moduleKey", args.createdByRef as string))
-        .first();
-      moduleId = mod?._id;
-    }
+    const moduleId = await resolveModuleIdByRef(ctx, args.createdByType, args.createdByRef);
 
     const def = {
       moduleId,

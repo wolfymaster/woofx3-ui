@@ -25,6 +25,7 @@ export const actionsStep: SyncStep = {
         description: row.description,
         paramsSchema: row.paramsSchema,
         projectionKey: row.projectionKey,
+        taxonomy: row.taxonomy,
         handlerType: row.type,
         functionCall: row.call,
         createdByType: row.createdByType,

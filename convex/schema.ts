@@ -328,6 +328,10 @@ export default defineSchema({
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
+    // The engine's open, multi-valued classification (e.g. ["platform.twitch"]),
+    // which replaces its legacy single-value category. Groups catalog entries by
+    // source without the UI hardcoding what the sources are.
+    taxonomy: v.optional(v.array(v.string())),
     moduleId: v.optional(v.id("moduleRepository")),
   })
     .index("by_slug", ["slug"])
@@ -347,6 +351,8 @@ export default defineSchema({
     // ${stepId.field} autocomplete. Parsed from the engine's `returns`.
     returns: v.optional(v.array(v.any())),
     projectionKey: v.optional(v.string()),
+    /** See triggerDefinitions.taxonomy. */
+    taxonomy: v.optional(v.array(v.string())),
     handlerType: v.optional(v.string()),
     functionCall: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),

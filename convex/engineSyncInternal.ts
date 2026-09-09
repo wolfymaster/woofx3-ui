@@ -3,6 +3,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { parseFieldList } from "@woofx3/api/ui-schema";
+import { bareModuleKey, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { canAccessAccount } from "./lib/teamAccess";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
@@ -401,6 +402,7 @@ export const reconcileTriggers = internalMutation({
         configSchema: v.optional(v.string()),
         allowVariants: v.optional(v.boolean()),
         projectionKey: v.optional(v.string()),
+        taxonomy: v.optional(v.array(v.string())),
         createdByType: v.optional(v.string()),
         createdByRef: v.optional(v.string()),
       })
@@ -408,17 +410,12 @@ export const reconcileTriggers = internalMutation({
   },
   handler: async (ctx, { instanceId, snapshots }) => {
     const snapshotIds = new Set(snapshots.map((s) => s.id));
+    const moduleIdsByKey = await loadModuleIdsByBareKey(ctx);
     let processed = 0;
 
     for (const snap of snapshots) {
-      let moduleId: Id<"moduleRepository"> | undefined;
-      if (snap.createdByType === "MODULE" && snap.createdByRef) {
-        const mod = await ctx.db
-          .query("moduleRepository")
-          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef!))
-          .first();
-        moduleId = mod?._id;
-      }
+      const moduleId =
+        snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
       const ui = triggerUiFields(snap.configSchema);
       const defRow = {
@@ -432,6 +429,7 @@ export const reconcileTriggers = internalMutation({
         configFields: ui.configFields,
         allowVariants: snap.allowVariants,
         projectionKey: snap.projectionKey,
+        taxonomy: snap.taxonomy,
         moduleId,
       };
       const existingDef = await ctx.db
@@ -523,6 +521,7 @@ export const reconcileActions = internalMutation({
         description: v.optional(v.string()),
         paramsSchema: v.optional(v.string()),
         projectionKey: v.optional(v.string()),
+        taxonomy: v.optional(v.array(v.string())),
         handlerType: v.optional(v.string()),
         functionCall: v.optional(v.string()),
         createdByType: v.optional(v.string()),
@@ -532,17 +531,12 @@ export const reconcileActions = internalMutation({
   },
   handler: async (ctx, { instanceId, snapshots }) => {
     const snapshotIds = new Set(snapshots.map((s) => s.id));
+    const moduleIdsByKey = await loadModuleIdsByBareKey(ctx);
     let processed = 0;
 
     for (const snap of snapshots) {
-      let moduleId: Id<"moduleRepository"> | undefined;
-      if (snap.createdByType === "MODULE" && snap.createdByRef) {
-        const mod = await ctx.db
-          .query("moduleRepository")
-          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef!))
-          .first();
-        moduleId = mod?._id;
-      }
+      const moduleId =
+        snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
       const ui = actionUiFields(snap.paramsSchema);
       const handlerType = snap.handlerType?.trim() || (snap.functionCall?.trim() ? "function" : undefined);
@@ -637,18 +631,13 @@ export const reconcileWidgets = internalMutation({
   },
   handler: async (ctx, { instanceId, snapshots }) => {
     const snapshotIds = new Set(snapshots.map((s) => s.id));
+    const moduleIdsByKey = await loadModuleIdsByBareKey(ctx);
     let processed = 0;
 
     for (const snap of snapshots) {
       // Resolve moduleId only for module-sourced widgets; built-ins have none.
-      let moduleId: Id<"moduleRepository"> | undefined;
-      if (snap.createdByType === "MODULE" && snap.createdByRef) {
-        const mod = await ctx.db
-          .query("moduleRepository")
-          .withIndex("by_module_key", (q) => q.eq("moduleKey", snap.createdByRef))
-          .first();
-        moduleId = mod?._id;
-      }
+      const moduleId =
+        snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
       const defRow = {
         moduleId,
