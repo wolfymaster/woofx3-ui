@@ -106,7 +106,10 @@ export const getAvailableWidgets = action({
   args: {
     instanceId: v.id("instances"),
   },
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
     widgets: Array<{
       id: string;
       manifestId: string;

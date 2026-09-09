@@ -24,9 +24,7 @@ export function TwitchSubscriptionGiftForm() {
       title="Subscription Gift"
       description="Simulate a bulk-gifted-subs event."
       eventSubject={TWITCH_EVENT_SUBJECTS.subscriptionGift}
-      onFire={() =>
-        fire(TWITCH_EVENT_SUBJECTS.subscriptionGift, payload as unknown as Record<string, unknown>)
-      }
+      onFire={() => fire(TWITCH_EVENT_SUBJECTS.subscriptionGift, payload as unknown as Record<string, unknown>)}
     >
       <div className="space-y-2">
         <Label htmlFor="gift-amount">Subs gifted</Label>

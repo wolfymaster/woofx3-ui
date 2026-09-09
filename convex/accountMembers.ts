@@ -1,12 +1,12 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
 import {
   assertCanManageAccountTeam,
   canAccessAccount,
   ensureInstanceMember,
   mapAccountRoleToInstanceRole,
 } from "./lib/teamAccess";
-import { mutation, query } from "./_generated/server";
 
 export const listForAccount = query({
   args: { accountId: v.id("accounts") },
@@ -95,9 +95,7 @@ export const removeMember = mutation({
 
     const row = await ctx.db
       .query("accountMembers")
-      .withIndex("by_account_user", (q) =>
-        q.eq("accountId", args.accountId).eq("userId", args.targetUserId),
-      )
+      .withIndex("by_account_user", (q) => q.eq("accountId", args.accountId).eq("userId", args.targetUserId))
       .first();
 
     if (!row) throw new Error("Member not found");
@@ -112,9 +110,7 @@ export const removeMember = mutation({
     for (const inst of instances) {
       const im = await ctx.db
         .query("instanceMembers")
-        .withIndex("by_instance_user", (q) =>
-          q.eq("instanceId", inst._id).eq("userId", args.targetUserId),
-        )
+        .withIndex("by_instance_user", (q) => q.eq("instanceId", inst._id).eq("userId", args.targetUserId))
         .first();
       if (im) {
         await ctx.db.delete(im._id);
@@ -143,9 +139,7 @@ export const updateMemberRole = mutation({
 
     const row = await ctx.db
       .query("accountMembers")
-      .withIndex("by_account_user", (q) =>
-        q.eq("accountId", args.accountId).eq("userId", args.targetUserId),
-      )
+      .withIndex("by_account_user", (q) => q.eq("accountId", args.accountId).eq("userId", args.targetUserId))
       .first();
 
     if (!row) throw new Error("Member not found");

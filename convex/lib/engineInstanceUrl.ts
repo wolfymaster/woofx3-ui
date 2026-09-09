@@ -1,6 +1,6 @@
-import { RpcTarget } from "@woofx3/api/client";
-import type { ApiGatewayContract } from "@woofx3/api/rpc";
 import type { Woofx3EngineApi } from "@woofx3/api";
+import type { RpcTarget } from "@woofx3/api/client";
+import type { ApiGatewayContract } from "@woofx3/api/rpc";
 
 // Re-export the SDK's capnweb session helpers + URL normalizer so everything
 // engine-related funnels through one import path in Convex code. The actual

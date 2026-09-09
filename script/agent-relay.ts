@@ -10,9 +10,9 @@
  * Default port: 9999
  */
 
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocket, WebSocketServer } from "ws";
 
-const PORT = parseInt(process.argv[2] || '9999', 10);
+const PORT = parseInt(process.argv[2] || "9999", 10);
 
 interface AgentConnection {
   id: string;
@@ -50,7 +50,7 @@ console.log(`\n🔗 Agent Relay Server started on ws://localhost:${PORT}`);
 console.log(`\nWaiting for agents to connect...\n`);
 console.log(`─────────────────────────────────────────────────`);
 
-wss.on('connection', (ws) => {
+wss.on("connection", (ws) => {
   const agentId = generateId();
   const agent: AgentConnection = {
     id: agentId,
@@ -64,45 +64,48 @@ wss.on('connection', (ws) => {
   console.log(`  Total agents: ${agents.size}`);
 
   // Send welcome message with agent ID
-  ws.send(JSON.stringify({
-    type: 'welcome',
-    agentId,
-    connectedAgents: agents.size,
-    instructions: `You are connected to the agent relay. Your ID is "${agentId}". ` +
-      `Send messages with { "type": "message", "content": "..." } to broadcast to other agents. ` +
-      `Use { "type": "identify", "name": "..." } to set your display name.`,
-  }));
+  ws.send(
+    JSON.stringify({
+      type: "welcome",
+      agentId,
+      connectedAgents: agents.size,
+      instructions:
+        `You are connected to the agent relay. Your ID is "${agentId}". ` +
+        `Send messages with { "type": "message", "content": "..." } to broadcast to other agents. ` +
+        `Use { "type": "identify", "name": "..." } to set your display name.`,
+    })
+  );
 
   // Notify other agents
   broadcast(agentId, {
-    type: 'agent_joined',
+    type: "agent_joined",
     agentId,
     totalAgents: agents.size,
   });
 
-  ws.on('message', (data) => {
+  ws.on("message", (data) => {
     try {
       const message = JSON.parse(data.toString());
       const timestamp = new Date().toISOString();
       const displayName = agent.name || agentId;
 
       switch (message.type) {
-        case 'identify':
+        case "identify":
           agent.name = message.name;
           console.log(`[${timestamp}] Agent ${agentId} identified as "${message.name}"`);
           broadcast(agentId, {
-            type: 'agent_identified',
+            type: "agent_identified",
             agentId,
             name: message.name,
           });
           break;
 
-        case 'message':
+        case "message":
           messageId++;
           console.log(`[${timestamp}] Message #${messageId} from ${displayName}:`);
-          console.log(`  ${message.content?.substring(0, 200)}${message.content?.length > 200 ? '...' : ''}`);
+          console.log(`  ${message.content?.substring(0, 200)}${message.content?.length > 200 ? "..." : ""}`);
           broadcast(agentId, {
-            type: 'message',
+            type: "message",
             id: messageId,
             from: agentId,
             fromName: agent.name,
@@ -111,18 +114,19 @@ wss.on('connection', (ws) => {
           });
           break;
 
-        case 'ping':
-          ws.send(JSON.stringify({ type: 'pong', timestamp }));
+        case "ping":
+          ws.send(JSON.stringify({ type: "pong", timestamp }));
           break;
 
-        case 'list_agents':
-          const agentList = Array.from(agents.values()).map(a => ({
+        case "list_agents": {
+          const agentList = Array.from(agents.values()).map((a) => ({
             id: a.id,
             name: a.name,
             joinedAt: a.joinedAt.toISOString(),
           }));
-          ws.send(JSON.stringify({ type: 'agent_list', agents: agentList }));
+          ws.send(JSON.stringify({ type: "agent_list", agents: agentList }));
           break;
+        }
 
         default:
           // Forward unknown message types as-is
@@ -138,30 +142,30 @@ wss.on('connection', (ws) => {
     }
   });
 
-  ws.on('close', () => {
+  ws.on("close", () => {
     agents.delete(agentId);
     console.log(`[${new Date().toISOString()}] Agent disconnected: ${agent.name || agentId}`);
     console.log(`  Total agents: ${agents.size}`);
 
     broadcast(agentId, {
-      type: 'agent_left',
+      type: "agent_left",
       agentId,
       name: agent.name,
       totalAgents: agents.size,
     });
   });
 
-  ws.on('error', (err) => {
+  ws.on("error", (err) => {
     console.error(`[${new Date().toISOString()}] WebSocket error for ${agent.name || agentId}:`, err);
   });
 });
 
-wss.on('error', (err) => {
-  console.error('Server error:', err);
+wss.on("error", (err) => {
+  console.error("Server error:", err);
 });
 
-process.on('SIGINT', () => {
-  console.log('\n\nShutting down relay server...');
+process.on("SIGINT", () => {
+  console.log("\n\nShutting down relay server...");
   wss.close();
   process.exit(0);
 });

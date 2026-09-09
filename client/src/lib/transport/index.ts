@@ -2,13 +2,11 @@
 // based on whether we're running in a browser or Tauri desktop app.
 
 import { BrowserTransport } from "./browser-transport";
-import { TauriTransport } from "./tauri-transport";
 import type { WoofxTransport } from "./interface";
+import { TauriTransport } from "./tauri-transport";
 
 function isTauri(): boolean {
-  return (
-    typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
-  );
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
 function createTransport(): WoofxTransport {

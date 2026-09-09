@@ -1,6 +1,6 @@
-import type { ConfigField } from "@woofx3/api/ui-schema";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { ConfigField } from "@woofx3/api/ui-schema";
 import { useAction, useQuery } from "convex/react";
 import { ArrowLeft, Link, Maximize, MoreVertical, Save, Settings, Trash2, ZoomIn, ZoomOut } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";

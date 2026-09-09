@@ -1,6 +1,6 @@
-import { RefreshCw, XCircle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { RefreshCw, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface ErrorStateProps {
   title?: string;
@@ -9,11 +9,11 @@ interface ErrorStateProps {
   compact?: boolean;
 }
 
-export function ErrorState({ 
-  title = 'Failed to load data', 
-  message = 'An error occurred while fetching the data.', 
+export function ErrorState({
+  title = "Failed to load data",
+  message = "An error occurred while fetching the data.",
   onRetry,
-  compact = false 
+  compact = false,
 }: ErrorStateProps) {
   if (compact) {
     return (

@@ -1,12 +1,12 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
 import {
   assertCanManageAccountTeam,
   canAccessAccount,
   grantInstanceAccessForAccount,
   normalizeEmail,
 } from "./lib/teamAccess";
-import { mutation, query } from "./_generated/server";
 
 function randomToken(): string {
   return `${crypto.randomUUID().replace(/-/g, "")}${crypto.randomUUID().replace(/-/g, "")}`;
@@ -76,9 +76,7 @@ export const create = mutation({
 
     const existing = await ctx.db
       .query("invitations")
-      .withIndex("by_account_email", (q) =>
-        q.eq("accountId", args.accountId).eq("email", normalized),
-      )
+      .withIndex("by_account_email", (q) => q.eq("accountId", args.accountId).eq("email", normalized))
       .collect();
 
     const now = Date.now();
@@ -157,9 +155,7 @@ export const accept = mutation({
 
     const existingMember = await ctx.db
       .query("accountMembers")
-      .withIndex("by_account_user", (q) =>
-        q.eq("accountId", inv.accountId).eq("userId", userId),
-      )
+      .withIndex("by_account_user", (q) => q.eq("accountId", inv.accountId).eq("userId", userId))
       .first();
 
     if (existingMember) {

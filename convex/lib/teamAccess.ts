@@ -5,22 +5,14 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-export async function getInstanceMembership(
-  ctx: QueryCtx,
-  instanceId: Id<"instances">,
-  userId: Id<"users">,
-) {
+export async function getInstanceMembership(ctx: QueryCtx, instanceId: Id<"instances">, userId: Id<"users">) {
   return ctx.db
     .query("instanceMembers")
     .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
     .first();
 }
 
-export async function getAccountMembership(
-  ctx: QueryCtx,
-  accountId: Id<"accounts">,
-  userId: Id<"users">,
-) {
+export async function getAccountMembership(ctx: QueryCtx, accountId: Id<"accounts">, userId: Id<"users">) {
   return ctx.db
     .query("accountMembers")
     .withIndex("by_account_user", (q) => q.eq("accountId", accountId).eq("userId", userId))
@@ -31,7 +23,7 @@ export async function getAccountMembership(
 export async function canAccessAccount(
   ctx: QueryCtx,
   accountId: Id<"accounts">,
-  userId: Id<"users">,
+  userId: Id<"users">
 ): Promise<boolean> {
   const account = await ctx.db.get(accountId);
   if (!account) {
@@ -48,7 +40,7 @@ export async function canAccessAccount(
 export async function assertCanManageAccountTeam(
   ctx: QueryCtx,
   accountId: Id<"accounts">,
-  userId: Id<"users">,
+  userId: Id<"users">
 ): Promise<{ account: Doc<"accounts"> } | null> {
   const account = await ctx.db.get(accountId);
   if (!account) {
@@ -79,7 +71,7 @@ export async function ensureInstanceMember(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   userId: Id<"users">,
-  role: "owner" | "admin" | "member",
+  role: "owner" | "admin" | "member"
 ) {
   const existing = await ctx.db
     .query("instanceMembers")
@@ -103,7 +95,7 @@ export async function grantInstanceAccessForAccount(
   ctx: MutationCtx,
   accountId: Id<"accounts">,
   userId: Id<"users">,
-  accountRole: AccountTeamRole,
+  accountRole: AccountTeamRole
 ) {
   const instanceRole = mapAccountRoleToInstanceRole(accountRole);
   const instances = await ctx.db

@@ -1,6 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { query, mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
 export const list = query({
@@ -84,11 +84,7 @@ export const replay = mutation({
     }
 
     // Call the engine to replay the alert
-    const engineApi = createEngineRpcSession<EngineApi>(
-      instance.url,
-      instance.clientId,
-      instance.clientSecret
-    );
+    const engineApi = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
 
     await engineApi.replayAlert(alert._id);
 

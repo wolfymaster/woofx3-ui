@@ -89,11 +89,14 @@ export const getForInstance = internalQuery({
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
       .collect();
 
-    const configs: Record<string, {
-      obsHost: string;
-      obsPassword?: string;
-      platformActions: typeof scenes[number][];
-    }> = {};
+    const configs: Record<
+      string,
+      {
+        obsHost: string;
+        obsPassword?: string;
+        platformActions: (typeof scenes)[number][];
+      }
+    > = {};
 
     for (const scene of scenes) {
       const config = await ctx.db

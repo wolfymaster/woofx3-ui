@@ -1,8 +1,8 @@
+import { parseDataShape, parseFieldList } from "@woofx3/api/ui-schema";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
-import { parseDataShape, parseFieldList } from "@woofx3/api/ui-schema";
 
 // Provenance from the engine: createdByRef == the module's composite moduleKey
 // (or "builtin" for SYSTEM resources). Drives cascade-on-delete; replaces moduleId.

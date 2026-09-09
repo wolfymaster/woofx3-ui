@@ -72,11 +72,7 @@ export const syncToEngine = internalAction({
       throw new Error("Instance not registered with engine");
     }
 
-    const engine = createEngineRpcSession<EngineApi>(
-      instance.url,
-      instance.clientId,
-      instance.clientSecret,
-    );
+    const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
 
     const token = {
       userId: link.platformUserId,
@@ -108,11 +104,7 @@ export const disconnect = action({
 
     if (instance?.clientId && instance?.clientSecret) {
       try {
-        const engine = createEngineRpcSession<EngineApi>(
-          instance.url,
-          instance.clientId,
-          instance.clientSecret,
-        );
+        const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
         await engine.deleteTwitchToken();
       } catch (err) {
         console.warn("[disconnect] engine.deleteTwitchToken failed (proceeding with local delete)", err);
@@ -123,4 +115,3 @@ export const disconnect = action({
     return { ok: true };
   },
 });
-

@@ -1,8 +1,8 @@
-import { useEffect } from "react";
 import { useStore } from "@nanostores/react";
+import { useEffect } from "react";
+import { useInstance } from "@/hooks/use-instance";
 import { $engineUrl } from "@/lib/stores";
 import { transport } from "@/lib/transport";
-import { useInstance } from "@/hooks/use-instance";
 
 /**
  * Keeps the browser/Tauri engine transport aligned with the selected Convex instance.

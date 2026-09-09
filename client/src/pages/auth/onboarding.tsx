@@ -1,19 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'wouter';
-import { useAction, useMutation, useQuery } from 'convex/react';
-import { useConvexAuth } from 'convex/react';
-import { api } from '@convex/_generated/api';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { MonitorPlay, Loader2, Check, Server, Building2 } from 'lucide-react';
-import { $currentInstanceId } from '@/lib/stores';
-import type { Id } from '@convex/_generated/dataModel';
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
+import { Building2, Check, Loader2, MonitorPlay, Server } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { $currentInstanceId } from "@/lib/stores";
 
 const STEPS = [
-  { id: 'account', title: 'Create your workspace', icon: Building2, description: 'Set up your account name' },
-  { id: 'instance', title: 'Connect your woofx3 instance', icon: Server, description: 'Enter the URL of your woofx3 installation' },
+  { id: "account", title: "Create your workspace", icon: Building2, description: "Set up your account name" },
+  {
+    id: "instance",
+    title: "Connect your woofx3 instance",
+    icon: Server,
+    description: "Enter the URL of your woofx3 installation",
+  },
 ];
 
 export default function Onboarding() {
@@ -26,17 +30,17 @@ export default function Onboarding() {
   const [error, setError] = useState<string | null>(null);
 
   // Step 1: Account
-  const [accountName, setAccountName] = useState('');
+  const [accountName, setAccountName] = useState("");
 
   // Step 2: Instance
-  const [instanceName, setInstanceName] = useState('');
-  const [instanceUrl, setInstanceUrl] = useState('localhost:8080');
+  const [instanceName, setInstanceName] = useState("");
+  const [instanceUrl, setInstanceUrl] = useState("localhost:8080");
 
   const createAccount = useMutation(api.accounts.createAccount);
   const createInstance = useMutation(api.instances.create);
   const registerInstance = useAction(api.registration.registerInstance);
   const existingAccount = useQuery(api.accounts.getMyAccount);
-  const [workspaceAccountId, setWorkspaceAccountId] = useState<Id<'accounts'> | null>(null);
+  const [workspaceAccountId, setWorkspaceAccountId] = useState<Id<"accounts"> | null>(null);
   const [registrationStatus, setRegistrationStatus] = useState<string | null>(null);
   const didPrefill = useRef(false);
 
@@ -62,7 +66,7 @@ export default function Onboarding() {
       }
       setStep(1);
     } catch (err: any) {
-      setError(err.message || 'Failed to create account.');
+      setError(err.message || "Failed to create account.");
     } finally {
       setIsLoading(false);
     }
@@ -75,10 +79,10 @@ export default function Onboarding() {
     try {
       const accountIdToUse = existingAccount?._id ?? workspaceAccountId;
       if (!accountIdToUse) {
-        throw new Error('Account not found');
+        throw new Error("Account not found");
       }
 
-      setRegistrationStatus('Creating instance...');
+      setRegistrationStatus("Creating instance...");
       const instanceId = await createInstance({
         accountId: accountIdToUse,
         name: instanceName.trim(),
@@ -86,7 +90,7 @@ export default function Onboarding() {
       });
 
       // Register with the woofx3 engine (handshake)
-      setRegistrationStatus('Registering with engine...');
+      setRegistrationStatus("Registering with engine...");
       const result = await registerInstance({ instanceId });
 
       if (!result.ok) {
@@ -95,9 +99,9 @@ export default function Onboarding() {
       }
 
       $currentInstanceId.set(instanceId);
-      navigate('/');
+      navigate("/");
     } catch (err: any) {
-      setError(err.message || 'Failed to create instance.');
+      setError(err.message || "Failed to create instance.");
     } finally {
       setIsLoading(false);
       setRegistrationStatus(null);
@@ -124,18 +128,18 @@ export default function Onboarding() {
         <div className="flex items-center justify-center gap-2 mb-8">
           {STEPS.map((s, i) => (
             <div key={s.id} className="flex items-center gap-2">
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors ${
-                i < step
-                  ? 'bg-primary text-primary-foreground'
-                  : i === step
-                  ? 'bg-primary/20 text-primary border-2 border-primary'
-                  : 'bg-muted text-muted-foreground'
-              }`}>
+              <div
+                className={`flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-colors ${
+                  i < step
+                    ? "bg-primary text-primary-foreground"
+                    : i === step
+                      ? "bg-primary/20 text-primary border-2 border-primary"
+                      : "bg-muted text-muted-foreground"
+                }`}
+              >
                 {i < step ? <Check className="h-4 w-4" /> : i + 1}
               </div>
-              {i < STEPS.length - 1 && (
-                <div className={`h-px w-12 ${i < step ? 'bg-primary' : 'bg-muted'}`} />
-              )}
+              {i < STEPS.length - 1 && <div className={`h-px w-12 ${i < step ? "bg-primary" : "bg-muted"}`} />}
             </div>
           ))}
         </div>
@@ -221,7 +225,7 @@ export default function Onboarding() {
                   </Button>
                   <Button type="submit" className="flex-1" disabled={isLoading}>
                     {isLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    {registrationStatus ?? 'Get started'}
+                    {registrationStatus ?? "Get started"}
                   </Button>
                 </div>
               </form>

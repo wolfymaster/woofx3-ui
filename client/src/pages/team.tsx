@@ -1,40 +1,25 @@
-import { useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import {
-  Search,
-  MoreHorizontal,
-  Users,
-  UserPlus,
-  Shield,
-  Crown,
-  Mail,
-  Trash2,
-  Building2,
-  Link as LinkIcon,
-  Copy,
-} from "lucide-react";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useMutation, useQuery } from "convex/react";
+import {
+  Building2,
+  Copy,
+  Crown,
+  Link as LinkIcon,
+  Mail,
+  MoreHorizontal,
+  Search,
+  Shield,
+  Trash2,
+  UserPlus,
+  Users,
+} from "lucide-react";
+import { useMemo, useState } from "react";
+import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -45,19 +30,21 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { PageHeader } from "@/components/layout/page-header";
-import { cn } from "@/lib/utils";
-import { useInstance } from "@/hooks/use-instance";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConvexUser } from "@/hooks/use-convex-auth";
+import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 const roleColors: Record<string, string> = {
   owner: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
@@ -78,10 +65,7 @@ export default function Team() {
 
   const accountId = instance?.accountId;
 
-  const teamData = useQuery(
-    api.accountMembers.listForAccount,
-    accountId ? { accountId } : "skip",
-  );
+  const teamData = useQuery(api.accountMembers.listForAccount, accountId ? { accountId } : "skip");
   const accounts = useQuery(api.accounts.listAccessibleForUser);
   const inviteData = useQuery(api.invitations.listForAccount, accountId ? { accountId } : "skip");
 
@@ -103,11 +87,7 @@ export default function Team() {
 
   const filteredMembers = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    return members.filter(
-      (m) =>
-        m.name.toLowerCase().includes(q) ||
-        (m.email ?? "").toLowerCase().includes(q),
-    );
+    return members.filter((m) => m.name.toLowerCase().includes(q) || (m.email ?? "").toLowerCase().includes(q));
   }, [members, searchQuery]);
 
   async function handleInvite() {
@@ -169,10 +149,7 @@ export default function Team() {
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
-      <PageHeader
-        title="Team"
-        description="Members and accounts for the workspace tied to your selected instance."
-      />
+      <PageHeader title="Team" description="Members and accounts for the workspace tied to your selected instance." />
 
       <Tabs defaultValue="members" className="space-y-6">
         <TabsList>
@@ -231,10 +208,7 @@ export default function Team() {
                         </div>
                         <div className="space-y-2">
                           <Label>Role</Label>
-                          <Select
-                            value={inviteRole}
-                            onValueChange={(v) => setInviteRole(v as "admin" | "member")}
-                          >
+                          <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as "admin" | "member")}>
                             <SelectTrigger data-testid="select-invite-role">
                               <SelectValue />
                             </SelectTrigger>
@@ -245,7 +219,8 @@ export default function Team() {
                           </Select>
                           <p className="text-xs text-muted-foreground">
                             {inviteRole === "admin" && "Can manage team settings and members."}
-                            {inviteRole === "member" && "Can use workflows, assets, and engine features for this account."}
+                            {inviteRole === "member" &&
+                              "Can use workflows, assets, and engine features for this account."}
                           </p>
                         </div>
                         {inviteLink ? (
@@ -301,7 +276,9 @@ export default function Team() {
               {teamData === undefined ? (
                 <div className="text-center py-8 text-muted-foreground">Loading members...</div>
               ) : teamData === null ? (
-                <div className="text-center py-8 text-muted-foreground">You don&apos;t have access to this account.</div>
+                <div className="text-center py-8 text-muted-foreground">
+                  You don&apos;t have access to this account.
+                </div>
               ) : (
                 <Table>
                   <TableHeader>
@@ -366,7 +343,11 @@ export default function Team() {
                       const isAccountOwnerRow = ownerId !== undefined && member.userId === ownerId;
 
                       return (
-                        <TableRow key={member.userId} className="hover-elevate" data-testid={`row-member-${member.userId}`}>
+                        <TableRow
+                          key={member.userId}
+                          className="hover-elevate"
+                          data-testid={`row-member-${member.userId}`}
+                        >
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <Avatar>
@@ -495,7 +476,8 @@ export default function Team() {
           <div className="mb-6">
             <h2 className="text-lg font-semibold">Accounts</h2>
             <p className="text-muted-foreground">
-              Your workspace and accounts others have shared with you. You can&apos;t add another owned account here yet.
+              Your workspace and accounts others have shared with you. You can&apos;t add another owned account here
+              yet.
             </p>
           </div>
 

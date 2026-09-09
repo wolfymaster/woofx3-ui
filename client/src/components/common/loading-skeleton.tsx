@@ -1,5 +1,5 @@
-import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface CardSkeletonProps {
   count?: number;
@@ -10,7 +10,7 @@ export function CardSkeleton({ count = 1, className }: CardSkeletonProps) {
   return (
     <>
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className={cn('rounded-lg border bg-card p-4 space-y-3', className)}>
+        <div key={i} className={cn("rounded-lg border bg-card p-4 space-y-3", className)}>
           <Skeleton className="h-32 w-full rounded-md" />
           <div className="space-y-2">
             <Skeleton className="h-4 w-3/4" />
@@ -91,7 +91,7 @@ export function DashboardSkeleton() {
         </div>
         <Skeleton className="h-10 w-32" />
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="rounded-lg border bg-card p-6 space-y-3">

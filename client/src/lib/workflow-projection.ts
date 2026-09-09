@@ -15,7 +15,10 @@ const NODE_HEIGHT = 80;
 
 export type LayoutDirection = "horizontal" | "vertical";
 
-export function definitionToReactFlow(def: WorkflowDefinition, direction: LayoutDirection = "horizontal"): {
+export function definitionToReactFlow(
+  def: WorkflowDefinition,
+  direction: LayoutDirection = "horizontal"
+): {
   nodes: ProjectionNode[];
   edges: Edge[];
 } {
