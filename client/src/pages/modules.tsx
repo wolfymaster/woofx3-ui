@@ -14,6 +14,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
+import { bareModuleKey } from "@/lib/module-key";
 
 interface ModuleListItem {
   _id: Id<"moduleRepository">;
@@ -94,6 +95,10 @@ export default function Modules() {
   const [moduleDetail, setModuleDetail] = useState<ModuleDetailResult | null>(null);
   const [moduleDetailLoading, setModuleDetailLoading] = useState(false);
   const [moduleDetailError, setModuleDetailError] = useState<string | null>(null);
+  // getModuleDetail is an action — a one-shot fetch, not a reactive query — so an install or update
+  // that lands on the route we are already on would leave the panel rendering the superseded version
+  // (and its "Update available" notice). Bumped when a module event reports success, to refetch.
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
 
   const prevSelectedRef = useRef(selectedModule);
   useEffect(() => {
@@ -116,15 +121,7 @@ export default function Modules() {
   const handleSelectInstalled = useCallback(
     (moduleId: Id<"moduleRepository">) => {
       const target = (repoModules || []).find((m) => m._id === moduleId);
-      const mk = target?.moduleKey;
-      if (mk) {
-        const parts = mk.split(":");
-        if (parts[0]) {
-          navigate(`/modules/${parts[0]}`);
-          return;
-        }
-      }
-      navigate(`/modules/${moduleId}`);
+      navigate(`/modules/${bareModuleKey(target?.moduleKey) ?? moduleId}`);
     },
     [navigate, repoModules]
   );
@@ -165,23 +162,27 @@ export default function Modules() {
     setSelectedModule({ source: "marketplace", marketplaceId: routeModuleId });
   }, [routeModuleId, repoModules]);
 
+  // An update started from the Installed list can be sitting on a `/modules/{convexId}` route (a
+  // module with no moduleKey is addressed by _id), so land on the marketplace-id route the upgraded
+  // module now answers to. Only ever re-routes a detail view onto itself: a route that already
+  // matches would just churn the detail fetch below, and someone who has browsed back to the store
+  // in the meantime should not be yanked out of it.
   useEffect(() => {
-    if (selectedModule?.source !== "marketplace" || !pendingModuleKey) {
+    if (installEvent?.status !== "success" || !pendingModuleKey || routeModuleId === undefined) {
       return;
     }
-    if (installEvent?.status === "success") {
-      const mpId = pendingModuleKey.split(":")[0];
-      if (mpId) {
-        navigate(`/modules/${mpId}`);
-      }
+    const marketplaceId = bareModuleKey(pendingModuleKey);
+    if (marketplaceId && marketplaceId !== routeModuleId) {
+      navigate(`/modules/${marketplaceId}`);
     }
-  }, [installEvent, pendingModuleKey, selectedModule, navigate]);
+  }, [installEvent, pendingModuleKey, routeModuleId, navigate]);
 
   useEffect(() => {
     if (installEvent?.status === "success") {
       const timer = setTimeout(() => {
         setIsInstalling(false);
         setPendingModuleKey(null);
+        setDetailRefreshKey((key) => key + 1);
       }, 1500);
       return () => clearTimeout(timer);
     }
@@ -217,6 +218,7 @@ export default function Modules() {
     [selectedModule]
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: detailRefreshKey re-triggers the fetch, it is not a value read in the body
   useEffect(() => {
     if (!detailModuleId || !instance) {
       setModuleDetail(null);
@@ -245,10 +247,24 @@ export default function Modules() {
     return () => {
       cancelled = true;
     };
-  }, [detailModuleId, instance, getModuleDetail]);
+  }, [detailModuleId, detailRefreshKey, instance, getModuleDetail]);
+
+  // Installing and updating are the same marketplace operation, and both need only the module's
+  // marketplace id. An installed selection carries that id in its moduleKey, so deriving it here —
+  // rather than reading it off a `source: "marketplace"` selection — is what makes Update reachable
+  // from the Installed list and not only from the Store.
+  const selectedMarketplaceId = useMemo(() => {
+    if (!selectedModule) {
+      return null;
+    }
+    if (selectedModule.source === "marketplace") {
+      return selectedModule.marketplaceId;
+    }
+    return bareModuleKey(selectedModule.module.moduleKey) ?? null;
+  }, [selectedModule]);
 
   const handleMarketplaceInstall = useCallback(async () => {
-    if (!instance || selectedModule?.source !== "marketplace") {
+    if (!instance || !selectedMarketplaceId) {
       return;
     }
     setIsInstalling(true);
@@ -256,14 +272,14 @@ export default function Modules() {
     try {
       const { moduleKey } = await installMarketplaceModule({
         instanceId: instance._id,
-        marketplaceModuleId: selectedModule.marketplaceId,
+        marketplaceModuleId: selectedMarketplaceId,
       });
       setPendingModuleKey(moduleKey);
     } catch (err) {
       setInstallError(err instanceof Error ? err.message : "Failed to install marketplace module.");
       setIsInstalling(false);
     }
-  }, [instance, selectedModule, installMarketplaceModule]);
+  }, [instance, selectedMarketplaceId, installMarketplaceModule]);
 
   const installedModuleForMarketplace = useMemo(() => {
     if (selectedModule?.source !== "marketplace" || !repoModules) {
@@ -337,7 +353,7 @@ export default function Modules() {
       category: m.category,
       tags: m.tags,
       isInstalled: m.isInstalled,
-      identifier: m.moduleKey?.split(":")[0],
+      identifier: bareModuleKey(m.moduleKey),
     };
   }, [selectedModule]);
 
@@ -417,8 +433,8 @@ export default function Modules() {
                           ? () => handleDelete(installedModuleForMarketplace._id)
                           : undefined
                     }
-                    onInstall={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
-                    onUpdate={selectedModule.source === "marketplace" ? handleMarketplaceInstall : undefined}
+                    onInstall={selectedMarketplaceId ? handleMarketplaceInstall : undefined}
+                    onUpdate={selectedMarketplaceId ? handleMarketplaceInstall : undefined}
                     isInstalling={isInstalling}
                     installDisabled={meta.isInstalled}
                     installDisabledReason={meta.isInstalled ? "Already installed" : undefined}

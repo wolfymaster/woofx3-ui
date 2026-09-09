@@ -244,6 +244,39 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
 }
 
 /**
+ * The row an incoming install replaces: this instance's record for the same
+ * module (matched on the version-free leading segment of the moduleKey) at a
+ * different version.
+ *
+ * The engine upgrades in place — barkloader tears down the previous version's
+ * triggers, actions, widgets, workflows and commands before registering the
+ * new ones, under a unique constraint on module name — so a second Convex row
+ * would misrepresent one module as two: the superseded version would sit in
+ * the Installed list forever, and every row pointing at the old record
+ * (trigger/action definitions, functions, widgets, assets, resource
+ * instances) would be stranded on it. Patching keeps the _id stable so those
+ * links survive the upgrade, and refreshes moduleKey so a later uninstall —
+ * which cascades on `createdByRef == record.moduleKey` — still matches.
+ */
+async function findSupersededModule(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  correlationKey: string
+): Promise<Doc<"moduleRepository"> | null> {
+  const bareKey = correlationKey.split(":")[0];
+  if (!bareKey) {
+    return null;
+  }
+  // Bounded by the modules installed on one instance, and there is no index on
+  // the leading segment of moduleKey — the same scan resolveModuleForDetail does.
+  const installed = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .collect();
+  return installed.find((m) => m.moduleKey?.split(":")[0] === bareKey) ?? null;
+}
+
+/**
  * Process a module.installed webhook callback from the engine.
  * Flips the "pending" moduleRepository record created by uploadAndDeliver to
  * "installed", leaving its manifest untouched. Marketplace installs don't
@@ -252,6 +285,10 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
  * http.ts schedules moduleManifestSync.syncManifest right after this
  * returns, which fetches the engine's authoritative manifest and backfills
  * it regardless of which path was taken.
+ *
+ * An upgrade arrives here as a new versioned moduleKey for a module that is
+ * already installed, and is applied to the existing row rather than inserted
+ * beside it — see `findSupersededModule`.
  */
 export const processModuleInstalled = internalMutation({
   args: {
@@ -269,6 +306,8 @@ export const processModuleInstalled = internalMutation({
       .withIndex("by_name_version", (q) => q.eq("name", moduleName).eq("version", moduleVersion))
       .first();
 
+    const superseded = record ? null : await findSupersededModule(ctx, instanceId, correlationKey);
+
     let moduleId: Id<"moduleRepository">;
     if (record) {
       await ctx.db.patch(record._id, {
@@ -277,6 +316,15 @@ export const processModuleInstalled = internalMutation({
         moduleKey: record.moduleKey ?? correlationKey,
       });
       moduleId = record._id;
+    } else if (superseded) {
+      await ctx.db.patch(superseded._id, {
+        status: "installed" as const,
+        statusMessage: undefined,
+        moduleKey: correlationKey,
+        name: moduleName,
+        version: moduleVersion,
+      });
+      moduleId = superseded._id;
     } else {
       moduleId = await ctx.db.insert("moduleRepository", {
         instanceId,
