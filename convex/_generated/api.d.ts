@@ -50,7 +50,6 @@ import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/tri
 import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widgets.js";
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
-import type * as lib_parseConfigSchema from "../lib/parseConfigSchema.js";
 import type * as lib_pkce from "../lib/pkce.js";
 import type * as lib_sceneOverlayUrl from "../lib/sceneOverlayUrl.js";
 import type * as lib_sceneSerialization from "../lib/sceneSerialization.js";
@@ -152,7 +151,6 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/widgets": typeof lib_engineSync_steps_widgets;
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/moduleKey": typeof lib_moduleKey;
-  "lib/parseConfigSchema": typeof lib_parseConfigSchema;
   "lib/pkce": typeof lib_pkce;
   "lib/sceneOverlayUrl": typeof lib_sceneOverlayUrl;
   "lib/sceneSerialization": typeof lib_sceneSerialization;
