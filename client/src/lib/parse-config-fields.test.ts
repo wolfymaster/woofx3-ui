@@ -31,19 +31,15 @@ describe("parseConfigFields", () => {
     expect(fields[0].description).toBe("Only fire when the redemption matches this reward.");
   });
 
-  test("normalizes boolean to toggle", () => {
-    const [f] = parseConfigFields([{ id: "x", label: "X", type: "boolean" }]);
-    expect(f.type).toBe("toggle");
+  // The contract's type list is closed and barkloader validates it at install, so an
+  // unrecognised type means a malformed declaration rather than a dialect to translate.
+  // `boolean` was the one the old parser rewrote to `toggle`; no manifest declares it.
+  test("drops a field whose type is not in the contract", () => {
+    expect(parseConfigFields([{ id: "x", label: "X", type: "boolean" }])).toEqual([]);
   });
 
   test("maps resource_ref field's resourceKind property (actual engine wire shape)", () => {
     const [f] = parseConfigFields([{ id: "counter", label: "Counter", type: "resource_ref", resourceKind: "counter" }]);
-    expect(f.type).toBe("resource_ref");
-    expect(f.resourceKind).toBe("counter");
-  });
-
-  test("falls back to a resource_ref field's kind property", () => {
-    const [f] = parseConfigFields([{ id: "counter", label: "Counter", type: "resource_ref", kind: "counter" }]);
     expect(f.type).toBe("resource_ref");
     expect(f.resourceKind).toBe("counter");
   });
