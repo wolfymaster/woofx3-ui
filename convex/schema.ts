@@ -321,6 +321,10 @@ export default defineSchema({
     event: v.optional(v.string()),
     allowVariants: v.optional(v.boolean()),
     configFields: v.optional(v.array(v.any())),
+    // DataShapeField[] naming what `trigger.data` carries when this trigger
+    // fires. Preferred over deriving variables from configFields' eventPath,
+    // which can only describe keys that are also config fields.
+    emits: v.optional(v.array(v.any())),
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
@@ -338,10 +342,10 @@ export default defineSchema({
     color: v.string(),
     icon: v.string(),
     configFields: v.optional(v.array(v.any())),
-    // ConfigField-shaped declarations describing this action's return value
-    // (e.g. an increment action's {next, previous, step}). UI-only — backs
-    // the workflow builder's ${stepId.field} variable autocomplete.
-    outputFields: v.optional(v.array(v.any())),
+    // DataShapeField[] naming what this action's function hands back (e.g. an
+    // increment action's {next, previous}). Backs the workflow builder's
+    // ${stepId.field} autocomplete. Parsed from the engine's `returns`.
+    returns: v.optional(v.array(v.any())),
     projectionKey: v.optional(v.string()),
     handlerType: v.optional(v.string()),
     functionCall: v.optional(v.string()),
@@ -671,22 +675,12 @@ export default defineSchema({
     createdByRef: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
     alertTypes: v.array(v.string()),
-    settings: v.array(
-      v.object({
-        key: v.string(),
-        fieldType: v.string(),
-        label: v.string(),
-        defaultValue: v.any(),
-        options: v.optional(
-          v.array(
-            v.object({
-              label: v.string(),
-              value: v.string(),
-            })
-          )
-        ),
-      })
-    ),
+    // ConfigField[] — the same shape triggers and actions store in
+    // `configFields` above, and stored the same way. It used to be an
+    // enumerated object with its own `key`/`fieldType` vocabulary, which both
+    // forked the contract and made every new ConfigField property a breaking
+    // change for widget sync.
+    settings: v.array(v.any()),
     createdAt: v.number(),
   })
     .index("by_module", ["moduleId"])

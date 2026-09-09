@@ -7,11 +7,11 @@ interface ConfigFieldLabelProps {
   label: string;
   required?: boolean;
   hint?: string;
-  dataSchema?: string;
+  examplePayload?: string;
 }
 
-export function ConfigFieldLabel({ htmlFor, label, required, hint, dataSchema }: ConfigFieldLabelProps) {
-  const showInfo = !!(hint || dataSchema);
+export function ConfigFieldLabel({ htmlFor, label, required, hint, examplePayload }: ConfigFieldLabelProps) {
+  const showInfo = !!(hint || examplePayload);
 
   return (
     <div className="flex items-center gap-1.5">
@@ -32,9 +32,9 @@ export function ConfigFieldLabel({ htmlFor, label, required, hint, dataSchema }:
           </PopoverTrigger>
           <PopoverContent className="max-w-sm text-sm" align="start">
             {hint && <p className="text-muted-foreground mb-2">{hint}</p>}
-            {dataSchema && (
+            {examplePayload && (
               <pre className="text-xs bg-muted rounded-md p-2 overflow-x-auto whitespace-pre-wrap font-mono">
-                {dataSchema}
+                {examplePayload}
               </pre>
             )}
           </PopoverContent>

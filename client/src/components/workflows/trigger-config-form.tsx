@@ -205,7 +205,14 @@ interface TriggerConfigFormProps {
   className?: string;
 }
 
-const customRenderers: Record<string, CustomFieldRenderer> = {
+/**
+ * The renderers ConfigurationForm cannot supply generically, because they need
+ * pickers wired to app state — the asset library and the resource instance
+ * list. Exported so every surface that renders a ConfigField gets the same
+ * controls: a `resource_ref` in a widget's settings must pick a resource the
+ * same way one in a trigger's config does.
+ */
+export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   media: MediaFieldRenderer,
   asset: MediaFieldRenderer,
   resource_ref: ResourceRefFieldRenderer,
@@ -221,7 +228,7 @@ export function TriggerConfigForm({ fields, values, onChange, availableVariables
       fields={fields as unknown as FieldDescriptor[]}
       values={values as Record<string, unknown>}
       onChange={(v) => onChange(v as TriggerConfigValues)}
-      customRenderers={customRenderers}
+      customRenderers={configFieldRenderers}
       availableVariables={availableVariables}
       className={className}
     />

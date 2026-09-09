@@ -34,32 +34,6 @@ function corsJson(body: unknown, status = 200): Response {
   });
 }
 
-type WidgetSetting = {
-  key: string;
-  fieldType: string;
-  label: string;
-  defaultValue: unknown;
-  options?: { label: string; value: string }[];
-};
-
-function parseSettingsSchema(
-  settings: {
-    key: string;
-    fieldType: string;
-    label: string;
-    defaultValue?: unknown;
-    options?: { label: string; value: string }[];
-  }[]
-): WidgetSetting[] {
-  return settings.map((item) => ({
-    key: item.key,
-    fieldType: item.fieldType,
-    label: item.label,
-    defaultValue: item.defaultValue,
-    options: item.options,
-  }));
-}
-
 const preflightHandler = httpAction(async () => {
   if (process.env.CORS_ENABLED !== "true") {
     return new Response(null, { status: 404 });
@@ -644,7 +618,9 @@ http.route({
         // Key on the canonical projectionKey, NOT widget.id (the engine omits id
         // for built-ins, which previously produced a duplicate empty-id row).
         for (const widget of event.widgets) {
-          const settings = parseSettingsSchema(widget.settings);
+          // The engine sends ConfigField[] — the same shape a trigger's or
+          // action's fields use — so there is nothing left to translate.
+          const settings = widget.settings;
           const widgetId = widgetCanonicalKey({
             projectionKey: widget.projectionKey,
             createdByRef: widget.createdByRef,

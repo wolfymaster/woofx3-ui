@@ -1,3 +1,4 @@
+import type { ConfigField } from "@woofx3/api/ui-schema";
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
@@ -26,14 +27,6 @@ import { LiveScenePreview } from "./live-scene-preview";
 import { WidgetCatalogSidebar } from "./widget-catalog-sidebar";
 import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
-
-interface WidgetSettingField {
-  key: string;
-  fieldType: string;
-  label: string;
-  defaultValue: unknown;
-  options?: Array<{ label: string; value: string }>;
-}
 
 interface SceneCanvasEditorProps {
   instanceId: Id<"instances">;
@@ -296,7 +289,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const selectedWidget = scene.widgets.find((w) => w.id === selectedWidgetId) ?? null;
   const selectedWidgetFields = (
     selectedWidget ? (catalogWidgets.find((c) => c.widgetId === selectedWidget.widgetCanonicalId)?.settings ?? []) : []
-  ) as WidgetSettingField[];
+  ) as ConfigField[];
 
   return (
     <div className="h-full flex flex-col">

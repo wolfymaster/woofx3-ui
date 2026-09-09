@@ -1,26 +1,26 @@
 import type { ConditionOperator } from "@woofx3/api";
-import type { ConfigField, ConfigFieldSource, ConfigFieldType } from "@woofx3/api/ui-schema";
+import {
+  CONFIG_FIELD_TYPES,
+  type ConfigField,
+  type ConfigFieldSource,
+  type ConfigFieldType,
+  type DataShapeField,
+} from "@woofx3/api/ui-schema";
 
-const FIELD_TYPES = new Set<ConfigFieldType>([
-  "number",
-  "range",
-  "text",
-  "select",
-  "media",
-  "toggle",
-  "color",
-  "asset",
-  "resource_ref",
-]);
+// Taken from the SDK rather than restated, so a new field type cannot be
+// accepted by the engine and silently dropped here.
+const FIELD_TYPES = new Set<string>(CONFIG_FIELD_TYPES);
 
+/**
+ * Narrow a stored type token.
+ *
+ * No aliases: the engine validates the declaration at install, so `boolean`
+ * and `string` cannot reach a stored row. Anything unrecognised is a row
+ * written before that validation existed, and dropping the field beats
+ * rendering a control the author did not ask for.
+ */
 function normalizeFieldType(raw: string): ConfigFieldType | null {
-  if (raw === "boolean") {
-    return "toggle";
-  }
-  if (FIELD_TYPES.has(raw as ConfigFieldType)) {
-    return raw as ConfigFieldType;
-  }
-  return null;
+  return FIELD_TYPES.has(raw) ? (raw as ConfigFieldType) : null;
 }
 
 export function parseConfigFieldSource(raw: unknown): ConfigFieldSource | undefined {
@@ -90,7 +90,7 @@ export function parseConfigField(item: unknown): ConfigField | null {
     defaultValue: o.defaultValue,
     description: typeof o.description === "string" ? o.description : undefined,
     hint: typeof o.hint === "string" ? o.hint : undefined,
-    dataSchema: typeof o.dataSchema === "string" ? o.dataSchema : undefined,
+    examplePayload: typeof o.examplePayload === "string" ? o.examplePayload : undefined,
     eventPath: typeof o.eventPath === "string" ? o.eventPath : undefined,
     operator:
       typeof o.operator === "string" && OPERATORS.has(o.operator as ConditionOperator)
@@ -98,14 +98,7 @@ export function parseConfigField(item: unknown): ConfigField | null {
         : undefined,
     mediaType: o.mediaType === "image" || o.mediaType === "audio" || o.mediaType === "video" ? o.mediaType : undefined,
     kinds: Array.isArray(o.kinds) ? o.kinds.filter((k): k is string => typeof k === "string") : undefined,
-    resourceKind:
-      type === "resource_ref"
-        ? typeof o.resourceKind === "string"
-          ? o.resourceKind
-          : typeof o.kind === "string"
-            ? o.kind
-            : undefined
-        : undefined,
+    resourceKind: type === "resource_ref" && typeof o.resourceKind === "string" ? o.resourceKind : undefined,
   };
   if (Array.isArray(o.options)) {
     field.options = o.options
@@ -152,48 +145,31 @@ export function withModuleName(fields: ConfigField[], moduleName: string | undef
   return fields.map((field) => (field.type === "resource_ref" ? { ...field, moduleName } : field));
 }
 
-export function parseConfigSchemaPayload(parsed: unknown): {
-  fields: ConfigField[];
-  allowVariants?: boolean;
-  color?: string;
-  icon?: string;
-} {
-  if (Array.isArray(parsed)) {
-    return { fields: parseConfigFields(parsed) };
-  }
-  if (!parsed || typeof parsed !== "object") {
-    return { fields: [] };
-  }
-  const obj = parsed as Record<string, unknown>;
-  const nested = obj.ui && typeof obj.ui === "object" ? (obj.ui as Record<string, unknown>) : obj;
-  const rawFields = Array.isArray(nested.fields)
-    ? nested.fields
-    : Array.isArray(nested.configFields)
-      ? nested.configFields
-      : [];
-  return {
-    fields: parseConfigFields(rawFields),
-    allowVariants: typeof nested.allowVariants === "boolean" ? nested.allowVariants : undefined,
-    color: typeof nested.color === "string" ? nested.color : undefined,
-    icon: typeof nested.icon === "string" ? nested.icon : undefined,
-  };
-}
-
-export function parseConfigSchemaString(raw: string | undefined): ReturnType<typeof parseConfigSchemaPayload> {
-  if (!raw) {
-    return { fields: [] };
-  }
-  try {
-    return parseConfigSchemaPayload(JSON.parse(raw));
-  } catch {
-    return { fields: [] };
-  }
-}
-
 export function isCommandsSource(field: ConfigField): boolean {
   return field.source?.kind === "commands";
 }
 
 export function isInternalSource(field: ConfigField): boolean {
   return field.source?.kind === "internal";
+}
+
+/**
+ * Narrow an already-parsed `emits` / `returns` array from a catalog row.
+ *
+ * The sibling of `parseConfigFields`, for the other vocabulary: a DataShape
+ * names values that exist at runtime, so its entries carry `path` rather than
+ * the `id`/`label` a rendered control needs. `parseDataShape` in the SDK does
+ * the same job for a JSON string; this one takes what Convex already stored.
+ */
+export function parseDataShapeFields(raw: unknown): DataShapeField[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter(
+    (entry): entry is DataShapeField =>
+      !!entry &&
+      typeof entry === "object" &&
+      typeof (entry as DataShapeField).path === "string" &&
+      (entry as DataShapeField).path.length > 0
+  );
 }

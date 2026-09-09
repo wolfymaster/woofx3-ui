@@ -1,7 +1,22 @@
-import type { ConfigField, ConfigFieldType, TriggerConfig } from "@woofx3/api/ui-schema";
+import type { ConfigField, ConfigFieldType, DataShapeField } from "@woofx3/api/ui-schema";
 import type { LucideIcon } from "lucide-react";
 
-export type { ConfigField, TriggerConfig };
+/**
+ * A preset's configuration surface: the fields plus whether the user may
+ * create multiple bound instances of the trigger.
+ *
+ * Declared here rather than imported. The engine contract has no such
+ * container any more — a field declaration is a bare array, and this pairing
+ * only exists because a *preset* bundles a trigger with its form. Keeping it
+ * local also ends the long-standing name clash with the workflow-definition
+ * `TriggerConfig`, which is a completely different thing.
+ */
+export interface TriggerConfig {
+  fields: ConfigField[];
+  allowVariants?: boolean;
+}
+
+export type { ConfigField };
 export type FieldType = ConfigFieldType;
 
 export interface ConfigValue {
@@ -45,10 +60,9 @@ export interface ActionPreset {
   color: string;
   config?: {
     fields: ConfigField[];
-    /** ConfigField-shaped declarations describing this action's return value (e.g. {next, previous, step}).
-     * Only `id`/`label`/`type`/`description` are meaningful here — backs the workflow builder's
-     * ${stepId.field} variable autocomplete. */
-    outputs?: ConfigField[];
+    /** DataShapeField[] naming what this action's function hands back (e.g. {next, previous}).
+     * Backs the workflow builder's ${stepId.field} variable autocomplete. */
+    outputs?: DataShapeField[];
   };
 }
 

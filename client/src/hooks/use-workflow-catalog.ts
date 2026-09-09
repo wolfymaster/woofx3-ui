@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { useMemo } from "react";
 import { useInstance } from "@/hooks/use-instance";
-import { parseConfigFields, withModuleName } from "@/lib/parse-config-fields";
+import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { ActionPreset, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
 
@@ -17,6 +17,8 @@ export type CatalogTriggerRow = {
   event?: string;
   allowVariants?: boolean;
   configFields?: unknown;
+  /** DataShapeField[] naming what `trigger.data` carries when this trigger fires. */
+  emits?: unknown;
   moduleId?: string;
   moduleName?: string;
 };
@@ -32,8 +34,8 @@ export type CatalogActionRow = {
   color: string;
   icon: string;
   configFields?: unknown;
-  /** ConfigField-shaped declarations describing this action's return value (e.g. {next, previous, step}). */
-  outputFields?: unknown;
+  /** DataShapeField[] naming what this action's function hands back (e.g. {next, previous}). */
+  returns?: unknown;
   moduleId?: string;
   moduleName?: string;
 };
@@ -64,8 +66,7 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
 function toActionPreset(row: CatalogActionRow): ActionPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
   const fields = withModuleName(parseConfigFields(row.configFields), row.moduleName);
-  // Output declarations reuse the same ConfigField shape/parser as input fields.
-  const outputs = parseConfigFields(row.outputFields);
+  const outputs = parseDataShapeFields(row.returns);
   const handlerType = row.handlerType?.trim() || (row.functionCall?.trim() ? "function" : undefined);
   return {
     id: row.id,
