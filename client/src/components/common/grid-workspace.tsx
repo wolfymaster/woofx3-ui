@@ -39,6 +39,8 @@ export interface GridWorkspaceProps<T> {
   getCategory?: (item: T) => string;
   getStatus?: (item: T) => string;
   renderItem: (item: T) => React.ReactNode;
+  /** Stable identity for each item. Required: the list is filtered and sorted, so positional keys would misalign state. */
+  getItemKey: (item: T) => React.Key;
   headerActions?: React.ReactNode;
   emptyState?: React.ReactNode;
   gridCols?: "compact" | "normal" | "large";
@@ -58,6 +60,7 @@ export function GridWorkspace<T>({
   getCategory,
   getStatus,
   renderItem,
+  getItemKey,
   headerActions,
   emptyState,
   gridCols = "normal",
@@ -226,6 +229,7 @@ export function GridWorkspace<T>({
       {isLoading ? (
         <div className={gridClassName}>
           {Array.from({ length: 8 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length skeleton placeholder; the list never reorders
             <Skeleton key={i} className="h-48 rounded-lg" />
           ))}
         </div>
@@ -239,7 +243,7 @@ export function GridWorkspace<T>({
       ) : (
         <div className={gridClassName} data-testid="container-grid">
           {filteredItems.map((item, index) => (
-            <div key={index} data-testid={`grid-item-${index}`}>
+            <div key={getItemKey(item)} data-testid={`grid-item-${index}`}>
               {renderItem(item)}
             </div>
           ))}
