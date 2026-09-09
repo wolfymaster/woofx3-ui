@@ -17,7 +17,7 @@ describe("parseConfigFields", () => {
         operator: "eq",
         description: "Only fire when the redemption matches this reward.",
         hint: "Loaded from Twitch.",
-        dataSchema: '{"rewardId":"..."}',
+        examplePayload: '{"rewardId":"..."}',
       },
     ]);
     expect(fields).toHaveLength(1);

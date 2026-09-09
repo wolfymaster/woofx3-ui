@@ -1,38 +1,14 @@
+import { parseFieldList } from "@woofx3/api/ui-schema";
 import { internal } from "../../../_generated/api";
 import { widgetCanonicalKey } from "../../widgetKey";
 import type { SyncStep, SyncStepContext } from "../steps";
-
-type WidgetSetting = {
-  key: string;
-  fieldType: string;
-  label: string;
-  defaultValue: unknown;
-  options?: Array<{ label: string; value: string }>;
-};
-
-function parseWidgetSettings(schemaJson: string): WidgetSetting[] {
-  try {
-    const arr = JSON.parse(schemaJson);
-    if (!Array.isArray(arr)) {
-      return [];
-    }
-    return arr.map((item: Record<string, unknown>) => ({
-      key: String(item.key ?? ""),
-      fieldType: String(item.fieldType ?? "text"),
-      label: String(item.label ?? ""),
-      defaultValue: item.defaultValue ?? null,
-      options: Array.isArray(item.options) ? (item.options as Array<{ label: string; value: string }>) : undefined,
-    }));
-  } catch {
-    return [];
-  }
-}
 
 /**
  * widgetsStep — full-snapshot reconciliation of engine widgets.
  *
  * Calls `getAvailableWidgets()` to get all widgets registered in the engine,
- * parses each widget's `settingsSchema` JSON string into a structured array,
+ * parses each widget's `settingsSchema` JSON string with the shared field
+ * parser — the same one trigger and action schemas use — into ConfigFields,
  * then forwards snapshots to `internal.engineSyncInternal.reconcileWidgets`.
  *
  * `moduleWidgets` is the global definition catalog (upserted by `widgetId`, never
@@ -53,7 +29,7 @@ export const widgetsStep: SyncStep = {
       directory: w.directory,
       description: w.description || undefined,
       alertTypes: w.alertTypes,
-      settings: parseWidgetSettings(w.settingsSchema),
+      settings: parseFieldList(w.settingsSchema),
       createdByType: w.createdByType,
       createdByRef: w.createdByRef,
     }));

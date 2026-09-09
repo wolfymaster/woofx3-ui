@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
-import { parseConfigSchemaString } from "./lib/parseConfigSchema";
+import { parseDataShape, parseFieldList } from "@woofx3/api/ui-schema";
 
 // Provenance from the engine: createdByRef == the module's composite moduleKey
 // (or "builtin" for SYSTEM resources). Drives cascade-on-delete; replaces moduleId.
@@ -101,6 +101,7 @@ const triggerValidator = v.object({
   description: v.optional(v.string()),
   event: v.optional(v.string()),
   configSchema: v.optional(v.string()),
+  emits: v.optional(v.string()),
   allowVariants: v.optional(v.boolean()),
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
@@ -114,7 +115,7 @@ const actionValidator = v.object({
   call: v.optional(v.string()),
   type: v.optional(v.string()),
   paramsSchema: v.optional(v.string()),
-  outputSchema: v.optional(v.string()),
+  returns: v.optional(v.string()),
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
   projectionKey: v.optional(v.string()),
@@ -136,13 +137,14 @@ type TriggerUiFields = {
   color: string;
   icon: string;
   configFields?: unknown[];
+  emits?: unknown[];
 };
 
 type ActionUiFields = {
   color: string;
   icon: string;
   configFields?: unknown[];
-  outputFields?: unknown[];
+  returns?: unknown[];
 };
 
 function parseJsonSafe(raw: string | undefined): unknown {
@@ -157,31 +159,33 @@ function parseJsonSafe(raw: string | undefined): unknown {
 }
 
 /**
- * Pick presentation fields from a parsed configSchema / paramsSchema.
- * Accepts either a bare array (treated as configFields) or an object with
- * top-level keys (or a nested `ui` object). Missing keys are left `undefined`
- * so callers can layer their own defaults.
+ * Pick presentation fields from a trigger's configSchema / emits.
+ *
+ * `color` and `icon` used to be read out of the schema container; nothing has
+ * ever set them, and the container they lived in no longer exists, so every
+ * trigger takes the defaults.
  */
-function triggerUi(configSchema: string | undefined): TriggerUiFields {
-  const { fields, color, icon } = parseConfigSchemaString(configSchema);
+function triggerUi(configSchema: string | undefined, emits: string | undefined): TriggerUiFields {
+  const fields = parseFieldList(configSchema);
+  const shape = parseDataShape(emits);
   return {
-    color: color ?? DEFAULT_UI_COLOR,
-    icon: icon ?? DEFAULT_TRIGGER_ICON,
+    color: DEFAULT_UI_COLOR,
+    icon: DEFAULT_TRIGGER_ICON,
     configFields: fields.length > 0 ? fields : undefined,
+    emits: shape ? shape.fields : undefined,
   };
 }
 
-function actionUi(paramsSchema: string | undefined, outputSchema: string | undefined): ActionUiFields {
-  const { fields, color, icon } = parseConfigSchemaString(paramsSchema);
-  // Output fields reuse the same ConfigField-shaped parser as input schema
-  // fields — only id/label/type/description end up meaningful for outputs,
-  // but the shape (and its parsing) is identical.
-  const { fields: outputFields } = parseConfigSchemaString(outputSchema);
+function actionUi(paramsSchema: string | undefined, returns: string | undefined): ActionUiFields {
+  const fields = parseFieldList(paramsSchema);
+  // `returns` is a DataShape, not a field list: it names values that exist at
+  // runtime rather than controls to render, so it parses differently.
+  const shape = parseDataShape(returns);
   return {
-    color: color ?? DEFAULT_UI_COLOR,
-    icon: icon ?? DEFAULT_ACTION_ICON,
+    color: DEFAULT_UI_COLOR,
+    icon: DEFAULT_ACTION_ICON,
     configFields: fields.length > 0 ? fields : undefined,
-    outputFields: outputFields.length > 0 ? outputFields : undefined,
+    returns: shape ? shape.fields : undefined,
   };
 }
 
@@ -192,6 +196,7 @@ type EngineTrigger = {
   description?: string;
   event?: string;
   configSchema?: string;
+  emits?: string;
   allowVariants?: boolean;
   projectionKey?: string;
 };
@@ -203,12 +208,12 @@ type EngineAction = {
   call?: string;
   type?: string;
   paramsSchema?: string;
-  outputSchema?: string;
+  returns?: string;
   projectionKey?: string;
 };
 
 function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | undefined) {
-  const ui = triggerUi(t.configSchema);
+  const ui = triggerUi(t.configSchema, t.emits);
   return {
     slug: t.id,
     name: t.name ?? t.id,
@@ -218,6 +223,7 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
     color: ui.color,
     icon: ui.icon,
     configFields: ui.configFields,
+    emits: ui.emits,
     allowVariants: t.allowVariants,
     projectionKey: t.projectionKey,
     moduleId,
@@ -225,7 +231,7 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
 }
 
 function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | undefined) {
-  const ui = actionUi(a.paramsSchema, a.outputSchema);
+  const ui = actionUi(a.paramsSchema, a.returns);
   const handlerType = a.type?.trim() || (a.call?.trim() ? "function" : undefined);
   return {
     slug: a.id,
@@ -235,7 +241,7 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
     color: ui.color,
     icon: ui.icon,
     configFields: ui.configFields,
-    outputFields: ui.outputFields,
+    returns: ui.returns,
     projectionKey: a.projectionKey,
     handlerType,
     functionCall: a.call?.trim() || undefined,

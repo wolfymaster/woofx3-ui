@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
-import { parseConfigSchemaString } from "./lib/parseConfigSchema";
+import { parseFieldList } from "@woofx3/api/ui-schema";
 import { canAccessAccount } from "./lib/teamAccess";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
@@ -367,10 +367,12 @@ function triggerUiFields(configSchema: string | undefined): {
   icon: string;
   configFields?: unknown[];
 } {
-  const { fields, color, icon } = parseConfigSchemaString(configSchema);
+  // color / icon were read out of the schema container, which no longer
+  // exists and which nothing ever populated — every row takes the defaults.
+  const fields = parseFieldList(configSchema);
   return {
-    color: color ?? DEFAULT_UI_COLOR,
-    icon: icon ?? DEFAULT_TRIGGER_ICON,
+    color: DEFAULT_UI_COLOR,
+    icon: DEFAULT_TRIGGER_ICON,
     configFields: fields.length > 0 ? fields : undefined,
   };
 }
@@ -490,10 +492,12 @@ function actionUiFields(paramsSchema: string | undefined): {
   icon: string;
   configFields?: unknown[];
 } {
-  const { fields, color, icon } = parseConfigSchemaString(paramsSchema);
+  // color / icon were read out of the schema container, which no longer
+  // exists and which nothing ever populated — every row takes the defaults.
+  const fields = parseFieldList(paramsSchema);
   return {
-    color: color ?? DEFAULT_UI_COLOR,
-    icon: icon ?? DEFAULT_ACTION_ICON,
+    color: DEFAULT_UI_COLOR,
+    icon: DEFAULT_ACTION_ICON,
     configFields: fields.length > 0 ? fields : undefined,
   };
 }
@@ -625,15 +629,7 @@ export const reconcileWidgets = internalMutation({
         directory: v.string(),
         description: v.optional(v.string()),
         alertTypes: v.array(v.string()),
-        settings: v.array(
-          v.object({
-            key: v.string(),
-            fieldType: v.string(),
-            label: v.string(),
-            defaultValue: v.any(),
-            options: v.optional(v.array(v.object({ label: v.string(), value: v.string() }))),
-          })
-        ),
+        settings: v.array(v.any()),
         createdByType: v.string(),
         createdByRef: v.string(),
       })

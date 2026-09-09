@@ -74,22 +74,7 @@ export const register = mutation({
     directory: v.string(),
     description: v.optional(v.string()),
     alertTypes: v.array(v.string()),
-    settings: v.array(
-      v.object({
-        key: v.string(),
-        fieldType: v.string(),
-        label: v.string(),
-        defaultValue: v.any(),
-        options: v.optional(
-          v.array(
-            v.object({
-              label: v.string(),
-              value: v.string(),
-            })
-          )
-        ),
-      })
-    ),
+    settings: v.array(v.any()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -142,22 +127,7 @@ export const registerFromWebhook = internalMutation({
     createdByRef: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
     alertTypes: v.array(v.string()),
-    settings: v.array(
-      v.object({
-        key: v.string(),
-        fieldType: v.string(),
-        label: v.string(),
-        defaultValue: v.any(),
-        options: v.optional(
-          v.array(
-            v.object({
-              label: v.string(),
-              value: v.string(),
-            })
-          )
-        ),
-      })
-    ),
+    settings: v.array(v.any()),
   },
   handler: async (ctx, args) => {
     // Resolve moduleId only for module-sourced widgets (built-ins have none).
