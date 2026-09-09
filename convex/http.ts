@@ -8,6 +8,7 @@ import { auth } from "./auth";
 import { buildBrowserSourceHtml, buildBrowserSourcePlaceholderHtml } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
+import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { widgetCanonicalKey } from "./lib/widgetKey";
@@ -1215,7 +1216,9 @@ http.route({
       );
     }
 
-    if (!sourceKey.overlayUrl) {
+    // A URL from before Scene Manager replaced streamware's overlay path resolves to nothing;
+    // say so rather than iframing a dead page. Reopening the scene editor re-mints it.
+    if (!isCurrentSceneUrl(sourceKey.overlayUrl, scene.engineSceneId)) {
       return htmlResponse(
         buildBrowserSourcePlaceholderHtml({
           sceneName,

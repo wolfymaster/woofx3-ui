@@ -17,10 +17,19 @@ describe("buildBrowserSourceHtml", () => {
     expect(html).toContain('src="https://engine.example/overlay/abc"');
   });
 
-  test("grants allow-scripts WITHOUT allow-same-origin (no sandbox escape)", () => {
+  // allow-same-origin is required, not an oversight: the overlay nests one iframe
+  // per widget and needs its own origin preserved to reach them. It grants no
+  // access to this page's origin — the engine is a different host.
+  test("grants allow-scripts and allow-same-origin, and nothing else", () => {
     const html = buildBrowserSourceHtml({ sceneName: "Scene", overlayUrl: "https://e/o/1" });
-    expect(html).toContain('sandbox="allow-scripts"');
-    expect(html).not.toContain("allow-same-origin");
+    expect(html).toContain('sandbox="allow-scripts allow-same-origin"');
+    expect(html).not.toContain("allow-popups");
+    expect(html).not.toContain("allow-top-navigation");
+  });
+
+  test("delegates Local Network Access so a LAN-resolved engine can prompt", () => {
+    const html = buildBrowserSourceHtml({ sceneName: "Scene", overlayUrl: "https://e/o/1" });
+    expect(html).toContain('allow="local-network-access"');
   });
 
   test("escapes a malicious scene name (no XSS via title)", () => {

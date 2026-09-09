@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { type ActionCtx, action, internalMutation, internalQuery } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 
 export const getDefaultScene = internalQuery({
   args: { instanceId: v.string() },
@@ -356,6 +357,23 @@ export const bustOverlayUrlCacheForInstance = internalMutation({
   },
 });
 
+/** Best-effort: a token whose URL we are replacing should not stay valid on the engine. */
+async function revokeStaleToken(
+  instance: { url: string; clientId: string; clientSecret: string },
+  engineTokenId: string | undefined
+): Promise<void> {
+  if (!engineTokenId) {
+    return;
+  }
+  try {
+    await createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret).revokeOverlayToken({
+      tokenId: engineTokenId,
+    });
+  } catch {
+    // A token we can no longer reach is not a reason to withhold a working URL.
+  }
+}
+
 async function requireInstanceForScene(
   ctx: ActionCtx,
   scene: Doc<"scenes">
@@ -367,13 +385,29 @@ async function requireInstanceForScene(
   return { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
 }
 
-// Mints (or reuses) a "preview"-purpose overlay token for the Scene
-// Manager's live canvas preview — a separate row/token from the "obs"
-// purpose above, so rotating or revoking the public OBS URL never disturbs
-// (or is disturbed by) this internal preview. Returns null rather than
-// throwing on any not-ready condition (unauthenticated caller, missing
-// scene, or a scene that hasn't synced with the engine yet) since this only
-// ever backs a passive preview surface, never a user-initiated action.
+// Mints (or reuses) a "preview"-purpose overlay token for the canvas preview and
+// returns the engine URL it resolves to — `{Scene Manager Public URL}/scene/
+// {engineSceneId}?token={token}`, straight from the engine.
+//
+// The editor embeds that URL directly rather than routing through the
+// /browser-source/{key} page OBS uses. That page exists to keep the engine URL
+// and token out of a public browser source; the editor is already an
+// authenticated view of the instance, so it has nothing to hide from itself,
+// and the indirection costs something real: a convex.site document between the
+// editor and the engine puts a third site in the frame's ancestor chain, which
+// makes every engine request cross-site and drops Scene Manager's SameSite=Strict
+// session cookie — the one authorizing the widget frames and the event stream.
+// Embedded directly, a UI and an engine that share a registrable domain
+// (ui.x.tv / scenes.x.tv) stay same-site and the session holds.
+//
+// The token is its own, separate from the "obs" purpose above, so rotating or
+// revoking the public browser-source URL never disturbs (or is disturbed by)
+// this preview.
+//
+// Returns null rather than throwing on any not-ready condition (unauthenticated
+// caller, missing scene, or a scene that hasn't synced with the engine yet)
+// since this only ever backs a passive preview surface, never a user-initiated
+// action.
 export const getOrCreatePreviewUrl = action({
   args: { sceneId: v.id("scenes") },
   handler: async (ctx, { sceneId }): Promise<string | null> => {
@@ -398,11 +432,15 @@ export const getOrCreatePreviewUrl = action({
       sceneId,
       purpose: "preview",
     });
-    if (existing?.overlayUrl) {
-      return existing.overlayUrl;
+    const cached = existing?.overlayUrl;
+    if (isCurrentSceneUrl(cached, engineSceneId)) {
+      return cached;
     }
 
     const instance = await requireInstanceForScene(ctx, scene);
+    if (cached) {
+      await revokeStaleToken(instance, existing?.engineTokenId);
+    }
     const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
     const minted = await rpc.mintOverlayToken({
       sceneId: engineSceneId,
@@ -454,15 +492,20 @@ export const getOrCreateBrowserSourceKey = action({
     }
     const { scene } = resolved;
 
-    const existing = await ctx.runQuery(internal.browserSource.getKeyForScenePurpose, { sceneId, purpose: "obs" });
-    if (existing?.overlayUrl) {
-      return existing.key;
-    }
-
     if (!scene.engineSceneId) {
       throw new Error("This scene has not finished syncing with the engine yet");
     }
+
+    const existing = await ctx.runQuery(internal.browserSource.getKeyForScenePurpose, { sceneId, purpose: "obs" });
+    const cached = existing?.overlayUrl;
+    if (existing && cached && isCurrentSceneUrl(cached, scene.engineSceneId)) {
+      return existing.key;
+    }
+
     const instance = await requireInstanceForScene(ctx, scene);
+    if (cached) {
+      await revokeStaleToken(instance, existing?.engineTokenId);
+    }
     const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
     const minted = await rpc.mintOverlayToken({
       sceneId: scene.engineSceneId,

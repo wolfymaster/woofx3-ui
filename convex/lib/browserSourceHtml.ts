@@ -36,6 +36,16 @@ const BASE_STYLE =
  * browser's same-origin policy still keeps the engine out of Convex
  * cookies/storage. It only stops the browser from minting a fresh opaque
  * origin for the overlay iframe.
+ *
+ * `allow="local-network-access"` delegates Chrome's Local Network Access
+ * permission to the overlay frame. A deployment whose engine hostname resolves
+ * to a LAN address (split-horizon DNS — `streamware.dev.woofx3.tv` →
+ * 192.168.0.x) makes this a public-page-to-local-network request, which Chrome
+ * gates behind a permission. The permission's default allowlist is `self`, so
+ * without this attribute the request is auto-denied with no prompt and the
+ * overlay silently renders nothing. Delegating lets the browser ask instead.
+ * OBS does not enforce this, which is why a browser source keeps working while
+ * the same page fails in a tab.
  */
 export function buildBrowserSourceHtml(params: { sceneName: string; overlayUrl: string }): string {
   const title = escapeHtml(params.sceneName);
@@ -49,7 +59,7 @@ export function buildBrowserSourceHtml(params: { sceneName: string; overlayUrl: 
 <style>${BASE_STYLE}iframe{position:fixed;inset:0;width:100%;height:100%;border:none;background:transparent}</style>
 </head>
 <body>
-<iframe src="${src}" sandbox="allow-scripts allow-same-origin" scrolling="no" allowtransparency="true"></iframe>
+<iframe src="${src}" sandbox="allow-scripts allow-same-origin" allow="local-network-access" scrolling="no" allowtransparency="true"></iframe>
 </body>
 </html>`;
 }
