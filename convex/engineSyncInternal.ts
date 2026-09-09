@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
-import { parseFieldList } from "@woofx3/api/ui-schema";
+import { parseDataShape, parseFieldList } from "@woofx3/api/ui-schema";
 import { bareModuleKey, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { canAccessAccount } from "./lib/teamAccess";
 
@@ -485,18 +485,27 @@ export const reconcileTriggers = internalMutation({
 const DEFAULT_ACTION_ICON = "ArrowRight";
 const DEFAULT_ACTION_CATEGORY = "General";
 
-function actionUiFields(paramsSchema: string | undefined): {
+function actionUiFields(
+  paramsSchema: string | undefined,
+  returns: string | undefined
+): {
   color: string;
   icon: string;
   configFields?: unknown[];
+  returns?: unknown[];
 } {
   // color / icon were read out of the schema container, which no longer
   // exists and which nothing ever populated — every row takes the defaults.
   const fields = parseFieldList(paramsSchema);
+  // `returns` is a DataShape, not a field list: it names values that exist at
+  // runtime rather than controls to render, so it parses differently. Same
+  // treatment the module.action.registered webhook gives it.
+  const shape = parseDataShape(returns);
   return {
     color: DEFAULT_UI_COLOR,
     icon: DEFAULT_ACTION_ICON,
     configFields: fields.length > 0 ? fields : undefined,
+    returns: shape ? shape.fields : undefined,
   };
 }
 
@@ -520,6 +529,7 @@ export const reconcileActions = internalMutation({
         name: v.optional(v.string()),
         description: v.optional(v.string()),
         paramsSchema: v.optional(v.string()),
+        returns: v.optional(v.string()),
         projectionKey: v.optional(v.string()),
         taxonomy: v.optional(v.array(v.string())),
         handlerType: v.optional(v.string()),
@@ -538,7 +548,7 @@ export const reconcileActions = internalMutation({
       const moduleId =
         snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
-      const ui = actionUiFields(snap.paramsSchema);
+      const ui = actionUiFields(snap.paramsSchema, snap.returns);
       const handlerType = snap.handlerType?.trim() || (snap.functionCall?.trim() ? "function" : undefined);
       const defRow = {
         slug: snap.id,
@@ -548,6 +558,7 @@ export const reconcileActions = internalMutation({
         color: ui.color,
         icon: ui.icon,
         configFields: ui.configFields,
+        returns: ui.returns,
         projectionKey: snap.projectionKey,
         handlerType,
         functionCall: snap.functionCall?.trim() || undefined,
