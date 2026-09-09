@@ -28,12 +28,12 @@ jobs:
       # `@woofx3/api` path alias (`../woofx3/shared/clients/typescript/api`)
       # resolves exactly as it does on a developer machine.
       - name: Checkout woofx3-ui
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: woofx3-ui
 
       - name: Checkout woofx3 engine (shared types only)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.ENGINE_REPOSITORY }}
           ref: ${{ env.ENGINE_REF }}
@@ -46,7 +46,7 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-${{ hashFiles('woofx3-ui/bun.lockb', '**/bun.lock') }}
@@ -84,14 +84,14 @@ jobs:
     name: Lint and format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lockb') }}
@@ -109,14 +109,14 @@ jobs:
     name: Docs build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-docs-${{ hashFiles('docs/bun.lock') }}
