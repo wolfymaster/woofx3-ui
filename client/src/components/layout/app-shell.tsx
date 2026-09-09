@@ -103,24 +103,20 @@ function NavItem({ item, collapsed, depth = 0 }: NavItemProps) {
   const hasChildren = item.children && item.children.length > 0;
   const isActive = item.href ? location === item.href : item.children?.some((child) => location === child.href);
 
-  const handleClick = useCallback(() => {
-    if (hasChildren) {
-      setIsExpanded(!isExpanded);
-    }
-  }, [hasChildren, isExpanded]);
+  const toggleExpanded = useCallback(() => {
+    setIsExpanded((expanded) => !expanded);
+  }, []);
 
-  const content = (
-    <div
-      className={cn(
-        "group flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors",
-        "hover-elevate active-elevate-2",
-        isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
-        !isActive && "text-sidebar-foreground/70 hover:text-sidebar-foreground",
-        depth > 0 && "ml-4"
-      )}
-      onClick={handleClick}
-      data-testid={`nav-item-${item.id}`}
-    >
+  const contentClassName = cn(
+    "group flex w-full items-center gap-3 px-3 py-2 rounded-md cursor-pointer text-left transition-colors",
+    "hover-elevate active-elevate-2",
+    isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+    !isActive && "text-sidebar-foreground/70 hover:text-sidebar-foreground",
+    depth > 0 && "ml-4"
+  );
+
+  const contentChildren = (
+    <>
       <Icon className={cn("h-5 w-5 shrink-0", isActive && "text-primary")} />
       {!collapsed && (
         <>
@@ -137,6 +133,18 @@ function NavItem({ item, collapsed, depth = 0 }: NavItemProps) {
           )}
         </>
       )}
+    </>
+  );
+
+  // Only branch items are interactive on their own: leaf items are wrapped in a
+  // <Link> (or a Radix trigger), so a nested <button> would be invalid there.
+  const content = hasChildren ? (
+    <button type="button" className={contentClassName} onClick={toggleExpanded} data-testid={`nav-item-${item.id}`}>
+      {contentChildren}
+    </button>
+  ) : (
+    <div className={contentClassName} data-testid={`nav-item-${item.id}`}>
+      {contentChildren}
     </div>
   );
 

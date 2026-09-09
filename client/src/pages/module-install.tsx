@@ -112,12 +112,14 @@ function FileExplorer({
 
     return (
       <div key={node.path}>
-        <div
+        <button
+          type="button"
           className={cn(
-            "flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted text-sm",
+            "flex w-full items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted text-sm text-left",
             isSelected && "bg-muted font-medium"
           )}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
+          aria-expanded={node.isDirectory && hasChildren ? isExpanded : undefined}
           onClick={() => {
             if (node.isDirectory && hasChildren) {
               toggleExpand(node.path);
@@ -150,7 +152,7 @@ function FileExplorer({
             </>
           )}
           <span className="truncate">{node.name}</span>
-        </div>
+        </button>
         {node.isDirectory && hasChildren && isExpanded && (
           <div>{node.children!.map((child) => renderNode(child, depth + 1))}</div>
         )}
