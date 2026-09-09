@@ -41,4 +41,12 @@ export default defineConfig({
     },
     socialLinks: [{ icon: "github", link: "https://github.com/wolfymaster/woofx3-ui" }],
   },
+  vite: {
+    css: {
+      // The docs site uses no Tailwind. Without this, Vite walks up and picks up
+      // the app's postcss.config.js, which needs tailwindcss from the root
+      // node_modules -- so the docs build would depend on a root install.
+      postcss: { plugins: [] },
+    },
+  },
 });
