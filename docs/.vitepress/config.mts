@@ -22,7 +22,7 @@ export default defineConfig({
             { text: "Workflows", link: "/ui/workflows" },
             { text: "Assets", link: "/ui/assets" },
             { text: "Scenes & overlays", link: "/ui/scenes" },
-            { text: "Settings & team", link: "/ui/settings-team" },
+            { text: "Admin & team", link: "/ui/admin-team" },
             { text: "Auth & onboarding", link: "/ui/auth-onboarding" },
             { text: "Convex & HTTP", link: "/ui/convex-surface" },
           ],

@@ -34,7 +34,7 @@ function isValidBaseUrl(value: string): boolean {
   }
 }
 
-export function StorageSettingsTab() {
+export function StorageSettings() {
   const { instance } = useInstance();
   const getConfig = useAction(api.storage.getConfig);
   const setConfig = useAction(api.storage.setConfig);
@@ -214,7 +214,7 @@ export function StorageSettingsTab() {
       </Card>
 
       <Card className="p-6">
-        <h2 className="text-lg font-medium mb-4">Overlay Public URL</h2>
+        <h2 className="text-lg font-medium mb-4">Scene Manager Public URL</h2>
         <div className="space-y-4">
           <div>
             <Label htmlFor="overlay-public-url">Public URL</Label>
@@ -222,15 +222,15 @@ export function StorageSettingsTab() {
               id="overlay-public-url"
               value={overlayPublicUrl}
               onChange={(e) => setOverlayPublicUrlState(e.target.value)}
-              placeholder="https://api.example.com"
+              placeholder="https://scenes.example.com"
               data-testid="input-overlay-public-url"
             />
             {overlayUrlError && <p className="mt-1 text-xs text-destructive">{overlayUrlError}</p>}
             <p className="mt-1 text-xs text-muted-foreground">
-              Public base URL the engine's overlay surface is reachable at — used for browser-source and scene-preview
-              links (<code>{"{url}/overlay/{token}/"}</code>) and for every widget/module asset URL. Point this at
-              wherever the engine's API service sits behind a tunnel or reverse proxy. Leave blank to use the
-              engine&apos;s default.
+              Public base URL the engine&apos;s <strong>Scene Manager</strong> service is reachable at — browser-source
+              and scene-preview links are built from it (<code>{"{url}/scene/{sceneId}?token=…"}</code>), as are
+              widget/module asset URLs. Point this at Scene Manager (port <code>9101</code> by default), not the API
+              gateway — the API service no longer serves scenes. Leave blank to use the engine&apos;s default.
             </p>
           </div>
         </div>
