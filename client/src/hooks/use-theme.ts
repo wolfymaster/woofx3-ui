@@ -1,7 +1,6 @@
 import { useStore } from "@nanostores/react";
 import { useCallback, useEffect } from "react";
 import { $theme, $themePreset, themePresets } from "@/lib/stores";
-import type { ThemePreset } from "@/types";
 
 export function useTheme() {
   const theme = useStore($theme);

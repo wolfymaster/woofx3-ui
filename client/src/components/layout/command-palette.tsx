@@ -6,15 +6,12 @@ import {
   Moon,
   Plus,
   Puzzle,
-  Radio,
-  Search,
   Settings,
   Sun,
   Users,
   Workflow,
-  Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   CommandDialog,
