@@ -254,7 +254,7 @@ export const listWorkflows = action({
     }
 
     const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    const result = await rpc.getWorkflows({ accountId: instanceId });
+    const result = await rpc.getWorkflows();
     return (result?.workflows ?? []).map((w) => ({ id: w.id, name: w.name }));
   },
 });

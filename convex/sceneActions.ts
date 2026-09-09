@@ -50,7 +50,6 @@ export const createScene = action({
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const result = await rpc.createScene({
       name: args.name,
-      accountId: bundle.applicationId,
       description: args.description,
       widgetsJson: args.widgetsJson ?? "[]",
       layoutJson: args.layoutJson ?? "{}",

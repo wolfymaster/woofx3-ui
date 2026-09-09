@@ -32,7 +32,6 @@ export const workflowsStep: SyncStep = {
       // so we must open a fresh session per page.
       const api = newApi();
       const res = (await api.getWorkflows({
-        accountId: applicationId,
         page,
         pageSize: ENGINE_SYNC_CONFIG.pageSize,
       })) as WfPage;

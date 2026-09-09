@@ -22,7 +22,7 @@ export const syncInstanceLiveState = internalAction({
 
     try {
       const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
-      const status = await rpc.getStreamStatus(args.instanceId);
+      const status = await rpc.getStreamStatus();
       await ctx.runMutation(internal.instanceLiveState.recordPoll, {
         instanceId: args.instanceId,
         isLive: status.isLive,
