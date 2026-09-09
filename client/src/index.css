@@ -60,6 +60,7 @@
 
   /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
+  /* biome-ignore lint/suspicious/noDuplicateCustomProperties: intentional progressive enhancement -- the plain value above is the fallback for browsers without relative color syntax */
   --sidebar-primary-border: hsl(
     from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) /
     alpha
@@ -144,6 +145,7 @@
 
   /* Fallback for older browsers */
   --sidebar-primary-border: hsl(var(--sidebar-primary));
+  /* biome-ignore lint/suspicious/noDuplicateCustomProperties: intentional progressive enhancement -- the plain value above is the fallback for browsers without relative color syntax */
   --sidebar-primary-border: hsl(
     from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) /
     alpha

@@ -148,6 +148,7 @@ function CommandTableSkeleton() {
         </TableHeader>
         <TableBody>
           {Array.from({ length: 5 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length skeleton placeholder; the list never reorders
             <TableRow key={i}>
               <TableCell>
                 <Skeleton className="h-4 w-20" />
@@ -1048,6 +1049,7 @@ function GroupsTab({
             </TableHeader>
             <TableBody>
               {Array.from({ length: 3 }).map((_, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length skeleton placeholder; the list never reorders
                 <TableRow key={i}>
                   <TableCell>
                     <Skeleton className="h-4 w-24" />
@@ -1377,6 +1379,7 @@ function GroupMembersEditor({ instanceId, group }: { instanceId: Id<"instances">
         {members === undefined ? (
           <div className="grid gap-2">
             {Array.from({ length: 3 }).map((_, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length skeleton placeholder; the list never reorders
               <Skeleton key={i} className="h-8 w-full" />
             ))}
           </div>
