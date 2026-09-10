@@ -97,7 +97,7 @@ export const upsertFromWebhook = internalMutation({
   handler: async (ctx, { instanceId, moduleKey, moduleName, version, functions }) => {
     const moduleRecord = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_module_key", (q) => q.eq("moduleKey", moduleKey))
+      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", moduleKey))
       .first();
 
     const moduleId =
@@ -105,7 +105,9 @@ export const upsertFromWebhook = internalMutation({
       (
         await ctx.db
           .query("moduleRepository")
-          .withIndex("by_name_version", (q) => q.eq("name", moduleName).eq("version", version))
+          .withIndex("by_instance_name_version", (q) =>
+            q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", version)
+          )
           .first()
       )?._id;
 

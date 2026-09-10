@@ -300,10 +300,12 @@ export const processModuleInstalled = internalMutation({
     actions: v.array(actionValidator),
   },
   handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion, triggers, actions }) => {
-    // Check if already exists by name+version (idempotency)
+    // Check if this instance already has the row (idempotency)
     const record = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_name_version", (q) => q.eq("name", moduleName).eq("version", moduleVersion))
+      .withIndex("by_instance_name_version", (q) =>
+        q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", moduleVersion)
+      )
       .first();
 
     const superseded = record ? null : await findSupersededModule(ctx, instanceId, correlationKey);
@@ -439,10 +441,12 @@ export const processRegisteredDefinitions = internalMutation({
     actions: v.array(actionValidator),
   },
   handler: async (ctx, { instanceId, moduleName, moduleVersion, triggers, actions }) => {
-    // Try to find the module record to link definitions to it
+    // Try to find this instance's module record to link definitions to it
     const record = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_name_version", (q) => q.eq("name", moduleName).eq("version", moduleVersion))
+      .withIndex("by_instance_name_version", (q) =>
+        q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", moduleVersion)
+      )
       .first();
     const moduleId = record?._id;
 
@@ -501,7 +505,7 @@ export const processModuleInstallFailed = internalMutation({
 
     const record = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_module_key", (q) => q.eq("moduleKey", correlationKey))
+      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", correlationKey))
       .first();
     if (record) {
       await ctx.db.patch(record._id, { status: "failed" as const, statusMessage: failMessage });
@@ -623,7 +627,7 @@ export const processModuleDeleted = internalMutation({
   handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion }) => {
     const record = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_module_key", (q) => q.eq("moduleKey", correlationKey))
+      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", correlationKey))
       .first();
 
     if (record) {
@@ -689,10 +693,14 @@ export const reconcileUninstalledModule = internalMutation({
  */
 /**
  * Best-effort: the engine sent a delete webhook without a moduleKey, so we
- * can't correlate it directly. Look up the moduleRepository record by name
- * and emit an error transient event under its stored moduleKey so the UI
- * subscription unsticks. If no record is found (or it has no moduleKey),
+ * can't correlate it directly. Look up this instance's moduleRepository record
+ * by name and emit an error transient event under its stored moduleKey so the
+ * UI subscription unsticks. If no record is found (or it has no moduleKey),
  * there's no pending UI subscription to notify — log and drop.
+ *
+ * Scoped to the instance: another tenant's row for the same module carries a
+ * different moduleKey, so emitting under it would leave the dialog that is
+ * actually waiting stuck until its timeout.
  */
 export const emitDeleteErrorForMissingKey = internalMutation({
   args: {
@@ -703,7 +711,7 @@ export const emitDeleteErrorForMissingKey = internalMutation({
   handler: async (ctx, { instanceId, moduleName, reason }) => {
     const record = await ctx.db
       .query("moduleRepository")
-      .withIndex("by_name_version", (q) => q.eq("name", moduleName))
+      .withIndex("by_instance_name_version", (q) => q.eq("instanceId", instanceId).eq("name", moduleName))
       .first();
 
     const correlationKey = record?.moduleKey;

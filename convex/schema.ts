@@ -226,7 +226,12 @@ export default defineSchema({
     .index("by_group", ["instanceId", "engineGroupId"])
     .index("by_group_username", ["instanceId", "engineGroupId", "username"]),
 
-  // moduleRepository: directory of all available modules (seeded by admins or uploaded)
+  // moduleRepository: directory of all available modules (seeded by admins or uploaded).
+  // Rows are per-tenant, and neither `name`+`version` nor `moduleKey` is unique
+  // across tenants — moduleKey is `{marketplaceId}:{version}:{sha7}`, built from
+  // the archive hash, so two instances installing the same module produce the
+  // same key. Every lookup must therefore be scoped by instanceId; the two
+  // indexes below are the only supported way to resolve a row from a webhook.
   moduleRepository: defineTable({
     instanceId: v.optional(v.id("instances")),
     moduleKey: v.optional(v.string()),
@@ -244,8 +249,8 @@ export default defineSchema({
     statusMessage: v.optional(v.string()),
   })
     .index("by_instance", ["instanceId"])
-    .index("by_name_version", ["name", "version"])
-    .index("by_module_key", ["moduleKey"]),
+    .index("by_instance_name_version", ["instanceId", "name", "version"])
+    .index("by_instance_module_key", ["instanceId", "moduleKey"]),
 
   // moduleCatalogFeatured: admin-curated set of marketplace modules to surface in the storefront's featured strip
   moduleCatalogFeatured: defineTable({

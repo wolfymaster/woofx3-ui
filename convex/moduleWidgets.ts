@@ -131,9 +131,10 @@ export const unregister = internalMutation({
 
 export const registerFromWebhook = internalMutation({
   args: {
-    // Present from the MODULE_WIDGET_REGISTERED webhook so the widget is placed
-    // for the delivering instance. The engine-sync reconcile also passes it.
-    instanceId: v.optional(v.id("instances")),
+    // The delivering instance, from the MODULE_WIDGET_REGISTERED webhook. Places
+    // the widget for that instance, and scopes the owning-module lookup — a
+    // module's moduleKey is shared by every tenant that installed it.
+    instanceId: v.id("instances"),
     widgetId: v.string(),
     name: v.string(),
     directory: v.string(),
@@ -165,7 +166,9 @@ export const registerFromWebhook = internalMutation({
     if (args.createdByType === "MODULE" && args.createdByRef) {
       const mod = await ctx.db
         .query("moduleRepository")
-        .withIndex("by_module_key", (q) => q.eq("moduleKey", args.createdByRef as string))
+        .withIndex("by_instance_module_key", (q) =>
+          q.eq("instanceId", args.instanceId).eq("moduleKey", args.createdByRef as string)
+        )
         .first();
       moduleId = mod?._id;
     }
@@ -193,12 +196,10 @@ export const registerFromWebhook = internalMutation({
       await ctx.db.insert("moduleWidgets", { ...def, createdAt: Date.now() });
     }
 
-    if (args.instanceId) {
-      await enableWidgetForInstance(ctx, args.instanceId, args.widgetId, {
-        createdByType: args.createdByType,
-        createdByRef: args.createdByRef,
-        projectionKey: args.projectionKey,
-      });
-    }
+    await enableWidgetForInstance(ctx, args.instanceId, args.widgetId, {
+      createdByType: args.createdByType,
+      createdByRef: args.createdByRef,
+      projectionKey: args.projectionKey,
+    });
   },
 });
