@@ -2,6 +2,12 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import {
+  pruneActionDefinitions,
+  pruneTriggerDefinitions,
+  pruneWidgetDefinitions,
+  uniqueIds,
+} from "./lib/definitionCatalog";
 import { parseConfigSchemaString } from "./lib/parseConfigSchema";
 
 // Provenance from the engine: createdByRef == the module's composite moduleKey
@@ -390,9 +396,11 @@ export const processModuleInstalled = internalMutation({
 
 /**
  * Process trigger/action deregistration events from the engine. Fires on
- * MODULE_TRIGGER_DEREGISTERED and MODULE_ACTION_DEREGISTERED, typically as
- * part of a module delete. Removes the catalog row and clears any per-instance
- * enablement so workflow builders no longer surface stale options.
+ * MODULE_TRIGGER_DEREGISTERED and MODULE_ACTION_DEREGISTERED — part of a module
+ * delete, and also of an upgrade, which tears the previous version's
+ * registrations down before installing the new ones. Clears this instance's
+ * enablement so its workflow builder no longer surfaces stale options, then
+ * drops the shared catalog row only if no other instance still enables it.
  *
  * Idempotent: deletes only when the row exists; missing rows are skipped.
  */
@@ -403,27 +411,18 @@ export const processDeregisteredDefinitions = internalMutation({
     actions: v.array(actionValidator),
   },
   handler: async (ctx, { instanceId, triggers, actions }) => {
+    // Disable first, prune second: the shared-catalog check asks whether any
+    // instance still enables the definition, and this one no longer should
+    // count itself.
     for (const trigger of triggers) {
-      const existing = await ctx.db
-        .query("triggerDefinitions")
-        .withIndex("by_slug", (q) => q.eq("slug", trigger.id))
-        .first();
-      if (existing) {
-        await ctx.db.delete(existing._id);
-      }
       await disableTriggerForInstance(ctx, instanceId, trigger.id);
     }
+    await pruneTriggerDefinitions(ctx, uniqueIds(triggers.map((t) => t.id)));
 
     for (const action of actions) {
-      const existing = await ctx.db
-        .query("actionDefinitions")
-        .withIndex("by_slug", (q) => q.eq("slug", action.id))
-        .first();
-      if (existing) {
-        await ctx.db.delete(existing._id);
-      }
       await disableActionForInstance(ctx, instanceId, action.id);
     }
+    await pruneActionDefinitions(ctx, uniqueIds(actions.map((a) => a.id)));
   },
 });
 
@@ -579,30 +578,44 @@ async function cascadeDeleteModuleRecord(
     await ctx.db.delete(row._id);
   }
 
-  // Clean global UI catalog rows. Best-effort: any def whose moduleId points
-  // at this record gets removed. Orphan defs (moduleId unset) survive here
-  // but no longer render because their per-instance join row is gone.
-  const triggers = await ctx.db
+  // Clean global UI catalog rows. These are a single shared catalog keyed by
+  // stable slug: every instance that installs the module points at the same
+  // row, and its moduleId records only whichever instance registered it last.
+  // So "the module is gone here" must not mean "the definition is gone" — a
+  // def survives while any instance still enables it, and only the last user
+  // takes it down.
+  const moduleTriggerDefs = await ctx.db
     .query("triggerDefinitions")
     .withIndex("by_module", (q) => q.eq("moduleId", record._id))
     .collect();
-  for (const trigger of triggers) {
-    await ctx.db.delete(trigger._id);
-  }
-  const actions = await ctx.db
+  const moduleActionDefs = await ctx.db
     .query("actionDefinitions")
     .withIndex("by_module", (q) => q.eq("moduleId", record._id))
     .collect();
-  for (const action of actions) {
-    await ctx.db.delete(action._id);
-  }
-  const widgetDefs = await ctx.db
+  const moduleWidgetDefs = await ctx.db
     .query("moduleWidgets")
     .withIndex("by_module", (q) => q.eq("moduleId", record._id))
     .collect();
-  for (const widget of widgetDefs) {
-    await ctx.db.delete(widget._id);
-  }
+
+  // Candidates come from both directions: the slugs this cascade just
+  // un-enabled — authoritative, since join rows are per-instance — and any def
+  // still pointing at the record about to be deleted, so none is left dangling
+  // at a dead id.
+  await pruneTriggerDefinitions(
+    ctx,
+    uniqueIds(enabledTriggerRows.map((r) => r.triggerId).concat(moduleTriggerDefs.map((d) => d.slug))),
+    record._id
+  );
+  await pruneActionDefinitions(
+    ctx,
+    uniqueIds(enabledActionRows.map((r) => r.actionId).concat(moduleActionDefs.map((d) => d.slug))),
+    record._id
+  );
+  await pruneWidgetDefinitions(
+    ctx,
+    uniqueIds(enabledWidgetRows.map((r) => r.widgetId).concat(moduleWidgetDefs.map((d) => d.widgetId))),
+    record._id
+  );
 
   await ctx.runMutation(internal.moduleFunctions.cascadeOnModuleDelete, {
     instanceId,

@@ -358,7 +358,10 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_trigger", ["instanceId", "triggerId"])
-    .index("by_instance_ref", ["instanceId", "createdByRef"]),
+    .index("by_instance_ref", ["instanceId", "createdByRef"])
+    // Across all instances: answers "does anyone still enable this definition?",
+    // which is what decides whether an uninstall may delete the shared def row.
+    .index("by_trigger", ["triggerId"]),
 
   // instanceActions: which action ids are enabled for a given instance.
   // See instanceTriggers for the rationale behind storing provenance here.
@@ -371,7 +374,9 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_action", ["instanceId", "actionId"])
-    .index("by_instance_ref", ["instanceId", "createdByRef"]),
+    .index("by_instance_ref", ["instanceId", "createdByRef"])
+    // See instanceTriggers.by_trigger.
+    .index("by_action", ["actionId"]),
 
   // instanceFunctions: which function ids are enabled for a given instance
   instanceFunctions: defineTable({
@@ -395,7 +400,9 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_widget", ["instanceId", "widgetId"])
-    .index("by_instance_ref", ["instanceId", "createdByRef"]),
+    .index("by_instance_ref", ["instanceId", "createdByRef"])
+    // See instanceTriggers.by_trigger.
+    .index("by_widget", ["widgetId"]),
 
   // workflowTemplates: predefined workflow templates for common Twitch events
   workflowTemplates: defineTable({

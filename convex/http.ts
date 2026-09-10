@@ -671,6 +671,7 @@ http.route({
       case EngineEventType.MODULE_WIDGET_DEREGISTERED: {
         for (const widget of event.widgets) {
           await ctx.runMutation(internal.moduleWidgets.unregister, {
+            instanceId: instance._id,
             widgetId: widgetCanonicalKey({
               projectionKey: widget.projectionKey,
               createdByRef: widget.createdByRef,
