@@ -28,6 +28,15 @@ Installs are **asynchronous** and correlated via a `moduleKey` echoed by the eng
 
 A hash of the in-browser zip is logged against the hash computed on the Convex side and the engine side to help diagnose byte-drift across the delivery.
 
+## Update an installed module
+
+There is no dedicated upgrade RPC — **an update is an install of the newer version**, the same `api.marketplace.installModule` call the Store's Install button makes.
+
+- `moduleDetail.getModuleDetail` reports `latestVersion` for an installed module by fetching `GET /modules/{id}` from the marketplace, keyed on the marketplace id in the module's `moduleKey`. When it is newer than the installed `version`, `ModuleDetailPanel` shows an **Update to vX.Y.Z** button beside Remove.
+- The action needs only the marketplace id, so `modules.tsx` derives it from the selection (`bareModuleKey(moduleKey)`) rather than from how the panel was opened — the Update button is therefore reachable from the Installed list, not only from the Store.
+- Both sides upgrade **in place**. The engine replaces the previous version's registrations under a unique constraint on module name, and `moduleWebhook.processModuleInstalled` patches the existing `moduleRepository` row (`findSupersededModule` matches on the version-free leading segment of the `moduleKey`) instead of inserting a second one. Keeping the `_id` stable is what keeps trigger/action definitions, functions, widgets, assets and resource instances pointed at the module across an upgrade.
+- `getModuleDetail` is an action, not a reactive query, so the panel refetches once the install's transient event reports success — otherwise it would keep rendering the superseded version and its "Update available" notice.
+
 ## Uninstall (`UninstallModuleDialog`)
 
 Same correlated-async pattern as install:
