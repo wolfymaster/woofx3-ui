@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, mutation, query } from "./_generated/server";
+import { pruneWidgetDefinitions } from "./lib/definitionCatalog";
 
 type WidgetProvenance = {
   createdByType?: string;
@@ -115,17 +116,28 @@ export const register = mutation({
   },
 });
 
+/**
+ * MODULE_WIDGET_DEREGISTERED: remove this instance's placement, then drop the
+ * shared definition only if no other instance still places it. The definition
+ * catalog is global, so deleting it outright took the widget away from every
+ * tenant that had it — and left this instance's own placement row behind,
+ * pointing at a definition that no longer existed.
+ */
 export const unregister = internalMutation({
-  args: { widgetId: v.string() },
+  args: {
+    instanceId: v.id("instances"),
+    widgetId: v.string(),
+  },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("moduleWidgets")
-      .withIndex("by_widget_id", (q) => q.eq("widgetId", args.widgetId))
+    const placement = await ctx.db
+      .query("instanceWidgets")
+      .withIndex("by_instance_widget", (q) => q.eq("instanceId", args.instanceId).eq("widgetId", args.widgetId))
       .first();
-
-    if (existing) {
-      await ctx.db.delete(existing._id);
+    if (placement) {
+      await ctx.db.delete(placement._id);
     }
+
+    await pruneWidgetDefinitions(ctx, [args.widgetId]);
   },
 });
 
