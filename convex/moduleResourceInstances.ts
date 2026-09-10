@@ -44,16 +44,6 @@ export const listByKind = query({
   },
 });
 
-export const getByCanonicalId = query({
-  args: { canonicalId: v.string() },
-  handler: async (ctx, { canonicalId }) => {
-    return ctx.db
-      .query("moduleResourceInstances")
-      .withIndex("by_canonical_id", (q) => q.eq("canonicalId", canonicalId))
-      .first();
-  },
-});
-
 /**
  * Resolve owning moduleRepository row for a resource-instance snapshot.
  * Prefer exact moduleKey; fall back to marketplace-id prefix or name within
@@ -125,9 +115,13 @@ async function upsertRow(
     canonicalId: instance.canonicalId,
   };
 
+  // Scoped to the instance: canonicalId is `{moduleName}:{kind}:{engine instance
+  // id}`, so an unscoped match would patch another tenant's resource — flipping
+  // its instanceId and moduleId to this caller's, and handing over a counter the
+  // other tenant's workflows still reference.
   const existing = await ctx.db
     .query("moduleResourceInstances")
-    .withIndex("by_canonical_id", (q) => q.eq("canonicalId", instance.canonicalId))
+    .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId).eq("canonicalId", instance.canonicalId))
     .first();
   if (existing) {
     await ctx.db.patch(existing._id, row);
@@ -188,11 +182,16 @@ export const reconcileForModule = internalMutation({
 });
 
 export const deleteFromWebhook = internalMutation({
-  args: { instance: resourceInstanceValidator },
-  handler: async (ctx, { instance }) => {
+  args: {
+    // The deleting instance, from the webhook's Bearer token — canonicalId is
+    // not unique across tenants, so without it this deletes someone else's row.
+    instanceId: v.id("instances"),
+    instance: resourceInstanceValidator,
+  },
+  handler: async (ctx, { instanceId, instance }) => {
     const existing = await ctx.db
       .query("moduleResourceInstances")
-      .withIndex("by_canonical_id", (q) => q.eq("canonicalId", instance.canonicalId))
+      .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId).eq("canonicalId", instance.canonicalId))
       .first();
     if (existing) {
       await ctx.db.delete(existing._id);

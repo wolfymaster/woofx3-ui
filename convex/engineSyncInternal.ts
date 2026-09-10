@@ -777,7 +777,7 @@ export const reconcileResourceInstances = internalMutation({
 
       const existing = await ctx.db
         .query("moduleResourceInstances")
-        .withIndex("by_canonical_id", (q) => q.eq("canonicalId", snap.canonicalId))
+        .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId).eq("canonicalId", snap.canonicalId))
         .first();
       if (existing) {
         await ctx.db.patch(existing._id, row);
