@@ -90,3 +90,23 @@ Summary (see `CLAUDE.md` for the full list): `internal*` for private APIs; valid
 ## Task management
 
 Notion backlog database `272a5cd7-e93c-80ee-8420-e30b81942b08`. New work in **this** repo → tag **Project: UI** unless clearly engine-side. Task descriptions should be self-contained for implementers.
+
+## Engine repo path
+
+This project types against the woofx3 engine's shared TypeScript clients
+(`@woofx3/api`, `@woofx3/common`), addressed by the relative path `../woofx3`
+in both `tsconfig.json` and `vite.config.ts`. TypeScript `paths` are static, so
+that path cannot be made configurable directly.
+
+`bun install` runs `scripts/ensure-engine-path.mjs`, which checks `../woofx3`
+resolves to the engine repo and symlinks it from `WOOFX3_ENGINE_PATH` when it
+does not:
+
+```bash
+WOOFX3_ENGINE_PATH=/path/to/woofx3 bun run setup
+```
+
+A **git worktree** of this repo needs this: `../woofx3` resolves next to the
+worktree, not next to the original clone. Without it the failure is
+`Cannot find module '@woofx3/api/ui-schema'`, which does not hint that the
+filesystem layout is the cause.
