@@ -32,7 +32,20 @@ export default function Alerts() {
   const rows = useMemo(() => (workflows ?? []) as Doc<"workflows">[], [workflows]);
   const loading = catalogLoading || workflows === undefined;
 
-  // Configured-trigger count per group, so the rail says where the work already is.
+  // Configured-trigger count per group, so the rail says where the work already
+  // is. A workflow's group comes from the trigger it binds to, since the alert
+  // kind is declared on the trigger rather than derivable from the event.
+  const groupKeyByEvent = useMemo(() => {
+    const byEvent = new Map<string, string>();
+    for (const preset of triggerPresets) {
+      const key = alertGroupKey(preset);
+      if (key && preset.event) {
+        byEvent.set(preset.event, key);
+      }
+    }
+    return byEvent;
+  }, [triggerPresets]);
+
   const counts = useMemo(() => {
     const byGroup = new Map<string, number>();
     for (const row of rows) {
@@ -40,11 +53,14 @@ export default function Alerts() {
       if (!projected.ok) {
         continue;
       }
-      const key = alertGroupKey(projected.projection.event);
+      const key = groupKeyByEvent.get(projected.projection.event);
+      if (!key) {
+        continue;
+      }
       byGroup.set(key, (byGroup.get(key) ?? 0) + projected.projection.triggers.length);
     }
     return byGroup;
-  }, [rows]);
+  }, [rows, groupKeyByEvent]);
 
   const groupKey = params?.group ?? null;
   const group = findAlertGroup(groups, groupKey ?? undefined);

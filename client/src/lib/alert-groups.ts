@@ -3,27 +3,64 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
 /**
  * Alert groups — "what happened", never "which platform".
  *
- * Engine event names read `{what}.{scope}.{platform}` (`cheer.channel.twitch`,
- * `redeem.channelpoints.twitch`, `subscriptionGift.channel.twitch`), so the leading
- * segment is the platform-neutral kind of thing that happened. Grouping on it keeps
- * the UI neutral — a viewer subscribing is a subscription whether it came from Twitch
- * or anywhere else — and picks up a module's events with no vocabulary of ours to
- * update: a trigger named `donation.channel.throne` becomes a Donation group the
- * moment the module is installed.
+ * Grouping reads the trigger's declared `alert.*` taxonomy axis rather than
+ * parsing its event name. A module author says what kind of thing their trigger
+ * reports; the UI does not infer it, and a trigger named `alert.donation` from
+ * any platform joins the Donation group the moment the module is installed.
+ *
+ * That distinction is not academic. This screen previously derived the group
+ * from the leading segment of the event name, which held only while events read
+ * `{what}.{scope}.{platform}`. Once they became `{scope}.{what}`
+ * (`channel.follow`, `channel.cheer`), every channel event collapsed into one
+ * "Channel" group. A declared axis cannot be reshaped by a rename.
+ *
+ * A trigger with no `alert.*` axis is not an alert type, so workflow and module
+ * lifecycle triggers stop being offered as things to alert on — which they
+ * never should have been.
  */
 export interface AlertGroup {
-  /** URL-safe segment, e.g. `cheer`. */
+  /** URL-safe segment, e.g. `cheer` — the axis leaf, not the event name. */
   key: string;
   label: string;
   presets: TriggerPreset[];
 }
 
-export function alertGroupKey(event: string): string {
-  return event.split(".")[0] ?? event;
+const ALERT_AXIS_PREFIX = "alert.";
+
+/**
+ * Labels where humanising the axis leaf gives the wrong words. Only the cases a
+ * reader would notice — everything else title-cases correctly on its own, and an
+ * entry here is a phrase the UI owns rather than one the module author does.
+ */
+const GROUP_LABEL_OVERRIDES: Record<string, string> = {
+  channelpoints: "Channel Points",
+  subscription: "Subscriptions",
+  watchstreak: "Watch Streak",
+  hypetrain: "Hype Train",
+};
+
+/**
+ * The alert kind a trigger reports, or `undefined` when it is not an alert.
+ *
+ * Only the first `alert.*` axis counts. Taxonomy is multi-valued to carry
+ * independent axes (`platform.twitch` alongside `alert.follow`), not to put one
+ * trigger in two alert groups.
+ */
+export function alertGroupKey(preset: Pick<TriggerPreset, "taxonomy">): string | undefined {
+  const axis = preset.taxonomy?.find((entry) => entry.startsWith(ALERT_AXIS_PREFIX));
+  if (!axis) {
+    return undefined;
+  }
+  const leaf = axis.slice(ALERT_AXIS_PREFIX.length).trim();
+  return leaf.length > 0 ? leaf : undefined;
 }
 
-/** `subscriptionGift` → "Subscription Gift". */
+/** `subscriptionGift` → "Subscription Gift"; known leaves get their real name. */
 export function alertGroupLabel(key: string): string {
+  const override = GROUP_LABEL_OVERRIDES[key];
+  if (override) {
+    return override;
+  }
   return key
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .split(/[_\s-]+/)
@@ -32,14 +69,14 @@ export function alertGroupLabel(key: string): string {
     .join(" ");
 }
 
-/** Every registered trigger, grouped by what it reports, ordered by label. */
+/** Every trigger that declares an alert kind, grouped by it, ordered by label. */
 export function buildAlertGroups(triggerPresets: TriggerPreset[]): AlertGroup[] {
   const byKey = new Map<string, TriggerPreset[]>();
   for (const preset of triggerPresets) {
-    if (!preset.event) {
+    const key = alertGroupKey(preset);
+    if (!key) {
       continue;
     }
-    const key = alertGroupKey(preset.event);
     const existing = byKey.get(key);
     if (existing) {
       existing.push(preset);

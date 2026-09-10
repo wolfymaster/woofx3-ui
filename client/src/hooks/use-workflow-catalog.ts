@@ -63,6 +63,7 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
     category: row.category,
     color: row.color,
     event: row.event,
+    taxonomy: row.taxonomy,
     config,
   };
 }

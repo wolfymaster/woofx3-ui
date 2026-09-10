@@ -41,6 +41,12 @@ export interface TriggerPreset {
   category: string;
   color: string;
   event?: string;
+  /**
+   * Declared classification axes, e.g. `["platform.twitch", "alert.follow"]`.
+   * The `alert.*` axis is what groups this trigger on the Alerts screen; see
+   * `alert-groups.ts`.
+   */
+  taxonomy?: string[];
   config?: TriggerConfig;
 }
 
