@@ -4,6 +4,8 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "setup": "node scripts/ensure-engine-path.mjs",
+    "postinstall": "node scripts/ensure-engine-path.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
