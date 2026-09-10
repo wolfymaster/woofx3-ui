@@ -594,6 +594,9 @@ export default defineSchema({
   // Mirrors engine AssetDefinition; written by MODULE_ASSET_REGISTERED handler.
   // Actions reference assets by canonicalId; editor maps to public URL via the
   // instance's storage adapter at workflow-save time.
+  // `canonicalId` and `projectionKey` are module-relative, so every tenant that
+  // installs the module produces the same values — a row is only identified by
+  // pairing one with the owning moduleId, which is itself instance-scoped.
   moduleAssets: defineTable({
     moduleId: v.id("moduleRepository"),
     engineAssetId: v.string(), // AssetDefinition.id
@@ -610,12 +613,14 @@ export default defineSchema({
     createdByRef: v.string(),
   })
     .index("by_module", ["moduleId"])
-    .index("by_canonical_id", ["canonicalId"])
-    .index("by_projection_key", ["projectionKey"]),
+    .index("by_module_canonical", ["moduleId", "canonicalId"]),
 
   // moduleResourceInstances: runtime-created instances of module-declared resource
   // kinds (e.g. user-defined counters). Mirrors engine ResourceInstanceDefinition.
   // Backs resource_ref ConfigField pickers in the workflow builder.
+  // `canonicalId` is `{moduleName}:{kind}:{instanceId}` where that instanceId is
+  // the engine's manifest-local resource id — two tenants can produce the same
+  // one, so it only identifies a row alongside the owning Convex instanceId.
   moduleResourceInstances: defineTable({
     instanceId: v.id("instances"),
     moduleId: v.id("moduleRepository"),
@@ -628,7 +633,7 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_module", ["moduleId"])
-    .index("by_canonical_id", ["canonicalId"])
+    .index("by_instance_canonical", ["instanceId", "canonicalId"])
     .index("by_instance_kind", ["instanceId", "kind"]),
 
   // moduleWidgets: global widget DEFINITION catalog (module-sourced AND built-in).

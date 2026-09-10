@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { internalMutation, type MutationCtx, query } from "./_generated/server";
 
 const assetValidator = v.object({
   id: v.string(),
@@ -33,15 +34,34 @@ export const listByModule = query({
   },
 });
 
-export const getByCanonicalId = query({
-  args: { canonicalId: v.string() },
-  handler: async (ctx, { canonicalId }) => {
-    return ctx.db
-      .query("moduleAssets")
-      .withIndex("by_canonical_id", (q) => q.eq("canonicalId", canonicalId))
-      .first();
-  },
-});
+/**
+ * The instance's own row for the module these assets belong to. Assets are
+ * identified by `moduleId` + `canonicalId`: `canonicalId` alone is shared by
+ * every tenant that installed the module, and this table has no instanceId of
+ * its own — the module row is what carries the tenant.
+ */
+async function resolveModuleId(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  moduleKey: string,
+  moduleName: string,
+  version: string
+): Promise<Id<"moduleRepository"> | undefined> {
+  const byKey = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", moduleKey))
+    .first();
+  if (byKey) {
+    return byKey._id;
+  }
+  const byNameVersion = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance_name_version", (q) =>
+      q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", version)
+    )
+    .first();
+  return byNameVersion?._id;
+}
 
 export const upsertFromWebhook = internalMutation({
   args: {
@@ -55,22 +75,7 @@ export const upsertFromWebhook = internalMutation({
     assets: v.array(assetValidator),
   },
   handler: async (ctx, { instanceId, moduleKey, moduleName, version, assets }) => {
-    const moduleRecord = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", moduleKey))
-      .first();
-
-    const moduleId =
-      moduleRecord?._id ??
-      (
-        await ctx.db
-          .query("moduleRepository")
-          .withIndex("by_instance_name_version", (q) =>
-            q.eq("instanceId", instanceId).eq("name", moduleName).eq("version", version)
-          )
-          .first()
-      )?._id;
-
+    const moduleId = await resolveModuleId(ctx, instanceId, moduleKey, moduleName, version);
     if (!moduleId) {
       return;
     }
@@ -94,7 +99,7 @@ export const upsertFromWebhook = internalMutation({
 
       const existing = await ctx.db
         .query("moduleAssets")
-        .withIndex("by_canonical_id", (q) => q.eq("canonicalId", asset.canonicalId))
+        .withIndex("by_module_canonical", (q) => q.eq("moduleId", moduleId).eq("canonicalId", asset.canonicalId))
         .first();
       if (existing) {
         await ctx.db.patch(existing._id, row);
@@ -105,13 +110,31 @@ export const upsertFromWebhook = internalMutation({
   },
 });
 
+/**
+ * Deregistration carries the same module identity as the registration that
+ * created the rows, so resolve the instance's module first and delete within
+ * it. If the module row is already gone — the engine fires this during a module
+ * delete, and `module.deleted` may land first — there is nothing left to do:
+ * `cascadeOnModuleDelete` removes every asset row for that module.
+ */
 export const deleteFromWebhook = internalMutation({
-  args: { assets: v.array(assetValidator) },
-  handler: async (ctx, { assets }) => {
+  args: {
+    instanceId: v.id("instances"),
+    moduleKey: v.string(),
+    moduleName: v.string(),
+    version: v.string(),
+    assets: v.array(assetValidator),
+  },
+  handler: async (ctx, { instanceId, moduleKey, moduleName, version, assets }) => {
+    const moduleId = await resolveModuleId(ctx, instanceId, moduleKey, moduleName, version);
+    if (!moduleId) {
+      return;
+    }
+
     for (const asset of assets) {
       const existing = await ctx.db
         .query("moduleAssets")
-        .withIndex("by_canonical_id", (q) => q.eq("canonicalId", asset.canonicalId))
+        .withIndex("by_module_canonical", (q) => q.eq("moduleId", moduleId).eq("canonicalId", asset.canonicalId))
         .first();
       if (existing) {
         await ctx.db.delete(existing._id);

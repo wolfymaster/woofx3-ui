@@ -875,6 +875,10 @@ http.route({
 
       case EngineEventType.MODULE_ASSET_DEREGISTERED: {
         await ctx.runMutation(internal.moduleAssets.deleteFromWebhook, {
+          instanceId: instance._id,
+          moduleKey: event.moduleKey,
+          moduleName: event.moduleName,
+          version: event.version,
           assets: event.assets,
         });
         return corsJson({ success: true, type: event.type });
@@ -890,6 +894,7 @@ http.route({
 
       case EngineEventType.MODULE_RESOURCE_INSTANCE_DELETED: {
         await ctx.runMutation(internal.moduleResourceInstances.deleteFromWebhook, {
+          instanceId: instance._id,
           instance: event.instance,
         });
         return corsJson({ success: true, type: event.type });
