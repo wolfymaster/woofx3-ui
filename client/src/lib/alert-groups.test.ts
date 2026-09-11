@@ -27,7 +27,9 @@ describe("alertGroupKey", () => {
   });
 
   test("a trigger with no alert axis is not an alert type", () => {
-    expect(alertGroupKey(preset("t", "Workflow created", ["system.workflow"], "db.workflow.created.*"))).toBeUndefined();
+    expect(
+      alertGroupKey(preset("t", "Workflow created", ["system.workflow"], "db.workflow.created.*"))
+    ).toBeUndefined();
     expect(alertGroupKey(preset("t", "No taxonomy at all", undefined, "channel.follow"))).toBeUndefined();
   });
 
@@ -102,10 +104,7 @@ describe("buildAlertGroups", () => {
 });
 
 describe("findAlertGroup", () => {
-  const groups = buildAlertGroups([
-    preset("t1", "Follow", ["alert.follow"]),
-    preset("t2", "Cheer", ["alert.cheer"]),
-  ]);
+  const groups = buildAlertGroups([preset("t1", "Follow", ["alert.follow"]), preset("t2", "Cheer", ["alert.cheer"])]);
 
   test("finds by key", () => {
     expect(findAlertGroup(groups, "follow")?.label).toBe("Follow");
