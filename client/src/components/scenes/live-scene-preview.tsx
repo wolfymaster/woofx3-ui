@@ -17,13 +17,14 @@ interface LiveScenePreviewProps {
  * convex/browserSource.ts's getOrCreatePreviewUrl — so the canvas shows the real
  * overlay rather than a reimplementation of widget rendering.
  *
- * Deliberately NOT routed through the /browser-source/{key} page OBS loads. That
- * page exists to keep the engine URL and token out of a public browser source,
- * which this authenticated editor has no reason to do, and putting a third site
- * in the frame's ancestor chain would make every engine request cross-site —
- * dropping Scene Manager's SameSite=Strict session cookie, which is what
- * authorizes the widget frames and the event stream inside the overlay. Loaded
- * directly, a UI and an engine sharing a registrable domain stay same-site.
+ * Deliberately NOT routed through the /browser-source/{key} route OBS loads.
+ * That route exists to give OBS a stable URL whose token can be rotated
+ * underneath it, which this authenticated editor has no use for. Framing a
+ * convex.site page here would also put a third site in the frame's ancestor
+ * chain, making every engine request cross-site — dropping Scene Manager's
+ * SameSite=Strict session cookie, which is what authorizes the widget frames and
+ * the event stream inside the overlay. Loaded directly, a UI and an engine
+ * sharing a registrable domain stay same-site.
  *
  * The preview's overlay token is its own, so rotating or revoking the public
  * browser-source URL leaves this untouched.

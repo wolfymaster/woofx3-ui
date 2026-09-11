@@ -41,13 +41,13 @@ The editor has three regions:
 Both surfaces render the **same engine overlay**, from the same `scene.publicUrl` setting (Admin → Storage → "Scene Manager Public URL"): the engine mints `{publicUrl}/scene/{engineSceneId}?token={token}` and that is what actually draws the widgets. They differ only in how they reach it.
 
 - **Canvas preview** — `browserSource.getOrCreatePreviewUrl` returns that engine URL and `LiveScenePreview` embeds it **directly**. The editor is an authenticated view of the instance, so it has no reason to hide the engine URL from itself, and going direct keeps the frame's ancestor chain to two sites. That matters: a third site in the chain makes every request from inside the overlay cross-site, which drops Scene Manager's `SameSite=Strict` session cookie — the cookie authorizing the widget frames (`/scene/{id}/widget/{instanceId}`) and the SSE stream (`/events`). A UI and an engine sharing a registrable domain (`ui.x.tv` / `scenes.x.tv`) stay same-site, and the overlay renders.
-- **Browser source** — `/browser-source/{key}` wraps the same engine URL in a page served from the Convex site, because a public OBS URL *should* keep the engine URL and token out of reach; the opaque key is what you revoke or rotate.
+- **Browser source** — `/browser-source/{key}` gives OBS a stable Convex URL and **redirects** it to the same engine URL. The opaque key is what you rotate or revoke; the token behind it can be re-minted without re-pasting anything into OBS. It redirects rather than wrapping the engine in its own page for the reason above: framed under `convex.site`, the overlay is cross-site to its top-level document, the `SameSite=Strict` cookie is withheld, and the widget frames and `/events` answer 401.
 
 Each has its own overlay token, so rotating the public browser-source URL never disturbs the preview.
 
-A cached URL that is not the current `{publicUrl}/scene/{engineSceneId}?token=…` shape — anything minted before Scene Manager replaced streamware's overlay path — is treated as a cache miss and re-minted (`convex/lib/sceneOverlayUrl.ts`), and `/browser-source/{key}` shows its placeholder rather than framing a dead URL.
+A cached URL that is not the current `{publicUrl}/scene/{engineSceneId}?token=…` shape — anything minted before Scene Manager replaced streamware's overlay path — is treated as a cache miss and re-minted (`convex/lib/sceneOverlayUrl.ts`), and `/browser-source/{key}` shows its placeholder rather than redirecting to a dead URL.
 
-**Local Network Access.** Both iframes carry `allow="local-network-access"`. When an engine hostname resolves to a LAN address (split-horizon DNS in dev — `streamware.dev.woofx3.tv` → `192.168.0.x`), Chrome treats the load as a public page reaching the local network and gates it behind a permission whose default allowlist is `self`; without the attribute it is auto-denied with no prompt and the overlay silently renders nothing. OBS does not enforce this, which is why a browser source can work while the same URL fails in a tab. The attribute is inert once the engine resolves to a public address.
+**Local Network Access.** The preview iframe carries `allow="local-network-access"`. When an engine hostname resolves to a LAN address (split-horizon DNS in dev — `streamware.dev.woofx3.tv` → `192.168.0.x`), Chrome treats the load as a public page reaching the local network and gates it behind a permission whose default allowlist is `self`; without the attribute it is auto-denied with no prompt and the overlay silently renders nothing. The attribute is inert once the engine resolves to a public address. The browser source is a top-level redirect, so it has no frame to delegate to — and OBS does not enforce Local Network Access in any case.
 
 Saves go through `useAction(api.sceneActions.updateScene)` (`widgetsJson` + `layoutJson`); a dirty flag drives the Save button and protects in-flight edits from the post-save webhook re-push.
 
@@ -70,15 +70,17 @@ The **link icon** dropdown in the editor header offers **Copy URL** and **Rotate
 - `api.browserSource.getOrCreateBrowserSourceKey` is idempotent (one key per scene) and membership-checked.
 - `api.browserSource.rotateBrowserSourceKey` revokes all existing keys for the scene and issues a fresh one; `revokeBrowserSourceKeys` revokes without reissuing. A leaked OBS URL stops resolving the moment its key is revoked.
 
-### HTML renderer (`GET /browser-source/{key}`)
+### Redirect (`GET /browser-source/{key}`)
 
-Engine-authoritative: the **engine renders the overlay**, so this page is a thin wrapper.
+Engine-authoritative: the **engine renders the overlay**, so this route only resolves the key and hands off.
 
-1. Resolve `key` → scene (cache) → `engineSceneId` + `instanceId`; bumps `lastUsedAt`.
-2. Resolve the instance's `engineSceneOverlayBaseUrl` via `internal.engineInfo.getEngineOverlayInfo` (cached on the instance with a TTL; one engine RPC on refresh).
-3. Return HTML that iframes **`{engineSceneOverlayBaseUrl}/{engineSceneId}`**.
+1. Resolve `key` → source key → scene (cache); bumps `lastUsedAt`.
+2. If the scene hasn't synced (no `engineSceneId`) or the cached `overlayUrl` isn't the current `/scene/{engineSceneId}?token=…` shape, render a transparent placeholder.
+3. Otherwise **`302`** to the cached `overlayUrl`, with `Cache-Control: no-store` so every OBS load re-resolves the key and picks up a rotated token.
 
-Security: the iframe is cross-origin (engine domain) and sandboxed **`allow-scripts` only — never `allow-same-origin`** (the previous combination defeated the sandbox). All interpolated values (`scene.name`, overlay URL) are HTML-escaped — see `convex/lib/browserSourceHtml.ts` (unit-tested in `browserSourceHtml.test.ts`). An un-synced scene or an engine with no overlay base configured renders a transparent placeholder.
+**Why a redirect, not an iframe.** Scene Manager's shell (`GET /scene/{id}?token=…`) is the only engine route that accepts the token. It trades it for an `sm_session` cookie marked `SameSite=Strict`, and the widget frames, the `/events` SSE stream, and delivery acks authenticate with that cookie alone. Framed under `convex.site`, all of those are cross-site to the top-level document, so the browser withholds the cookie and they 401 — the shell loads, but no widget or event ever arrives. After the redirect the overlay is the top-level document and the cookie flows. See `buildBrowserSourceRedirect` in `convex/lib/browserSourceHtml.ts` (unit-tested in `browserSourceHtml.test.ts`); placeholder values are HTML-escaped there too.
+
+The engine URL, token included, is visible once the redirect lands — as it already was in the old wrapper page's iframe `src`. A leaked engine URL stays valid until its token is revoked.
 
 > Note: the old `/api/widgets/{...}/index.html` stub in `convex/http.ts` is **no longer used** by the scene overlay (it predates this work and is still referenced only by the unrouted legacy alert renderer `client/src/pages/browser-source.tsx`).
 

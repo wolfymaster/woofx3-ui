@@ -5,7 +5,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
-import { buildBrowserSourceHtml, buildBrowserSourcePlaceholderHtml } from "./lib/browserSourceHtml";
+import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
@@ -1203,10 +1203,11 @@ http.route({
       new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 
     // Scenes are engine-authoritative and the engine renders the overlay, so this
-    // page just iframes the engine-minted overlay-token URL cached on the source
-    // key (see convex/browserSource.ts's getOrCreateBrowserSourceKey — it mints
-    // via the engine's overlayTokenRoutes at key-creation time, not here, so
-    // this stays a single fast lookup on every OBS page load).
+    // route just redirects to the engine-minted overlay-token URL cached on the
+    // source key (see convex/browserSource.ts's getOrCreateBrowserSourceKey — it
+    // mints via the engine's overlayTokenRoutes at key-creation time, not here, so
+    // this stays a single fast lookup on every OBS page load). Why a redirect
+    // rather than a wrapper page: see buildBrowserSourceRedirect.
     if (!scene.engineSceneId) {
       return htmlResponse(
         buildBrowserSourcePlaceholderHtml({
@@ -1217,7 +1218,7 @@ http.route({
     }
 
     // A URL from before Scene Manager replaced streamware's overlay path resolves to nothing;
-    // say so rather than iframing a dead page. Reopening the scene editor re-mints it.
+    // say so rather than redirecting to a dead page. Reopening the scene editor re-mints it.
     if (!isCurrentSceneUrl(sourceKey.overlayUrl, scene.engineSceneId)) {
       return htmlResponse(
         buildBrowserSourcePlaceholderHtml({
@@ -1227,7 +1228,7 @@ http.route({
       );
     }
 
-    return htmlResponse(buildBrowserSourceHtml({ sceneName, overlayUrl: sourceKey.overlayUrl }));
+    return buildBrowserSourceRedirect(sourceKey.overlayUrl);
   }),
 });
 

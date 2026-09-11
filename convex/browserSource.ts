@@ -390,13 +390,13 @@ async function requireInstanceForScene(
 // {engineSceneId}?token={token}`, straight from the engine.
 //
 // The editor embeds that URL directly rather than routing through the
-// /browser-source/{key} page OBS uses. That page exists to keep the engine URL
-// and token out of a public browser source; the editor is already an
-// authenticated view of the instance, so it has nothing to hide from itself,
-// and the indirection costs something real: a convex.site document between the
-// editor and the engine puts a third site in the frame's ancestor chain, which
-// makes every engine request cross-site and drops Scene Manager's SameSite=Strict
-// session cookie — the one authorizing the widget frames and the event stream.
+// /browser-source/{key} route OBS uses. That route exists to give OBS a stable
+// URL whose token can be rotated underneath it; the editor is an authenticated
+// view that fetches this URL itself, so it has no use for the indirection. It
+// must not frame a convex.site document either: a third site in the frame's
+// ancestor chain makes every engine request cross-site and drops Scene Manager's
+// SameSite=Strict session cookie — the one authorizing the widget frames and the
+// event stream. (The OBS route avoids the same trap by redirecting, not framing.)
 // Embedded directly, a UI and an engine that share a registrable domain
 // (ui.x.tv / scenes.x.tv) stay same-site and the session holds.
 //
