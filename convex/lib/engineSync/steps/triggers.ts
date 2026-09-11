@@ -25,6 +25,7 @@ export const triggersStep: SyncStep = {
       configSchema: t.configSchema,
       allowVariants: t.allowVariants,
       projectionKey: t.projectionKey,
+      taxonomy: t.taxonomy,
       createdByType: t.createdByType,
       createdByRef: t.createdByRef,
     }));

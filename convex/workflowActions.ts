@@ -81,7 +81,6 @@ export const createFromDefinition = action({
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const engineDefinition = unescapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">;
     await rpc.createWorkflow({
-      accountId: bundle.applicationId,
       definition: engineDefinition,
       correlationKey,
     });

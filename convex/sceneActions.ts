@@ -50,7 +50,6 @@ export const createScene = action({
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const result = await rpc.createScene({
       name: args.name,
-      accountId: bundle.applicationId,
       description: args.description,
       widgetsJson: args.widgetsJson ?? "[]",
       layoutJson: args.layoutJson ?? "{}",
@@ -107,7 +106,10 @@ export const getAvailableWidgets = action({
   args: {
     instanceId: v.id("instances"),
   },
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
     widgets: Array<{
       id: string;
       manifestId: string;

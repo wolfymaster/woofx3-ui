@@ -84,7 +84,10 @@ export function CreateResourceDialog({ kind, onClose, onCreate }: CreateResource
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button disabled={!resourceInstanceId.trim() || !displayName.trim() || creating} onClick={() => void handleCreate()}>
+          <Button
+            disabled={!resourceInstanceId.trim() || !displayName.trim() || creating}
+            onClick={() => void handleCreate()}
+          >
             {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
             Create
           </Button>

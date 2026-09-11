@@ -38,7 +38,7 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    allowedHosts: ['ui.dev.woofx3.tv'],
+    allowedHosts: ["ui.dev.woofx3.tv"],
     host: true,
     fs: {
       strict: true,

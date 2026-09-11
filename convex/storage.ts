@@ -1,9 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { StorageConfig } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import type { StorageConfig } from "@woofx3/api";
 
 export const getConfig = action({
   args: {
@@ -15,11 +15,13 @@ export const getConfig = action({
       return null;
     }
 
-    const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null =
-      await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, {
+    const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null = await ctx.runQuery(
+      internal.workflowCatalogContext.catalogContextForUser,
+      {
         instanceId: args.instanceId,
         userId,
-      });
+      }
+    );
     if (!bundle) {
       return null;
     }
@@ -49,11 +51,13 @@ export const setConfig = action({
       throw new Error("Not authenticated");
     }
 
-    const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null =
-      await ctx.runQuery(internal.workflowCatalogContext.catalogContextForUser, {
+    const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null = await ctx.runQuery(
+      internal.workflowCatalogContext.catalogContextForUser,
+      {
         instanceId: args.instanceId,
         userId,
-      });
+      }
+    );
     if (!bundle) {
       throw new Error("Not authorized");
     }

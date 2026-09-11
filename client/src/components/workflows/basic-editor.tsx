@@ -316,7 +316,7 @@ export function BasicWorkflowEditor() {
     },
     onSuccess: ({ engineWorkflowId }) => {
       toast({ title: "Workflow created" });
-      navigate(`/workflows/${engineWorkflowId}`);
+      navigate(`/stream/workflows/${engineWorkflowId}`);
     },
     onError: (err) => {
       toast({
@@ -496,9 +496,9 @@ export function BasicWorkflowEditor() {
         title: ids.length === 1 ? "Workflow created" : `${ids.length} workflows created`,
       });
       if (ids.length === 1) {
-        navigate(`/workflows/${ids[0]}`);
+        navigate(`/stream/workflows/${ids[0]}`);
       } else {
-        navigate("/workflows");
+        navigate("/stream/workflows");
       }
     },
     onError: (err) => {

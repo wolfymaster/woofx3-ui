@@ -1,5 +1,5 @@
+import { ArrowLeft, Home } from "lucide-react";
 import { Link } from "wouter";
-import { Home, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function NotFound() {
@@ -8,7 +8,9 @@ export default function NotFound() {
       <div className="space-y-6">
         <div className="space-y-2">
           <h1 className="text-7xl font-bold text-primary">404</h1>
-          <h2 className="text-2xl font-semibold" data-testid="text-not-found-title">Page Not Found</h2>
+          <h2 className="text-2xl font-semibold" data-testid="text-not-found-title">
+            Page Not Found
+          </h2>
           <p className="text-muted-foreground max-w-md" data-testid="text-not-found-description">
             The page you're looking for doesn't exist or has been moved.
           </p>

@@ -1,8 +1,10 @@
+import { parseDataShape, parseFieldList } from "@woofx3/api/ui-schema";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
-import { parseConfigSchemaString } from "./lib/parseConfigSchema";
+import { bareModuleKey, loadModuleIdsByBareKey } from "./lib/moduleKey";
+import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { canAccessAccount } from "./lib/teamAccess";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
@@ -124,6 +126,7 @@ export const reconcileGroups = internalMutation({
         engineGroupId: v.string(),
         name: v.string(),
         description: v.string(),
+        isBuiltIn: v.optional(v.boolean()),
         engineCreatedAt: v.string(),
         members: v.array(v.string()),
       })
@@ -150,6 +153,7 @@ export const reconcileGroups = internalMutation({
         applicationId,
         name: snap.name,
         description: snap.description,
+        isBuiltIn: snap.isBuiltIn ?? false,
         engineCreatedAt: snap.engineCreatedAt,
         updatedAt: now,
       };
@@ -337,8 +341,11 @@ export const reconcileScenes = internalMutation({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
     for (const row of local) {
-      if (row.engineSceneId && !liveIds.has(row.engineSceneId)) {
-        await ctx.db.delete(row._id);
+      // A row without an engineSceneId has no counterpart to match against and
+      // would otherwise survive every sweep forever, stuck "Syncing" in the UI.
+      const orphaned = !row.engineSceneId || !liveIds.has(row.engineSceneId);
+      if (orphaned) {
+        await deleteSceneAndChildren(ctx, row._id);
       }
     }
 
@@ -365,10 +372,12 @@ function triggerUiFields(configSchema: string | undefined): {
   icon: string;
   configFields?: unknown[];
 } {
-  const { fields, color, icon } = parseConfigSchemaString(configSchema);
+  // color / icon were read out of the schema container, which no longer
+  // exists and which nothing ever populated — every row takes the defaults.
+  const fields = parseFieldList(configSchema);
   return {
-    color: color ?? DEFAULT_UI_COLOR,
-    icon: icon ?? DEFAULT_TRIGGER_ICON,
+    color: DEFAULT_UI_COLOR,
+    icon: DEFAULT_TRIGGER_ICON,
     configFields: fields.length > 0 ? fields : undefined,
   };
 }
@@ -397,6 +406,7 @@ export const reconcileTriggers = internalMutation({
         configSchema: v.optional(v.string()),
         allowVariants: v.optional(v.boolean()),
         projectionKey: v.optional(v.string()),
+        taxonomy: v.optional(v.array(v.string())),
         createdByType: v.optional(v.string()),
         createdByRef: v.optional(v.string()),
       })
@@ -404,19 +414,12 @@ export const reconcileTriggers = internalMutation({
   },
   handler: async (ctx, { instanceId, snapshots }) => {
     const snapshotIds = new Set(snapshots.map((s) => s.id));
+    const moduleIdsByKey = await loadModuleIdsByBareKey(ctx, instanceId);
     let processed = 0;
 
     for (const snap of snapshots) {
-      let moduleId: Id<"moduleRepository"> | undefined;
-      if (snap.createdByType === "MODULE" && snap.createdByRef) {
-        const mod = await ctx.db
-          .query("moduleRepository")
-          .withIndex("by_instance_module_key", (q) =>
-            q.eq("instanceId", instanceId).eq("moduleKey", snap.createdByRef!)
-          )
-          .first();
-        moduleId = mod?._id;
-      }
+      const moduleId =
+        snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
       const ui = triggerUiFields(snap.configSchema);
       const defRow = {
@@ -430,6 +433,7 @@ export const reconcileTriggers = internalMutation({
         configFields: ui.configFields,
         allowVariants: snap.allowVariants,
         projectionKey: snap.projectionKey,
+        taxonomy: snap.taxonomy,
         moduleId,
       };
       const existingDef = await ctx.db
@@ -485,16 +489,27 @@ export const reconcileTriggers = internalMutation({
 const DEFAULT_ACTION_ICON = "ArrowRight";
 const DEFAULT_ACTION_CATEGORY = "General";
 
-function actionUiFields(paramsSchema: string | undefined): {
+function actionUiFields(
+  paramsSchema: string | undefined,
+  returns: string | undefined
+): {
   color: string;
   icon: string;
   configFields?: unknown[];
+  returns?: unknown[];
 } {
-  const { fields, color, icon } = parseConfigSchemaString(paramsSchema);
+  // color / icon were read out of the schema container, which no longer
+  // exists and which nothing ever populated — every row takes the defaults.
+  const fields = parseFieldList(paramsSchema);
+  // `returns` is a DataShape, not a field list: it names values that exist at
+  // runtime rather than controls to render, so it parses differently. Same
+  // treatment the module.action.registered webhook gives it.
+  const shape = parseDataShape(returns);
   return {
-    color: color ?? DEFAULT_UI_COLOR,
-    icon: icon ?? DEFAULT_ACTION_ICON,
+    color: DEFAULT_UI_COLOR,
+    icon: DEFAULT_ACTION_ICON,
     configFields: fields.length > 0 ? fields : undefined,
+    returns: shape ? shape.fields : undefined,
   };
 }
 
@@ -518,7 +533,9 @@ export const reconcileActions = internalMutation({
         name: v.optional(v.string()),
         description: v.optional(v.string()),
         paramsSchema: v.optional(v.string()),
+        returns: v.optional(v.string()),
         projectionKey: v.optional(v.string()),
+        taxonomy: v.optional(v.array(v.string())),
         handlerType: v.optional(v.string()),
         functionCall: v.optional(v.string()),
         createdByType: v.optional(v.string()),
@@ -528,21 +545,14 @@ export const reconcileActions = internalMutation({
   },
   handler: async (ctx, { instanceId, snapshots }) => {
     const snapshotIds = new Set(snapshots.map((s) => s.id));
+    const moduleIdsByKey = await loadModuleIdsByBareKey(ctx, instanceId);
     let processed = 0;
 
     for (const snap of snapshots) {
-      let moduleId: Id<"moduleRepository"> | undefined;
-      if (snap.createdByType === "MODULE" && snap.createdByRef) {
-        const mod = await ctx.db
-          .query("moduleRepository")
-          .withIndex("by_instance_module_key", (q) =>
-            q.eq("instanceId", instanceId).eq("moduleKey", snap.createdByRef!)
-          )
-          .first();
-        moduleId = mod?._id;
-      }
+      const moduleId =
+        snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
-      const ui = actionUiFields(snap.paramsSchema);
+      const ui = actionUiFields(snap.paramsSchema, snap.returns);
       const handlerType = snap.handlerType?.trim() || (snap.functionCall?.trim() ? "function" : undefined);
       const defRow = {
         slug: snap.id,
@@ -552,6 +562,7 @@ export const reconcileActions = internalMutation({
         color: ui.color,
         icon: ui.icon,
         configFields: ui.configFields,
+        returns: ui.returns,
         projectionKey: snap.projectionKey,
         handlerType,
         functionCall: snap.functionCall?.trim() || undefined,
@@ -627,15 +638,7 @@ export const reconcileWidgets = internalMutation({
         directory: v.string(),
         description: v.optional(v.string()),
         alertTypes: v.array(v.string()),
-        settings: v.array(
-          v.object({
-            key: v.string(),
-            fieldType: v.string(),
-            label: v.string(),
-            defaultValue: v.any(),
-            options: v.optional(v.array(v.object({ label: v.string(), value: v.string() }))),
-          })
-        ),
+        settings: v.array(v.any()),
         createdByType: v.string(),
         createdByRef: v.string(),
       })
@@ -643,18 +646,13 @@ export const reconcileWidgets = internalMutation({
   },
   handler: async (ctx, { instanceId, snapshots }) => {
     const snapshotIds = new Set(snapshots.map((s) => s.id));
+    const moduleIdsByKey = await loadModuleIdsByBareKey(ctx, instanceId);
     let processed = 0;
 
     for (const snap of snapshots) {
       // Resolve moduleId only for module-sourced widgets; built-ins have none.
-      let moduleId: Id<"moduleRepository"> | undefined;
-      if (snap.createdByType === "MODULE" && snap.createdByRef) {
-        const mod = await ctx.db
-          .query("moduleRepository")
-          .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", snap.createdByRef))
-          .first();
-        moduleId = mod?._id;
-      }
+      const moduleId =
+        snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
       const defRow = {
         moduleId,

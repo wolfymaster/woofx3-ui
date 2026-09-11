@@ -21,7 +21,7 @@ export interface DashboardWidgetProps {
   onConfigChange?: (config: Record<string, unknown>) => void;
 }
 
-export type DashboardWidgetCategory = "stream" | "automation";
+export type DashboardWidgetCategory = "stream" | "automation" | "utility";
 
 export interface DashboardWidgetDefinition {
   /** Stable catalog key, persisted as DashboardPanelWidget.type. */

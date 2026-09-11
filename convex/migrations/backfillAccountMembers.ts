@@ -15,9 +15,7 @@ export default internalMutation({
     for (const account of accounts) {
       const existing = await ctx.db
         .query("accountMembers")
-        .withIndex("by_account_user", (q) =>
-          q.eq("accountId", account._id).eq("userId", account.ownerId),
-        )
+        .withIndex("by_account_user", (q) => q.eq("accountId", account._id).eq("userId", account.ownerId))
         .first();
 
       if (!existing) {

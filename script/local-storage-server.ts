@@ -18,9 +18,9 @@
  *   npx convex env set STORAGE_PROVIDER local
  */
 
-import { mkdir, unlink } from "node:fs/promises";
-import { join, dirname, resolve } from "node:path";
 import { existsSync } from "node:fs";
+import { mkdir, unlink } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
 
 const PORT = parseInt(process.env.LOCAL_STORAGE_PORT ?? "4001", 10);
 const STORAGE_DIR = resolve(process.env.LOCAL_STORAGE_DIR ?? "./uploads");

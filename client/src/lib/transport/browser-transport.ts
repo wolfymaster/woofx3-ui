@@ -75,9 +75,9 @@ export class BrowserTransport implements WoofxTransport {
     return this.session.api;
   }
 
-  async getStreamStatus(instanceId: string): Promise<StreamStatus> {
+  async getStreamStatus(_instanceId: string): Promise<StreamStatus> {
     try {
-      const result = await this.getApi().getStreamStatus(instanceId);
+      const result = await this.getApi().getStreamStatus();
       return result as StreamStatus;
     } catch {
       return { isLive: false, uptime: "00:00:00", viewerCount: 0 };
@@ -96,7 +96,7 @@ export class BrowserTransport implements WoofxTransport {
     return () => {};
   }
 
-  subscribeWorkflowRuns(instanceId: string, callback: (run: WorkflowRun) => void): () => void {
+  subscribeWorkflowRuns(_instanceId: string, callback: (run: WorkflowRun) => void): () => void {
     const api = this.session?.api;
     if (!api) {
       return () => {};
@@ -104,7 +104,7 @@ export class BrowserTransport implements WoofxTransport {
 
     const interval = setInterval(async () => {
       try {
-        const runs = await api.getWorkflowRuns({ accountId: instanceId });
+        const runs = await api.getWorkflowRuns();
         for (const r of runs) {
           callback(r as unknown as WorkflowRun);
         }
@@ -116,10 +116,8 @@ export class BrowserTransport implements WoofxTransport {
     return () => clearInterval(interval);
   }
 
-  async getWorkflows(instanceId: string): Promise<Workflow[]> {
-    const result = await this.getApi().getWorkflows({
-      accountId: instanceId,
-    });
+  async getWorkflows(_instanceId: string): Promise<Workflow[]> {
+    const result = await this.getApi().getWorkflows();
     return (result?.workflows ?? []) as unknown as Workflow[];
   }
 

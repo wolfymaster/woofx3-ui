@@ -15,8 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useInstance } from "@/hooks/use-instance";
 import type { ConfigField, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
-import type { Asset } from "@/types";
-import { AssetLibraryModal } from "./asset-library-modal";
+import { AssetLibraryModal, type SelectedAsset } from "./asset-library-modal";
 
 // ---------------------------------------------------------------------------
 // Media field — uses AssetLibraryModal, so it lives here as a custom renderer
@@ -37,7 +36,7 @@ const MediaFieldRenderer: CustomFieldRenderer = ({ field, value, onChange }) => 
   const assetValue = value as MediaFieldValue | null;
   const filterTypes = field.mediaType ? [field.mediaType] : undefined;
 
-  const handleSelect = (asset: Asset) => {
+  const handleSelect = (asset: SelectedAsset) => {
     onChange({
       id: asset.id,
       name: asset.name,
@@ -206,7 +205,14 @@ interface TriggerConfigFormProps {
   className?: string;
 }
 
-const customRenderers: Record<string, CustomFieldRenderer> = {
+/**
+ * The renderers ConfigurationForm cannot supply generically, because they need
+ * pickers wired to app state — the asset library and the resource instance
+ * list. Exported so every surface that renders a ConfigField gets the same
+ * controls: a `resource_ref` in a widget's settings must pick a resource the
+ * same way one in a trigger's config does.
+ */
+export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   media: MediaFieldRenderer,
   asset: MediaFieldRenderer,
   resource_ref: ResourceRefFieldRenderer,
@@ -222,7 +228,7 @@ export function TriggerConfigForm({ fields, values, onChange, availableVariables
       fields={fields as unknown as FieldDescriptor[]}
       values={values as Record<string, unknown>}
       onChange={(v) => onChange(v as TriggerConfigValues)}
-      customRenderers={customRenderers}
+      customRenderers={configFieldRenderers}
       availableVariables={availableVariables}
       className={className}
     />

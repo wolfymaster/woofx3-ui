@@ -4,6 +4,27 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 
+/**
+ * Convex storage upload URL for staging a module bundle before
+ * `uploadAndDeliver` ships it to the engine.
+ *
+ * This lived in convex/assets.ts until user assets moved to engine-backed
+ * storage. It never had anything to do with the assets table — it is raw
+ * Convex storage, and module bundles are the only thing that still uses it —
+ * so it moved here, next to its one caller, rather than being deleted with
+ * the rest of that file.
+ */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    return ctx.storage.generateUploadUrl();
+  },
+});
+
 export const list = query({
   args: {
     instanceId: v.optional(v.id("instances")),

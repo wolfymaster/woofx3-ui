@@ -1,81 +1,81 @@
-import { useState, useCallback } from 'react';
-import { useStore } from '@nanostores/react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  LayoutDashboard, 
-  Puzzle, 
-  Workflow, 
-  FolderOpen, 
-  Layers, 
-  Settings,
-  Users,
-  Building2,
-  ChevronRight,
-  ChevronDown,
-  Search,
+import { useStore } from "@nanostores/react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
   Bell,
+  Building2,
+  ChevronDown,
+  ChevronRight,
   Command,
-  Sun,
-  Moon,
-  PanelLeftClose,
-  PanelLeft,
-  Palette,
-  LogOut,
+  FolderOpen,
   HelpCircle,
-  Radio
-} from 'lucide-react';
-import { Link, useLocation } from 'wouter';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+  Layers,
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  Palette,
+  PanelLeft,
+  PanelLeftClose,
+  Puzzle,
+  Radio,
+  Search,
+  Settings,
+  Sun,
+  Users,
+  Workflow,
+} from "lucide-react";
+import { useCallback, useState } from "react";
+import { Link, useLocation } from "wouter";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuSubContent,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
-} from '@/components/ui/dropdown-menu';
-import { $sidebarCollapsed, $commandPaletteOpen, $notifications } from '@/lib/stores';
-import { useTheme } from '@/hooks/use-theme';
-import type { NavigationItem } from '@/types';
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useTheme } from "@/hooks/use-theme";
+import { $commandPaletteOpen, $notifications, $sidebarCollapsed } from "@/lib/stores";
+import { cn } from "@/lib/utils";
+import type { NavigationItem } from "@/types";
 
 const navigationItems: NavigationItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard', href: '/' },
-  { 
-    id: 'modules', 
-    label: 'Modules', 
-    icon: 'Puzzle',
+  { id: "dashboard", label: "Dashboard", icon: "LayoutDashboard", href: "/" },
+  {
+    id: "modules",
+    label: "Modules",
+    icon: "Puzzle",
     children: [
-      { id: 'browse', label: 'Browse Modules', icon: 'Search', href: '/modules' },
-      { id: 'installed', label: 'Installed', icon: 'Puzzle', href: '/modules/installed' },
-    ]
+      { id: "browse", label: "Browse Modules", icon: "Search", href: "/modules" },
+      { id: "installed", label: "Installed", icon: "Puzzle", href: "/modules/installed" },
+    ],
   },
-  { 
-    id: 'workflows', 
-    label: 'Workflows', 
-    icon: 'Workflow',
+  {
+    id: "workflows",
+    label: "Workflows",
+    icon: "Workflow",
     children: [
-      { id: 'all-workflows', label: 'All Workflows', icon: 'Workflow', href: '/workflows' },
-      { id: 'new-workflow', label: 'Create New', icon: 'Workflow', href: '/workflows/new' },
-    ]
+      { id: "all-workflows", label: "All Workflows", icon: "Workflow", href: "/workflows" },
+      { id: "new-workflow", label: "Create New", icon: "Workflow", href: "/workflows/new" },
+    ],
   },
-  { id: 'assets', label: 'Assets', icon: 'FolderOpen', href: '/assets' },
-  { id: 'scenes', label: 'Scene Editor', icon: 'Layers', href: '/scenes' },
+  { id: "assets", label: "Assets", icon: "FolderOpen", href: "/assets" },
+  { id: "scenes", label: "Scene Editor", icon: "Layers", href: "/scenes" },
 ];
 
 const bottomNavItems: NavigationItem[] = [
-  { id: 'team', label: 'Team', icon: 'Users', href: '/team' },
-  { id: 'settings', label: 'Settings', icon: 'Settings', href: '/settings' },
+  { id: "team", label: "Team", icon: "Users", href: "/team" },
+  { id: "settings", label: "Settings", icon: "Settings", href: "/settings" },
 ];
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -101,27 +101,23 @@ function NavItem({ item, collapsed, depth = 0 }: NavItemProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const Icon = iconMap[item.icon] || LayoutDashboard;
   const hasChildren = item.children && item.children.length > 0;
-  const isActive = item.href ? location === item.href : item.children?.some(child => location === child.href);
+  const isActive = item.href ? location === item.href : item.children?.some((child) => location === child.href);
 
-  const handleClick = useCallback(() => {
-    if (hasChildren) {
-      setIsExpanded(!isExpanded);
-    }
-  }, [hasChildren, isExpanded]);
+  const toggleExpanded = useCallback(() => {
+    setIsExpanded((expanded) => !expanded);
+  }, []);
 
-  const content = (
-    <div
-      className={cn(
-        'group flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer transition-colors',
-        'hover-elevate active-elevate-2',
-        isActive && 'bg-sidebar-accent text-sidebar-accent-foreground',
-        !isActive && 'text-sidebar-foreground/70 hover:text-sidebar-foreground',
-        depth > 0 && 'ml-4'
-      )}
-      onClick={handleClick}
-      data-testid={`nav-item-${item.id}`}
-    >
-      <Icon className={cn('h-5 w-5 shrink-0', isActive && 'text-primary')} />
+  const contentClassName = cn(
+    "group flex w-full items-center gap-3 px-3 py-2 rounded-md cursor-pointer text-left transition-colors",
+    "hover-elevate active-elevate-2",
+    isActive && "bg-sidebar-accent text-sidebar-accent-foreground",
+    !isActive && "text-sidebar-foreground/70 hover:text-sidebar-foreground",
+    depth > 0 && "ml-4"
+  );
+
+  const contentChildren = (
+    <>
+      <Icon className={cn("h-5 w-5 shrink-0", isActive && "text-primary")} />
       {!collapsed && (
         <>
           <span className="flex-1 text-sm font-medium truncate">{item.label}</span>
@@ -131,35 +127,33 @@ function NavItem({ item, collapsed, depth = 0 }: NavItemProps) {
             </Badge>
           )}
           {hasChildren && (
-            <motion.div
-              initial={false}
-              animate={{ rotate: isExpanded ? 90 : 0 }}
-              transition={{ duration: 0.15 }}
-            >
+            <motion.div initial={false} animate={{ rotate: isExpanded ? 90 : 0 }} transition={{ duration: 0.15 }}>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </motion.div>
           )}
         </>
       )}
+    </>
+  );
+
+  // Only branch items are interactive on their own: leaf items are wrapped in a
+  // <Link> (or a Radix trigger), so a nested <button> would be invalid there.
+  const content = hasChildren ? (
+    <button type="button" className={contentClassName} onClick={toggleExpanded} data-testid={`nav-item-${item.id}`}>
+      {contentChildren}
+    </button>
+  ) : (
+    <div className={contentClassName} data-testid={`nav-item-${item.id}`}>
+      {contentChildren}
     </div>
   );
 
-  const wrappedContent = item.href && !hasChildren ? (
-    <Link href={item.href}>{content}</Link>
-  ) : (
-    content
-  );
+  const wrappedContent = item.href && !hasChildren ? <Link href={item.href}>{content}</Link> : content;
 
   if (collapsed && !hasChildren) {
     return (
       <Tooltip delayDuration={0}>
-        <TooltipTrigger asChild>
-          {item.href ? (
-            <Link href={item.href}>{content}</Link>
-          ) : (
-            content
-          )}
-        </TooltipTrigger>
+        <TooltipTrigger asChild>{item.href ? <Link href={item.href}>{content}</Link> : content}</TooltipTrigger>
         <TooltipContent side="right" className="font-medium">
           {item.label}
         </TooltipContent>
@@ -177,7 +171,7 @@ function NavItem({ item, collapsed, depth = 0 }: NavItemProps) {
             <DropdownMenuSeparator />
             {item.children?.map((child) => (
               <DropdownMenuItem key={child.id} asChild>
-                <Link href={child.href || '#'} className="cursor-pointer">
+                <Link href={child.href || "#"} className="cursor-pointer">
                   {child.label}
                 </Link>
               </DropdownMenuItem>
@@ -191,7 +185,7 @@ function NavItem({ item, collapsed, depth = 0 }: NavItemProps) {
             {hasChildren && isExpanded && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
+                animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
@@ -211,7 +205,7 @@ function NavItem({ item, collapsed, depth = 0 }: NavItemProps) {
 }
 
 function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
-  const displayName = 'Select Instance';
+  const displayName = "Select Instance";
   const initials = displayName.slice(0, 2).toUpperCase();
 
   if (collapsed) {
@@ -221,9 +215,7 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
           <Button variant="ghost" size="icon" className="w-10 h-10" data-testid="button-team-switcher">
             <Avatar className="h-8 w-8">
               <AvatarImage src={undefined} />
-              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
-                {initials}
-              </AvatarFallback>
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">{initials}</AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>
@@ -253,15 +245,11 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
         >
           <Avatar className="h-9 w-9">
             <AvatarImage src={undefined} />
-            <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
-              {initials}
-            </AvatarFallback>
+            <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">{initials}</AvatarFallback>
           </Avatar>
           <div className="flex-1 text-left">
             <p className="text-sm font-semibold truncate">{displayName}</p>
-            <p className="text-xs text-muted-foreground truncate">
-              {'Instance'}
-            </p>
+            <p className="text-xs text-muted-foreground truncate">{"Instance"}</p>
           </div>
           <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
         </Button>
@@ -297,20 +285,25 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
 function UserMenu({ collapsed }: { collapsed: boolean }) {
   const { theme, toggleTheme, preset, presets, setPreset } = useTheme();
 
-  const displayName = 'Demo User';
-  const email = 'demo@woofx3.io';
-  const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+  const displayName = "Demo User";
+  const email = "demo@woofx3.io";
+  const initials = displayName
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   const content = (
-    <div className={cn(
-      'flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer hover-elevate',
-      collapsed && 'justify-center'
-    )}>
+    <div
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-md cursor-pointer hover-elevate",
+        collapsed && "justify-center"
+      )}
+    >
       <Avatar className="h-8 w-8">
         <AvatarImage src={undefined} />
-        <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
-          {initials}
-        </AvatarFallback>
+        <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">{initials}</AvatarFallback>
       </Avatar>
       {!collapsed && (
         <div className="flex-1 min-w-0">
@@ -326,7 +319,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
       <DropdownMenuTrigger asChild>
         <div data-testid="button-user-menu">{content}</div>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side={collapsed ? 'right' : 'top'} align="start" className="w-56">
+      <DropdownMenuContent side={collapsed ? "right" : "top"} align="start" className="w-56">
         <DropdownMenuLabel className="font-normal">
           <div className="flex flex-col space-y-1">
             <p className="text-sm font-medium">{displayName}</p>
@@ -350,7 +343,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuItem onClick={toggleTheme}>
-          {theme === 'dark' ? (
+          {theme === "dark" ? (
             <>
               <Sun className="mr-2 h-4 w-4" />
               Light Mode
@@ -386,7 +379,7 @@ export function AppShell({ children }: AppShellProps) {
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   const toggleSidebar = useCallback(() => {
     $sidebarCollapsed.set(!collapsed);
@@ -397,14 +390,14 @@ export function AppShell({ children }: AppShellProps) {
   }, []);
 
   const getBreadcrumbs = () => {
-    const paths = location.split('/').filter(Boolean);
-    if (paths.length === 0) return [{ label: 'Dashboard', href: '/' }];
-    
+    const paths = location.split("/").filter(Boolean);
+    if (paths.length === 0) return [{ label: "Dashboard", href: "/" }];
+
     return [
-      { label: 'Home', href: '/' },
+      { label: "Home", href: "/" },
       ...paths.map((path, idx) => ({
-        label: path.charAt(0).toUpperCase() + path.slice(1).replace(/-/g, ' '),
-        href: '/' + paths.slice(0, idx + 1).join('/'),
+        label: path.charAt(0).toUpperCase() + path.slice(1).replace(/-/g, " "),
+        href: "/" + paths.slice(0, idx + 1).join("/"),
       })),
     ];
   };
@@ -416,7 +409,7 @@ export function AppShell({ children }: AppShellProps) {
       <motion.aside
         initial={false}
         animate={{ width: collapsed ? 64 : 280 }}
-        transition={{ duration: 0.2, ease: 'easeInOut' }}
+        transition={{ duration: 0.2, ease: "easeInOut" }}
         className="flex flex-col bg-sidebar border-r border-sidebar-border shrink-0"
       >
         <div className="p-2">
@@ -451,17 +444,8 @@ export function AppShell({ children }: AppShellProps) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="h-14 border-b border-border bg-background/80 backdrop-blur-sm flex items-center justify-between px-4 gap-4 shrink-0">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={toggleSidebar}
-              data-testid="button-toggle-sidebar"
-            >
-              {collapsed ? (
-                <PanelLeft className="h-5 w-5" />
-              ) : (
-                <PanelLeftClose className="h-5 w-5" />
-              )}
+            <Button variant="ghost" size="icon" onClick={toggleSidebar} data-testid="button-toggle-sidebar">
+              {collapsed ? <PanelLeft className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
             </Button>
 
             <nav className="flex items-center gap-1 text-sm" data-testid="nav-breadcrumbs">
@@ -498,9 +482,7 @@ export function AppShell({ children }: AppShellProps) {
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications">
                   <Bell className="h-5 w-5" />
-                  {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
-                  )}
+                  {unreadCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Notifications</TooltipContent>
@@ -509,16 +491,10 @@ export function AppShell({ children }: AppShellProps) {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="ghost" size="icon" onClick={toggleTheme} data-testid="button-theme-toggle">
-                  {theme === 'dark' ? (
-                    <Sun className="h-5 w-5" />
-                  ) : (
-                    <Moon className="h-5 w-5" />
-                  )}
+                  {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                {theme === 'dark' ? 'Light mode' : 'Dark mode'}
-              </TooltipContent>
+              <TooltipContent>{theme === "dark" ? "Light mode" : "Dark mode"}</TooltipContent>
             </Tooltip>
 
             <div className="flex items-center gap-2 pl-2 border-l border-border">
@@ -537,9 +513,7 @@ export function AppShell({ children }: AppShellProps) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto">
-          {children}
-        </main>
+        <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>
   );

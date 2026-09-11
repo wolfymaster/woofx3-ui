@@ -19,7 +19,8 @@
       "@/*": ["./client/src/*"],
       "@convex/*": ["./convex/*"],
       "@woofx3/api": ["../woofx3/shared/clients/typescript/api/index.ts"],
-      "@woofx3/api/*": ["../woofx3/shared/clients/typescript/api/*.ts"]
+      "@woofx3/api/*": ["../woofx3/shared/clients/typescript/api/*.ts"],
+      "@woofx3/cloudevents/*": ["../woofx3/shared/common/typescript/cloudevents/*.ts"]
     }
   }
 }

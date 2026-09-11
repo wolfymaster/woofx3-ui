@@ -146,6 +146,7 @@ Always use `bun`/`bunx`, never `npm`/`npx`/`node`.
 @convex/     → convex/
 @assets/     → attached_assets/
 @woofx3/api  → ../woofx3/shared/clients/typescript/api/api.ts
+@woofx3/cloudevents/*  → ../woofx3/shared/common/typescript/cloudevents/*  (tsconfig.json only; tests)
 ```
 
 Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Always use these — never use relative paths that cross directory boundaries.

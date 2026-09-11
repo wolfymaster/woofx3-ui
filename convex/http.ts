@@ -5,9 +5,10 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
-import { buildBrowserSourceHtml, buildBrowserSourcePlaceholderHtml } from "./lib/browserSourceHtml";
+import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
+import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { widgetCanonicalKey } from "./lib/widgetKey";
@@ -32,32 +33,6 @@ function corsJson(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json", ...CORS_HEADERS },
   });
-}
-
-type WidgetSetting = {
-  key: string;
-  fieldType: string;
-  label: string;
-  defaultValue: unknown;
-  options?: { label: string; value: string }[];
-};
-
-function parseSettingsSchema(
-  settings: {
-    key: string;
-    fieldType: string;
-    label: string;
-    defaultValue?: unknown;
-    options?: { label: string; value: string }[];
-  }[]
-): WidgetSetting[] {
-  return settings.map((item) => ({
-    key: item.key,
-    fieldType: item.fieldType,
-    label: item.label,
-    defaultValue: item.defaultValue,
-    options: item.options,
-  }));
 }
 
 const preflightHandler = httpAction(async () => {
@@ -644,7 +619,9 @@ http.route({
         // Key on the canonical projectionKey, NOT widget.id (the engine omits id
         // for built-ins, which previously produced a duplicate empty-id row).
         for (const widget of event.widgets) {
-          const settings = parseSettingsSchema(widget.settings);
+          // The engine sends ConfigField[] — the same shape a trigger's or
+          // action's fields use — so there is nothing left to translate.
+          const settings = widget.settings;
           const widgetId = widgetCanonicalKey({
             projectionKey: widget.projectionKey,
             createdByRef: widget.createdByRef,
@@ -795,6 +772,7 @@ http.route({
           engineGroupId: event.group.id,
           name: event.group.name,
           description: event.group.description,
+          isBuiltIn: event.group.isBuiltIn,
           engineCreatedAt: event.group.createdAt,
         });
         return corsJson({ success: true, type: event.type });
@@ -1232,10 +1210,11 @@ http.route({
       new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 
     // Scenes are engine-authoritative and the engine renders the overlay, so this
-    // page just iframes the engine-minted overlay-token URL cached on the source
-    // key (see convex/browserSource.ts's getOrCreateBrowserSourceKey — it mints
-    // via the engine's overlayTokenRoutes at key-creation time, not here, so
-    // this stays a single fast lookup on every OBS page load).
+    // route just redirects to the engine-minted overlay-token URL cached on the
+    // source key (see convex/browserSource.ts's getOrCreateBrowserSourceKey — it
+    // mints via the engine's overlayTokenRoutes at key-creation time, not here, so
+    // this stays a single fast lookup on every OBS page load). Why a redirect
+    // rather than a wrapper page: see buildBrowserSourceRedirect.
     if (!scene.engineSceneId) {
       return htmlResponse(
         buildBrowserSourcePlaceholderHtml({
@@ -1245,7 +1224,9 @@ http.route({
       );
     }
 
-    if (!sourceKey.overlayUrl) {
+    // A URL from before Scene Manager replaced streamware's overlay path resolves to nothing;
+    // say so rather than redirecting to a dead page. Reopening the scene editor re-mints it.
+    if (!isCurrentSceneUrl(sourceKey.overlayUrl, scene.engineSceneId)) {
       return htmlResponse(
         buildBrowserSourcePlaceholderHtml({
           sceneName,
@@ -1254,7 +1235,7 @@ http.route({
       );
     }
 
-    return htmlResponse(buildBrowserSourceHtml({ sceneName, overlayUrl: sourceKey.overlayUrl }));
+    return buildBrowserSourceRedirect(sourceKey.overlayUrl);
   }),
 });
 

@@ -2,29 +2,33 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// One placed widget on a dashboard panel. Exported so convex/dashboardLayouts.ts's
+// setPanelWidgets argument validator is literally the same shape the table stores —
+// they drifted apart once before, and a mutation validator that is missing a field
+// the client sends rejects the whole write at the argument boundary.
+export const dashboardPanelWidgetValidator = v.object({
+  zoneId: v.string(),
+  // Identifies one widget within a zone now that a zone can hold more
+  // than one (stacked, resizable). Optional because rows saved before
+  // multi-widget zones only ever had one widget per zoneId — those are
+  // still valid without it; client/src/lib/dashboard-widgets/types.ts's
+  // widgetSlotId() falls back to zoneId for that legacy shape.
+  slotId: v.optional(v.string()),
+  type: v.string(),
+  config: v.optional(v.any()),
+  // Percentage (0-100) of the zone's stack this widget occupies.
+  // Undefined means "split evenly" — computed client-side, not stored
+  // until the user actually drags a resize handle.
+  size: v.optional(v.number()),
+});
+
 // Shared shape for dashboardLayouts.panels (and its legacy `pages` alias below).
 const dashboardPanelValidator = v.array(
   v.object({
     id: v.string(),
     name: v.string(),
     layoutId: v.string(),
-    widgets: v.array(
-      v.object({
-        zoneId: v.string(),
-        // Identifies one widget within a zone now that a zone can hold more
-        // than one (stacked, resizable). Optional because rows saved before
-        // multi-widget zones only ever had one widget per zoneId — those are
-        // still valid without it; client/src/lib/dashboard-widgets/types.ts's
-        // widgetSlotId() falls back to zoneId for that legacy shape.
-        slotId: v.optional(v.string()),
-        type: v.string(),
-        config: v.optional(v.any()),
-        // Percentage (0-100) of the zone's stack this widget occupies.
-        // Undefined means "split evenly" — computed client-side, not stored
-        // until the user actually drags a resize handle.
-        size: v.optional(v.number()),
-      })
-    ),
+    widgets: v.array(dashboardPanelWidgetValidator),
   })
 );
 
@@ -136,36 +140,6 @@ export default defineSchema({
     connectedByUserId: v.optional(v.string()),
   }).index("by_instance", ["instanceId"]),
 
-  // folders: virtual organizational folders for assets per instance
-  folders: defineTable({
-    instanceId: v.id("instances"),
-    name: v.string(),
-    parentId: v.optional(v.id("folders")),
-    createdAt: v.number(),
-    createdBy: v.id("users"),
-  }).index("by_instance", ["instanceId"]),
-
-  // assets: uploaded files (images/audio/video) — supports multiple storage backends
-  assets: defineTable({
-    instanceId: v.id("instances"),
-    name: v.string(),
-    type: v.union(v.literal("image"), v.literal("audio"), v.literal("video")),
-    // Virtual folder this asset belongs to (null/absent = root)
-    folderId: v.optional(v.id("folders")),
-    // Legacy field — present only on records created before the adapter migration.
-    // Run convex/migrations/backfillAssetKeys to populate fileKey/storageProvider
-    // on these records, then this field can be removed.
-    storageId: v.optional(v.id("_storage")),
-    // Provider-agnostic file key (storageId string for Convex, object key for R2/local)
-    fileKey: v.optional(v.string()),
-    // Which storage backend holds this file
-    storageProvider: v.optional(v.union(v.literal("convex"), v.literal("r2"), v.literal("local"))),
-    mimeType: v.string(),
-    size: v.number(),
-    createdAt: v.number(),
-    createdBy: v.id("users"),
-  }).index("by_instance", ["instanceId"]),
-
   // chatCommands: engine-authoritative read cache of chat commands. The engine
   // (Woofx3EngineApi createCommand/updateCommand/deleteCommand + listCommands)
   // is the source of truth; this table is populated by convex/chatCommandActions.ts
@@ -207,6 +181,12 @@ export default defineSchema({
     engineGroupId: v.string(),
     name: v.string(),
     description: v.string(),
+    // Built-in groups are seeded by the engine for every application and
+    // cannot be renamed or deleted; membership of all but "everyone" is owned
+    // by the platform membership sync, so editing it by hand is overwritten on
+    // the chatter's next message. Optional to accommodate rows cached before
+    // this field existed; treat missing as false.
+    isBuiltIn: v.optional(v.boolean()),
     engineCreatedAt: v.string(), // ISO 8601, as returned by the engine
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -284,6 +264,57 @@ export default defineSchema({
     columnSizes: v.optional(v.array(v.number())),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
+  // streamGoals: the dashboard command bar's goal cards (Bits / Subs / Followers, ...).
+  // Manually entered and manually advanced — the engine reports no running
+  // follower/sub/bits totals today (instanceLiveState carries only live state,
+  // title, game, and viewer count), so there is nothing to derive these from.
+  // Scoped per instance rather than per user: a goal is the channel's, and
+  // everyone sharing the account should see the same progress.
+  streamGoals: defineTable({
+    instanceId: v.id("instances"),
+    label: v.string(),
+    current: v.number(),
+    target: v.number(),
+    sortOrder: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
+  // dashboardNotes: freeform scratch text behind the dashboard's Notes rail
+  // widget. Per user and per instance — notes are private working memory
+  // ("remember to thank the raider"), not shared channel state, so an account
+  // shared with a moderator does not hand them the owner's notes.
+  dashboardNotes: defineTable({
+    instanceId: v.id("instances"),
+    userId: v.id("users"),
+    content: v.string(),
+    updatedAt: v.number(),
+  }).index("by_instance_user", ["instanceId", "userId"]),
+
+  // pinnedMessages: notes the dashboard's Activity panel keeps visible — a
+  // raid to shout out, a link to repeat. Composed by hand rather than pinned
+  // off a real chat message: no addressable chat-message record exists on this
+  // side today (the engine webhook path carries lifecycle events, not chat,
+  // and the browser's direct EventSub feed carries no chat either).
+  pinnedMessages: defineTable({
+    instanceId: v.id("instances"),
+    authorName: v.optional(v.string()),
+    content: v.string(),
+    pinnedAt: v.number(),
+    pinnedByUserId: v.id("users"),
+  }).index("by_instance_pinned_at", ["instanceId", "pinnedAt"]),
+
+  // streamHighlights: moments saved off the live event feed (a big cheer, a
+  // raid) so they survive the feed scrolling away. Curated, not derived —
+  // saved explicitly from the Activity panel's Events tab.
+  streamHighlights: defineTable({
+    instanceId: v.id("instances"),
+    kind: v.string(), // PlatformEventType, or "note" for a hand-written one
+    userName: v.string(),
+    detail: v.optional(v.string()),
+    amount: v.optional(v.number()),
+    occurredAt: v.number(),
+    savedByUserId: v.id("users"),
+  }).index("by_instance_occurred_at", ["instanceId", "occurredAt"]),
+
   // triggerDefinitions: UI metadata only; at most one row per stable trigger id (matches engine / module id)
   triggerDefinitions: defineTable({
     slug: v.string(), // stable id, e.g. twitch.channel.follow (namespaced by module)
@@ -295,9 +326,17 @@ export default defineSchema({
     event: v.optional(v.string()),
     allowVariants: v.optional(v.boolean()),
     configFields: v.optional(v.array(v.any())),
+    // DataShapeField[] naming what `trigger.data` carries when this trigger
+    // fires. Preferred over deriving variables from configFields' eventPath,
+    // which can only describe keys that are also config fields.
+    emits: v.optional(v.array(v.any())),
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
+    // The engine's open, multi-valued classification (e.g. ["platform.twitch"]),
+    // which replaces its legacy single-value category. Groups catalog entries by
+    // source without the UI hardcoding what the sources are.
+    taxonomy: v.optional(v.array(v.string())),
     moduleId: v.optional(v.id("moduleRepository")),
   })
     .index("by_slug", ["slug"])
@@ -312,11 +351,13 @@ export default defineSchema({
     color: v.string(),
     icon: v.string(),
     configFields: v.optional(v.array(v.any())),
-    // ConfigField-shaped declarations describing this action's return value
-    // (e.g. an increment action's {next, previous, step}). UI-only — backs
-    // the workflow builder's ${stepId.field} variable autocomplete.
-    outputFields: v.optional(v.array(v.any())),
+    // DataShapeField[] naming what this action's function hands back (e.g. an
+    // increment action's {next, previous}). Backs the workflow builder's
+    // ${stepId.field} autocomplete. Parsed from the engine's `returns`.
+    returns: v.optional(v.array(v.any())),
     projectionKey: v.optional(v.string()),
+    /** See triggerDefinitions.taxonomy. */
+    taxonomy: v.optional(v.array(v.string())),
     handlerType: v.optional(v.string()),
     functionCall: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
@@ -657,22 +698,12 @@ export default defineSchema({
     createdByRef: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
     alertTypes: v.array(v.string()),
-    settings: v.array(
-      v.object({
-        key: v.string(),
-        fieldType: v.string(),
-        label: v.string(),
-        defaultValue: v.any(),
-        options: v.optional(
-          v.array(
-            v.object({
-              label: v.string(),
-              value: v.string(),
-            })
-          )
-        ),
-      })
-    ),
+    // ConfigField[] — the same shape triggers and actions store in
+    // `configFields` above, and stored the same way. It used to be an
+    // enumerated object with its own `key`/`fieldType` vocabulary, which both
+    // forked the contract and made every new ConfigField property a breaking
+    // change for widget sync.
+    settings: v.array(v.any()),
     createdAt: v.number(),
   })
     .index("by_module", ["moduleId"])
@@ -835,22 +866,6 @@ export default defineSchema({
   })
     .index("by_instance_correlation", ["instanceId", "correlationKey"])
     .index("by_expires_at", ["expiresAt"]),
-
-  // userDashboardLayouts: per-user, per-instance dashboard widget layout persistence
-  userDashboardLayouts: defineTable({
-    userId: v.id("users"),
-    instanceId: v.id("instances"),
-    layout: v.array(
-      v.object({
-        id: v.string(),
-        type: v.string(),
-        position: v.object({ x: v.number(), y: v.number() }),
-        size: v.object({ width: v.number(), height: v.number() }),
-        config: v.optional(v.any()),
-      })
-    ),
-    updatedAt: v.number(),
-  }).index("by_user_instance", ["userId", "instanceId"]),
 
   // engineEventLog: audit trail of every engine webhook event received
   // (source: "webhook", written by the POST /api/webhooks/woofx3 handler in

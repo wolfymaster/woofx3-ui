@@ -1,5 +1,5 @@
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
-import { parseConfigFields } from "@/lib/parse-config-fields";
+import { parseConfigFields, parseDataShapeFields } from "@/lib/parse-config-fields";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { StepNode, WorkflowTree } from "@/lib/workflow-tree";
 
@@ -93,6 +93,12 @@ export interface VariableOption {
   label: string;
   /** Which step (or "Trigger") this option came from, for grouping in the picker. */
   group: string;
+  /** Declared type of the referenced value, e.g. "string" | "number" | "boolean".
+   *  Comes from the catalog's own field definition — the engine already ships
+   *  it, so nothing here has to guess or maintain a parallel schema. */
+  type?: string;
+  /** Prose from the catalog field, when the module author wrote any. */
+  description?: string;
 }
 
 /**
@@ -124,11 +130,16 @@ function collectPredecessorSteps(steps: StepNode[], targetId: string): StepNode[
 
 /**
  * Every ${...} variable a field on `currentNodeId` could reference right now: the
- * trigger's own data fields, plus each predecessor action's declared outputs (see
- * ActionPreset.config.outputs / the manifest's `outputs[]`) and each predecessor
- * condition's boolean result. Steps that haven't necessarily run yet by the time
- * `currentNodeId` executes (later siblings, sibling branches, descendants) are excluded —
- * offering them would suggest references the engine can't reliably resolve.
+ * trigger's payload, plus each predecessor action's declared return value and each
+ * predecessor condition's boolean result. Steps that haven't necessarily run yet by
+ * the time `currentNodeId` executes (later siblings, sibling branches, descendants)
+ * are excluded — offering them would suggest references the engine can't reliably
+ * resolve.
+ *
+ * A trigger's payload comes from its declared `emits` when it has one. Otherwise it
+ * falls back to deriving variables from config fields carrying an `eventPath`, which
+ * is all that was available before triggers could describe their payload — and which
+ * can only ever name keys that happen to also be config fields.
  */
 export function computeAvailableVariables(
   tree: WorkflowTree,
@@ -139,14 +150,28 @@ export function computeAvailableVariables(
   const options: VariableOption[] = [];
 
   const triggerRow = resolveCatalogTrigger(tree.trigger, catalogTriggers);
-  const triggerFields = parseConfigFields(triggerRow?.configFields);
-  for (const field of triggerFields) {
-    if (field.eventPath) {
+  const emitted = parseDataShapeFields(triggerRow?.emits);
+  if (emitted.length > 0) {
+    for (const field of emitted) {
       options.push({
-        value: `\${trigger.data.${field.eventPath}}`,
-        label: field.label,
+        value: `\${trigger.data.${field.path}}`,
+        label: field.path,
         group: "Trigger",
+        type: field.type,
+        description: field.description,
       });
+    }
+  } else {
+    for (const field of parseConfigFields(triggerRow?.configFields)) {
+      if (field.eventPath) {
+        options.push({
+          value: `\${trigger.data.${field.eventPath}}`,
+          label: field.label,
+          group: "Trigger",
+          type: field.type,
+          description: field.description,
+        });
+      }
     }
   }
 
@@ -154,13 +179,14 @@ export function computeAvailableVariables(
   for (const step of predecessors) {
     if (step.type === "action") {
       const catalogRow = resolveCatalogAction(step, catalogActions);
-      const outputFields = parseConfigFields(catalogRow?.outputFields);
       const group = catalogRow?.name ?? step.id;
-      for (const field of outputFields) {
+      for (const field of parseDataShapeFields(catalogRow?.returns)) {
         options.push({
-          value: `\${${step.id}.${field.id}}`,
-          label: field.label,
+          value: `\${${step.id}.${field.path}}`,
+          label: field.path,
           group,
+          type: field.type,
+          description: field.description,
         });
       }
     } else if (step.type === "condition") {
@@ -168,6 +194,8 @@ export function computeAvailableVariables(
         value: `\${${step.id}.result}`,
         label: "Condition result",
         group: "Condition",
+        type: "boolean",
+        description: "Whether this condition matched.",
       });
     }
   }

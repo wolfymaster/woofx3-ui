@@ -1,14 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, Grid3X3, LayoutGrid, ArrowUpDown } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { ArrowUpDown, Grid3X3, LayoutGrid, Search, SlidersHorizontal } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,9 +9,11 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
-import { Skeleton } from '@/components/ui/skeleton';
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 export interface FilterOption {
   value: string;
@@ -45,9 +39,11 @@ export interface GridWorkspaceProps<T> {
   getCategory?: (item: T) => string;
   getStatus?: (item: T) => string;
   renderItem: (item: T) => React.ReactNode;
+  /** Stable identity for each item. Required: the list is filtered and sorted, so positional keys would misalign state. */
+  getItemKey: (item: T) => React.Key;
   headerActions?: React.ReactNode;
   emptyState?: React.ReactNode;
-  gridCols?: 'compact' | 'normal' | 'large';
+  gridCols?: "compact" | "normal" | "large";
 }
 
 export function GridWorkspace<T>({
@@ -55,7 +51,7 @@ export function GridWorkspace<T>({
   description,
   items,
   isLoading = false,
-  searchPlaceholder = 'Search...',
+  searchPlaceholder = "Search...",
   categories,
   statusOptions,
   sortOptions,
@@ -64,36 +60,37 @@ export function GridWorkspace<T>({
   getCategory,
   getStatus,
   renderItem,
+  getItemKey,
   headerActions,
   emptyState,
-  gridCols = 'normal',
+  gridCols = "normal",
 }: GridWorkspaceProps<T>) {
-  const [search, setSearch] = useState('');
-  const [category, setCategory] = useState<string>('all');
-  const [status, setStatus] = useState<string>('all');
-  const [sort, setSort] = useState<string>(defaultSort || sortOptions?.[0]?.value || 'name');
-  const [density, setDensity] = useState<'compact' | 'normal' | 'large'>(gridCols);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<string>("all");
+  const [status, setStatus] = useState<string>("all");
+  const [sort, setSort] = useState<string>(defaultSort || sortOptions?.[0]?.value || "name");
+  const [density, setDensity] = useState<"compact" | "normal" | "large">(gridCols);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       const searchValue = getSearchValue(item).toLowerCase();
-      const matchesSearch = search === '' || searchValue.includes(search.toLowerCase());
-      
-      const itemCategory = getCategory?.(item) || '';
-      const matchesCategory = category === 'all' || itemCategory === category;
-      
-      const itemStatus = getStatus?.(item) || '';
-      const matchesStatus = status === 'all' || itemStatus === status;
-      
+      const matchesSearch = search === "" || searchValue.includes(search.toLowerCase());
+
+      const itemCategory = getCategory?.(item) || "";
+      const matchesCategory = category === "all" || itemCategory === category;
+
+      const itemStatus = getStatus?.(item) || "";
+      const matchesStatus = status === "all" || itemStatus === status;
+
       return matchesSearch && matchesCategory && matchesStatus;
     });
   }, [items, search, category, status, getSearchValue, getCategory, getStatus]);
 
   const gridClassName = cn(
     "grid gap-4",
-    density === 'compact' && "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
-    density === 'normal' && "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
-    density === 'large' && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+    density === "compact" && "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+    density === "normal" && "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4",
+    density === "large" && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
   );
 
   const hasFilters = categories || statusOptions;
@@ -102,9 +99,13 @@ export function GridWorkspace<T>({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">{title}</h1>
+          <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">
+            {title}
+          </h1>
           {description && (
-            <p className="text-muted-foreground mt-1" data-testid="text-page-description">{description}</p>
+            <p className="text-muted-foreground mt-1" data-testid="text-page-description">
+              {description}
+            </p>
           )}
         </div>
         {headerActions && (
@@ -191,28 +192,28 @@ export function GridWorkspace<T>({
 
           <div className="flex items-center border rounded-md">
             <Button
-              variant={density === 'compact' ? 'secondary' : 'ghost'}
+              variant={density === "compact" ? "secondary" : "ghost"}
               size="icon"
               className="h-8 w-8 rounded-none rounded-l-md"
-              onClick={() => setDensity('compact')}
+              onClick={() => setDensity("compact")}
               data-testid="button-density-compact"
             >
               <Grid3X3 className="h-4 w-4" />
             </Button>
             <Button
-              variant={density === 'normal' ? 'secondary' : 'ghost'}
+              variant={density === "normal" ? "secondary" : "ghost"}
               size="icon"
               className="h-8 w-8 rounded-none"
-              onClick={() => setDensity('normal')}
+              onClick={() => setDensity("normal")}
               data-testid="button-density-normal"
             >
               <LayoutGrid className="h-4 w-4" />
             </Button>
             <Button
-              variant={density === 'large' ? 'secondary' : 'ghost'}
+              variant={density === "large" ? "secondary" : "ghost"}
               size="icon"
               className="h-8 w-8 rounded-none rounded-r-md"
-              onClick={() => setDensity('large')}
+              onClick={() => setDensity("large")}
               data-testid="button-density-large"
             >
               <LayoutGrid className="h-5 w-5" />
@@ -222,12 +223,13 @@ export function GridWorkspace<T>({
       </div>
 
       <div className="text-sm text-muted-foreground" data-testid="text-result-count">
-        {isLoading ? 'Loading...' : `${filteredItems.length} items`}
+        {isLoading ? "Loading..." : `${filteredItems.length} items`}
       </div>
 
       {isLoading ? (
         <div className={gridClassName}>
           {Array.from({ length: 8 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length skeleton placeholder; the list never reorders
             <Skeleton key={i} className="h-48 rounded-lg" />
           ))}
         </div>
@@ -235,15 +237,13 @@ export function GridWorkspace<T>({
         emptyState || (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="text-muted-foreground mb-2">No items found</div>
-            <p className="text-sm text-muted-foreground">
-              Try adjusting your search or filter criteria
-            </p>
+            <p className="text-sm text-muted-foreground">Try adjusting your search or filter criteria</p>
           </div>
         )
       ) : (
         <div className={gridClassName} data-testid="container-grid">
           {filteredItems.map((item, index) => (
-            <div key={index} data-testid={`grid-item-${index}`}>
+            <div key={getItemKey(item)} data-testid={`grid-item-${index}`}>
               {renderItem(item)}
             </div>
           ))}

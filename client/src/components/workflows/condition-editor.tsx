@@ -1,8 +1,9 @@
 import type { ConditionConfig, ConditionOperator } from "@woofx3/api";
 import { Plus, X } from "lucide-react";
+import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { VariableOption } from "@/lib/workflow-variables";
 
 const OPERATORS: ConditionOperator[] = [
   "eq",
@@ -70,6 +71,9 @@ interface ConditionEditorProps {
   conditions: ConditionConfig[];
   onChange: (conditions: ConditionConfig[]) => void;
   addLabel?: string;
+  /** Offered when the user types "${" in the field or value input — see computeAvailableVariables.
+   * Empty is fine: the picker only opens when it has something to show, so the inputs stay plain text. */
+  availableVariables?: VariableOption[];
 }
 
 /**
@@ -78,7 +82,12 @@ interface ConditionEditorProps {
  * `${...}` field paths against runtime context, so field/operator/value are
  * all plain user input here.
  */
-export function ConditionEditor({ conditions, onChange, addLabel = "Add condition" }: ConditionEditorProps) {
+export function ConditionEditor({
+  conditions,
+  onChange,
+  addLabel = "Add condition",
+  availableVariables = [],
+}: ConditionEditorProps) {
   const updateRow = (index: number, patch: Partial<ConditionConfig>) => {
     onChange(conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   };
@@ -98,13 +107,16 @@ export function ConditionEditor({ conditions, onChange, addLabel = "Add conditio
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: rows have no stable identity; list is append/remove-only, not reordered
           <div key={index} className="flex items-start gap-2">
-            <Input
-              value={condition.field}
-              onChange={(e) => updateRow(index, { field: e.target.value })}
-              placeholder="${trigger.data.field}"
-              className="flex-[1.2] font-mono text-xs"
-              data-testid={`input-condition-field-${index}`}
-            />
+            <div className="flex-[1.2]">
+              <VariableAwareInput
+                value={condition.field}
+                onChange={(field) => updateRow(index, { field })}
+                placeholder="${trigger.data.field}"
+                className="font-mono text-xs"
+                availableVariables={availableVariables}
+                data-testid={`input-condition-field-${index}`}
+              />
+            </div>
             <Select
               value={condition.operator}
               onValueChange={(value) =>
@@ -126,13 +138,15 @@ export function ConditionEditor({ conditions, onChange, addLabel = "Add conditio
               </SelectContent>
             </Select>
             {!hideValue && (
-              <Input
-                value={valueToInputString(condition.value)}
-                onChange={(e) => updateRow(index, { value: parseValueForOperator(condition.operator, e.target.value) })}
-                placeholder="value"
-                className="flex-1"
-                data-testid={`input-condition-value-${index}`}
-              />
+              <div className="flex-1">
+                <VariableAwareInput
+                  value={valueToInputString(condition.value)}
+                  onChange={(raw) => updateRow(index, { value: parseValueForOperator(condition.operator, raw) })}
+                  placeholder="value"
+                  availableVariables={availableVariables}
+                  data-testid={`input-condition-value-${index}`}
+                />
+              </div>
             )}
             <Button
               type="button"

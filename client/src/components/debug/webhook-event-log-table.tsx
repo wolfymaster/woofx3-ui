@@ -73,6 +73,7 @@ function EventLogTableSkeleton() {
         </TableHeader>
         <TableBody>
           {Array.from({ length: 8 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length skeleton placeholder; the list never reorders
             <TableRow key={i}>
               <TableCell>
                 <Skeleton className="h-4 w-20" />

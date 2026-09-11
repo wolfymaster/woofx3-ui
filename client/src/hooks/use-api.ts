@@ -1,12 +1,18 @@
-import { useQuery, useMutation, useQueryClient, type UseQueryOptions, type UseMutationOptions } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
-import type { PaginatedResponse, ApiError } from '@/types';
+import {
+  type UseMutationOptions,
+  type UseQueryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { apiClient } from "@/lib/api-client";
+import type { ApiError, PaginatedResponse } from "@/types";
 
 export function useApiQuery<T>(
   key: (string | number | undefined)[],
   endpoint: string,
   params?: Record<string, string | number | boolean | undefined>,
-  options?: Omit<UseQueryOptions<T, ApiError>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<T, ApiError>, "queryKey" | "queryFn">
 ) {
   return useQuery<T, ApiError>({
     queryKey: key,
@@ -23,7 +29,7 @@ export function usePaginatedQuery<T>(
   page: number = 1,
   pageSize: number = 20,
   filters?: Record<string, string | number | boolean | undefined>,
-  options?: Omit<UseQueryOptions<PaginatedResponse<T>, ApiError>, 'queryKey' | 'queryFn'>
+  options?: Omit<UseQueryOptions<PaginatedResponse<T>, ApiError>, "queryKey" | "queryFn">
 ) {
   return useQuery<PaginatedResponse<T>, ApiError>({
     queryKey: [...key, page, pageSize, filters],
@@ -37,7 +43,7 @@ export function usePaginatedQuery<T>(
 
 export function useApiMutation<TData, TVariables>(
   mutationFn: (variables: TVariables) => Promise<TData>,
-  options?: Omit<UseMutationOptions<TData, ApiError, TVariables>, 'mutationFn'>
+  options?: Omit<UseMutationOptions<TData, ApiError, TVariables>, "mutationFn">
 ) {
   return useMutation<TData, ApiError, TVariables>({
     mutationFn,
@@ -48,7 +54,7 @@ export function useApiMutation<TData, TVariables>(
 export function useCreateMutation<T, TVariables = Partial<T>>(
   endpoint: string,
   invalidateKeys?: string[][],
-  options?: Omit<UseMutationOptions<T, ApiError, TVariables>, 'mutationFn'>
+  options?: Omit<UseMutationOptions<T, ApiError, TVariables>, "mutationFn">
 ) {
   const queryClient = useQueryClient();
 
@@ -66,7 +72,7 @@ export function useCreateMutation<T, TVariables = Partial<T>>(
 export function useUpdateMutation<T, TVariables = Partial<T>>(
   getEndpoint: (id: string) => string,
   invalidateKeys?: string[][],
-  options?: Omit<UseMutationOptions<T, ApiError, { id: string; data: TVariables }>, 'mutationFn'>
+  options?: Omit<UseMutationOptions<T, ApiError, { id: string; data: TVariables }>, "mutationFn">
 ) {
   const queryClient = useQueryClient();
 
@@ -84,7 +90,7 @@ export function useUpdateMutation<T, TVariables = Partial<T>>(
 export function useDeleteMutation(
   getEndpoint: (id: string) => string,
   invalidateKeys?: string[][],
-  options?: Omit<UseMutationOptions<void, ApiError, string>, 'mutationFn'>
+  options?: Omit<UseMutationOptions<void, ApiError, string>, "mutationFn">
 ) {
   const queryClient = useQueryClient();
 

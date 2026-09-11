@@ -4,10 +4,16 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
+    "setup": "node scripts/ensure-engine-path.mjs",
+    "postinstall": "node scripts/ensure-engine-path.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
     "check": "tsc",
+    "check:convex": "tsc -p convex/tsconfig.json",
+    "test": "bun test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
     "docs": "bun --cwd docs run docs",
     "docs:build": "bun --cwd docs run docs:build",
     "docs:preview": "bun --cwd docs run docs:preview"
@@ -91,6 +97,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.3.2",
     "@replit/vite-plugin-cartographer": "^0.4.4",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",

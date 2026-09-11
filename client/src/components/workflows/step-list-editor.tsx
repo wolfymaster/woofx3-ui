@@ -497,10 +497,12 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
   /** Every step id currently in use, for the Step ID field's live uniqueness check. */
   const existingStepIds = useMemo(() => (tree ? collectStepIds(tree.steps) : new Set<string>()), [tree]);
 
-  /** ${stepId.field} variables the selected action step can reference — only steps that would
-   * have already run by the time it executes (see computeAvailableVariables). */
+  /** ${stepId.field} variables the selected step can reference — only steps that would
+   * have already run by the time it executes (see computeAvailableVariables). Conditions and
+   * waits get these too: their field/value/event inputs read runtime context the same way an
+   * action's parameters do. The trigger is excluded — nothing runs before it. */
   const availableVariables = useMemo(() => {
-    if (!tree || !selectedNode || selectedNode.type !== "action") {
+    if (!tree || !selectedNode || selectedNode.type === "trigger") {
       return [];
     }
     return computeAvailableVariables(tree, selectedNode.id, catalogActions, catalogTriggers);

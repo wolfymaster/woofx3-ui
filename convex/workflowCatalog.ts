@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, type QueryCtx, query } from "./_generated/server";
 import { canonicalRefFromProjectionKey } from "./lib/canonicalRef";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { bareModuleKey } from "./lib/moduleKey";
 import type { CatalogBundle } from "./workflowCatalogContext";
 import { loadCatalogBundle } from "./workflowCatalogContext";
 
@@ -19,7 +20,9 @@ function catalogTriggerRow(def: Doc<"triggerDefinitions">, id: string, moduleNam
     event: def.event,
     allowVariants: def.allowVariants,
     configFields: def.configFields,
+    emits: def.emits,
     projectionKey: def.projectionKey,
+    taxonomy: def.taxonomy,
     canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "trigger"),
     moduleId: def.moduleId,
     moduleName,
@@ -35,8 +38,9 @@ function catalogActionRow(def: Doc<"actionDefinitions">, id: string, moduleName:
     color: def.color,
     icon: def.icon,
     configFields: def.configFields,
-    outputFields: def.outputFields,
+    returns: def.returns,
     projectionKey: def.projectionKey,
+    taxonomy: def.taxonomy,
     canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "action"),
     handlerType: def.handlerType,
     functionCall: def.functionCall,
@@ -65,7 +69,7 @@ async function resolveModuleNames(
   for (const moduleId of uniqueIds) {
     const module = await ctx.db.get(moduleId);
     if (module) {
-      names.set(moduleId, module.moduleKey?.split(":")[0] ?? module.name);
+      names.set(moduleId, bareModuleKey(module.moduleKey) ?? module.name);
     }
   }
   return names;
@@ -147,7 +151,7 @@ export const listWorkflows = action({
         throw new Error("Instance is not registered with the engine");
       }
       const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-      const result = await rpc.getWorkflows({ accountId: instanceId });
+      const result = await rpc.getWorkflows();
       const workflows = result?.workflows;
       if (!Array.isArray(workflows)) {
         return [];

@@ -12,7 +12,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { type DashboardLayoutDefinition, dashboardLayouts, getDashboardLayout } from "@/lib/dashboard-layouts";
+import {
+  columnWeight,
+  type DashboardLayoutDefinition,
+  dashboardLayouts,
+  getDashboardLayout,
+  rowWeight,
+} from "@/lib/dashboard-layouts";
 import { dashboardWidgetsByCategory, getDashboardWidget } from "@/lib/dashboard-widgets/registry";
 import { widgetSlotId } from "@/lib/dashboard-widgets/types";
 
@@ -24,10 +30,14 @@ function LayoutPreview({ layout }: { layout: DashboardLayoutDefinition }) {
     <div className="flex flex-col gap-1 w-full h-16">
       {layout.rows.map((row, rowIndex) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: rows are a static, never-reordered layout definition
-        <div key={`row-${rowIndex}`} className="flex flex-1 gap-1">
+        <div key={`row-${rowIndex}`} className="flex gap-1" style={{ flexGrow: rowWeight(row), flexBasis: 0 }}>
           {Array.from({ length: row.columns }).map((_, columnIndex) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: columns are a static, never-reordered layout definition
-            <div key={`col-${columnIndex}`} className="flex-1 rounded bg-muted border border-border" />
+            <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: columns are a static, never-reordered layout definition
+              key={`col-${columnIndex}`}
+              className="rounded bg-muted border border-border"
+              style={{ flexGrow: columnWeight(row, columnIndex), flexBasis: 0 }}
+            />
           ))}
         </div>
       ))}
@@ -45,7 +55,10 @@ export function DashboardLayoutPicker({ onSelect }: DashboardLayoutPickerProps) 
       <div className="text-center max-w-md mb-8">
         <LayoutTemplate className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
         <h2 className="text-xl font-semibold mb-2">Choose a Dashboard Layout</h2>
-        <p className="text-muted-foreground">Pick a starting layout for your dashboard. You can change this later.</p>
+        <p className="text-muted-foreground">
+          Pick the arrangement of widget areas for this page. A page keeps the layout it was created with — to use a
+          different one, delete the page and add a new one.
+        </p>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full max-w-2xl">
         {dashboardLayouts.map((layout) => (
@@ -132,6 +145,8 @@ function WidgetSlot({ widget, isEditing, onRemove, onConfigChange }: WidgetSlotP
 interface DashboardZoneProps {
   zoneId: string;
   widgets: DashboardPanelWidget[];
+  /** Share of the row's width, relative to the row's other zones. */
+  widthWeight: number;
   isEditing: boolean;
   onAssignWidget: (zoneId: string, type: string) => void;
   onRemoveWidget: (zoneId: string, slotId: string) => void;
@@ -142,20 +157,24 @@ interface DashboardZoneProps {
 function DashboardZone({
   zoneId,
   widgets,
+  widthWeight,
   isEditing,
   onAssignWidget,
   onRemoveWidget,
   onWidgetConfigChange,
   onResizeWidgets,
 }: DashboardZoneProps) {
+  const growStyle = { flexGrow: widthWeight, flexBasis: 0 };
+
   if (widgets.length === 0) {
     if (!isEditing) {
-      return <div className="flex-1" data-testid={`canvas-zone-${zoneId}`} />;
+      return <div style={growStyle} data-testid={`canvas-zone-${zoneId}`} />;
     }
 
     return (
       <div
-        className="flex-1 rounded-lg border-2 border-dashed border-border flex items-center justify-center"
+        className="rounded-lg border-2 border-dashed border-border flex items-center justify-center"
+        style={growStyle}
         data-testid={`canvas-zone-${zoneId}`}
       >
         <AddWidgetMenu
@@ -194,7 +213,7 @@ function DashboardZone({
   });
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 gap-2" data-testid={`canvas-zone-${zoneId}`}>
+    <div className="flex flex-col min-h-0 gap-2" style={growStyle} data-testid={`canvas-zone-${zoneId}`}>
       <ResizablePanelGroup
         direction="vertical"
         className="flex-1 min-h-0"
@@ -262,13 +281,14 @@ export function DashboardCanvas({
     <div className="h-full p-4 flex flex-col gap-4">
       {layout.rows.map((row, rowIndex) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: rows are a static, never-reordered layout definition
-        <div key={`row-${rowIndex}`} className="flex-1 flex gap-4 min-h-0">
+        <div key={`row-${rowIndex}`} className="flex gap-4 min-h-0" style={{ flexGrow: rowWeight(row), flexBasis: 0 }}>
           {Array.from({ length: row.columns }).map((_, columnIndex) => {
             const zoneId = `${rowIndex}-${columnIndex}`;
             return (
               <DashboardZone
                 key={zoneId}
                 zoneId={zoneId}
+                widthWeight={columnWeight(row, columnIndex)}
                 widgets={widgetsByZone.get(zoneId) ?? []}
                 isEditing={isEditing}
                 onAssignWidget={onAssignWidget}

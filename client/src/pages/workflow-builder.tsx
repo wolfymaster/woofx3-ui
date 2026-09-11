@@ -459,7 +459,7 @@ export default function WorkflowBuilder() {
       });
       toast({ title: "Workflow deleted" });
       setDeleteOpen(false);
-      navigate("/workflows");
+      navigate("/stream/workflows");
     } catch (err) {
       toast({
         title: "Delete failed",
@@ -567,7 +567,7 @@ export default function WorkflowBuilder() {
     <div className="h-full flex flex-col">
       <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/workflows")} data-testid="button-back">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/stream/workflows")} data-testid="button-back">
             <ChevronLeft className="h-5 w-5" />
           </Button>
           <Separator orientation="vertical" className="h-6" />

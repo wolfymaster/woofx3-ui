@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, mutation, query } from "./_generated/server";
 import { pruneWidgetDefinitions } from "./lib/definitionCatalog";
+import { resolveModuleIdByRef } from "./lib/moduleKey";
 
 type WidgetProvenance = {
   createdByType?: string;
@@ -75,22 +76,7 @@ export const register = mutation({
     directory: v.string(),
     description: v.optional(v.string()),
     alertTypes: v.array(v.string()),
-    settings: v.array(
-      v.object({
-        key: v.string(),
-        fieldType: v.string(),
-        label: v.string(),
-        defaultValue: v.any(),
-        options: v.optional(
-          v.array(
-            v.object({
-              label: v.string(),
-              value: v.string(),
-            })
-          )
-        ),
-      })
-    ),
+    settings: v.array(v.any()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -155,35 +141,11 @@ export const registerFromWebhook = internalMutation({
     createdByRef: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
     alertTypes: v.array(v.string()),
-    settings: v.array(
-      v.object({
-        key: v.string(),
-        fieldType: v.string(),
-        label: v.string(),
-        defaultValue: v.any(),
-        options: v.optional(
-          v.array(
-            v.object({
-              label: v.string(),
-              value: v.string(),
-            })
-          )
-        ),
-      })
-    ),
+    settings: v.array(v.any()),
   },
   handler: async (ctx, args) => {
     // Resolve moduleId only for module-sourced widgets (built-ins have none).
-    let moduleId: Id<"moduleRepository"> | undefined;
-    if (args.createdByType === "MODULE" && args.createdByRef) {
-      const mod = await ctx.db
-        .query("moduleRepository")
-        .withIndex("by_instance_module_key", (q) =>
-          q.eq("instanceId", args.instanceId).eq("moduleKey", args.createdByRef as string)
-        )
-        .first();
-      moduleId = mod?._id;
-    }
+    const moduleId = await resolveModuleIdByRef(ctx, args.instanceId, args.createdByType, args.createdByRef);
 
     const def = {
       moduleId,

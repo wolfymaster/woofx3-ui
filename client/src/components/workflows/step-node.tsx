@@ -132,15 +132,18 @@ export function StepNodeCard({
   const summary = getNodeSummary(node, catalogTriggers, catalogActions, resourceLabels);
 
   return (
-    <div
+    <button
+      type="button"
       className={cn(
         "px-5 py-4 rounded-xl border-2 bg-card min-w-[240px] max-w-[400px] shadow-sm cursor-pointer transition-all",
+        "w-full text-left",
         styles.border,
         isSelected && "ring-2 ring-primary ring-offset-2 ring-offset-background",
         "hover:shadow-md"
       )}
       style={{ marginLeft: depth * 24 }}
       onClick={onSelect}
+      aria-pressed={isSelected}
       data-testid={`node-${node.type}-${node.id}`}
     >
       <div className="flex items-center gap-3">
@@ -160,6 +163,6 @@ export function StepNodeCard({
           )}
         </div>
       </div>
-    </div>
+    </button>
   );
 }

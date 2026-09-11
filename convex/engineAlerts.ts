@@ -21,7 +21,7 @@ const STATUS_VALIDATOR = v.union(
   v.literal("timed_out"),
   v.literal("skipped"),
   v.literal("pending"),
-  v.literal("dispatched"),
+  v.literal("dispatched")
 );
 
 const KNOWN_STATUSES: ReadonlySet<EngineAlertStatus> = new Set<EngineAlertStatus>([
@@ -73,9 +73,7 @@ export const listForInstance = query({
     if (status) {
       return ctx.db
         .query("engineAlerts")
-        .withIndex("by_instance_status", (q) =>
-          q.eq("instanceId", instanceId).eq("status", status),
-        )
+        .withIndex("by_instance_status", (q) => q.eq("instanceId", instanceId).eq("status", status))
         .order("desc")
         .take(take);
     }

@@ -1,6 +1,6 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { internalMutation, query } from "./_generated/server";
 
 const DEFAULT_TTL_MS = 60_000; // 60 seconds
 
@@ -18,7 +18,7 @@ export const get = query({
     return ctx.db
       .query("transientEvents")
       .withIndex("by_instance_correlation", (q) =>
-        q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey),
+        q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey)
       )
       .order("desc")
       .first();

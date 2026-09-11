@@ -35,7 +35,7 @@ export interface FieldDescriptor {
   /** Hint rendered below the field. */
   hint?: string;
   description?: string;
-  dataSchema?: string;
+  examplePayload?: string;
   /** Media subtype hint for media-type fields. */
   mediaType?: "image" | "audio" | "video";
   /** Allow arbitrary extra properties for custom field renderers. */
@@ -286,7 +286,7 @@ function InternalSelectFieldRenderer({
         label={field.label}
         required={field.required}
         hint={field.hint as string | undefined}
-        dataSchema={field.dataSchema as string | undefined}
+        examplePayload={field.examplePayload as string | undefined}
       />
       <Select value={(value as string) ?? ""} onValueChange={onChange} disabled={disabled}>
         <SelectTrigger data-testid={`select-${field.id}`}>
@@ -313,7 +313,7 @@ function ColorFieldRenderer({ field, value, onChange }: FieldRendererProps) {
         label={field.label}
         required={field.required}
         hint={field.hint as string | undefined}
-        dataSchema={field.dataSchema as string | undefined}
+        examplePayload={field.examplePayload as string | undefined}
       />
       <Input
         id={field.id}

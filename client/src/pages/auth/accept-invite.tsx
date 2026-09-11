@@ -1,11 +1,10 @@
+import { api } from "@convex/_generated/api";
+import { useConvexAuth, useMutation } from "convex/react";
+import { Loader2, MonitorPlay } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { useConvexAuth } from "convex/react";
-import { useMutation } from "convex/react";
-import { api } from "@convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, MonitorPlay } from "lucide-react";
 
 function getTokenFromLocation(): string | null {
   if (typeof window === "undefined") {
@@ -49,7 +48,9 @@ export default function AcceptInvite() {
     }
     if (!isAuthenticated) {
       const token = getTokenFromLocation();
-      const next = token ? `/auth/login?next=${encodeURIComponent(`/auth/accept-invite?token=${token}`)}` : "/auth/login";
+      const next = token
+        ? `/auth/login?next=${encodeURIComponent(`/auth/accept-invite?token=${token}`)}`
+        : "/auth/login";
       navigate(next);
       return;
     }

@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { Check, Loader2, Store } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation } from "wouter";
+import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { getCategoryColor, getCategoryCounts } from "@/components/modules/module-category";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -53,7 +54,7 @@ export function ModuleSidebar({
   const totalCount = catalog?.length ?? 0;
 
   return (
-    <div className="w-64 shrink-0 border-r bg-background flex flex-col">
+    <div className={SIDEBAR_RAIL}>
       <div className="p-2 border-b">
         <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => navigate("/modules")}>
           <Store className="h-3.5 w-3.5" />

@@ -161,6 +161,7 @@ function WidgetIframe({
     <iframe
       ref={iframeRef}
       src={widgetUrl}
+      title={`Widget ${widget.moduleWidgetId}`}
       style={style}
       className="border-0"
       sandbox="allow-scripts allow-same-origin"

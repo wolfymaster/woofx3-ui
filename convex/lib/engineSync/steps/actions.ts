@@ -18,13 +18,17 @@ export const actionsStep: SyncStep = {
     const api = newApi();
     const raw = await api.getActions();
     const snapshots = (raw ?? []).map((a) => {
-      const row = a as typeof a & { type?: string };
+      // `returns` is the contract's name; an engine predating that rename still
+      // sends the same JSON as `outputSchema`.
+      const row = a as typeof a & { type?: string; outputSchema?: string };
       return {
         id: row.id,
         name: row.name,
         description: row.description,
         paramsSchema: row.paramsSchema,
+        returns: row.returns ?? row.outputSchema,
         projectionKey: row.projectionKey,
+        taxonomy: row.taxonomy,
         handlerType: row.type,
         functionCall: row.call,
         createdByType: row.createdByType,

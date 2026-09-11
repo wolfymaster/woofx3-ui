@@ -1,11 +1,9 @@
-// Pure HTML builders for the public browser-source page (kept separate from
+// Pure response builders for the public browser-source route (kept separate from
 // convex/http.ts so they can be unit-tested without the Convex runtime).
 //
-// Scenes are engine-authoritative and the engine renders the overlay itself, so
-// this page is a thin wrapper that iframes the engine's per-scene overlay URL.
-// The opaque browser-source key — not the engineSceneId — is what OBS holds, so
-// revoking the key disables the overlay (the engine URL is never exposed to the
-// client except inside the sandboxed iframe).
+// Scenes are engine-authoritative and the engine renders the overlay itself. The
+// opaque browser-source key — not the engine URL — is what OBS holds, so the
+// token behind it can be rotated or re-minted without re-pasting anything into OBS.
 
 export function escapeHtml(value: string): string {
   return value
@@ -20,38 +18,34 @@ const BASE_STYLE =
   "*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:transparent;overflow:hidden}";
 
 /**
- * Wraps the engine overlay URL in a full-bleed sandboxed iframe.
+ * Sends OBS on to the engine's overlay URL as a top-level navigation.
  *
- * Sandbox flags: `allow-scripts allow-same-origin`.
- *  - `allow-scripts` lets the overlay run JavaScript.
- *  - `allow-same-origin` preserves the overlay's own origin (the engine
- *    host), which the overlay needs to nest its widget iframes and inject
- *    `widgetHost` into them. Without it, the overlay gets an opaque origin
- *    and any nested widget iframe — even with its own `allow-same-origin` —
- *    ends up cross-origin from its parent, so `iframe.contentWindow.widgetHost`
- *    assignment throws DOMException and widget events never reach widget code.
+ * A redirect, not an iframe: Scene Manager trades the URL's token for an
+ * `sm_session` cookie marked `SameSite=Strict`, and every follow-up request
+ * (widget frames, the `/events` stream, delivery acks) authenticates with that
+ * cookie alone. Framed inside this convex.site page the overlay is cross-site to
+ * its top-level document, so the browser withholds the cookie and those requests
+ * 401. Once redirected, the overlay *is* the top-level document and the cookie
+ * flows.
  *
- * `allow-same-origin` here does NOT grant the overlay access to this Convex
- * page's origin: the engine and Convex live on different hosts, so the
- * browser's same-origin policy still keeps the engine out of Convex
- * cookies/storage. It only stops the browser from minting a fresh opaque
- * origin for the overlay iframe.
+ * `no-store` so every OBS load re-resolves the key: rotation and re-minting swap
+ * the token behind it, and a cached redirect would pin the old one.
+ * `no-referrer` keeps the key URL — itself a bearer credential — out of the
+ * engine's request logs.
  */
-export function buildBrowserSourceHtml(params: { sceneName: string; overlayUrl: string }): string {
-  const title = escapeHtml(params.sceneName);
-  const src = escapeHtml(params.overlayUrl);
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title}</title>
-<style>${BASE_STYLE}iframe{position:fixed;inset:0;width:100%;height:100%;border:none;background:transparent}</style>
-</head>
-<body>
-<iframe src="${src}" sandbox="allow-scripts allow-same-origin" scrolling="no" allowtransparency="true"></iframe>
-</body>
-</html>`;
+export function buildBrowserSourceRedirect(overlayUrl: string): Response {
+  const target = new URL(overlayUrl);
+  if (target.protocol !== "https:" && target.protocol !== "http:") {
+    throw new Error(`Refusing to redirect a browser source to a non-HTTP URL (${target.protocol})`);
+  }
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: target.toString(),
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    },
+  });
 }
 
 /**

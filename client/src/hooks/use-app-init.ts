@@ -1,4 +1,4 @@
-import { useConvexAuth } from 'convex/react';
+import { useConvexAuth } from "convex/react";
 
 export function useAppInit() {
   const { isAuthenticated, isLoading } = useConvexAuth();

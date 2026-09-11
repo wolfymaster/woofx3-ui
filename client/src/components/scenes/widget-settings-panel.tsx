@@ -1,130 +1,13 @@
+import type { ConfigField } from "@woofx3/api/ui-schema";
 import { Trash2 } from "lucide-react";
+import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
+import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import type { Widget } from "@/types";
-
-interface WidgetSettingField {
-  key: string;
-  fieldType: string;
-  label: string;
-  defaultValue: unknown;
-  options?: Array<{ label: string; value: string }>;
-}
-
-interface WidgetSettingsFormProps {
-  fields: WidgetSettingField[];
-  settings: Record<string, unknown>;
-  onChange: (key: string, value: unknown) => void;
-}
-
-function WidgetSettingsForm({ fields, settings, onChange }: WidgetSettingsFormProps) {
-  if (fields.length === 0) {
-    return <p className="text-xs text-muted-foreground">This widget has no configurable settings.</p>;
-  }
-
-  return (
-    <div className="space-y-4">
-      {fields.map((field) => {
-        const current = settings[field.key] ?? field.defaultValue;
-        const type = field.fieldType.toLowerCase();
-
-        if (type === "boolean" || type === "toggle") {
-          return (
-            <div key={field.key} className="flex items-center justify-between">
-              <Label className="text-xs">{field.label}</Label>
-              <Switch
-                checked={Boolean(current)}
-                onCheckedChange={(v) => onChange(field.key, v)}
-                data-testid={`setting-${field.key}`}
-              />
-            </div>
-          );
-        }
-
-        if (type === "select" && field.options) {
-          return (
-            <div key={field.key} className="space-y-1">
-              <Label className="text-xs">{field.label}</Label>
-              <Select value={String(current ?? "")} onValueChange={(v) => onChange(field.key, v)}>
-                <SelectTrigger data-testid={`setting-${field.key}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {field.options.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          );
-        }
-
-        if (type === "color") {
-          return (
-            <div key={field.key} className="space-y-1">
-              <Label className="text-xs">{field.label}</Label>
-              <Input
-                type="color"
-                value={String(current ?? "#000000")}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                className="h-9 w-full p-1"
-                data-testid={`setting-${field.key}`}
-              />
-            </div>
-          );
-        }
-
-        if (type === "number") {
-          return (
-            <div key={field.key} className="space-y-1">
-              <Label className="text-xs">{field.label}</Label>
-              <Input
-                type="number"
-                value={current === undefined || current === null ? "" : Number(current)}
-                onChange={(e) => onChange(field.key, e.target.value === "" ? null : Number(e.target.value))}
-                data-testid={`setting-${field.key}`}
-              />
-            </div>
-          );
-        }
-
-        if (type === "textarea") {
-          return (
-            <div key={field.key} className="space-y-1">
-              <Label className="text-xs">{field.label}</Label>
-              <Textarea
-                value={String(current ?? "")}
-                onChange={(e) => onChange(field.key, e.target.value)}
-                data-testid={`setting-${field.key}`}
-              />
-            </div>
-          );
-        }
-
-        return (
-          <div key={field.key} className="space-y-1">
-            <Label className="text-xs">{field.label}</Label>
-            <Input
-              value={String(current ?? "")}
-              onChange={(e) => onChange(field.key, e.target.value)}
-              data-testid={`setting-${field.key}`}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 interface WidgetSettingsPanelProps {
   widget: Widget;
-  fields: WidgetSettingField[];
+  fields: ConfigField[];
   onChangeSetting: (key: string, value: unknown) => void;
   onDelete: () => void;
 }
@@ -150,7 +33,27 @@ export function WidgetSettingsPanel({ widget, fields, onChangeSetting, onDelete 
         </Button>
       </div>
       <div className="flex-1 overflow-y-auto p-4">
-        <WidgetSettingsForm fields={fields} settings={widget.settings} onChange={onChangeSetting} />
+        {fields.length === 0 ? (
+          <p className="text-xs text-muted-foreground">This widget has no configurable settings.</p>
+        ) : (
+          <ConfigurationForm
+            // A widget's settings are ConfigFields, exactly like a trigger's
+            // config, so they render through the same form rather than a
+            // parallel one that supported a narrower set of types. That is
+            // what gives a widget `resource_ref` pickers, `required`,
+            // `description` and hints for free.
+            fields={fields as unknown as FieldDescriptor[]}
+            values={widget.settings}
+            onChange={(next) => {
+              for (const field of fields) {
+                if (next[field.id] !== widget.settings[field.id]) {
+                  onChangeSetting(field.id, next[field.id]);
+                }
+              }
+            }}
+            customRenderers={configFieldRenderers}
+          />
+        )}
       </div>
     </div>
   );

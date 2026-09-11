@@ -8,9 +8,7 @@ describe("stableWidgetId", () => {
   });
 
   it("strips version and hash from a versioned canonical id", () => {
-    expect(stableWidgetId("spotify:1.0.0:df18e02:widget:now_playing")).toBe(
-      "spotify:widget:now_playing"
-    );
+    expect(stableWidgetId("spotify:1.0.0:df18e02:widget:now_playing")).toBe("spotify:widget:now_playing");
   });
 
   it("returns undefined when the :widget: marker is absent", () => {
@@ -34,15 +32,13 @@ describe("widgetCanonicalKey", () => {
   });
 
   it("returns projectionKey as-is when already stable", () => {
-    expect(widgetCanonicalKey({ projectionKey: "builtin:widget:media_alert" })).toBe(
-      "builtin:widget:media_alert"
-    );
+    expect(widgetCanonicalKey({ projectionKey: "builtin:widget:media_alert" })).toBe("builtin:widget:media_alert");
   });
 
   it("constructs key from createdByRef + manifestId, stripping version from ref", () => {
-    expect(
-      widgetCanonicalKey({ createdByRef: "spotify:1.0.0:abc", manifestId: "now_playing" })
-    ).toBe("spotify:widget:now_playing");
+    expect(widgetCanonicalKey({ createdByRef: "spotify:1.0.0:abc", manifestId: "now_playing" })).toBe(
+      "spotify:widget:now_playing"
+    );
   });
 
   it("constructs key from simple createdByRef + manifestId", () => {
@@ -52,15 +48,13 @@ describe("widgetCanonicalKey", () => {
   });
 
   it("normalises a versioned canonicalId fallback", () => {
-    expect(
-      widgetCanonicalKey({ canonicalId: "spotify:1.0.0:df18e02:widget:now_playing" })
-    ).toBe("spotify:widget:now_playing");
+    expect(widgetCanonicalKey({ canonicalId: "spotify:1.0.0:df18e02:widget:now_playing" })).toBe(
+      "spotify:widget:now_playing"
+    );
   });
 
   it("passes through a stable canonicalId fallback unchanged", () => {
-    expect(widgetCanonicalKey({ canonicalId: "spotify:widget:now_playing" })).toBe(
-      "spotify:widget:now_playing"
-    );
+    expect(widgetCanonicalKey({ canonicalId: "spotify:widget:now_playing" })).toBe("spotify:widget:now_playing");
   });
 
   it("falls back to id when all other fields are missing", () => {

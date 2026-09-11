@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { useAction } from "convex/react";
 import { api } from "@convex/_generated/api";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import type { Id } from "@convex/_generated/dataModel";
+import { useAction } from "convex/react";
+import { Loader2, Unlink } from "lucide-react";
+import { useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,8 +13,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Unlink } from "lucide-react";
-import type { Id } from "@convex/_generated/dataModel";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 
 interface TwitchIntegrationCardProps {
@@ -28,19 +28,14 @@ interface TwitchIntegrationCardProps {
   isLoading: boolean;
 }
 
-export function TwitchIntegrationCard({
-  instanceId,
-  isConnected,
-  twitchLink,
-  isLoading,
-}: TwitchIntegrationCardProps) {
+export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isLoading }: TwitchIntegrationCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const disconnect = useAction(api.twitchIntegration.disconnect);
 
   const handleConnect = () => {
     if (!instanceId) return;
-    const redirectTo = encodeURIComponent("/settings/integrations");
+    const redirectTo = encodeURIComponent("/admin/integrations");
     window.location.href = `${CONVEX_SITE_URL}/api/integrations/twitch/start?instanceId=${instanceId}&redirect_to=${redirectTo}`;
   };
 
@@ -61,9 +56,7 @@ export function TwitchIntegrationCard({
     return (
       <div className="flex items-center justify-between p-4 rounded-lg border">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded bg-purple-600 flex items-center justify-center text-white font-bold">
-            T
-          </div>
+          <div className="h-10 w-10 rounded bg-purple-600 flex items-center justify-center text-white font-bold">T</div>
           <div>
             <p className="font-medium">Twitch</p>
             <p className="text-sm text-muted-foreground">Loading...</p>
@@ -89,9 +82,7 @@ export function TwitchIntegrationCard({
             </Avatar>
             <div>
               <p className="font-medium">Twitch</p>
-              <p className="text-sm text-muted-foreground">
-                Connected as {twitchLink.platformUsername}
-              </p>
+              <p className="text-sm text-muted-foreground">Connected as {twitchLink.platformUsername}</p>
             </div>
           </div>
           <Button
@@ -100,11 +91,7 @@ export function TwitchIntegrationCard({
             disabled={isDisconnecting}
             data-testid="button-disconnect-twitch"
           >
-            {isDisconnecting ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-            ) : (
-              <Unlink className="h-4 w-4 mr-2" />
-            )}
+            {isDisconnecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Unlink className="h-4 w-4 mr-2" />}
             Disconnect
           </Button>
         </div>
@@ -114,8 +101,8 @@ export function TwitchIntegrationCard({
             <AlertDialogHeader>
               <AlertDialogTitle>Disconnect Twitch</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to disconnect your Twitch account? This will stop all Twitch-related
-                actions and triggers for this instance.
+                Are you sure you want to disconnect your Twitch account? This will stop all Twitch-related actions and
+                triggers for this instance.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -142,20 +129,13 @@ export function TwitchIntegrationCard({
   return (
     <div className="flex items-center justify-between p-4 rounded-lg border">
       <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded bg-purple-600 flex items-center justify-center text-white font-bold">
-          T
-        </div>
+        <div className="h-10 w-10 rounded bg-purple-600 flex items-center justify-center text-white font-bold">T</div>
         <div>
           <p className="font-medium">Twitch</p>
           <p className="text-sm text-muted-foreground">Not connected</p>
         </div>
       </div>
-      <Button
-        variant="outline"
-        onClick={handleConnect}
-        disabled={!instanceId}
-        data-testid="button-connect-twitch"
-      >
+      <Button variant="outline" onClick={handleConnect} disabled={!instanceId} data-testid="button-connect-twitch">
         Connect
       </Button>
     </div>

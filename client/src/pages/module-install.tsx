@@ -1,32 +1,30 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
-import { useLocation } from 'wouter';
-import { useMutation, useQuery } from 'convex/react';
-import JSZip from 'jszip';
-import Editor from '@monaco-editor/react';
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import Editor from "@monaco-editor/react";
+import { useMutation, useQuery } from "convex/react";
+import JSZip from "jszip";
 import {
-  Upload,
+  AlertCircle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   File,
   Folder,
   FolderOpen,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-
   Loader2,
-  ChevronRight,
-  ChevronDown,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { PageHeader } from '@/components/layout/page-header';
-import { useTheme } from '@/hooks/use-theme';
-import { cn } from '@/lib/utils';
-import { api } from '@convex/_generated/api';
-import { useInstance } from '@/hooks/use-instance';
-import type { Id } from '@convex/_generated/dataModel';
+  Upload,
+  XCircle,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
+import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useInstance } from "@/hooks/use-instance";
+import { useTheme } from "@/hooks/use-theme";
+import { cn } from "@/lib/utils";
 
 interface FileNode {
   name: string;
@@ -39,7 +37,7 @@ interface FileNode {
 interface CheckResult {
   id: string;
   name: string;
-  status: 'pass' | 'fail' | 'warning';
+  status: "pass" | "fail" | "warning";
   message: string;
 }
 
@@ -48,14 +46,14 @@ function buildFileTree(files: Record<string, string>): FileNode[] {
   const pathMap = new Map<string, FileNode>();
 
   for (const [path, content] of Object.entries(files)) {
-    const parts = path.split('/');
-    let currentPath = '';
-    
+    const parts = path.split("/");
+    let currentPath = "";
+
     for (let i = 0; i < parts.length; i++) {
       const part = parts[i];
       const isLast = i === parts.length - 1;
       currentPath = currentPath ? `${currentPath}/${part}` : part;
-      
+
       if (!pathMap.has(currentPath)) {
         const node: FileNode = {
           name: part,
@@ -64,13 +62,13 @@ function buildFileTree(files: Record<string, string>): FileNode[] {
           content: isLast ? content : undefined,
           children: [],
         };
-        
+
         pathMap.set(currentPath, node);
-        
+
         if (i === 0) {
           tree.push(node);
         } else {
-          const parentPath = parts.slice(0, i).join('/');
+          const parentPath = parts.slice(0, i).join("/");
           const parent = pathMap.get(parentPath);
           if (parent) {
             parent.children = parent.children || [];
@@ -80,7 +78,7 @@ function buildFileTree(files: Record<string, string>): FileNode[] {
       }
     }
   }
-  
+
   return tree;
 }
 
@@ -96,7 +94,7 @@ function FileExplorer({
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   const toggleExpand = (path: string) => {
-    setExpanded(prev => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
         next.delete(path);
@@ -114,12 +112,14 @@ function FileExplorer({
 
     return (
       <div key={node.path}>
-        <div
+        <button
+          type="button"
           className={cn(
-            'flex items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted text-sm',
-            isSelected && 'bg-muted font-medium'
+            "flex w-full items-center gap-1 px-2 py-1.5 rounded-md cursor-pointer hover:bg-muted text-sm text-left",
+            isSelected && "bg-muted font-medium"
           )}
           style={{ paddingLeft: `${depth * 16 + 8}px` }}
+          aria-expanded={node.isDirectory && hasChildren ? isExpanded : undefined}
           onClick={() => {
             if (node.isDirectory && hasChildren) {
               toggleExpand(node.path);
@@ -152,11 +152,9 @@ function FileExplorer({
             </>
           )}
           <span className="truncate">{node.name}</span>
-        </div>
+        </button>
         {node.isDirectory && hasChildren && isExpanded && (
-          <div>
-            {node.children!.map(child => renderNode(child, depth + 1))}
-          </div>
+          <div>{node.children!.map((child) => renderNode(child, depth + 1))}</div>
         )}
       </div>
     );
@@ -164,33 +162,31 @@ function FileExplorer({
 
   return (
     <ScrollArea className="h-full">
-      <div className="p-2">
-        {files.map(node => renderNode(node))}
-      </div>
+      <div className="p-2">{files.map((node) => renderNode(node))}</div>
     </ScrollArea>
   );
 }
 
 function getLanguageFromPath(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase();
+  const ext = path.split(".").pop()?.toLowerCase();
   const langMap: Record<string, string> = {
-    'js': 'javascript',
-    'jsx': 'javascript',
-    'ts': 'typescript',
-    'tsx': 'typescript',
-    'json': 'json',
-    'yaml': 'yaml',
-    'yml': 'yaml',
-    'md': 'markdown',
-    'html': 'html',
-    'css': 'css',
-    'py': 'python',
-    'go': 'go',
-    'rs': 'rust',
-    'sh': 'shell',
-    'bash': 'shell',
+    js: "javascript",
+    jsx: "javascript",
+    ts: "typescript",
+    tsx: "typescript",
+    json: "json",
+    yaml: "yaml",
+    yml: "yaml",
+    md: "markdown",
+    html: "html",
+    css: "css",
+    py: "python",
+    go: "go",
+    rs: "rust",
+    sh: "shell",
+    bash: "shell",
   };
-  return langMap[ext || ''] || 'plaintext';
+  return langMap[ext || ""] || "plaintext";
 }
 
 // Checks Pipeline
@@ -202,59 +198,55 @@ interface Check {
 
 const checks: Check[] = [
   {
-    id: 'json-validator',
-    name: 'JSON Validator',
+    id: "json-validator",
+    name: "JSON Validator",
     run: async (files) => {
-      const jsonFiles = Object.entries(files).filter(([path]) => 
-        path.endsWith('.json')
-      );
-      
+      const jsonFiles = Object.entries(files).filter(([path]) => path.endsWith(".json"));
+
       for (const [path, content] of jsonFiles) {
         try {
           JSON.parse(content);
         } catch (error) {
           return {
-            id: 'json-validator',
-            name: 'JSON Validator',
-            status: 'fail',
-            message: `Invalid JSON in ${path}: ${error instanceof Error ? error.message : 'Parse error'}`,
+            id: "json-validator",
+            name: "JSON Validator",
+            status: "fail",
+            message: `Invalid JSON in ${path}: ${error instanceof Error ? error.message : "Parse error"}`,
           };
         }
       }
-      
+
       return {
-        id: 'json-validator',
-        name: 'JSON Validator',
-        status: 'pass',
+        id: "json-validator",
+        name: "JSON Validator",
+        status: "pass",
         message: `All ${jsonFiles.length} JSON files are valid`,
       };
     },
   },
   {
-    id: 'yaml-validator',
-    name: 'YAML Validator',
+    id: "yaml-validator",
+    name: "YAML Validator",
     run: async (files) => {
       // Simple YAML validation - in production you'd use a proper YAML parser
-      const yamlFiles = Object.entries(files).filter(([path]) => 
-        path.endsWith('.yaml') || path.endsWith('.yml')
-      );
-      
+      const yamlFiles = Object.entries(files).filter(([path]) => path.endsWith(".yaml") || path.endsWith(".yml"));
+
       for (const [path, content] of yamlFiles) {
         // Basic YAML structure check
-        if (content.trim() && !content.includes(':')) {
+        if (content.trim() && !content.includes(":")) {
           return {
-            id: 'yaml-validator',
-            name: 'YAML Validator',
-            status: 'fail',
+            id: "yaml-validator",
+            name: "YAML Validator",
+            status: "fail",
             message: `Invalid YAML structure in ${path}`,
           };
         }
       }
-      
+
       return {
-        id: 'yaml-validator',
-        name: 'YAML Validator',
-        status: 'pass',
+        id: "yaml-validator",
+        name: "YAML Validator",
+        status: "pass",
         message: `All ${yamlFiles.length} YAML files appear valid`,
       };
     },
@@ -271,8 +263,8 @@ async function runChecks(files: Record<string, string>): Promise<CheckResult[]> 
       results.push({
         id: check.id,
         name: check.name,
-        status: 'fail',
-        message: `Check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        status: "fail",
+        message: `Check failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       });
     }
   }
@@ -300,8 +292,8 @@ function getCommonDirectoryPrefix(paths: string[]): string {
 
 function toSnakeCase(str: string): string {
   return str
-    .replace(/([a-z])([A-Z])/g, '$1_$2')
-    .replace(/[\s\-]+/g, '_')
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[\s-]+/g, "_")
     .toLowerCase();
 }
 
@@ -318,30 +310,28 @@ export default function ModuleInstall() {
   const [pendingModuleKey, setPendingModuleKey] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
 
-  const generateUploadUrl = useMutation(api.assets.generateUploadUrl);
+  const generateUploadUrl = useMutation(api.moduleRepository.generateUploadUrl);
   const uploadAndDeliver = useMutation(api.moduleRepository.uploadAndDeliver);
 
   // Subscribe to transient events — Convex realtime pushes the moment the webhook emits one
   const installEvent = useQuery(
     api.transientEvents.get,
-    pendingModuleKey && instance
-      ? { instanceId: instance._id, correlationKey: pendingModuleKey }
-      : "skip",
+    pendingModuleKey && instance ? { instanceId: instance._id, correlationKey: pendingModuleKey } : "skip"
   );
 
   const fileTree = useMemo(() => buildFileTree(files), [files]);
-  
+
   // Find manifest file on load
   useEffect(() => {
     if (Object.keys(files).length > 0 && !selectedPath) {
-      const manifestPath = Object.keys(files).find(path => 
-        path.endsWith('manifest.json') || path.endsWith('manifest.yaml') || path.endsWith('manifest.yml')
+      const manifestPath = Object.keys(files).find(
+        (path) => path.endsWith("manifest.json") || path.endsWith("manifest.yaml") || path.endsWith("manifest.yml")
       );
       if (manifestPath) {
         setSelectedPath(manifestPath);
       } else {
         // Select first file
-        const firstFile = Object.keys(files).find(path => !path.endsWith('/'));
+        const firstFile = Object.keys(files).find((path) => !path.endsWith("/"));
         if (firstFile) {
           setSelectedPath(firstFile);
         }
@@ -353,7 +343,7 @@ export default function ModuleInstall() {
   useEffect(() => {
     if (Object.keys(files).length > 0) {
       setIsRunningChecks(true);
-      runChecks(files).then(results => {
+      runChecks(files).then((results) => {
         setCheckResults(results);
         setIsRunningChecks(false);
       });
@@ -398,7 +388,7 @@ export default function ModuleInstall() {
         Object.keys(zip.files).map(async (filename) => {
           const zipEntry = zip.files[filename];
           if (!zipEntry.dir) {
-            const content = await zipEntry.async('string');
+            const content = await zipEntry.async("string");
             extractedFiles[filename] = content;
           }
         })
@@ -406,62 +396,78 @@ export default function ModuleInstall() {
 
       setFiles(extractedFiles);
     } catch (error) {
-      console.error('Failed to extract zip:', error);
-      setInstallError('Failed to extract zip file. Please ensure it is a valid zip archive.');
+      console.error("Failed to extract zip:", error);
+      setInstallError("Failed to extract zip file. Please ensure it is a valid zip archive.");
     }
   }, []);
 
-  const handleFileUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) { return; }
-    await processZipFile(file);
-  }, [processZipFile]);
+  const handleFileUpload = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        return;
+      }
+      await processZipFile(file);
+    },
+    [processZipFile]
+  );
 
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useState({ current: 0 })[0];
 
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current += 1;
-    if (e.dataTransfer.types.includes("Files")) {
-      setIsDragging(true);
-    }
-  }, [dragCounter]);
+  const handleDragEnter = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current += 1;
+      if (e.dataTransfer.types.includes("Files")) {
+        setIsDragging(true);
+      }
+    },
+    [dragCounter]
+  );
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current -= 1;
-    if (dragCounter.current === 0) {
+  const handleDragLeave = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current -= 1;
+      if (dragCounter.current === 0) {
+        setIsDragging(false);
+      }
+    },
+    [dragCounter]
+  );
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current = 0;
       setIsDragging(false);
-    }
-  }, [dragCounter]);
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounter.current = 0;
-    setIsDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (!file) {
+        return;
+      }
 
-    const file = e.dataTransfer.files[0];
-    if (!file) { return; }
+      if (!file.name.endsWith(".zip")) {
+        setInstallError("Please drop a .zip file.");
+        return;
+      }
 
-    if (!file.name.endsWith('.zip')) {
-      setInstallError('Please drop a .zip file.');
-      return;
-    }
-
-    await processZipFile(file);
-  }, [processZipFile, dragCounter]);
+      await processZipFile(file);
+    },
+    [processZipFile, dragCounter]
+  );
 
   const handleFileChange = useCallback((path: string, content: string) => {
-    setFiles(prev => ({
+    setFiles((prev) => ({
       ...prev,
       [path]: content,
     }));
@@ -469,7 +475,7 @@ export default function ModuleInstall() {
 
   const handleInstall = useCallback(async () => {
     if (!instance) {
-      setInstallError('No instance selected. Please select an instance first.');
+      setInstallError("No instance selected. Please select an instance first.");
       return;
     }
 
@@ -483,40 +489,45 @@ export default function ModuleInstall() {
       for (const [path, content] of Object.entries(files)) {
         zip.file(path.slice(commonPrefix.length), content);
       }
-      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const zipBlob = await zip.generateAsync({ type: "blob" });
 
       // Upload zip to Convex storage
       const uploadUrl = await generateUploadUrl();
       const uploadResult = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/zip' },
+        method: "POST",
+        headers: { "Content-Type": "application/zip" },
         body: zipBlob,
       });
-      if (!uploadResult.ok) { throw new Error('Upload failed'); }
-      const { storageId } = await uploadResult.json() as { storageId: Id<'_storage'> };
+      if (!uploadResult.ok) {
+        throw new Error("Upload failed");
+      }
+      const { storageId } = (await uploadResult.json()) as { storageId: Id<"_storage"> };
 
       // Parse manifest from extracted files
       const manifestContent =
-        files['manifest.json'] ||
-        files[Object.keys(files).find((f) => f.endsWith('manifest.json')) ?? ''];
+        files["manifest.json"] || files[Object.keys(files).find((f) => f.endsWith("manifest.json")) ?? ""];
 
       let manifest: Record<string, unknown> = {};
       if (manifestContent) {
-        try { manifest = JSON.parse(manifestContent); } catch {}
+        try {
+          manifest = JSON.parse(manifestContent);
+        } catch {}
       }
 
-      const name = (manifest.name as string) || Object.keys(files)[0]?.split('/')[0] || 'Unknown Module';
-      const description = (manifest.description as string) || '';
-      const version = (manifest.version as string) || '1.0.0';
-      const tags: string[] = Array.isArray(manifest.tags) ? manifest.tags as string[] : [];
+      const name = (manifest.name as string) || Object.keys(files)[0]?.split("/")[0] || "Unknown Module";
+      const description = (manifest.description as string) || "";
+      const version = (manifest.version as string) || "1.0.0";
+      const tags: string[] = Array.isArray(manifest.tags) ? (manifest.tags as string[]) : [];
 
       // Generate deterministic moduleKey: id:version:hash
       // This key is passed to the engine and echoed back in the webhook,
       // then used as the correlationKey for the transient event subscription.
       const moduleId = (manifest.id as string) || toSnakeCase(name);
       const zipArrayBuffer = await zipBlob.arrayBuffer();
-      const hashBuffer = await crypto.subtle.digest('SHA-256', zipArrayBuffer);
-      const hashHex = Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+      const hashBuffer = await crypto.subtle.digest("SHA-256", zipArrayBuffer);
+      const hashHex = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
       const shortHash = hashHex.slice(0, 7);
       const moduleKey = `${moduleId}:${version}:${shortHash}`;
 
@@ -546,29 +557,23 @@ export default function ModuleInstall() {
       // Subscribe to transient events for this moduleKey
       setPendingModuleKey(moduleKey);
     } catch (error) {
-      console.error('Failed to install module:', error);
-      setInstallError(error instanceof Error ? error.message : 'Failed to install module. Please try again.');
+      console.error("Failed to install module:", error);
+      setInstallError(error instanceof Error ? error.message : "Failed to install module. Please try again.");
       setIsInstalling(false);
     }
   }, [files, instance, generateUploadUrl, uploadAndDeliver]);
 
-  const allChecksPassed = checkResults.length > 0 && checkResults.every(r => r.status === 'pass');
+  const allChecksPassed = checkResults.length > 0 && checkResults.every((r) => r.status === "pass");
   const selectedContent = selectedPath ? files[selectedPath] : null;
-  const selectedLanguage = selectedPath ? getLanguageFromPath(selectedPath) : 'plaintext';
+  const selectedLanguage = selectedPath ? getLanguageFromPath(selectedPath) : "plaintext";
 
   if (Object.keys(files).length === 0) {
     return (
       <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
-        <PageHeader 
-          title="Install Module" 
-          description="Upload a module zip file to install it."
-        />
-        
+        <PageHeader title="Install Module" description="Upload a module zip file to install it." />
+
         <Card
-          className={cn(
-            "mt-8 transition-colors",
-            isDragging && "border-primary border-2 bg-primary/5",
-          )}
+          className={cn("mt-8 transition-colors", isDragging && "border-primary border-2 bg-primary/5")}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
@@ -577,19 +582,12 @@ export default function ModuleInstall() {
           <CardContent className="pt-12 pb-12">
             <div className="flex flex-col items-center justify-center">
               <Upload className={cn("h-16 w-16 mb-4", isDragging ? "text-primary" : "text-muted-foreground")} />
-              <h3 className="text-lg font-semibold mb-2">
-                {isDragging ? "Drop to upload" : "Upload Module Zip"}
-              </h3>
+              <h3 className="text-lg font-semibold mb-2">{isDragging ? "Drop to upload" : "Upload Module Zip"}</h3>
               <p className="text-sm text-muted-foreground mb-6 text-center max-w-md">
                 Drag and drop a zip file here, or click the button below to browse.
               </p>
               <label>
-                <input
-                  type="file"
-                  accept=".zip"
-                  onChange={handleFileUpload}
-                  className="hidden"
-                />
+                <input type="file" accept=".zip" onChange={handleFileUpload} className="hidden" />
                 <Button asChild>
                   <span>
                     <Upload className="h-4 w-4 mr-2" />
@@ -608,10 +606,7 @@ export default function ModuleInstall() {
     <div className="flex flex-col h-full overflow-hidden">
       <div className="border-b bg-background shrink-0">
         <div className="p-6 max-w-[1600px] mx-auto">
-          <PageHeader 
-            title="Install Module" 
-            description="Review and edit module files before installation."
-          />
+          <PageHeader title="Install Module" description="Review and edit module files before installation." />
         </div>
       </div>
 
@@ -622,11 +617,7 @@ export default function ModuleInstall() {
             <h3 className="text-sm font-semibold">Files</h3>
           </div>
           <div className="flex-1 overflow-hidden">
-            <FileExplorer
-              files={fileTree}
-              selectedPath={selectedPath}
-              onSelect={setSelectedPath}
-            />
+            <FileExplorer files={fileTree} selectedPath={selectedPath} onSelect={setSelectedPath} />
           </div>
         </div>
 
@@ -646,11 +637,11 @@ export default function ModuleInstall() {
                   language={selectedLanguage}
                   value={selectedContent}
                   onChange={(value) => value && handleFileChange(selectedPath, value)}
-                  theme={theme === 'dark' ? 'vs-dark' : 'vs'}
+                  theme={theme === "dark" ? "vs-dark" : "vs"}
                   options={{
                     minimap: { enabled: false },
                     fontSize: 14,
-                    wordWrap: 'on',
+                    wordWrap: "on",
                     automaticLayout: true,
                   }}
                 />
@@ -684,27 +675,19 @@ export default function ModuleInstall() {
                     <div
                       key={result.id}
                       className={cn(
-                        'p-3 rounded-md border text-sm',
-                        result.status === 'pass' && 'bg-green-500/10 border-green-500/20',
-                        result.status === 'fail' && 'bg-red-500/10 border-red-500/20',
-                        result.status === 'warning' && 'bg-yellow-500/10 border-yellow-500/20'
+                        "p-3 rounded-md border text-sm",
+                        result.status === "pass" && "bg-green-500/10 border-green-500/20",
+                        result.status === "fail" && "bg-red-500/10 border-red-500/20",
+                        result.status === "warning" && "bg-yellow-500/10 border-yellow-500/20"
                       )}
                     >
                       <div className="flex items-center gap-2 mb-1">
-                        {result.status === 'pass' && (
-                          <CheckCircle2 className="h-4 w-4 text-green-500" />
-                        )}
-                        {result.status === 'fail' && (
-                          <XCircle className="h-4 w-4 text-red-500" />
-                        )}
-                        {result.status === 'warning' && (
-                          <AlertCircle className="h-4 w-4 text-yellow-500" />
-                        )}
+                        {result.status === "pass" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                        {result.status === "fail" && <XCircle className="h-4 w-4 text-red-500" />}
+                        {result.status === "warning" && <AlertCircle className="h-4 w-4 text-yellow-500" />}
                         <span className="font-medium">{result.name}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {result.message}
-                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">{result.message}</p>
                     </div>
                   ))}
                 </div>
@@ -722,11 +705,7 @@ export default function ModuleInstall() {
               </div>
             ) : (
               <>
-                <Button
-                  className="w-full"
-                  onClick={handleInstall}
-                  disabled={!allChecksPassed || isInstalling}
-                >
+                <Button className="w-full" onClick={handleInstall} disabled={!allChecksPassed || isInstalling}>
                   {isInstalling ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -771,9 +750,7 @@ export default function ModuleInstall() {
           <DialogHeader>
             <DialogTitle>Install Failed</DialogTitle>
           </DialogHeader>
-          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">
-            {installError}
-          </pre>
+          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{installError}</pre>
         </DialogContent>
       </Dialog>
     </div>

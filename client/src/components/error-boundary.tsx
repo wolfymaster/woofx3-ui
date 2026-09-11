@@ -1,4 +1,4 @@
-import { Component, ReactNode } from "react";
+import { Component, type ReactNode } from "react";
 import { ErrorFallback } from "./error-fallback";
 
 interface ErrorBoundaryProps {
@@ -24,10 +24,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     return { hasError: true, error };
   }
 
-  static getDerivedStateFromProps(
-    props: ErrorBoundaryProps,
-    state: ErrorBoundaryState & { prevResetKey?: string },
-  ) {
+  static getDerivedStateFromProps(props: ErrorBoundaryProps, state: ErrorBoundaryState & { prevResetKey?: string }) {
     if (props.resetKey !== undefined && props.resetKey !== state.prevResetKey) {
       return { hasError: false, error: undefined, prevResetKey: props.resetKey };
     }
@@ -50,12 +47,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       if (this.props.fallback) {
         return this.props.fallback;
       }
-      return (
-        <ErrorFallback
-          onReset={this.handleReset}
-          message={this.state.error?.message}
-        />
-      );
+      return <ErrorFallback onReset={this.handleReset} message={this.state.error?.message} />;
     }
 
     return this.props.children;

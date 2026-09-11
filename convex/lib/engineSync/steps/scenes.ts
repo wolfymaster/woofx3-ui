@@ -28,7 +28,6 @@ export const scenesStep: SyncStep = {
       // so we must open a fresh session per page.
       const api = newApi();
       const res = (await api.getScenes({
-        accountId: applicationId,
         page,
         pageSize: ENGINE_SYNC_CONFIG.pageSize,
       })) as ScPage;

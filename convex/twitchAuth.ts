@@ -84,9 +84,7 @@ export const deleteOrphanedAuthAccount = internalMutation({
   handler: async (ctx, { providerAccountId }) => {
     const account = await ctx.db
       .query("authAccounts")
-      .withIndex("providerAndAccountId", (q) =>
-        q.eq("provider", "twitch").eq("providerAccountId", providerAccountId),
-      )
+      .withIndex("providerAndAccountId", (q) => q.eq("provider", "twitch").eq("providerAccountId", providerAccountId))
       .unique();
 
     if (!account) {
@@ -117,4 +115,3 @@ export const deletePendingAuth = internalMutation({
     }
   },
 });
-

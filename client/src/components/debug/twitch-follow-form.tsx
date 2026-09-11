@@ -2,7 +2,7 @@ import { useState } from "react";
 import { TriggerCard } from "@/components/debug/trigger-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFireTrigger } from "@/hooks/use-fire-trigger";
+import { useSimulateTwitchEvent } from "@/hooks/use-simulate-twitch-event";
 import { TWITCH_EVENT_SUBJECTS, type TwitchFollowPayload } from "@/lib/debug/twitch-events";
 
 const DEFAULTS: TwitchFollowPayload = {
@@ -10,7 +10,7 @@ const DEFAULTS: TwitchFollowPayload = {
 };
 
 export function TwitchFollowForm() {
-  const fire = useFireTrigger();
+  const fire = useSimulateTwitchEvent();
   const [payload, setPayload] = useState<TwitchFollowPayload>(DEFAULTS);
 
   return (

@@ -23,6 +23,7 @@ export const groupsStep: SyncStep = {
         engineGroupId: g.id,
         name: g.name,
         description: g.description,
+        isBuiltIn: g.isBuiltIn,
         engineCreatedAt: g.createdAt,
         members: members ?? [],
       });

@@ -77,6 +77,7 @@ export const upsertFromWebhook = internalMutation({
     engineGroupId: v.string(),
     name: v.string(),
     description: v.string(),
+    isBuiltIn: v.optional(v.boolean()),
     engineCreatedAt: v.string(),
   },
   handler: async (ctx, args) => {
@@ -91,6 +92,7 @@ export const upsertFromWebhook = internalMutation({
       applicationId: args.applicationId,
       name: args.name,
       description: args.description,
+      isBuiltIn: args.isBuiltIn ?? false,
       engineCreatedAt: args.engineCreatedAt,
       updatedAt: Date.now(),
     };

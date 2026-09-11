@@ -3,6 +3,7 @@ import { TwitchCheerForm } from "@/components/debug/twitch-cheer-form";
 import { TwitchFollowForm } from "@/components/debug/twitch-follow-form";
 import { TwitchSubscribeForm } from "@/components/debug/twitch-subscribe-form";
 import { TwitchSubscriptionGiftForm } from "@/components/debug/twitch-subscription-gift-form";
+import { TWITCH_EVENT_SUBJECTS } from "@/lib/debug/twitch-events";
 
 export interface TriggerEntry {
   // Stable key for React lists. Use the canonical event subject.
@@ -24,10 +25,10 @@ export const TRIGGER_GROUPS: TriggerGroup[] = [
     heading: "Twitch",
     key: "twitch",
     entries: [
-      { key: "follow.user.twitch", Form: TwitchFollowForm },
-      { key: "subscribe.user.twitch", Form: TwitchSubscribeForm },
-      { key: "subscription.gift.twitch", Form: TwitchSubscriptionGiftForm },
-      { key: "cheer.user.twitch", Form: TwitchCheerForm },
+      { key: TWITCH_EVENT_SUBJECTS.follow, Form: TwitchFollowForm },
+      { key: TWITCH_EVENT_SUBJECTS.subscribe, Form: TwitchSubscribeForm },
+      { key: TWITCH_EVENT_SUBJECTS.subscriptionGift, Form: TwitchSubscriptionGiftForm },
+      { key: TWITCH_EVENT_SUBJECTS.cheer, Form: TwitchCheerForm },
     ],
   },
 ];

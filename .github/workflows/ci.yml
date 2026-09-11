@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [master, release]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch/PR supersedes an in-flight run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUN_VERSION: "1.3.14"
+  # The engine's shared type package (`@woofx3/api`) is consumed from a sibling
+  # checkout, so CI clones wolfymaster/woofx3 next to this repo. See below.
+  ENGINE_REPOSITORY: wolfymaster/woofx3
+  ENGINE_REF: master
+  ENGINE_API_DIR: woofx3/shared/clients/typescript/api
+
+jobs:
+  verify:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+    steps:
+      # Both repos are checked out as siblings inside the workspace so that the
+      # `@woofx3/api` path alias (`../woofx3/shared/clients/typescript/api`)
+      # resolves exactly as it does on a developer machine.
+      - name: Checkout woofx3-ui
+        uses: actions/checkout@v7
+        with:
+          path: woofx3-ui
+
+      - name: Checkout woofx3 engine (shared types only)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.ENGINE_REPOSITORY }}
+          ref: ${{ env.ENGINE_REF }}
+          path: woofx3
+          # cloudevents: tests pin UI event names against the engine's enum.
+          sparse-checkout: |
+            shared/clients/typescript/api
+            shared/common/typescript/cloudevents
+          sparse-checkout-cone-mode: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-${{ hashFiles('woofx3-ui/bun.lockb', '**/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
+
+      - name: Install dependencies
+        working-directory: woofx3-ui
+        run: bun install --frozen-lockfile
+
+      - name: Install engine shared-types dependencies
+        working-directory: ${{ env.ENGINE_API_DIR }}
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck client
+        working-directory: woofx3-ui
+        run: bun run check
+
+      - name: Typecheck Convex
+        if: ${{ !cancelled() }}
+        working-directory: woofx3-ui
+        run: bun run check:convex
+
+      - name: Run tests
+        if: ${{ !cancelled() }}
+        working-directory: woofx3-ui
+        run: bun test
+
+      - name: Build
+        if: ${{ !cancelled() }}
+        working-directory: woofx3-ui
+        run: bun run build
+
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-${{ hashFiles('bun.lockb') }}
+          restore-keys: |
+            bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
+
+      # No engine checkout here, so skip the postinstall that links ../woofx3;
+      # Biome does not need it.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      # Repo-wide and blocking. Run `bun run lint:fix` locally to auto-fix.
+      - name: Biome check
+        run: bunx biome ci . --reporter=github
+
+  docs:
+    name: Docs build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-docs-${{ hashFiles('docs/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: bun install --frozen-lockfile
+
+      - name: Build docs
+        working-directory: docs
+        run: bun run docs:build

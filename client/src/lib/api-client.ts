@@ -1,7 +1,7 @@
-import type { ApiError, PaginatedResponse } from '@/types';
+import type { ApiError, PaginatedResponse } from "@/types";
 
 export interface RequestConfig {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   headers?: Record<string, string>;
   params?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
@@ -41,11 +41,11 @@ class ApiClient {
   }
 
   async request<T>(endpoint: string, config: RequestConfig = {}): Promise<T> {
-    const { method = 'GET', headers = {}, params, body, signal } = config;
+    const { method = "GET", headers = {}, params, body, signal } = config;
 
     const url = this.buildUrl(endpoint, params);
     const requestHeaders = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       ...this.defaultHeaders,
       ...headers,
     };
@@ -64,8 +64,8 @@ class ApiClient {
         }
 
         const errorData = await response.json().catch(() => ({
-          code: 'UNKNOWN_ERROR',
-          message: 'An unexpected error occurred',
+          code: "UNKNOWN_ERROR",
+          message: "An unexpected error occurred",
         }));
 
         const apiError: ApiError = {
@@ -84,54 +84,66 @@ class ApiClient {
 
       return response.json();
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (error instanceof Error && error.name === "AbortError") {
         throw error;
       }
       if ((error as ApiError).code) {
         throw error;
       }
       const apiError: ApiError = {
-        code: 'NETWORK_ERROR',
-        message: 'Failed to connect to the server',
+        code: "NETWORK_ERROR",
+        message: "Failed to connect to the server",
       };
       this.onError?.(apiError);
       throw apiError;
     }
   }
 
-  get<T>(endpoint: string, params?: Record<string, string | number | boolean | undefined>, signal?: AbortSignal): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET', params, signal });
+  get<T>(
+    endpoint: string,
+    params?: Record<string, string | number | boolean | undefined>,
+    signal?: AbortSignal
+  ): Promise<T> {
+    return this.request<T>(endpoint, { method: "GET", params, signal });
   }
 
-  post<T>(endpoint: string, body?: unknown, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
-    return this.request<T>(endpoint, { method: 'POST', body, params });
+  post<T>(
+    endpoint: string,
+    body?: unknown,
+    params?: Record<string, string | number | boolean | undefined>
+  ): Promise<T> {
+    return this.request<T>(endpoint, { method: "POST", body, params });
   }
 
   put<T>(endpoint: string, body?: unknown): Promise<T> {
-    return this.request<T>(endpoint, { method: 'PUT', body });
+    return this.request<T>(endpoint, { method: "PUT", body });
   }
 
   patch<T>(endpoint: string, body?: unknown): Promise<T> {
-    return this.request<T>(endpoint, { method: 'PATCH', body });
+    return this.request<T>(endpoint, { method: "PATCH", body });
   }
 
   delete<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'DELETE' });
+    return this.request<T>(endpoint, { method: "DELETE" });
   }
 }
 
 export const apiClient = new ApiClient({
-  baseUrl: '/api',
+  baseUrl: "/api",
   onError: (error) => {
-    console.error('API Error:', error);
+    console.error("API Error:", error);
   },
   onUnauthorized: () => {
-    console.warn('Unauthorized - redirecting to login');
+    console.warn("Unauthorized - redirecting to login");
   },
 });
 
 export function createPaginatedFetcher<T>(endpoint: string) {
-  return async (page: number = 1, pageSize: number = 20, filters?: Record<string, string | number | boolean | undefined>): Promise<PaginatedResponse<T>> => {
+  return async (
+    page: number = 1,
+    pageSize: number = 20,
+    filters?: Record<string, string | number | boolean | undefined>
+  ): Promise<PaginatedResponse<T>> => {
     return apiClient.get<PaginatedResponse<T>>(endpoint, { page, pageSize, ...filters });
   };
 }
