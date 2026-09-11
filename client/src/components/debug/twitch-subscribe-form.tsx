@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useFireTrigger } from "@/hooks/use-fire-trigger";
+import { useSimulateTwitchEvent } from "@/hooks/use-simulate-twitch-event";
 import { TWITCH_EVENT_SUBJECTS, type TwitchSubscribePayload } from "@/lib/debug/twitch-events";
 
 const DEFAULTS: TwitchSubscribePayload = {
@@ -15,7 +15,7 @@ const DEFAULTS: TwitchSubscribePayload = {
 };
 
 export function TwitchSubscribeForm() {
-  const fire = useFireTrigger();
+  const fire = useSimulateTwitchEvent();
   const [payload, setPayload] = useState<TwitchSubscribePayload>(DEFAULTS);
 
   return (

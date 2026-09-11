@@ -38,7 +38,10 @@ jobs:
           repository: ${{ env.ENGINE_REPOSITORY }}
           ref: ${{ env.ENGINE_REF }}
           path: woofx3
-          sparse-checkout: shared/clients/typescript/api
+          # cloudevents: tests pin UI event names against the engine's enum.
+          sparse-checkout: |
+            shared/clients/typescript/api
+            shared/common/typescript/cloudevents
           sparse-checkout-cone-mode: true
 
       - uses: oven-sh/setup-bun@v2

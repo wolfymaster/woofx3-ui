@@ -3,7 +3,7 @@ import { TriggerCard } from "@/components/debug/trigger-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useFireTrigger } from "@/hooks/use-fire-trigger";
+import { useSimulateTwitchEvent } from "@/hooks/use-simulate-twitch-event";
 import { TWITCH_EVENT_SUBJECTS, type TwitchCheerPayload } from "@/lib/debug/twitch-events";
 
 interface FormState {
@@ -33,7 +33,7 @@ function toPayload(state: FormState): TwitchCheerPayload {
 }
 
 export function TwitchCheerForm() {
-  const fire = useFireTrigger();
+  const fire = useSimulateTwitchEvent();
   const [state, setState] = useState<FormState>(DEFAULTS);
 
   return (

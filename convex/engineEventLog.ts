@@ -117,9 +117,8 @@ export const list = query({
 });
 
 /**
- * Re-fire a logged event's (eventType, payload) at the engine via the same
- * triggerEvent RPC the Debug page's manual "Fire" buttons already use (see
- * debug.ts::fireTrigger) — there is no engine-side "replay this exact
+ * Re-fire a logged event's (eventType, payload) at the engine via the generic
+ * triggerEvent RPC (see debug.ts::fireTrigger) — there is no engine-side "replay this exact
  * webhook" primitive for non-alert event types, so this is the only generic
  * mechanism available.
  */
