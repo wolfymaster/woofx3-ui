@@ -4,6 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { bareModuleKey, loadModuleIdsByBareKey } from "./lib/moduleKey";
+import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { canAccessAccount } from "./lib/teamAccess";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
@@ -340,8 +341,11 @@ export const reconcileScenes = internalMutation({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
     for (const row of local) {
-      if (row.engineSceneId && !liveIds.has(row.engineSceneId)) {
-        await ctx.db.delete(row._id);
+      // A row without an engineSceneId has no counterpart to match against and
+      // would otherwise survive every sweep forever, stuck "Syncing" in the UI.
+      const orphaned = !row.engineSceneId || !liveIds.has(row.engineSceneId);
+      if (orphaned) {
+        await deleteSceneAndChildren(ctx, row._id);
       }
     }
 

@@ -1,7 +1,9 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, type QueryCtx, query } from "./_generated/server";
+import { deleteSceneAndChildren, purgeSceneChildren } from "./lib/sceneCascade";
 import { parseSceneLayout, parseSceneWidgets } from "./lib/sceneSerialization";
 
 // Scenes are engine-authoritative. The engine is the source of truth; this table
@@ -189,7 +191,19 @@ export const deleteFromWebhook = internalMutation({
       .first();
 
     if (scene) {
-      await ctx.db.delete(scene._id);
+      await deleteSceneAndChildren(ctx, scene._id);
+    }
+  },
+});
+
+// Continuation of a cascade that exceeded its per-transaction budget. Reschedules
+// itself until every child row of the (already deleted) scene is gone.
+export const cascadeSceneChildren = internalMutation({
+  args: { sceneId: v.id("scenes") },
+  handler: async (ctx, args) => {
+    const { done } = await purgeSceneChildren(ctx, args.sceneId);
+    if (!done) {
+      await ctx.scheduler.runAfter(0, internal.scenes.cascadeSceneChildren, { sceneId: args.sceneId });
     }
   },
 });

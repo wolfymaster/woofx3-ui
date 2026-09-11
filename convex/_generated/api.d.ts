@@ -51,6 +51,7 @@ import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widg
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
 import type * as lib_pkce from "../lib/pkce.js";
+import type * as lib_sceneCascade from "../lib/sceneCascade.js";
 import type * as lib_sceneOverlayUrl from "../lib/sceneOverlayUrl.js";
 import type * as lib_sceneSerialization from "../lib/sceneSerialization.js";
 import type * as lib_spotifyIntegrationScopes from "../lib/spotifyIntegrationScopes.js";
@@ -152,6 +153,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/moduleKey": typeof lib_moduleKey;
   "lib/pkce": typeof lib_pkce;
+  "lib/sceneCascade": typeof lib_sceneCascade;
   "lib/sceneOverlayUrl": typeof lib_sceneOverlayUrl;
   "lib/sceneSerialization": typeof lib_sceneSerialization;
   "lib/spotifyIntegrationScopes": typeof lib_spotifyIntegrationScopes;
