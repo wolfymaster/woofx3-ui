@@ -36,11 +36,10 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
 }
 
 /**
- * Hand-fire an event into the engine's NATS bus on a caller-supplied subject.
- * Used by the /debug page to simulate Twitch (and future) triggers without
- * needing real platform traffic. Caller is responsible for using a canonical
- * subject string — this is intentional, see docs/superpowers/specs/
- * 2026-05-02-debug-triggers-design.md.
+ * Publish an event onto the engine's NATS bus on a caller-supplied subject,
+ * with no `platform` attribute. Used to replay logged engine events
+ * (engineEventLog.retrigger), which are not all platform events. Caller is
+ * responsible for using a canonical subject string.
  */
 export const fireTrigger = action({
   args: {
@@ -52,5 +51,24 @@ export const fireTrigger = action({
     const bundle = await requireInstanceContext(ctx, instanceId);
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     return rpc.triggerEvent(eventType, eventData as Record<string, unknown>);
+  },
+});
+
+/**
+ * Inject a synthetic Twitch event. The engine stamps `platform: "twitch"`, so
+ * the simulated event is identical to a real one and satisfies
+ * `${trigger.platform}` filters that a `fireTrigger` event would not. Used by
+ * the /debug page trigger forms.
+ */
+export const simulateTwitchEvent = action({
+  args: {
+    instanceId: v.id("instances"),
+    eventType: v.string(),
+    eventData: v.any(),
+  },
+  handler: async (ctx, { instanceId, eventType, eventData }): Promise<{ success: boolean; message: string }> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return rpc.simulateTwitchEvent(eventType, eventData as Record<string, unknown>);
   },
 });
