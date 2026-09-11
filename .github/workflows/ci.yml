@@ -101,8 +101,10 @@ jobs:
           restore-keys: |
             bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
 
+      # No engine checkout here, so skip the postinstall that links ../woofx3;
+      # Biome does not need it.
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: bun install --frozen-lockfile --ignore-scripts
 
       # Repo-wide and blocking. Run `bun run lint:fix` locally to auto-fix.
       - name: Biome check
