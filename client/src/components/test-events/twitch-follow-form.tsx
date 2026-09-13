@@ -1,25 +1,18 @@
 import { useState } from "react";
-import { TriggerCard } from "@/components/debug/trigger-card";
+import { TestEventForm, type TestEventProps } from "@/components/test-events/test-event-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useSimulateTwitchEvent } from "@/hooks/use-simulate-twitch-event";
-import { TWITCH_EVENT_SUBJECTS, type TwitchFollowPayload } from "@/lib/debug/twitch-events";
+import type { TwitchFollowPayload } from "@/lib/debug/twitch-events";
 
 const DEFAULTS: TwitchFollowPayload = {
   userName: "test_follower",
 };
 
-export function TwitchFollowForm() {
-  const fire = useSimulateTwitchEvent();
+export function TwitchFollowForm({ preset }: TestEventProps) {
   const [payload, setPayload] = useState<TwitchFollowPayload>(DEFAULTS);
 
   return (
-    <TriggerCard
-      title="Follow"
-      description="Simulate a new channel follow."
-      eventSubject={TWITCH_EVENT_SUBJECTS.follow}
-      onFire={() => fire(TWITCH_EVENT_SUBJECTS.follow, payload as unknown as Record<string, unknown>)}
-    >
+    <TestEventForm preset={preset} payload={payload}>
       <div className="space-y-2">
         <Label htmlFor="follow-userName">User name</Label>
         <Input
@@ -29,6 +22,6 @@ export function TwitchFollowForm() {
           data-testid="input-follow-userName"
         />
       </div>
-    </TriggerCard>
+    </TestEventForm>
   );
 }

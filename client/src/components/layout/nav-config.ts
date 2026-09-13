@@ -1,6 +1,5 @@
 import {
   Bell,
-  Bug,
   CircleHelp,
   FolderOpen,
   GraduationCap,
@@ -48,7 +47,6 @@ export const STREAM_ITEMS: NavItem[] = [
 
 export const HELP_ITEMS: NavItem[] = [
   { id: "learning", label: "Learning", icon: GraduationCap, href: "/help/learning" },
-  { id: "debug", label: "Debug", icon: Bug, href: "/help/debug" },
   { id: "logs", label: "Logs", icon: ScrollText, href: "/help/logs" },
   { id: "feedback", label: "Submit Feedback", icon: MessageSquarePlus, href: "/help/feedback" },
 ];

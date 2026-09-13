@@ -1,11 +1,12 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
-import { ExternalLink, Loader2, Plus } from "lucide-react";
+import { ExternalLink, Loader2, Plus, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { TriggerCard } from "@/components/triggers/trigger-card";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
@@ -32,6 +33,8 @@ interface EventWorkflowEditorProps {
   actionPresets: ActionPreset[];
   /** Every workflow on this instance; the ones for this event are found here. */
   workflows: Doc<"workflows">[];
+  /** Opens the test sheet on this event; no lightning icon when omitted. */
+  onTest?: () => void;
 }
 
 interface EditorState {
@@ -51,7 +54,7 @@ interface EditorState {
  * uses. Two cheer triggers at different thresholds are two condition tasks in one
  * workflow, which is what makes them shareable and keeps the builder's view honest.
  */
-export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }: EventWorkflowEditorProps) {
+export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows, onTest }: EventWorkflowEditorProps) {
   const event = triggerPreset.event ?? "";
   const [, navigate] = useLocation();
   const { instance } = useInstance();
@@ -251,7 +254,26 @@ export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }:
     <section className="space-y-3" data-testid={`event-editor-${event}`}>
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h2 className="text-sm font-medium">{triggerPreset.name}</h2>
+          <div className="flex items-center gap-1">
+            <h2 className="text-sm font-medium">{triggerPreset.name}</h2>
+            {onTest && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                    onClick={onTest}
+                    aria-label={`Test ${triggerPreset.name}`}
+                    data-testid={`test-event-${event}`}
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Fire a test event</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground truncate">{triggerPreset.description}</p>
         </div>
         <Button variant="outline" size="sm" onClick={addTrigger} data-testid={`add-trigger-${event}`}>

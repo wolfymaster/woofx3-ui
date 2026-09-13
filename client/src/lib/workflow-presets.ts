@@ -48,6 +48,8 @@ export interface TriggerPreset {
    */
   taxonomy?: string[];
   config?: TriggerConfig;
+  /** What `trigger.data` carries when this fires; seeds the Alerts test sheet's payload. */
+  emits?: DataShapeField[];
 }
 
 export interface ActionPreset {

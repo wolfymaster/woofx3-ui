@@ -10,8 +10,8 @@
 //
 // We mirror rather than import because @woofx3/api does not re-export the
 // cloudevents subpath today; the `@woofx3/cloudevents` alias the test uses is
-// not wired into Vite, which is a larger surface change than this debug page
-// warrants.
+// not wired into Vite, which is a larger surface change than these test forms
+// warrant.
 
 export const TWITCH_EVENT_SUBJECTS = {
   follow: "channel.follow",
