@@ -8,7 +8,7 @@ Convex is the **multi-tenant control plane**: auth, accounts, instances, assets,
 |------|----------------------|
 | Identity & tenants | `auth.ts`, `users.ts`, `accounts.ts`, `instances.ts` |
 | Workflows (UI + sync) | `workflows.ts`, `workflowCatalog.ts`, `workflowCatalogContext.ts`, `workflowTemplates.ts`, `seeds/triggerActions.ts` |
-| Modules | `moduleRepository.ts`, `moduleEngine.ts`, `moduleWebhook.ts`, `moduleWidgets.ts`, `triggerDefinitions.ts`, `actionDefinitions.ts` |
+| Modules | `moduleRepository.ts`, `moduleEngine.ts`, `moduleWebhook.ts`, `moduleWidgets.ts`, `triggerDefinitions.ts`, `actionDefinitions.ts`, `inboundWebhooks.ts` (third-party webhook endpoints) |
 | Async realtime bus | `transientEvents.ts` — ephemeral per-instance `{correlationKey → progress/success/error}` entries used by the UI to observe async engine round-trips; TTL-cleaned by a scheduled mutation |
 | Media | `assets.ts`, `folders.ts`, `lib/storage/*` |
 | Scenes & overlays | `scenes.ts`, `sceneSlots.ts`, `browserSource.ts`, `alertDescriptors.ts`, `obsCommands.ts` |
@@ -31,6 +31,7 @@ Besides auth and Twitch OAuth, the HTTP router wires **public or special-purpose
   - `module.delete_failed` → emits a `module.uninstall` error transient event carrying the engine's conflict list.
   - `module.trigger.registered`, `module.action.registered` → `moduleWebhook.processRegisteredDefinitions` (upsert trigger / action definitions without requiring a `moduleKey`).
   - Every branch correlates to the originating UI operation via `data.moduleKey` (echoed back by the engine). Unknown event types return `{ success: true, handled: false }`.
+- `POST` or `GET /api/webhooks/<endpointId>` — **third-party ingress** for module webhook triggers, distinct from the engine callback above. It carries no credential: the endpoint id is the capability. Convex looks the endpoint up (`inboundWebhooks.getByEndpointId`; 404 when unknown or disabled), caps the body at 256 KiB (413), and forwards the request to the engine's `handleInboundWebhook` RPC, waiting up to 10 s. The engine runs the module's handler, publishes the events it returns, and answers; Convex relays that answer as-is (502 when malformed, 503 when the engine is unreachable, 504 when it is too slow). Endpoints are provisioned from `module.trigger.registered`, disabled (never deleted) on `module.trigger.deregistered` so an upgrade, reinstall or rollback keeps the URL, and deleted only with the module.
 - Browser source `claim` / poll paths, OBS command polling, and widget asset serving.
 
 Paths evolve — read `http.ts` and the imported route modules when integrating.

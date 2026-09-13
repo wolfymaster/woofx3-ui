@@ -3,12 +3,15 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
+import { disableEndpoint, provisionEndpoint, removeEndpointsForModule } from "./inboundWebhooks";
 import {
   pruneActionDefinitions,
   pruneTriggerDefinitions,
   pruneWidgetDefinitions,
   uniqueIds,
 } from "./lib/definitionCatalog";
+import { bareModuleKey } from "./lib/moduleKey";
+import { webhookEndpointKey } from "./lib/webhookEndpointKey";
 
 // Provenance from the engine: createdByRef == the module's composite moduleKey
 // (or "builtin" for SYSTEM resources). Drives cascade-on-delete; replaces moduleId.
@@ -112,7 +115,11 @@ const triggerValidator = v.object({
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
   projectionKey: v.optional(v.string()),
+  // Deregistration payloads always carry it; without it every
+  // module.trigger.deregistered callback fails validation.
+  canonicalId: v.optional(v.string()),
   taxonomy: v.optional(v.array(v.string())),
+  transport: v.optional(v.string()),
 });
 
 const actionValidator = v.object({
@@ -126,6 +133,7 @@ const actionValidator = v.object({
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
   projectionKey: v.optional(v.string()),
+  canonicalId: v.optional(v.string()),
   taxonomy: v.optional(v.array(v.string())),
 });
 
@@ -208,6 +216,7 @@ type EngineTrigger = {
   allowVariants?: boolean;
   projectionKey?: string;
   taxonomy?: string[];
+  transport?: string;
 };
 
 type EngineAction = {
@@ -237,6 +246,7 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
     allowVariants: t.allowVariants,
     projectionKey: t.projectionKey,
     taxonomy: t.taxonomy,
+    transport: t.transport,
     moduleId,
   };
 }
@@ -428,6 +438,12 @@ export const processDeregisteredDefinitions = internalMutation({
     // count itself.
     for (const trigger of triggers) {
       await disableTriggerForInstance(ctx, instanceId, trigger.id);
+      // Disabled, never deleted: a forced reinstall or rollback also
+      // deregisters, and deleting would hand the trigger a new URL.
+      const endpointKey = webhookEndpointKey(trigger);
+      if (endpointKey) {
+        await disableEndpoint(ctx, { instanceId, triggerKey: endpointKey.triggerKey });
+      }
     }
     await pruneTriggerDefinitions(ctx, uniqueIds(triggers.map((t) => t.id)));
 
@@ -476,6 +492,10 @@ export const processRegisteredDefinitions = internalMutation({
         createdByType: trigger.createdByType,
         createdByRef: trigger.createdByRef,
       });
+      const endpointKey = webhookEndpointKey(trigger);
+      if (endpointKey) {
+        await provisionEndpoint(ctx, { instanceId, ...endpointKey });
+      }
     }
 
     for (const action of actions) {
@@ -561,6 +581,13 @@ async function cascadeDeleteModuleRecord(
 ) {
   if (record.archiveKey) {
     await ctx.storage.delete(record.archiveKey as Id<"_storage">);
+  }
+
+  // The only place webhook endpoints are deleted: everywhere else they are
+  // disabled so the URL survives.
+  const modulePrefix = bareModuleKey(record.moduleKey);
+  if (modulePrefix) {
+    await removeEndpointsForModule(ctx, { instanceId, modulePrefix });
   }
 
   // Authoritative cleanup: walk the per-instance join rows by provenance.

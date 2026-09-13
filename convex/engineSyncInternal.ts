@@ -2,6 +2,7 @@ import { parseDataShape, parseFieldList } from "@woofx3/api/ui-schema";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
+import { reconcileEndpoints } from "./inboundWebhooks";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { bareModuleKey, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
@@ -409,6 +410,7 @@ export const reconcileTriggers = internalMutation({
         taxonomy: v.optional(v.array(v.string())),
         createdByType: v.optional(v.string()),
         createdByRef: v.optional(v.string()),
+        transport: v.optional(v.string()),
       })
     ),
   },
@@ -434,6 +436,7 @@ export const reconcileTriggers = internalMutation({
         allowVariants: snap.allowVariants,
         projectionKey: snap.projectionKey,
         taxonomy: snap.taxonomy,
+        transport: snap.transport,
         moduleId,
       };
       const existingDef = await ctx.db
@@ -470,6 +473,8 @@ export const reconcileTriggers = internalMutation({
 
       processed++;
     }
+
+    await reconcileEndpoints(ctx, instanceId, snapshots);
 
     // Delete instanceTriggers rows for this instance no longer in the engine snapshot.
     const liveInstRows = await ctx.db

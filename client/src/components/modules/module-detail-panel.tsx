@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
+import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -229,11 +230,16 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
                 workflows={workflows}
               />
             ) : topTab === "settings" ? (
-              <SettingsTab
-                instanceId={instanceId}
-                moduleId={module.identifier ?? ""}
-                manifestSettings={manifestSettings ?? []}
-              />
+              <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
+                {instanceId && module.identifier && (
+                  <ModuleWebhookEndpoints instanceId={instanceId} modulePrefix={module.identifier} />
+                )}
+                <SettingsTab
+                  instanceId={instanceId}
+                  moduleId={module.identifier ?? ""}
+                  manifestSettings={manifestSettings ?? []}
+                />
+              </div>
             ) : (
               <ManageResourcesTab
                 instanceId={instanceId}
@@ -665,6 +671,8 @@ interface SettingsTabProps {
 function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProps) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [loadedValues, setLoadedValues] = useState<Record<string, string> | null>(null);
+  // A secret's value never comes back from the engine, only whether one is stored.
+  const [secretIsSet, setSecretIsSet] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
@@ -684,11 +692,14 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     void getSettingsAction({ instanceId, moduleId })
       .then((settings) => {
         const map: Record<string, string> = {};
+        const secrets: Record<string, boolean> = {};
         for (const s of settings) {
           map[s.key] = s.value;
+          secrets[s.key] = s.isSet ?? s.value !== "";
         }
         setLoadedValues(map);
         setValues(map);
+        setSecretIsSet(secrets);
         setLoadState("loaded");
       })
       .catch((err) => {
@@ -725,7 +736,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     );
   }
 
-  async function handleSave(key: string) {
+  async function saveSetting(key: string, value: string, isSecret: boolean) {
     if (!instanceId) {
       return;
     }
@@ -733,7 +744,12 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     setSaveError(null);
     setSaveSuccess(null);
     try {
-      await updateSettingAction({ instanceId, moduleId, key, value: values[key] ?? "" });
+      await updateSettingAction({ instanceId, moduleId, key, value });
+      if (isSecret) {
+        setSecretIsSet((prev) => ({ ...prev, [key]: value !== "" }));
+        // The typed secret is not kept once the engine has it.
+        setValues((prev) => ({ ...prev, [key]: "" }));
+      }
       setSaveSuccess(key);
       setTimeout(() => setSaveSuccess(null), 2000);
     } catch (err) {
@@ -741,6 +757,13 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     } finally {
       setSaving(null);
     }
+  }
+
+  function clearSecret(key: string) {
+    if (!window.confirm("Clear this secret? The module loses it until a new value is saved.")) {
+      return;
+    }
+    void saveSetting(key, "", true);
   }
 
   return (
@@ -754,6 +777,21 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
         {manifestSettings.map((field) => {
           if (field.type === "button") {
             return <SettingButtonRow key={field.id} instanceId={instanceId} moduleId={moduleId} field={field} />;
+          }
+          if (field.type === "secret") {
+            return (
+              <SecretSettingRow
+                key={field.id}
+                field={field}
+                isSet={secretIsSet[field.id] ?? false}
+                value={values[field.id] ?? ""}
+                busy={saving === field.id}
+                saved={saveSuccess === field.id}
+                onChange={(value) => setValues((prev) => ({ ...prev, [field.id]: value }))}
+                onSave={() => void saveSetting(field.id, values[field.id] ?? "", true)}
+                onClear={() => clearSecret(field.id)}
+              />
+            );
           }
           const currentValue = values[field.id] ?? loadedValues?.[field.id] ?? field.default ?? "";
           const isDirty = currentValue !== (loadedValues?.[field.id] ?? field.default ?? "");
@@ -769,7 +807,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
                   variant={saveSuccess === field.id ? "secondary" : "outline"}
                   className="h-7 px-3 text-xs"
                   disabled={!isDirty || saving === field.id}
-                  onClick={() => void handleSave(field.id)}
+                  onClick={() => void saveSetting(field.id, values[field.id] ?? "", false)}
                 >
                   {saving === field.id ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -796,6 +834,72 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
         })}
       </div>
     </ScrollArea>
+  );
+}
+
+interface SecretSettingRowProps {
+  field: ManifestSettingField;
+  isSet: boolean;
+  value: string;
+  busy: boolean;
+  saved: boolean;
+  onChange: (value: string) => void;
+  onSave: () => void;
+  onClear: () => void;
+}
+
+/**
+ * A `secret` setting. The stored value never comes back from the engine, so
+ * the field always starts empty and shows only whether a value is set.
+ */
+function SecretSettingRow({ field, isSet, value, busy, saved, onChange, onSave, onClear }: SecretSettingRowProps) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor={`setting-${field.id}`} className="text-sm font-medium">
+          {field.name}
+          {field.required && !isSet && <span className="text-destructive ml-1">*</span>}
+        </Label>
+        <div className="flex items-center gap-2">
+          <Badge variant={isSet ? "secondary" : "outline"} className="text-xs">
+            {isSet ? "Set" : "Not set"}
+          </Badge>
+          {isSet && (
+            <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" disabled={busy} onClick={onClear}>
+              Clear
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={saved ? "secondary" : "outline"}
+            className="h-7 px-3 text-xs"
+            disabled={value === "" || busy}
+            onClick={onSave}
+          >
+            {busy ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : saved ? (
+              <>
+                <Check className="h-3 w-3 mr-1" />
+                Saved
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </div>
+      </div>
+      {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+      <Input
+        id={`setting-${field.id}`}
+        type="password"
+        autoComplete="new-password"
+        value={value}
+        placeholder={isSet ? "Stored. Type a new value to replace it." : "Not set"}
+        onChange={(e) => onChange(e.target.value)}
+        className="font-mono text-sm"
+      />
+    </div>
   );
 }
 
