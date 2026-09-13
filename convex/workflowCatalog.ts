@@ -6,6 +6,7 @@ import { action, internalMutation, type QueryCtx, query } from "./_generated/ser
 import { canonicalRefFromProjectionKey } from "./lib/canonicalRef";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { bareModuleKey } from "./lib/moduleKey";
+import { isWebhookTrigger } from "./lib/webhookEndpointKey";
 import type { CatalogBundle } from "./workflowCatalogContext";
 import { loadCatalogBundle } from "./workflowCatalogContext";
 
@@ -86,7 +87,8 @@ async function mergeCatalog(ctx: QueryCtx, bundle: CatalogBundle): Promise<Merge
   const triggers = [];
   for (const id of bundle.enabledTriggerIds) {
     const def = bundle.triggerDefs[id];
-    if (!def) {
+    // A webhook trigger is fired by its module's handler; nothing binds to it.
+    if (!def || isWebhookTrigger(def)) {
       continue;
     }
     triggers.push(catalogTriggerRow(def, id, def.moduleId ? moduleNames.get(def.moduleId) : undefined));

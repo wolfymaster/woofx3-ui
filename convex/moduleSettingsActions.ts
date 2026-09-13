@@ -11,8 +11,11 @@ export interface ModuleSettingValue {
   id: string;
   moduleId: string;
   key: string;
+  /** Always empty for a `secret` setting; its value never leaves the engine. */
   value: string;
   valueType: string;
+  /** Whether a value is stored — the only way to tell for a `secret` setting. */
+  isSet?: boolean;
 }
 
 export async function requireEngineInstance(

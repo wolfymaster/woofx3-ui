@@ -28,6 +28,7 @@ export const triggersStep: SyncStep = {
       taxonomy: t.taxonomy,
       createdByType: t.createdByType,
       createdByRef: t.createdByRef,
+      transport: t.transport,
     }));
     return await ctx.runMutation(internal.engineSyncInternal.reconcileTriggers, {
       instanceId,

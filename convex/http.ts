@@ -1,3 +1,4 @@
+import type { InboundWebhookResponse } from "@woofx3/api";
 import type { CallbackEnvelope, CallbackEvent } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
 import { httpRouter } from "convex/server";
@@ -7,6 +8,15 @@ import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
+import {
+  buildForwardedRequest,
+  EngineTimeoutError,
+  MAX_INBOUND_BODY_BYTES,
+  toHttpResponse,
+  withEngineTimeout,
+} from "./lib/inboundWebhookRelay";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
@@ -1238,5 +1248,74 @@ http.route({
     return buildBrowserSourceRedirect(sourceKey.overlayUrl);
   }),
 });
+
+/** How long the control plane waits for the engine to run a webhook handler. */
+const INBOUND_WEBHOOK_ENGINE_TIMEOUT_MS = 10_000;
+
+// Third-party webhooks: a POST, or a GET verification handshake, to
+// /api/webhooks/<endpointId>. The exact /api/webhooks/woofx3 routes above
+// still win: the router matches exact paths before prefixes.
+const inboundWebhookHandler = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  const path = parseInboundWebhookPath(url.pathname);
+  if (!path.ok) {
+    return new Response(null, { status: 404 });
+  }
+  const endpoint = await ctx.runQuery(internal.inboundWebhooks.getByEndpointId, { endpointId: path.endpointId });
+  if (!endpoint || !endpoint.isEnabled) {
+    return new Response(null, { status: 404 });
+  }
+
+  if (Number(request.headers.get("content-length") ?? "0") > MAX_INBOUND_BODY_BYTES) {
+    return new Response(null, { status: 413 });
+  }
+  const body = await request.arrayBuffer();
+  if (body.byteLength > MAX_INBOUND_BODY_BYTES) {
+    return new Response(null, { status: 413 });
+  }
+
+  // Bookkeeping must never change the answer a provider gets.
+  const recordDelivery = async (status: number, error?: string) => {
+    try {
+      await ctx.runMutation(internal.inboundWebhooks.recordDelivery, { endpointId: endpoint._id, status, error });
+    } catch (err) {
+      logger.warn("inbound webhook: failed to record delivery", {
+        endpointId: endpoint.endpointId,
+        error: String(err),
+      });
+    }
+  };
+
+  const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: endpoint.instanceId });
+  if (!instance?.url || !instance.clientId || !instance.clientSecret) {
+    await recordDelivery(503, "instance is not registered with an engine");
+    return new Response(null, { status: 503 });
+  }
+
+  const forwarded = buildForwardedRequest(request, url, body, crypto.randomUUID());
+  let engineResponse: InboundWebhookResponse;
+  try {
+    const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+    engineResponse = await withEngineTimeout(
+      rpc.handleInboundWebhook(endpoint.triggerKey, forwarded),
+      INBOUND_WEBHOOK_ENGINE_TIMEOUT_MS
+    );
+  } catch (err) {
+    const timedOut = err instanceof EngineTimeoutError;
+    const status = timedOut ? 504 : 503;
+    await recordDelivery(status, timedOut ? "engine did not answer in time" : "engine unreachable");
+    return new Response(null, { status });
+  }
+
+  const response = toHttpResponse(engineResponse);
+  await recordDelivery(
+    response.status,
+    response.status >= 500 ? `engine answered ${engineResponse.status}` : undefined
+  );
+  return response;
+});
+
+http.route({ pathPrefix: "/api/webhooks/", method: "POST", handler: inboundWebhookHandler });
+http.route({ pathPrefix: "/api/webhooks/", method: "GET", handler: inboundWebhookHandler });
 
 export default http;

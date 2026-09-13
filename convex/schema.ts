@@ -337,6 +337,9 @@ export default defineSchema({
     // which replaces its legacy single-value category. Groups catalog entries by
     // source without the UI hardcoding what the sources are.
     taxonomy: v.optional(v.array(v.string())),
+    // The manifest trigger `type`. "webhook" triggers are fired by inbound
+    // HTTP through their module's handler and never offered in the builder.
+    transport: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),
   })
     .index("by_slug", ["slug"])
@@ -940,4 +943,27 @@ export default defineSchema({
   })
     .index("by_instance_recent", ["instanceId", "startedAt"])
     .index("by_started_at", ["startedAt"]),
+
+  // webhookEndpoints: public third-party ingress, one per webhook trigger per
+  // instance. The row is the capability: its endpointId is the URL. It is
+  // disabled rather than deleted on deregistration, so an upgrade, reinstall
+  // or rollback never changes the URL. It holds no function name and no
+  // secret; the engine owns both.
+  webhookEndpoints: defineTable({
+    instanceId: v.id("instances"),
+    endpointId: v.string(),
+    // The webhook trigger's canonical id, {modulePrefix}:trigger:{triggerId}
+    // (the engine's projectionKey); what the engine resolves the handler by.
+    triggerKey: v.string(),
+    modulePrefix: v.string(),
+    triggerManifestId: v.string(),
+    isEnabled: v.boolean(),
+    lastDeliveryAt: v.optional(v.number()),
+    lastStatus: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_endpoint_id", ["endpointId"])
+    .index("by_instance_trigger", ["instanceId", "triggerKey"])
+    .index("by_instance_module", ["instanceId", "modulePrefix"]),
 });

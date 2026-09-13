@@ -14,6 +14,8 @@
 
 - Reads `api.moduleRepository.get` plus `api.triggerDefinitions.listByModule` and `api.actionDefinitions.listByModule` to show metadata and every trigger / action the module registered with the UI.
 - Offers the same uninstall entry point as the listing page.
+- For an installed module with webhook triggers, the **Settings** tab lists each trigger's public URL with its last delivery (`api.inboundWebhooks.listForInstanceModule`, rendered by `client/src/components/modules/module-webhook-endpoints.tsx`).
+- Settings declared `type: "secret"` render as write-only password fields: the engine never returns a secret's value, only whether one is set.
 
 ## Custom upload (`/modules/install`)
 
