@@ -13,9 +13,10 @@ import type { SyncStep, SyncStepContext } from "../steps";
  *
  * Engine `Scene` shape (see `@woofx3/api`):
  *   { id, name, accountId, widgets, createdAt }
- * The Convex `scenes` table stores additional UI-only fields (description,
- * layout dimensions, sceneWidgets) that arrive via webhooks and are not
- * touched by this reconciler.
+ * Only `id` and `name` are forwarded. The wire `widgets` are a lossy
+ * projection of the scene's widget JSON; the full JSON, along with the
+ * description and layout, arrives only through the scene webhooks. See
+ * `reconcileScenes`.
  */
 export const scenesStep: SyncStep = {
   name: "scenes",
@@ -45,7 +46,6 @@ export const scenesStep: SyncStep = {
     const upserts = all.map((s) => ({
       engineSceneId: s.id,
       name: s.name,
-      widgets: s.widgets,
     }));
     const engineIds = upserts.map((u) => u.engineSceneId);
 
