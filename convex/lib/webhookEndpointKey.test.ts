@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isWebhookTrigger, webhookEndpointKey } from "./webhookEndpointKey";
+import { isWebhookTrigger, webhookEndpointKey, webhookEndpointKeys } from "./webhookEndpointKey";
 
 const KEY = {
   triggerKey: "example_store:trigger:orders",
@@ -46,5 +46,27 @@ describe("webhookEndpointKey", () => {
     expect(
       webhookEndpointKey({ transport: "webhook", projectionKey: "example_store:1.0.0:trigger:orders" })
     ).toBeNull();
+  });
+});
+
+describe("webhookEndpointKeys", () => {
+  it("keys every webhook trigger and skips bus triggers", () => {
+    expect(
+      webhookEndpointKeys([
+        { transport: "webhook", projectionKey: "example_store:trigger:orders" },
+        { transport: "eventbus", event: "store.order.created" },
+      ])
+    ).toEqual({ keys: [KEY], complete: true });
+  });
+
+  // An engine whose trigger listing leaves projectionKey off must not read as
+  // one whose webhook triggers are all gone.
+  it("is incomplete when a webhook trigger cannot be keyed", () => {
+    expect(
+      webhookEndpointKeys([
+        { transport: "webhook", projectionKey: "example_store:trigger:orders" },
+        { event: "webhook.example_store.refunds" },
+      ])
+    ).toEqual({ keys: [KEY], complete: false });
   });
 });

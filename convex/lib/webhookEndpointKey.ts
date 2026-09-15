@@ -33,3 +33,28 @@ export function webhookEndpointKey(trigger: {
   }
   return { triggerKey: trigger.projectionKey, modulePrefix, triggerManifestId };
 }
+
+/**
+ * The endpoint identities of a trigger list's webhook triggers. `complete` is
+ * false when some webhook trigger in the list cannot be keyed: the list then
+ * cannot say which endpoints are gone.
+ */
+export function webhookEndpointKeys(triggers: { transport?: string; event?: string; projectionKey?: string }[]): {
+  keys: WebhookEndpointKey[];
+  complete: boolean;
+} {
+  const keys: WebhookEndpointKey[] = [];
+  let complete = true;
+  for (const trigger of triggers) {
+    if (!isWebhookTrigger(trigger)) {
+      continue;
+    }
+    const key = webhookEndpointKey(trigger);
+    if (key) {
+      keys.push(key);
+    } else {
+      complete = false;
+    }
+  }
+  return { keys, complete };
+}
