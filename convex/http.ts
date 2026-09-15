@@ -650,6 +650,8 @@ http.route({
             projectionKey: widget.projectionKey,
             alertTypes: widget.alertTypes ?? [],
             settings,
+            surfaces: widget.surfaces,
+            hostsSurface: widget.hostsSurface,
           });
         }
         return corsJson({ success: true, type: event.type });

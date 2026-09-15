@@ -644,6 +644,8 @@ export const reconcileWidgets = internalMutation({
         description: v.optional(v.string()),
         alertTypes: v.array(v.string()),
         settings: v.array(v.any()),
+        surfaces: v.optional(v.array(v.string())),
+        hostsSurface: v.optional(v.string()),
         createdByType: v.string(),
         createdByRef: v.string(),
       })
@@ -669,6 +671,8 @@ export const reconcileWidgets = internalMutation({
         createdByRef: snap.createdByRef,
         alertTypes: snap.alertTypes,
         settings: snap.settings,
+        surfaces: snap.surfaces,
+        hostsSurface: snap.hostsSurface,
       };
       const existingDef = await ctx.db
         .query("moduleWidgets")

@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { DEFAULT_ALERT_WIDGET_NAME } from "@convex/lib/alertWidgets";
 import { useAction, useQuery } from "convex/react";
 import { FileAudio, FileImage, FileVideo, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
@@ -8,8 +9,10 @@ import {
   type FieldDescriptor,
 } from "@/components/common/configuration-form";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
+import { AlertLayoutField } from "@/components/scenes/alert-layout-field";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useInstance } from "@/hooks/use-instance";
@@ -193,6 +196,53 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = ({ field, value, onChange 
 };
 
 // ---------------------------------------------------------------------------
+// Alert widget name — free text, suggesting the names of the alert widgets
+// already placed on the instance's scenes. Free text so a step can target a
+// name before any scene has an alert widget answering to it.
+// ---------------------------------------------------------------------------
+
+function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
+  const { instance } = useInstance();
+  const names = useQuery(api.sceneWidgets.alertWidgetNames, instance ? { instanceId: instance._id } : "skip") ?? [];
+  const listId = `alert-widget-names-${field.id}`;
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={field.id}>
+        {field.label}
+        {field.required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      <Input
+        id={field.id}
+        list={listId}
+        value={typeof value === "string" ? value : ""}
+        placeholder={DEFAULT_ALERT_WIDGET_NAME}
+        onChange={(e) => onChange(e.target.value)}
+        data-testid={`input-${field.id}`}
+      />
+      <datalist id={listId}>
+        {names.map((name) => (
+          <option key={name} value={name} />
+        ))}
+      </datalist>
+      {typeof field.description === "string" && <p className="text-xs text-muted-foreground">{field.description}</p>}
+    </div>
+  );
+}
+
+const AlertWidgetNameRenderer: CustomFieldRenderer = (props) => <AlertWidgetNameField {...props} />;
+
+// ---------------------------------------------------------------------------
+// Layout — a canvas of widgets, edited in a dialog. The layout's widget
+// settings use these same renderers, so a media picker in an alert works as it
+// does everywhere else.
+// ---------------------------------------------------------------------------
+
+const LayoutFieldRenderer: CustomFieldRenderer = (props) => (
+  <AlertLayoutField {...props} renderers={configFieldRenderers} />
+);
+
+// ---------------------------------------------------------------------------
 // TriggerConfigForm — thin wrapper around ConfigurationForm
 // ---------------------------------------------------------------------------
 
@@ -207,15 +257,17 @@ interface TriggerConfigFormProps {
 
 /**
  * The renderers ConfigurationForm cannot supply generically, because they need
- * pickers wired to app state — the asset library and the resource instance
- * list. Exported so every surface that renders a ConfigField gets the same
- * controls: a `resource_ref` in a widget's settings must pick a resource the
- * same way one in a trigger's config does.
+ * pickers wired to app state — the asset library, the resource instance list,
+ * the alert widget names and the layout canvas. Exported so every surface that
+ * renders a ConfigField gets the same controls: a `resource_ref` in a widget's
+ * settings must pick a resource the same way one in a trigger's config does.
  */
 export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   media: MediaFieldRenderer,
   asset: MediaFieldRenderer,
   resource_ref: ResourceRefFieldRenderer,
+  "field:layout": LayoutFieldRenderer,
+  "source:alertWidgets": AlertWidgetNameRenderer,
 };
 
 export function TriggerConfigForm({ fields, values, onChange, availableVariables, className }: TriggerConfigFormProps) {
