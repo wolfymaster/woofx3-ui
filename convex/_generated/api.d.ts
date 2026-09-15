@@ -37,6 +37,7 @@ import type * as instances from "../instances.js";
 import type * as invitations from "../invitations.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
 import type * as lib_canonicalRef from "../lib/canonicalRef.js";
+import type * as lib_definitionCatalog from "../lib/definitionCatalog.js";
 import type * as lib_dollarKeys from "../lib/dollarKeys.js";
 import type * as lib_engineInstanceUrl from "../lib/engineInstanceUrl.js";
 import type * as lib_engineSync_config from "../lib/engineSync/config.js";
@@ -144,6 +145,7 @@ declare const fullApi: ApiFromModules<{
   invitations: typeof invitations;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
   "lib/canonicalRef": typeof lib_canonicalRef;
+  "lib/definitionCatalog": typeof lib_definitionCatalog;
   "lib/dollarKeys": typeof lib_dollarKeys;
   "lib/engineInstanceUrl": typeof lib_engineInstanceUrl;
   "lib/engineSync/config": typeof lib_engineSync_config;

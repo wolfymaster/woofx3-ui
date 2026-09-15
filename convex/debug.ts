@@ -38,7 +38,8 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
 /**
  * Publish an event onto the engine's NATS bus on a caller-supplied subject,
  * with no `platform` attribute. Used to replay logged engine events
- * (engineEventLog.retrigger), which are not all platform events. Caller is
+ * (engineEventLog.retrigger), which are not all platform events, and by the
+ * Alerts test sheet for triggers that are not Twitch's. Caller is
  * responsible for using a canonical subject string.
  */
 export const fireTrigger = action({
@@ -58,7 +59,7 @@ export const fireTrigger = action({
  * Inject a synthetic Twitch event. The engine stamps `platform: "twitch"`, so
  * the simulated event is identical to a real one and satisfies
  * `${trigger.platform}` filters that a `fireTrigger` event would not. Used by
- * the /debug page trigger forms.
+ * the test-event sheet on the Alerts screen.
  */
 export const simulateTwitchEvent = action({
   args: {

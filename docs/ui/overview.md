@@ -28,12 +28,14 @@ The menu is declared in one place — `client/src/components/layout/nav-config.t
 | Dashboard | `/` | — |
 | Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Assets, Workflows |
 | Modules | `/modules` | — (the page renders its own category sidebar) |
-| Help | `/help` | Learning, Debug, Logs, Submit Feedback |
+| Help | `/help` | Learning, Logs, Submit Feedback |
 | Admin | `/admin` | Engine, Integrations, Storage, Appearance |
 
 Admin and Team are not in the primary nav — they are the icon buttons in the header's utility cluster (`UTILITY_SECTIONS`), but Admin renders the same section sidebar as Stream and Help.
 
-`/stream`, `/help`, and `/admin` redirect to their first sub-item. Counters, Timers, Queues, Learning, and Submit Feedback are placeholder screens — no engine surface backs them yet. The pre-restructure top-level paths (`/alerts`, `/commands`, `/assets`, `/scenes`, `/scenes/:id`, `/workflows`, `/workflows/:id`, `/debug`, `/settings/:tab`) redirect to their new homes.
+`/stream`, `/help`, and `/admin` redirect to their first sub-item. Counters, Timers, Queues, Learning, and Submit Feedback are placeholder screens — no engine surface backs them yet. The pre-restructure top-level paths (`/alerts`, `/commands`, `/assets`, `/scenes`, `/scenes/:id`, `/workflows`, `/workflows/:id`, `/settings/:tab`) redirect to their new homes.
+
+There is no separate Debug page any more: `/debug` and `/help/debug` redirect to Alerts. Test events are fired from the lightning icon beside each event there, which opens a side sheet (`components/test-events/test-event-sheet.tsx`). Its trigger picker lists every alert trigger, grouped by the same `alert.*` taxonomy as the rail, with the clicked one preselected; its settings sit below, above a Trigger button. Events with a hand-built form in `components/test-events/registry.ts` (follow, subscribe, subscription gift, cheer) get that form; every other trigger gets a JSON editor seeded from its declared `emits` shape. Twitch triggers fire through `debug.simulateTwitchEvent` so the engine stamps the platform; anything else is published as-is through `debug.fireTrigger`.
 
 **Error boundaries** reset on `location` change so a bad screen does not brick the whole app.
 

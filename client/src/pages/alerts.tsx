@@ -2,11 +2,12 @@ import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { Bell, Loader2 } from "lucide-react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { AlertGroupRail } from "@/components/alerts/alert-group-rail";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
+import { TestEventSheet } from "@/components/test-events/test-event-sheet";
 import { EventWorkflowEditor } from "@/components/triggers/event-workflow-editor";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -27,6 +28,11 @@ export default function Alerts() {
   const { instance } = useInstance();
   const { triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
+
+  // The trigger stays selected while the sheet closes, so its contents don't blank
+  // out mid-animation.
+  const [testPresetId, setTestPresetId] = useState<string | null>(null);
+  const [isTestOpen, setIsTestOpen] = useState(false);
 
   const groups = useMemo(() => buildAlertGroups(triggerPresets), [triggerPresets]);
   const rows = useMemo(() => (workflows ?? []) as Doc<"workflows">[], [workflows]);
@@ -64,6 +70,11 @@ export default function Alerts() {
 
   const groupKey = params?.group ?? null;
   const group = findAlertGroup(groups, groupKey ?? undefined);
+
+  function openTest(presetId: string) {
+    setTestPresetId(presetId);
+    setIsTestOpen(true);
+  }
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -103,12 +114,21 @@ export default function Alerts() {
                   triggerPreset={preset}
                   actionPresets={actionPresets}
                   workflows={rows}
+                  onTest={() => openTest(preset.id)}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      <TestEventSheet
+        open={isTestOpen}
+        onOpenChange={setIsTestOpen}
+        groups={groups}
+        selectedId={testPresetId}
+        onSelect={setTestPresetId}
+      />
     </div>
   );
 }

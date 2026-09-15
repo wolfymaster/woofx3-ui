@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { TriggerCard } from "@/components/debug/trigger-card";
+import { TestEventForm, type TestEventProps } from "@/components/test-events/test-event-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useSimulateTwitchEvent } from "@/hooks/use-simulate-twitch-event";
-import { TWITCH_EVENT_SUBJECTS, type TwitchSubscriptionGiftPayload } from "@/lib/debug/twitch-events";
+import type { TwitchSubscriptionGiftPayload } from "@/lib/debug/twitch-events";
 
 const DEFAULTS: TwitchSubscriptionGiftPayload = {
   amount: 5,
@@ -15,17 +14,11 @@ const DEFAULTS: TwitchSubscriptionGiftPayload = {
   tier: "1000",
 };
 
-export function TwitchSubscriptionGiftForm() {
-  const fire = useSimulateTwitchEvent();
+export function TwitchSubscriptionGiftForm({ preset }: TestEventProps) {
   const [payload, setPayload] = useState<TwitchSubscriptionGiftPayload>(DEFAULTS);
 
   return (
-    <TriggerCard
-      title="Subscription Gift"
-      description="Simulate a bulk-gifted-subs event."
-      eventSubject={TWITCH_EVENT_SUBJECTS.subscriptionGift}
-      onFire={() => fire(TWITCH_EVENT_SUBJECTS.subscriptionGift, payload as unknown as Record<string, unknown>)}
-    >
+    <TestEventForm preset={preset} payload={payload}>
       <div className="space-y-2">
         <Label htmlFor="gift-amount">Subs gifted</Label>
         <Input
@@ -77,6 +70,6 @@ export function TwitchSubscriptionGiftForm() {
           data-testid="switch-gift-isAnonymous"
         />
       </div>
-    </TriggerCard>
+    </TestEventForm>
   );
 }

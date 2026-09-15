@@ -65,6 +65,7 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
     event: row.event,
     taxonomy: row.taxonomy,
     config,
+    emits: parseDataShapeFields(row.emits),
   };
 }
 

@@ -24,7 +24,6 @@ import TwitchCallback from "@/pages/auth/twitch-callback";
 import Commands from "@/pages/commands";
 import Counters from "@/pages/counters";
 import Dashboard from "@/pages/dashboard";
-import Debug from "@/pages/debug";
 import Feedback from "@/pages/feedback";
 import Learning from "@/pages/learning";
 import Logs from "@/pages/logs";
@@ -165,7 +164,6 @@ function AppRoutes() {
                     <Redirect to="/help/learning" />
                   </Route>
                   <Route path="/help/learning" component={Learning} />
-                  <Route path="/help/debug" component={Debug} />
                   <Route path="/help/logs" component={Logs} />
                   <Route path="/help/feedback" component={Feedback} />
 
@@ -201,8 +199,12 @@ function AppRoutes() {
                     <Redirect to="/stream/scenes" />
                   </Route>
                   <Route path="/scenes/:id">{(params) => <Redirect to={`/stream/scenes/${params.id}`} />}</Route>
+                  {/* Test events moved onto the Alerts screen, beside each event. */}
                   <Route path="/debug">
-                    <Redirect to="/help/debug" />
+                    <Redirect to="/stream/alerts" />
+                  </Route>
+                  <Route path="/help/debug">
+                    <Redirect to="/stream/alerts" />
                   </Route>
                   <Route path="/settings/:tab?">
                     {(params) => (

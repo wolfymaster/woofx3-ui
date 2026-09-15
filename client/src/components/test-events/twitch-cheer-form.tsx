@@ -1,10 +1,9 @@
 import { useState } from "react";
-import { TriggerCard } from "@/components/debug/trigger-card";
+import { TestEventForm, type TestEventProps } from "@/components/test-events/test-event-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useSimulateTwitchEvent } from "@/hooks/use-simulate-twitch-event";
-import { TWITCH_EVENT_SUBJECTS, type TwitchCheerPayload } from "@/lib/debug/twitch-events";
+import type { TwitchCheerPayload } from "@/lib/debug/twitch-events";
 
 interface FormState {
   amount: number;
@@ -32,17 +31,11 @@ function toPayload(state: FormState): TwitchCheerPayload {
   };
 }
 
-export function TwitchCheerForm() {
-  const fire = useSimulateTwitchEvent();
+export function TwitchCheerForm({ preset }: TestEventProps) {
   const [state, setState] = useState<FormState>(DEFAULTS);
 
   return (
-    <TriggerCard
-      title="Cheer"
-      description="Simulate a bits cheer."
-      eventSubject={TWITCH_EVENT_SUBJECTS.cheer}
-      onFire={() => fire(TWITCH_EVENT_SUBJECTS.cheer, toPayload(state) as unknown as Record<string, unknown>)}
-    >
+    <TestEventForm preset={preset} payload={toPayload(state)}>
       <div className="space-y-2">
         <Label htmlFor="cheer-amount">Bits</Label>
         <Input
@@ -92,6 +85,6 @@ export function TwitchCheerForm() {
           data-testid="input-cheer-userName"
         />
       </div>
-    </TriggerCard>
+    </TestEventForm>
   );
 }

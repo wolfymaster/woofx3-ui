@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { TriggerCard } from "@/components/debug/trigger-card";
+import { TestEventForm, type TestEventProps } from "@/components/test-events/test-event-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useSimulateTwitchEvent } from "@/hooks/use-simulate-twitch-event";
-import { TWITCH_EVENT_SUBJECTS, type TwitchSubscribePayload } from "@/lib/debug/twitch-events";
+import type { TwitchSubscribePayload } from "@/lib/debug/twitch-events";
 
 const DEFAULTS: TwitchSubscribePayload = {
   isGift: false,
@@ -14,17 +13,11 @@ const DEFAULTS: TwitchSubscribePayload = {
   userName: "test_subscriber",
 };
 
-export function TwitchSubscribeForm() {
-  const fire = useSimulateTwitchEvent();
+export function TwitchSubscribeForm({ preset }: TestEventProps) {
   const [payload, setPayload] = useState<TwitchSubscribePayload>(DEFAULTS);
 
   return (
-    <TriggerCard
-      title="Subscription"
-      description="Simulate a channel subscription."
-      eventSubject={TWITCH_EVENT_SUBJECTS.subscribe}
-      onFire={() => fire(TWITCH_EVENT_SUBJECTS.subscribe, payload as unknown as Record<string, unknown>)}
-    >
+    <TestEventForm preset={preset} payload={payload}>
       <div className="space-y-2">
         <Label htmlFor="sub-tier">Tier</Label>
         <Select value={payload.tier} onValueChange={(value) => setPayload({ ...payload, tier: value })}>
@@ -65,6 +58,6 @@ export function TwitchSubscribeForm() {
           data-testid="input-sub-userName"
         />
       </div>
-    </TriggerCard>
+    </TestEventForm>
   );
 }
