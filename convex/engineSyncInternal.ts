@@ -289,11 +289,13 @@ export const reconcileWorkflows = internalMutation({
  * appears are deleted. Legacy rows without an `engineSceneId` (created via
  * the older webhook path that keyed by name) are left alone.
  *
- * The engine's `Scene` shape (see `@woofx3/api`) is minimal: `id`, `name`,
- * `accountId`, `widgets`, `createdAt`. Convex stores additional UI-only
- * fields (description, layout dimensions, sceneWidgets) that are populated
- * via webhooks; this reconciler does not touch those fields and only
- * patches what the engine actually returns.
+ * Presence and names only — never `widgets`. The engine's `getScenes()` wire
+ * shape is lossy: it reduces each placed widget to
+ * `{ id, type, position, size: { w, h } }`, while the editor stores the full
+ * widget JSON (`size: { width, height }`, `widgetCanonicalId`, settings, ...).
+ * That full JSON only arrives through the SCENE_CREATED / SCENE_UPDATED
+ * webhooks (`scenes.upsertFromWebhook`). Copying the wire shape over it
+ * collapsed every widget on the canvas to a 0×0 box on each sync.
  */
 export const reconcileScenes = internalMutation({
   args: {
@@ -304,7 +306,6 @@ export const reconcileScenes = internalMutation({
       v.object({
         engineSceneId: v.string(),
         name: v.string(),
-        widgets: v.optional(v.array(v.any())),
       })
     ),
   },
@@ -317,19 +318,18 @@ export const reconcileScenes = internalMutation({
         .withIndex("by_engine_scene_id", (q) => q.eq("instanceId", instanceId).eq("engineSceneId", u.engineSceneId))
         .first();
       if (existing) {
-        await ctx.db.patch(existing._id, {
-          applicationId,
-          name: u.name,
-          widgets: u.widgets,
-          updatedAt: now,
-        });
+        // Bumping updatedAt makes an open editor re-adopt the row, so only write on a real change.
+        if (existing.name !== u.name || existing.applicationId !== applicationId) {
+          await ctx.db.patch(existing._id, { applicationId, name: u.name, updatedAt: now });
+        }
       } else {
+        // Its SCENE_CREATED webhook never landed. Widgets stay unset rather than
+        // lossy until a SCENE_UPDATED delivers the full JSON.
         await ctx.db.insert("scenes", {
           instanceId,
           applicationId,
           engineSceneId: u.engineSceneId,
           name: u.name,
-          widgets: u.widgets,
           createdAt: now,
           updatedAt: now,
         });
