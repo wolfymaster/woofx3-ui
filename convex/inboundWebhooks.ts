@@ -4,7 +4,8 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
 import { shouldRecordDelivery } from "./lib/inboundWebhookDelivery";
 import { getInstanceMembership } from "./lib/teamAccess";
-import { type WebhookEndpointKey, webhookEndpointKey } from "./lib/webhookEndpointKey";
+import { type WebhookEndpointKey, webhookEndpointKeys } from "./lib/webhookEndpointKey";
+import { logger } from "./logger";
 
 type EndpointKey = { instanceId: Id<"instances">; triggerKey: string };
 
@@ -70,21 +71,27 @@ export async function removeEndpointsForModule(
  * trigger is gone. Never deletes — the trigger may return in a later version.
  * The repair path for registration callbacks that were missed or arrived out
  * of order.
+ *
+ * Disables nothing when the list has a webhook trigger it cannot key: that
+ * trigger could own any endpoint, so none can be called gone, and disabling
+ * would take down a URL that is still live.
  */
 export async function reconcileEndpoints(
   ctx: MutationCtx,
   instanceId: Id<"instances">,
   triggers: { transport?: string; event?: string; projectionKey?: string }[]
 ): Promise<void> {
-  const live = new Set<string>();
-  for (const trigger of triggers) {
-    const key = webhookEndpointKey(trigger);
-    if (!key) {
-      continue;
-    }
-    live.add(key.triggerKey);
+  const { keys, complete } = webhookEndpointKeys(triggers);
+  for (const key of keys) {
     await provisionEndpoint(ctx, { instanceId, ...key });
   }
+  if (!complete) {
+    logger.warn("webhook endpoints: a webhook trigger in the engine's list has no projectionKey; disabling none", {
+      instanceId,
+    });
+    return;
+  }
+  const live = new Set(keys.map((key) => key.triggerKey));
   const rows = await ctx.db
     .query("webhookEndpoints")
     .withIndex("by_instance_trigger", (q) => q.eq("instanceId", instanceId))
