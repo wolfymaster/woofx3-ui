@@ -471,7 +471,12 @@ export interface ConfigurationFormProps {
   onSubmit?: (values: FieldValues) => void;
   /** Label for the submit button. Defaults to "Save". */
   submitLabel?: string;
-  /** Map of field type → custom renderer for types not handled by builtins (e.g. "media"). */
+  /**
+   * Custom renderers, keyed by field type for types the builtins don't handle
+   * (e.g. "media"). A key of `source:<kind>` (options drawn from app state) or
+   * `field:<type>` (a value no variable can stand in for) takes over the whole
+   * field, without the variable toggle.
+   */
   customRenderers?: Record<string, CustomFieldRenderer>;
   /** Variables offered for ${stepId.field} references — see computeAvailableVariables.
    * Omit outside a workflow-builder context (e.g. module settings); the ${} affordances
@@ -524,6 +529,14 @@ export function ConfigurationForm({
       {fields.map((field) => {
         const fieldValue = values[field.id];
         const changeHandler = (v: unknown) => handleFieldChange(field.id, v);
+
+        const sourceKind = (field as { source?: { kind?: unknown } }).source?.kind;
+        const ownRenderer =
+          (typeof sourceKind === "string" ? customRenderers?.[`source:${sourceKind}`] : undefined) ??
+          customRenderers?.[`field:${field.type}`];
+        if (ownRenderer) {
+          return <div key={field.id}>{ownRenderer({ field, value: fieldValue, onChange: changeHandler })}</div>;
+        }
 
         // text/textarea mix literal text and ${} references freely in one string, so they
         // never need the toggle below — VariableAwareInput handles both at once.

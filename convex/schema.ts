@@ -707,6 +707,12 @@ export default defineSchema({
     // forked the contract and made every new ConfigField property a breaking
     // change for widget sync.
     settings: v.array(v.any()),
+    // Where the widget may be placed: "scene", "alert", or both. Absent on
+    // rows registered before widgets declared it, which are scene widgets.
+    surfaces: v.optional(v.array(v.string())),
+    // The surface this widget's placements host: "alert" for the alert
+    // widget, the area of a scene where alert layouts play.
+    hostsSurface: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("by_module", ["moduleId"])

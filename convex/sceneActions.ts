@@ -118,7 +118,8 @@ export const getAvailableWidgets = action({
       directory: string;
       alertTypes: string[];
       settingsSchema: string;
-      surface: string;
+      surfaces: string[];
+      hostsSurface: string;
     }>;
   }> => {
     const bundle = await requireInstanceContext(ctx, args.instanceId);
@@ -127,7 +128,7 @@ export const getAvailableWidgets = action({
     const result = await rpc.getAvailableWidgets();
 
     return {
-      widgets: (result.widgets ?? []).filter((w) => w.surface === "scene"),
+      widgets: (result.widgets ?? []).filter((w) => w.surfaces.includes("scene")),
     };
   },
 });

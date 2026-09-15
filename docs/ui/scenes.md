@@ -56,9 +56,13 @@ Saves go through `useAction(api.sceneActions.updateScene)` (`widgetsJson` + `lay
 Widgets are **engine-registered module widgets only** — no arbitrary/custom widget types.
 
 - **Widget type:** `{ id, widgetCanonicalId, name, position, size, rotation, opacity, zIndex, locked, visible, settings }`
-- **Canonical ID format:** `{moduleId}:widget:{manifestId}` (e.g. `builtin:widget:media_alert`)
+- **Canonical ID format:** `{moduleId}:widget:{manifestId}` (e.g. `woofx3:widget:text`)
 - **Widget catalog:** `convex/moduleWidgets.ts` `list` — populated via the `MODULE_WIDGET_REGISTERED` webhook (`convex/http.ts` → `moduleWidgets.registerFromWebhook`). Note: this query is currently global (not instance-scoped).
-- **MediaAlert (how it's "installed"):** It is a **built-in** engine widget defined in `woofx3/streamware/src/builtin-widgets.ts` (`canonical_id: builtin:widget:media_alert`, `surface: "scene"`). On engine startup the streamware publishes a `module.widget.registered` event (module_key `builtin`); the API service forwards it as a `MODULE_WIDGET_REGISTERED` webhook, and Convex upserts it into `moduleWidgets` (with `moduleId: undefined`). So it appears in the widget bar **automatically** once the engine has emitted that webhook — there is no per-scene install step. It does **not** arrive via the periodic `getAvailableWidgets` sync, which skips widgets with no resolvable module.
+- **Surfaces:** each catalog row carries `surfaces` (`scene`, `alert`). The scene editor offers only widgets placeable on a scene; the Alert action's layout editor offers only widgets placeable in an alert. Rows without `surfaces` are scene widgets.
+- **Alert widgets:** the bundled `woofx3:widget:alert` (its catalog row has `hostsSurface: "alert"`) is a named area where alerts play. The scene manager draws it, so it has no frame of its own and the editor shows only its placeholder. The editor names a scene's first alert widget `default` and later ones `alert-2`, `alert-3`…; an Alert action plays on every alert widget with its target name. `convex/lib/alertWidgets.ts` holds the naming rules, which must match the scene manager's.
+- **Bundled widgets** (Alert, Text, Image, Video, Audio, Lottie) arrive through the bundled `woofx3` module's install, as a `MODULE_WIDGET_REGISTERED` webhook like any module widget, and are grouped as "Built-in".
+
+The canvas itself — palette, drag/resize handles, placeholders and the settings panel — is `WidgetLayoutCanvas`, shared by the scene editor and the Alert action's layout editor (`alert-layout-field.tsx`). It edits whatever widgets it is handed and saves nothing.
 
 ## Browser source
 

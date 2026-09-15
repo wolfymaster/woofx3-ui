@@ -1,20 +1,30 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { Trash2 } from "lucide-react";
-import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
+import {
+  ConfigurationForm,
+  type CustomFieldRenderer,
+  type FieldDescriptor,
+} from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
-import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import type { Widget } from "@/types";
 
 interface WidgetSettingsPanelProps {
   widget: Widget;
   fields: ConfigField[];
+  renderers: Record<string, CustomFieldRenderer>;
   onChangeSetting: (key: string, value: unknown) => void;
   onDelete: () => void;
 }
 
 /** Right-side settings pane for the currently-selected canvas widget — replaces the old
  * gear-icon popover so configuring a widget doesn't require hunting for a tiny trigger. */
-export function WidgetSettingsPanel({ widget, fields, onChangeSetting, onDelete }: WidgetSettingsPanelProps) {
+export function WidgetSettingsPanel({
+  widget,
+  fields,
+  renderers,
+  onChangeSetting,
+  onDelete,
+}: WidgetSettingsPanelProps) {
   return (
     <div className="w-80 shrink-0 border-l bg-background flex flex-col">
       <div className="p-4 border-b flex items-start justify-between gap-2">
@@ -51,7 +61,7 @@ export function WidgetSettingsPanel({ widget, fields, onChangeSetting, onDelete 
                 }
               }
             }}
-            customRenderers={configFieldRenderers}
+            customRenderers={renderers}
           />
         )}
       </div>

@@ -142,6 +142,8 @@ export const registerFromWebhook = internalMutation({
     projectionKey: v.optional(v.string()),
     alertTypes: v.array(v.string()),
     settings: v.array(v.any()),
+    surfaces: v.optional(v.array(v.string())),
+    hostsSurface: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // Resolve moduleId only for module-sourced widgets (built-ins have none).
@@ -158,6 +160,8 @@ export const registerFromWebhook = internalMutation({
       projectionKey: args.projectionKey,
       alertTypes: args.alertTypes,
       settings: args.settings,
+      surfaces: args.surfaces,
+      hostsSurface: args.hostsSurface,
     };
 
     const existing = await ctx.db
