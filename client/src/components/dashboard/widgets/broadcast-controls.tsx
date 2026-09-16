@@ -3,7 +3,6 @@ import { useAction, useQuery } from "convex/react";
 import { Loader2, Megaphone, Pin, Radio } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useInstance } from "@/hooks/use-instance";
@@ -34,12 +33,10 @@ export function BroadcastControlsWidget() {
   const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
   const pinned = useQuery(api.activityPanel.listPinned, instance ? { instanceId: instance._id } : "skip");
   const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
-  const sendShoutout = useAction(api.twitchBroadcast.sendShoutout);
 
   const [message, setMessage] = useState("");
   const [color, setColor] = useState<AnnouncementColor>("primary");
-  const [shoutoutTarget, setShoutoutTarget] = useState("");
-  const [busy, setBusy] = useState<"announce" | "shoutout" | null>(null);
+  const [busy, setBusy] = useState<"announce" | null>(null);
 
   const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   // A link created before the announcement scope was added keeps working for
@@ -67,22 +64,6 @@ export function BroadcastControlsWidget() {
       toast({ title: "Announcement sent" });
     } catch (error) {
       report(error, "Couldn't send that announcement");
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const handleShoutout = async () => {
-    if (!instance || !shoutoutTarget.trim()) {
-      return;
-    }
-    setBusy("shoutout");
-    try {
-      await sendShoutout({ instanceId: instance._id, targetLogin: shoutoutTarget });
-      setShoutoutTarget("");
-      toast({ title: "Shoutout sent" });
-    } catch (error) {
-      report(error, "Couldn't send that shoutout");
     } finally {
       setBusy(null);
     }
@@ -146,29 +127,6 @@ export function BroadcastControlsWidget() {
             Reconnect Twitch in Settings → Integrations to grant the announcement permission.
           </p>
         )}
-      </section>
-
-      <section className="space-y-2">
-        <Label htmlFor="shoutout-target">Shoutout</Label>
-        <div className="flex items-center gap-2">
-          <Input
-            id="shoutout-target"
-            value={shoutoutTarget}
-            onChange={(e) => setShoutoutTarget(e.target.value)}
-            placeholder="channel name"
-            className="text-sm"
-            data-testid="input-shoutout-target"
-          />
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void handleShoutout()}
-            disabled={busy !== null || !shoutoutTarget.trim()}
-            data-testid="button-send-shoutout"
-          >
-            {busy === "shoutout" ? <Loader2 className="h-4 w-4" /> : "Send"}
-          </Button>
-        </div>
       </section>
 
       <section className="space-y-1.5">

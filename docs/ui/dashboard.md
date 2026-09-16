@@ -25,17 +25,19 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
   edit mode writes through immediately — otherwise the change would be dropped.
   Note this covers a widget's *settings*, which are per user along with the layout
   row they live in. Content that belongs to the channel rather than the viewer —
-  macros, stream goals — lives in its own instance-scoped table instead.
+  macros, stream goals, the shoutout queue — lives in its own instance-scoped
+  table instead.
 
 ## Widgets
 
 | Type | Category | Notes |
 |------|----------|-------|
 | `stream-status` | stream | Live/offline, viewers, uptime |
-| `live-events` | stream | Follows/subs/cheers/raids direct from Twitch |
+| `live-events` | stream | Follows/subs/cheers/raids, pushed from the engine |
 | `activity` | stream | Tabbed events, pinned notes, highlights |
 | `stream-preview` | stream | Thumbnail, click to enlarge |
-| `broadcast-controls` | stream | Announcement and shoutout |
+| `broadcast-controls` | stream | Announcements |
+| `shoutout` | stream | Autocomplete from chat, confirm, queue — see below |
 | `workflow-runs` | automation | Recent and in-progress executions |
 | `macro-pad` | automation | One-click buttons — see below |
 | `stream-stats` | utility | Viewers, uptime, category |
@@ -75,6 +77,44 @@ variable names are restricted to `[A-Za-z0-9_]`.
 Execution of `chat-command` and `trigger-workflow` is **not yet wired** to the
 engine; both log to the console. `http-request` currently fetches straight from the
 browser, so it is subject to CORS and exposes any header secret client-side.
+
+## Shoutout
+
+Queues Twitch shoutouts and sends them one at a time within the endpoint's
+cooldown.
+
+The autocomplete lists **who is currently in chat**. Nothing in woofx3 tracks
+chat presence — the only signal anywhere is the per-message chat event, and no
+service accumulates it — so the roster comes from Twitch's
+`GET /helix/chat/chatters` (`convex/shoutouts.ts`), cached per instance with
+in-flight dedupe in `hooks/use-chatters.ts` and ranked locally on each keystroke
+by `lib/chatter-match.ts`. That needs `moderator:read:chatters`, which is already
+in `TWITCH_INTEGRATION_SCOPES`; a link created before that scope was added keeps
+working for everything else, so `authorizeTwitch` turns the gap into a "reconnect
+Twitch" message rather than a silent 401.
+
+Picking from the list, or pressing Send with a typed name, looks the channel up
+and shows a confirmation card — avatar, display name, partner/affiliate — before
+anything is queued, so a mistyped name is caught by a face. You can shout out
+someone who is not currently in chat; the list is a convenience, not a filter.
+
+The queue is instance-scoped (`shoutoutQueue`), one row per entry, so reordering
+rewrites `sortOrder` only on the rows that moved and removal is a single delete —
+the queue is edited by hand while a scheduled processor writes to it. A processor
+run (`processQueue`) sends at most one shoutout and reschedules itself: the
+cooldown is minutes, and an action holding a timer open that long is neither
+reliable nor cheap, so the scheduler is the timer. `shoutoutState` keeps the
+single-flight guard, since two runs firing together would send two shoutouts
+inside one cooldown.
+
+Twitch refuses a shoutout when the target is not live, and refuses the same
+channel twice within an hour. A failed entry stays queued with a growing backoff
+(capped at 15 minutes) and the processor **skips past it** to the next eligible
+entry, so one offline channel cannot stall everyone behind it. Nothing gives up
+on its own — an entry leaves the queue when it sends or when you remove it. Every
+*attempt* is paced by the cooldown, successful or not: a refused shoutout is
+still a call to a rate-limited endpoint. The timing rules are pure and tested in
+`convex/lib/shoutoutSchedule.ts`.
 
 ## Data sources
 

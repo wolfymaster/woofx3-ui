@@ -301,6 +301,51 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
 
+  // shoutoutQueue: Twitch shoutouts waiting to be sent for an instance. Shared
+  // per instance like streamGoals below -- a shoutout is the channel's, not one
+  // viewer's, and everyone sharing the account should see the same queue.
+  //
+  // One row per entry rather than an array: the queue is reordered and pruned by
+  // hand while a scheduled processor reads and writes it, so a whole-array
+  // replace would drop whichever side wrote second.
+  //
+  // There is no status column. An entry is pending until it sends, at which
+  // point the row is deleted; `attempts` and `lastError` are what distinguish
+  // "waiting its turn" from "failed and backing off", so there is no second
+  // source of truth to drift.
+  shoutoutQueue: defineTable({
+    instanceId: v.id("instances"),
+    /** Twitch login, lowercased -- the canonical key. */
+    login: v.string(),
+    /** Properly-cased name for display; Twitch logins lose the casing. */
+    displayName: v.string(),
+    twitchUserId: v.string(),
+    profileImageUrl: v.optional(v.string()),
+    /** Twitch's broadcaster_type: "partner", "affiliate", or "" for neither. */
+    broadcasterType: v.optional(v.string()),
+    sortOrder: v.number(),
+    attempts: v.number(),
+    /** Epoch ms before which the processor must not attempt this entry again. */
+    nextEligibleAt: v.number(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
+
+  // shoutoutState: one row per instance, holding what the queue processor needs
+  // that is not per-entry. Separate from shoutoutQueue because it outlives every
+  // entry -- the 2-minute spacing still applies after the queue drains.
+  shoutoutState: defineTable({
+    instanceId: v.id("instances"),
+    /**
+     * Epoch ms of the last attempt, successful or not. Failures are paced too:
+     * a refused shoutout is still a call to a rate-limited endpoint, so the
+     * cooldown is measured from every attempt rather than every send.
+     */
+    lastAttemptAt: v.optional(v.number()),
+    /** Epoch ms a processor run is already scheduled for, so adds don't stack runs. */
+    runScheduledFor: v.optional(v.number()),
+  }).index("by_instance", ["instanceId"]),
+
   // streamGoals: the dashboard command bar's goal cards (Bits / Subs / Followers, ...).
   // Manually entered and manually advanced — the engine reports no running
   // follower/sub/bits totals today (instanceLiveState carries only live state,

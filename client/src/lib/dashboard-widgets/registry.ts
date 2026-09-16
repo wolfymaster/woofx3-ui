@@ -1,9 +1,21 @@
-import { Activity, Grid3x3, Megaphone, MessagesSquare, NotebookPen, Radio, Tv, Workflow, Zap } from "lucide-react";
+import {
+  Activity,
+  Grid3x3,
+  Megaphone,
+  MessagesSquare,
+  NotebookPen,
+  Radio,
+  Tv,
+  Volume2,
+  Workflow,
+  Zap,
+} from "lucide-react";
 import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-panel";
 import { BroadcastControlsWidget } from "@/components/dashboard/widgets/broadcast-controls";
 import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
+import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
 import { StreamStatusWidget } from "@/components/dashboard/widgets/stream-status";
@@ -55,6 +67,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: Megaphone,
     category: "stream",
     component: BroadcastControlsWidget,
+  },
+  {
+    type: "shoutout",
+    label: "Shoutout",
+    description: "Queue shoutouts for people in chat — sent one at a time, two minutes apart.",
+    icon: Volume2,
+    category: "stream",
+    component: ShoutoutWidget,
   },
   {
     type: "workflow-runs",
