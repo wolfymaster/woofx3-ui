@@ -22,6 +22,23 @@ export const dashboardPanelWidgetValidator = v.object({
   size: v.optional(v.number()),
 });
 
+export const macroActionTypeValidator = v.union(
+  v.literal("chat-command"),
+  v.literal("trigger-workflow"),
+  v.literal("http-request")
+);
+
+// Mirrors MacroConfig in client/src/lib/macro-pad.ts. Free-text fields may carry
+// `{{name}}` variables, which the browser resolves at click time.
+export const macroConfigValidator = v.object({
+  command: v.optional(v.string()),
+  workflowId: v.optional(v.string()),
+  url: v.optional(v.string()),
+  method: v.optional(v.union(v.literal("GET"), v.literal("POST"), v.literal("PUT"), v.literal("DELETE"))),
+  headers: v.optional(v.record(v.string(), v.string())),
+  body: v.optional(v.string()),
+});
+
 // Shared shape for dashboardLayouts.panels (and its legacy `pages` alias below).
 const dashboardPanelValidator = v.array(
   v.object({
@@ -263,6 +280,26 @@ export default defineSchema({
     ),
     columnSizes: v.optional(v.array(v.number())),
   }).index("by_instance_user", ["instanceId", "userId"]),
+
+  // macros: the instance's macro pad buttons. Shared per instance rather than per
+  // user, like streamGoals below — a dashboard *layout* is a personal workspace
+  // preference, but the macro pad is the channel's, so everyone sharing the
+  // account sees the same buttons in the same order.
+  //
+  // One row per button rather than an array on a parent document: add, edit and
+  // delete each touch a single document, and a reorder rewrites sortOrder only on
+  // the rows that actually moved — so two people editing the pad cannot clobber
+  // each other the way a whole-array replace would.
+  macros: defineTable({
+    instanceId: v.id("instances"),
+    label: v.string(),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    type: macroActionTypeValidator,
+    config: macroConfigValidator,
+    sortOrder: v.number(),
+    updatedAt: v.number(),
+  }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
 
   // streamGoals: the dashboard command bar's goal cards (Bits / Subs / Followers, ...).
   // Manually entered and manually advanced — the engine reports no running

@@ -35,6 +35,7 @@ import type * as inboundWebhooks from "../inboundWebhooks.js";
 import type * as instanceLiveState from "../instanceLiveState.js";
 import type * as instances from "../instances.js";
 import type * as invitations from "../invitations.js";
+import type * as lib_alertWidgets from "../lib/alertWidgets.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
 import type * as lib_canonicalRef from "../lib/canonicalRef.js";
 import type * as lib_definitionCatalog from "../lib/definitionCatalog.js";
@@ -65,8 +66,10 @@ import type * as lib_twitchIntegrationScopes from "../lib/twitchIntegrationScope
 import type * as lib_webhookEndpointKey from "../lib/webhookEndpointKey.js";
 import type * as lib_widgetKey from "../lib/widgetKey.js";
 import type * as logger from "../logger.js";
+import type * as macros from "../macros.js";
 import type * as marketplace from "../marketplace.js";
 import type * as migrations_backfillAccountMembers from "../migrations/backfillAccountMembers.js";
+import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
 import type * as moduleAssets from "../moduleAssets.js";
 import type * as moduleDetail from "../moduleDetail.js";
 import type * as moduleEngine from "../moduleEngine.js";
@@ -143,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   instanceLiveState: typeof instanceLiveState;
   instances: typeof instances;
   invitations: typeof invitations;
+  "lib/alertWidgets": typeof lib_alertWidgets;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
   "lib/canonicalRef": typeof lib_canonicalRef;
   "lib/definitionCatalog": typeof lib_definitionCatalog;
@@ -173,8 +177,10 @@ declare const fullApi: ApiFromModules<{
   "lib/webhookEndpointKey": typeof lib_webhookEndpointKey;
   "lib/widgetKey": typeof lib_widgetKey;
   logger: typeof logger;
+  macros: typeof macros;
   marketplace: typeof marketplace;
   "migrations/backfillAccountMembers": typeof migrations_backfillAccountMembers;
+  "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
   moduleAssets: typeof moduleAssets;
   moduleDetail: typeof moduleDetail;
   moduleEngine: typeof moduleEngine;
