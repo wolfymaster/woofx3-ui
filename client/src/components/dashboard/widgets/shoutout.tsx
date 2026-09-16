@@ -1,15 +1,17 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Loader2, Megaphone, Radio, Volume2 } from "lucide-react";
+import { ChevronRight, Loader2, Megaphone, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useChatters } from "@/hooks/use-chatters";
 import { useInstance } from "@/hooks/use-instance";
 import { matchChatters } from "@/lib/chatter-match";
+import { cn } from "@/lib/utils";
 import { ShoutoutQueue, type ShoutoutQueueEntry } from "./shoutout-queue";
 
 interface PendingTarget {
@@ -39,6 +41,8 @@ export function ShoutoutWidget() {
   const [pending, setPending] = useState<PendingTarget | null>(null);
   const [isLooking, setIsLooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Session-local, not persisted: a starting height, not a remembered preference. */
+  const [queueOpen, setQueueOpen] = useState(false);
 
   // Drives the "retrying in Nm" labels without each row owning a timer.
   const [now, setNow] = useState(() => Date.now());
@@ -234,21 +238,21 @@ export function ShoutoutWidget() {
           <div className="flex justify-center py-4">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
-        ) : entries.length === 0 ? (
-          <div className="flex flex-col items-center py-6 text-center">
-            <Radio className="mb-2 h-7 w-7 text-muted-foreground/50" />
-            <p className="text-xs text-muted-foreground">Nothing queued</p>
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {/* Sits with the queue rather than in a header: it describes the
-                list below it, and the pacing is the thing people want to know. */}
-            <span className="block text-[10px] tabular-nums text-muted-foreground">
+        ) : entries.length > 0 ? (
+          // Collapsed by default so the widget is only as tall as the thing you
+          // came here to do. The trigger still carries the count and the pacing:
+          // a queue that is about to fire shoutouts should not go silent about
+          // its size just because it is folded away.
+          <Collapsible open={queueOpen} onOpenChange={setQueueOpen}>
+            <CollapsibleTrigger className="flex w-full items-center gap-1 text-[10px] tabular-nums text-muted-foreground hover:text-foreground">
+              <ChevronRight className={cn("h-3 w-3 transition-transform", queueOpen && "rotate-90")} />
               {entries.length} queued · 2m apart
-            </span>
-            <ShoutoutQueue entries={entries} now={now} onRemove={handleRemove} onReorder={handleReorder} />
-          </div>
-        )}
+            </CollapsibleTrigger>
+            <CollapsibleContent className="pt-1.5">
+              <ShoutoutQueue entries={entries} now={now} onRemove={handleRemove} onReorder={handleReorder} />
+            </CollapsibleContent>
+          </Collapsible>
+        ) : null}
       </div>
     </div>
   );
