@@ -21,6 +21,7 @@ import {
 } from "@/lib/dashboard-layouts";
 import { dashboardWidgetsByCategory, getDashboardWidget } from "@/lib/dashboard-widgets/registry";
 import { widgetSlotId } from "@/lib/dashboard-widgets/types";
+import { cn } from "@/lib/utils";
 
 type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
 type DashboardPanelWidget = DashboardPanel["widgets"][number];
@@ -104,20 +105,27 @@ function AddWidgetMenu({ onSelect, trigger }: { onSelect: (type: string) => void
 interface WidgetSlotProps {
   widget: DashboardPanelWidget;
   isEditing: boolean;
+  /** False for every widget stacked below the first in its zone. */
+  isFirst: boolean;
   onRemove: () => void;
   onConfigChange: (config: Record<string, unknown>) => void;
 }
 
-function WidgetSlot({ widget, isEditing, onRemove, onConfigChange }: WidgetSlotProps) {
+function WidgetSlot({ widget, isEditing, isFirst, onRemove, onConfigChange }: WidgetSlotProps) {
   const entry = getDashboardWidget(widget.type);
   const Component = entry?.component;
 
-  // One card for both cases, differing only in its body. An unknown widget used
-  // to return early before the edit-mode row was rendered, which left it with no
+  // Transparent: the surface belongs to the zone, so stacked widgets sit on one
+  // background instead of butting two bordered cards together. A rule separates
+  // them, since the resize handle that used to imply a boundary only renders
+  // while editing.
+  //
+  // Both the known and unknown cases share this frame. An unknown widget used to
+  // return early, before the edit-mode row was rendered, which left it with no
   // remove control at all -- so the one placement you most need to delete was
-  // the one you could not. Sharing the frame keeps that from recurring.
+  // the one you could not.
   return (
-    <Card className="h-full flex flex-col overflow-hidden">
+    <div className={cn("h-full flex flex-col overflow-hidden", !isFirst && "border-t border-border")}>
       {isEditing && (
         <div className="flex items-center px-2 py-1.5 border-b border-border bg-muted/30 shrink-0">
           {/* No name here: the registry label still identifies the widget in the
@@ -143,7 +151,7 @@ function WidgetSlot({ widget, isEditing, onRemove, onConfigChange }: WidgetSlotP
           </div>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -210,6 +218,7 @@ function DashboardZone({
         <WidgetSlot
           widget={widget}
           isEditing={isEditing}
+          isFirst={index === 0}
           onRemove={() => onRemoveWidget(zoneId, slotId)}
           onConfigChange={(config) => onWidgetConfigChange(zoneId, slotId, widget.type, config)}
         />
@@ -219,9 +228,12 @@ function DashboardZone({
 
   return (
     <div className="flex flex-col min-h-0 gap-2" style={growStyle} data-testid={`canvas-zone-${zoneId}`}>
+      {/* The surface is the zone's, not each widget's. It sits on the panel
+          group rather than the outer div so the edit-mode Add Widget button
+          below stays off it. */}
       <ResizablePanelGroup
         direction="vertical"
-        className="flex-1 min-h-0"
+        className="flex-1 min-h-0 rounded-lg border border-border bg-card overflow-hidden"
         onLayout={isEditing ? (sizes) => onResizeWidgets(zoneId, sizes) : undefined}
       >
         {panelChildren}
