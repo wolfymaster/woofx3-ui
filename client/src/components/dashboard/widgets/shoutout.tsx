@@ -162,7 +162,15 @@ export function ShoutoutWidget() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button size="sm" className="flex-1 gap-1.5" onClick={confirm} data-testid="button-confirm-shoutout">
+              <Button
+                size="sm"
+                className="flex-1 gap-1.5"
+                // Enter in the box opens this card, so focus lands here and a
+                // second Enter queues it — the whole flow without the mouse.
+                autoFocus
+                onClick={confirm}
+                data-testid="button-confirm-shoutout"
+              >
                 <Megaphone className="h-4 w-4" />
                 Add to queue
               </Button>
