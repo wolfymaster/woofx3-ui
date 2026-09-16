@@ -371,16 +371,28 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
-  // pinnedMessages: notes the dashboard's Activity panel keeps visible — a
-  // raid to shout out, a link to repeat. Composed by hand rather than pinned
-  // off a real chat message: no addressable chat-message record exists on this
-  // side today (the engine webhook path carries lifecycle events, not chat,
-  // and the browser's direct EventSub feed carries no chat either).
+  // pinnedMessages: history of things worth pinning in the channel's chat, kept
+  // so the same message can be re-pinned across streams without retyping it.
+  //
+  // Twitch holds exactly one pinned message per channel and pins it by message
+  // id, so this is deliberately NOT a mirror of that single slot — it is the
+  // local list we pin *from*. `twitchMessageId` is set only for entries this app
+  // posted itself; a message id stops being pinnable once its stream ends, which
+  // is why the text is kept too and re-posted when the id is stale (see
+  // lib/pinStrategy.ts).
+  //
+  // Rows predating Twitch pinning were hand-written Activity-panel notes. They
+  // carry no message id and so take the re-post path, which is exactly right.
   pinnedMessages: defineTable({
     instanceId: v.id("instances"),
     authorName: v.optional(v.string()),
     content: v.string(),
+    /** Set when this app posted the message; absent for hand-written entries. */
+    twitchMessageId: v.optional(v.string()),
+    /** When the entry was created — also when its message id was minted. */
     pinnedAt: v.number(),
+    /** Last time this entry was actually pinned on Twitch, for ordering by recency of use. */
+    lastPinnedAt: v.optional(v.number()),
     pinnedByUserId: v.id("users"),
   }).index("by_instance_pinned_at", ["instanceId", "pinnedAt"]),
 

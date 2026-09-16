@@ -56,6 +56,7 @@ import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.
 import type * as lib_inboundWebhookPath from "../lib/inboundWebhookPath.js";
 import type * as lib_inboundWebhookRelay from "../lib/inboundWebhookRelay.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
+import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
 import type * as lib_sceneCascade from "../lib/sceneCascade.js";
 import type * as lib_sceneOverlayUrl from "../lib/sceneOverlayUrl.js";
@@ -87,6 +88,7 @@ import type * as moduleWebhook from "../moduleWebhook.js";
 import type * as moduleWidgets from "../moduleWidgets.js";
 import type * as obsCommands from "../obsCommands.js";
 import type * as obsSceneConfigs from "../obsSceneConfigs.js";
+import type * as pins from "../pins.js";
 import type * as platformRealtime from "../platformRealtime.js";
 import type * as registration from "../registration.js";
 import type * as resources from "../resources.js";
@@ -170,6 +172,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inboundWebhookPath": typeof lib_inboundWebhookPath;
   "lib/inboundWebhookRelay": typeof lib_inboundWebhookRelay;
   "lib/moduleKey": typeof lib_moduleKey;
+  "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
   "lib/sceneCascade": typeof lib_sceneCascade;
   "lib/sceneOverlayUrl": typeof lib_sceneOverlayUrl;
@@ -201,6 +204,7 @@ declare const fullApi: ApiFromModules<{
   moduleWidgets: typeof moduleWidgets;
   obsCommands: typeof obsCommands;
   obsSceneConfigs: typeof obsSceneConfigs;
+  pins: typeof pins;
   platformRealtime: typeof platformRealtime;
   registration: typeof registration;
   resources: typeof resources;

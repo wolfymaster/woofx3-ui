@@ -34,9 +34,10 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 |------|----------|-------|
 | `stream-status` | stream | Live/offline, viewers, uptime |
 | `live-events` | stream | Follows/subs/cheers/raids, pushed from the engine |
-| `activity` | stream | Tabbed events, pinned notes, highlights |
+| `activity` | stream | Tabbed events and highlights |
 | `stream-preview` | stream | Thumbnail, click to enlarge |
-| `broadcast-controls` | stream | Announcements |
+| `announcement` | stream | Send a coloured announcement to chat |
+| `pinned` | stream | Twitch pinned message, plus re-pinnable history — see below |
 | `shoutout` | stream | Autocomplete from chat, confirm, queue — see below |
 | `workflow-runs` | automation | Recent and in-progress executions |
 | `macro-pad` | automation | One-click buttons — see below |
@@ -77,6 +78,38 @@ variable names are restricted to `[A-Za-z0-9_]`.
 Execution of `chat-command` and `trigger-workflow` is **not yet wired** to the
 engine; both log to the console. `http-request` currently fetches straight from the
 browser, so it is subject to CORS and exposes any header secret client-side.
+
+## Pinned
+
+Twitch keeps **exactly one pinned message per channel**, and pinning a new one
+silently replaces it — so the widget shows a single current pin, not a list. The
+list underneath is *history*: things worth pinning again, kept because the same
+message tends to recur stream after stream.
+
+Pinning targets an existing chat message by id (`PUT /helix/chat/pins`), so a
+"custom" pinned message is really Send Chat Message with its `pin` flag — which
+means **it posts a visible chat message** from the connected account. Twitch pins
+messages; there is no free-floating pinned text.
+
+Reading the current pin (`GET /helix/chat/pins`) returns only ids and timing —
+no message text, no author. So the widget can quote a pin only when its id
+matches one we recorded; a pin made from Twitch's own UI shows as "pinned
+outside this app". Nothing here receives chat, so there is no other way to learn
+what it says. There is also no EventSub type for pinning, which is why the
+current pin is polled rather than pushed.
+
+Re-pinning has two paths, chosen by `convex/lib/pinStrategy.ts`: reuse the
+stored message id when the entry was created during the current broadcast,
+otherwise re-post the text and pin the new message, since a message id stops
+being pinnable once its stream ends. A refusal falls back to re-posting anyway —
+the rule exists to keep that fallback rare, not to replace it. History rows
+predating this feature were hand-written Activity-panel notes; they carry no
+message id and so always take the re-post path.
+
+Pinning needs `moderator:manage:chat_messages`. Reading needs only
+`moderator:read:chat_messages`, which existing links already carry — so the
+current pin is visible before reconnecting, while the controls are disabled with
+an inline hint. These endpoints have been in open beta since 2026-05-15.
 
 ## Shoutout
 
