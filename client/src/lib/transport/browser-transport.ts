@@ -4,17 +4,9 @@
 // pipelining under the hood). Subscriptions are polling-based since the
 // engine's current Api surface is point-in-time.
 
-import type { Woofx3EngineApi } from "@woofx3/api";
+import type { StreamEventFrame, Woofx3EngineApi } from "@woofx3/api";
 import { createEngineBrowserSession, type EngineBrowserSession, type RpcTarget } from "@woofx3/api/client";
-import type {
-  ChatMessage,
-  EngineModule,
-  StreamEvent,
-  StreamStatus,
-  WoofxTransport,
-  Workflow,
-  WorkflowRun,
-} from "./interface";
+import type { ChatMessage, EngineModule, StreamStatus, WoofxTransport, Workflow, WorkflowRun } from "./interface";
 
 /**
  * Local intersection: Woofx3EngineApi with an extra method the engine
@@ -30,12 +22,27 @@ const POLL_INTERVAL_RUNS = 10000;
 export class BrowserTransport implements WoofxTransport {
   private session: EngineBrowserSession<BrowserEngineApi> | null = null;
   private connected = false;
+  /** url|clientId|clientSecret of the live session, so connect() can no-op. */
+  private target: string | null = null;
+  private streamListeners = new Set<(frame: StreamEventFrame) => void>();
+  private streamRegistered = false;
 
   connect(url: string, clientId?: string, clientSecret?: string): void {
+    // Idempotent for an unchanged target. `useSyncEngineTransport` re-runs
+    // whenever the Convex instance row's object identity changes, which is any
+    // update at all -- rebuilding the socket each time would drop every
+    // registered stream subscription with it.
+    const target = `${url}|${clientId ?? ""}|${clientSecret ?? ""}`;
+    if (this.session && this.target === target) {
+      return;
+    }
+    this.target = target;
+
     if (this.session) {
       this.session.dispose();
       this.session = null;
       this.connected = false;
+      this.streamRegistered = false;
     }
 
     if (!url || !clientId || !clientSecret) {
@@ -50,6 +57,7 @@ export class BrowserTransport implements WoofxTransport {
       this.session = createEngineBrowserSession<BrowserEngineApi>(url, clientId, clientSecret, fallback);
       this.connected = true;
       console.log("[Transport] Connected to woofx3 at", url);
+      this.ensureStreamSubscription();
     } catch (err) {
       this.connected = false;
       console.warn("[Transport] Failed to connect:", err);
@@ -91,9 +99,38 @@ export class BrowserTransport implements WoofxTransport {
     return () => {};
   }
 
-  subscribeStreamEvents(_instanceId: string, _callback: (event: StreamEvent) => void): () => void {
-    // Engine no longer exposes getStreamEvents for browser polling.
-    return () => {};
+  /**
+   * One engine subscription, fanned out locally to every listener: the frames
+   * are identical for all of them, and a capnweb stub per widget would multiply
+   * pushes across the socket for no gain.
+   */
+  subscribeStreamEvents(_instanceId: string, callback: (frame: StreamEventFrame) => void): () => void {
+    this.streamListeners.add(callback);
+    this.ensureStreamSubscription();
+    return () => {
+      this.streamListeners.delete(callback);
+    };
+  }
+
+  private ensureStreamSubscription(): void {
+    if (this.streamRegistered || !this.session || this.streamListeners.size === 0) {
+      return;
+    }
+    this.streamRegistered = true;
+    this.session.api
+      .subscribeStreamEvents({
+        // forEach rather than for...of: this project's tsc target predates
+        // downlevel Set iteration, so the loop form does not compile.
+        onStreamEvent: async (frame: StreamEventFrame) => {
+          this.streamListeners.forEach((listener) => {
+            listener(frame);
+          });
+        },
+      })
+      .catch((err: unknown) => {
+        this.streamRegistered = false;
+        console.warn("[Transport] Failed to subscribe to stream events:", err);
+      });
   }
 
   subscribeWorkflowRuns(_instanceId: string, callback: (run: WorkflowRun) => void): () => void {
