@@ -70,6 +70,11 @@ export function ShoutoutWidget() {
 
   const suggestions = useMemo(() => matchChatters(chatters, query), [chatters, query]);
 
+  // Whether cmdk has anything on screen to act on. Not `suggestions.length`
+  // alone: an empty query still ranks the alphabetical head of the roster, but
+  // the list is not rendered, so cmdk has nothing highlighted.
+  const showingSuggestions = query.length > 0 && suggestions.length > 0;
+
   // Both the autocomplete and the Send button land here: you can shout out
   // someone who is not currently in chat, so the typed value is as valid an
   // input as a picked one.
@@ -176,6 +181,17 @@ export function ShoutoutWidget() {
                 placeholder="Who are we shouting out?"
                 value={query}
                 onValueChange={setQuery}
+                onKeyDown={(event) => {
+                  // cmdk already handles Enter whenever it has a highlighted
+                  // item, and selecting that chatter is what Enter should do.
+                  // Enter is only ours when there is nothing to select, so a
+                  // name that is not currently in chat still submits.
+                  if (event.key !== "Enter" || showingSuggestions || isLooking) {
+                    return;
+                  }
+                  event.preventDefault();
+                  void beginConfirm(query);
+                }}
                 data-testid="input-shoutout-target"
               />
               {query.length > 0 && (
