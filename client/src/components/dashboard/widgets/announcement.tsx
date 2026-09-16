@@ -74,7 +74,11 @@ export function AnnouncementWidget() {
 
   return (
     <div className="h-full flex flex-col overflow-auto p-3 gap-2">
-      <Label htmlFor="announcement-message">Announcement</Label>
+      {/* Kept for the textarea's accessible name, but not painted: the widget's
+          title belongs in the registry, not on the card. */}
+      <Label htmlFor="announcement-message" className="sr-only">
+        Announcement
+      </Label>
       <Textarea
         id="announcement-message"
         value={message}

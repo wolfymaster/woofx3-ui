@@ -134,13 +134,6 @@ export function ShoutoutWidget() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-sm font-semibold">Shoutout</span>
-        {entries.length > 0 && (
-          <span className="text-xs tabular-nums text-muted-foreground">{entries.length} queued · 2m apart</span>
-        )}
-      </div>
-
       <div className="flex-1 space-y-3 overflow-auto p-3">
         {pending ? (
           <div className="space-y-3 rounded-md border border-border p-3" data-testid="shoutout-confirm">
@@ -247,7 +240,14 @@ export function ShoutoutWidget() {
             <p className="text-xs text-muted-foreground">Nothing queued</p>
           </div>
         ) : (
-          <ShoutoutQueue entries={entries} now={now} onRemove={handleRemove} onReorder={handleReorder} />
+          <div className="space-y-1.5">
+            {/* Sits with the queue rather than in a header: it describes the
+                list below it, and the pacing is the thing people want to know. */}
+            <span className="block text-[10px] tabular-nums text-muted-foreground">
+              {entries.length} queued · 2m apart
+            </span>
+            <ShoutoutQueue entries={entries} now={now} onRemove={handleRemove} onReorder={handleReorder} />
+          </div>
         )}
       </div>
     </div>

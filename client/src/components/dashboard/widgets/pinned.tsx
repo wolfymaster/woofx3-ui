@@ -131,11 +131,6 @@ export function PinnedWidget() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
-        <span className="text-sm font-semibold">Pinned</span>
-        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-      </div>
-
       <div className="flex-1 space-y-3 overflow-auto p-3">
         <section className="space-y-1.5">
           <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Currently pinned</span>
@@ -183,7 +178,7 @@ export function PinnedWidget() {
               disabled={busy || !draft.trim() || !canPin}
               data-testid="button-pin-message"
             >
-              <Pin className="h-4 w-4" />
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pin className="h-4 w-4" />}
               Pin message
             </Button>
             <span className="text-[10px] tabular-nums text-muted-foreground">

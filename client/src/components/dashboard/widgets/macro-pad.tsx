@@ -289,8 +289,7 @@ export function MacroPadModule() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <span className="text-sm font-semibold">Macro Pad</span>
+      <div className="flex items-center justify-end px-3 py-2 border-b border-border shrink-0">
         <TooltipProvider>
           <div className="flex items-center gap-1">
             {macros && macros.length > 0 && (

@@ -101,12 +101,9 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">Workflow Runs</span>
-          <Badge variant="secondary" className="text-xs">
-            {runs.filter((r) => r.status === "running" || r.status === "pending").length} active
-          </Badge>
-        </div>
+        <Badge variant="secondary" className="text-xs">
+          {runs.filter((r) => r.status === "running" || r.status === "pending").length} active
+        </Badge>
         <Button
           variant="ghost"
           size="icon"
