@@ -18,6 +18,13 @@ export const SHOUTOUT_COOLDOWN_MS = 120_000;
 const RETRY_BASE_MS = 120_000;
 const RETRY_MAX_MS = 900_000; // 15 minutes
 
+/**
+ * How far past its scheduled time a processor run may be before it is presumed
+ * lost. Covers ordinary scheduler latency; anything beyond it means the job is
+ * not coming.
+ */
+export const STALE_RUN_GRACE_MS = 60_000;
+
 /** An entry as the scheduling rules see it. */
 export interface SchedulableEntry {
   sortOrder: number;
@@ -66,6 +73,29 @@ export function pickNextEntry<T extends SchedulableEntry>(entries: readonly T[],
     }
   }
   return best;
+}
+
+/**
+ * Whether a queue needs its processor re-armed.
+ *
+ * Two distinct failures look the same from outside. A run that died mid-flight
+ * leaves `runScheduledFor` undefined, because processQueue clears it before
+ * doing any work. A run the scheduler lost outright -- a deployment restart --
+ * leaves it set to a time that has passed, and nothing will ever clear it; the
+ * single-flight guard would then refuse to schedule a replacement forever. Both
+ * mean no run is coming.
+ *
+ * A time still in the future is a healthy pending run, however far out: the
+ * processor legitimately schedules itself up to a backoff away.
+ */
+export function isQueueStalled(runScheduledFor: number | undefined, hasEntries: boolean, now: number): boolean {
+  if (!hasEntries) {
+    return false;
+  }
+  if (runScheduledFor === undefined) {
+    return true;
+  }
+  return runScheduledFor < now - STALE_RUN_GRACE_MS;
 }
 
 /**

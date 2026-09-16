@@ -15,6 +15,7 @@ import {
 } from "./_generated/server";
 import {
   earliestEligibleAt,
+  isQueueStalled,
   nextSendAt,
   pickNextEntry,
   retryDelayMs,
@@ -404,6 +405,56 @@ export const processQueue = internalAction({
       instanceId: args.instanceId,
       at: now + SHOUTOUT_COOLDOWN_MS,
     });
+  },
+});
+
+/**
+ * Re-arm one instance's processor when its queue has work and no run is coming.
+ *
+ * A lost `runScheduledFor` is cleared before rescheduling: ensureProcessorScheduled
+ * reads an existing earlier time as proof a run is already on its way, so a
+ * stale one would make it decline to schedule anything, forever.
+ */
+export const rearmIfStalled = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<boolean> => {
+    // Existence only -- the sweep runs for every instance on a timer and has no
+    // reason to read a queue it is not going to touch.
+    const firstEntry = await ctx.db
+      .query("shoutoutQueue")
+      .withIndex("by_instance_and_sort_order", (q) => q.eq("instanceId", args.instanceId))
+      .first();
+
+    const state = await stateRow(ctx, args.instanceId);
+    const now = Date.now();
+
+    if (!isQueueStalled(state?.runScheduledFor, firstEntry !== null, now)) {
+      return false;
+    }
+
+    if (state && state.runScheduledFor !== undefined) {
+      await ctx.db.patch(state._id, { runScheduledFor: undefined });
+    }
+    await ensureProcessorScheduled(ctx, args.instanceId, now);
+    return true;
+  },
+});
+
+/**
+ * Cron entry point: nothing else re-arms a queue whose run went missing, since a
+ * run is only ever scheduled by an enqueue or by the previous run.
+ *
+ * One transaction per instance rather than one covering all of them, matching
+ * streamStatus.sweepLiveState -- a sweep that grows with the instance count does
+ * not belong in a single transaction.
+ */
+export const sweepStalledQueues = internalAction({
+  args: {},
+  handler: async (ctx): Promise<void> => {
+    const instanceIds: Id<"instances">[] = await ctx.runQuery(internal.instances.listRegisteredIds, {});
+    for (const instanceId of instanceIds) {
+      await ctx.runMutation(internal.shoutouts.rearmIfStalled, { instanceId });
+    }
   },
 });
 

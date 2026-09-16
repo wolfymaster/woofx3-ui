@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { earliestEligibleAt, nextSendAt, pickNextEntry, retryDelayMs, SHOUTOUT_COOLDOWN_MS } from "./shoutoutSchedule";
+import {
+  earliestEligibleAt,
+  isQueueStalled,
+  nextSendAt,
+  pickNextEntry,
+  retryDelayMs,
+  SHOUTOUT_COOLDOWN_MS,
+  STALE_RUN_GRACE_MS,
+} from "./shoutoutSchedule";
 
 const NOW = 1_000_000;
 
@@ -71,6 +79,34 @@ describe("pickNextEntry", () => {
   test("does not assume the input is sorted", () => {
     const entries = [entry(9, NOW - 1), entry(4, NOW - 1), entry(7, NOW - 1)];
     expect(pickNextEntry(entries, NOW)?.sortOrder).toBe(4);
+  });
+});
+
+describe("isQueueStalled", () => {
+  test("an empty queue is never stalled, however long nothing has been scheduled", () => {
+    expect(isQueueStalled(undefined, false, NOW)).toBe(false);
+    expect(isQueueStalled(NOW - 10_000_000, false, NOW)).toBe(false);
+  });
+
+  test("entries waiting with no run scheduled is stalled", () => {
+    expect(isQueueStalled(undefined, true, NOW)).toBe(true);
+  });
+
+  test("a run still to come is healthy, however far out its backoff put it", () => {
+    expect(isQueueStalled(NOW + 1, true, NOW)).toBe(false);
+    expect(isQueueStalled(NOW + 900_000, true, NOW)).toBe(false);
+  });
+
+  test("a run only just overdue is given its grace rather than double-armed", () => {
+    expect(isQueueStalled(NOW - 1_000, true, NOW)).toBe(false);
+  });
+
+  test("a run overdue past the grace is presumed lost", () => {
+    expect(isQueueStalled(NOW - STALE_RUN_GRACE_MS - 1, true, NOW)).toBe(true);
+  });
+
+  test("exactly at the grace boundary is not yet stalled", () => {
+    expect(isQueueStalled(NOW - STALE_RUN_GRACE_MS, true, NOW)).toBe(false);
   });
 });
 
