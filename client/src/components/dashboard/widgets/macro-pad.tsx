@@ -1,233 +1,370 @@
 import { api } from "@convex/_generated/api";
-import { useAction } from "convex/react";
-import { Edit, Globe, Loader2, MessageSquare, Pencil, Plus, Trash2, Workflow } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import type { Id } from "@convex/_generated/dataModel";
+import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useAction, useMutation, useQuery } from "convex/react";
+import { Check, GripVertical, Loader2, Pencil, Plus, SlidersHorizontal, Trash2, Zap } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
+import {
+  applyMacroVariables,
+  extractMacroVariables,
+  isHexColor,
+  type MacroButton,
+  type MacroConfig,
+  type MacroInput,
+} from "@/lib/macro-pad";
 import { cn } from "@/lib/utils";
+import { MacroIconPreview } from "./macro-icon-picker";
 import { MacroConfigModal } from "./macro-pad-config-modal";
+import { MacroVariablePrompt } from "./macro-variable-prompt";
 
-export interface MacroButton {
-  id: string;
-  label: string;
-  icon?: string;
-  type: "chat-command" | "trigger-workflow" | "http-request";
-  config: {
-    // For chat-command
-    command?: string;
-    // For trigger-workflow
-    workflowId?: string;
-    // For http-request
-    url?: string;
-    method?: "GET" | "POST" | "PUT" | "DELETE";
-    headers?: Record<string, string>;
-    body?: string;
+export type { MacroButton } from "@/lib/macro-pad";
+
+interface MacroTileProps {
+  macro: MacroButton;
+  isEditMode: boolean;
+  isExecuting: boolean;
+  variableCount: number;
+  onRun: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function MacroTile({ macro, isEditMode, isExecuting, variableCount, onRun, onEdit, onDelete }: MacroTileProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: macro.id,
+    disabled: !isEditMode,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
   };
+
+  // Tint rather than fill: the label keeps the theme's foreground color, so a
+  // pale or a vivid choice stays readable without measuring contrast. Same
+  // `${hex}20` wash the module detail panel uses for catalog colors.
+  const tint = isHexColor(macro.color) ? { borderColor: macro.color, backgroundColor: `${macro.color}20` } : undefined;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn("relative aspect-square", isDragging && "z-10 opacity-80")}
+      data-testid={`macro-tile-${macro.id}`}
+    >
+      <button
+        type="button"
+        disabled={isEditMode || isExecuting}
+        onClick={onRun}
+        style={tint}
+        className={cn(
+          "h-full w-full rounded-lg border border-border bg-card p-2",
+          "flex flex-col items-center justify-center gap-1.5 text-center",
+          "transition-all duration-100",
+          !isEditMode && "hover:border-primary/60 hover:bg-muted/50 active:scale-[0.97] active:bg-muted",
+          isEditMode && "cursor-grab border-dashed active:cursor-grabbing",
+          isDragging && "border-primary shadow-lg"
+        )}
+        {...(isEditMode ? attributes : {})}
+        {...(isEditMode ? listeners : {})}
+        data-testid={`button-macro-${macro.id}`}
+      >
+        {isExecuting ? (
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        ) : (
+          <MacroIconPreview
+            icon={macro.icon}
+            className={tint ? undefined : "text-muted-foreground"}
+            style={tint ? { color: macro.color } : undefined}
+          />
+        )}
+        <span className="text-xs font-medium leading-tight line-clamp-2">{macro.label}</span>
+        {variableCount > 0 && !isEditMode && (
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {variableCount === 1 ? "1 input" : `${variableCount} inputs`}
+          </span>
+        )}
+      </button>
+
+      {isEditMode && (
+        <>
+          <GripVertical className="absolute bottom-1 left-1 h-3.5 w-3.5 text-muted-foreground/60 pointer-events-none" />
+          <div className="absolute top-1 right-1 flex gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 bg-background/80"
+              onClick={onEdit}
+              data-testid={`button-edit-macro-${macro.id}`}
+            >
+              <Pencil className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 bg-background/80 text-destructive hover:text-destructive"
+              onClick={onDelete}
+              data-testid={`button-delete-macro-${macro.id}`}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
-interface MacroPadModuleProps {
-  config?: Record<string, unknown>;
-  onConfigChange?: (config: Record<string, unknown>) => void;
-}
-
-export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) {
+// Takes no props: the pad is shared per instance, so nothing about it comes from
+// the per-user widget config.
+export function MacroPadModule() {
   const { instance } = useInstance();
-  const [macros, setMacros] = useState<MacroButton[]>((config?.macros as MacroButton[]) || []);
   const [isEditMode, setIsEditMode] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [editingMacro, setEditingMacro] = useState<MacroButton | null>(null);
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
+  const [pendingMacro, setPendingMacro] = useState<MacroButton | null>(null);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const listEngineWorkflows = useAction(api.moduleEngine.listWorkflows);
 
-  // Load workflows via Convex
+  const instanceId = instance?._id;
+  const listArgs = instanceId ? { instanceId } : "skip";
+
+  const macros = useQuery(api.macros.list, listArgs);
+  const addMacro = useMutation(api.macros.addMacro);
+  const updateMacro = useMutation(api.macros.updateMacro);
+  const deleteMacro = useMutation(api.macros.deleteMacro);
+  // Without an optimistic update a dragged tile springs back to its old slot
+  // until the server round-trip lands.
+  const reorderMacros = useMutation(api.macros.reorderMacros).withOptimisticUpdate((localStore, args) => {
+    if (!instanceId) {
+      return;
+    }
+    const current = localStore.getQuery(api.macros.list, { instanceId });
+    if (!current) {
+      return;
+    }
+    const byId = new Map(current.map((macro) => [macro.id, macro]));
+    const reordered = args.macroIds.flatMap((id) => {
+      const macro = byId.get(id);
+      return macro ? [macro] : [];
+    });
+    localStore.setQuery(api.macros.list, { instanceId }, reordered);
+  });
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: depends on instance?._id (not the instance object) so it doesn't re-fetch on every reference change
   useEffect(() => {
     if (!instance) return;
     listEngineWorkflows({ instanceId: instance._id }).then(setWorkflows).catch(console.error);
   }, [instance?._id, listEngineWorkflows]);
 
-  // Sync macros from config when it changes
-  useEffect(() => {
-    if (config?.macros) {
-      setMacros(config.macros as MacroButton[]);
+  const variableCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const macro of macros ?? []) {
+      counts[macro.id] = extractMacroVariables(macro.config).length;
     }
-  }, [config?.macros]);
+    return counts;
+  }, [macros]);
 
   const handleAddMacro = useCallback(() => {
     setEditingMacro(null);
     setConfigModalOpen(true);
   }, []);
 
-  const handleEditMacro = useCallback((macro: MacroButton) => {
-    setEditingMacro(macro);
-    setConfigModalOpen(true);
-  }, []);
-
   const handleDeleteMacro = useCallback(
     (id: string) => {
-      const newMacros = macros.filter((m) => m.id !== id);
-      setMacros(newMacros);
-      onConfigChange?.({ macros: newMacros });
+      if (!instanceId) {
+        return;
+      }
+      void deleteMacro({ instanceId, macroId: id as Id<"macros"> });
     },
-    [macros, onConfigChange]
+    [instanceId, deleteMacro]
   );
 
   const handleSaveMacro = useCallback(
-    (macro: MacroButton) => {
-      let newMacros: MacroButton[];
-      if (editingMacro) {
-        // Update existing macro
-        newMacros = macros.map((m) => (m.id === editingMacro.id ? macro : m));
-      } else {
-        // Add new macro
-        newMacros = [...macros, macro];
+    (input: MacroInput) => {
+      if (!instanceId) {
+        return;
       }
-      setMacros(newMacros);
-      onConfigChange?.({ macros: newMacros });
+      if (editingMacro) {
+        void updateMacro({ instanceId, macroId: editingMacro.id as Id<"macros">, ...input });
+      } else {
+        void addMacro({ instanceId, ...input });
+      }
       setConfigModalOpen(false);
       setEditingMacro(null);
     },
-    [editingMacro, macros, onConfigChange]
+    [editingMacro, instanceId, addMacro, updateMacro]
   );
 
-  const handleExecuteMacro = useCallback(
-    async (macro: MacroButton) => {
-      if (isEditMode) return;
-
-      setIsExecuting(macro.id);
-      try {
-        switch (macro.type) {
-          case "chat-command":
-            // Execute chat command
-            if (macro.config.command) {
-              // TODO: Implement chat command execution via API
-              console.log("Executing chat command:", macro.config.command);
-            }
-            break;
-          case "trigger-workflow":
-            // Trigger workflow
-            if (macro.config.workflowId) {
-              // TODO: Implement workflow trigger via API
-              console.log("Triggering workflow:", macro.config.workflowId);
-            }
-            break;
-          case "http-request":
-            // Make HTTP request
-            if (macro.config.url) {
-              const response = await fetch(macro.config.url, {
-                method: macro.config.method || "GET",
-                headers: macro.config.headers || {},
-                body: macro.config.body ? JSON.stringify(JSON.parse(macro.config.body)) : undefined,
-              });
-              console.log("HTTP request result:", response.status);
-            }
-            break;
-        }
-      } catch (error) {
-        console.error("Failed to execute macro:", error);
-      } finally {
-        setIsExecuting(null);
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id || !instanceId || !macros) {
+        return;
       }
+      const from = macros.findIndex((m) => m.id === active.id);
+      const to = macros.findIndex((m) => m.id === over.id);
+      if (from === -1 || to === -1) {
+        return;
+      }
+      const macroIds = arrayMove(macros, from, to).map((m) => m.id);
+      void reorderMacros({ instanceId, macroIds });
     },
-    [isEditMode]
+    [macros, instanceId, reorderMacros]
   );
 
-  const getIcon = (iconName?: string) => {
-    const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
-      message: MessageSquare,
-      workflow: Workflow,
-      globe: Globe,
-    };
-    return iconMap[iconName || ""] || MessageSquare;
-  };
+  // A pad button is a small target; requiring a few pixels of movement keeps a
+  // click from being swallowed as the start of a drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  // Execution is still stubbed for two of the three types — the pad's buttons
+  // are wired to the engine separately. `config` arrives with every {{variable}}
+  // already resolved.
+  const runMacro = useCallback(async (macro: MacroButton, resolved: MacroConfig) => {
+    setIsExecuting(macro.id);
+    try {
+      switch (macro.type) {
+        case "chat-command":
+          if (resolved.command) {
+            // TODO: Implement chat command execution via API
+            console.log("Executing chat command:", resolved.command);
+          }
+          break;
+        case "trigger-workflow":
+          if (resolved.workflowId) {
+            // TODO: Implement workflow trigger via API
+            console.log("Triggering workflow:", resolved.workflowId);
+          }
+          break;
+        case "http-request":
+          if (resolved.url) {
+            const response = await fetch(resolved.url, {
+              method: resolved.method || "GET",
+              headers: resolved.headers || {},
+              body: resolved.body ? JSON.stringify(JSON.parse(resolved.body)) : undefined,
+            });
+            console.log("HTTP request result:", response.status);
+          }
+          break;
+      }
+    } catch (error) {
+      console.error("Failed to execute macro:", error);
+    } finally {
+      setIsExecuting(null);
+    }
+  }, []);
+
+  const handlePress = useCallback(
+    (macro: MacroButton) => {
+      if (isEditMode) {
+        return;
+      }
+      if (extractMacroVariables(macro.config).length > 0) {
+        setPendingMacro(macro);
+        return;
+      }
+      void runMacro(macro, macro.config);
+    },
+    [isEditMode, runMacro]
+  );
+
+  const handleVariablesSubmitted = useCallback(
+    (values: Record<string, string>) => {
+      if (!pendingMacro) {
+        return;
+      }
+      const macro = pendingMacro;
+      setPendingMacro(null);
+      void runMacro(macro, applyMacroVariables(macro.config, values));
+    },
+    [pendingMacro, runMacro]
+  );
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
         <span className="text-sm font-semibold">Macro Pad</span>
-        <div className="flex items-center gap-1">
-          {macros.length > 0 && (
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditMode(!isEditMode)}>
-              <Edit className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleAddMacro}>
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
+        <TooltipProvider>
+          <div className="flex items-center gap-1">
+            {macros && macros.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isEditMode ? "secondary" : "ghost"}
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setIsEditMode(!isEditMode)}
+                    data-testid="button-toggle-macro-edit"
+                  >
+                    {isEditMode ? <Check className="h-3.5 w-3.5" /> : <SlidersHorizontal className="h-3.5 w-3.5" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isEditMode ? "Done" : "Edit and reorder"}</TooltipContent>
+              </Tooltip>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={handleAddMacro}
+                  data-testid="button-add-macro"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Add a macro</TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </div>
 
-      <div className="flex-1 p-3 overflow-auto">
-        {macros.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <div className="text-center mb-4">
-              <div className="h-16 w-16 rounded-lg bg-muted flex items-center justify-center mb-3 mx-auto">
-                <MessageSquare className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <p className="text-sm text-muted-foreground mb-2">No macros yet</p>
-              <p className="text-xs text-muted-foreground mb-4">Add your first macro to get started</p>
-            </div>
-            <Button onClick={handleAddMacro} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Macro
-            </Button>
+      <div className="flex-1 overflow-auto p-3">
+        {macros === undefined ? (
+          <div className="h-full flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
+        ) : macros.length === 0 ? (
+          <EmptyState
+            icon={Zap}
+            title="No macros yet"
+            description="Add a button to fire a chat command, a workflow, or an HTTP request in one click."
+            action={{ label: "Add Macro", onClick: handleAddMacro }}
+            className="h-full py-6"
+          />
         ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {macros.map((macro) => {
-              const Icon = getIcon(macro.icon);
-              const isExecutingThis = isExecuting === macro.id;
-
-              return (
-                <Card
-                  key={macro.id}
-                  className={cn(
-                    "aspect-square flex flex-col items-center justify-center p-2 relative transition-all",
-                    !isEditMode && "cursor-pointer hover:bg-muted/50",
-                    isExecutingThis && "opacity-50"
-                  )}
-                  onClick={() => !isEditMode && handleExecuteMacro(macro)}
-                >
-                  {isEditMode && (
-                    <div className="absolute top-1 right-1 flex gap-1 z-10">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-5 w-5"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditMacro(macro);
-                        }}
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-5 w-5 text-destructive hover:text-destructive"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteMacro(macro.id);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
-                  <div className="flex flex-col items-center justify-center gap-1.5 flex-1">
-                    {isExecutingThis ? (
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                    ) : (
-                      <Icon className="h-6 w-6 text-muted-foreground" />
-                    )}
-                    <span className="text-xs font-medium text-center line-clamp-2">{macro.label}</span>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+          <>
+            {isEditMode && <p className="text-[11px] text-muted-foreground mb-2">Drag to reorder</p>}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={macros.map((m) => m.id)} strategy={rectSortingStrategy}>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(5.25rem,1fr))] gap-2">
+                  {macros.map((macro) => (
+                    <MacroTile
+                      key={macro.id}
+                      macro={macro}
+                      isEditMode={isEditMode}
+                      isExecuting={isExecuting === macro.id}
+                      variableCount={variableCounts[macro.id] ?? 0}
+                      onRun={() => handlePress(macro)}
+                      onEdit={() => {
+                        setEditingMacro(macro);
+                        setConfigModalOpen(true);
+                      }}
+                      onDelete={() => handleDeleteMacro(macro.id)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </>
         )}
       </div>
 
@@ -237,6 +374,18 @@ export function MacroPadModule({ config, onConfigChange }: MacroPadModuleProps) 
         macro={editingMacro}
         workflows={workflows}
         onSave={handleSaveMacro}
+      />
+
+      <MacroVariablePrompt
+        open={pendingMacro !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingMacro(null);
+          }
+        }}
+        macroLabel={pendingMacro?.label ?? ""}
+        variables={pendingMacro ? extractMacroVariables(pendingMacro.config) : []}
+        onSubmit={handleVariablesSubmitted}
       />
     </div>
   );

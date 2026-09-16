@@ -1,5 +1,4 @@
-import { Globe, MessageSquare, Workflow as WorkflowIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,7 +13,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import type { MacroButton } from "./macro-pad";
+import {
+  extractMacroVariables,
+  type MacroActionType,
+  type MacroButton,
+  type MacroHttpMethod,
+  type MacroInput,
+} from "@/lib/macro-pad";
+import { MacroColorPicker } from "./macro-color-picker";
+import { MacroIconPicker } from "./macro-icon-picker";
 
 /**
  * Minimal shape the picker needs — only `id` + `name` are read. Sourced from
@@ -28,17 +35,19 @@ interface MacroConfigModalProps {
   onOpenChange: (open: boolean) => void;
   macro: MacroButton | null;
   workflows: WorkflowOption[];
-  onSave: (macro: MacroButton) => void;
+  /** Ids are assigned by the server, so an edit is identified by `macro`, not by the payload. */
+  onSave: (input: MacroInput) => void;
 }
 
 export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave }: MacroConfigModalProps) {
   const [label, setLabel] = useState("");
-  const [icon, setIcon] = useState<string>("");
-  const [type, setType] = useState<"chat-command" | "trigger-workflow" | "http-request">("chat-command");
+  const [icon, setIcon] = useState<string | undefined>(undefined);
+  const [color, setColor] = useState<string | undefined>(undefined);
+  const [type, setType] = useState<MacroActionType>("chat-command");
   const [command, setCommand] = useState("");
   const [workflowId, setWorkflowId] = useState("");
   const [httpUrl, setHttpUrl] = useState("");
-  const [httpMethod, setHttpMethod] = useState<"GET" | "POST" | "PUT" | "DELETE">("GET");
+  const [httpMethod, setHttpMethod] = useState<MacroHttpMethod>("GET");
   const [httpHeaders, setHttpHeaders] = useState("");
   const [httpBody, setHttpBody] = useState("");
 
@@ -48,7 +57,8 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
   useEffect(() => {
     if (macro) {
       setLabel(macro.label);
-      setIcon(macro.icon || "");
+      setIcon(macro.icon);
+      setColor(macro.color);
       setType(macro.type);
       setCommand(macro.config.command || "");
       setWorkflowId(macro.config.workflowId || "");
@@ -57,9 +67,9 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
       setHttpHeaders(JSON.stringify(macro.config.headers || {}, null, 2));
       setHttpBody(macro.config.body || "");
     } else {
-      // Reset to defaults
       setLabel("");
-      setIcon("");
+      setIcon(undefined);
+      setColor(undefined);
       setType("chat-command");
       setCommand("");
       setWorkflowId("");
@@ -70,15 +80,39 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
     }
   }, [macro, open]);
 
+  // Headers are typed as free text, so a half-written JSON object is a normal
+  // intermediate state — treat unparseable as "no headers yet" rather than
+  // letting it throw on every keystroke.
+  const parsedHeaders = useMemo((): Record<string, string> => {
+    if (!httpHeaders.trim()) {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(httpHeaders);
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, string>) : {};
+    } catch {
+      return {};
+    }
+  }, [httpHeaders]);
+
+  const variables = useMemo(
+    () =>
+      extractMacroVariables({
+        ...(type === "chat-command" && { command }),
+        ...(type === "http-request" && { url: httpUrl, body: httpBody, headers: parsedHeaders }),
+      }),
+    [type, command, httpUrl, httpBody, parsedHeaders]
+  );
+
   const handleSave = () => {
     if (!label.trim()) {
       return;
     }
 
-    const newMacro: MacroButton = {
-      id: macro?.id || `macro-${Date.now()}`,
+    const newMacro: MacroInput = {
       label: label.trim(),
-      icon: icon || undefined,
+      icon,
+      color,
       type,
       config: {
         ...(type === "chat-command" && { command }),
@@ -86,7 +120,7 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
         ...(type === "http-request" && {
           url: httpUrl,
           method: httpMethod,
-          headers: httpHeaders ? JSON.parse(httpHeaders) : {},
+          headers: parsedHeaders,
           body: httpBody,
         }),
       },
@@ -94,12 +128,6 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
 
     onSave(newMacro);
   };
-
-  const iconOptions = [
-    { value: "message", label: "Message", icon: MessageSquare },
-    { value: "workflow", label: "Workflow", icon: WorkflowIcon },
-    { value: "globe", label: "Globe", icon: Globe },
-  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -110,54 +138,30 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
         </DialogHeader>
 
         <div className="space-y-4 py-4">
-          <div className="space-y-2">
-            <Label htmlFor="macro-label">Label</Label>
-            <Input
-              id="macro-label"
-              placeholder="e.g., Send Hello"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="macro-label">Label</Label>
+              <Input
+                id="macro-label"
+                placeholder="e.g., Send Hello"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                data-testid="input-macro-label"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="macro-icon">Icon</Label>
+              <MacroIconPicker id="macro-icon" value={icon} onChange={setIcon} />
+            </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="macro-icon">Icon (Optional)</Label>
-            <Select value={icon} onValueChange={setIcon}>
-              <SelectTrigger id="macro-icon">
-                <SelectValue placeholder="Select an icon" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">None</SelectItem>
-                {iconOptions.map((option) => {
-                  const Icon = option.icon;
-                  return (
-                    <SelectItem key={option.value} value={option.value}>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4" />
-                        {option.label}
-                      </div>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+            <Label>Color</Label>
+            <MacroColorPicker value={color} onChange={setColor} />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="macro-type">Action Type</Label>
-            <Select value={type} onValueChange={(v) => setType(v as typeof type)}>
-              <SelectTrigger id="macro-type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="chat-command">Send Chat Command</SelectItem>
-                <SelectItem value="trigger-workflow">Trigger Workflow</SelectItem>
-                <SelectItem value="http-request">HTTP Request</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <Tabs value={type} onValueChange={(v) => setType(v as typeof type)}>
+          <Tabs value={type} onValueChange={(v) => setType(v as MacroActionType)}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="chat-command">Chat Command</TabsTrigger>
               <TabsTrigger value="trigger-workflow">Workflow</TabsTrigger>
@@ -169,9 +173,10 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
                 <Label htmlFor="chat-command">Command</Label>
                 <Input
                   id="chat-command"
-                  placeholder="e.g., !hello"
+                  placeholder="e.g., !so {{channel}}"
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
+                  data-testid="input-macro-command"
                 />
                 <p className="text-xs text-muted-foreground">The chat command to send when this macro is executed.</p>
               </div>
@@ -201,7 +206,7 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
                 <Label htmlFor="http-url">URL</Label>
                 <Input
                   id="http-url"
-                  placeholder="https://api.example.com/endpoint"
+                  placeholder="https://api.example.com/{{target}}"
                   value={httpUrl}
                   onChange={(e) => setHttpUrl(e.target.value)}
                 />
@@ -209,7 +214,7 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
 
               <div className="space-y-2">
                 <Label htmlFor="http-method">Method</Label>
-                <Select value={httpMethod} onValueChange={(v) => setHttpMethod(v as typeof httpMethod)}>
+                <Select value={httpMethod} onValueChange={(v) => setHttpMethod(v as MacroHttpMethod)}>
                   <SelectTrigger id="http-method">
                     <SelectValue />
                   </SelectTrigger>
@@ -245,13 +250,34 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
               </div>
             </TabsContent>
           </Tabs>
+
+          <div className="rounded-md border border-border p-3 space-y-1.5" data-testid="macro-variables-hint">
+            <p className="text-xs font-medium">Variables</p>
+            {variables.length > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Pressing this button will ask for{" "}
+                {variables.map((name, index) => (
+                  <span key={name}>
+                    {index > 0 && ", "}
+                    <code className="font-mono text-foreground">{name}</code>
+                  </span>
+                ))}
+                .
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Write <code className="font-mono">{"{{name}}"}</code> anywhere above to be asked for its value each time
+                the button is pressed.
+              </p>
+            )}
+          </div>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!label.trim()}>
+          <Button onClick={handleSave} disabled={!label.trim()} data-testid="button-save-macro">
             {macro ? "Save Changes" : "Add Macro"}
           </Button>
         </DialogFooter>
