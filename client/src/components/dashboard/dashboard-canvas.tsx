@@ -110,25 +110,24 @@ interface WidgetSlotProps {
 
 function WidgetSlot({ widget, isEditing, onRemove, onConfigChange }: WidgetSlotProps) {
   const entry = getDashboardWidget(widget.type);
-  if (!entry) {
-    return (
-      <Card className="h-full flex items-center justify-center text-sm text-muted-foreground">
-        Unknown widget type: {widget.type}
-      </Card>
-    );
-  }
+  const Component = entry?.component;
 
-  const Component = entry.component;
-
+  // One card for both cases, differing only in its body. An unknown widget used
+  // to return early before the edit-mode row was rendered, which left it with no
+  // remove control at all -- so the one placement you most need to delete was
+  // the one you could not. Sharing the frame keeps that from recurring.
   return (
     <Card className="h-full flex flex-col overflow-hidden">
       {isEditing && (
-        <div className="flex items-center justify-between px-2 py-1.5 border-b border-border bg-muted/30 shrink-0">
-          <span className="text-xs font-medium text-muted-foreground">{entry.label}</span>
+        <div className="flex items-center px-2 py-1.5 border-b border-border bg-muted/30 shrink-0">
+          {/* No name here: the registry label still identifies the widget in the
+              Add Widget menu, but most widgets draw their own heading, so
+              printing it again only duplicated it. */}
           <button
             type="button"
-            className="text-muted-foreground hover:text-destructive"
+            className="ml-auto text-muted-foreground hover:text-destructive"
             onClick={onRemove}
+            aria-label={`Remove ${entry?.label ?? widget.type}`}
             data-testid={`button-remove-widget-${widgetSlotId(widget)}`}
           >
             <X className="h-3.5 w-3.5" />
@@ -136,7 +135,13 @@ function WidgetSlot({ widget, isEditing, onRemove, onConfigChange }: WidgetSlotP
         </div>
       )}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <Component config={widget.config} onConfigChange={onConfigChange} />
+        {Component ? (
+          <Component config={widget.config} onConfigChange={onConfigChange} />
+        ) : (
+          <div className="h-full flex items-center justify-center p-3 text-center text-sm text-muted-foreground">
+            Unknown widget type: {widget.type}
+          </div>
+        )}
       </div>
     </Card>
   );
