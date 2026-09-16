@@ -1,11 +1,14 @@
 // BrowserTransport — wraps the woofx3 SDK's capnweb WebSocket client for
 // direct browser→engine communication. Authenticates via the SDK's
 // createEngineBrowserSession (which handles gateway.authenticate + promise
-// pipelining under the hood). Subscriptions are polling-based since the
-// engine's current Api surface is point-in-time.
+// pipelining under the hood).
+//
+// Stream events arrive as engine pushes over this session; workflow runs are
+// still polled, since the engine exposes no subscription for them.
 
 import type { StreamEventFrame, Woofx3EngineApi } from "@woofx3/api";
 import { createEngineBrowserSession, type EngineBrowserSession, type RpcTarget } from "@woofx3/api/client";
+import { createReconnectBackoff } from "@/lib/reconnect-backoff";
 import type { ChatMessage, EngineModule, StreamStatus, WoofxTransport, Workflow, WorkflowRun } from "./interface";
 
 /**
@@ -19,13 +22,30 @@ interface BrowserEngineApi extends RpcTarget, Woofx3EngineApi {
 
 const POLL_INTERVAL_RUNS = 10000;
 
+interface Credentials {
+  url: string;
+  clientId: string;
+  clientSecret: string;
+}
+
 export class BrowserTransport implements WoofxTransport {
   private session: EngineBrowserSession<BrowserEngineApi> | null = null;
   private connected = false;
   /** url|clientId|clientSecret of the live session, so connect() can no-op. */
   private target: string | null = null;
+  /** Held so a reconnect can re-authenticate without another connect() call. */
+  private credentials: Credentials | null = null;
   private streamListeners = new Set<(frame: StreamEventFrame) => void>();
   private streamRegistered = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private backoff = createReconnectBackoff();
+  /**
+   * Bumped by every connect() and disconnect(). A broken-session callback or a
+   * pending retry carries the generation it was created under and does nothing
+   * if that no longer matches — dispose() can itself break the session, and a
+   * timer must not resurrect a target the caller has already moved off.
+   */
+  private generation = 0;
 
   connect(url: string, clientId?: string, clientSecret?: string): void {
     // Idempotent for an unchanged target. `useSyncEngineTransport` re-runs
@@ -36,44 +56,114 @@ export class BrowserTransport implements WoofxTransport {
     if (this.session && this.target === target) {
       return;
     }
-    this.target = target;
 
-    if (this.session) {
-      this.session.dispose();
-      this.session = null;
-      this.connected = false;
-      this.streamRegistered = false;
-    }
+    this.target = target;
+    this.teardown();
+    this.generation += 1;
 
     if (!url || !clientId || !clientSecret) {
       // Without credentials we can't build an authenticated session. The
       // old transport allowed an unauthenticated "ping-only" mode; nothing
       // in the current UI uses that path, so drop it.
+      this.credentials = null;
       return;
     }
 
-    try {
-      const fallback = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
-      this.session = createEngineBrowserSession<BrowserEngineApi>(url, clientId, clientSecret, fallback);
-      this.connected = true;
-      console.log("[Transport] Connected to woofx3 at", url);
-      this.ensureStreamSubscription();
-    } catch (err) {
-      this.connected = false;
-      console.warn("[Transport] Failed to connect:", err);
-    }
+    this.credentials = { url, clientId, clientSecret };
+    this.backoff.reset();
+    this.openSession(this.generation);
   }
 
   disconnect(): void {
+    this.generation += 1;
+    this.teardown();
+    // Cleared last: its absence is what stops a reconnect being scheduled.
+    this.credentials = null;
+    this.target = null;
+  }
+
+  isConnected(): boolean {
+    return this.connected && !!this.session;
+  }
+
+  /** Drop the live session and any pending retry, without touching credentials. */
+  private teardown(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.session) {
       this.session.dispose();
       this.session = null;
     }
     this.connected = false;
+    this.streamRegistered = false;
   }
 
-  isConnected(): boolean {
-    return this.connected && !!this.session;
+  private openSession(generation: number): void {
+    const credentials = this.credentials;
+    if (!credentials || generation !== this.generation) {
+      return;
+    }
+
+    try {
+      const fallback = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss" : "ws";
+      const session = createEngineBrowserSession<BrowserEngineApi>(
+        credentials.url,
+        credentials.clientId,
+        credentials.clientSecret,
+        fallback
+      );
+      this.session = session;
+      this.connected = true;
+
+      session.onBroken(() => {
+        if (generation !== this.generation || this.session !== session) {
+          return;
+        }
+        console.warn("[Transport] Engine session broken; reconnecting");
+        this.session = null;
+        this.connected = false;
+        this.streamRegistered = false;
+        this.scheduleReconnect(generation);
+      });
+
+      // The backoff resets on a proven round trip, not on construction:
+      // createEngineBrowserSession does not await authenticate, so a socket
+      // that is about to fail still builds cleanly. Resetting there would turn
+      // a dead engine into a one-second retry loop. ping costs nothing and
+      // works whether or not anything is subscribed.
+      void session.api
+        .ping()
+        .then(() => {
+          if (generation === this.generation && this.session === session) {
+            this.backoff.reset();
+          }
+        })
+        .catch(() => {
+          // A failure here means the session is unusable; onBroken drives the
+          // retry, so there is nothing to do but leave the backoff advancing.
+        });
+
+      this.ensureStreamSubscription();
+    } catch (err) {
+      this.connected = false;
+      this.session = null;
+      console.warn("[Transport] Failed to connect:", err);
+      this.scheduleReconnect(generation);
+    }
+  }
+
+  private scheduleReconnect(generation: number): void {
+    if (this.reconnectTimer || !this.credentials || generation !== this.generation) {
+      return;
+    }
+    const delay = this.backoff.next();
+    console.warn(`[Transport] Reconnecting in ${delay}ms (attempt ${this.backoff.attempts})`);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.openSession(generation);
+    }, delay);
   }
 
   private getApi(): BrowserEngineApi {
@@ -95,7 +185,7 @@ export class BrowserTransport implements WoofxTransport {
   subscribeChatMessages(_instanceId: string, _callback: (msg: ChatMessage) => void): () => void {
     // Engine no longer exposes getChatMessages / sendChatMessage. Keep the
     // transport method so dashboard widgets compile; inbound chat will need
-    // a different delivery path (e.g. webhooks) before this can do work.
+    // a different delivery path before this can do work.
     return () => {};
   }
 
@@ -103,6 +193,10 @@ export class BrowserTransport implements WoofxTransport {
    * One engine subscription, fanned out locally to every listener: the frames
    * are identical for all of them, and a capnweb stub per widget would multiply
    * pushes across the socket for no gain.
+   *
+   * The returned unsubscribe only drops the local listener. The engine-side
+   * registration lives as long as the session, and is re-established after a
+   * reconnect by openSession.
    */
   subscribeStreamEvents(_instanceId: string, callback: (frame: StreamEventFrame) => void): () => void {
     this.streamListeners.add(callback);
@@ -134,12 +228,14 @@ export class BrowserTransport implements WoofxTransport {
   }
 
   subscribeWorkflowRuns(_instanceId: string, callback: (run: WorkflowRun) => void): () => void {
-    const api = this.session?.api;
-    if (!api) {
-      return () => {};
-    }
-
     const interval = setInterval(async () => {
+      // Read through the live session each tick rather than capturing `api`:
+      // a reconnect replaces the session, and a captured stub would keep
+      // polling a dead one.
+      const api = this.session?.api;
+      if (!api) {
+        return;
+      }
       try {
         const runs = await api.getWorkflowRuns();
         for (const r of runs) {
