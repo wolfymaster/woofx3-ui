@@ -4,6 +4,7 @@ import { AlertCircle, BellRing, CheckCircle2, Loader2, SkipForward } from "lucid
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
+import { describeAlertFailure } from "@/lib/alert-failure";
 import { cn } from "@/lib/utils";
 
 const ALERT_LIMIT = 30;
@@ -70,6 +71,7 @@ function AlertLogItem({ alert }: { alert: AlertRow }) {
   const config = statusConfig[alert.status] ?? statusConfig.sent;
   const StatusIcon = config.icon;
   const target = alertTarget(alert.payload);
+  const friendly = alert.error ? describeAlertFailure(alert.error) : null;
 
   return (
     <div
@@ -84,12 +86,16 @@ function AlertLogItem({ alert }: { alert: AlertRow }) {
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span>{formatTimeAgo(alert.engineCreatedAt)}</span>
         </div>
-        {/* Truncated with the full text on hover, for the same reason the
-            workflow runs widget does it: the row is narrow, and a reason long
-            enough to be useful is long enough to push everything else out. */}
+        {/* The readable title on the row; the advice and the original
+            technical reason both on hover. Keeps the row one line without
+            hiding anything — and falls back to the raw reason for a failure
+            the mapping does not know. */}
         {alert.error && (
-          <p className={cn("text-xs truncate mt-0.5", config.color)} title={alert.error}>
-            {alert.error}
+          <p
+            className={cn("text-xs truncate mt-0.5", config.color)}
+            title={[friendly?.hint, alert.error].filter(Boolean).join("\n\n")}
+          >
+            {friendly?.title ?? alert.error}
           </p>
         )}
       </div>

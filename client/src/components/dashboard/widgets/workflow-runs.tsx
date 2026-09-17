@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
+import { describeAlertFailure } from "@/lib/alert-failure";
 import type { WorkflowRun } from "@/lib/transport";
 import { transport } from "@/lib/transport";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ const statusConfig: Record<
 function WorkflowRunItem({ run }: { run: WorkflowRun }) {
   const config = statusConfig[run.status] ?? statusConfig.running;
   const StatusIcon = config.icon;
+  const friendly = run.error ? describeAlertFailure(run.error) : null;
 
   return (
     <div
@@ -58,12 +60,17 @@ function WorkflowRunItem({ run }: { run: WorkflowRun }) {
             </>
           )}
         </div>
-        {/* Truncated with the full text on hover: these rows are narrow, and
-            wrapping a long reason would push everything else off screen —
-            but hiding it entirely leaves a red badge nobody can act on. */}
+        {/* Truncated with the advice and the original reason on hover: these
+            rows are narrow, and wrapping would push everything else off screen
+            — but hiding it entirely leaves a red badge nobody can act on. A
+            step failure the mapping does not recognise shows verbatim, which
+            is most of them: only alerts are mapped so far. */}
         {run.error && (
-          <p className={cn("text-xs truncate mt-0.5", config.color)} title={run.error}>
-            {run.error}
+          <p
+            className={cn("text-xs truncate mt-0.5", config.color)}
+            title={[friendly?.hint, run.error].filter(Boolean).join("\n\n")}
+          >
+            {friendly?.title ?? run.error}
           </p>
         )}
       </div>
