@@ -940,9 +940,9 @@ export default defineSchema({
   })
     // The timeline's only read: every step of one run, in execution order.
     .index("by_run", ["runId", "stepIndex"])
-    // Upsert key, mirroring the unique index Postgres enforces. A step is
-    // reported twice per attempt -- on start and on settle -- so without this
-    // the timeline shows every step twice.
+    // Upsert key, mirroring the unique index Postgres enforces. Webhook
+    // delivery is at-least-once, so without this a repeated report shows the
+    // same step twice.
     .index("by_attempt", ["runId", "taskId", "attempt"]),
 
   // alertHistory: bounded history of fired alerts

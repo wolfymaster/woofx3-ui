@@ -1,7 +1,38 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { getInstanceMembership } from "./lib/teamAccess";
 
 const RUN_LIMIT_DEFAULT = 50;
+
+/**
+ * Milliseconds for an engine timestamp. Go marshals nanosecond precision, which
+ * not every JavaScript engine parses, so the fraction is trimmed first.
+ */
+function engineTime(value: string | undefined): number {
+  if (!value) {
+    return Number.NaN;
+  }
+  return Date.parse(value.replace(/(\.\d{3})\d+/, "$1"));
+}
+
+/**
+ * Whether an incoming snapshot is at least as new as the stored row.
+ *
+ * Webhooks arrive at-least-once and in any order, so a snapshot of a run still
+ * running can land after the one recording its completion. Applying it would
+ * rewind the run to `running` for good. When either time cannot be read the
+ * snapshot is applied: a stale row is recoverable, a dropped one is not.
+ */
+function isAtLeastAsNew(incoming: string, stored: string | undefined): boolean {
+  const next = engineTime(incoming);
+  const current = engineTime(stored);
+  if (Number.isNaN(next) || Number.isNaN(current)) {
+    return true;
+  }
+  return next >= current;
+}
 const RUN_LIMIT_MAX = 200;
 
 const runSnapshot = v.object({
@@ -38,12 +69,47 @@ const stepSnapshot = v.object({
 });
 
 /**
- * Runs for one instance, newest first.
+ * Whether the signed-in user may read this instance's history.
+ *
+ * Run history carries trigger events and resolved step parameters, which can
+ * include viewer names and message text, so it is gated exactly like the
+ * workflow definitions it describes.
+ */
+async function canRead(ctx: QueryCtx, instanceId: Id<"instances">): Promise<boolean> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    return false;
+  }
+  return (await getInstanceMembership(ctx, instanceId, userId)) !== null;
+}
+
+/**
+ * A workflow's display name, or undefined when the definition has not been
+ * mirrored into Convex yet or carries no name. The UI falls back to the id.
+ */
+async function workflowName(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  engineWorkflowId: string
+): Promise<string | undefined> {
+  const workflow: Doc<"workflows"> | null = await ctx.db
+    .query("workflows")
+    .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", engineWorkflowId))
+    .first();
+  const name = (workflow?.definition as { name?: unknown } | undefined)?.name;
+  return typeof name === "string" && name.length > 0 ? name : undefined;
+}
+
+/**
+ * Runs for one instance, newest first, each with its workflow's name.
  *
  * Deliberately does not join steps: the list shows one line per run, and
  * fetching every step of every run to render a summary would read the whole
  * history to display a page of it. The timeline loads steps for the one run
  * it is showing.
+ *
+ * Names are resolved once per distinct workflow rather than once per run --
+ * a page of fifty runs is usually a handful of workflows firing repeatedly.
  */
 export const listForInstance = query({
   args: {
@@ -51,12 +117,23 @@ export const listForInstance = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, { instanceId, limit }) => {
+    if (!(await canRead(ctx, instanceId))) {
+      return [];
+    }
+
     const take = Math.min(Math.max(limit ?? RUN_LIMIT_DEFAULT, 1), RUN_LIMIT_MAX);
-    return ctx.db
+    const runs = await ctx.db
       .query("workflowRuns")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .order("desc")
       .take(take);
+
+    const names = new Map<string, string | undefined>();
+    for (const workflowId of Array.from(new Set(runs.map((run) => run.workflowId)))) {
+      names.set(workflowId, await workflowName(ctx, instanceId, workflowId));
+    }
+
+    return runs.map((run) => ({ ...run, workflowName: names.get(run.workflowId) }));
   },
 });
 
@@ -67,6 +144,10 @@ export const runWithSteps = query({
     engineRunId: v.string(),
   },
   handler: async (ctx, { instanceId, engineRunId }) => {
+    if (!(await canRead(ctx, instanceId))) {
+      return null;
+    }
+
     const run = await ctx.db
       .query("workflowRuns")
       .withIndex("by_engine_id", (q) => q.eq("engineRunId", engineRunId))
@@ -83,7 +164,10 @@ export const runWithSteps = query({
       .withIndex("by_run", (q) => q.eq("runId", engineRunId))
       .collect();
 
-    return { run, steps };
+    return {
+      run: { ...run, workflowName: await workflowName(ctx, instanceId, run.workflowId) },
+      steps,
+    };
   },
 });
 
@@ -115,7 +199,9 @@ export const recordFromWebhook = internalMutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, row);
+      if (isAtLeastAsNew(run.updatedAt, existing.engineUpdatedAt)) {
+        await ctx.db.patch(existing._id, row);
+      }
     } else {
       await ctx.db.insert("workflowRuns", row);
     }
@@ -143,7 +229,9 @@ export const updateFromWebhook = internalMutation({
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, patch);
+      if (isAtLeastAsNew(run.updatedAt, existing.engineUpdatedAt)) {
+        await ctx.db.patch(existing._id, patch);
+      }
       return;
     }
 
@@ -190,9 +278,9 @@ export const recordStepFromWebhook = internalMutation({
       createdAt: Date.now(),
     };
 
-    // Keyed on the attempt, not the engine's row id: a step is reported when
-    // it starts and again when it settles, and the engine mints a fresh id
-    // each time. Matching on (run, task, attempt) collapses them into the one
+    // Keyed on the attempt, not the step's id: a repeated report of an attempt
+    // Postgres already stored arrives carrying a different id than the one the
+    // row kept. Matching on (run, task, attempt) collapses copies into the one
     // row the Postgres unique index also enforces.
     const existing = await ctx.db
       .query("workflowRunSteps")
@@ -202,7 +290,9 @@ export const recordStepFromWebhook = internalMutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, row);
+      if (isAtLeastAsNew(step.updatedAt, existing.engineUpdatedAt)) {
+        await ctx.db.patch(existing._id, row);
+      }
     } else {
       await ctx.db.insert("workflowRunSteps", row);
     }
