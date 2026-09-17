@@ -1,5 +1,6 @@
 import {
   Activity,
+  BellRing,
   Grid3x3,
   Megaphone,
   MessagesSquare,
@@ -12,6 +13,7 @@ import {
   Zap,
 } from "lucide-react";
 import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-panel";
+import { AlertLogWidget } from "@/components/dashboard/widgets/alert-log";
 import { AnnouncementWidget } from "@/components/dashboard/widgets/announcement";
 import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
@@ -93,6 +95,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: Workflow,
     category: "automation",
     component: WorkflowRunsModule,
+  },
+  {
+    type: "alert-log",
+    label: "Alert Log",
+    description: "Alerts the engine sent, and the reason any of them never played.",
+    icon: BellRing,
+    category: "automation",
+    component: AlertLogWidget,
   },
   {
     type: "stream-stats",
