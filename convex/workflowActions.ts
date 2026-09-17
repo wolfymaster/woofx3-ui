@@ -180,6 +180,31 @@ export const trigger = action({
 });
 
 /**
+ * Run a recorded workflow run again, whole or from one of its steps.
+ *
+ * Returns the correlation key at once, like `trigger`. The replay's progress
+ * arrives in transientEvents under it, and a refusal arrives there as a failure
+ * carrying the engine's reason. A replay is fired by a person, so like any
+ * manual run it is not written to the history.
+ */
+export const replay = action({
+  args: {
+    instanceId: v.id("instances"),
+    engineRunId: v.string(),
+    fromTaskId: v.optional(v.string()),
+  },
+  handler: async (ctx, { instanceId, engineRunId, fromTaskId }): Promise<{ triggerId: string }> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+    const triggerId = crypto.randomUUID();
+
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    await rpc.replayWorkflowRun(engineRunId, fromTaskId, triggerId, "dashboard");
+
+    return { triggerId };
+  },
+});
+
+/**
  * Toggle a workflow's enabled state on the engine. Waits for the engine's
  * webhook echo before returning.
  */

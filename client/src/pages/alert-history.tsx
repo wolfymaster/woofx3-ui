@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { History } from "lucide-react";
 import { useState } from "react";
+import { ReplayControls } from "@/components/alert-history/replay-controls";
 import { RunList } from "@/components/alert-history/run-list";
 import { RunTimeline } from "@/components/alert-history/run-timeline";
 import { EmptyState } from "@/components/common/empty-state";
@@ -55,7 +56,19 @@ export default function AlertHistory() {
             <RunList runs={runs} selectedRunId={activeRunId} onSelect={setSelectedRunId} />
           </Card>
           <Card className="min-h-[20rem]">
-            {activeRunId && <RunTimeline instanceId={instance._id} engineRunId={activeRunId} />}
+            {activeRunId && (
+              <RunTimeline
+                instanceId={instance._id}
+                engineRunId={activeRunId}
+                actions={({ failedStepTaskId }) => (
+                  <ReplayControls
+                    instanceId={instance._id}
+                    engineRunId={activeRunId}
+                    failedStepTaskId={failedStepTaskId}
+                  />
+                )}
+              />
+            )}
           </Card>
         </div>
       )}
