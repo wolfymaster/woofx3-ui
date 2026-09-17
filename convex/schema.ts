@@ -883,6 +883,68 @@ export default defineSchema({
     .index("by_engine_id", ["engineAlertId"])
     .index("by_instance_status", ["instanceId", "status"]),
 
+  // workflowRuns: durable history of runs the engine recorded, projected from
+  // the db-proxy outbox. Distinct from transientEvents, which carries the live
+  // progress of a run someone is waiting on and expires in a minute: these are
+  // the runs nobody was watching, which is exactly why they are kept.
+  //
+  // Runs fired by hand from the dashboard never reach here -- the engine does
+  // not record them.
+  workflowRuns: defineTable({
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    engineRunId: v.string(), // WorkflowRunSnapshot.id (the engine's execution id)
+    workflowId: v.string(),
+    // Left open rather than a union: run statuses come from the engine's own
+    // ExecutionStatus, which has values that do not reach here yet ("waiting").
+    // A union would force coercing an unknown status into a wrong one.
+    status: v.string(),
+    triggeredBy: v.optional(v.string()),
+    // The originating CloudEvent, verbatim. What a replay re-feeds.
+    triggerEvent: v.optional(v.string()),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+    engineCreatedAt: v.string(),
+    engineUpdatedAt: v.string(),
+    createdAt: v.number(), // Convex-side ingest time
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_id", ["engineRunId"])
+    .index("by_instance_workflow", ["instanceId", "workflowId"]),
+
+  // workflowRunSteps: one row per attempt at a task within a run.
+  //
+  // `inputs` is the parameters as resolved at run time and `outputs` the task's
+  // exports -- the two things the definition cannot reproduce, and what a
+  // resume restores. Both are JSON strings; nothing here reads inside them.
+  workflowRunSteps: defineTable({
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    engineStepId: v.string(),
+    runId: v.string(), // engineRunId of the owning run
+    taskId: v.string(),
+    name: v.optional(v.string()),
+    status: v.string(),
+    attempt: v.number(),
+    stepIndex: v.number(),
+    inputs: v.optional(v.string()),
+    outputs: v.optional(v.string()),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+    engineCreatedAt: v.string(),
+    engineUpdatedAt: v.string(),
+    createdAt: v.number(),
+  })
+    // The timeline's only read: every step of one run, in execution order.
+    .index("by_run", ["runId", "stepIndex"])
+    // Upsert key, mirroring the unique index Postgres enforces. A step is
+    // reported twice per attempt -- on start and on settle -- so without this
+    // the timeline shows every step twice.
+    .index("by_attempt", ["runId", "taskId", "attempt"]),
+
   // alertHistory: bounded history of fired alerts
   alertHistory: defineTable({
     instanceId: v.id("instances"),

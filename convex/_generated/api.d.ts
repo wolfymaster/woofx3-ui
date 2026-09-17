@@ -114,6 +114,7 @@ import type * as workflowActions from "../workflowActions.js";
 import type * as workflowCatalog from "../workflowCatalog.js";
 import type * as workflowCatalogContext from "../workflowCatalogContext.js";
 import type * as workflowInternal from "../workflowInternal.js";
+import type * as workflowRuns from "../workflowRuns.js";
 import type * as workflowTemplates from "../workflowTemplates.js";
 import type * as workflows from "../workflows.js";
 
@@ -230,6 +231,7 @@ declare const fullApi: ApiFromModules<{
   workflowCatalog: typeof workflowCatalog;
   workflowCatalogContext: typeof workflowCatalogContext;
   workflowInternal: typeof workflowInternal;
+  workflowRuns: typeof workflowRuns;
   workflowTemplates: typeof workflowTemplates;
   workflows: typeof workflows;
 }>;

@@ -955,6 +955,33 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      // Durable run history. Separate from the WORKFLOW_RUN_STARTED family
+      // above, which writes transientEvents for a caller watching one run:
+      // these are database rows, and they outlive the person who wasn't there.
+      case EngineEventType.WORKFLOW_RUN_RECORDED: {
+        await ctx.runMutation(internal.workflowRuns.recordFromWebhook, {
+          instanceId: instance._id,
+          run: event.run,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WORKFLOW_RUN_UPDATED: {
+        await ctx.runMutation(internal.workflowRuns.updateFromWebhook, {
+          instanceId: instance._id,
+          run: event.run,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WORKFLOW_RUN_STEP_RECORDED: {
+        await ctx.runMutation(internal.workflowRuns.recordStepFromWebhook, {
+          instanceId: instance._id,
+          step: event.step,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       case EngineEventType.ALERT_RECORDED: {
         await ctx.runMutation(internal.engineAlerts.recordFromWebhook, {
           instanceId: instance._id,
