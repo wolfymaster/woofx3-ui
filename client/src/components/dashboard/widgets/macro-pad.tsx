@@ -132,6 +132,7 @@ export function MacroPadModule() {
   const [pendingMacro, setPendingMacro] = useState<MacroButton | null>(null);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const listEngineWorkflows = useAction(api.moduleEngine.listWorkflows);
+  const triggerWorkflow = useAction(api.workflowActions.trigger);
 
   const instanceId = instance?._id;
   const listArgs = instanceId ? { instanceId } : "skip";
@@ -224,42 +225,46 @@ export function MacroPadModule() {
   // click from being swallowed as the start of a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  // Execution is still stubbed for two of the three types — the pad's buttons
-  // are wired to the engine separately. `config` arrives with every {{variable}}
-  // already resolved.
-  const runMacro = useCallback(async (macro: MacroButton, resolved: MacroConfig) => {
-    setIsExecuting(macro.id);
-    try {
-      switch (macro.type) {
-        case "chat-command":
-          if (resolved.command) {
-            // TODO: Implement chat command execution via API
-            console.log("Executing chat command:", resolved.command);
-          }
-          break;
-        case "trigger-workflow":
-          if (resolved.workflowId) {
-            // TODO: Implement workflow trigger via API
-            console.log("Triggering workflow:", resolved.workflowId);
-          }
-          break;
-        case "http-request":
-          if (resolved.url) {
-            const response = await fetch(resolved.url, {
-              method: resolved.method || "GET",
-              headers: resolved.headers || {},
-              body: resolved.body ? JSON.stringify(JSON.parse(resolved.body)) : undefined,
-            });
-            console.log("HTTP request result:", response.status);
-          }
-          break;
+  // Chat-command execution is still stubbed; workflow and HTTP buttons run for
+  // real. `config` arrives with every {{variable}} already resolved.
+  const runMacro = useCallback(
+    async (macro: MacroButton, resolved: MacroConfig) => {
+      setIsExecuting(macro.id);
+      try {
+        switch (macro.type) {
+          case "chat-command":
+            if (resolved.command) {
+              // TODO: Implement chat command execution via API
+              console.log("Executing chat command:", resolved.command);
+            }
+            break;
+          case "trigger-workflow":
+            if (resolved.workflowId && instanceId) {
+              // Resolves once the request reaches the bus. The run happens in
+              // the engine and reports its own lifecycle, so there is nothing
+              // further to await here.
+              await triggerWorkflow({ instanceId, workflowNameOrId: resolved.workflowId });
+            }
+            break;
+          case "http-request":
+            if (resolved.url) {
+              const response = await fetch(resolved.url, {
+                method: resolved.method || "GET",
+                headers: resolved.headers || {},
+                body: resolved.body ? JSON.stringify(JSON.parse(resolved.body)) : undefined,
+              });
+              console.log("HTTP request result:", response.status);
+            }
+            break;
+        }
+      } catch (error) {
+        console.error("Failed to execute macro:", error);
+      } finally {
+        setIsExecuting(null);
       }
-    } catch (error) {
-      console.error("Failed to execute macro:", error);
-    } finally {
-      setIsExecuting(null);
-    }
-  }, []);
+    },
+    [instanceId, triggerWorkflow]
+  );
 
   const handlePress = useCallback(
     (macro: MacroButton) => {

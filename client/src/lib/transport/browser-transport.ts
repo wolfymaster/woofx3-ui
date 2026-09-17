@@ -254,9 +254,15 @@ export class BrowserTransport implements WoofxTransport {
     return (result?.workflows ?? []) as unknown as Workflow[];
   }
 
+  /**
+   * Asks the engine to run a workflow and returns the correlation id for that
+   * request, not an execution id: the engine mints an execution id only when
+   * the run actually begins, after this call has returned. The run's outcome is
+   * reported against the id returned here.
+   */
   async executeWorkflow(_instanceId: string, workflowId: string): Promise<string> {
-    const result = await this.getApi().triggerWorkflowByName(workflowId, {}, "user");
-    return result.executionId || workflowId;
+    const result = await this.getApi().triggerWorkflowByName(workflowId, {}, "user", undefined, "dashboard");
+    return result.triggerId;
   }
 
   async getModuleState(_instanceId: string, moduleId: string): Promise<unknown> {

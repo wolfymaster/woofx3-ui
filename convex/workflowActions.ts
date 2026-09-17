@@ -152,6 +152,34 @@ export const deleteByEngineId = action({
 });
 
 /**
+ * Ask the engine to run a workflow, matched by id or by name.
+ *
+ * Returns the correlation key immediately rather than waiting, unlike the CRUD
+ * actions above. A run's outcome is not a webhook echo confirming a change; it
+ * is a lifecycle that arrives in `transientEvents` under this key. Callers
+ * subscribe with `api.transientEvents.get` and watch the run from there.
+ */
+export const trigger = action({
+  args: {
+    instanceId: v.id("instances"),
+    workflowNameOrId: v.string(),
+    parameters: v.optional(v.record(v.string(), v.string())),
+  },
+  handler: async (ctx, { instanceId, workflowNameOrId, parameters }): Promise<{ triggerId: string }> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+    // Minted before the call, so a caller can subscribe to the outcome before
+    // the run exists -- and so a lost response cannot strand a run whose
+    // result nobody can then find.
+    const triggerId = crypto.randomUUID();
+
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    await rpc.triggerWorkflowByName(workflowNameOrId, parameters ?? {}, undefined, triggerId, "dashboard");
+
+    return { triggerId };
+  },
+});
+
+/**
  * Toggle a workflow's enabled state on the engine. Waits for the engine's
  * webhook echo before returning.
  */
