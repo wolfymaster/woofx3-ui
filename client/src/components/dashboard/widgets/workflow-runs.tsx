@@ -58,6 +58,14 @@ function WorkflowRunItem({ run }: { run: WorkflowRun }) {
             </>
           )}
         </div>
+        {/* Truncated with the full text on hover: these rows are narrow, and
+            wrapping a long reason would push everything else off screen —
+            but hiding it entirely leaves a red badge nobody can act on. */}
+        {run.error && (
+          <p className={cn("text-xs truncate mt-0.5", config.color)} title={run.error}>
+            {run.error}
+          </p>
+        )}
       </div>
       <Badge variant="secondary" className={cn("text-[10px] shrink-0", config.color)}>
         {config.label}
