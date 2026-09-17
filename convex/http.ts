@@ -920,6 +920,41 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      // A workflow run somebody is waiting on. transientEvents is keyed by the
+      // client-generated id the trigger carried, so the UI subscribes before
+      // the run exists; these three arms are the only thing that turns "the
+      // event was published" into an outcome it can actually show.
+      case EngineEventType.WORKFLOW_RUN_STARTED:
+      case EngineEventType.WORKFLOW_RUN_COMPLETED:
+      case EngineEventType.WORKFLOW_RUN_FAILED: {
+        if (!event.triggerId) {
+          // The api-side relay already drops these, so arriving here means an
+          // older engine or a hand-published event. There is nothing to
+          // correlate it to, and writing a row under an undefined key would
+          // put it somewhere no subscriber looks.
+          return corsJson({ success: true, type: event.type, handled: false });
+        }
+        await ctx.runMutation(internal.transientEvents.emit, {
+          instanceId: instance._id,
+          correlationKey: event.triggerId,
+          type: event.type,
+          status:
+            event.type === EngineEventType.WORKFLOW_RUN_FAILED
+              ? "error"
+              : event.type === EngineEventType.WORKFLOW_RUN_COMPLETED
+                ? "success"
+                : "progress",
+          message: event.type === EngineEventType.WORKFLOW_RUN_FAILED ? event.error : undefined,
+          data: {
+            workflowId: event.workflowId,
+            executionId: event.executionId,
+            triggeredBy: event.triggeredBy,
+            occurredAt: event.occurredAt,
+          },
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       case EngineEventType.ALERT_RECORDED: {
         await ctx.runMutation(internal.engineAlerts.recordFromWebhook, {
           instanceId: instance._id,

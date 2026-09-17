@@ -47,11 +47,19 @@ export const fireTrigger = action({
     instanceId: v.id("instances"),
     eventType: v.string(),
     eventData: v.any(),
+    // Supplied by a caller that wants to know how the resulting run ended. The
+    // engine echoes it onto its workflow.run.* events, which land back in
+    // transientEvents under this same key.
+    triggerId: v.optional(v.string()),
+    triggeredBy: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, eventType, eventData }): Promise<{ success: boolean; message: string }> => {
+  handler: async (
+    ctx,
+    { instanceId, eventType, eventData, triggerId, triggeredBy }
+  ): Promise<{ success: boolean; message: string }> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    return rpc.triggerEvent(eventType, eventData as Record<string, unknown>);
+    return rpc.triggerEvent(eventType, eventData as Record<string, unknown>, triggerId, triggeredBy);
   },
 });
 
@@ -66,10 +74,16 @@ export const simulateTwitchEvent = action({
     instanceId: v.id("instances"),
     eventType: v.string(),
     eventData: v.any(),
+    // See fireTrigger: the correlation key a caller waits on.
+    triggerId: v.optional(v.string()),
+    triggeredBy: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, eventType, eventData }): Promise<{ success: boolean; message: string }> => {
+  handler: async (
+    ctx,
+    { instanceId, eventType, eventData, triggerId, triggeredBy }
+  ): Promise<{ success: boolean; message: string }> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    return rpc.simulateTwitchEvent(eventType, eventData as Record<string, unknown>);
+    return rpc.simulateTwitchEvent(eventType, eventData as Record<string, unknown>, triggerId, triggeredBy);
   },
 });
