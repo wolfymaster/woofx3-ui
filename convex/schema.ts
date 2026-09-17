@@ -115,6 +115,12 @@ export default defineSchema({
     twitchUserId: v.optional(v.string()),
     isLive: v.boolean(),
     startedAt: v.optional(v.string()), // ISO from StreamOnlineEvent
+    // The logical session the broadcast belongs to. It spans brief dropouts, so
+    // unlike startedAt above it is NOT cleared when the stream goes offline — a
+    // session may be entirely offline. Written only by SESSION_STARTED; the
+    // stream and poll writers omit these keys, which leaves them untouched.
+    sessionId: v.optional(v.string()),
+    sessionStartedAt: v.optional(v.string()), // ISO from SessionStartedEvent
     streamTitle: v.optional(v.string()),
     gameName: v.optional(v.string()),
     viewerCount: v.optional(v.number()),

@@ -30,20 +30,24 @@ export type RepinPlan =
 /**
  * How to re-pin `entry`.
  *
- * `streamStartedAt` is the current broadcast's start, or undefined when the
- * channel is offline or its live state is not yet known.
+ * `sessionStartedAt` is the current stream session's start, or undefined when
+ * no session is known yet.
  *
- * An entry created before the current stream began keeps an id from a previous
- * broadcast, which Twitch will refuse, so it goes straight to re-posting rather
- * than spending a call to learn that. When the stream boundary is unknown the
- * id is tried anyway: the runtime fallback catches a refusal, and guessing
- * "stale" would needlessly duplicate a message that was pinnable all along.
+ * The boundary is the session rather than the broadcast because a session spans
+ * brief dropouts: keying on the broadcast would move the boundary on every
+ * reconnect and discard ids that are still pinnable.
+ *
+ * An entry created before the current session began keeps an id Twitch will
+ * refuse, so it goes straight to re-posting rather than spending a call to
+ * learn that. When the boundary is unknown the id is tried anyway: the runtime
+ * fallback catches a refusal, and guessing "stale" would needlessly duplicate a
+ * message that was pinnable all along.
  */
-export function planRepin(entry: PinHistoryEntry, streamStartedAt: number | undefined): RepinPlan {
+export function planRepin(entry: PinHistoryEntry, sessionStartedAt: number | undefined): RepinPlan {
   if (!entry.twitchMessageId) {
     return { kind: "resend", text: entry.content };
   }
-  if (streamStartedAt !== undefined && entry.createdAt < streamStartedAt) {
+  if (sessionStartedAt !== undefined && entry.createdAt < sessionStartedAt) {
     return { kind: "resend", text: entry.content };
   }
   return { kind: "repin", messageId: entry.twitchMessageId };

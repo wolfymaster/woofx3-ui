@@ -992,6 +992,16 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      case EngineEventType.SESSION_STARTED: {
+        await ctx.runMutation(internal.instanceLiveState.onSessionStarted, {
+          instanceId: instance._id,
+          applicationId: event.applicationId,
+          sessionId: event.sessionId,
+          sessionStartedAt: event.startedAt,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       default: {
         logger.warn("webhook: unhandled event type", { eventType });
         return corsJson({ success: true, type: eventType, handled: false });

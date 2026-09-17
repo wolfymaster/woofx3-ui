@@ -99,26 +99,32 @@ export const historyEntry = internalQuery({
 });
 
 /**
- * The current broadcast's start as epoch ms, so a message id minted during an
- * earlier stream is not retried.
+ * The current session's start as epoch ms, so a message id minted during an
+ * earlier session is not retried.
  *
- * instanceLiveState stores startedAt as an ISO string (it comes straight off
- * the StreamOnline event), while history timestamps are epoch ms — so this
- * converts rather than handing planRepin two different units. An unparseable
- * value yields undefined, which planRepin reads as "boundary unknown" and
+ * Keyed on the session rather than the broadcast: a session spans brief
+ * dropouts, so a reconnect would otherwise move the boundary and throw away
+ * message ids that are still perfectly pinnable.
+ *
+ * instanceLiveState stores it as an ISO string (straight off the engine's
+ * SessionStarted event) while history timestamps are epoch ms, so this converts
+ * rather than handing planRepin two different units. An absent or unparseable
+ * value yields null, which planRepin reads as "boundary unknown" and
  * optimistically tries the id.
  */
-export const streamStartedAt = internalQuery({
+export const sessionStartedAt = internalQuery({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<number | null> => {
     const live = await ctx.db
       .query("instanceLiveState")
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
       .first();
-    if (!live?.isLive || !live.startedAt) {
+    // No isLive gate: a session stays current while the stream is down, so
+    // being offline does not make the boundary unknown.
+    if (!live?.sessionStartedAt) {
       return null;
     }
-    const parsed = Date.parse(live.startedAt);
+    const parsed = Date.parse(live.sessionStartedAt);
     return Number.isNaN(parsed) ? null : parsed;
   },
 });
@@ -343,7 +349,7 @@ export const repinFromHistory = action({
     // the function boundary. planRepin takes undefined for "boundary unknown",
     // so the conversion happens here rather than widening its signature to
     // carry a transport detail.
-    const startedAt: number | null = await ctx.runQuery(internal.pins.streamStartedAt, {
+    const startedAt: number | null = await ctx.runQuery(internal.pins.sessionStartedAt, {
       instanceId: args.instanceId,
     });
 
