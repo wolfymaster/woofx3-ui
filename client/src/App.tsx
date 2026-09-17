@@ -14,6 +14,7 @@ import AdminAppearance from "@/pages/admin/appearance";
 import AdminEngine from "@/pages/admin/engine";
 import AdminIntegrations from "@/pages/admin/integrations";
 import AdminStorage from "@/pages/admin/storage";
+import AlertHistory from "@/pages/alert-history";
 import Alerts from "@/pages/alerts";
 import Assets from "@/pages/assets";
 import AcceptInvite from "@/pages/auth/accept-invite";
@@ -141,6 +142,7 @@ function AppRoutes() {
                   </Route>
                   <Route path="/stream/alerts" component={Alerts} />
                   <Route path="/stream/alerts/:group" component={Alerts} />
+                  <Route path="/stream/alert-history" component={AlertHistory} />
                   <Route path="/stream/commands" component={Commands} />
                   <Route path="/stream/counters" component={Counters} />
                   <Route path="/stream/timers" component={Timers} />

@@ -4,6 +4,7 @@ import {
   FolderOpen,
   GraduationCap,
   HardDrive,
+  History,
   Key,
   Layers,
   LayoutDashboard,
@@ -36,6 +37,7 @@ export interface NavSection extends NavItem {
 
 export const STREAM_ITEMS: NavItem[] = [
   { id: "alerts", label: "Alerts", icon: Bell, href: "/stream/alerts" },
+  { id: "alert-history", label: "Alert History", icon: History, href: "/stream/alert-history" },
   { id: "commands", label: "Commands", icon: MessageSquare, href: "/stream/commands" },
   { id: "counters", label: "Counters", icon: Tally5, href: "/stream/counters" },
   { id: "scenes", label: "Scenes", icon: Layers, href: "/stream/scenes" },
