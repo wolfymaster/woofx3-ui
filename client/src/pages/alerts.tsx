@@ -11,19 +11,29 @@ import { TestEventSheet } from "@/components/test-events/test-event-sheet";
 import { EventWorkflowEditor } from "@/components/triggers/event-workflow-editor";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { alertGroupKey, buildAlertGroups, findAlertGroup } from "@/lib/alert-groups";
+import {
+  alertMenuPath,
+  alertNodeId,
+  buildAlertTree,
+  countAlertsByNode,
+  findAlertNode,
+  flattenAlertTree,
+  subtreePresets,
+  taxonomyLabel,
+} from "@/lib/alert-groups";
 import { projectWorkflow } from "@/lib/trigger-projection";
 
 const BASE_PATH = "/stream/alerts";
 
 /**
- * Triggers, grouped by what happened.
+ * Triggers, grouped by platform and then by what happened.
  *
  * Each event's configured triggers live in one workflow, so this screen is a projection
  * of the engine's own records — see lib/trigger-projection.ts. Nothing is stored here.
  */
 export default function Alerts() {
-  const params = useParams<{ group?: string }>();
+  // Everything below the Alerts route is the selected menu path, as deep as the taxonomy nests.
+  const params = useParams<{ "*"?: string }>();
   const [, navigate] = useLocation();
   const { instance } = useInstance();
   const { triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
@@ -34,42 +44,48 @@ export default function Alerts() {
   const [testPresetId, setTestPresetId] = useState<string | null>(null);
   const [isTestOpen, setIsTestOpen] = useState(false);
 
-  const groups = useMemo(() => buildAlertGroups(triggerPresets), [triggerPresets]);
+  const tree = useMemo(() => buildAlertTree(triggerPresets), [triggerPresets]);
+  const sections = useMemo(() => flattenAlertTree(tree), [tree]);
   const rows = useMemo(() => (workflows ?? []) as Doc<"workflows">[], [workflows]);
   const loading = catalogLoading || workflows === undefined;
 
-  // Configured-trigger count per group, so the rail says where the work already
-  // is. A workflow's group comes from the trigger it binds to, since the alert
-  // kind is declared on the trigger rather than derivable from the event.
-  const groupKeyByEvent = useMemo(() => {
-    const byEvent = new Map<string, string>();
+  // Configured-trigger count per menu entry, so the rail says where the work already
+  // is. A workflow's place comes from the trigger it binds to, since platform and
+  // alert kind are declared on the trigger rather than derivable from the event.
+  const menuPathByEvent = useMemo(() => {
+    const byEvent = new Map<string, string[]>();
     for (const preset of triggerPresets) {
-      const key = alertGroupKey(preset);
-      if (key && preset.event) {
-        byEvent.set(preset.event, key);
+      const path = alertMenuPath(preset);
+      if (path && preset.event) {
+        byEvent.set(preset.event, path);
       }
     }
     return byEvent;
   }, [triggerPresets]);
 
   const counts = useMemo(() => {
-    const byGroup = new Map<string, number>();
+    const perWorkflow: [string[], number][] = [];
     for (const row of rows) {
       const projected = projectWorkflow(row);
       if (!projected.ok) {
         continue;
       }
-      const key = groupKeyByEvent.get(projected.projection.event);
-      if (!key) {
-        continue;
+      const path = menuPathByEvent.get(projected.projection.event);
+      if (path) {
+        perWorkflow.push([path, projected.projection.triggers.length]);
       }
-      byGroup.set(key, (byGroup.get(key) ?? 0) + projected.projection.triggers.length);
     }
-    return byGroup;
-  }, [rows, groupKeyByEvent]);
+    return countAlertsByNode(perWorkflow);
+  }, [rows, menuPathByEvent]);
 
-  const groupKey = params?.group ?? null;
-  const group = findAlertGroup(groups, groupKey ?? undefined);
+  const selectedPath = (params?.["*"] ?? "").split("/").filter(Boolean).map(decodeSegment);
+  const selectedId = selectedPath.length > 0 ? alertNodeId(selectedPath) : null;
+  const node = selectedId === null ? undefined : findAlertNode(tree, selectedPath);
+  const nodePresets = node ? subtreePresets(node) : [];
+  // A leaf label alone does not say which entry this is once a segment repeats at
+  // two depths — `alert.subscription.gift` and `alert.shared.subscription.gift`
+  // both end in "Gift" — so the title names the whole trail, as the rail shows it.
+  const nodeTrail = node ? selectedPath.map(taxonomyLabel).join(" › ") : null;
 
   function openTest(presetId: string) {
     setTestPresetId(presetId);
@@ -78,14 +94,14 @@ export default function Alerts() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      <AlertGroupRail groups={groups} counts={counts} selectedKey={groupKey} basePath={BASE_PATH} />
+      <AlertGroupRail tree={tree} counts={counts} selectedId={selectedId} basePath={BASE_PATH} />
 
       <div className="flex-1 overflow-auto">
         <div className="p-6 lg:p-8 max-w-[900px]">
           <PageHeader
-            title={group ? group.label : "Alerts"}
+            title={nodeTrail ?? "Alerts"}
             description={
-              group
+              node
                 ? "Every trigger configured for this kind of event, and what each one does."
                 : "Pick a kind of event on the left. Each one is backed by a workflow you can also open in the builder."
             }
@@ -93,13 +109,13 @@ export default function Alerts() {
 
           {loading ? (
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-          ) : groupKey === null ? (
+          ) : selectedId === null ? (
             <EmptyState
               icon={Bell}
               title="Choose an event type"
               description="Cheers, subscriptions, raids — whatever a module registers shows up in the list on the left."
             />
-          ) : !group ? (
+          ) : !node ? (
             <EmptyState
               icon={Bell}
               title="No such event type"
@@ -108,7 +124,7 @@ export default function Alerts() {
             />
           ) : (
             <div className="space-y-10">
-              {group.presets.map((preset) => (
+              {nodePresets.map((preset) => (
                 <EventWorkflowEditor
                   key={preset.id}
                   triggerPreset={preset}
@@ -125,10 +141,19 @@ export default function Alerts() {
       <TestEventSheet
         open={isTestOpen}
         onOpenChange={setIsTestOpen}
-        groups={groups}
+        sections={sections}
         selectedId={testPresetId}
         onSelect={setTestPresetId}
       />
     </div>
   );
+}
+
+/** A URL path segment decoded; one that is not valid percent-encoding is kept as written, and matches nothing. */
+function decodeSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }

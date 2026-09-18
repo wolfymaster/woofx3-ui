@@ -141,7 +141,7 @@ function AppRoutes() {
                     <Redirect to="/stream/alerts" />
                   </Route>
                   <Route path="/stream/alerts" component={Alerts} />
-                  <Route path="/stream/alerts/:group" component={Alerts} />
+                  <Route path="/stream/alerts/*" component={Alerts} />
                   <Route path="/stream/alert-history" component={AlertHistory} />
                   <Route path="/stream/commands" component={Commands} />
                   <Route path="/stream/counters" component={Counters} />
