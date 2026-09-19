@@ -433,6 +433,9 @@ export default defineSchema({
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
+    // How a configured trigger reads, e.g. "{reward} is redeemed": the module's
+    // wording, with a {fieldId} placeholder for each condition value.
+    sentence: v.optional(v.string()),
     // The engine's open, multi-valued classification (e.g. ["platform.twitch"]),
     // which replaces its legacy single-value category. Groups catalog entries by
     // source without the UI hardcoding what the sources are.

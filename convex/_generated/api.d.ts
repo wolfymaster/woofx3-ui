@@ -55,6 +55,7 @@ import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/wo
 import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.js";
 import type * as lib_inboundWebhookPath from "../lib/inboundWebhookPath.js";
 import type * as lib_inboundWebhookRelay from "../lib/inboundWebhookRelay.js";
+import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
@@ -172,6 +173,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inboundWebhookDelivery": typeof lib_inboundWebhookDelivery;
   "lib/inboundWebhookPath": typeof lib_inboundWebhookPath;
   "lib/inboundWebhookRelay": typeof lib_inboundWebhookRelay;
+  "lib/moduleDisplayName": typeof lib_moduleDisplayName;
   "lib/moduleKey": typeof lib_moduleKey;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
