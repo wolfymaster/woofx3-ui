@@ -271,7 +271,14 @@ export default function Dashboard() {
     const widgets = currentWidgets.map((widget) =>
       widget.zoneId === zoneId && widgetSlotId(widget) === slotId ? { ...widget, type, config } : widget
     );
-    setDraftWidgetsForPanel(panelId, widgets);
+    if (isEditing) {
+      setDraftWidgetsForPanel(panelId, widgets);
+      return;
+    }
+    // Outside edit mode there is no draft anyone will later Save, so a widget's
+    // own settings (a macro added to the pad, a reordered button) have to reach
+    // Convex now or they are lost on the next load.
+    void setPanelWidgets({ instanceId: instance._id, panelId, widgets });
   };
 
   const handleResizeWidgets = (

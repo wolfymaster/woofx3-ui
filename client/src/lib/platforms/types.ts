@@ -1,15 +1,18 @@
-// Direct-to-platform realtime events for dashboard widgets — NOT to be
-// confused with engine/module-contributed scene widgets (WidgetDefinition /
-// WidgetInstance in the shared @woofx3/api contract), which are a completely
-// separate concept rendered as iframes on OBS browser sources. This is
-// UI-native: the browser connects straight to the streaming platform (e.g.
-// Twitch EventSub) so dashboard widgets get realtime events without any
-// engine round-trip.
+// Realtime platform events for dashboard widgets — NOT to be confused with
+// engine/module-contributed scene widgets (WidgetDefinition / WidgetInstance
+// in the shared @woofx3/api contract), which are a completely separate concept
+// rendered as iframes on OBS browser sources.
 //
-// A widget calls `usePlatformEvents` (./use-platform-events) rather than
-// touching a PlatformClient directly — that hook is what turns N widgets
-// each asking for the same event type into a single real subscription per
-// type, shared across every connected platform.
+// Events reach the browser from the engine over the transport's capnweb
+// session, as CloudEvent frames mapped here by ./engine-events. The browser
+// used to hold its own Twitch EventSub socket instead, which meant one
+// connection per open tab and a second event vocabulary alongside the
+// CloudEvents every other engine surface speaks.
+//
+// A widget calls `usePlatformEvents` (./use-platform-events) rather than the
+// transport directly — the transport keeps a single engine subscription and
+// fans out locally, so N widgets asking for the same type still produce one
+// registration.
 
 export type PlatformEventType = "follow" | "subscribe" | "cheer" | "raid";
 
@@ -24,12 +27,4 @@ export interface PlatformEvent {
   message?: string;
   tier?: string;
   timestamp: Date;
-}
-
-export interface PlatformClient {
-  isConnected(): boolean;
-  /** Ref-counted: the underlying subscription is created on the first call for
-   * a given type and torn down when the last one unsubscribes. */
-  subscribe(eventType: PlatformEventType, callback: (event: PlatformEvent) => void): () => void;
-  disconnect(): void;
 }

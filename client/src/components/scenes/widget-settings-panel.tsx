@@ -6,12 +6,14 @@ import {
   type FieldDescriptor,
 } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
+import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
 
 interface WidgetSettingsPanelProps {
   widget: Widget;
   fields: ConfigField[];
   renderers: Record<string, CustomFieldRenderer>;
+  availableVariables?: VariableOption[];
   onChangeSetting: (key: string, value: unknown) => void;
   onDelete: () => void;
 }
@@ -22,6 +24,7 @@ export function WidgetSettingsPanel({
   widget,
   fields,
   renderers,
+  availableVariables,
   onChangeSetting,
   onDelete,
 }: WidgetSettingsPanelProps) {
@@ -62,6 +65,7 @@ export function WidgetSettingsPanel({
               }
             }}
             customRenderers={renderers}
+            availableVariables={availableVariables}
           />
         )}
       </div>

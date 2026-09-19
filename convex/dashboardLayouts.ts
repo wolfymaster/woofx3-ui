@@ -126,7 +126,9 @@ export const renamePanel = mutation({
 // Replaces a panel's whole widgets array in one write. The client edits
 // widget placement in local draft state while `isEditing` is on (so Cancel
 // is just discarding that draft, no server round-trip) and calls this once
-// per changed panel when Save is clicked.
+// per changed panel when Save is clicked. A widget changing its own config
+// outside edit mode (a macro added to the macro pad) writes through here
+// immediately instead — there is no draft to save in that case.
 export const setPanelWidgets = mutation({
   args: {
     instanceId: v.id("instances"),

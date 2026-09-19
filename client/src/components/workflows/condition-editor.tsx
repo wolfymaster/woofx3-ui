@@ -71,7 +71,7 @@ interface ConditionEditorProps {
   conditions: ConditionConfig[];
   onChange: (conditions: ConditionConfig[]) => void;
   addLabel?: string;
-  /** Offered when the user types "${" in the field or value input — see computeAvailableVariables.
+  /** Offered when the user types "{" in the field or value input — see computeAvailableVariables.
    * Empty is fine: the picker only opens when it has something to show, so the inputs stay plain text. */
   availableVariables?: VariableOption[];
 }
@@ -111,7 +111,7 @@ export function ConditionEditor({
               <VariableAwareInput
                 value={condition.field}
                 onChange={(field) => updateRow(index, { field })}
-                placeholder="${trigger.data.field}"
+                placeholder="{variable}"
                 className="font-mono text-xs"
                 availableVariables={availableVariables}
                 data-testid={`input-condition-field-${index}`}

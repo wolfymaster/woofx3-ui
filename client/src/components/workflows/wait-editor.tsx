@@ -11,7 +11,7 @@ const DEFAULT_AGGREGATION: AggregationConfig = { strategy: "count", threshold: 1
 interface WaitEditorProps {
   wait: WaitConfig;
   onChange: (wait: WaitConfig) => void;
-  /** Offered when the user types "${" in the event, sum-field, or match-condition inputs. */
+  /** Offered when the user types "{" in the event, sum-field, or match-condition inputs. */
   availableVariables?: VariableOption[];
 }
 

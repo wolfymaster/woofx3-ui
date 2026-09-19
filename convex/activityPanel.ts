@@ -1,16 +1,17 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
+import { mutation, type QueryCtx, query } from "./_generated/server";
 import { getInstanceMembership } from "./lib/teamAccess";
 
-// Backing store for the dashboard's Activity panel: pinned notes and saved
-// highlights. Both are instance-scoped and shared across everyone with access
-// to the account — unlike dashboard notes, these are about the channel, not
-// about one operator.
+// Backing store for the dashboard's Activity panel: saved highlights.
+// Instance-scoped and shared across everyone with access to the account —
+// unlike dashboard notes, these are about the channel, not one operator.
+//
+// Pinning moved to convex/pins.ts when it came to mean real Twitch pinning; the
+// pinnedMessages table it used is now that feature's history.
 
 const FEED_PAGE_SIZE = 50;
-const MAX_CONTENT_LENGTH = 2_000;
 
 async function requireMember(ctx: QueryCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
   const userId = await getAuthUserId(ctx);
@@ -34,60 +35,6 @@ async function memberOrNull(ctx: QueryCtx, instanceId: Id<"instances">): Promise
   const membership = await getInstanceMembership(ctx, instanceId, userId);
   return membership ? userId : null;
 }
-
-export const listPinned = query({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<Doc<"pinnedMessages">[]> => {
-    if (!(await memberOrNull(ctx, args.instanceId))) {
-      return [];
-    }
-    return ctx.db
-      .query("pinnedMessages")
-      .withIndex("by_instance_pinned_at", (q) => q.eq("instanceId", args.instanceId))
-      .order("desc")
-      .take(FEED_PAGE_SIZE);
-  },
-});
-
-export const pin = mutation({
-  args: {
-    instanceId: v.id("instances"),
-    content: v.string(),
-    authorName: v.optional(v.string()),
-  },
-  handler: async (ctx, args): Promise<Id<"pinnedMessages">> => {
-    const userId = await requireMember(ctx, args.instanceId);
-
-    const content = args.content.trim();
-    if (!content) {
-      throw new Error("A pinned message needs some text");
-    }
-    if (content.length > MAX_CONTENT_LENGTH) {
-      throw new Error(`Pinned messages are limited to ${MAX_CONTENT_LENGTH} characters`);
-    }
-    const authorName = args.authorName?.trim();
-
-    return ctx.db.insert("pinnedMessages", {
-      instanceId: args.instanceId,
-      content,
-      authorName: authorName || undefined,
-      pinnedAt: Date.now(),
-      pinnedByUserId: userId,
-    });
-  },
-});
-
-export const unpin = mutation({
-  args: { messageId: v.id("pinnedMessages") },
-  handler: async (ctx: MutationCtx, args) => {
-    const message = await ctx.db.get(args.messageId);
-    if (!message) {
-      return;
-    }
-    await requireMember(ctx, message.instanceId);
-    await ctx.db.delete(args.messageId);
-  },
-});
 
 export const listHighlights = query({
   args: { instanceId: v.id("instances") },

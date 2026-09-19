@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, type QueryCtx, query } from "./_generated/server";
 import { canonicalRefFromProjectionKey } from "./lib/canonicalRef";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { BUILTIN_MODULE_LABEL, resolveModuleDisplayNames } from "./lib/moduleDisplayName";
 import { bareModuleKey } from "./lib/moduleKey";
 import { isWebhookTrigger } from "./lib/webhookEndpointKey";
 import type { CatalogBundle } from "./workflowCatalogContext";
@@ -22,6 +23,7 @@ function catalogTriggerRow(def: Doc<"triggerDefinitions">, id: string, moduleNam
     allowVariants: def.allowVariants,
     configFields: def.configFields,
     emits: def.emits,
+    sentence: def.sentence,
     projectionKey: def.projectionKey,
     taxonomy: def.taxonomy,
     canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "trigger"),
@@ -30,7 +32,12 @@ function catalogTriggerRow(def: Doc<"triggerDefinitions">, id: string, moduleNam
   };
 }
 
-function catalogActionRow(def: Doc<"actionDefinitions">, id: string, moduleName: string | undefined) {
+function catalogActionRow(
+  def: Doc<"actionDefinitions">,
+  id: string,
+  moduleName: string | undefined,
+  moduleLabel: string | undefined
+) {
   return {
     id,
     name: def.name,
@@ -47,6 +54,9 @@ function catalogActionRow(def: Doc<"actionDefinitions">, id: string, moduleName:
     functionCall: def.functionCall,
     moduleId: def.moduleId,
     moduleName,
+    // The action picker groups by the module a user recognises, which is a different
+    // name than `moduleName`: that one is the engine-facing key its RPCs need.
+    moduleLabel: moduleLabel ?? BUILTIN_MODULE_LABEL,
   };
 }
 
@@ -83,6 +93,10 @@ async function mergeCatalog(ctx: QueryCtx, bundle: CatalogBundle): Promise<Merge
     ctx,
     [...triggerDefs, ...actionDefs].map((def) => def.moduleId)
   );
+  const moduleLabels = await resolveModuleDisplayNames(
+    ctx,
+    actionDefs.map((def) => def.moduleId)
+  );
 
   const triggers = [];
   for (const id of bundle.enabledTriggerIds) {
@@ -100,7 +114,14 @@ async function mergeCatalog(ctx: QueryCtx, bundle: CatalogBundle): Promise<Merge
     if (!def) {
       continue;
     }
-    actions.push(catalogActionRow(def, id, def.moduleId ? moduleNames.get(def.moduleId) : undefined));
+    actions.push(
+      catalogActionRow(
+        def,
+        id,
+        def.moduleId ? moduleNames.get(def.moduleId) : undefined,
+        def.moduleId ? moduleLabels.get(def.moduleId) : undefined
+      )
+    );
   }
 
   return { triggers, actions };

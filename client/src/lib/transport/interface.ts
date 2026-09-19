@@ -1,3 +1,5 @@
+import type { StreamEventFrame } from "@woofx3/api";
+
 // WoofxTransport — abstracts communication with a woofx3 instance.
 // The browser (BrowserTransport) connects directly via WebSocket.
 // Tauri (TauriTransport) will use IPC → Rust → WebSocket.
@@ -19,18 +21,6 @@ export interface ChatMessage {
   message: string;
   color?: string;
   badges?: string[];
-  timestamp: Date;
-}
-
-export interface StreamEvent {
-  id: string;
-  type: "follow" | "subscribe" | "gift" | "bits" | "raid" | "cheer" | "custom";
-  userId?: string;
-  username?: string;
-  amount?: number;
-  viewerCount?: number;
-  message?: string;
-  metadata?: Record<string, unknown>;
   timestamp: Date;
 }
 
@@ -91,8 +81,11 @@ export interface WoofxTransport {
   // Chat (inbound subscription only — outbound send was removed from the engine)
   subscribeChatMessages(instanceId: string, callback: (msg: ChatMessage) => void): () => void;
 
-  // Stream events
-  subscribeStreamEvents(instanceId: string, callback: (event: StreamEvent) => void): () => void;
+  // Stream events. Carries the engine's CloudEvent frame verbatim; mapping to
+  // whatever a consumer renders is the consumer's job (see
+  // lib/platforms/engine-events.ts), so this transport does not introduce a
+  // second event vocabulary alongside the shared contract.
+  subscribeStreamEvents(instanceId: string, callback: (frame: StreamEventFrame) => void): () => void;
 
   // Workflow runs
   subscribeWorkflowRuns(instanceId: string, callback: (run: WorkflowRun) => void): () => void;

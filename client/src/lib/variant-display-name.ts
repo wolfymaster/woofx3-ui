@@ -1,9 +1,13 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { TriggerConfigValues, TriggerPreset } from "@/lib/workflow-presets";
 import { formatConfigValue } from "@/lib/workflow-presets";
+import { ANY_CONDITION } from "@/lib/workflow-presets-json";
 
 function formatFieldValue(field: ConfigField, raw: TriggerConfigValues[string]): string {
-  if (raw === null || raw === undefined || raw === "") {
+  if (raw === ANY_CONDITION) {
+    return `any ${field.label.toLowerCase()}`;
+  }
+  if (raw === undefined || raw === "") {
     return "";
   }
   return formatConfigValue(raw as Parameters<typeof formatConfigValue>[0], field.unit);

@@ -1,19 +1,19 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { useEffect, useRef } from "react";
 import { useInstance } from "@/hooks/use-instance";
-import { getTwitchClient } from "./twitch-client";
+import { transport } from "@/lib/transport";
+import { frameToPlatformEvent } from "./engine-events";
 import type { PlatformEvent, PlatformEventType } from "./types";
 
-// Widget-facing entry point for the direct-to-platform realtime layer. Each
-// call is a "virtual" subscription — under the hood every widget on the page
-// shares the same per-instance TwitchEventSubClient (see ./twitch-client),
-// which ref-counts so N widgets asking for "follow" only open one real
-// Twitch subscription. Aggregates across every platform connected for the
-// instance (currently just Twitch; more platforms plug in here later).
+// Widget-facing entry point for realtime platform events. Events arrive from
+// the engine over the capnweb session the transport already holds, rather than
+// from a per-tab connection to the platform: one socket instead of one per tab,
+// and one CloudEvent vocabulary shared with every other engine surface.
+//
+// Each call is a "virtual" subscription — the transport keeps a single engine
+// subscription and fans out locally, so N widgets asking for "follow" still
+// produce one registration.
 export function usePlatformEvents(eventTypes: PlatformEventType[], onEvent: (event: PlatformEvent) => void): void {
   const { instance } = useInstance();
-  const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
 
   const onEventRef = useRef(onEvent);
   onEventRef.current = onEvent;
@@ -21,7 +21,7 @@ export function usePlatformEvents(eventTypes: PlatformEventType[], onEvent: (eve
   eventTypesRef.current = eventTypes;
   const eventTypesKey = eventTypes.join(",");
 
-  const hasTwitch = !!platformLinks?.some((link) => link.platform === "twitch");
+  const instanceId = instance?._id;
 
   // eventTypesRef/onEventRef intentionally excluded from deps — refs are
   // stable and read at call time. eventTypesKey isn't referenced in the body
@@ -30,17 +30,14 @@ export function usePlatformEvents(eventTypes: PlatformEventType[], onEvent: (eve
   // requested types actually change.
   // biome-ignore lint/correctness/useExhaustiveDependencies: eventTypesKey is a deliberate content-key, not an oversight
   useEffect(() => {
-    if (!instance || !hasTwitch) {
+    if (!instanceId) {
       return;
     }
-    const client = getTwitchClient(instance._id);
-    const unsubscribes = eventTypesRef.current.map((eventType) =>
-      client.subscribe(eventType, (event) => onEventRef.current(event))
-    );
-    return () => {
-      for (const unsubscribe of unsubscribes) {
-        unsubscribe();
+    return transport.subscribeStreamEvents(instanceId, (frame) => {
+      const event = frameToPlatformEvent(frame);
+      if (event && eventTypesRef.current.includes(event.type)) {
+        onEventRef.current(event);
       }
-    };
-  }, [instance, hasTwitch, eventTypesKey]);
+    });
+  }, [instanceId, eventTypesKey]);
 }

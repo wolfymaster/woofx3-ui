@@ -23,7 +23,12 @@ import {
   type TriggerPreset,
   type TriggerVariant,
 } from "@/lib/workflow-presets";
-import { buildDefinitionFromPresets, buildDefinitionsForVariants } from "@/lib/workflow-presets-json";
+import {
+  buildDefinitionFromPresets,
+  buildDefinitionsForVariants,
+  incompleteConditionFields,
+} from "@/lib/workflow-presets-json";
+import { triggerPresetVariables, type VariableOption } from "@/lib/workflow-variables";
 import { PresetCard } from "./preset-card";
 import { TriggerConfigForm } from "./trigger-config-form";
 
@@ -131,6 +136,7 @@ function VariantConfigRow({ tier, trigger, allVariants, index, onUpdate, onRemov
               }
               onUpdate(tier.id, updates);
             }}
+            allowAny
           />
         )}
       </div>
@@ -246,10 +252,12 @@ function VariantActionPicker({ tier, actionChoices, onSelectAction }: VariantAct
 // Action config form for the single active variant.
 interface VariantActionConfigPickerProps {
   tier: TriggerVariant;
+  /** What the action's settings may reference: the trigger's payload. */
+  availableVariables: VariableOption[];
   onUpdateConfig: (tierId: string, actionConfig: TriggerConfigValues) => void;
 }
 
-function VariantActionConfigPicker({ tier, onUpdateConfig }: VariantActionConfigPickerProps) {
+function VariantActionConfigPicker({ tier, availableVariables, onUpdateConfig }: VariantActionConfigPickerProps) {
   if (!tier.action?.config?.fields) {
     return null;
   }
@@ -267,6 +275,7 @@ function VariantActionConfigPicker({ tier, onUpdateConfig }: VariantActionConfig
           fields={tier.action.config.fields}
           values={tier.actionConfig}
           onChange={(actionConfig) => onUpdateConfig(tier.id, actionConfig)}
+          availableVariables={availableVariables}
         />
       </div>
     </Card>
@@ -328,7 +337,12 @@ export function BasicWorkflowEditor() {
   });
 
   const hasTriggerConfig = (selectedTrigger?.config?.fields?.length ?? 0) > 0;
+  const triggerFields = selectedTrigger?.config?.fields ?? [];
   const allowVariants = !!selectedTrigger?.config?.allowVariants;
+  // A field left empty is neither a condition nor Any, so the wizard does not move past it.
+  const triggerConfigIncomplete = allowVariants
+    ? variants.some((variant) => incompleteConditionFields(triggerFields, variant.values).length > 0)
+    : incompleteConditionFields(triggerFields, triggerConfig).length > 0;
   const hasActionConfig = allowVariants
     ? variants.some((t) => (t.action?.config?.fields?.length ?? 0) > 0)
     : (selectedAction?.config?.fields?.length ?? 0) > 0;
@@ -440,6 +454,9 @@ export function BasicWorkflowEditor() {
 
   const handleContinue = () => {
     if (step === "trigger-config") {
+      if (triggerConfigIncomplete) {
+        return;
+      }
       setStep("action");
     } else if (step === "action" && allowVariants) {
       // For variant mode, check if all variants have actions and any need config
@@ -537,7 +554,9 @@ export function BasicWorkflowEditor() {
   // - For variant mode: all variants have actions selected
   // - For simple mode: action is selected
   const canCreate =
-    selectedTrigger && (allowVariants ? variants.length > 0 && variants.every((t) => t.action) : !!selectedAction);
+    selectedTrigger &&
+    !triggerConfigIncomplete &&
+    (allowVariants ? variants.length > 0 && variants.every((t) => t.action) : !!selectedAction);
 
   const canContinueFromAction = allowVariants
     ? variants.every((t) => t.action) && variants.some((t) => (t.action?.config?.fields?.length ?? 0) > 0)
@@ -679,6 +698,7 @@ export function BasicWorkflowEditor() {
                       fields={selectedTrigger.config.fields}
                       values={triggerConfig}
                       onChange={setTriggerConfig}
+                      allowAny
                     />
                   )}
                 </Card>
@@ -800,6 +820,7 @@ export function BasicWorkflowEditor() {
                   </div>
                   <VariantActionConfigPicker
                     tier={activeConfigVariant}
+                    availableVariables={selectedTrigger ? triggerPresetVariables(selectedTrigger) : []}
                     onUpdateConfig={handleVariantActionConfigUpdate}
                   />
                 </>
@@ -835,6 +856,7 @@ export function BasicWorkflowEditor() {
                         fields={selectedAction.config.fields}
                         values={actionConfig}
                         onChange={setActionConfig}
+                        availableVariables={selectedTrigger ? triggerPresetVariables(selectedTrigger) : []}
                       />
                     )}
                   </Card>
@@ -878,7 +900,7 @@ export function BasicWorkflowEditor() {
           )}
 
           {step === "trigger-config" && (
-            <Button onClick={handleContinue} data-testid="button-continue">
+            <Button onClick={handleContinue} disabled={triggerConfigIncomplete} data-testid="button-continue">
               Continue
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>

@@ -10,13 +10,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import type { AlertGroup } from "@/lib/alert-groups";
+import type { AlertMenuSection } from "@/lib/alert-groups";
 
 interface TestEventSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Every alert trigger, grouped by its `alert.*` taxonomy — the same groups as the rail. */
-  groups: AlertGroup[];
+  /** Every alert trigger, in the rail's menu order — see flattenAlertTree. */
+  sections: AlertMenuSection[];
   /** Held by the caller so the lightning icon on another event can retarget an open sheet. */
   selectedId: string | null;
   onSelect: (presetId: string) => void;
@@ -29,9 +29,9 @@ interface TestEventSheetProps {
  * visible and editable while firing — checking a threshold is edit, fire, repeat
  * rather than close, edit, reopen.
  */
-export function TestEventSheet({ open, onOpenChange, groups, selectedId, onSelect }: TestEventSheetProps) {
+export function TestEventSheet({ open, onOpenChange, sections, selectedId, onSelect }: TestEventSheetProps) {
   const preset = selectedId
-    ? groups.flatMap((group) => group.presets).find((entry) => entry.id === selectedId)
+    ? sections.flatMap((section) => section.presets).find((entry) => entry.id === selectedId)
     : undefined;
   const Form = preset ? testEventFormFor(preset) : null;
 
@@ -59,10 +59,10 @@ export function TestEventSheet({ open, onOpenChange, groups, selectedId, onSelec
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {groups.map((group) => (
-                    <SelectGroup key={group.key}>
-                      <SelectLabel>{group.label}</SelectLabel>
-                      {group.presets.map((entry) => (
+                  {sections.map((section) => (
+                    <SelectGroup key={section.id}>
+                      <SelectLabel>{section.label}</SelectLabel>
+                      {section.presets.map((entry) => (
                         <SelectItem key={entry.id} value={entry.id}>
                           {entry.name}
                         </SelectItem>

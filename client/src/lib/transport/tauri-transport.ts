@@ -6,15 +6,8 @@
 // Implementation will use: import { invoke } from '@tauri-apps/api/tauri'
 // and Rust commands defined in src-tauri/src/main.rs
 
-import type {
-  ChatMessage,
-  EngineModule,
-  StreamEvent,
-  StreamStatus,
-  WoofxTransport,
-  Workflow,
-  WorkflowRun,
-} from "./interface";
+import type { StreamEventFrame } from "@woofx3/api";
+import type { ChatMessage, EngineModule, StreamStatus, WoofxTransport, Workflow, WorkflowRun } from "./interface";
 
 export class TauriTransport implements WoofxTransport {
   connect(url: string, clientId?: string, clientSecret?: string): void {
@@ -41,7 +34,7 @@ export class TauriTransport implements WoofxTransport {
     throw new Error("TauriTransport not yet implemented");
   }
 
-  subscribeStreamEvents(instanceId: string, callback: (event: StreamEvent) => void): () => void {
+  subscribeStreamEvents(instanceId: string, callback: (frame: StreamEventFrame) => void): () => void {
     // TODO: Tauri event listener on 'stream-event' events
     throw new Error("TauriTransport not yet implemented");
   }

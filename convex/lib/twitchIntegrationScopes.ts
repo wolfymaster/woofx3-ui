@@ -19,6 +19,10 @@ export const TWITCH_INTEGRATION_SCOPES = [
   "moderator:manage:blocked_terms",
   "moderator:manage:shoutouts",
   "moderator:manage:banned_users",
+  // Pinning, unpinning and updating a pinned chat message. The read half below
+  // covers only reading the current pin, so a link granted before this was
+  // added can see what is pinned but not change it.
+  "moderator:manage:chat_messages",
   "moderator:read:chatters",
   "moderator:read:chat_messages",
   "moderator:read:chat_settings",

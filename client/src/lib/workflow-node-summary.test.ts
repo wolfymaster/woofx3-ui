@@ -46,7 +46,7 @@ describe("triggerNodeSummary", () => {
     expect(triggerNodeSummary(node, catalog)).toEqual(["Reward: Free Hugs"]);
   });
 
-  test("omits fields with no matching condition instead of showing a default", () => {
+  test("says a field with no matching condition matches any value, instead of showing a default", () => {
     const node: TriggerNode = { type: "trigger", id: "__trigger", event: "cheer.user.twitch", conditions: [] };
     const catalog = [
       catalogTrigger({
@@ -54,7 +54,7 @@ describe("triggerNodeSummary", () => {
         configFields: [{ id: "amount", label: "Minimum bits", type: "number", eventPath: "amount", min: 5 }],
       }),
     ];
-    expect(triggerNodeSummary(node, catalog)).toEqual([]);
+    expect(triggerNodeSummary(node, catalog)).toEqual(["Minimum bits: any"]);
   });
 
   test("recovers the picked chat command from the assembled event suffix", () => {
