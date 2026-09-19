@@ -10,10 +10,12 @@ import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/hooks/use-theme";
+import { ALERT_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import AdminAppearance from "@/pages/admin/appearance";
 import AdminEngine from "@/pages/admin/engine";
 import AdminIntegrations from "@/pages/admin/integrations";
 import AdminStorage from "@/pages/admin/storage";
+import AlertEditor from "@/pages/alert-editor";
 import AlertHistory from "@/pages/alert-history";
 import Alerts from "@/pages/alerts";
 import Assets from "@/pages/assets";
@@ -142,6 +144,7 @@ function AppRoutes() {
                   </Route>
                   <Route path="/stream/alerts" component={Alerts} />
                   <Route path="/stream/alerts/*" component={Alerts} />
+                  <Route path={ALERT_EDITOR_ROUTE} component={AlertEditor} />
                   <Route path="/stream/alert-history" component={AlertHistory} />
                   <Route path="/stream/commands" component={Commands} />
                   <Route path="/stream/counters" component={Counters} />
