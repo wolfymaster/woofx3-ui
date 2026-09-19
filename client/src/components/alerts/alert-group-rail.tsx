@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { type AlertNode, alertNodeId } from "@/lib/alert-groups";
+import { type AlertNode, alertNodeId, alertSectionAnchor, anchoredPresets } from "@/lib/alert-groups";
 import { cn } from "@/lib/utils";
 
 interface AlertGroupRailProps {
@@ -15,6 +15,10 @@ interface AlertGroupRailProps {
   /** Id of the selected node, or null when none is. */
   selectedId: string | null;
   basePath: string;
+  /** The section last jumped to on the selected node's page, by its anchor. */
+  activeAnchor: string | null;
+  /** A jump link was followed; the page scrolls that section's heading to the top. */
+  onAnchorSelect: (anchor: string) => void;
 }
 
 /** Indent per nesting level, in pixels. */
@@ -28,7 +32,14 @@ const LEVEL_INDENT = 12;
  * rail doubles as the answer to "what can I make an alert for?" — which is why picking
  * a kind and then creating is one step rather than a separate trigger hunt.
  */
-export function AlertGroupRail({ tree, counts, selectedId, basePath }: AlertGroupRailProps) {
+export function AlertGroupRail({
+  tree,
+  counts,
+  selectedId,
+  basePath,
+  activeAnchor,
+  onAnchorSelect,
+}: AlertGroupRailProps) {
   return (
     <nav className={SIDEBAR_RAIL} aria-label="Alert groups">
       <ScrollArea className="flex-1">
@@ -40,6 +51,8 @@ export function AlertGroupRail({ tree, counts, selectedId, basePath }: AlertGrou
               counts={counts}
               selectedId={selectedId}
               basePath={basePath}
+              activeAnchor={activeAnchor}
+              onAnchorSelect={onAnchorSelect}
             />
           ))}
         </div>
@@ -52,9 +65,12 @@ interface NodeProps {
   counts: Map<string, number>;
   selectedId: string | null;
   basePath: string;
+  activeAnchor: string | null;
+  onAnchorSelect: (anchor: string) => void;
 }
 
-function PlatformSection({ platform, counts, selectedId, basePath }: NodeProps & { platform: AlertNode }) {
+function PlatformSection({ platform, ...nodeProps }: NodeProps & { platform: AlertNode }) {
+  const { counts, selectedId } = nodeProps;
   const id = alertNodeId(platform.path);
   const [open, setOpen] = useOpenWhenSelectedInside(id, selectedId, true);
   const count = counts.get(id) ?? 0;
@@ -78,26 +94,22 @@ function PlatformSection({ platform, counts, selectedId, basePath }: NodeProps &
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-0.5 pt-1">
         {platform.children.map((node) => (
-          <RailNode
-            key={alertNodeId(node.path)}
-            node={node}
-            depth={0}
-            counts={counts}
-            selectedId={selectedId}
-            basePath={basePath}
-          />
+          <RailNode key={alertNodeId(node.path)} node={node} depth={0} {...nodeProps} />
         ))}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function RailNode({ node, depth, counts, selectedId, basePath }: NodeProps & { node: AlertNode; depth: number }) {
+function RailNode({ node, depth, ...nodeProps }: NodeProps & { node: AlertNode; depth: number }) {
+  const { counts, selectedId, basePath, activeAnchor, onAnchorSelect } = nodeProps;
   const id = alertNodeId(node.path);
-  const [open, setOpen] = useOpenWhenSelectedInside(id, selectedId, false);
-  const hasChildren = node.children.length > 0;
+  const anchors = anchoredPresets(node);
+  const [open, setOpen] = useOpenWhenSelectedInside(id, selectedId, false, anchors.length > 0);
+  const hasChildren = node.children.length > 0 || anchors.length > 0;
   const isActive = selectedId === id;
   const count = counts.get(id) ?? 0;
+  const href = `${basePath}/${node.path.map(encodeURIComponent).join("/")}`;
 
   return (
     <div>
@@ -119,7 +131,7 @@ function RailNode({ node, depth, counts, selectedId, basePath }: NodeProps & { n
         ) : (
           <span className="w-6 shrink-0" />
         )}
-        <Link href={`${basePath}/${node.path.map(encodeURIComponent).join("/")}`} className="block flex-1 min-w-0">
+        <Link href={href} className="block flex-1 min-w-0">
           <span
             className="flex items-center justify-between gap-2 py-2 pr-2.5 text-[15px] cursor-pointer"
             aria-current={isActive ? "page" : undefined}
@@ -133,15 +145,28 @@ function RailNode({ node, depth, counts, selectedId, basePath }: NodeProps & { n
       {hasChildren && open && (
         <div className="space-y-0.5 mt-0.5">
           {node.children.map((child) => (
-            <RailNode
-              key={alertNodeId(child.path)}
-              node={child}
-              depth={depth + 1}
-              counts={counts}
-              selectedId={selectedId}
-              basePath={basePath}
-            />
+            <RailNode key={alertNodeId(child.path)} node={child} depth={depth + 1} {...nodeProps} />
           ))}
+          {anchors.map((preset) => {
+            const anchor = alertSectionAnchor(preset);
+            const isCurrent = isActive && activeAnchor === anchor;
+            return (
+              <Link
+                key={preset.id}
+                href={`${href}#${anchor}`}
+                onClick={() => onAnchorSelect(anchor)}
+                className={cn(
+                  "block truncate rounded-md py-1.5 pr-2.5 text-[13px] text-muted-foreground hover:bg-accent hover:text-foreground",
+                  isCurrent && "text-foreground"
+                )}
+                style={{ paddingLeft: (depth + 1) * LEVEL_INDENT + 24 }}
+                aria-current={isCurrent ? "location" : undefined}
+                data-testid={`alert-anchor-${anchor}`}
+              >
+                {preset.name}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
@@ -150,14 +175,16 @@ function RailNode({ node, depth, counts, selectedId, basePath }: NodeProps & { n
 
 /**
  * Open state for a collapsible entry that also opens itself whenever the selection
- * moves somewhere inside it, so following a link never lands on a hidden entry.
+ * moves somewhere inside it, so following a link never lands on a hidden entry. An
+ * entry listing jumps to its own sections opens when it is selected itself, too.
  */
 function useOpenWhenSelectedInside(
   id: string,
   selectedId: string | null,
-  initiallyOpen: boolean
+  initiallyOpen: boolean,
+  opensWhenSelected = false
 ): [boolean, (open: boolean) => void] {
-  const selectedInside = selectedId?.startsWith(`${id}/`) ?? false;
+  const selectedInside = (selectedId?.startsWith(`${id}/`) ?? false) || (opensWhenSelected && selectedId === id);
   const [open, setOpen] = useState(initiallyOpen || selectedInside);
   useEffect(() => {
     if (selectedInside) {

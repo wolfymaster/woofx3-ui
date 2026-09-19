@@ -44,6 +44,12 @@ export interface ProjectedAction {
 export interface ProjectedTrigger {
   /** Condition task id, or a synthetic id for the unconditional trigger. */
   id: string;
+  /**
+   * False pauses the trigger: its condition task is `disabled`, which the engine
+   * resolves as not matching, so none of its actions run. The unconditional trigger
+   * has no condition task to carry the flag, and is always enabled.
+   */
+  enabled: boolean;
   /** Empty means it fires every time — encoded with no condition task at all. */
   conditions: ConditionConfig[];
   conditionLogic?: "and" | "or";
@@ -72,7 +78,7 @@ export type ProjectionResult = { ok: true; projection: WorkflowProjection } | { 
 /** Task id of the implicit trigger holding actions that run on every event. */
 export const UNCONDITIONAL_TRIGGER_ID = "__always";
 
-type EngineTask = TaskDefinition & { function?: string; $ref?: string };
+type EngineTask = TaskDefinition & { function?: string; $ref?: string; disabled?: boolean };
 
 const RESULT_REFERENCE = /^\$\{([A-Za-z0-9_-]+)\.result\}$/;
 
@@ -128,6 +134,7 @@ export function projectWorkflow(row: Doc<"workflows">): ProjectionResult {
     claimed.add(task.id);
     triggers.push({
       id: task.id,
+      enabled: task.disabled !== true,
       conditions: normalizeConditions(task),
       conditionLogic: task.conditionLogic,
       actions,
@@ -163,7 +170,7 @@ export function projectWorkflow(row: Doc<"workflows">): ProjectionResult {
     loose.forEach((task, index) => {
       actions.push(toProjectedAction(task, index > 0 ? loose[index - 1] : undefined));
     });
-    triggers.unshift({ id: UNCONDITIONAL_TRIGGER_ID, conditions: [], actions });
+    triggers.unshift({ id: UNCONDITIONAL_TRIGGER_ID, enabled: true, conditions: [], actions });
   }
 
   return {
@@ -244,15 +251,19 @@ export function buildWorkflowDefinition(args: BuildDefinitionArgs): Omit<Workflo
   const tasks: EngineTask[] = [];
 
   for (const trigger of args.triggers) {
-    const isUnconditional = trigger.conditions.length === 0;
+    if (trigger.id === UNCONDITIONAL_TRIGGER_ID && !trigger.enabled) {
+      throw new Error("the unconditional trigger has no condition task to disable");
+    }
+    const hasConditionTask = emitsConditionTask(trigger);
     const actionIds = trigger.actions.map((action) => action.id);
 
-    if (!isUnconditional) {
+    if (hasConditionTask) {
       tasks.push({
         id: trigger.id,
         type: "condition",
         conditions: trigger.conditions,
         ...(trigger.conditionLogic ? { conditionLogic: trigger.conditionLogic } : {}),
+        ...(trigger.enabled ? {} : { disabled: true }),
         // Every action, not just the first: the engine does not propagate a skip to
         // dependents, so an unlisted action would run even when the condition missed.
         onTrue: actionIds,
@@ -261,7 +272,7 @@ export function buildWorkflowDefinition(args: BuildDefinitionArgs): Omit<Workflo
 
     // Actions form stages: a concurrent action joins the stage before it, a sequential
     // one waits for every task in that stage.
-    let previousStage: string[] = isUnconditional ? [] : [trigger.id];
+    let previousStage: string[] = hasConditionTask ? [trigger.id] : [];
     let currentStage: string[] = [];
     for (const action of trigger.actions) {
       if (action.concurrentWithPrevious && currentStage.length > 0) {
@@ -279,7 +290,7 @@ export function buildWorkflowDefinition(args: BuildDefinitionArgs): Omit<Workflo
 
   for (const action of args.shared) {
     const owning = args.triggers.filter((trigger) => action.triggerIds.includes(trigger.id));
-    const conditional = owning.filter((trigger) => trigger.conditions.length > 0);
+    const conditional = owning.filter(emitsConditionTask);
     const task = toEngineTask(
       action,
       owning.map((trigger) => trigger.id).filter((id) => id !== UNCONDITIONAL_TRIGGER_ID)
@@ -308,6 +319,14 @@ export function buildWorkflowDefinition(args: BuildDefinitionArgs): Omit<Workflo
     definition.id = args.engineWorkflowId;
   }
   return definition;
+}
+
+/**
+ * A trigger with no conditions needs no condition task, and its actions run on every
+ * event. A paused one still gets a task, because the task is what carries `disabled`.
+ */
+function emitsConditionTask(trigger: ProjectedTrigger): boolean {
+  return trigger.conditions.length > 0 || !trigger.enabled;
 }
 
 function toEngineTask(action: ProjectedAction, dependsOn: string[]): EngineTask {

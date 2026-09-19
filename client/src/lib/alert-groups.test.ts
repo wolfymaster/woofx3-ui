@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   type AlertNode,
   alertMenuPath,
+  alertSectionAnchor,
+  anchoredPresets,
   buildAlertTree,
   countAlertsByNode,
   findAlertNode,
@@ -210,5 +212,37 @@ describe("countAlertsByNode", () => {
     expect(counts.get("twitch/subscription")).toBe(3);
     expect(counts.get("twitch/subscription/gift")).toBe(1);
     expect(counts.get("twitch/cheer")).toBe(3);
+  });
+});
+
+describe("alertSectionAnchor", () => {
+  test("slugs the event into an element id", () => {
+    expect(alertSectionAnchor(preset("row-1", "Channel resub", [], "channel.resub"))).toBe("event-channel-resub");
+  });
+
+  test("falls back to the row id when there is no event", () => {
+    expect(alertSectionAnchor(preset("Row_1", "Webhook"))).toBe("event-row-1");
+  });
+});
+
+describe("anchoredPresets", () => {
+  const tax = ["platform.twitch", "alert.subscription"];
+
+  test("lists a leaf's triggers once there are two", () => {
+    const [twitch] = buildAlertTree([
+      preset("a", "Channel subscribe", tax, "channel.subscribe"),
+      preset("b", "Channel resub", tax, "channel.resub"),
+    ]);
+    expect(anchoredPresets(twitch.children[0]).map((p) => p.name)).toEqual(["Channel resub", "Channel subscribe"]);
+  });
+
+  test("lists nothing for a leaf with one trigger, or a node with children", () => {
+    const [twitch] = buildAlertTree([
+      preset("a", "Channel subscribe", tax, "channel.subscribe"),
+      preset("b", "Gift", ["platform.twitch", "alert.subscription.gift"], "channel.subscriptionGift"),
+    ]);
+    const subscriptions = twitch.children[0];
+    expect(anchoredPresets(subscriptions)).toEqual([]);
+    expect(anchoredPresets(subscriptions.children[0])).toEqual([]);
   });
 });

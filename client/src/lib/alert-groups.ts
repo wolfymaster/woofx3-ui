@@ -155,6 +155,28 @@ export function findAlertNode(tree: readonly AlertNode[], path: readonly string[
   return node;
 }
 
+/**
+ * The element id of a trigger's section on its Alerts page, which the menu links to as
+ * `#…`. Built from the event rather than the catalog row id, so a link survives the
+ * module being reinstalled.
+ */
+export function alertSectionAnchor(preset: Pick<TriggerPreset, "id" | "event">): string {
+  const slug = (preset.event || preset.id)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `event-${slug}`;
+}
+
+/**
+ * The triggers a menu entry lists beneath itself as jumps to their sections: a leaf's
+ * own, once there are two. A single trigger is the whole page, so a jump to it would
+ * repeat the entry; a node with children is reached through them.
+ */
+export function anchoredPresets(node: AlertNode): TriggerPreset[] {
+  return node.children.length === 0 && node.presets.length > 1 ? node.presets : [];
+}
+
 /** A node's own triggers, then its descendants' in menu order. */
 export function subtreePresets(node: AlertNode): TriggerPreset[] {
   return [...node.presets, ...node.children.flatMap(subtreePresets)];

@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { Bell, Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { AlertGroupRail } from "@/components/alerts/alert-group-rail";
 import { EmptyState } from "@/components/common/empty-state";
@@ -43,6 +43,19 @@ export default function Alerts() {
   // out mid-animation.
   const [testPresetId, setTestPresetId] = useState<string | null>(null);
   const [isTestOpen, setIsTestOpen] = useState(false);
+
+  // A jump from the menu to one trigger's section. The request carries a nonce so
+  // following the same jump twice scrolls twice; a link opened with a #hash starts
+  // with one.
+  const [activeAnchor, setActiveAnchor] = useState<string | null>(() => currentHash());
+  const [scrollRequest, setScrollRequest] = useState<{ anchor: string; nonce: number } | null>(() => {
+    const anchor = currentHash();
+    return anchor ? { anchor, nonce: 0 } : null;
+  });
+  const requestScroll = (anchor: string) => {
+    setActiveAnchor(anchor);
+    setScrollRequest({ anchor, nonce: Date.now() });
+  };
 
   const tree = useMemo(() => buildAlertTree(triggerPresets), [triggerPresets]);
   const sections = useMemo(() => flattenAlertTree(tree), [tree]);
@@ -86,6 +99,34 @@ export default function Alerts() {
   // two depths — `alert.subscription.gift` and `alert.shared.subscription.gift`
   // both end in "Gift" — so the title names the whole trail, as the rail shows it.
   const nodeTrail = node ? selectedPath.map(taxonomyLabel).join(" › ") : null;
+  // A lone event's title is its own name, so the trail above it stops at its parent.
+  const breadcrumb = selectedPath.slice(0, -1).map(taxonomyLabel);
+
+  // Leaving for an entry of the menu drops the jump marker, since that link has no #hash.
+  useEffect(() => {
+    if (selectedId !== null && currentHash() === null) {
+      setActiveAnchor(null);
+    }
+  }, [selectedId]);
+
+  // Waits two frames before scrolling: each section opens its draft in an effect, and
+  // the sections above the target must reach their full height first or it lands short.
+  useEffect(() => {
+    if (!scrollRequest || loading) {
+      return;
+    }
+    let second = 0;
+    const first = requestAnimationFrame(() => {
+      second = requestAnimationFrame(() => {
+        document.getElementById(scrollRequest.anchor)?.scrollIntoView({ block: "start", behavior: "smooth" });
+        setScrollRequest(null);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(first);
+      cancelAnimationFrame(second);
+    };
+  }, [scrollRequest, loading]);
 
   function openTest(presetId: string) {
     setTestPresetId(presetId);
@@ -94,27 +135,31 @@ export default function Alerts() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      <AlertGroupRail tree={tree} counts={counts} selectedId={selectedId} basePath={BASE_PATH} />
+      <AlertGroupRail
+        tree={tree}
+        counts={counts}
+        selectedId={selectedId}
+        basePath={BASE_PATH}
+        activeAnchor={activeAnchor}
+        onAnchorSelect={requestScroll}
+      />
 
       <div className="flex-1 overflow-auto">
-        <div className="p-6 lg:p-8 max-w-[900px]">
-          <PageHeader
-            title={nodeTrail ?? "Alerts"}
-            description={
-              node
-                ? "Every trigger configured for this kind of event, and what each one does."
-                : "Pick a kind of event on the left. Each one is backed by a workflow you can also open in the builder."
-            }
-          />
-
+        <div className="mx-auto w-full max-w-[880px] px-4 pb-8 pt-6 sm:px-6 sm:pt-16">
           {loading ? (
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : selectedId === null ? (
-            <EmptyState
-              icon={Bell}
-              title="Choose an event type"
-              description="Cheers, subscriptions, raids — whatever a module registers shows up in the list on the left."
-            />
+            <>
+              <PageHeader
+                title="Alerts"
+                description="Pick a kind of event on the left. Each one is backed by a workflow you can also open in the builder."
+              />
+              <EmptyState
+                icon={Bell}
+                title="Choose an event type"
+                description="Cheers, subscriptions, raids — whatever a module registers shows up in the list on the left."
+              />
+            </>
           ) : !node ? (
             <EmptyState
               icon={Bell}
@@ -123,13 +168,18 @@ export default function Alerts() {
               action={{ label: "Back to alerts", onClick: () => navigate(BASE_PATH) }}
             />
           ) : (
-            <div className="space-y-10">
+            <div className="flex flex-col gap-16">
+              {nodePresets.length > 1 && (
+                <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-4xl">{nodeTrail}</h1>
+              )}
               {nodePresets.map((preset) => (
                 <EventWorkflowEditor
                   key={preset.id}
                   triggerPreset={preset}
                   actionPresets={actionPresets}
                   workflows={rows}
+                  breadcrumb={nodePresets.length > 1 ? [] : breadcrumb}
+                  headingLevel={nodePresets.length > 1 ? "h2" : "h1"}
                   onTest={() => openTest(preset.id)}
                 />
               ))}
@@ -147,6 +197,12 @@ export default function Alerts() {
       />
     </div>
   );
+}
+
+/** The page's #hash without the #, or null when it has none. */
+function currentHash(): string | null {
+  const hash = window.location.hash.slice(1);
+  return hash ? decodeSegment(hash) : null;
 }
 
 /** A URL path segment decoded; one that is not valid percent-encoding is kept as written, and matches nothing. */
