@@ -42,6 +42,24 @@ function assembleEventType(trigger: TriggerWithEvent, config: TriggerConfigValue
   return parts.join(".");
 }
 
+/**
+ * A trigger condition field's value when it is switched to Any: the field saves no
+ * condition, so the trigger matches whatever the event carries there. Distinct from an
+ * empty value, which is a field the user has not finished filling in.
+ */
+export const ANY_CONDITION = null;
+
+/** Condition fields that are neither Any nor filled in, and so cannot be saved as meant. */
+export function incompleteConditionFields(fields: ConfigField[], values: TriggerConfigValues): ConfigField[] {
+  return fields.filter((field) => {
+    if (isCommandsSource(field)) {
+      return false;
+    }
+    const value = values[field.id];
+    return value === undefined || value === "";
+  });
+}
+
 export function fieldValuesToConditions(fields: ConfigField[], values: TriggerConfigValues): ConditionConfig[] {
   const out: ConditionConfig[] = [];
   for (const field of fields) {
@@ -85,8 +103,9 @@ function conditionEventPath(condition: ConditionConfig): string | undefined {
 }
 
 /**
- * Inverse of a single field's forward encoding in fieldValuesToConditions. Returns `undefined`
- * when no condition was ever emitted for this field — distinct from an explicit falsy/zero value.
+ * Inverse of a single field's forward encoding in fieldValuesToConditions. A field with no
+ * condition reads as ANY_CONDITION, since that is what the engine does with it. Returns
+ * `undefined` only for a commands field, which is folded into the event name instead.
  */
 export function decodeConditionValue(
   field: ConfigField,
@@ -98,7 +117,7 @@ export function decodeConditionValue(
   const path = field.eventPath ?? field.id;
   const condition = conditions.find((c) => conditionEventPath(c) === path);
   if (!condition) {
-    return undefined;
+    return ANY_CONDITION;
   }
   if (field.type === "range") {
     if (condition.operator === "between" && Array.isArray(condition.value) && condition.value.length === 2) {

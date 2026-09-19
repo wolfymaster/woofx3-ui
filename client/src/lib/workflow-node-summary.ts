@@ -3,7 +3,7 @@ import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-c
 import { isCommandsSource, parseConfigFields } from "@/lib/parse-config-fields";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import { formatConfigValue } from "@/lib/workflow-presets";
-import { decodeConditionValue } from "@/lib/workflow-presets-json";
+import { ANY_CONDITION, decodeConditionValue } from "@/lib/workflow-presets-json";
 import type { ActionNode, TriggerNode } from "@/lib/workflow-tree";
 
 function formatFieldSummaryValue(field: ConfigField, raw: unknown, resourceLabels?: Map<string, string>): string {
@@ -56,7 +56,8 @@ export function triggerNodeSummary(
   }
   const parts = commandFieldSummary(catalogTrigger, node, fields);
   for (const field of fields) {
-    const formatted = formatFieldSummaryValue(field, decodeConditionValue(field, node.conditions), resourceLabels);
+    const decoded = decodeConditionValue(field, node.conditions);
+    const formatted = decoded === ANY_CONDITION ? "any" : formatFieldSummaryValue(field, decoded, resourceLabels);
     if (formatted) {
       parts.push(`${field.label}: ${formatted}`);
     }

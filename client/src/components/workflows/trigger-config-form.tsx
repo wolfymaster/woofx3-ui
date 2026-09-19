@@ -250,8 +250,15 @@ interface TriggerConfigFormProps {
   fields: ConfigField[];
   values: TriggerConfigValues;
   onChange: (values: TriggerConfigValues) => void;
-  /** Variables offered for ${stepId.field} references — see computeAvailableVariables. */
+  /** Variables offered for {variable} references — see computeAvailableVariables. */
   availableVariables?: VariableOption[];
+  /** For trigger conditions — see ConfigurationForm's `allowAny`. */
+  allowAny?: boolean;
+  /**
+   * Replaces the shared renderer for a key, for a surface that shows a field its own way:
+   * the triggers page shows an alert's layout as a preview that links to the alert editor.
+   */
+  rendererOverrides?: Record<string, CustomFieldRenderer>;
   className?: string;
 }
 
@@ -270,7 +277,15 @@ export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   "source:alertWidgets": AlertWidgetNameRenderer,
 };
 
-export function TriggerConfigForm({ fields, values, onChange, availableVariables, className }: TriggerConfigFormProps) {
+export function TriggerConfigForm({
+  fields,
+  values,
+  onChange,
+  availableVariables,
+  allowAny,
+  rendererOverrides,
+  className,
+}: TriggerConfigFormProps) {
   return (
     <ConfigurationForm
       // ConfigField has a narrower, intentional shape (see workflow-presets);
@@ -280,8 +295,9 @@ export function TriggerConfigForm({ fields, values, onChange, availableVariables
       fields={fields as unknown as FieldDescriptor[]}
       values={values as Record<string, unknown>}
       onChange={(v) => onChange(v as TriggerConfigValues)}
-      customRenderers={configFieldRenderers}
+      customRenderers={rendererOverrides ? { ...configFieldRenderers, ...rendererOverrides } : configFieldRenderers}
       availableVariables={availableVariables}
+      allowAny={allowAny}
       className={className}
     />
   );

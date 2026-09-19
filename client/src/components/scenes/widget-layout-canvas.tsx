@@ -6,6 +6,7 @@ import { type ReactNode, useCallback, useState } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
 import { CanvasWidgetHandle } from "./canvas-widget-handle";
 import { WidgetCatalogSidebar } from "./widget-catalog-sidebar";
@@ -23,6 +24,8 @@ interface WidgetLayoutCanvasProps {
   /** The widgets that may be placed here, already narrowed to this canvas's surface. */
   catalog: SceneWidgetCatalogRow[];
   renderers: Record<string, CustomFieldRenderer>;
+  /** What text in a widget's settings may reference. A scene has no workflow around it, so it passes none. */
+  availableVariables?: VariableOption[];
   /** An `add` is reported apart from every other edit, for a caller that saves as soon as a widget is added. */
   onChange: (update: WidgetsUpdate, change: "add" | "edit") => void;
   /** Real widget pixels, drawn over the placeholders and under the handles. */
@@ -42,6 +45,7 @@ export function WidgetLayoutCanvas({
   widgets,
   catalog,
   renderers,
+  availableVariables,
   onChange,
   preview,
   placeholder,
@@ -215,6 +219,7 @@ export function WidgetLayoutCanvas({
             widget={selectedWidget}
             fields={selectedWidgetFields}
             renderers={renderers}
+            availableVariables={availableVariables}
             onChangeSetting={(key, value) =>
               editWidget(selectedWidget.id, (w) => ({ ...w, settings: { ...w.settings, [key]: value } }))
             }
