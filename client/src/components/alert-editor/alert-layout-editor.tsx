@@ -1,12 +1,14 @@
 import { api } from "@convex/_generated/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { useQuery } from "convex/react";
-import { Film, Image, Loader2, Sparkles, Square, Type, Volume2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { LayerInspector } from "@/components/alert-editor/layer-inspector";
-import { StageArea } from "@/components/common/stage-area";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
+import { LayersList } from "@/components/overlay-editor/layers-list";
+import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
+import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,14 +27,12 @@ import {
   centerOf,
   clampCenter,
   durationOf,
-  type LayerKind,
   layerKind,
   longestLayerId,
   newLayer,
   withCenter,
 } from "@/lib/alert-editor";
 import { type AlertLayout, readAlertLayout, writeAlertLayout } from "@/lib/alert-layout";
-import { cn } from "@/lib/utils";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -40,15 +40,6 @@ import type { Widget } from "@/types";
 
 /** Width the phone layout switches at; below it the stage is a fixed-width strip. */
 const DESKTOP_QUERY = "(min-width: 1024px)";
-
-const KIND_ICON: Record<LayerKind, typeof Square> = {
-  text: Type,
-  image: Image,
-  video: Film,
-  audio: Volume2,
-  lottie: Sparkles,
-  other: Square,
-};
 
 interface AlertLayoutEditorProps {
   /** The step's stored layout, read once when the editor opens. */
@@ -224,6 +215,28 @@ export function AlertLayoutEditor({
     />
   ) : null;
 
+  const taxonomyOf = (widget: Widget) => catalog.find((row) => row.widgetId === widget.widgetCanonicalId)?.taxonomy;
+
+  const palette = (layout: "grid" | "row") => (
+    <WidgetPalette widgets={catalog} onAdd={addLayer} layout={layout} emptyMessage="No alert widgets are installed." />
+  );
+
+  const layerList = (horizontal = false) => (
+    <LayersList
+      layers={layersNewestFirst}
+      selectedId={selectedId}
+      label={layerLabel}
+      taxonomyOf={taxonomyOf}
+      meta={(widget) => {
+        const duration = durationOf(widget);
+        return duration > 0 ? formatSeconds(duration) : "auto";
+      }}
+      onSelect={setSelectedId}
+      horizontal={horizontal}
+      emptyMessage="No layers yet. Add a widget to start."
+    />
+  );
+
   const stage = (zoom: number) => (
     <AlertStage
       layout={layout}
@@ -261,21 +274,14 @@ export function AlertLayoutEditor({
               </Button>
             </div>
           </header>
-          <div className="grid min-h-0 flex-1 grid-cols-[216px_minmax(0,1fr)_296px]">
-            <aside className="flex min-h-0 flex-col gap-6 overflow-y-auto border-r p-4">
-              <WidgetTiles catalog={catalog} onAdd={addLayer} columns={2} />
-              <LayersList
-                layers={layersNewestFirst}
-                selectedId={selectedId}
-                layerLabel={layerLabel}
-                onSelect={setSelectedId}
-              />
-            </aside>
-            <StageArea canvas={layout}>{stage}</StageArea>
-            <aside className="min-h-0 overflow-y-auto border-l p-4">
-              {inspector ?? <AlertSummary layout={layout} lengthLabel={lengthLabel} />}
-            </aside>
-          </div>
+          <OverlayEditorShell
+            canvas={layout}
+            palette={palette("grid")}
+            layers={layerList()}
+            stage={stage}
+            inspector={inspector ? <div className="p-4">{inspector}</div> : null}
+            inspectorFallback={<AlertSummary layout={layout} lengthLabel={lengthLabel} />}
+          />
         </>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -297,14 +303,8 @@ export function AlertLayoutEditor({
             </div>
           </div>
           <div className="flex flex-col gap-6 px-4 py-5">
-            <WidgetTiles catalog={catalog} onAdd={addLayer} columns="row" />
-            <LayersList
-              layers={layersNewestFirst}
-              selectedId={selectedId}
-              layerLabel={layerLabel}
-              onSelect={setSelectedId}
-              horizontal
-            />
+            {palette("row")}
+            {layerList(true)}
             {inspector ? (
               <div className="rounded-2xl border bg-card p-4">{inspector}</div>
             ) : (
@@ -331,97 +331,6 @@ export function AlertLayoutEditor({
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  );
-}
-
-/** The widgets an alert can hold, as tiles that add a layer. */
-function WidgetTiles({
-  catalog,
-  onAdd,
-  columns,
-}: {
-  catalog: CatalogWidget[];
-  onAdd: (row: CatalogWidget) => void;
-  columns: 2 | "row";
-}) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">Add widget</h2>
-      {catalog.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No alert widgets are installed.</p>
-      ) : (
-        <div className={cn("grid gap-2", columns === 2 ? "grid-cols-2" : "grid-flow-col auto-cols-[minmax(64px,1fr)]")}>
-          {catalog.map((row) => {
-            const Icon = KIND_ICON[layerKind({ widgetCanonicalId: row.widgetId })];
-            return (
-              <button
-                key={row.widgetId}
-                type="button"
-                onClick={() => onAdd(row)}
-                className="flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border bg-muted/30 p-2 text-xs hover:border-foreground/20 hover:bg-accent"
-                data-testid={`add-widget-${row.widgetId}`}
-              >
-                <span className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-primary/15 text-primary-text">
-                  <Icon className="h-5 w-5" aria-hidden="true" />
-                </span>
-                <span className="truncate">{row.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-/** The layers, newest on top as they stack; picking one selects it on the stage. */
-function LayersList({
-  layers,
-  selectedId,
-  layerLabel,
-  onSelect,
-  horizontal = false,
-}: {
-  layers: Widget[];
-  selectedId: string | null;
-  layerLabel: (widget: Widget) => string;
-  onSelect: (widgetId: string) => void;
-  horizontal?: boolean;
-}) {
-  return (
-    <section className="flex min-w-0 flex-col gap-3">
-      <h2 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">Layers</h2>
-      {layers.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No layers yet. Add a widget to start.</p>
-      ) : (
-        <div className={cn(horizontal ? "-mx-4 flex gap-2 overflow-x-auto px-4 pb-1" : "flex flex-col gap-1")}>
-          {layers.map((widget) => {
-            const Icon = KIND_ICON[layerKind(widget)];
-            const isSelected = widget.id === selectedId;
-            const duration = durationOf(widget);
-            return (
-              <button
-                key={widget.id}
-                type="button"
-                aria-pressed={isSelected}
-                onClick={() => onSelect(widget.id)}
-                className={cn(
-                  "flex shrink-0 items-center gap-2 text-left text-sm hover:bg-accent",
-                  horizontal ? "h-11 max-w-[220px] rounded-full border px-3" : "min-h-9 rounded-lg px-2 py-1.5",
-                  isSelected && "bg-accent ring-2 ring-inset ring-primary"
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">{layerLabel(widget)}</span>
-                <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                  {duration > 0 ? formatSeconds(duration) : "auto"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </section>
   );
 }
 

@@ -101,6 +101,7 @@ export function AlertLayoutField({ field, value, onChange, renderers, availableV
           </DialogHeader>
           {draft && (
             <WidgetLayoutCanvas
+              className="flex-1"
               width={draft.width}
               height={draft.height}
               widgets={draft.widgets}

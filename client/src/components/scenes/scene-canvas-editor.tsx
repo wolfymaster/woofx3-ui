@@ -257,152 +257,152 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     );
   }
 
-  return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/stream/scenes")} title="Back to scenes">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <Input
-            value={scene.name}
-            onChange={(e) => mutateScene((prev) => ({ ...prev, name: e.target.value }))}
-            className="font-semibold border-none bg-transparent focus-visible:ring-0 w-56"
-            data-testid="input-scene-name"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Scene settings */}
-          <Popover>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="icon" data-testid="button-scene-settings">
-                    <Settings className="h-4 w-4" />
-                  </Button>
-                </PopoverTrigger>
-              </TooltipTrigger>
-              <TooltipContent>Scene settings</TooltipContent>
-            </Tooltip>
-            <PopoverContent align="end" className="w-72 space-y-4">
+  const header = (
+    <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
+      <div className="flex items-center gap-3 min-w-0">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/stream/scenes")} title="Back to scenes">
+          <ArrowLeft className="h-5 w-5" />
+        </Button>
+        <Input
+          value={scene.name}
+          onChange={(e) => mutateScene((prev) => ({ ...prev, name: e.target.value }))}
+          className="font-semibold border-none bg-transparent focus-visible:ring-0 w-56"
+          data-testid="input-scene-name"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        {/* Scene settings */}
+        <Popover>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" data-testid="button-scene-settings">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Scene settings</TooltipContent>
+          </Tooltip>
+          <PopoverContent align="end" className="w-72 space-y-4">
+            <div className="space-y-1">
+              <Label className="text-xs">Description</Label>
+              <Input
+                value={scene.description}
+                onChange={(e) => mutateScene((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Optional"
+                data-testid="input-scene-description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
-                <Label className="text-xs">Description</Label>
+                <Label className="text-xs">Width</Label>
                 <Input
-                  value={scene.description}
-                  onChange={(e) => mutateScene((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Optional"
-                  data-testid="input-scene-description"
+                  type="number"
+                  value={scene.width}
+                  onChange={(e) => mutateScene((prev) => ({ ...prev, width: Number(e.target.value) || 0 }))}
+                  data-testid="input-scene-width"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs">Width</Label>
-                  <Input
-                    type="number"
-                    value={scene.width}
-                    onChange={(e) => mutateScene((prev) => ({ ...prev, width: Number(e.target.value) || 0 }))}
-                    data-testid="input-scene-width"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Height</Label>
-                  <Input
-                    type="number"
-                    value={scene.height}
-                    onChange={(e) => mutateScene((prev) => ({ ...prev, height: Number(e.target.value) || 0 }))}
-                    data-testid="input-scene-height"
-                  />
-                </div>
-              </div>
               <div className="space-y-1">
-                <Label className="text-xs">Background</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="color"
-                    value={scene.backgroundColor === "transparent" ? "#000000" : scene.backgroundColor}
-                    onChange={(e) => mutateScene((prev) => ({ ...prev, backgroundColor: e.target.value }))}
-                    className="h-9 w-12 p-1 shrink-0"
-                    data-testid="input-scene-bg"
-                  />
-                  <Input
-                    value={scene.backgroundColor}
-                    onChange={(e) => mutateScene((prev) => ({ ...prev, backgroundColor: e.target.value }))}
-                    placeholder="transparent"
-                  />
-                </div>
+                <Label className="text-xs">Height</Label>
+                <Input
+                  type="number"
+                  value={scene.height}
+                  onChange={(e) => mutateScene((prev) => ({ ...prev, height: Number(e.target.value) || 0 }))}
+                  data-testid="input-scene-height"
+                />
               </div>
-            </PopoverContent>
-          </Popover>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Background</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="color"
+                  value={scene.backgroundColor === "transparent" ? "#000000" : scene.backgroundColor}
+                  onChange={(e) => mutateScene((prev) => ({ ...prev, backgroundColor: e.target.value }))}
+                  className="h-9 w-12 p-1 shrink-0"
+                  data-testid="input-scene-bg"
+                />
+                <Input
+                  value={scene.backgroundColor}
+                  onChange={(e) => mutateScene((prev) => ({ ...prev, backgroundColor: e.target.value }))}
+                  placeholder="transparent"
+                />
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
 
-          {/* Browser source */}
-          <DropdownMenu>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" disabled={!convexSceneId} data-testid="button-browser-source">
-                    <Link className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-              </TooltipTrigger>
-              <TooltipContent>Browser Source URL</TooltipContent>
-            </Tooltip>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleCopyBrowserSource} data-testid="menu-copy-browser-source">
-                <Link className="h-4 w-4 mr-2" />
-                Copy URL
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleRotateBrowserSource} data-testid="menu-rotate-browser-source">
-                <Settings className="h-4 w-4 mr-2" />
-                Rotate URL (revoke old)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {/* Browser source */}
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" disabled={!convexSceneId} data-testid="button-browser-source">
+                  <Link className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Browser Source URL</TooltipContent>
+          </Tooltip>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleCopyBrowserSource} data-testid="menu-copy-browser-source">
+              <Link className="h-4 w-4 mr-2" />
+              Copy URL
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleRotateBrowserSource} data-testid="menu-rotate-browser-source">
+              <Settings className="h-4 w-4 mr-2" />
+              Rotate URL (revoke old)
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
 
-          <Button onClick={handleSave} disabled={isSaving || !isDirty} data-testid="button-save-scene">
-            <Save className="h-4 w-4 mr-2" />
-            {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
-          </Button>
+        <Button onClick={handleSave} disabled={isSaving || !isDirty} data-testid="button-save-scene">
+          <Save className="h-4 w-4 mr-2" />
+          {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
+        </Button>
 
-          {/* Scene actions */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" data-testid="button-scene-menu">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={handleDuplicateScene}>Duplicate scene</DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="text-destructive focus:text-destructive"
-                onClick={handleDeleteScene}
-                data-testid="menu-delete-scene"
-              >
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete scene
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        {/* Scene actions */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" data-testid="button-scene-menu">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleDuplicateScene}>Duplicate scene</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={handleDeleteScene}
+              data-testid="menu-delete-scene"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete scene
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
-
-      <WidgetLayoutCanvas
-        width={scene.width}
-        height={scene.height}
-        widgets={scene.widgets}
-        catalog={sceneCatalog}
-        renderers={configFieldRenderers}
-        onChange={handleWidgetsChange}
-        preview={
-          <LiveScenePreview
-            sceneId={convexSceneId}
-            width={scene.width}
-            height={scene.height}
-            reloadToken={previewReloads}
-          />
-        }
-      />
     </div>
+  );
+
+  return (
+    <WidgetLayoutCanvas
+      header={header}
+      width={scene.width}
+      height={scene.height}
+      widgets={scene.widgets}
+      catalog={sceneCatalog}
+      renderers={configFieldRenderers}
+      onChange={handleWidgetsChange}
+      preview={
+        <LiveScenePreview
+          sceneId={convexSceneId}
+          width={scene.width}
+          height={scene.height}
+          reloadToken={previewReloads}
+        />
+      }
+    />
   );
 }

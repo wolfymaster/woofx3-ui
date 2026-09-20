@@ -3,11 +3,12 @@ import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
-import { StageArea } from "@/components/common/stage-area";
+import { LayersList } from "@/components/overlay-editor/layers-list";
+import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
+import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
 import { CanvasWidgetHandle } from "./canvas-widget-handle";
-import { WidgetCatalogSidebar } from "./widget-catalog-sidebar";
 import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
 
@@ -30,6 +31,10 @@ interface WidgetLayoutCanvasProps {
   preview?: ReactNode;
   /** Drawn in place of a widget's generic placeholder. */
   placeholder?: (widget: Widget) => ReactNode;
+  /** The editor's title bar. Omitted where this is embedded in a dialog that has its own. */
+  header?: ReactNode;
+  /** See OverlayEditorShell.className: how the editor claims its height. */
+  className?: string;
 }
 
 /**
@@ -47,6 +52,8 @@ export function WidgetLayoutCanvas({
   onChange,
   preview,
   placeholder,
+  header,
+  className,
 }: WidgetLayoutCanvasProps) {
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   // StageArea re-observes whenever this identity changes, so it is not rebuilt per render.
@@ -133,61 +140,78 @@ export function WidgetLayoutCanvas({
   const selectedWidget = widgets.find((w) => w.id === selectedWidgetId) ?? null;
   const selectedWidgetFields = (selectedWidget ? (catalogRowFor(selectedWidget)?.settings ?? []) : []) as ConfigField[];
 
+  const layersNewestFirst = [...widgets].sort((a, b) => b.zIndex - a.zIndex);
+  const taxonomyOf = useCallback((widget: Widget) => catalogRowFor(widget)?.taxonomy, [catalogRowFor]);
+
   return (
-    <div className="relative flex-1 flex overflow-hidden">
-      <WidgetCatalogSidebar catalogWidgets={catalog} onAdd={addWidget} />
-
-      <StageArea canvas={canvasSize} className="flex-1">
-        {(zoom) => (
-          // biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets
+    <OverlayEditorShell
+      canvas={canvasSize}
+      className={className}
+      header={header}
+      palette={
+        <WidgetPalette
+          widgets={catalog}
+          onAdd={(row) => addWidget(row.widgetId, row.name)}
+          layout="grid"
+          emptyMessage="No scene widgets are installed."
+        />
+      }
+      layers={
+        <LayersList
+          layers={layersNewestFirst}
+          selectedId={selectedWidgetId}
+          label={(widget) =>
+            isAlertWidget(widget) ? `${widget.name} · ${alertWidgetName(widget.settings)}` : widget.name
+          }
+          taxonomyOf={taxonomyOf}
+          onSelect={setSelectedWidgetId}
+          emptyMessage="Nothing on the canvas yet. Add a widget to start."
+        />
+      }
+      stage={(zoom) => (
+        // biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets
+        <div
+          className="relative shrink-0 overflow-hidden bg-[#050507] shadow-lg"
+          style={{ width: width * zoom, height: height * zoom }}
+          onMouseDown={handleBackgroundMouseDown}
+          data-testid="scene-canvas"
+        >
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
           <div
-            className="relative shrink-0 overflow-hidden bg-black/80 shadow-2xl"
-            style={{ width: width * zoom, height: height * zoom }}
+            style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width, height }}
             onMouseDown={handleBackgroundMouseDown}
-            data-testid="scene-canvas"
           >
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
-            <div
-              style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width, height }}
-              onMouseDown={handleBackgroundMouseDown}
-            >
-              {widgets.map((widget) => (
-                <WidgetFallbackBackground
-                  key={widget.id}
-                  widget={widget}
-                  label={isAlertWidget(widget) ? `${widget.name} · ${alertWidgetName(widget.settings)}` : undefined}
-                >
-                  {placeholder?.(widget)}
-                </WidgetFallbackBackground>
-              ))}
-              {preview}
-              {widgets.map((widget) => (
-                <CanvasWidgetHandle
-                  key={widget.id}
-                  widget={widget}
-                  isSelected={selectedWidgetId === widget.id}
-                  scale={zoom}
-                  onSelect={() => setSelectedWidgetId(widget.id)}
-                  onMove={(dx, dy) =>
-                    editWidget(widget.id, (w) => ({
-                      ...w,
-                      position: { x: Math.max(0, w.position.x + dx), y: Math.max(0, w.position.y + dy) },
-                    }))
-                  }
-                  onResize={(w, h) => editWidget(widget.id, (prev) => ({ ...prev, size: { width: w, height: h } }))}
-                />
-              ))}
-            </div>
+            {widgets.map((widget) => (
+              <WidgetFallbackBackground
+                key={widget.id}
+                widget={widget}
+                label={isAlertWidget(widget) ? `${widget.name} · ${alertWidgetName(widget.settings)}` : undefined}
+              >
+                {placeholder?.(widget)}
+              </WidgetFallbackBackground>
+            ))}
+            {preview}
+            {widgets.map((widget) => (
+              <CanvasWidgetHandle
+                key={widget.id}
+                widget={widget}
+                isSelected={selectedWidgetId === widget.id}
+                scale={zoom}
+                onSelect={() => setSelectedWidgetId(widget.id)}
+                onMove={(dx, dy) =>
+                  editWidget(widget.id, (w) => ({
+                    ...w,
+                    position: { x: Math.max(0, w.position.x + dx), y: Math.max(0, w.position.y + dy) },
+                  }))
+                }
+                onResize={(w, h) => editWidget(widget.id, (prev) => ({ ...prev, size: { width: w, height: h } }))}
+              />
+            ))}
           </div>
-        )}
-      </StageArea>
-
-      {/* Floated rather than docked as a flex sibling: as a sibling it took width
-          from the canvas, so selecting a widget resized the canvas and shifted the
-          whole scene under the cursor mid-click. Overlaying leaves the canvas
-          exactly where it was. */}
-      {selectedWidget && (
-        <div className="absolute inset-y-0 right-0 z-20 flex shadow-xl">
+        </div>
+      )}
+      inspector={
+        selectedWidget ? (
           <WidgetSettingsPanel
             widget={selectedWidget}
             fields={selectedWidgetFields}
@@ -198,8 +222,29 @@ export function WidgetLayoutCanvas({
             }
             onDelete={() => deleteWidget(selectedWidget.id)}
           />
-        </div>
-      )}
+        ) : null
+      }
+      inspectorFallback={<CanvasSummary width={width} height={height} count={widgets.length} />}
+    />
+  );
+}
+
+/** What the right rail shows with nothing selected, so the rail is never blank. */
+function CanvasSummary({ width, height, count }: { width: number; height: number; count: number }) {
+  return (
+    <div className="flex flex-col gap-4 p-4">
+      <h2 className="text-sm font-semibold">Canvas</h2>
+      <p className="text-xs text-muted-foreground">
+        Select a widget on the canvas to edit it, or add one from the left.
+      </p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+        <dt className="text-muted-foreground">Size</dt>
+        <dd className="font-mono text-xs leading-5">
+          {width} × {height}
+        </dd>
+        <dt className="text-muted-foreground">Widgets</dt>
+        <dd className="font-mono text-xs leading-5">{count}</dd>
+      </dl>
     </div>
   );
 }
