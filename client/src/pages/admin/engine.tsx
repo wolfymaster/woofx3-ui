@@ -4,6 +4,7 @@ import { useStore } from "@nanostores/react";
 import { useAction, useMutation as useConvexMutation } from "convex/react";
 import { AlertTriangle, CheckCircle2, Loader2, Server, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ManagedEngineCard } from "@/components/engine/managed-engine-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { EngineSyncCard } from "@/components/settings/engine-sync-card";
 import {
@@ -29,11 +30,14 @@ type ConnectionStatus = "idle" | "testing" | "success" | "error";
 function EngineSettings() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const testConnectionAction = useAction(api.engineHealth.testConnection);
+  const registerInstance = useAction(api.registration.registerInstance);
   const updateInstance = useConvexMutation(api.instances.update);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [savingUrl, setSavingUrl] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fallbackUrl = useStore($engineUrl);
@@ -67,6 +71,24 @@ function EngineSettings() {
       setSavingUrl(false);
     }
   }, [instance, urlDraft, updateInstance]);
+
+  const handleRegister = useCallback(async () => {
+    if (!instance) {
+      return;
+    }
+    setRegisterError(null);
+    setRegistering(true);
+    try {
+      const result = await registerInstance({ instanceId: instance._id });
+      if (!result.ok) {
+        setRegisterError(result.error);
+      }
+    } catch (e) {
+      setRegisterError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRegistering(false);
+    }
+  }, [instance, registerInstance]);
 
   const handleTestConnection = useCallback(async () => {
     if (!effectiveUrl) {
@@ -126,6 +148,18 @@ function EngineSettings() {
           No instance selected. Complete onboarding or pick an instance from the header menu.
         </CardContent>
       </Card>
+    );
+  }
+
+  // A managed engine has no URL to edit: woofx3 runs it, and its address is
+  // the name chosen at signup. What can be asked of it is on its own card.
+  if (instance.hosting === "managed") {
+    return (
+      <div className="space-y-4">
+        <ManagedEngineCard instanceId={instance._id} />
+        {instance.clientId && <EngineSyncCard instanceId={instance._id} />}
+        <DangerZone instanceId={instance._id} />
+      </div>
     );
   }
 
@@ -195,13 +229,29 @@ function EngineSettings() {
           <div className="grid gap-2">
             <Label>Registration Status</Label>
             <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-              <div className={`h-2 w-2 rounded-full ${instance?.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
+              <div className={`h-2 w-2 rounded-full ${instance.clientId ? "bg-green-500" : "bg-yellow-500"}`} />
               <p className="text-sm text-muted-foreground">
-                {instance?.clientId
-                  ? "Registered with engine"
-                  : "Not registered — re-run onboarding or register from here."}
+                {instance.clientId ? "Registered with engine" : "Not registered — register from here."}
               </p>
             </div>
+            {!instance.clientId && (
+              <div className="space-y-1">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleRegister}
+                  disabled={registering || !effectiveUrl}
+                  data-testid="button-register-engine"
+                >
+                  {registering ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                  Register with engine
+                </Button>
+                {registerError && <p className="text-xs text-destructive">{registerError}</p>}
+                <p className="text-xs text-muted-foreground">
+                  Exchanges credentials with the engine at this URL. Save the URL first if you just changed it.
+                </p>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
             <div className="h-2 w-2 rounded-full bg-green-500" />

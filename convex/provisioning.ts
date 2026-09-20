@@ -7,6 +7,7 @@ import {
   checkSlugAvailability,
   createEngine,
   deleteEngine,
+  getEngine,
   isMaintenanceConfigured,
   MAINTENANCE_OWNER_TYPE,
   MaintenanceApiError,
@@ -86,6 +87,24 @@ export const forInstance = query({
     }
     const { registrationToken: _registrationToken, ...rest } = row;
     return rest;
+  },
+});
+
+/**
+ * What only the maintenance API knows about a managed engine: whether it has
+ * been flagged for an operator's attention. Everything else on the admin page
+ * comes from the provisioning row, which the callbacks keep current, so this
+ * is fetched once when the page opens rather than subscribed to.
+ */
+export const engineFlag = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<{ at: string; reason: string } | null> => {
+    const row = await requireManagedRow(ctx, instanceId);
+    if (!row.maintenanceEngineId) {
+      return null;
+    }
+    const { engine } = await getEngine(row.maintenanceEngineId);
+    return engine.flag;
   },
 });
 

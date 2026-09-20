@@ -1,33 +1,16 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
-import { CheckCircle2, Circle, Loader2, MinusCircle, XCircle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { ProvisioningSteps } from "@/components/engine/provisioning-steps";
 import { Button } from "@/components/ui/button";
 import { engineHostname } from "@/lib/engine-slug";
 import { $currentInstanceId } from "@/lib/stores";
 
 interface ProvisioningProgressProps {
   instanceId: Id<"instances">;
-}
-
-type StepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
-
-function StepIcon({ status }: { status: StepStatus }) {
-  if (status === "succeeded") {
-    return <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />;
-  }
-  if (status === "failed") {
-    return <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />;
-  }
-  if (status === "running") {
-    return <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500 shrink-0" />;
-  }
-  if (status === "skipped") {
-    return <MinusCircle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
-  }
-  return <Circle className="h-3.5 w-3.5 text-muted-foreground shrink-0" />;
 }
 
 /** What the user is told is happening, per row status. */
@@ -104,21 +87,7 @@ export function ProvisioningProgress({ instanceId }: ProvisioningProgressProps) 
         <p className="text-xs text-muted-foreground font-mono mt-0.5">{provisioning.publicUrl ?? hostname}</p>
       </div>
 
-      {provisioning.steps.length > 0 && (
-        <ul className="space-y-1.5 text-sm" data-testid="list-provisioning-steps">
-          {provisioning.steps.map((step) => (
-            <li key={step.key} className="flex items-start gap-2">
-              <span className="mt-0.5">
-                <StepIcon status={step.status} />
-              </span>
-              <span className="min-w-0">
-                <span className={step.status === "failed" ? "text-destructive" : undefined}>{step.label}</span>
-                {step.error && <span className="block text-xs text-destructive break-words">{step.error}</span>}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <ProvisioningSteps steps={provisioning.steps} />
 
       {/* Registration has no steps of its own: it is one handshake, retried on
           a backoff, so its state is the row's rather than a list entry. */}

@@ -153,6 +153,17 @@ export function checkSlugAvailability(slug: string): Promise<SlugAvailability> {
   return request<SlugAvailability>(`/v1/slugs/${encodeURIComponent(slug)}?kind=customer`, { method: "GET" });
 }
 
+/**
+ * The engine as the maintenance API sees it now.
+ *
+ * The callbacks carry everything the provisioning row needs, so this is only
+ * for what they never report: `flag`, which an operator or the reaper sets on
+ * an engine that needs attention long after its run ended.
+ */
+export function getEngine(engineId: string): Promise<{ engine: MaintenanceEngine }> {
+  return request(`/v1/engines/${encodeURIComponent(engineId)}`, { method: "GET" });
+}
+
 /** Resume a failed run from the step it failed on. */
 export function retryRun(
   engineId: string,
