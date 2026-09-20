@@ -54,16 +54,6 @@ export const forInstanceInternal = internalQuery({
   },
 });
 
-export const byMaintenanceEngine = internalQuery({
-  args: { maintenanceEngineId: v.string() },
-  handler: async (ctx, { maintenanceEngineId }) => {
-    return ctx.db
-      .query("engineProvisioning")
-      .withIndex("by_maintenance_engine", (q) => q.eq("maintenanceEngineId", maintenanceEngineId))
-      .first();
-  },
-});
-
 /**
  * The instance a managed engine will belong to, plus a fresh provisioning row.
  *

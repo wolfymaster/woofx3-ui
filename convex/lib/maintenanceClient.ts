@@ -71,11 +71,6 @@ export interface CreatedEngine {
   registrationToken?: string;
 }
 
-export interface EngineDetail {
-  engine: MaintenanceEngine;
-  run: MaintenanceRun | null;
-}
-
 export interface SlugAvailability {
   available: boolean;
   reason?: string;
@@ -152,10 +147,6 @@ export function createEngine(input: CreateEngineInput, idempotencyKey: string): 
     idempotencyKey,
     body: { kind: "customer", version: "latest", ...input },
   });
-}
-
-export function getEngine(engineId: string): Promise<EngineDetail> {
-  return request<EngineDetail>(`/v1/engines/${encodeURIComponent(engineId)}`, { method: "GET" });
 }
 
 export function checkSlugAvailability(slug: string): Promise<SlugAvailability> {
