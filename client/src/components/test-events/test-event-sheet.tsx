@@ -1,14 +1,4 @@
-import { testEventFormFor } from "@/components/test-events/registry";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { TestEventPicker } from "@/components/test-events/test-event-picker";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import type { AlertMenuSection } from "@/lib/alert-groups";
 
@@ -30,11 +20,6 @@ interface TestEventSheetProps {
  * rather than close, edit, reopen.
  */
 export function TestEventSheet({ open, onOpenChange, sections, selectedId, onSelect }: TestEventSheetProps) {
-  const preset = selectedId
-    ? sections.flatMap((section) => section.presets).find((entry) => entry.id === selectedId)
-    : undefined;
-  const Form = preset ? testEventFormFor(preset) : null;
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
       <SheetContent
@@ -50,38 +35,7 @@ export function TestEventSheet({ open, onOpenChange, sections, selectedId, onSel
           </SheetDescription>
         </SheetHeader>
 
-        {preset && Form ? (
-          <>
-            <div className="space-y-2 pb-4 border-b">
-              <Label htmlFor="test-event-trigger">Trigger</Label>
-              <Select value={preset.id} onValueChange={onSelect}>
-                <SelectTrigger id="test-event-trigger" data-testid="select-test-event">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {sections.map((section) => (
-                    <SelectGroup key={section.id}>
-                      <SelectLabel>{section.label}</SelectLabel>
-                      {section.presets.map((entry) => (
-                        <SelectItem key={entry.id} value={entry.id}>
-                          {entry.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {preset.description}
-                <span className="block mt-1 font-mono text-muted-foreground/80">{preset.event}</span>
-              </p>
-            </div>
-
-            <Form key={preset.id} preset={preset} />
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground">That trigger is no longer registered on this instance.</p>
-        )}
+        <TestEventPicker sections={sections} selectedId={selectedId} onSelect={onSelect} />
       </SheetContent>
     </Sheet>
   );

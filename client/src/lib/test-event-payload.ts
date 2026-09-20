@@ -5,7 +5,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /** A fresh empty value per call — a shared `{}` would be written through by nested paths. */
-function emptyValueOf(type: DataShapeFieldType): unknown {
+export function emptyValueOf(type: DataShapeFieldType): unknown {
   switch (type) {
     case "string":
       return "";
