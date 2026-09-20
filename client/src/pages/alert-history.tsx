@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { History } from "lucide-react";
 import { useState } from "react";
+import { useSearch } from "wouter";
 import { ReplayControls } from "@/components/alert-history/replay-controls";
 import { RunList } from "@/components/alert-history/run-list";
 import { RunTimeline } from "@/components/alert-history/run-timeline";
@@ -13,6 +14,12 @@ import { useInstance } from "@/hooks/use-instance";
 
 const RUN_LIMIT = 100;
 
+/** The run a link asked for, or null when it asked for none. */
+function runFromSearch(search: string): string | null {
+  const run = new URLSearchParams(search).get("run");
+  return run && run.length > 0 ? run : null;
+}
+
 /**
  * Every workflow run the engine recorded, with a timeline of what each one did.
  *
@@ -21,11 +28,16 @@ const RUN_LIMIT = 100;
  */
 export default function AlertHistory() {
   const { instance } = useInstance();
+  const search = useSearch();
   const runs = useQuery(
     api.workflowRuns.listForInstance,
     instance ? { instanceId: instance._id, limit: RUN_LIMIT } : "skip"
   );
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  // `?run=` is how the Alerts dashboard hands over the run behind an alert.
+  // Read once as the initial selection rather than watched: after landing, the
+  // person's clicks in the list decide what is shown, and re-reading the
+  // unchanged parameter would drag them back.
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(() => runFromSearch(search));
 
   // Nothing chosen yet means the newest run, so the page opens on something
   // rather than an empty pane.

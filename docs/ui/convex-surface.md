@@ -12,6 +12,7 @@ Convex is the **multi-tenant control plane**: auth, accounts, instances, assets,
 | Async realtime bus | `transientEvents.ts` — ephemeral per-instance `{correlationKey → progress/success/error}` entries used by the UI to observe async engine round-trips; TTL-cleaned by a scheduled mutation |
 | Media | `assets.ts`, `folders.ts`, `lib/storage/*` |
 | Scenes & overlays | `scenes.ts`, `sceneSlots.ts`, `browserSource.ts`, `alertDescriptors.ts`, `obsCommands.ts` |
+| Alert log | `engineAlerts.ts` (mirror of the engine's dispatch log, plus the Alerts dashboard's `overview` counters), `alertActions.ts` (`replayAlert` proxy) |
 | Platform | `twitchAuth.ts`, `chatCommands.ts`, `dashboardLayouts.ts` |
 | Engine connectivity | `engineHealth.ts`, `lib/engineInstanceUrl.ts`, `registration.ts` |
 

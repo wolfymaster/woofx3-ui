@@ -5,6 +5,7 @@ import { Bell, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { AlertGroupRail } from "@/components/alerts/alert-group-rail";
+import { AlertsDashboard } from "@/components/alerts/dashboard/alerts-dashboard";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { TestEventSheet } from "@/components/test-events/test-event-sheet";
@@ -22,6 +23,7 @@ import {
   taxonomyLabel,
 } from "@/lib/alert-groups";
 import { projectWorkflow } from "@/lib/trigger-projection";
+import { cn } from "@/lib/utils";
 
 const BASE_PATH = "/stream/alerts";
 
@@ -145,20 +147,23 @@ export default function Alerts() {
       />
 
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto w-full max-w-[880px] px-4 pb-8 pt-6 sm:px-6 sm:pt-16">
+        {/* The dashboard lays out three panels side by side; one event's
+            triggers are prose, and prose needs a measure. */}
+        <div
+          className={cn(
+            "mx-auto w-full px-4 pb-8 pt-6 sm:px-6",
+            selectedId === null ? "max-w-[1200px]" : "max-w-[880px] sm:pt-16"
+          )}
+        >
           {loading ? (
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : selectedId === null ? (
             <>
               <PageHeader
                 title="Alerts"
-                description="Pick a kind of event on the left. Each one is backed by a workflow you can also open in the builder."
+                description="How your alerts have been going, and a way to fire one yourself. Pick a kind of event on the left to configure what it does."
               />
-              <EmptyState
-                icon={Bell}
-                title="Choose an event type"
-                description="Cheers, subscriptions, raids — whatever a module registers shows up in the list on the left."
-              />
+              <AlertsDashboard sections={sections} />
             </>
           ) : !node ? (
             <EmptyState
