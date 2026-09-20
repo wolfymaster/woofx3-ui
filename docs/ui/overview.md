@@ -35,6 +35,10 @@ Admin and Team are not in the primary nav — they are the icon buttons in the h
 
 `/stream`, `/help`, and `/admin` redirect to their first sub-item. Counters, Timers, Queues, Learning, and Submit Feedback are placeholder screens — no engine surface backs them yet. The pre-restructure top-level paths (`/alerts`, `/commands`, `/assets`, `/scenes`, `/scenes/:id`, `/workflows`, `/workflows/:id`, `/settings/:tab`) redirect to their new homes.
 
+**Editors are routes, not dialogs.** A dialog is awkward on a phone and has no back button, no shareable link and nowhere to put a second level of editing, so anything you work in gets its own path; modals are left for confirmations. Alerts puts one step's content at `/stream/alert-editor/:event/:triggerId/:actionId` — beside Alerts rather than under it, because everything below `/stream/alerts/` is read as a menu path. Chat commands nest theirs (list, command, a step's alert content, groups list, group) so the Commands menu entry stays active throughout; see [Chat commands](./commands.md) for the full set. Paths come from `lib/alert-editor-route.ts` and `lib/command-editor-route.ts` — build them there, not by hand.
+
+Edits that span more than one of those routes are held in a draft store outside the component tree — `lib/event-drafts.ts` for an event's triggers, `lib/command-drafts.ts` for one command — so leaving the page for a nested editor does not lose them, and the owning screen's Save covers everything done under it.
+
 There is no separate Debug page any more: `/debug` and `/help/debug` redirect to Alerts. Test events are fired from the lightning icon beside each event there, which opens a side sheet (`components/test-events/test-event-sheet.tsx`). Its trigger picker lists every alert trigger, grouped the way the rail is (platform, then each `alert.*` segment), with the clicked one preselected; its settings sit below, above a Trigger button. Events with a hand-built form in `components/test-events/registry.ts` (follow, subscribe, subscription gift, cheer) get that form; every other trigger gets a JSON editor seeded from its declared `emits` shape. Twitch triggers fire through `debug.simulateTwitchEvent` so the engine stamps the platform; anything else is published as-is through `debug.fireTrigger`.
 
 **Error boundaries** reset on `location` change so a bad screen does not brick the whole app.
@@ -57,6 +61,7 @@ When you touch a screen, check imports: `from "convex/react"` vs `@/lib/transpor
 ## Related docs
 
 - [Dashboard](./dashboard.md)
+- [Chat commands](./commands.md)
 - [Modules](./modules.md)
 - [Workflows](./workflows.md)
 - [Assets](./assets.md)

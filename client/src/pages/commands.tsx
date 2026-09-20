@@ -4,8 +4,6 @@ import type { ActionStep } from "@woofx3/api";
 import { useAction, useQuery } from "convex/react";
 import {
   AlertTriangle,
-  Check,
-  ChevronsUpDown,
   Clock,
   Globe,
   Lock,
@@ -13,15 +11,13 @@ import {
   Pencil,
   Plus,
   Search,
-  Shield,
   ToggleLeft,
   ToggleRight,
   Trash2,
   Users,
-  X,
 } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
-import { ActionListEditor } from "@/components/actions/action-list-editor";
+import { Link, useLocation } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -37,36 +33,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Command as ComboBox,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { commandActionVariables } from "@/lib/command-variables";
-import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
+import {
+  COMMAND_GROUP_NEW_ROUTE,
+  COMMAND_GROUPS_PATH,
+  COMMAND_LIST_PATH,
+  COMMAND_NEW_ROUTE,
+  commandEditorPath,
+  commandGroupEditorPath,
+} from "@/lib/command-editor-route";
+import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { groupLabel, sortGroups } from "@/lib/group-display";
 import { cn } from "@/lib/utils";
 import type { ActionPreset } from "@/lib/workflow-presets";
@@ -74,32 +55,6 @@ import { resolveActionStepPreset } from "@/lib/workflow-presets-json";
 
 type CommandDoc = Doc<"chatCommands">;
 type GroupDoc = Doc<"chatCommandGroups">;
-type Visibility = "public" | "restricted";
-
-interface CommandFormState {
-  command: string;
-  actions: ActionStep[];
-  cooldown: number;
-  priority: number;
-  enabled: boolean;
-  visibility: Visibility;
-  groupIds: string[];
-  usernames: string[];
-}
-
-const defaultFormState: CommandFormState = {
-  command: "",
-  // A new command starts ready to answer, which is what most commands do. The
-  // action is the ordinary "send chat message", not a special kind of command,
-  // so replacing or adding to it is the same gesture as configuring it.
-  actions: [],
-  cooldown: 5,
-  priority: 0,
-  enabled: true,
-  visibility: "public",
-  groupIds: [],
-  usernames: [],
-};
 
 /**
  * What a command does, for a row that shows no detail: the one action it runs,
@@ -123,26 +78,6 @@ function truncate(text: string, max = 60): string {
     return text;
   }
   return `${text.slice(0, max)}...`;
-}
-
-// Everything up to the first space is the command word; everything after is
-// the argumentPattern (e.g. "sr {songTitle}" -> command "sr", pattern
-// "{songTitle}"). See CommandSnapshot.argumentPattern in @woofx3/api for the
-// extraction rule the engine applies at chat-message time.
-function splitCommandInput(raw: string): { command: string; argumentPattern: string } {
-  const trimmed = raw.trim().replace(/^!/, "");
-  const spaceIndex = trimmed.indexOf(" ");
-  if (spaceIndex === -1) {
-    return { command: trimmed, argumentPattern: "" };
-  }
-  return {
-    command: trimmed.slice(0, spaceIndex),
-    argumentPattern: trimmed.slice(spaceIndex + 1).trim(),
-  };
-}
-
-function joinCommandInput(command: string, argumentPattern: string): string {
-  return argumentPattern ? `${command} ${argumentPattern}` : command;
 }
 
 function CommandTableSkeleton() {
@@ -192,9 +127,17 @@ function CommandTableSkeleton() {
   );
 }
 
+/**
+ * The commands list and the groups list, each on its own route.
+ *
+ * They read as two tabs of one screen, but the tabs are links rather than local state:
+ * the group pages need somewhere definite to go back to, and a bookmark or a reload
+ * lands where it left off.
+ */
 export default function Commands() {
+  const [location] = useLocation();
   const { instance, isLoading: instanceLoading } = useInstance();
-  const [activeTab, setActiveTab] = useState<"commands" | "groups">("commands");
+  const showingGroups = location.startsWith(COMMAND_GROUPS_PATH);
 
   const commandsRaw = useQuery(api.chatCommands.list, instance ? { instanceId: instance._id } : "skip");
   const groupsRaw = useQuery(api.chatCommandGroups.list, instance ? { instanceId: instance._id } : "skip");
@@ -211,25 +154,48 @@ export default function Commands() {
         description="Manage chat commands, permission groups, and who can trigger them."
       />
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "commands" | "groups")} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="commands" data-testid="tab-commands">
-            Commands
-          </TabsTrigger>
-          <TabsTrigger value="groups" data-testid="tab-groups">
-            Groups
-          </TabsTrigger>
-        </TabsList>
+      <nav className="mb-6 flex w-fit items-center gap-1 rounded-lg bg-muted p-1 text-muted-foreground">
+        <TabLink href={COMMAND_LIST_PATH} isActive={!showingGroups} testId="tab-commands">
+          Commands
+        </TabLink>
+        <TabLink href={COMMAND_GROUPS_PATH} isActive={showingGroups} testId="tab-groups">
+          Groups
+        </TabLink>
+      </nav>
 
-        <TabsContent value="commands" className="mt-0">
-          <CommandsTab instanceId={instance?._id} commands={commands} groups={groups} isLoading={commandsLoading} />
-        </TabsContent>
-
-        <TabsContent value="groups" className="mt-0">
-          <GroupsTab instanceId={instance?._id} groups={groups} commands={commands} isLoading={groupsLoading} />
-        </TabsContent>
-      </Tabs>
+      {showingGroups ? (
+        <GroupsTab instanceId={instance?._id} groups={groups} commands={commands} isLoading={groupsLoading} />
+      ) : (
+        <CommandsTab instanceId={instance?._id} commands={commands} isLoading={commandsLoading} />
+      )}
     </div>
+  );
+}
+
+/** One of the two list routes, styled as the tab it reads as. */
+function TabLink({
+  href,
+  isActive,
+  testId,
+  children,
+}: {
+  href: string;
+  isActive: boolean;
+  testId: string;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={isActive ? "page" : undefined}
+      data-testid={testId}
+      className={cn(
+        "inline-flex min-h-9 items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium",
+        isActive ? "bg-background text-foreground shadow-sm" : "hover:text-foreground"
+      )}
+    >
+      {children}
+    </Link>
   );
 }
 
@@ -240,26 +206,18 @@ export default function Commands() {
 function CommandsTab({
   instanceId,
   commands,
-  groups,
   isLoading,
 }: {
   instanceId: Id<"instances"> | undefined;
   commands: CommandDoc[];
-  groups: GroupDoc[];
   isLoading: boolean;
 }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const { actionPresets } = useWorkflowCatalog();
   const [searchQuery, setSearchQuery] = useState("");
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<CommandDoc | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CommandDoc | null>(null);
-  const [formState, setFormState] = useState<CommandFormState>(defaultFormState);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [userInput, setUserInput] = useState("");
 
-  const createCommand = useAction(api.chatCommandActions.createCommand);
   const updateCommand = useAction(api.chatCommandActions.updateCommand);
   const deleteCommand = useAction(api.chatCommandActions.deleteCommand);
 
@@ -268,121 +226,6 @@ function CommandsTab({
     : commands;
 
   const sortedCommands = [...filteredCommands].sort((a, b) => a.command.localeCompare(b.command));
-
-  function openCreateDialog() {
-    setEditing(null);
-    setFormState(defaultFormState);
-    setFormError(null);
-    setUserInput("");
-    setDialogOpen(true);
-  }
-
-  function openEditDialog(cmd: CommandDoc) {
-    setEditing(cmd);
-    setFormState({
-      command: joinCommandInput(cmd.command, cmd.argumentPattern ?? ""),
-      actions: unescapeDollarKeys(cmd.actions ?? []) as ActionStep[],
-      cooldown: cmd.cooldown,
-      priority: cmd.priority,
-      enabled: cmd.enabled,
-      visibility: cmd.visibility,
-      groupIds: cmd.groupIds,
-      usernames: cmd.usernames,
-    });
-    setFormError(null);
-    setUserInput("");
-    setDialogOpen(true);
-  }
-
-  function addUsername() {
-    const name = userInput.trim().toLowerCase().replace(/^@/, "");
-    if (!name) {
-      return;
-    }
-    if (formState.usernames.includes(name)) {
-      setUserInput("");
-      return;
-    }
-    setFormState((s) => ({ ...s, usernames: [...s.usernames, name] }));
-    setUserInput("");
-  }
-
-  function removeUsername(name: string) {
-    setFormState((s) => ({ ...s, usernames: s.usernames.filter((u) => u !== name) }));
-  }
-
-  function toggleGroup(engineGroupId: string) {
-    setFormState((s) => ({
-      ...s,
-      groupIds: s.groupIds.includes(engineGroupId)
-        ? s.groupIds.filter((id) => id !== engineGroupId)
-        : [...s.groupIds, engineGroupId],
-    }));
-  }
-
-  // Follows the argument pattern as it is typed, so a `{songTitle}` just added
-  // to the command name is offerable in the actions below without saving first.
-  const commandVariables = useMemo(
-    () => commandActionVariables(splitCommandInput(formState.command).argumentPattern),
-    [formState.command]
-  );
-
-  const restrictedWithNoAccess =
-    formState.visibility === "restricted" && formState.groupIds.length === 0 && formState.usernames.length === 0;
-
-  async function handleSave() {
-    setFormError(null);
-
-    const { command, argumentPattern } = splitCommandInput(formState.command);
-    if (!command) {
-      setFormError("Command name is required.");
-      return;
-    }
-
-    if (!instanceId) {
-      return;
-    }
-
-    setSaving(true);
-    try {
-      if (editing) {
-        await updateCommand({
-          instanceId,
-          engineCommandId: editing.engineCommandId,
-          command,
-          actions: escapeDollarKeys(formState.actions) as unknown[],
-          cooldown: formState.cooldown,
-          priority: formState.priority,
-          enabled: formState.enabled,
-          visibility: formState.visibility,
-          groupIds: formState.groupIds,
-          usernames: formState.usernames,
-          argumentPattern,
-        });
-        toast({ title: "Command updated" });
-      } else {
-        await createCommand({
-          instanceId,
-          command,
-          actions: escapeDollarKeys(formState.actions) as unknown[],
-          cooldown: formState.cooldown,
-          priority: formState.priority,
-          enabled: formState.enabled,
-          visibility: formState.visibility,
-          groupIds: formState.groupIds,
-          usernames: formState.usernames,
-          argumentPattern,
-        });
-        toast({ title: "Command created" });
-      }
-      setDialogOpen(false);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "An error occurred";
-      setFormError(message);
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleDelete() {
     if (!deleteTarget || !instanceId) {
@@ -440,7 +283,7 @@ function CommandsTab({
             className="pl-9"
           />
         </div>
-        <Button onClick={openCreateDialog} disabled={!instanceId}>
+        <Button onClick={() => navigate(COMMAND_NEW_ROUTE)} disabled={!instanceId} data-testid="button-add-command">
           <Plus className="h-4 w-4 mr-2" />
           Add Command
         </Button>
@@ -453,7 +296,7 @@ function CommandsTab({
           icon={MessageSquare}
           title="No commands found"
           description={searchQuery ? "Try adjusting your search." : "Create your first chat command to get started."}
-          action={!searchQuery ? { label: "Add Command", onClick: openCreateDialog } : undefined}
+          action={!searchQuery ? { label: "Add Command", onClick: () => navigate(COMMAND_NEW_ROUTE) } : undefined}
         />
       ) : (
         <Card>
@@ -521,7 +364,14 @@ function CommandsTab({
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditDialog(cmd)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => navigate(commandEditorPath(cmd.engineCommandId))}
+                        aria-label={`Edit !${cmd.command}`}
+                        data-testid={`edit-command-${cmd.engineCommandId}`}
+                      >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
                       <Button
@@ -540,175 +390,6 @@ function CommandsTab({
           </Table>
         </Card>
       )}
-
-      {/* Create / Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit Command" : "New Command"}</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            {formError && (
-              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">
-                {formError}
-              </div>
-            )}
-
-            <div className="grid gap-2">
-              <Label htmlFor="cmd-name">Command</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-sm">
-                  !
-                </span>
-                <Input
-                  id="cmd-name"
-                  placeholder="sr {songTitle}"
-                  className="pl-6 font-mono"
-                  value={formState.command}
-                  onChange={(e) => setFormState((s) => ({ ...s, command: e.target.value }))}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Everything up to the first space is the command name. Add {"{variableName}"} after it to capture the
-                rest of the message as an argument — e.g. "sr {"{songTitle}"}" passes what the user types after !sr as
-                songTitle.
-              </p>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>When it runs</Label>
-              <ActionListEditor
-                actions={formState.actions}
-                onChange={(actions) => setFormState((state) => ({ ...state, actions }))}
-                actionPresets={actionPresets}
-                availableVariables={commandVariables}
-                emptyHint="No actions yet. Add one to decide what happens — or leave it empty for a command that only fires its workflow trigger."
-              />
-              <p className="text-xs text-muted-foreground">
-                Actions run in order. Type {"{"} in a text field to use what the command captured, like the chatter's
-                name or an argument.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="cmd-cooldown">Cooldown (seconds)</Label>
-                <Input
-                  id="cmd-cooldown"
-                  type="number"
-                  min={0}
-                  value={formState.cooldown}
-                  onChange={(e) => setFormState((s) => ({ ...s, cooldown: Number(e.target.value) }))}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="cmd-priority">Priority (optional)</Label>
-                <Input
-                  id="cmd-priority"
-                  type="number"
-                  value={formState.priority}
-                  onChange={(e) => setFormState((s) => ({ ...s, priority: Number(e.target.value) }))}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-3">
-              <div className="flex items-center gap-2">
-                <Shield className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium">Visibility</span>
-              </div>
-              <Select
-                value={formState.visibility}
-                onValueChange={(val) => setFormState((s) => ({ ...s, visibility: val as Visibility }))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="public">Public — anyone can use this command</SelectItem>
-                  <SelectItem value="restricted">Restricted — only granted groups/users</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {formState.visibility === "restricted" && (
-                <div className="grid gap-3 pl-1">
-                  <div className="grid gap-2">
-                    <Label>Groups</Label>
-                    <GroupMultiSelect groups={groups} selected={formState.groupIds} onToggle={toggleGroup} />
-                  </div>
-
-                  <div className="grid gap-2">
-                    <Label htmlFor="cmd-usernames">Specific users</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="cmd-usernames"
-                        placeholder="username"
-                        value={userInput}
-                        onChange={(e) => setUserInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addUsername();
-                          }
-                        }}
-                      />
-                      <Button type="button" variant="outline" onClick={addUsername}>
-                        Add
-                      </Button>
-                    </div>
-                    {formState.usernames.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        {formState.usernames.map((user) => (
-                          <Badge key={user} variant="secondary" className="gap-1 pr-1">
-                            {user}
-                            <button
-                              type="button"
-                              onClick={() => removeUsername(user)}
-                              className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
-                              aria-label={`Remove ${user}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {restrictedWithNoAccess && (
-                    <div className="flex items-start gap-2 text-sm text-amber-600 dark:text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
-                      <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-                      <span>
-                        This command is restricted but has no groups or users granted — it will be invocable by no one.
-                        Add at least one group or username, or switch it to Public.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Switch
-                id="cmd-enabled"
-                checked={formState.enabled}
-                onCheckedChange={(checked) => setFormState((s) => ({ ...s, enabled: checked }))}
-              />
-              <Label htmlFor="cmd-enabled">Enabled</Label>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {editing ? "Save Changes" : "Create Command"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete confirmation */}
       <AlertDialog
@@ -737,110 +418,9 @@ function CommandsTab({
   );
 }
 
-function GroupMultiSelect({
-  groups,
-  selected,
-  onToggle,
-}: {
-  groups: GroupDoc[];
-  selected: string[];
-  onToggle: (engineGroupId: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const groupsById = useMemo(() => new Map(groups.map((g) => [g.engineGroupId, g])), [groups]);
-  // Mirrors the Groups tab's split, so "which of these did I create?" is
-  // answerable while granting rather than only while managing.
-  const builtIn = useMemo(() => sortGroups(groups.filter((g) => g.isBuiltIn)), [groups]);
-  const custom = useMemo(() => sortGroups(groups.filter((g) => !g.isBuiltIn)), [groups]);
-
-  return (
-    <div className="grid gap-2">
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button variant="outline" role="combobox" aria-expanded={open} className="justify-between font-normal">
-            {selected.length > 0
-              ? `${selected.length} group${selected.length === 1 ? "" : "s"} selected`
-              : "Select groups..."}
-            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-          <ComboBox>
-            <CommandInput placeholder="Search groups..." />
-            <CommandList>
-              <CommandEmpty>No matching groups.</CommandEmpty>
-              {builtIn.length > 0 && (
-                <CommandGroup heading="Built-in">
-                  {builtIn.map((group) => {
-                    const isSelected = selected.includes(group.engineGroupId);
-                    return (
-                      <CommandItem
-                        key={group.engineGroupId}
-                        value={group.name}
-                        onSelect={() => onToggle(group.engineGroupId)}
-                      >
-                        <Check className={cn("h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
-                        {groupLabel(group)}
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              )}
-              {custom.length > 0 && (
-                <CommandGroup heading="Custom">
-                  {custom.map((group) => {
-                    const isSelected = selected.includes(group.engineGroupId);
-                    return (
-                      <CommandItem
-                        key={group.engineGroupId}
-                        value={group.name}
-                        onSelect={() => onToggle(group.engineGroupId)}
-                      >
-                        <Check className={cn("h-4 w-4", isSelected ? "opacity-100" : "opacity-0")} />
-                        {groupLabel(group)}
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              )}
-            </CommandList>
-          </ComboBox>
-        </PopoverContent>
-      </Popover>
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selected.map((id) => (
-            <Badge key={id} variant="secondary" className="gap-1 pr-1">
-              {(() => {
-                const g = groupsById.get(id);
-                return g ? groupLabel(g) : id;
-              })()}
-              <button
-                type="button"
-                onClick={() => onToggle(id)}
-                className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
-                aria-label={`Remove ${groupsById.get(id)?.name ?? id}`}
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Groups tab
 // ---------------------------------------------------------------------------
-
-interface GroupFormState {
-  name: string;
-  description: string;
-}
-
-const defaultGroupForm: GroupFormState = { name: "", description: "" };
 
 function GroupsTab({
   instanceId,
@@ -854,16 +434,9 @@ function GroupsTab({
   isLoading: boolean;
 }) {
   const { toast } = useToast();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<GroupDoc | null>(null);
+  const [, navigate] = useLocation();
   const [deleteTarget, setDeleteTarget] = useState<GroupDoc | null>(null);
-  const [membersTarget, setMembersTarget] = useState<GroupDoc | null>(null);
-  const [formState, setFormState] = useState<GroupFormState>(defaultGroupForm);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
-  const createGroup = useAction(api.chatCommandActions.createGroup);
-  const updateGroup = useAction(api.chatCommandActions.updateGroup);
   const deleteGroup = useAction(api.chatCommandActions.deleteGroup);
 
   // No server-side "used by N commands" lookup exists — computed client-side
@@ -877,71 +450,6 @@ function GroupsTab({
     }
     return map;
   }, [commands]);
-
-  function openCreateDialog() {
-    setEditing(null);
-    setFormState(defaultGroupForm);
-    setFormError(null);
-    setDialogOpen(true);
-  }
-
-  function openEditDialog(group: GroupDoc) {
-    setEditing(group);
-    setFormState({ name: group.name, description: group.description });
-    setFormError(null);
-    setDialogOpen(true);
-  }
-
-  async function handleSave() {
-    setFormError(null);
-    const name = formState.name.trim();
-    if (!name) {
-      setFormError("Group name is required.");
-      return;
-    }
-    // `groups` is unique on (application_id, name) in the engine, and the
-    // built-ins already occupy everyone/subscriber/vip/moderator/broadcaster.
-    // Without this the create is still refused, but as a raw constraint error.
-    const clash = groups.find(
-      (g) => g.name.toLowerCase() === name.toLowerCase() && g.engineGroupId !== editing?.engineGroupId
-    );
-    if (clash) {
-      setFormError(
-        clash.isBuiltIn
-          ? `"${clash.name}" is a built-in group. Pick a different name.`
-          : `A group called "${clash.name}" already exists.`
-      );
-      return;
-    }
-    if (!instanceId) {
-      return;
-    }
-
-    setSaving(true);
-    try {
-      if (editing) {
-        await updateGroup({
-          instanceId,
-          engineGroupId: editing.engineGroupId,
-          name,
-          description: formState.description.trim() || undefined,
-        });
-        toast({ title: "Group updated" });
-      } else {
-        await createGroup({
-          instanceId,
-          name,
-          description: formState.description.trim() || undefined,
-        });
-        toast({ title: "Group created" });
-      }
-      setDialogOpen(false);
-    } catch (err: unknown) {
-      setFormError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function handleDelete() {
     if (!deleteTarget || !instanceId) {
@@ -964,7 +472,7 @@ function GroupsTab({
 
   // Built-in groups are seeded by the engine and cannot be renamed or deleted.
   // Membership of all but "everyone" is owned by the platform membership sync,
-  // so a hand edit is reverted on that chatter's next message — the UI offers a
+  // so a hand edit is reverted on that chatter's next message — their page is a
   // read-only roster instead of an editor that silently loses writes.
   const builtInGroups = useMemo(() => sortGroups(groups.filter((g) => g.isBuiltIn)), [groups]);
   const customGroups = useMemo(() => sortGroups(groups.filter((g) => !g.isBuiltIn)), [groups]);
@@ -972,7 +480,7 @@ function GroupsTab({
   return (
     <div>
       <div className="flex items-center justify-end mb-6">
-        <Button onClick={openCreateDialog} disabled={!instanceId}>
+        <Button onClick={() => navigate(COMMAND_GROUP_NEW_ROUTE)} disabled={!instanceId} data-testid="button-add-group">
           <Plus className="h-4 w-4 mr-2" />
           Add Group
         </Button>
@@ -1015,7 +523,7 @@ function GroupsTab({
           icon={Users}
           title="No groups found"
           description="Built-in groups are seeded by the engine for every application, so this usually means the instance hasn't synced yet. Create a custom group, or check the engine connection in Settings."
-          action={{ label: "Add Group", onClick: openCreateDialog }}
+          action={{ label: "Add Group", onClick: () => navigate(COMMAND_GROUP_NEW_ROUTE) }}
         />
       ) : (
         <div className="space-y-8">
@@ -1027,7 +535,7 @@ function GroupsTab({
                   Seeded automatically and kept up to date from chat. They can't be renamed, deleted, or edited by hand.
                 </p>
               </div>
-              <GroupTable groups={builtInGroups} usageByGroupId={usageByGroupId} onViewMembers={setMembersTarget} />
+              <GroupTable groups={builtInGroups} usageByGroupId={usageByGroupId} />
             </section>
           )}
 
@@ -1043,64 +551,11 @@ function GroupsTab({
                 No custom groups yet. Create one to grant a set of usernames access to restricted commands.
               </Card>
             ) : (
-              <GroupTable
-                groups={customGroups}
-                usageByGroupId={usageByGroupId}
-                onViewMembers={setMembersTarget}
-                onEdit={openEditDialog}
-                onDelete={setDeleteTarget}
-              />
+              <GroupTable groups={customGroups} usageByGroupId={usageByGroupId} onDelete={setDeleteTarget} />
             )}
           </section>
         </div>
       )}
-
-      {/* Create / Edit dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Edit Group" : "New Group"}</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            {formError && (
-              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-md px-3 py-2">
-                {formError}
-              </div>
-            )}
-
-            <div className="grid gap-2">
-              <Label htmlFor="group-name">Name</Label>
-              <Input
-                id="group-name"
-                placeholder="moderator"
-                value={formState.name}
-                onChange={(e) => setFormState((s) => ({ ...s, name: e.target.value }))}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="group-description">Description (optional)</Label>
-              <Textarea
-                id="group-description"
-                placeholder="Channel moderators with elevated command access."
-                value={formState.description}
-                onChange={(e) => setFormState((s) => ({ ...s, description: e.target.value }))}
-                rows={2}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {editing ? "Save Changes" : "Create Group"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete confirmation */}
       <AlertDialog
@@ -1127,57 +582,25 @@ function GroupsTab({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* Members management */}
-      <Dialog
-        open={membersTarget !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setMembersTarget(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{membersTarget?.name} members</DialogTitle>
-            <DialogDescription>
-              {membersTarget?.isBuiltIn
-                ? "Membership of this group is kept up to date from chat automatically. It's shown here for reference and can't be edited — a manual change would be reverted on that user's next message."
-                : "Manage which chat usernames belong to this group. Membership is by username — there's no separate user picker."}
-            </DialogDescription>
-          </DialogHeader>
-          {membersTarget && instanceId && <GroupMembersEditor instanceId={instanceId} group={membersTarget} />}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMembersTarget(null)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
 
 /**
- * One group table. Edit and delete are rendered only when a handler is passed,
- * which is how built-in groups lose those affordances: the engine refuses both
- * for them, and a button that always fails is worse than no button.
+ * One group table. Every row opens the group's own page, where its name, description and
+ * members live; that page decides what of them is editable, since a built-in group is
+ * seeded by the engine and refuses both a rename and a delete. Delete stays here on the
+ * row, because it acts on the list rather than on what the page shows.
  */
 function GroupTable({
   groups,
   usageByGroupId,
-  onViewMembers,
-  onEdit,
   onDelete,
 }: {
   groups: GroupDoc[];
   usageByGroupId: Map<string, number>;
-  onViewMembers: (group: GroupDoc) => void;
-  onEdit?: (group: GroupDoc) => void;
   onDelete?: (group: GroupDoc) => void;
 }) {
-  const editable = !!onEdit && !!onDelete;
-
   return (
     <Card>
       <Table>
@@ -1186,19 +609,24 @@ function GroupTable({
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
             <TableHead>Used by</TableHead>
-            <TableHead className={editable ? "w-[160px]" : "w-[120px]"}>Actions</TableHead>
+            <TableHead className={onDelete ? "w-[160px]" : "w-[120px]"}>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {groups.map((group) => {
             const usage = usageByGroupId.get(group.engineGroupId) ?? 0;
-            // "everyone" matches every user implicitly through a wildcard and
-            // has no membership rows at all, so a roster view would be an
-            // empty list implying nobody is in it.
+            // "everyone" matches every user implicitly through a wildcard and has no
+            // membership rows at all, so its page would show an empty roster implying
+            // nobody is in it.
             const hasRoster = group.name !== "everyone";
+            const href = commandGroupEditorPath(group.engineGroupId);
             return (
               <TableRow key={group._id} data-testid={`group-row-${group.engineGroupId}`}>
-                <TableCell className="font-medium">{groupLabel(group)}</TableCell>
+                <TableCell className="font-medium">
+                  <Link href={href} className="hover:underline" data-testid={`open-group-${group.engineGroupId}`}>
+                    {groupLabel(group)}
+                  </Link>
+                </TableCell>
                 <TableCell className="text-muted-foreground max-w-[320px]">
                   {group.description ? truncate(group.description) : <span className="italic">—</span>}
                 </TableCell>
@@ -1210,27 +638,32 @@ function GroupTable({
                 <TableCell>
                   <div className="flex items-center gap-1">
                     {hasRoster ? (
-                      <Button variant="ghost" size="sm" onClick={() => onViewMembers(group)}>
-                        <Users className="h-3.5 w-3.5 mr-1.5" />
-                        {editable ? "Members" : "View"}
+                      <Button asChild variant="ghost" size="sm">
+                        <Link href={href}>
+                          <Users className="h-3.5 w-3.5 mr-1.5" />
+                          {onDelete ? "Members" : "View"}
+                        </Link>
                       </Button>
                     ) : (
                       <span className="text-xs text-muted-foreground italic px-2">Everyone</span>
                     )}
-                    {onEdit && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onEdit(group)}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
                     {onDelete && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => onDelete(group)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <>
+                        <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+                          <Link href={href} aria-label={`Edit ${group.name}`}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => onDelete(group)}
+                          aria-label={`Delete ${group.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
                     )}
                   </div>
                 </TableCell>
@@ -1240,116 +673,5 @@ function GroupTable({
         </TableBody>
       </Table>
     </Card>
-  );
-}
-
-function GroupMembersEditor({ instanceId, group }: { instanceId: Id<"instances">; group: GroupDoc }) {
-  // Built-in rosters are owned by the platform membership sync. The engine
-  // would accept a write here and then overwrite it on the chatter's next
-  // message, so the editing affordances are withheld rather than offered and
-  // silently undone.
-  const readOnly = !!group.isBuiltIn;
-  const { toast } = useToast();
-  const [usernameInput, setUsernameInput] = useState("");
-  const [pending, setPending] = useState(false);
-
-  const members = useQuery(api.chatCommandGroups.listMembers, {
-    instanceId,
-    engineGroupId: group.engineGroupId,
-  });
-
-  const addUserToGroup = useAction(api.chatCommandActions.addUserToGroup);
-  const removeUserFromGroup = useAction(api.chatCommandActions.removeUserFromGroup);
-
-  async function handleAdd() {
-    const username = usernameInput.trim().toLowerCase().replace(/^@/, "");
-    if (!username) {
-      return;
-    }
-    setPending(true);
-    try {
-      await addUserToGroup({ instanceId, engineGroupId: group.engineGroupId, username });
-      setUsernameInput("");
-    } catch (err: unknown) {
-      toast({
-        title: "Failed to add member",
-        description: err instanceof Error ? err.message : undefined,
-        variant: "destructive",
-      });
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function handleRemove(username: string) {
-    setPending(true);
-    try {
-      await removeUserFromGroup({ instanceId, engineGroupId: group.engineGroupId, username });
-    } catch (err: unknown) {
-      toast({
-        title: "Failed to remove member",
-        description: err instanceof Error ? err.message : undefined,
-        variant: "destructive",
-      });
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <div className="grid gap-3 py-2">
-      {!readOnly && (
-        <div className="flex gap-2">
-          <Input
-            placeholder="username"
-            value={usernameInput}
-            onChange={(e) => setUsernameInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                handleAdd();
-              }
-            }}
-          />
-          <Button type="button" variant="outline" onClick={handleAdd} disabled={pending}>
-            Add
-          </Button>
-        </div>
-      )}
-
-      <div className="max-h-64 overflow-y-auto">
-        {members === undefined ? (
-          <div className="grid gap-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: fixed-length skeleton placeholder; the list never reorders
-              <Skeleton key={i} className="h-8 w-full" />
-            ))}
-          </div>
-        ) : members.length === 0 ? (
-          <p className="text-sm text-muted-foreground italic py-2">
-            {readOnly ? "Nobody in this group right now." : "No members yet."}
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {members.map((username) => (
-              <Badge key={username} variant="secondary" className={readOnly ? "" : "gap-1 pr-1"}>
-                {username}
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(username)}
-                    className="ml-0.5 rounded-full hover:bg-muted-foreground/20 p-0.5"
-                    aria-label={`Remove ${username}`}
-                    disabled={pending}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                )}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   );
 }

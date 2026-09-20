@@ -155,6 +155,7 @@ export function TriggerCard({
                     resolveActionPreset
                   )}
                   alertEditorHref={alertEditorHref(action.id)}
+                  concurrentWithPrevious={action.concurrentWithPrevious}
                   isExpanded={expandedActionId === action.id}
                   onToggleExpanded={() => onExpandAction(expandedActionId === action.id ? null : action.id)}
                   onChangeParameters={(parameters) => onChangeActionParameters(action.id, parameters)}
