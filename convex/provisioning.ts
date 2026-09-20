@@ -188,7 +188,12 @@ export const retry = action({
     }
 
     try {
-      const { run } = await retryRun(row.maintenanceEngineId, row.runId, `${row._id}:retry:${row.runId}`);
+      // A resumed run keeps its id, so the key carries the row's last change
+      // too: two clicks on one failure are the same request, but a second
+      // failure of the same run can be retried again rather than answered from
+      // the maintenance API's stored response.
+      const idempotencyKey = `${row._id}:retry:${row.runId}:${row.updatedAt}`;
+      const { run } = await retryRun(row.maintenanceEngineId, row.runId, idempotencyKey);
       await ctx.runMutation(internal.provisioningInternal.recordRetryStarted, {
         provisioningId: row._id,
         runId: run.id,
