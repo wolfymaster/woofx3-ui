@@ -6,7 +6,7 @@ import { ActionPickerDialog } from "@/components/workflows/action-picker-dialog"
 import { TriggerConfigForm } from "@/components/workflows/trigger-config-form";
 import { cn } from "@/lib/utils";
 import type { ActionPreset, TriggerConfigValues } from "@/lib/workflow-presets";
-import { presetToActionStep, resolveActionStepPreset } from "@/lib/workflow-presets-json";
+import { actionStepLabel, presetToActionStep, resolveActionStepPreset } from "@/lib/workflow-presets-json";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 interface ActionListEditorProps {
@@ -101,9 +101,7 @@ export function ActionListEditor({
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
                     )}
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium truncate">
-                        {preset?.name ?? step.function ?? step.action}
-                      </span>
+                      <span className="block text-sm font-medium truncate">{actionStepLabel(step, actionPresets)}</span>
                       <span className="block text-xs text-muted-foreground truncate">{summarize(step, preset)}</span>
                     </span>
                   </button>
@@ -196,5 +194,5 @@ function summarize(step: ActionStep, preset: ActionPreset | undefined): string {
       return `${field.label}: ${value}`;
     }
   }
-  return preset?.description || step.function || step.action;
+  return preset?.description || step.function || step.action || "";
 }

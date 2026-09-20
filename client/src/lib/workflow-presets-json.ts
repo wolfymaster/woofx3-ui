@@ -236,6 +236,39 @@ export function resolveActionStepPreset(step: ActionStep, presets: ActionPreset[
 }
 
 /**
+ * The workflow a sub-workflow step runs, for a step that names one.
+ *
+ * `ActionStep` does not model this shape: a command whose module declared a
+ * workflow is stored as the same `{type: "workflow", workflow: {...}}` task a
+ * workflow uses to call another workflow, and the engine runs a command's
+ * actions as tasks, so it accepts one here.
+ */
+function subWorkflowId(step: ActionStep): string | undefined {
+  const task = step as ActionStep & { type?: string; workflow?: { workflowId?: string } };
+  if (task.type !== "workflow") {
+    return undefined;
+  }
+  return task.workflow?.workflowId;
+}
+
+/**
+ * What to call one action step: its catalog entry's name, falling back to
+ * whatever the step names itself. Never empty — a step the catalog cannot
+ * explain still has to render as something.
+ */
+export function actionStepLabel(step: ActionStep, presets: ActionPreset[]): string {
+  const preset = resolveActionStepPreset(step, presets);
+  if (preset) {
+    return preset.name;
+  }
+  const workflowId = subWorkflowId(step);
+  if (workflowId) {
+    return `Run workflow ${workflowId}`;
+  }
+  return step.function ?? step.action ?? "Unrecognized action";
+}
+
+/**
  * Builds a fresh ActionNode for a newly-inserted step, from a catalog
  * ActionPreset the user picked in the action picker. Mirrors buildActionTask's
  * preset -> wire-field mapping (action/function/ref), pre-filled with the
