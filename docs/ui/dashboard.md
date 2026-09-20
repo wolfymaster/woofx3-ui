@@ -69,9 +69,9 @@ tints the tile's border, icon, and a faint `${hex}20` background wash, the same
 treatment the module detail panel gives catalog colors. The label keeps the theme
 foreground so any choice stays readable.
 
-Buttons support **variables**: any `{{name}}` written into the command, URL, body,
-or a header value is collected from the user in a prompt before the macro runs.
-The `{{…}}` delimiter is deliberately distinct from the workflow engine's `${…}`
+Buttons support **variables**: any <code v-pre>{{name}}</code> written into the command,
+URL, body, or a header value is collected from the user in a prompt before the macro runs.
+The <code v-pre>{{…}}</code> delimiter is deliberately distinct from the workflow engine's `${…}`
 and the shared TS resolver's `{…}` (see `client/src/lib/macro-pad.ts` for why) —
 variable names are restricted to `[A-Za-z0-9_]`.
 
