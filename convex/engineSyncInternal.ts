@@ -4,7 +4,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { reconcileEndpoints } from "./inboundWebhooks";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
-import { bareModuleKey, loadModuleIdsByBareKey } from "./lib/moduleKey";
+import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { canAccessAccount } from "./lib/teamAccess";
 
@@ -645,6 +645,7 @@ export const reconcileWidgets = internalMutation({
         settings: v.array(v.any()),
         surfaces: v.optional(v.array(v.string())),
         hostsSurface: v.optional(v.string()),
+        taxonomy: v.optional(v.array(v.string())),
         createdByType: v.string(),
         createdByRef: v.string(),
       })
@@ -672,6 +673,7 @@ export const reconcileWidgets = internalMutation({
         settings: snap.settings,
         surfaces: snap.surfaces,
         hostsSurface: snap.hostsSurface,
+        taxonomy: snap.taxonomy,
       };
       const existingDef = await ctx.db
         .query("moduleWidgets")
@@ -999,6 +1001,10 @@ export const startRun = internalMutation({
       status: "running",
       startedAt: now,
       steps: [
+        // Must list every step in SYNC_STEPS: updateRunStep patches the entry
+        // whose name matches and silently does nothing when there is none, so
+        // a step missing here runs but reports neither progress nor failure.
+        { name: "modules", status: "pending", itemsProcessed: 0 },
         { name: "commands", status: "pending", itemsProcessed: 0 },
         { name: "groups", status: "pending", itemsProcessed: 0 },
         { name: "functions", status: "pending", itemsProcessed: 0 },
@@ -1017,6 +1023,7 @@ export const updateRunStep = internalMutation({
   args: {
     runId: v.id("syncRuns"),
     stepName: v.union(
+      v.literal("modules"),
       v.literal("commands"),
       v.literal("groups"),
       v.literal("functions"),
@@ -1219,5 +1226,92 @@ export const cleanupOldRuns = internalMutation({
       await ctx.db.delete(r._id);
     }
     return old.length;
+  },
+});
+
+/**
+ * Reconcile `moduleRepository` against a full snapshot of the modules the
+ * engine has installed, manifests included.
+ *
+ * Self-healing counterpart to the `module.installed` webhook, and the only
+ * path that gives a row its manifest. That webhook carries no manifest field,
+ * so `processModuleInstalled` writes `{}`; the dashboard upload path was the
+ * sole writer of a real one. Every module the engine installs by itself —
+ * each bundled module, from barkloader's boot reconciler — therefore had a
+ * manifest declaring nothing, or no row at all. `resourceKinds.getForInstance`
+ * reads a kind only from that manifest, so its page rendered "not available"
+ * for a kind the engine had installed and was serving.
+ *
+ * Upsert-only. A module gone from the engine is torn down by
+ * `processModuleDeleted` / `reconcileUninstalledModule`, which also cascade
+ * the triggers, actions and widgets hanging off the row. Deleting here would
+ * duplicate that with less context, and would race an upload whose `pending`
+ * row the engine has not installed yet — that row is absent from the snapshot
+ * precisely because the install is still in flight.
+ *
+ * Ordering: must run before `resources`, which drops any resource instance
+ * whose owning module has no row.
+ */
+export const reconcileModules = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    snapshots: v.array(
+      v.object({
+        name: v.string(),
+        version: v.string(),
+        moduleId: v.string(),
+        moduleKey: v.string(),
+        manifest: v.any(),
+        description: v.string(),
+        author: v.string(),
+        category: v.string(),
+        tags: v.array(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, { instanceId, snapshots }) => {
+    // One row per installed module per instance; the same ceiling
+    // loadModuleIdsByBareKey reads under.
+    const rows = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .take(500);
+    const claimed = new Set<string>();
+    let processed = 0;
+
+    for (const snap of snapshots) {
+      const existing = findModuleRow(rows, snap, claimed);
+      if (existing) {
+        claimed.add(existing._id);
+      }
+
+      // The engine is authoritative for identity and manifest. Catalog text is
+      // only filled in, never blanked: a marketplace upload carries a
+      // description the manifest itself may not.
+      const fields = {
+        instanceId,
+        name: snap.name,
+        version: snap.version,
+        manifest: snap.manifest,
+        status: "installed" as const,
+        statusMessage: undefined,
+        moduleKey: snap.moduleKey || existing?.moduleKey,
+        description: snap.description || existing?.description || "",
+        tags: snap.tags.length > 0 ? snap.tags : (existing?.tags ?? []),
+        ...(snap.author ? { author: snap.author } : {}),
+        ...(snap.category ? { category: snap.category } : {}),
+      };
+
+      if (existing) {
+        await ctx.db.patch(existing._id, fields);
+      } else {
+        // archiveKey stays empty: the engine holds the archive, and nothing
+        // reads this field for a module the dashboard did not upload.
+        await ctx.db.insert("moduleRepository", { ...fields, archiveKey: "" });
+      }
+      processed++;
+    }
+
+    return { itemsProcessed: processed };
   },
 });
