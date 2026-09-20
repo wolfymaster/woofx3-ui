@@ -17,6 +17,7 @@ import {
   toHttpResponse,
   withEngineTimeout,
 } from "./lib/inboundWebhookRelay";
+import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
@@ -1071,6 +1072,153 @@ http.route({
     }
   }),
 });
+
+/**
+ * Progress callbacks from the woofx3 maintenance API while it provisions or
+ * tears down a managed engine.
+ *
+ * Unlike the engine's own webhook above, this caller is one trusted service
+ * rather than one engine per tenant, so it authenticates with an HMAC over the
+ * exact body instead of a per-instance bearer token: there is no instance to
+ * look a token up by until provisioning finishes. The engine a callback is
+ * about is found by `engineId`, which this deployment recorded when it asked
+ * for the engine.
+ *
+ * Delivery is at-least-once and the sender retries until it sees a 2xx, so a
+ * repeat must be acknowledged rather than applied twice, and a rejected
+ * signature must answer 401 rather than 200.
+ */
+http.route({
+  path: "/api/webhooks/maintenance",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const secret = process.env.MAINTENANCE_WEBHOOK_SECRET;
+    if (!secret) {
+      logger.error("maintenance webhook: MAINTENANCE_WEBHOOK_SECRET is not configured");
+      return new Response(JSON.stringify({ error: "Not configured" }), {
+        status: 503,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // The signature covers the exact bytes sent, so the body is read as text
+    // and parsed only after it verifies.
+    const body = await request.text();
+    const verification = await verifySignature(body, request.headers.get(SIGNATURE_HEADER), secret, new Date());
+    if (!verification.valid) {
+      logger.warn("maintenance webhook: rejected", { reason: verification.reason });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body);
+    } catch {
+      return corsJson({ error: "Invalid JSON" }, 400);
+    }
+    const event = payload as Record<string, unknown>;
+    const eventId = typeof event.id === "string" ? event.id : null;
+    const eventType = typeof event.type === "string" ? event.type : null;
+    if (!eventId || !eventType) {
+      return corsJson({ error: "Missing id or type" }, 400);
+    }
+    const engineId = typeof event.engineId === "string" ? event.engineId : undefined;
+
+    const isNew = await ctx.runMutation(internal.provisioningInternal.claimCallbackEvent, {
+      eventId,
+      eventType,
+      maintenanceEngineId: engineId,
+    });
+    if (!isNew) {
+      return corsJson({ success: true, type: eventType, handled: true, duplicate: true });
+    }
+
+    logger.info("maintenance webhook: event received", { type: eventType, engineId, eventId });
+
+    if (!engineId) {
+      logger.warn("maintenance webhook: event without an engineId", { type: eventType, eventId });
+      return corsJson({ success: true, type: eventType, handled: false });
+    }
+
+    switch (eventType) {
+      case "engine.run.step": {
+        const step = typeof event.step === "string" ? event.step : null;
+        const status = maintenanceStepStatus(event.status);
+        if (!step || !status) {
+          return corsJson({ error: "Malformed engine.run.step" }, 400);
+        }
+        await ctx.runMutation(internal.provisioningInternal.applyRunStep, {
+          maintenanceEngineId: engineId,
+          step,
+          label: typeof event.label === "string" ? event.label : step,
+          status,
+          error: maintenanceErrorText(event.error),
+        });
+        return corsJson({ success: true, type: eventType, handled: true });
+      }
+
+      case "engine.ready": {
+        const url = typeof event.url === "string" ? event.url : null;
+        if (!url) {
+          return corsJson({ error: "Malformed engine.ready" }, 400);
+        }
+        await ctx.runMutation(internal.provisioningInternal.applyEngineReady, {
+          maintenanceEngineId: engineId,
+          url,
+        });
+        return corsJson({ success: true, type: eventType, handled: true });
+      }
+
+      case "engine.failed": {
+        await ctx.runMutation(internal.provisioningInternal.applyEngineFailed, {
+          maintenanceEngineId: engineId,
+          step: typeof event.step === "string" ? event.step : "unknown",
+          error: maintenanceErrorText(event.error) ?? "The engine could not be created",
+        });
+        return corsJson({ success: true, type: eventType, handled: true });
+      }
+
+      case "engine.deleted": {
+        await ctx.runMutation(internal.provisioningInternal.applyEngineDeleted, { maintenanceEngineId: engineId });
+        return corsJson({ success: true, type: eventType, handled: true });
+      }
+
+      default: {
+        logger.warn("maintenance webhook: unhandled event type", { type: eventType });
+        return corsJson({ success: true, type: eventType, handled: false });
+      }
+    }
+  }),
+});
+
+/** The maintenance API's step statuses; anything else means the contract moved and the event is refused. */
+function maintenanceStepStatus(value: unknown): "pending" | "running" | "succeeded" | "failed" | "skipped" | null {
+  switch (value) {
+    case "pending":
+    case "running":
+    case "succeeded":
+    case "failed":
+    case "skipped":
+      return value;
+    default:
+      return null;
+  }
+}
+
+/** `{ code, message }` flattened for display; the code is kept because it is stable and the message is not. */
+function maintenanceErrorText(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const error = value as { code?: unknown; message?: unknown };
+  if (typeof error.message !== "string") {
+    return undefined;
+  }
+  return typeof error.code === "string" ? `${error.code}: ${error.message}` : error.message;
+}
 
 http.route({ pathPrefix: "/api/browser-source/", method: "OPTIONS", handler: preflightHandler });
 http.route({
