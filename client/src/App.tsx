@@ -73,24 +73,31 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Redirects users who haven't completed onboarding
+// Redirects users who haven't completed onboarding.
+//
+// An instance row alone is not onboarding done: a managed engine has one from
+// the moment provisioning starts, and a failed bring-your-own registration
+// leaves one behind too. Only `clientId` says the handshake happened, which is
+// what every screen past this point depends on, so anything short of that goes
+// back to onboarding — where the provisioning progress screen takes over.
 function OnboardingGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
   const account = useQuery(api.accounts.getMyAccount);
   const instances = useQuery(api.instances.listForCurrentUser);
   const [, navigate] = useLocation();
+  const hasRegisteredInstance = (instances ?? []).some((instance) => Boolean(instance?.clientId));
 
   useEffect(() => {
     if (!isAuthenticated) return;
     if (account === undefined || instances === undefined) return; // still loading
 
-    if (!account || instances.length === 0) {
+    if (!account || !hasRegisteredInstance) {
       navigate("/auth/onboarding");
     }
-  }, [isAuthenticated, account, instances, navigate]);
+  }, [isAuthenticated, account, instances, hasRegisteredInstance, navigate]);
 
   if (account === undefined || instances === undefined) return <SplashScreen />;
-  if (!account || instances.length === 0) return null;
+  if (!account || !hasRegisteredInstance) return null;
   return <>{children}</>;
 }
 

@@ -79,8 +79,24 @@ export const create = mutation({
       throw new Error("Not authorized");
     }
 
+    // An account has one engine, and a registration that failed leaves an
+    // instance behind with no credentials. Retrying onboarding with a
+    // corrected URL must land on that row rather than add a second one the
+    // user would then have to choose between.
+    const existing = await ctx.db
+      .query("instances")
+      .withIndex("by_account", (q) => q.eq("accountId", args.accountId))
+      .take(50);
+    const unregistered = existing.find((instance) => !instance.clientId && instance.hosting !== "managed");
+    if (unregistered) {
+      await ctx.db.patch(unregistered._id, { name: args.name, url: args.url, hosting: "external" });
+      await ensureInstanceMember(ctx, unregistered._id, userId, "owner");
+      return unregistered._id;
+    }
+
     const instanceId = await ctx.db.insert("instances", {
       ...args,
+      hosting: "external",
       createdAt: Date.now(),
     });
 
