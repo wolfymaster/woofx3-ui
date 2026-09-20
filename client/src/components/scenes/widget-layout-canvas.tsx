@@ -1,11 +1,9 @@
 import { alertWidgetName, nextAlertWidgetName } from "@convex/lib/alertWidgets";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { Maximize, ZoomIn, ZoomOut } from "lucide-react";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import { StageArea } from "@/components/common/stage-area";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
 import { CanvasWidgetHandle } from "./canvas-widget-handle";
@@ -51,7 +49,8 @@ export function WidgetLayoutCanvas({
   placeholder,
 }: WidgetLayoutCanvasProps) {
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(0.5);
+  // StageArea re-observes whenever this identity changes, so it is not rebuilt per render.
+  const canvasSize = useMemo(() => ({ width, height }), [width, height]);
 
   const catalogRowFor = useCallback(
     (widget: Widget) => catalog.find((row) => row.widgetId === widget.widgetCanonicalId),
@@ -138,37 +137,11 @@ export function WidgetLayoutCanvas({
     <div className="relative flex-1 flex overflow-hidden">
       <WidgetCatalogSidebar catalogWidgets={catalog} onAdd={addWidget} />
 
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
-      <div className="flex-1 bg-muted/30 relative overflow-auto" onMouseDown={handleBackgroundMouseDown}>
-        <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-card rounded-md border p-1 z-10">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setZoom((z) => Math.max(0.25, z - 0.1))}
-            data-testid="button-zoom-out"
-          >
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <span className="text-sm w-12 text-center">{Math.round(zoom * 100)}%</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setZoom((z) => Math.min(2, z + 0.1))}
-            data-testid="button-zoom-in"
-          >
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Separator orientation="vertical" className="h-6" />
-          <Button variant="ghost" size="icon" onClick={() => setZoom(0.5)} data-testid="button-fit">
-            <Maximize className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
-        <div className="absolute inset-0 flex items-center justify-center p-8" onMouseDown={handleBackgroundMouseDown}>
-          {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
+      <StageArea canvas={canvasSize} className="flex-1">
+        {(zoom) => (
+          // biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets
           <div
-            className="relative bg-black/80 shadow-2xl"
+            className="relative shrink-0 overflow-hidden bg-black/80 shadow-2xl"
             style={{ width: width * zoom, height: height * zoom }}
             onMouseDown={handleBackgroundMouseDown}
             data-testid="scene-canvas"
@@ -206,8 +179,8 @@ export function WidgetLayoutCanvas({
               ))}
             </div>
           </div>
-        </div>
-      </div>
+        )}
+      </StageArea>
 
       {/* Floated rather than docked as a flex sibling: as a sibling it took width
           from the canvas, so selecting a widget resized the canvas and shifted the

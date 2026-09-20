@@ -654,6 +654,7 @@ http.route({
             settings,
             surfaces: widget.surfaces,
             hostsSurface: widget.hostsSurface,
+            taxonomy: widget.taxonomy,
           });
         }
         return corsJson({ success: true, type: event.type });

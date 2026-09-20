@@ -32,6 +32,7 @@ export const widgetsStep: SyncStep = {
       settings: parseFieldList(w.settingsSchema),
       surfaces: w.surfaces,
       hostsSurface: w.hostsSurface || undefined,
+      taxonomy: w.taxonomy,
       createdByType: w.createdByType,
       createdByRef: w.createdByRef,
     }));

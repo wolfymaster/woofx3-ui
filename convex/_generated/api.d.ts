@@ -48,6 +48,7 @@ import type * as lib_engineSync_steps_actions from "../lib/engineSync/steps/acti
 import type * as lib_engineSync_steps_commands from "../lib/engineSync/steps/commands.js";
 import type * as lib_engineSync_steps_functions from "../lib/engineSync/steps/functions.js";
 import type * as lib_engineSync_steps_groups from "../lib/engineSync/steps/groups.js";
+import type * as lib_engineSync_steps_modules from "../lib/engineSync/steps/modules.js";
 import type * as lib_engineSync_steps_resources from "../lib/engineSync/steps/resources.js";
 import type * as lib_engineSync_steps_scenes from "../lib/engineSync/steps/scenes.js";
 import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/triggers.js";
@@ -175,6 +176,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/commands": typeof lib_engineSync_steps_commands;
   "lib/engineSync/steps/functions": typeof lib_engineSync_steps_functions;
   "lib/engineSync/steps/groups": typeof lib_engineSync_steps_groups;
+  "lib/engineSync/steps/modules": typeof lib_engineSync_steps_modules;
   "lib/engineSync/steps/resources": typeof lib_engineSync_steps_resources;
   "lib/engineSync/steps/scenes": typeof lib_engineSync_steps_scenes;
   "lib/engineSync/steps/triggers": typeof lib_engineSync_steps_triggers;

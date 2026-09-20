@@ -61,3 +61,50 @@ export async function resolveModuleIdByRef(
   }
   return (await loadModuleIdsByBareKey(ctx, instanceId)).get(bareModuleKey(createdByRef) ?? createdByRef);
 }
+
+/** What `findModuleRow` needs of a `moduleRepository` row. */
+export interface ModuleRowIdentity {
+  _id: string;
+  moduleKey?: string;
+  name: string;
+  version: string;
+}
+
+/** What `findModuleRow` needs of an engine module snapshot. */
+export interface ModuleSnapshotIdentity {
+  name: string;
+  version: string;
+  moduleId: string;
+  moduleKey: string;
+}
+
+/**
+ * The `moduleRepository` row an engine module snapshot belongs to.
+ *
+ * Three tiers, narrowest first. `moduleKey` carries version and content hash
+ * (`woofx3:0.7.0:dcbcc35`), so an upgraded module no longer matches the key
+ * its row was written under; the bare key is what survives a version bump.
+ * name+version is the last resort, for a row that predates moduleKey entirely.
+ *
+ * `claimed` holds the ids already matched in this pass, so two snapshots can
+ * never collapse onto one row — without it, two versions of a module present
+ * at once would both fall through to the same bare-key match and the second
+ * would overwrite the first instead of inserting.
+ */
+export function findModuleRow<T extends ModuleRowIdentity>(
+  rows: readonly T[],
+  snap: ModuleSnapshotIdentity,
+  claimed: ReadonlySet<string>
+): T | undefined {
+  const free = rows.filter((row) => !claimed.has(row._id));
+  const exact = snap.moduleKey ? free.find((row) => row.moduleKey === snap.moduleKey) : undefined;
+  if (exact) {
+    return exact;
+  }
+  const bare = bareModuleKey(snap.moduleKey) ?? snap.moduleId;
+  const byBare = bare ? free.find((row) => bareModuleKey(row.moduleKey) === bare) : undefined;
+  if (byBare) {
+    return byBare;
+  }
+  return free.find((row) => row.name === snap.name && row.version === snap.version);
+}

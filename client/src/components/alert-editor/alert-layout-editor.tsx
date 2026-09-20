@@ -1,10 +1,11 @@
 import { api } from "@convex/_generated/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { useQuery } from "convex/react";
-import { Film, Image, Loader2, Minus, Plus, Sparkles, Square, Type, Volume2 } from "lucide-react";
+import { Film, Image, Loader2, Sparkles, Square, Type, Volume2 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { LayerInspector } from "@/components/alert-editor/layer-inspector";
+import { StageArea } from "@/components/common/stage-area";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import {
   AlertDialog,
@@ -24,14 +25,11 @@ import {
   centerOf,
   clampCenter,
   durationOf,
-  fitZoom,
   type LayerKind,
   layerKind,
   longestLayerId,
   newLayer,
   withCenter,
-  zoomIn,
-  zoomOut,
 } from "@/lib/alert-editor";
 import { type AlertLayout, readAlertLayout, writeAlertLayout } from "@/lib/alert-layout";
 import { cn } from "@/lib/utils";
@@ -40,9 +38,6 @@ import { placeableOn } from "@/lib/widget-surfaces";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
 
-/** Room around the canvas when it is fitted to the stage area, clear of the zoom control. */
-const FIT_PADDING = 32;
-const ZOOM_CONTROL_ROOM = 56;
 /** Width the phone layout switches at; below it the stage is a fixed-width strip. */
 const DESKTOP_QUERY = "(min-width: 1024px)";
 
@@ -276,7 +271,7 @@ export function AlertLayoutEditor({
                 onSelect={setSelectedId}
               />
             </aside>
-            <DesktopStageArea canvas={layout}>{stage}</DesktopStageArea>
+            <StageArea canvas={layout}>{stage}</StageArea>
             <aside className="min-h-0 overflow-y-auto border-l p-4">
               {inspector ?? <AlertSummary layout={layout} lengthLabel={lengthLabel} />}
             </aside>
@@ -427,77 +422,6 @@ function LayersList({
         </div>
       )}
     </section>
-  );
-}
-
-/** The desktop stage: the canvas fitted to the space between the rails, with zoom controls. */
-function DesktopStageArea({ canvas, children }: { canvas: AlertLayout; children: (zoom: number) => React.ReactNode }) {
-  const areaRef = useRef<HTMLDivElement>(null);
-  const [fit, setFit] = useState(0.36);
-  // Null follows Fit as the window resizes; a number is a zoom the user picked.
-  const [chosenZoom, setChosenZoom] = useState<number | null>(null);
-  const zoom = chosenZoom ?? fit;
-
-  useEffect(() => {
-    const area = areaRef.current;
-    if (!area) {
-      return;
-    }
-    const observer = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setFit(fitZoom({ width, height: height - ZOOM_CONTROL_ROOM }, canvas, FIT_PADDING));
-    });
-    observer.observe(area);
-    return () => observer.disconnect();
-  }, [canvas]);
-
-  return (
-    <div
-      ref={areaRef}
-      className="relative min-h-0 overflow-auto"
-      style={{
-        backgroundImage: "radial-gradient(hsl(var(--border)) 1px, transparent 1px)",
-        backgroundSize: "20px 20px",
-      }}
-    >
-      <div
-        className="flex min-h-full min-w-full items-center justify-center p-8 pb-20"
-        style={{ width: "max-content" }}
-      >
-        {children(zoom)}
-      </div>
-      <div className="sticky bottom-4 left-0 flex justify-center">
-        <div className="flex items-center gap-1 rounded-xl border bg-popover p-1 shadow-lg">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setChosenZoom(zoomOut(zoom))}
-            aria-label="Zoom out"
-          >
-            <Minus className="h-4 w-4" />
-          </Button>
-          <span className="w-12 text-center font-mono text-xs">{Math.round(zoom * 100)}%</span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setChosenZoom(zoomIn(zoom))}
-            aria-label="Zoom in"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            className="h-8 px-3 text-xs"
-            onClick={() => setChosenZoom(null)}
-            aria-pressed={chosenZoom === null}
-          >
-            Fit
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }
 

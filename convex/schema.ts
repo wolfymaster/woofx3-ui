@@ -914,6 +914,11 @@ export default defineSchema({
     // The surface this widget's placements host: "alert" for the alert
     // widget, the area of a scene where alert layouts play.
     hostsSurface: v.optional(v.string()),
+    // Open, multi-valued dotted classification ("media.video"), the same axis
+    // triggers and actions carry. The scene editor's catalog groups on it.
+    // Absent on rows registered before widgets declared it, and empty for a
+    // widget whose author declared none.
+    taxonomy: v.optional(v.array(v.string())),
     createdAt: v.number(),
   })
     .index("by_module", ["moduleId"])
@@ -1191,6 +1196,7 @@ export default defineSchema({
     steps: v.array(
       v.object({
         name: v.union(
+          v.literal("modules"),
           v.literal("commands"),
           v.literal("groups"),
           v.literal("functions"),

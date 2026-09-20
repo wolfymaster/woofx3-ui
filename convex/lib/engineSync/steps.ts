@@ -5,6 +5,7 @@ import { actionsStep } from "./steps/actions";
 import { commandsStep } from "./steps/commands";
 import { functionsStep } from "./steps/functions";
 import { groupsStep } from "./steps/groups";
+import { modulesStep } from "./steps/modules";
 import { resourcesStep } from "./steps/resources";
 import { scenesStep } from "./steps/scenes";
 import { triggersStep } from "./steps/triggers";
@@ -12,6 +13,7 @@ import { widgetsStep } from "./steps/widgets";
 import { workflowsStep } from "./steps/workflows";
 
 export type SyncStepName =
+  | "modules"
   | "commands"
   | "groups"
   | "functions"
@@ -41,6 +43,10 @@ export interface SyncStep {
 }
 
 export const SYNC_STEPS: readonly SyncStep[] = [
+  // First: every later step resolves an engine record back to its
+  // moduleRepository row, and `resources` drops an instance whose module has
+  // none. A module installed since the last sweep has no row until this runs.
+  modulesStep,
   commandsStep,
   groupsStep,
   functionsStep,
