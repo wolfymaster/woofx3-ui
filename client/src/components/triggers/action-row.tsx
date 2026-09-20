@@ -1,5 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { ArrowRight, Bell, type LucideIcon, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Bell, type LucideIcon, Trash2 } from "lucide-react";
 import { Link } from "wouter";
 import { AlertLayoutPreview } from "@/components/alerts/alert-layout-preview";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
@@ -8,24 +8,47 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TriggerConfigForm } from "@/components/workflows/trigger-config-form";
 import { readAlertLayout } from "@/lib/alert-layout";
-import type { ProjectedAction } from "@/lib/trigger-projection";
 import { cn } from "@/lib/utils";
 import type { ActionPreset, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
 
+/**
+ * What a row needs to draw one step, common to a trigger's actions (ProjectedAction) and
+ * a chat command's (ActionStep). The two surfaces store their steps differently — only
+ * this much is shared, and the row is written against it so both get the same UI.
+ */
+export interface ActionRowStep {
+  id: string;
+  /** `action` on the task — the handler type, e.g. `function`. */
+  handlerType: string;
+  /** Specific registered call for `function` handlers. */
+  functionCall?: string;
+  parameters: TriggerConfigValues;
+}
+
 interface ActionRowProps {
-  action: ProjectedAction;
+  action: ActionRowStep;
   preset?: ActionPreset;
   /** 1-based position in its trigger, shown on the step. */
   stepNumber: number;
   /** What this action's settings may reference — see projectedActionVariables. */
   availableVariables: VariableOption[];
-  /** Where "Edit alert" goes for an action with an alert layout. */
-  alertEditorHref: string;
+  /**
+   * Where "Edit alert" goes for an action with an alert layout. Omitted on a surface with
+   * no alert editor route of its own, and the layout field then offers its own editor.
+   */
+  alertEditorHref?: string;
+  /** Whether this step starts with the one above it, where the surface can run steps at once. */
+  concurrentWithPrevious?: boolean;
   isExpanded: boolean;
   onToggleExpanded: () => void;
   onChangeParameters: (parameters: TriggerConfigValues) => void;
-  onToggleConcurrent: () => void;
+  /** Omitted where steps always run in order; the concurrency switch is then not offered. */
+  onToggleConcurrent?: () => void;
+  /** Omitted where the order is not the user's to change; the move buttons are then not offered. */
+  onMove?: (delta: -1 | 1) => void;
+  /** Whether a step follows this one, so the last step's Move down is not offered as live. */
+  canMoveDown?: boolean;
   onRemove: () => void;
 }
 
@@ -36,10 +59,13 @@ export function ActionRow({
   stepNumber,
   availableVariables,
   alertEditorHref,
+  concurrentWithPrevious,
   isExpanded,
   onToggleExpanded,
   onChangeParameters,
   onToggleConcurrent,
+  onMove,
+  canMoveDown = false,
   onRemove,
 }: ActionRowProps) {
   const fields = preset?.config?.fields ?? [];
@@ -66,12 +92,37 @@ export function ActionRow({
             <span className="truncate text-[13px] text-muted-foreground">{stepDetail(action, fields)}</span>
           )}
         </button>
+        {onMove && (
+          <>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 shrink-0 text-muted-foreground"
+              onClick={() => onMove(-1)}
+              disabled={isFirst}
+              aria-label="Move step up"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 shrink-0 text-muted-foreground"
+              onClick={() => onMove(1)}
+              disabled={!canMoveDown}
+              aria-label="Move step down"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+          </>
+        )}
         <Button
           variant="ghost"
           size="icon"
           className="h-10 w-10 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
           onClick={onRemove}
           aria-label="Remove step"
+          data-testid={`remove-step-${action.id}`}
         >
           <Trash2 className="h-4 w-4" />
         </Button>
@@ -79,9 +130,9 @@ export function ActionRow({
 
       {isExpanded && (
         <div className="space-y-4 px-4 pb-4 pt-1.5 sm:pl-[50px]">
-          {!isFirst && (
+          {onToggleConcurrent && !isFirst && (
             <div className="flex items-center gap-3">
-              <Switch id={concurrentId} checked={action.concurrentWithPrevious} onCheckedChange={onToggleConcurrent} />
+              <Switch id={concurrentId} checked={!!concurrentWithPrevious} onCheckedChange={onToggleConcurrent} />
               <Label htmlFor={concurrentId} className="text-[13px] font-normal text-muted-foreground">
                 Start at the same time as step {stepNumber - 1}
               </Label>
@@ -100,7 +151,9 @@ export function ActionRow({
               values={action.parameters}
               onChange={onChangeParameters}
               availableVariables={availableVariables}
-              rendererOverrides={{ "field:layout": alertContentRenderer(alertEditorHref) }}
+              rendererOverrides={
+                alertEditorHref ? { "field:layout": alertContentRenderer(alertEditorHref) } : undefined
+              }
             />
           )}
         </div>
@@ -109,12 +162,15 @@ export function ActionRow({
   );
 }
 
-export function actionName(action: ProjectedAction, preset: ActionPreset | undefined): string {
+export function actionName(
+  action: Pick<ActionRowStep, "handlerType" | "functionCall">,
+  preset: ActionPreset | undefined
+): string {
   return preset?.name ?? action.functionCall ?? action.handlerType;
 }
 
 /** What a collapsed step says about itself: its first filled-in setting. */
-export function stepDetail(action: ProjectedAction, fields: ConfigField[]): string {
+export function stepDetail(action: Pick<ActionRowStep, "parameters">, fields: ConfigField[]): string {
   for (const field of fields) {
     const value = action.parameters[field.id];
     if (typeof value === "string" && value.trim()) {
@@ -132,7 +188,7 @@ export function stepDetail(action: ProjectedAction, fields: ConfigField[]): stri
  * catalog entry carries, which is the same default arrow for all of them until modules
  * can declare one.
  */
-export function stepIcon(action: Pick<ProjectedAction, "handlerType">, preset: ActionPreset | undefined): LucideIcon {
+export function stepIcon(action: Pick<ActionRowStep, "handlerType">, preset: ActionPreset | undefined): LucideIcon {
   if (action.handlerType === "alert") {
     return Bell;
   }
