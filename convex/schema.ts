@@ -94,6 +94,11 @@ export default defineSchema({
     clientId: v.optional(v.string()),
     clientSecret: v.optional(v.string()),
     webhookSecret: v.optional(v.string()),
+    // Who runs the engine. Absent means "external": every instance predates
+    // managed engines, so the user pasted the URL of an engine they host.
+    // "managed" engines are created by the woofx3 maintenance API and are the
+    // only ones engineProvisioning rows and deprovisioning apply to.
+    hosting: v.optional(v.union(v.literal("managed"), v.literal("external"))),
     createdAt: v.number(),
     lastViewedAt: v.optional(v.number()),
     lastEngineActivityAt: v.optional(v.number()),
@@ -137,6 +142,80 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_app", ["instanceId", "applicationId"]),
+
+  // engineProvisioning: one row per managed instance, tracking the woofx3
+  // maintenance API's provisioning run and the registration handshake that
+  // follows it. The row is the progress screen's only source: the maintenance
+  // API pushes every step transition to /api/webhooks/maintenance, so the
+  // browser subscribes here instead of polling anything.
+  //
+  // `registrationToken` is the secret the engine requires from whoever claims
+  // it, so a public engine cannot be claimed by whoever reaches it first. It
+  // is sent to the maintenance API at create time and replayed to the engine
+  // at registration; no public query may return it.
+  engineProvisioning: defineTable({
+    instanceId: v.id("instances"),
+    accountId: v.id("accounts"),
+    requestedBy: v.id("users"),
+    // Assigned by the maintenance API, so both are absent until POST /v1/engines answers.
+    maintenanceEngineId: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    slug: v.string(),
+    status: v.union(
+      v.literal("requested"),
+      v.literal("provisioning"),
+      v.literal("ready"),
+      v.literal("registering"),
+      v.literal("registered"),
+      v.literal("failed"),
+      v.literal("deprovisioning"),
+      v.literal("deleted")
+    ),
+    // Mirrors the maintenance API's run steps, in run order. Bounded by the
+    // number of steps in a run (nine today), so it stays a field rather than
+    // a table. Step status values are the maintenance API's own.
+    steps: v.array(
+      v.object({
+        key: v.string(),
+        label: v.string(),
+        status: v.union(
+          v.literal("pending"),
+          v.literal("running"),
+          v.literal("succeeded"),
+          v.literal("failed"),
+          v.literal("skipped")
+        ),
+        error: v.optional(v.string()),
+      })
+    ),
+    publicUrl: v.optional(v.string()),
+    // The release the engine reports running, as its ready callback gives it.
+    // Kept here so the admin page can name it without asking the maintenance
+    // API again.
+    reportedVersion: v.optional(v.string()),
+    error: v.optional(v.string()),
+    registrationToken: v.string(),
+    // Registration is retried on a backoff after the engine reports ready;
+    // this counts the attempts made so far so the schedule can advance.
+    registrationAttempts: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_account", ["accountId"])
+    .index("by_maintenance_engine", ["maintenanceEngineId"]),
+
+  // maintenanceEvents: delivered maintenance-API callback ids. The endpoint is
+  // at-least-once, so this is the dedupe key: an id already present means the
+  // event was applied and the redelivery is acknowledged without reapplying it.
+  maintenanceEvents: defineTable({
+    eventId: v.string(),
+    eventType: v.string(),
+    maintenanceEngineId: v.optional(v.string()),
+    receivedAt: v.number(),
+  })
+    .index("by_event", ["eventId"])
+    .index("by_received_at", ["receivedAt"]),
 
   // instanceMembers: users who have access to an instance
   instanceMembers: defineTable({

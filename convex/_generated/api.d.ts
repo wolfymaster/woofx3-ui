@@ -55,6 +55,8 @@ import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/wo
 import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.js";
 import type * as lib_inboundWebhookPath from "../lib/inboundWebhookPath.js";
 import type * as lib_inboundWebhookRelay from "../lib/inboundWebhookRelay.js";
+import type * as lib_maintenanceClient from "../lib/maintenanceClient.js";
+import type * as lib_maintenanceSignature from "../lib/maintenanceSignature.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
@@ -91,6 +93,8 @@ import type * as obsCommands from "../obsCommands.js";
 import type * as obsSceneConfigs from "../obsSceneConfigs.js";
 import type * as pins from "../pins.js";
 import type * as platformRealtime from "../platformRealtime.js";
+import type * as provisioning from "../provisioning.js";
+import type * as provisioningInternal from "../provisioningInternal.js";
 import type * as registration from "../registration.js";
 import type * as resources from "../resources.js";
 import type * as sceneActions from "../sceneActions.js";
@@ -173,6 +177,8 @@ declare const fullApi: ApiFromModules<{
   "lib/inboundWebhookDelivery": typeof lib_inboundWebhookDelivery;
   "lib/inboundWebhookPath": typeof lib_inboundWebhookPath;
   "lib/inboundWebhookRelay": typeof lib_inboundWebhookRelay;
+  "lib/maintenanceClient": typeof lib_maintenanceClient;
+  "lib/maintenanceSignature": typeof lib_maintenanceSignature;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;
   "lib/moduleKey": typeof lib_moduleKey;
   "lib/pinStrategy": typeof lib_pinStrategy;
@@ -209,6 +215,8 @@ declare const fullApi: ApiFromModules<{
   obsSceneConfigs: typeof obsSceneConfigs;
   pins: typeof pins;
   platformRealtime: typeof platformRealtime;
+  provisioning: typeof provisioning;
+  provisioningInternal: typeof provisioningInternal;
   registration: typeof registration;
   resources: typeof resources;
   sceneActions: typeof sceneActions;
