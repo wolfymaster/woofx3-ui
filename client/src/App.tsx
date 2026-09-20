@@ -11,6 +11,14 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/hooks/use-theme";
 import { ALERT_EDITOR_ROUTE } from "@/lib/alert-editor-route";
+import {
+  COMMAND_EDITOR_ROUTE,
+  COMMAND_GROUP_EDITOR_ROUTE,
+  COMMAND_GROUP_NEW_ROUTE,
+  COMMAND_GROUPS_PATH,
+  COMMAND_NEW_ROUTE,
+  COMMAND_STEP_ALERT_ROUTE,
+} from "@/lib/command-editor-route";
 import AdminAppearance from "@/pages/admin/appearance";
 import AdminEngine from "@/pages/admin/engine";
 import AdminIntegrations from "@/pages/admin/integrations";
@@ -24,6 +32,9 @@ import Login from "@/pages/auth/login";
 import Onboarding from "@/pages/auth/onboarding";
 import Register from "@/pages/auth/register";
 import TwitchCallback from "@/pages/auth/twitch-callback";
+import CommandEditor from "@/pages/command-editor";
+import CommandGroupEditor from "@/pages/command-group-editor";
+import CommandStepAlertEditor from "@/pages/command-step-alert-editor";
 import Commands from "@/pages/commands";
 import Counters from "@/pages/counters";
 import Dashboard from "@/pages/dashboard";
@@ -153,6 +164,13 @@ function AppRoutes() {
                   <Route path="/stream/alerts/*" component={Alerts} />
                   <Route path={ALERT_EDITOR_ROUTE} component={AlertEditor} />
                   <Route path="/stream/alert-history" component={AlertHistory} />
+                  {/* Order matters: the fixed segments must be matched before :engineCommandId. */}
+                  <Route path={COMMAND_STEP_ALERT_ROUTE} component={CommandStepAlertEditor} />
+                  <Route path={COMMAND_GROUP_NEW_ROUTE} component={CommandGroupEditor} />
+                  <Route path={COMMAND_GROUP_EDITOR_ROUTE} component={CommandGroupEditor} />
+                  <Route path={COMMAND_GROUPS_PATH} component={Commands} />
+                  <Route path={COMMAND_NEW_ROUTE} component={CommandEditor} />
+                  <Route path={COMMAND_EDITOR_ROUTE} component={CommandEditor} />
                   <Route path="/stream/commands" component={Commands} />
                   <Route path="/stream/counters" component={Counters} />
                   <Route path="/stream/counters/*" component={Counters} />

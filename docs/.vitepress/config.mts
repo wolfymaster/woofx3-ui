@@ -18,6 +18,7 @@ export default defineConfig({
           items: [
             { text: "Shell & routing", link: "/ui/overview" },
             { text: "Dashboard", link: "/ui/dashboard" },
+            { text: "Chat commands", link: "/ui/commands" },
             { text: "Modules", link: "/ui/modules" },
             { text: "Workflows", link: "/ui/workflows" },
             { text: "Assets", link: "/ui/assets" },
