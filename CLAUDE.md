@@ -159,7 +159,11 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 
 - **Tiger Style** ([tigerstyle.dev](https://tigerstyle.dev/)): fail fast; use assertions and checks so the app does not stay in an undesirable state (TypeScript: narrow types, early returns, `assert`/`invariant` helpers where appropriate; Convex: validate args and reject invalid states).
 - **Explicit over implicit**: clear names, types, and data flow over magic strings and hidden coupling.
-- **Comments**: sparingly; use for non-obvious rationale or genuinely complex logic. Prefer self-documenting structure and names.
+- **Comments**: must make sense to someone who has only the repository — no access to the conversation, the task, the PR, or prior versions of the file. Describe what the code does and why it's shaped this way, never what changed. The code is the primary documentation of *what*, so a comment earns its place mostly by saying *why*, and only when the why cannot be recovered from reading the code. Prefer a better name, or a smaller function, over a comment explaining a worse one.
+  - Keep: an invariant, a trade-off and what was traded away, a constraint imposed from outside, a choice that looks wrong until you know the reason.
+  - Cut: anything that restates the line below it; change narration (*"was X"*, *"renamed from Y"*, *"previously"*, *"now also"*); PR or issue numbers. Change rationale goes in the commit message or PR description. Git and the tracker already hold that history, and unlike them a comment is never updated when the thing it describes moves on — so it rots in place and starts lying.
+  - Cross-file references are OK only for real coupling (*"must match X in Y"*).
+  - A comment naming a field, value or file that no longer exists is worse than no comment: the reader searches for it, finds nothing, and trusts the rest less.
 - **Optimize for the reader**: straightforward code beats clever one-liners.
 - **Composition over inheritance**: build UI and modules from small pieces; rely on TypeScript interfaces/types and component composition (e.g. Shadcn patterns) rather than deep class hierarchies.
 - **Proven patterns**: use well-regarded architecture and design patterns when they fit this stack (layering, hooks, transport boundaries, idempotent webhooks, etc.).

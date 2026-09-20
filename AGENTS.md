@@ -66,7 +66,7 @@ Summary (see `CLAUDE.md` for the full list): `internal*` for private APIs; valid
 **Programming principles** (expanded in **`CLAUDE.md`**):
 
 - **Tiger Style**: fail fast; assert and validate; do not stay in undesirable states.
-- **Explicit** over implicit; **sparse** comments (complex / non-obvious only); **optimize for the reader**.
+- **Explicit** over implicit; **sparse** comments that say *why* and make sense with only the repository (never narrate what changed — that goes in the commit/PR); **optimize for the reader**.
 - **Braces** on all `if` / `else` / `for` / `while` bodies.
 - **Composition** and TypeScript **interfaces** over inheritance; **established patterns**; **design for change** (less code you regret later).
 - **Git**: second-guess bad fits—commit or branch and try another approach. **Never** add `Co-Authored-By` trailers to commits.
