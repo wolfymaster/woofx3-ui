@@ -2,8 +2,9 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
-import { assertCanManageAccountTeam, ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
 import { logger } from "./logger";
+import { performRegistration } from "./registration";
 
 /**
  * Database side of managed-engine provisioning. Everything here is internal:
@@ -78,12 +79,14 @@ export const reserveManagedInstance = internalMutation({
     registrationToken: v.string(),
   },
   handler: async (ctx, { accountId, userId, slug, registrationToken }) => {
-    const access = await assertCanManageAccountTeam(ctx, accountId, userId);
-    if (!access) {
+    // The account owner only: an engine is a resource the account is billed
+    // for, which is a narrower question than who may manage its team.
+    const account = await ctx.db.get(accountId);
+    if (!account || account.ownerId !== userId) {
       throw new Error("Not authorized");
     }
 
-    const instanceId = await findOrCreateManagedInstance(ctx, access.account, userId);
+    const instanceId = await findOrCreateManagedInstance(ctx, account, userId);
     const existing = await ctx.db
       .query("engineProvisioning")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -308,14 +311,12 @@ export const applyRunStep = internalMutation({
       steps[index] = next;
     }
 
-    // A late step report must not pull a registered engine backwards; the
-    // provisioning run is over by then.
-    const keepStatus = row.status === "registering" || row.status === "registered" || row.status === "deleted";
-    await ctx.db.patch(row._id, {
-      steps,
-      status: keepStatus ? row.status : row.status === "requested" ? "provisioning" : row.status,
-      updatedAt: Date.now(),
-    });
+    // The first step report is what turns a requested engine into one that is
+    // visibly being built. Every other status stands: a late report must not
+    // pull an engine that is already registering, registered or deleted back
+    // into provisioning.
+    const rowStatus = row.status === "requested" ? "provisioning" : row.status;
+    await ctx.db.patch(row._id, { steps, status: rowStatus, updatedAt: Date.now() });
   },
 });
 
@@ -396,7 +397,7 @@ export const runRegistration = internalAction({
       return;
     }
 
-    const result = await ctx.runAction(internal.registration.registerWithEngine, {
+    const result = await performRegistration(ctx, {
       instanceId: row.instanceId,
       userId: row.requestedBy,
       registrationToken: row.registrationToken,
