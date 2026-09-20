@@ -4,6 +4,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";
+import { type ManifestResourceKind, parseManifestResourceKinds } from "./lib/resourceKinds";
 import { marketplaceFetch } from "./marketplace";
 
 export type ManifestSettingAction =
@@ -21,12 +22,7 @@ export interface ManifestSettingField {
   action?: ManifestSettingAction;
 }
 
-export interface ManifestResourceKind {
-  kind: string;
-  name: string;
-  description: string;
-  valueSchema?: Record<string, unknown>;
-}
+export type { ManifestResourceKind };
 
 export interface ModuleDetailResult {
   id: string;
@@ -147,24 +143,6 @@ function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
       };
     })
     .filter((s) => s.id);
-}
-
-function parseManifestResourceKinds(manifest: unknown): ManifestResourceKind[] {
-  const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
-  return asArr(raw.resources)
-    .map((r) => {
-      const o = r && typeof r === "object" ? (r as Record<string, unknown>) : {};
-      const entry: ManifestResourceKind = {
-        kind: asStr(o.kind),
-        name: asStr(o.name),
-        description: asStr(o.description),
-      };
-      if (o.valueSchema && typeof o.valueSchema === "object") {
-        entry.valueSchema = o.valueSchema as Record<string, unknown>;
-      }
-      return entry;
-    })
-    .filter((r) => r.kind);
 }
 
 function formatInstalledDetail(

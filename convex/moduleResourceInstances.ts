@@ -12,6 +12,7 @@ const resourceInstanceValidator = v.object({
   displayName: v.string(),
   canonicalId: v.string(),
   moduleKey: v.string(), // owning module's stable composite key — resolves moduleRepository._id
+  settings: v.optional(v.any()),
 });
 
 export const listForInstance = query({
@@ -102,6 +103,7 @@ async function upsertRow(
     kind: string;
     displayName: string;
     canonicalId: string;
+    settings?: unknown;
   }
 ) {
   const row = {
@@ -113,6 +115,7 @@ async function upsertRow(
     kind: instance.kind,
     displayName: instance.displayName,
     canonicalId: instance.canonicalId,
+    settings: instance.settings ?? {},
   };
 
   // Scoped to the instance: canonicalId is `{moduleName}:{kind}:{engine instance

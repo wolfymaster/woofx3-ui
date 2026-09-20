@@ -29,10 +29,9 @@ export const dropAllInstanceSync = internalMutation({
  * truth: every row is upserted by `engineCommandId`; rows whose
  * `engineCommandId` no longer appears in the snapshot are deleted.
  *
- * The engine's `CommandSnapshot` (see `@woofx3/api`) carries the
- * type-discriminated payload in a single `typeValue` string, plus the
- * `visibility`/`groupIds`/`usernames` permission fields — see
- * docs/services/commands-ui.md in the woofx3 engine repo.
+ * The engine's `CommandSnapshot` (see `@woofx3/api`) carries the actions the
+ * command runs, plus the `visibility`/`groupIds`/`usernames` permission
+ * fields — see docs/services/commands-ui.md in the woofx3 engine repo.
  */
 export const reconcileCommands = internalMutation({
   args: {
@@ -42,8 +41,7 @@ export const reconcileCommands = internalMutation({
       v.object({
         engineCommandId: v.string(),
         command: v.string(),
-        type: v.union(v.literal("text"), v.literal("function")),
-        typeValue: v.string(),
+        actions: v.array(v.any()),
         cooldown: v.number(),
         priority: v.number(),
         enabled: v.boolean(),
@@ -74,8 +72,7 @@ export const reconcileCommands = internalMutation({
       const fields = {
         applicationId,
         command: snap.command,
-        type: snap.type,
-        typeValue: snap.typeValue,
+        actions: snap.actions,
         cooldown: snap.cooldown,
         priority: snap.priority,
         enabled: snap.enabled,
@@ -402,10 +399,10 @@ export const reconcileTriggers = internalMutation({
         id: v.string(),
         name: v.optional(v.string()),
         description: v.optional(v.string()),
-        sentence: v.optional(v.string()),
         category: v.optional(v.string()),
         event: v.optional(v.string()),
         configSchema: v.optional(v.string()),
+        sentence: v.optional(v.string()),
         allowVariants: v.optional(v.boolean()),
         projectionKey: v.optional(v.string()),
         taxonomy: v.optional(v.array(v.string())),
@@ -431,10 +428,10 @@ export const reconcileTriggers = internalMutation({
         description: snap.description ?? "",
         category: snap.category ?? "General",
         event: snap.event || undefined,
-        sentence: snap.sentence?.trim() || undefined,
         color: ui.color,
         icon: ui.icon,
         configFields: ui.configFields,
+        sentence: snap.sentence?.trim() || undefined,
         allowVariants: snap.allowVariants,
         projectionKey: snap.projectionKey,
         taxonomy: snap.taxonomy,
@@ -744,6 +741,7 @@ export const reconcileResourceInstances = internalMutation({
         displayName: v.string(),
         canonicalId: v.string(),
         moduleKey: v.string(),
+        settings: v.optional(v.any()),
       })
     ),
   },
@@ -782,6 +780,7 @@ export const reconcileResourceInstances = internalMutation({
         kind: snap.kind,
         displayName: snap.displayName,
         canonicalId: snap.canonicalId,
+        settings: snap.settings ?? {},
       };
 
       const existing = await ctx.db

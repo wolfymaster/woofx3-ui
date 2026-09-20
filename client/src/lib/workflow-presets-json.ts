@@ -1,4 +1,4 @@
-import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
+import type { ActionStep, ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { TaskDefinition, TriggerConfig as WorkflowTriggerConfig } from "@woofx3/api/workflow-definition";
 import { isCommandsSource } from "@/lib/parse-config-fields";
@@ -187,6 +187,52 @@ function buildActionTask(
 
 function resolveTriggerRef(trigger: TriggerWithEvent, triggerRef?: string): string | undefined {
   return triggerRef ?? trigger.canonicalRef;
+}
+
+/**
+ * The stored shape of one action a command runs: the same `ActionStep` the
+ * engine executes, built from the catalog entry the user picked. Mirrors
+ * buildActionTask's preset -> wire-field mapping (action/function/ref), so a
+ * command's action and a workflow's step are the same thing written once.
+ */
+export function presetToActionStep(preset: ActionPreset, id: string): ActionStep {
+  const handlerType = preset.handlerType ?? (preset.functionCall ? "function" : undefined);
+  if (!handlerType) {
+    throw new Error(
+      `action "${preset.name}" (${preset.id}) is missing handlerType — re-sync the catalog or reinstall the module`
+    );
+  }
+  const step: ActionStep = {
+    id,
+    action: handlerType,
+    parameters: getDefaultConfigValues(preset.config?.fields ?? []) as Record<string, unknown>,
+  };
+  if (preset.functionCall) {
+    step.function = preset.functionCall;
+  }
+  if (preset.canonicalRef) {
+    step.$ref = preset.canonicalRef;
+  }
+  return step;
+}
+
+/** The catalog entry an action step came from, for rendering and editing it. */
+export function resolveActionStepPreset(step: ActionStep, presets: ActionPreset[]): ActionPreset | undefined {
+  if (step.$ref) {
+    const byRef = presets.find((preset) => preset.canonicalRef === step.$ref);
+    if (byRef) {
+      return byRef;
+    }
+  }
+  if (step.function) {
+    const byFunction = presets.find((preset) => preset.functionCall === step.function);
+    if (byFunction) {
+      return byFunction;
+    }
+  }
+  // Last resort: match on handler type, but only when it names exactly one.
+  const byHandler = presets.filter((preset) => preset.handlerType === step.action);
+  return byHandler.length === 1 ? byHandler[0] : undefined;
 }
 
 /**

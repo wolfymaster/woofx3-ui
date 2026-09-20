@@ -148,6 +148,7 @@ function AppRoutes() {
                   <Route path="/stream/alert-history" component={AlertHistory} />
                   <Route path="/stream/commands" component={Commands} />
                   <Route path="/stream/counters" component={Counters} />
+                  <Route path="/stream/counters/*" component={Counters} />
                   <Route path="/stream/timers" component={Timers} />
                   <Route path="/stream/queues" component={Queues} />
                   <Route path="/stream/scenes" component={Scenes} />

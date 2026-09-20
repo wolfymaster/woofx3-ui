@@ -174,8 +174,11 @@ export default defineSchema({
     applicationId: v.string(),
     engineCommandId: v.string(),
     command: v.string(), // without the "!" prefix
-    type: v.union(v.literal("text"), v.literal("function")),
-    typeValue: v.string(), // response text ("text") or qualified function name ("function")
+    // The actions this command runs, in order -- the same shape a workflow step
+    // has (`ActionStep` in @woofx3/api). Stored with `$ref` escaped, like every
+    // other engine JSON Convex holds (see lib/dollarKeys.ts), and validated by
+    // the engine, which is the authority on what it can run.
+    actions: v.array(v.any()),
     // "{variable}" placeholders parsed out of user input after the command
     // word, e.g. "{songTitle}" — extracted values are merged into the
     // function's invoke payload (or usable in a "text" response). Empty
@@ -430,12 +433,12 @@ export default defineSchema({
     // fires. Preferred over deriving variables from configFields' eventPath,
     // which can only describe keys that are also config fields.
     emits: v.optional(v.array(v.any())),
-    supportsTiers: v.optional(v.boolean()),
-    tierLabel: v.optional(v.string()),
-    projectionKey: v.optional(v.string()),
     // How a configured trigger reads, e.g. "{reward} is redeemed": the module's
     // wording, with a {fieldId} placeholder for each condition value.
     sentence: v.optional(v.string()),
+    supportsTiers: v.optional(v.boolean()),
+    tierLabel: v.optional(v.string()),
+    projectionKey: v.optional(v.string()),
     // The engine's open, multi-valued classification (e.g. ["platform.twitch"]),
     // which replaces its legacy single-value category. Groups catalog entries by
     // source without the UI hardcoding what the sources are.
@@ -784,11 +787,27 @@ export default defineSchema({
     kind: v.string(),
     displayName: v.string(),
     canonicalId: v.string(), // {moduleName}:{kind}:{instanceId}
+    // What the instance was created with: its kind's `schema` field values.
+    // Optional for rows mirrored before instances carried settings.
+    settings: v.optional(v.any()),
   })
     .index("by_instance", ["instanceId"])
     .index("by_module", ["moduleId"])
     .index("by_instance_canonical", ["instanceId", "canonicalId"])
     .index("by_instance_kind", ["instanceId", "kind"]),
+
+  // resourceValues: the current value of each resource instance (a counter's
+  // number), mirrored from the owning module's storage at `state:<canonicalId>`.
+  // Kept here because the storage-changed webhook only lands in transientEvents,
+  // which expire after a minute -- too short to serve as a current value. Upserted
+  // from that webhook and refreshed from the engine's getResourceValues. `value`
+  // is null when the instance holds nothing, which reads as its initial value.
+  resourceValues: defineTable({
+    instanceId: v.id("instances"),
+    canonicalId: v.string(),
+    value: v.any(),
+    updatedAt: v.number(),
+  }).index("by_instance_canonical", ["instanceId", "canonicalId"]),
 
   // moduleWidgets: global widget DEFINITION catalog (module-sourced AND built-in).
   // moduleId is optional — built-in widgets (createdByType "SYSTEM") have no module.

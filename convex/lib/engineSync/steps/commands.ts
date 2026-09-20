@@ -1,4 +1,5 @@
 import { internal } from "../../../_generated/api";
+import { escapeDollarKeys } from "../../dollarKeys";
 import type { SyncStep, SyncStepContext } from "../steps";
 
 /**
@@ -17,8 +18,9 @@ export const commandsStep: SyncStep = {
     const safe = (snapshots ?? []).map((s) => ({
       engineCommandId: s.id,
       command: s.command,
-      type: s.type,
-      typeValue: s.typeValue,
+      // Escaped like every other engine JSON Convex stores: an action's `$ref`
+      // is a reserved field name there (see lib/dollarKeys.ts).
+      actions: escapeDollarKeys(s.actions ?? []) as unknown[],
       cooldown: s.cooldown,
       priority: s.priority,
       enabled: s.enabled,
