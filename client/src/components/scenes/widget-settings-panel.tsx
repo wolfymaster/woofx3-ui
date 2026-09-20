@@ -29,7 +29,7 @@ export function WidgetSettingsPanel({
   onDelete,
 }: WidgetSettingsPanelProps) {
   return (
-    <div className="w-80 shrink-0 border-l bg-background flex flex-col">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="p-4 border-b flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{widget.name}</p>
