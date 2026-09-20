@@ -76,6 +76,10 @@
   /* Fallback for older browsers */
   --primary-border: hsl(var(--primary));
   --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  /* Text in the accent hue, dark enough to read on a light surface; highlights values
+     such as a trigger's condition. Derived so a changed accent carries through. */
+  --primary-text: hsl(var(--primary));
+  --primary-text: hsl(from hsl(var(--primary)) h s 40%);
 
   /* Fallback for older browsers */
   --secondary-border: hsl(var(--secondary));
@@ -161,6 +165,9 @@
   /* Fallback for older browsers */
   --primary-border: hsl(var(--primary));
   --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  /* Light enough to read on a dark surface; see the light theme's --primary-text. */
+  --primary-text: hsl(var(--primary));
+  --primary-text: hsl(from hsl(var(--primary)) h s 84%);
 
   /* Fallback for older browsers */
   --secondary-border: hsl(var(--secondary));

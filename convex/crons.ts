@@ -24,4 +24,10 @@ crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLo
 // whether anyone has the dashboard open.
 crons.interval("stream live state sweep", { minutes: 2 }, internal.streamStatus.sweepLiveState);
 
+// Re-arms a shoutout queue whose processor run went missing — a deployment
+// restart, or a run that died before it could reschedule itself. A run is
+// otherwise only ever scheduled by an enqueue or by the run before it, so
+// without this a queue with work in it sits idle and nothing reports it.
+crons.interval("shoutout queue sweep", { minutes: 2 }, internal.shoutouts.sweepStalledQueues);
+
 export default crons;

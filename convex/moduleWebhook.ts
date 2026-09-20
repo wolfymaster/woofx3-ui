@@ -111,6 +111,7 @@ const triggerValidator = v.object({
   event: v.optional(v.string()),
   configSchema: v.optional(v.string()),
   emits: v.optional(v.string()),
+  sentence: v.optional(v.string()),
   allowVariants: v.optional(v.boolean()),
   createdByType: v.optional(v.string()),
   createdByRef: v.optional(v.string()),
@@ -213,6 +214,7 @@ type EngineTrigger = {
   event?: string;
   configSchema?: string;
   emits?: string;
+  sentence?: string;
   allowVariants?: boolean;
   projectionKey?: string;
   taxonomy?: string[];
@@ -243,6 +245,7 @@ function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | u
     icon: ui.icon,
     configFields: ui.configFields,
     emits: ui.emits,
+    sentence: t.sentence?.trim() || undefined,
     allowVariants: t.allowVariants,
     projectionKey: t.projectionKey,
     taxonomy: t.taxonomy,

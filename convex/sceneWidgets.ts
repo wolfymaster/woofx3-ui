@@ -3,32 +3,13 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type QueryCtx, query } from "./_generated/server";
 import { alertWidgetName, DEFAULT_ALERT_WIDGET_NAME } from "./lib/alertWidgets";
+import { BUILTIN_MODULE_LABEL, resolveModuleDisplayNames } from "./lib/moduleDisplayName";
 
 export type SceneWidgetCatalogRow = Doc<"moduleWidgets"> & { moduleName: string };
 
 // Built-in widgets (createdByType "SYSTEM", e.g. the bundled Alert and Text
 // widgets) have no moduleId — see docs/ui/scenes.md "Widget System" for how
 // they arrive via the engine's startup webhook rather than a module install.
-const BUILTIN_GROUP_LABEL = "Built-in";
-
-// Resolves each distinct moduleId to its moduleRepository.name (the human display
-// name, e.g. "Counter") for grouping the widget catalog sidebar by module — a
-// different derivation than workflowCatalog.ts's resolveModuleNames, which
-// resolves to the engine-facing moduleKey segment for RPC calls, not display.
-async function resolveModuleDisplayNames(
-  ctx: QueryCtx,
-  moduleIds: (Id<"moduleRepository"> | undefined)[]
-): Promise<Map<Id<"moduleRepository">, string>> {
-  const uniqueIds = Array.from(new Set(moduleIds.filter((id): id is Id<"moduleRepository"> => id !== undefined)));
-  const names = new Map<Id<"moduleRepository">, string>();
-  for (const moduleId of uniqueIds) {
-    const module = await ctx.db.get(moduleId);
-    if (module) {
-      names.set(moduleId, module.name);
-    }
-  }
-  return names;
-}
 
 async function isInstanceMember(ctx: QueryCtx, instanceId: Id<"instances">): Promise<boolean> {
   const userId = await getAuthUserId(ctx);
@@ -81,7 +62,7 @@ export const listForInstance = query({
 
     return defs.map((def) => ({
       ...def,
-      moduleName: (def.moduleId ? moduleNames.get(def.moduleId) : undefined) ?? BUILTIN_GROUP_LABEL,
+      moduleName: (def.moduleId ? moduleNames.get(def.moduleId) : undefined) ?? BUILTIN_MODULE_LABEL,
     }));
   },
 });

@@ -43,14 +43,16 @@ export function StreamStatsWidget() {
 
   const isLive = liveState?.isLive ?? false;
   const startedAt = liveState?.startedAt;
+  const sessionId = liveState?.sessionId;
 
-  // A new broadcast is a new session — otherwise last stream's tallies linger
-  // on a tab left open across a restart. Reset during render rather than in an
-  // effect: there's no outside system to sync with, just state derived from a
+  // Tallies belong to the session, not the broadcast: keying this on startedAt
+  // meant a thirty-second dropout reset the counts mid-stream, because
+  // reconnecting mints a new start. Reset during render rather than in an
+  // effect — there's no outside system to sync with, just state derived from a
   // changed input.
-  const [talliedSession, setTalliedSession] = useState(startedAt);
-  if (talliedSession !== startedAt) {
-    setTalliedSession(startedAt);
+  const [talliedSession, setTalliedSession] = useState(sessionId);
+  if (talliedSession !== sessionId) {
+    setTalliedSession(sessionId);
     setTallies(EMPTY_TALLIES);
   }
 

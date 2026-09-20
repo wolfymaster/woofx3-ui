@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useInstance } from "@/hooks/use-instance";
 import { type AlertLayout, readAlertLayout, writeAlertLayout } from "@/lib/alert-layout";
 import { placeableOn } from "@/lib/widget-surfaces";
+import type { VariableOption } from "@/lib/workflow-variables";
 import { alertWidgetPreview } from "./alert-widget-previews";
 import { WidgetLayoutCanvas, type WidgetsUpdate } from "./widget-layout-canvas";
 
@@ -17,6 +18,8 @@ interface AlertLayoutFieldProps {
   onChange: (value: unknown) => void;
   /** The field renderers the layout's widget settings use. */
   renderers: Record<string, CustomFieldRenderer>;
+  /** What the layout's widget settings may reference: the variables of the step the layout belongs to. */
+  availableVariables: VariableOption[];
 }
 
 /**
@@ -24,7 +27,7 @@ interface AlertLayoutFieldProps {
  * them on the shared widget canvas. The dialog works on a draft, so closing it
  * without Done leaves the step as it was.
  */
-export function AlertLayoutField({ field, value, onChange, renderers }: AlertLayoutFieldProps) {
+export function AlertLayoutField({ field, value, onChange, renderers, availableVariables }: AlertLayoutFieldProps) {
   const { instance } = useInstance();
   const catalogRows = useQuery(api.sceneWidgets.listForInstance, instance ? { instanceId: instance._id } : "skip");
   const surface = typeof field.surface === "string" ? field.surface : "alert";
@@ -103,6 +106,7 @@ export function AlertLayoutField({ field, value, onChange, renderers }: AlertLay
               widgets={draft.widgets}
               catalog={catalog}
               renderers={renderers}
+              availableVariables={availableVariables}
               onChange={handleWidgetsChange}
               placeholder={alertWidgetPreview}
             />

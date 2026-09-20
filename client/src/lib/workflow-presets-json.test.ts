@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { ActionPreset, TriggerPreset, TriggerVariant } from "./workflow-presets";
 import {
+  ANY_CONDITION,
   buildDefinitionFromPresets,
   buildDefinitionsForVariants,
   conditionsToFieldValues,
   fieldValuesToConditions,
+  incompleteConditionFields,
 } from "./workflow-presets-json";
 
 const chatAction = {
@@ -222,15 +224,35 @@ describe("conditionsToFieldValues", () => {
     expect(values.amount).toEqual({ type: "range", min: 10, max: 20 });
   });
 
-  test("falls back to defaults when no matching condition exists", () => {
-    const fields = [{ id: "amount", label: "Minimum bits", type: "number" as const, eventPath: "amount", min: 5 }];
+  test("reads a field with no condition as Any, not as its default", () => {
+    const fields = [
+      { id: "amount", label: "Minimum bits", type: "number" as const, eventPath: "amount", defaultValue: 100 },
+    ];
     const values = conditionsToFieldValues(fields, []);
-    expect(values.amount).toBe(5);
+    expect(values.amount).toBe(ANY_CONDITION);
+    expect(fieldValuesToConditions(fields, values)).toEqual([]);
   });
 
   test("round-trips through fieldValuesToConditions", () => {
     const fields = [{ id: "rewardId", label: "Reward", type: "select" as const, eventPath: "rewardId" }];
     const conditions = fieldValuesToConditions(fields, { rewardId: "abc" });
     expect(conditionsToFieldValues(fields, conditions)).toEqual({ rewardId: "abc" });
+  });
+});
+
+describe("incompleteConditionFields", () => {
+  const fields = [
+    { id: "amount", label: "Minimum bits", type: "number" as const, eventPath: "amount" },
+    { id: "tier", label: "Tier", type: "select" as const, eventPath: "tier" },
+    { id: "gifted", label: "Gifted", type: "toggle" as const, eventPath: "isGift" },
+  ];
+
+  test("flags a field left empty, but not one switched to Any or holding a falsy value", () => {
+    const incomplete = incompleteConditionFields(fields, { amount: "", tier: ANY_CONDITION, gifted: false });
+    expect(incomplete.map((field) => field.id)).toEqual(["amount"]);
+  });
+
+  test("flags a field with no value at all", () => {
+    expect(incompleteConditionFields(fields, { amount: 0, gifted: true }).map((field) => field.id)).toEqual(["tier"]);
   });
 });

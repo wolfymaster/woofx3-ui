@@ -1,6 +1,9 @@
+import type { ConfigField, DataShapeField } from "@woofx3/api/ui-schema";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { parseConfigFields, parseDataShapeFields } from "@/lib/parse-config-fields";
+import type { ProjectedAction } from "@/lib/trigger-projection";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
+import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
 import type { StepNode, WorkflowTree } from "@/lib/workflow-tree";
 
 const STEP_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
@@ -135,11 +138,6 @@ function collectPredecessorSteps(steps: StepNode[], targetId: string): StepNode[
  * the time `currentNodeId` executes (later siblings, sibling branches, descendants)
  * are excluded — offering them would suggest references the engine can't reliably
  * resolve.
- *
- * A trigger's payload comes from its declared `emits` when it has one. Otherwise it
- * falls back to deriving variables from config fields carrying an `eventPath`, which
- * is all that was available before triggers could describe their payload — and which
- * can only ever name keys that happen to also be config fields.
  */
 export function computeAvailableVariables(
   tree: WorkflowTree,
@@ -147,48 +145,19 @@ export function computeAvailableVariables(
   catalogActions: CatalogActionRow[],
   catalogTriggers: CatalogTriggerRow[]
 ): VariableOption[] {
-  const options: VariableOption[] = [];
-
   const triggerRow = resolveCatalogTrigger(tree.trigger, catalogTriggers);
-  const emitted = parseDataShapeFields(triggerRow?.emits);
-  if (emitted.length > 0) {
-    for (const field of emitted) {
-      options.push({
-        value: `\${trigger.data.${field.path}}`,
-        label: field.path,
-        group: "Trigger",
-        type: field.type,
-        description: field.description,
-      });
-    }
-  } else {
-    for (const field of parseConfigFields(triggerRow?.configFields)) {
-      if (field.eventPath) {
-        options.push({
-          value: `\${trigger.data.${field.eventPath}}`,
-          label: field.label,
-          group: "Trigger",
-          type: field.type,
-          description: field.description,
-        });
-      }
-    }
-  }
+  const options = triggerDataVariables(
+    parseDataShapeFields(triggerRow?.emits),
+    parseConfigFields(triggerRow?.configFields)
+  );
 
   const predecessors = collectPredecessorSteps(tree.steps, currentNodeId) ?? [];
   for (const step of predecessors) {
     if (step.type === "action") {
       const catalogRow = resolveCatalogAction(step, catalogActions);
-      const group = catalogRow?.name ?? step.id;
-      for (const field of parseDataShapeFields(catalogRow?.returns)) {
-        options.push({
-          value: `\${${step.id}.${field.path}}`,
-          label: field.path,
-          group,
-          type: field.type,
-          description: field.description,
-        });
-      }
+      options.push(
+        ...stepOutputVariables(step.id, catalogRow?.name ?? step.id, parseDataShapeFields(catalogRow?.returns))
+      );
     } else if (step.type === "condition") {
       options.push({
         value: `\${${step.id}.result}`,
@@ -201,4 +170,77 @@ export function computeAvailableVariables(
   }
 
   return options;
+}
+
+/**
+ * Every variable an action on the Alerts screen could reference: the trigger's payload,
+ * plus the outputs of the actions in stages before its own. An action marked concurrent
+ * runs in the same stage as the one above it (see buildWorkflowDefinition), so neither
+ * can read the other's output.
+ */
+export function projectedActionVariables(
+  trigger: TriggerPreset,
+  actions: readonly ProjectedAction[],
+  actionIndex: number,
+  presetOf: (action: ProjectedAction) => ActionPreset | undefined
+): VariableOption[] {
+  if (actionIndex < 0 || actionIndex >= actions.length) {
+    throw new Error(`action index ${actionIndex} is outside a trigger with ${actions.length} actions`);
+  }
+  let stageStart = actionIndex;
+  while (stageStart > 0 && actions[stageStart].concurrentWithPrevious) {
+    stageStart -= 1;
+  }
+
+  const options = triggerPresetVariables(trigger);
+  for (const action of actions.slice(0, stageStart)) {
+    const preset = presetOf(action);
+    options.push(...stepOutputVariables(action.id, preset?.name ?? action.id, preset?.config?.outputs ?? []));
+  }
+  return options;
+}
+
+/** The trigger's payload, which every action a trigger preset runs may reference. */
+export function triggerPresetVariables(trigger: TriggerPreset): VariableOption[] {
+  return triggerDataVariables(trigger.emits ?? [], trigger.config?.fields ?? []);
+}
+
+/**
+ * A trigger's payload comes from its declared `emits` when it has one. Otherwise it
+ * falls back to deriving variables from config fields carrying an `eventPath`, which
+ * is all that was available before triggers could describe their payload — and which
+ * can only ever name keys that happen to also be config fields.
+ */
+function triggerDataVariables(
+  emits: readonly DataShapeField[],
+  configFields: readonly ConfigField[]
+): VariableOption[] {
+  if (emits.length > 0) {
+    return emits.map((field) => ({
+      value: `\${trigger.data.${field.path}}`,
+      label: field.path,
+      group: "Trigger",
+      type: field.type,
+      description: field.description,
+    }));
+  }
+  return configFields
+    .filter((field) => field.eventPath)
+    .map((field) => ({
+      value: `\${trigger.data.${field.eventPath}}`,
+      label: field.label,
+      group: "Trigger",
+      type: field.type,
+      description: field.description,
+    }));
+}
+
+function stepOutputVariables(stepId: string, group: string, returns: readonly DataShapeField[]): VariableOption[] {
+  return returns.map((field) => ({
+    value: `\${${stepId}.${field.path}}`,
+    label: field.path,
+    group,
+    type: field.type,
+    description: field.description,
+  }));
 }

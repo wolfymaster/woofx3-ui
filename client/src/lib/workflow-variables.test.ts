@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import type { ProjectedAction } from "@/lib/trigger-projection";
+import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
 import type { StepNode, TriggerNode, WorkflowTree } from "@/lib/workflow-tree";
 import {
   collectStepIds,
@@ -7,6 +9,7 @@ import {
   generateStepId,
   isStepIdReferenced,
   isValidStepId,
+  projectedActionVariables,
 } from "./workflow-variables";
 
 function catalogTrigger(overrides: Partial<CatalogTriggerRow>): CatalogTriggerRow {
@@ -325,5 +328,49 @@ describe("computeAvailableVariables — type and description", () => {
       typedTriggerCatalog
     );
     expect(options.find((o) => o.value === "${c1.result}")?.type).toBe("boolean");
+  });
+});
+
+describe("projectedActionVariables", () => {
+  const cheer = {
+    id: "t1",
+    name: "Cheer",
+    description: "",
+    category: "twitch",
+    color: "",
+    event: "cheer.user.twitch",
+    emits: [{ path: "amount", type: "number" }],
+  } as unknown as TriggerPreset;
+  const counter = {
+    id: "a1",
+    name: "Increment Counter",
+    config: { fields: [], outputs: [{ path: "next", type: "number" }] },
+  } as unknown as ActionPreset;
+  const action = (id: string, concurrentWithPrevious = false): ProjectedAction => ({
+    id,
+    handlerType: "function",
+    functionCall: "counter.increment",
+    parameters: {},
+    concurrentWithPrevious,
+  });
+  const values = (actions: ProjectedAction[], index: number) =>
+    projectedActionVariables(cheer, actions, index, () => counter).map((option) => option.value);
+
+  test("offers the trigger's data and the outputs of every earlier stage", () => {
+    expect(values([action("first"), action("second"), action("third")], 2)).toEqual([
+      "${trigger.data.amount}",
+      "${first.next}",
+      "${second.next}",
+    ]);
+  });
+
+  test("leaves out an action running alongside this one", () => {
+    const actions = [action("first"), action("second"), action("third", true)];
+    expect(values(actions, 2)).toEqual(["${trigger.data.amount}", "${first.next}"]);
+    expect(values(actions, 1)).toEqual(["${trigger.data.amount}", "${first.next}"]);
+  });
+
+  test("a first action marked concurrent still sees the trigger", () => {
+    expect(values([action("first", true)], 0)).toEqual(["${trigger.data.amount}"]);
   });
 });

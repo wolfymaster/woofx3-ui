@@ -6,7 +6,11 @@ import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-c
 import { parseConfigFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { TriggerConfigValues } from "@/lib/workflow-presets";
-import { conditionsToFieldValues, fieldValuesToConditions } from "@/lib/workflow-presets-json";
+import {
+  conditionsToFieldValues,
+  fieldValuesToConditions,
+  incompleteConditionFields,
+} from "@/lib/workflow-presets-json";
 import type { ActionNode, ConditionNode, StepNode, TriggerNode, WaitNode } from "@/lib/workflow-tree";
 import { isValidStepId, type VariableOption } from "@/lib/workflow-variables";
 import { ConditionEditor } from "./condition-editor";
@@ -85,7 +89,7 @@ function StepIdField({
         <p className="text-xs text-destructive">{error}</p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Reference this step's output elsewhere as <code>{`\${${trimmed || id}.field}`}</code>.
+          Later steps can use this step's output: type <code>{"{"}</code> in one of their fields.
         </p>
       )}
     </div>
@@ -101,17 +105,28 @@ function TriggerConfigPanel({
   catalog: CatalogTriggerRow[];
   onUpdateTriggerConditions: (conditions: ConditionConfig[]) => void;
 }) {
+  // Values with a field left empty have no condition form yet, so they are held here
+  // until finished; saving them would quietly turn the empty field into Any.
+  const [unfinished, setUnfinished] = useState<TriggerConfigValues | null>(null);
   const catalogRow = resolveCatalogTrigger(node, catalog);
   const fields = withModuleName(parseConfigFields(catalogRow?.configFields), catalogRow?.moduleName);
   if (fields.length === 0) {
     return <p className="text-sm text-muted-foreground">This trigger has no configurable settings.</p>;
   }
-  const values = conditionsToFieldValues(fields, node.conditions);
+  const values = unfinished ?? conditionsToFieldValues(fields, node.conditions);
   return (
     <TriggerConfigForm
       fields={fields}
       values={values}
-      onChange={(next) => onUpdateTriggerConditions(fieldValuesToConditions(fields, next))}
+      onChange={(next) => {
+        if (incompleteConditionFields(fields, next).length > 0) {
+          setUnfinished(next);
+          return;
+        }
+        setUnfinished(null);
+        onUpdateTriggerConditions(fieldValuesToConditions(fields, next));
+      }}
+      allowAny
     />
   );
 }

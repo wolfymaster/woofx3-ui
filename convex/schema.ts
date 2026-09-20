@@ -22,6 +22,23 @@ export const dashboardPanelWidgetValidator = v.object({
   size: v.optional(v.number()),
 });
 
+export const macroActionTypeValidator = v.union(
+  v.literal("chat-command"),
+  v.literal("trigger-workflow"),
+  v.literal("http-request")
+);
+
+// Mirrors MacroConfig in client/src/lib/macro-pad.ts. Free-text fields may carry
+// `{{name}}` variables, which the browser resolves at click time.
+export const macroConfigValidator = v.object({
+  command: v.optional(v.string()),
+  workflowId: v.optional(v.string()),
+  url: v.optional(v.string()),
+  method: v.optional(v.union(v.literal("GET"), v.literal("POST"), v.literal("PUT"), v.literal("DELETE"))),
+  headers: v.optional(v.record(v.string(), v.string())),
+  body: v.optional(v.string()),
+});
+
 // Shared shape for dashboardLayouts.panels (and its legacy `pages` alias below).
 const dashboardPanelValidator = v.array(
   v.object({
@@ -98,6 +115,12 @@ export default defineSchema({
     twitchUserId: v.optional(v.string()),
     isLive: v.boolean(),
     startedAt: v.optional(v.string()), // ISO from StreamOnlineEvent
+    // The logical session the broadcast belongs to. It spans brief dropouts, so
+    // unlike startedAt above it is NOT cleared when the stream goes offline — a
+    // session may be entirely offline. Written only by SESSION_STARTED; the
+    // stream and poll writers omit these keys, which leaves them untouched.
+    sessionId: v.optional(v.string()),
+    sessionStartedAt: v.optional(v.string()), // ISO from SessionStartedEvent
     streamTitle: v.optional(v.string()),
     gameName: v.optional(v.string()),
     viewerCount: v.optional(v.number()),
@@ -264,6 +287,71 @@ export default defineSchema({
     columnSizes: v.optional(v.array(v.number())),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
+  // macros: the instance's macro pad buttons. Shared per instance rather than per
+  // user, like streamGoals below — a dashboard *layout* is a personal workspace
+  // preference, but the macro pad is the channel's, so everyone sharing the
+  // account sees the same buttons in the same order.
+  //
+  // One row per button rather than an array on a parent document: add, edit and
+  // delete each touch a single document, and a reorder rewrites sortOrder only on
+  // the rows that actually moved — so two people editing the pad cannot clobber
+  // each other the way a whole-array replace would.
+  macros: defineTable({
+    instanceId: v.id("instances"),
+    label: v.string(),
+    icon: v.optional(v.string()),
+    color: v.optional(v.string()),
+    type: macroActionTypeValidator,
+    config: macroConfigValidator,
+    sortOrder: v.number(),
+    updatedAt: v.number(),
+  }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
+
+  // shoutoutQueue: Twitch shoutouts waiting to be sent for an instance. Shared
+  // per instance like streamGoals below -- a shoutout is the channel's, not one
+  // viewer's, and everyone sharing the account should see the same queue.
+  //
+  // One row per entry rather than an array: the queue is reordered and pruned by
+  // hand while a scheduled processor reads and writes it, so a whole-array
+  // replace would drop whichever side wrote second.
+  //
+  // There is no status column. An entry is pending until it sends, at which
+  // point the row is deleted; `attempts` and `lastError` are what distinguish
+  // "waiting its turn" from "failed and backing off", so there is no second
+  // source of truth to drift.
+  shoutoutQueue: defineTable({
+    instanceId: v.id("instances"),
+    /** Twitch login, lowercased -- the canonical key. */
+    login: v.string(),
+    /** Properly-cased name for display; Twitch logins lose the casing. */
+    displayName: v.string(),
+    twitchUserId: v.string(),
+    profileImageUrl: v.optional(v.string()),
+    /** Twitch's broadcaster_type: "partner", "affiliate", or "" for neither. */
+    broadcasterType: v.optional(v.string()),
+    sortOrder: v.number(),
+    attempts: v.number(),
+    /** Epoch ms before which the processor must not attempt this entry again. */
+    nextEligibleAt: v.number(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
+
+  // shoutoutState: one row per instance, holding what the queue processor needs
+  // that is not per-entry. Separate from shoutoutQueue because it outlives every
+  // entry -- the 2-minute spacing still applies after the queue drains.
+  shoutoutState: defineTable({
+    instanceId: v.id("instances"),
+    /**
+     * Epoch ms of the last attempt, successful or not. Failures are paced too:
+     * a refused shoutout is still a call to a rate-limited endpoint, so the
+     * cooldown is measured from every attempt rather than every send.
+     */
+    lastAttemptAt: v.optional(v.number()),
+    /** Epoch ms a processor run is already scheduled for, so adds don't stack runs. */
+    runScheduledFor: v.optional(v.number()),
+  }).index("by_instance", ["instanceId"]),
+
   // streamGoals: the dashboard command bar's goal cards (Bits / Subs / Followers, ...).
   // Manually entered and manually advanced — the engine reports no running
   // follower/sub/bits totals today (instanceLiveState carries only live state,
@@ -289,16 +377,28 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
-  // pinnedMessages: notes the dashboard's Activity panel keeps visible — a
-  // raid to shout out, a link to repeat. Composed by hand rather than pinned
-  // off a real chat message: no addressable chat-message record exists on this
-  // side today (the engine webhook path carries lifecycle events, not chat,
-  // and the browser's direct EventSub feed carries no chat either).
+  // pinnedMessages: history of things worth pinning in the channel's chat, kept
+  // so the same message can be re-pinned across streams without retyping it.
+  //
+  // Twitch holds exactly one pinned message per channel and pins it by message
+  // id, so this is deliberately NOT a mirror of that single slot — it is the
+  // local list we pin *from*. `twitchMessageId` is set only for entries this app
+  // posted itself; a message id stops being pinnable once its stream ends, which
+  // is why the text is kept too and re-posted when the id is stale (see
+  // lib/pinStrategy.ts).
+  //
+  // Rows predating Twitch pinning were hand-written Activity-panel notes. They
+  // carry no message id and so take the re-post path, which is exactly right.
   pinnedMessages: defineTable({
     instanceId: v.id("instances"),
     authorName: v.optional(v.string()),
     content: v.string(),
+    /** Set when this app posted the message; absent for hand-written entries. */
+    twitchMessageId: v.optional(v.string()),
+    /** When the entry was created — also when its message id was minted. */
     pinnedAt: v.number(),
+    /** Last time this entry was actually pinned on Twitch, for ordering by recency of use. */
+    lastPinnedAt: v.optional(v.number()),
     pinnedByUserId: v.id("users"),
   }).index("by_instance_pinned_at", ["instanceId", "pinnedAt"]),
 
@@ -333,6 +433,9 @@ export default defineSchema({
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
+    // How a configured trigger reads, e.g. "{reward} is redeemed": the module's
+    // wording, with a {fieldId} placeholder for each condition value.
+    sentence: v.optional(v.string()),
     // The engine's open, multi-valued classification (e.g. ["platform.twitch"]),
     // which replaces its legacy single-value category. Groups catalog entries by
     // source without the UI hardcoding what the sources are.
@@ -782,6 +885,68 @@ export default defineSchema({
     .index("by_instance", ["instanceId"])
     .index("by_engine_id", ["engineAlertId"])
     .index("by_instance_status", ["instanceId", "status"]),
+
+  // workflowRuns: durable history of runs the engine recorded, projected from
+  // the db-proxy outbox. Distinct from transientEvents, which carries the live
+  // progress of a run someone is waiting on and expires in a minute: these are
+  // the runs nobody was watching, which is exactly why they are kept.
+  //
+  // Runs fired by hand from the dashboard never reach here -- the engine does
+  // not record them.
+  workflowRuns: defineTable({
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    engineRunId: v.string(), // WorkflowRunSnapshot.id (the engine's execution id)
+    workflowId: v.string(),
+    // Left open rather than a union: run statuses come from the engine's own
+    // ExecutionStatus, which has values that do not reach here yet ("waiting").
+    // A union would force coercing an unknown status into a wrong one.
+    status: v.string(),
+    triggeredBy: v.optional(v.string()),
+    // The originating CloudEvent, verbatim. What a replay re-feeds.
+    triggerEvent: v.optional(v.string()),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+    engineCreatedAt: v.string(),
+    engineUpdatedAt: v.string(),
+    createdAt: v.number(), // Convex-side ingest time
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_id", ["engineRunId"])
+    .index("by_instance_workflow", ["instanceId", "workflowId"]),
+
+  // workflowRunSteps: one row per attempt at a task within a run.
+  //
+  // `inputs` is the parameters as resolved at run time and `outputs` the task's
+  // exports -- the two things the definition cannot reproduce, and what a
+  // resume restores. Both are JSON strings; nothing here reads inside them.
+  workflowRunSteps: defineTable({
+    instanceId: v.id("instances"),
+    applicationId: v.string(),
+    engineStepId: v.string(),
+    runId: v.string(), // engineRunId of the owning run
+    taskId: v.string(),
+    name: v.optional(v.string()),
+    status: v.string(),
+    attempt: v.number(),
+    stepIndex: v.number(),
+    inputs: v.optional(v.string()),
+    outputs: v.optional(v.string()),
+    error: v.optional(v.string()),
+    startedAt: v.optional(v.string()),
+    completedAt: v.optional(v.string()),
+    durationMs: v.optional(v.number()),
+    engineCreatedAt: v.string(),
+    engineUpdatedAt: v.string(),
+    createdAt: v.number(),
+  })
+    // The timeline's only read: every step of one run, in execution order.
+    .index("by_run", ["runId", "stepIndex"])
+    // Upsert key, mirroring the unique index Postgres enforces. Webhook
+    // delivery is at-least-once, so without this a repeated report shows the
+    // same step twice.
+    .index("by_attempt", ["runId", "taskId", "attempt"]),
 
   // alertHistory: bounded history of fired alerts
   alertHistory: defineTable({

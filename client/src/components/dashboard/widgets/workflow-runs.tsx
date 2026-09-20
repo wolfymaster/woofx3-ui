@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
+import { describeAlertFailure } from "@/lib/alert-failure";
 import type { WorkflowRun } from "@/lib/transport";
 import { transport } from "@/lib/transport";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ const statusConfig: Record<
 function WorkflowRunItem({ run }: { run: WorkflowRun }) {
   const config = statusConfig[run.status] ?? statusConfig.running;
   const StatusIcon = config.icon;
+  const friendly = run.error ? describeAlertFailure(run.error) : null;
 
   return (
     <div
@@ -58,6 +60,19 @@ function WorkflowRunItem({ run }: { run: WorkflowRun }) {
             </>
           )}
         </div>
+        {/* Truncated with the advice and the original reason on hover: these
+            rows are narrow, and wrapping would push everything else off screen
+            — but hiding it entirely leaves a red badge nobody can act on. A
+            step failure the mapping does not recognise shows verbatim, which
+            is most of them: only alerts are mapped so far. */}
+        {run.error && (
+          <p
+            className={cn("text-xs truncate mt-0.5", config.color)}
+            title={[friendly?.hint, run.error].filter(Boolean).join("\n\n")}
+          >
+            {friendly?.title ?? run.error}
+          </p>
+        )}
       </div>
       <Badge variant="secondary" className={cn("text-[10px] shrink-0", config.color)}>
         {config.label}
@@ -101,12 +116,9 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold">Workflow Runs</span>
-          <Badge variant="secondary" className="text-xs">
-            {runs.filter((r) => r.status === "running" || r.status === "pending").length} active
-          </Badge>
-        </div>
+        <Badge variant="secondary" className="text-xs">
+          {runs.filter((r) => r.status === "running" || r.status === "pending").length} active
+        </Badge>
         <Button
           variant="ghost"
           size="icon"

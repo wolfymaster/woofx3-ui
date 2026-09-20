@@ -43,11 +43,16 @@ export interface TriggerPreset {
   event?: string;
   /**
    * Declared classification axes, e.g. `["platform.twitch", "alert.follow"]`.
-   * The `alert.*` axis is what groups this trigger on the Alerts screen; see
+   * The `platform.*` and `alert.*` axes place this trigger in the Alerts menu; see
    * `alert-groups.ts`.
    */
   taxonomy?: string[];
   config?: TriggerConfig;
+  /**
+   * How a configured trigger reads, e.g. `"{reward} is redeemed"`, with `{fieldId}` where
+   * a condition value goes. Declared by the module; see lib/condition-sentence.ts.
+   */
+  sentence?: string;
   /** What `trigger.data` carries when this fires; seeds the Alerts test sheet's payload. */
   emits?: DataShapeField[];
 }
@@ -66,6 +71,10 @@ export interface ActionPreset {
   icon: LucideIcon;
   category: string;
   color: string;
+  /** The module providing this action, by its display name; the action picker groups by it. */
+  source: string;
+  /** Declared classification axes, e.g. `["system.workflow"]` — see TriggerPreset.taxonomy. */
+  taxonomy?: string[];
   config?: {
     fields: ConfigField[];
     /** DataShapeField[] naming what this action's function hands back (e.g. {next, previous}).

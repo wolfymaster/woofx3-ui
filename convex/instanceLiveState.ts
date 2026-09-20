@@ -89,6 +89,47 @@ export const recordPoll = internalMutation({
   },
 });
 
+// The engine's resolver owns which session the system is in and announces it
+// here. Deliberately not folded into onStreamOnline: a session spans brief
+// dropouts, so it changes on a different schedule from the broadcast, and on
+// the engine side the two are separate bus subscribers with no ordering
+// between them.
+//
+// Touches only the session fields. isLive and the broadcast columns belong to
+// the stream writers, and a session can legitimately start while offline.
+export const onSessionStarted = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    applicationId: v.optional(v.string()),
+    sessionId: v.string(),
+    sessionStartedAt: v.string(),
+  },
+  handler: async (ctx, { instanceId, applicationId, sessionId, sessionStartedAt }) => {
+    const existing = await ctx.db
+      .query("instanceLiveState")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+
+    if (existing) {
+      // applicationId is deliberately not patched: a patch carries undefined as
+      // a deletion, and the stream writers own that field.
+      await ctx.db.patch(existing._id, { sessionId, sessionStartedAt });
+      return;
+    }
+
+    // No stream event has landed yet, so nothing knows whether we are live.
+    await ctx.db.insert("instanceLiveState", {
+      instanceId,
+      applicationId,
+      sessionId,
+      sessionStartedAt,
+      isLive: false,
+      lastUpdateSource: "webhook" as const,
+      lastUpdatedAt: Date.now(),
+    });
+  },
+});
+
 export const onStreamOffline = internalMutation({
   args: {
     instanceId: v.id("instances"),

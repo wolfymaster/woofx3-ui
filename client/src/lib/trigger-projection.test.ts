@@ -137,6 +137,7 @@ describe("buildWorkflowDefinition", () => {
   const triggers: ProjectedTrigger[] = [
     {
       id: "rule_1",
+      enabled: true,
       // biome-ignore lint/suspicious/noTemplateCurlyInString: canonical engine selector syntax
       conditions: [{ field: "${trigger.data.amount}", operator: "gte", value: 1000 }],
       actions: [
@@ -184,8 +185,8 @@ describe("buildWorkflowDefinition", () => {
       event: "cheer.channel.twitch",
       name: "Cheer",
       triggers: [
-        { id: "rule_1", conditions: [{ field: "a", operator: "eq", value: 1 }], actions: [] },
-        { id: "rule_2", conditions: [{ field: "b", operator: "eq", value: 2 }], actions: [] },
+        { id: "rule_1", enabled: true, conditions: [{ field: "a", operator: "eq", value: 1 }], actions: [] },
+        { id: "rule_2", enabled: true, conditions: [{ field: "b", operator: "eq", value: 2 }], actions: [] },
       ],
       shared: [
         {
@@ -221,6 +222,7 @@ describe("buildWorkflowDefinition", () => {
       triggers: [
         {
           id: UNCONDITIONAL_TRIGGER_ID,
+          enabled: true,
           conditions: [],
           actions: [
             {
@@ -238,6 +240,44 @@ describe("buildWorkflowDefinition", () => {
 
     expect(definition.tasks.every((t) => t.type === "action")).toBe(true);
     expect((definition.tasks[0] as { dependsOn?: string[] }).dependsOn).toBeUndefined();
+  });
+
+  test("pauses a trigger by disabling its condition task, and reads it back paused", () => {
+    const paused = triggers.map((trigger) => ({ ...trigger, enabled: false }));
+    const definition = buildWorkflowDefinition({
+      event: "cheer.channel.twitch",
+      name: "Cheer",
+      triggers: paused,
+      shared: [],
+    });
+    expect(definition.tasks.find((t) => t.id === "rule_1")).toMatchObject({ type: "condition", disabled: true });
+
+    const result = projectWorkflow(row(definition));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.projection.triggers[0].enabled).toBe(false);
+  });
+
+  test("keeps a condition task for a paused trigger that has no conditions", () => {
+    const definition = buildWorkflowDefinition({
+      event: "cheer.channel.twitch",
+      name: "Cheer",
+      triggers: [{ ...triggers[0], id: "rule_9", enabled: false, conditions: [] }],
+      shared: [],
+    });
+    expect(definition.tasks.find((t) => t.id === "rule_9")).toMatchObject({ type: "condition", disabled: true });
+    expect((definition.tasks.find((t) => t.id === "act_1") as { dependsOn?: string[] }).dependsOn).toEqual(["rule_9"]);
+  });
+
+  test("refuses to pause the unconditional trigger", () => {
+    expect(() =>
+      buildWorkflowDefinition({
+        event: "cheer.channel.twitch",
+        name: "Cheer",
+        triggers: [{ id: UNCONDITIONAL_TRIGGER_ID, enabled: false, conditions: [], actions: [] }],
+        shared: [],
+      })
+    ).toThrow();
   });
 
   test("round-trips through the engine's storage shape", () => {

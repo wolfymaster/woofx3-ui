@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { useMemo } from "react";
 import { useInstance } from "@/hooks/use-instance";
+import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
 import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { ActionPreset, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
@@ -19,6 +20,8 @@ export type CatalogTriggerRow = {
   configFields?: unknown;
   /** DataShapeField[] naming what `trigger.data` carries when this trigger fires. */
   emits?: unknown;
+  /** The module's condition sentence template; see TriggerPreset.sentence. */
+  sentence?: string;
   /** Engine classification, e.g. ["platform.twitch"] — groups entries by source. */
   taxonomy?: string[];
   moduleId?: string;
@@ -42,6 +45,8 @@ export type CatalogActionRow = {
   taxonomy?: string[];
   moduleId?: string;
   moduleName?: string;
+  /** The owning module's display name, e.g. "Counter"; `moduleName` is its engine-facing key. */
+  moduleLabel?: string;
 };
 
 function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
@@ -66,6 +71,7 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
     taxonomy: row.taxonomy,
     config,
     emits: parseDataShapeFields(row.emits),
+    sentence: typeof row.sentence === "string" && row.sentence.trim() !== "" ? row.sentence : undefined,
   };
 }
 
@@ -84,6 +90,8 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
     icon,
     category: row.category,
     color: row.color,
+    source: row.moduleLabel ?? BUILTIN_MODULE_LABEL,
+    taxonomy: row.taxonomy,
     config:
       fields.length > 0 || outputs.length > 0
         ? { fields, outputs: outputs.length > 0 ? outputs : undefined }

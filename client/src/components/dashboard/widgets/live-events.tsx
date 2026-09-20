@@ -78,8 +78,7 @@ export function LiveEventsWidget({ onSaveHighlight, hideHeader }: LiveEventsWidg
   return (
     <div className="flex flex-col h-full">
       {!hideHeader && (
-        <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-          <span className="text-sm font-semibold">Live Events</span>
+        <div className="flex items-center justify-end px-3 py-2 border-b border-border shrink-0">
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
             Live

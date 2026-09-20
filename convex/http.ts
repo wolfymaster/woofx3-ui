@@ -920,6 +920,68 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      // A workflow run somebody is waiting on. transientEvents is keyed by the
+      // client-generated id the trigger carried, so the UI subscribes before
+      // the run exists; these three arms are the only thing that turns "the
+      // event was published" into an outcome it can actually show.
+      case EngineEventType.WORKFLOW_RUN_STARTED:
+      case EngineEventType.WORKFLOW_RUN_COMPLETED:
+      case EngineEventType.WORKFLOW_RUN_FAILED: {
+        if (!event.triggerId) {
+          // The api-side relay already drops these, so arriving here means an
+          // older engine or a hand-published event. There is nothing to
+          // correlate it to, and writing a row under an undefined key would
+          // put it somewhere no subscriber looks.
+          return corsJson({ success: true, type: event.type, handled: false });
+        }
+        await ctx.runMutation(internal.transientEvents.emit, {
+          instanceId: instance._id,
+          correlationKey: event.triggerId,
+          type: event.type,
+          status:
+            event.type === EngineEventType.WORKFLOW_RUN_FAILED
+              ? "error"
+              : event.type === EngineEventType.WORKFLOW_RUN_COMPLETED
+                ? "success"
+                : "progress",
+          message: event.type === EngineEventType.WORKFLOW_RUN_FAILED ? event.error : undefined,
+          data: {
+            workflowId: event.workflowId,
+            executionId: event.executionId,
+            triggeredBy: event.triggeredBy,
+            occurredAt: event.occurredAt,
+          },
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      // Durable run history. Separate from the WORKFLOW_RUN_STARTED family
+      // above, which writes transientEvents for a caller watching one run:
+      // these are database rows, and they outlive the person who wasn't there.
+      case EngineEventType.WORKFLOW_RUN_RECORDED: {
+        await ctx.runMutation(internal.workflowRuns.recordFromWebhook, {
+          instanceId: instance._id,
+          run: event.run,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WORKFLOW_RUN_UPDATED: {
+        await ctx.runMutation(internal.workflowRuns.updateFromWebhook, {
+          instanceId: instance._id,
+          run: event.run,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.WORKFLOW_RUN_STEP_RECORDED: {
+        await ctx.runMutation(internal.workflowRuns.recordStepFromWebhook, {
+          instanceId: instance._id,
+          step: event.step,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
       case EngineEventType.ALERT_RECORDED: {
         await ctx.runMutation(internal.engineAlerts.recordFromWebhook, {
           instanceId: instance._id,
@@ -988,6 +1050,16 @@ http.route({
           instanceId: instance._id,
           applicationId: event.applicationId,
           twitchUserId: event.twitchUserId,
+        });
+        return corsJson({ success: true, type: event.type });
+      }
+
+      case EngineEventType.SESSION_STARTED: {
+        await ctx.runMutation(internal.instanceLiveState.onSessionStarted, {
+          instanceId: instance._id,
+          applicationId: event.applicationId,
+          sessionId: event.sessionId,
+          sessionStartedAt: event.startedAt,
         });
         return corsJson({ success: true, type: event.type });
       }

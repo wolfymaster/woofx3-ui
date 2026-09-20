@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { suggestVariantDisplayName } from "./variant-display-name";
 import type { TriggerPreset } from "./workflow-presets";
+import { ANY_CONDITION } from "./workflow-presets-json";
 
 const cheerTrigger = {
   id: "cheer.user.twitch",
@@ -26,6 +27,11 @@ describe("suggestVariantDisplayName", () => {
   test("includes trigger name and formatted field value", () => {
     const name = suggestVariantDisplayName(cheerTrigger, { amount: 100 }, []);
     expect(name).toBe("Cheer — 100 bits");
+  });
+
+  test("names a field switched to Any", () => {
+    const name = suggestVariantDisplayName(cheerTrigger, { amount: ANY_CONDITION }, []);
+    expect(name).toBe("Cheer — any minimum bits");
   });
 
   test("deduplicates when name already exists", () => {

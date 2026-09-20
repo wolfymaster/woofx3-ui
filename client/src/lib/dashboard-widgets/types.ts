@@ -7,14 +7,13 @@ import type { ComponentType } from "react";
 // HTML/JS asset, placed on a scene, and rendered as an iframe by the OBS
 // browser source. This registry never touches that system.
 //
-// Forward-compat note: that shared contract's `WidgetDefinition.surface`
-// field already has a `"dashboard"` variant reserved for modules eventually
-// contributing dashboard cards too — via the same asset-bundle/iframe
-// mechanism (third-party module code can't safely run as a React component
-// in our own bundle). Nothing produces that data yet, so this registry only
-// holds native widgets for now; a module-sourced entry would be a distinct
-// variant of DashboardWidgetDefinition added when that lands, not a
-// different registry.
+// Forward-compat note: the shared contract's WIDGET_SURFACES is
+// ["scene", "alert"] — there is no "dashboard" surface, so modules cannot
+// contribute dashboard widgets at all today. If that lands it would go
+// through the same asset-bundle/iframe mechanism (third-party module code
+// can't safely run as a React component in our own bundle), and a
+// module-sourced entry would be a distinct variant of
+// DashboardWidgetDefinition added here, not a different registry.
 
 export interface DashboardWidgetProps {
   config?: Record<string, unknown>;
