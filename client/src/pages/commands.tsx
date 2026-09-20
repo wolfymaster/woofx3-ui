@@ -51,7 +51,7 @@ import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { groupLabel, sortGroups } from "@/lib/group-display";
 import { cn } from "@/lib/utils";
 import type { ActionPreset } from "@/lib/workflow-presets";
-import { resolveActionStepPreset } from "@/lib/workflow-presets-json";
+import { actionStepLabel } from "@/lib/workflow-presets-json";
 
 type CommandDoc = Doc<"chatCommands">;
 type GroupDoc = Doc<"chatCommandGroups">;
@@ -67,7 +67,7 @@ function summarizeActions(actions: unknown[], actionPresets: ActionPreset[]): Re
   }
   if (steps.length === 1) {
     const step = steps[0];
-    const name = resolveActionStepPreset(step, actionPresets)?.name ?? step.function ?? step.action;
+    const name = actionStepLabel(step, actionPresets);
     return <span title={name}>{truncate(name)}</span>;
   }
   return `${steps.length} actions`;

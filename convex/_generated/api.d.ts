@@ -76,6 +76,7 @@ import type * as logger from "../logger.js";
 import type * as macros from "../macros.js";
 import type * as marketplace from "../marketplace.js";
 import type * as migrations_backfillAccountMembers from "../migrations/backfillAccountMembers.js";
+import type * as migrations_backfillCommandActions from "../migrations/backfillCommandActions.js";
 import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
 import type * as moduleAssets from "../moduleAssets.js";
 import type * as moduleDetail from "../moduleDetail.js";
@@ -201,6 +202,7 @@ declare const fullApi: ApiFromModules<{
   macros: typeof macros;
   marketplace: typeof marketplace;
   "migrations/backfillAccountMembers": typeof migrations_backfillAccountMembers;
+  "migrations/backfillCommandActions": typeof migrations_backfillCommandActions;
   "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
   moduleAssets: typeof moduleAssets;
   moduleDetail: typeof moduleDetail;
