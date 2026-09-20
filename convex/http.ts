@@ -24,6 +24,7 @@ import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { widgetCanonicalKey } from "./lib/widgetKey";
 import { logger } from "./logger";
+import { canonicalIdForStorageKey } from "./resourceValues";
 import "./browserSource";
 import "./obsCommands";
 import "./moduleWebhook";
@@ -756,8 +757,9 @@ http.route({
           applicationId: event.command.applicationId,
           engineCommandId: event.command.id,
           command: event.command.command,
-          type: event.command.type,
-          typeValue: event.command.typeValue,
+          // Already `$`-escaped: the whole webhook payload is escaped on the
+          // way in (see the escapeDollarKeys call on the envelope above).
+          actions: event.command.actions ?? [],
           cooldown: event.command.cooldown,
           priority: event.command.priority,
           enabled: event.command.enabled,
@@ -876,6 +878,7 @@ http.route({
         return corsJson({ success: true, type: event.type });
       }
 
+      case EngineEventType.MODULE_RESOURCE_INSTANCE_UPDATED:
       case EngineEventType.MODULE_RESOURCE_INSTANCE_CREATED: {
         await ctx.runMutation(internal.moduleResourceInstances.upsertFromWebhook, {
           instanceId: instance._id,
@@ -893,6 +896,14 @@ http.route({
       }
 
       case EngineEventType.MODULE_STORAGE_CHANGED: {
+        const canonicalId = canonicalIdForStorageKey(event.key);
+        if (canonicalId) {
+          await ctx.runMutation(internal.resourceValues.upsert, {
+            instanceId: instance._id,
+            canonicalId,
+            value: event.value ?? null,
+          });
+        }
         await ctx.runMutation(internal.transientEvents.emit, {
           instanceId: instance._id,
           correlationKey: `${event.moduleId}:${event.key}`,

@@ -1205,13 +1205,14 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
         <CreateResourceDialog
           kind={createDialogKind}
           onClose={() => setCreateDialogKind(null)}
-          onCreate={async (resourceInstanceId, displayName) => {
+          onCreate={async (resourceInstanceId, displayName, settings) => {
             await createAction({
               instanceId,
               moduleName,
               kind: createDialogKind.kind,
               resourceInstanceId,
               displayName,
+              settings,
             });
             await syncAction({ instanceId, moduleDbId });
           }}

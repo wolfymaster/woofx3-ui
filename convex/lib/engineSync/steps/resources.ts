@@ -14,8 +14,16 @@ import type { SyncStep, SyncStepContext } from "../steps";
 export const resourcesStep: SyncStep = {
   name: "resources",
   run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
-    const api = newApi();
-    const snapshots = await api.listAllResourceInstances();
-    return await ctx.runMutation(internal.engineSyncInternal.reconcileResourceInstances, { instanceId, snapshots });
+    const snapshots = await newApi().listAllResourceInstances();
+    const result = await ctx.runMutation(internal.engineSyncInternal.reconcileResourceInstances, {
+      instanceId,
+      snapshots,
+    });
+    // Each capnweb batch session is single-use, so the value read needs its own.
+    if (snapshots.length > 0) {
+      const values = await newApi().getResourceValues(snapshots.map((snapshot) => snapshot.canonicalId));
+      await ctx.runMutation(internal.resourceValues.upsertMany, { instanceId, values });
+    }
+    return result;
   },
 };

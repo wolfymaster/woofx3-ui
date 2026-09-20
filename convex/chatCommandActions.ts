@@ -1,8 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { ActionStep } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
+import { escapeDollarKeys, unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
 // Chat commands and their permission groups are engine-authoritative (see
@@ -43,15 +45,20 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
   };
 }
 
-const commandTypeValidator = v.union(v.literal("text"), v.literal("function"));
+/**
+ * A command's actions. `v.any()` per step because a step's `parameters` are
+ * whatever the action declares, and because `$ref` arrives escaped (see
+ * lib/dollarKeys.ts). The engine validates the list on save -- it is the only
+ * party that knows which actions exist.
+ */
+const actionsValidator = v.array(v.any());
 const visibilityValidator = v.union(v.literal("public"), v.literal("restricted"));
 
 export const createCommand = action({
   args: {
     instanceId: v.id("instances"),
     command: v.string(),
-    type: commandTypeValidator,
-    typeValue: v.string(),
+    actions: actionsValidator,
     cooldown: v.number(),
     priority: v.optional(v.number()),
     enabled: v.boolean(),
@@ -67,8 +74,7 @@ export const createCommand = action({
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const result = await rpc.createCommand({
       command: args.command,
-      type: args.type,
-      typeValue: args.typeValue,
+      actions: unescapeDollarKeys(args.actions) as ActionStep[],
       cooldown: args.cooldown,
       priority: args.priority,
       enabled: args.enabled,
@@ -84,8 +90,7 @@ export const createCommand = action({
       applicationId: result.applicationId,
       engineCommandId: result.id,
       command: result.command,
-      type: result.type,
-      typeValue: result.typeValue,
+      actions: escapeDollarKeys(result.actions ?? []) as unknown[],
       cooldown: result.cooldown,
       priority: result.priority,
       enabled: result.enabled,
@@ -104,8 +109,7 @@ export const updateCommand = action({
     instanceId: v.id("instances"),
     engineCommandId: v.string(),
     command: v.string(),
-    type: commandTypeValidator,
-    typeValue: v.string(),
+    actions: actionsValidator,
     cooldown: v.number(),
     priority: v.number(),
     enabled: v.boolean(),
@@ -121,8 +125,7 @@ export const updateCommand = action({
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const result = await rpc.updateCommand(args.engineCommandId, {
       command: args.command,
-      type: args.type,
-      typeValue: args.typeValue,
+      actions: unescapeDollarKeys(args.actions) as ActionStep[],
       cooldown: args.cooldown,
       priority: args.priority,
       enabled: args.enabled,
@@ -138,8 +141,7 @@ export const updateCommand = action({
       applicationId: result.applicationId,
       engineCommandId: result.id,
       command: result.command,
-      type: result.type,
-      typeValue: result.typeValue,
+      actions: escapeDollarKeys(result.actions ?? []) as unknown[],
       cooldown: result.cooldown,
       priority: result.priority,
       enabled: result.enabled,

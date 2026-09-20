@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { ActionStep } from "@woofx3/api";
 import { useAction, useQuery } from "convex/react";
 import {
   AlertTriangle,
@@ -19,7 +20,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
+import { ActionListEditor } from "@/components/actions/action-list-editor";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -62,28 +64,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { commandActionVariables } from "@/lib/command-variables";
+import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import { groupLabel, sortGroups } from "@/lib/group-display";
 import { cn } from "@/lib/utils";
+import type { ActionPreset } from "@/lib/workflow-presets";
+import { resolveActionStepPreset } from "@/lib/workflow-presets-json";
 
 type CommandDoc = Doc<"chatCommands">;
 type GroupDoc = Doc<"chatCommandGroups">;
-interface AvailableFunction {
-  id: string;
-  moduleId: string | undefined;
-  moduleName: string;
-  manifestId: string;
-  name: string;
-  qualifiedName: string;
-  runtime: string;
-}
-
-type CommandType = "text" | "function";
 type Visibility = "public" | "restricted";
 
 interface CommandFormState {
   command: string;
-  type: CommandType;
-  typeValue: string;
+  actions: ActionStep[];
   cooldown: number;
   priority: number;
   enabled: boolean;
@@ -94,8 +89,10 @@ interface CommandFormState {
 
 const defaultFormState: CommandFormState = {
   command: "",
-  type: "text",
-  typeValue: "",
+  // A new command starts ready to answer, which is what most commands do. The
+  // action is the ordinary "send chat message", not a special kind of command,
+  // so replacing or adding to it is the same gesture as configuring it.
+  actions: [],
   cooldown: 5,
   priority: 0,
   enabled: true,
@@ -103,6 +100,23 @@ const defaultFormState: CommandFormState = {
   groupIds: [],
   usernames: [],
 };
+
+/**
+ * What a command does, for a row that shows no detail: the one action it runs,
+ * or how many. A command with none only announces itself for workflows.
+ */
+function summarizeActions(actions: unknown[], actionPresets: ActionPreset[]): ReactNode {
+  const steps = unescapeDollarKeys(actions) as ActionStep[];
+  if (steps.length === 0) {
+    return <span className="italic">trigger only</span>;
+  }
+  if (steps.length === 1) {
+    const step = steps[0];
+    const name = resolveActionStepPreset(step, actionPresets)?.name ?? step.function ?? step.action;
+    return <span title={name}>{truncate(name)}</span>;
+  }
+  return `${steps.length} actions`;
+}
 
 function truncate(text: string, max = 60): string {
   if (text.length <= max) {
@@ -138,8 +152,7 @@ function CommandTableSkeleton() {
         <TableHeader>
           <TableRow>
             <TableHead>Command</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Response</TableHead>
+            <TableHead>Runs</TableHead>
             <TableHead>Visibility</TableHead>
             <TableHead>Cooldown</TableHead>
             <TableHead>Enabled</TableHead>
@@ -185,14 +198,8 @@ export default function Commands() {
 
   const commandsRaw = useQuery(api.chatCommands.list, instance ? { instanceId: instance._id } : "skip");
   const groupsRaw = useQuery(api.chatCommandGroups.list, instance ? { instanceId: instance._id } : "skip");
-  const availableFunctionsRaw = useQuery(
-    api.chatCommands.listAvailableFunctions,
-    instance ? { instanceId: instance._id } : "skip"
-  );
-
   const commands = commandsRaw ?? [];
   const groups = groupsRaw ?? [];
-  const availableFunctions = availableFunctionsRaw ?? [];
 
   const commandsLoading = instanceLoading || commandsRaw === undefined;
   const groupsLoading = instanceLoading || groupsRaw === undefined;
@@ -215,13 +222,7 @@ export default function Commands() {
         </TabsList>
 
         <TabsContent value="commands" className="mt-0">
-          <CommandsTab
-            instanceId={instance?._id}
-            commands={commands}
-            groups={groups}
-            availableFunctions={availableFunctions}
-            isLoading={commandsLoading}
-          />
+          <CommandsTab instanceId={instance?._id} commands={commands} groups={groups} isLoading={commandsLoading} />
         </TabsContent>
 
         <TabsContent value="groups" className="mt-0">
@@ -240,16 +241,15 @@ function CommandsTab({
   instanceId,
   commands,
   groups,
-  availableFunctions,
   isLoading,
 }: {
   instanceId: Id<"instances"> | undefined;
   commands: CommandDoc[];
   groups: GroupDoc[];
-  availableFunctions: AvailableFunction[];
   isLoading: boolean;
 }) {
   const { toast } = useToast();
+  const { actionPresets } = useWorkflowCatalog();
   const [searchQuery, setSearchQuery] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<CommandDoc | null>(null);
@@ -281,8 +281,7 @@ function CommandsTab({
     setEditing(cmd);
     setFormState({
       command: joinCommandInput(cmd.command, cmd.argumentPattern ?? ""),
-      type: cmd.type,
-      typeValue: cmd.typeValue,
+      actions: unescapeDollarKeys(cmd.actions ?? []) as ActionStep[],
       cooldown: cmd.cooldown,
       priority: cmd.priority,
       enabled: cmd.enabled,
@@ -321,6 +320,13 @@ function CommandsTab({
     }));
   }
 
+  // Follows the argument pattern as it is typed, so a `{songTitle}` just added
+  // to the command name is offerable in the actions below without saving first.
+  const commandVariables = useMemo(
+    () => commandActionVariables(splitCommandInput(formState.command).argumentPattern),
+    [formState.command]
+  );
+
   const restrictedWithNoAccess =
     formState.visibility === "restricted" && formState.groupIds.length === 0 && formState.usernames.length === 0;
 
@@ -330,11 +336,6 @@ function CommandsTab({
     const { command, argumentPattern } = splitCommandInput(formState.command);
     if (!command) {
       setFormError("Command name is required.");
-      return;
-    }
-
-    if (formState.type === "function" && !formState.typeValue.trim()) {
-      setFormError("Choose a function for this command.");
       return;
     }
 
@@ -349,8 +350,7 @@ function CommandsTab({
           instanceId,
           engineCommandId: editing.engineCommandId,
           command,
-          type: formState.type,
-          typeValue: formState.typeValue,
+          actions: escapeDollarKeys(formState.actions) as unknown[],
           cooldown: formState.cooldown,
           priority: formState.priority,
           enabled: formState.enabled,
@@ -364,8 +364,7 @@ function CommandsTab({
         await createCommand({
           instanceId,
           command,
-          type: formState.type,
-          typeValue: formState.typeValue,
+          actions: escapeDollarKeys(formState.actions) as unknown[],
           cooldown: formState.cooldown,
           priority: formState.priority,
           enabled: formState.enabled,
@@ -411,8 +410,7 @@ function CommandsTab({
         instanceId,
         engineCommandId: cmd.engineCommandId,
         command: cmd.command,
-        type: cmd.type,
-        typeValue: cmd.typeValue,
+        actions: cmd.actions ?? [],
         cooldown: cmd.cooldown,
         priority: cmd.priority,
         enabled: !cmd.enabled,
@@ -463,8 +461,7 @@ function CommandsTab({
             <TableHeader>
               <TableRow>
                 <TableHead>Command</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Response</TableHead>
+                <TableHead>Runs</TableHead>
                 <TableHead>Visibility</TableHead>
                 <TableHead>Cooldown</TableHead>
                 <TableHead>Enabled</TableHead>
@@ -480,17 +477,8 @@ function CommandsTab({
                       <span className="text-muted-foreground font-normal"> {cmd.argumentPattern}</span>
                     ) : null}
                   </TableCell>
-                  <TableCell>
-                    <Badge variant={cmd.type === "function" ? "outline" : "default"} className="capitalize">
-                      {cmd.type}
-                    </Badge>
-                  </TableCell>
                   <TableCell className="max-w-[280px] text-muted-foreground">
-                    {cmd.typeValue ? (
-                      <span title={cmd.typeValue}>{truncate(cmd.typeValue)}</span>
-                    ) : (
-                      <span className="italic">trigger only</span>
-                    )}
+                    {summarizeActions(cmd.actions ?? [], actionPresets)}
                   </TableCell>
                   <TableCell>
                     {cmd.visibility === "public" ? (
@@ -589,65 +577,19 @@ function CommandsTab({
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="cmd-type">Type</Label>
-              <Select
-                value={formState.type}
-                onValueChange={(val) => setFormState((s) => ({ ...s, type: val as CommandType, typeValue: "" }))}
-              >
-                <SelectTrigger id="cmd-type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="text">Text response</SelectItem>
-                  <SelectItem value="function">Function</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>When it runs</Label>
+              <ActionListEditor
+                actions={formState.actions}
+                onChange={(actions) => setFormState((state) => ({ ...state, actions }))}
+                actionPresets={actionPresets}
+                availableVariables={commandVariables}
+                emptyHint="No actions yet. Add one to decide what happens — or leave it empty for a command that only fires its workflow trigger."
+              />
+              <p className="text-xs text-muted-foreground">
+                Actions run in order. Type {"{"} in a text field to use what the command captured, like the chatter's
+                name or an argument.
+              </p>
             </div>
-
-            {formState.type === "text" && (
-              <div className="grid gap-2">
-                <Label htmlFor="cmd-response">Response</Label>
-                <Textarea
-                  id="cmd-response"
-                  placeholder="Hello, welcome to the stream! Leave empty for a trigger-only command."
-                  value={formState.typeValue}
-                  onChange={(e) => setFormState((s) => ({ ...s, typeValue: e.target.value }))}
-                  rows={3}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {
-                    "Supports {template} variables. Leave empty for a trigger-only command — it still fires a workflow trigger, but sends nothing to chat."
-                  }
-                </p>
-              </div>
-            )}
-
-            {formState.type === "function" && (
-              <div className="grid gap-2">
-                <Label htmlFor="cmd-function">Function</Label>
-                <Select
-                  value={formState.typeValue}
-                  onValueChange={(val) => setFormState((s) => ({ ...s, typeValue: val }))}
-                >
-                  <SelectTrigger id="cmd-function">
-                    <SelectValue placeholder="Select a function..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableFunctions.length === 0 ? (
-                      <div className="px-2 py-4 text-sm text-muted-foreground text-center">
-                        No functions available from installed modules.
-                      </div>
-                    ) : (
-                      availableFunctions.map((fn) => (
-                        <SelectItem key={fn.qualifiedName} value={fn.qualifiedName}>
-                          {fn.name} <span className="text-muted-foreground">({fn.moduleName})</span>
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">

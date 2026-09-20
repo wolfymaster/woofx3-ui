@@ -121,6 +121,12 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = ({ field, value, onChange 
     instanceId && resourceKind ? { instanceId, kind: resourceKind } : "skip"
   );
   const createAction = useAction(api.moduleResourceActions.createResourceInstance);
+  // The kind's create form, so an instance made from here is configured the same
+  // way as one made on the kind's own page.
+  const kindDefinition = useQuery(
+    api.resourceKinds.getForInstance,
+    instanceId && resourceKind && createOpen ? { instanceId, kind: resourceKind } : "skip"
+  );
 
   const options = instances ?? [];
   const loading = !!instanceId && !!resourceKind && instances === undefined;
@@ -177,15 +183,17 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = ({ field, value, onChange 
 
       {createOpen && instanceId && resourceKind && moduleName && (
         <CreateResourceDialog
-          kind={{ kind: resourceKind, name: field.label }}
+          key={kindDefinition ? "with-schema" : "without-schema"}
+          kind={{ kind: resourceKind, name: field.label, schema: kindDefinition?.schema }}
           onClose={() => setCreateOpen(false)}
-          onCreate={async (resourceInstanceId, displayName) => {
+          onCreate={async (resourceInstanceId, displayName, settings) => {
             const created = await createAction({
               instanceId,
               moduleName,
               kind: resourceKind,
               resourceInstanceId,
               displayName,
+              settings,
             });
             onChange(created.canonicalId);
           }}
