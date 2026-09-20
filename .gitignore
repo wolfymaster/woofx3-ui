@@ -16,3 +16,6 @@ src-tauri/target/
 docs/node_modules
 docs/.vitepress/cache
 docs/.vitepress/dist
+
+# Superpowers plans/specs (local planning artifacts)
+docs/superpowers/
