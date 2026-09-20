@@ -178,6 +178,9 @@ export const retry = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ retried: "provisioning" | "registration" }> => {
     const row = await requireManagedRow(ctx, instanceId);
+    if (row.status === "deprovisioning") {
+      throw new Error("This engine is being deleted");
+    }
 
     if (row.publicUrl) {
       await ctx.runMutation(internal.provisioningInternal.restartRegistration, { provisioningId: row._id });

@@ -301,9 +301,14 @@ export const applyCallbackEvent = internalMutation({
 
       case "engine.failed": {
         const step = args.step ?? "unknown";
+        // `engine.failed` does not say which kind of run failed, so the row's
+        // own state answers it: a teardown that failed must not be presented
+        // as an engine that failed to be built, because retrying those means
+        // opposite things.
+        const status = row.status === "deprovisioning" ? "deprovisioning" : "failed";
         await ctx.db.patch(row._id, {
-          status: "failed",
-          error: `${step}: ${args.error ?? "the engine could not be created"}`,
+          status,
+          error: `${step}: ${args.error ?? "the maintenance API reported a failure"}`,
           updatedAt: Date.now(),
         });
         return { handled: true, duplicate: false };
