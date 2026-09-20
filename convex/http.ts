@@ -1125,72 +1125,27 @@ http.route({
     if (!eventId || !eventType) {
       return corsJson({ error: "Missing id or type" }, 400);
     }
-    const engineId = typeof event.engineId === "string" ? event.engineId : undefined;
-
-    const isNew = await ctx.runMutation(internal.provisioningInternal.claimCallbackEvent, {
-      eventId,
-      eventType,
-      maintenanceEngineId: engineId,
-    });
-    if (!isNew) {
-      return corsJson({ success: true, type: eventType, handled: true, duplicate: true });
-    }
-
-    logger.info("maintenance webhook: event received", { type: eventType, engineId, eventId });
-
+    const engineId = typeof event.engineId === "string" ? event.engineId : null;
     if (!engineId) {
       logger.warn("maintenance webhook: event without an engineId", { type: eventType, eventId });
       return corsJson({ success: true, type: eventType, handled: false });
     }
 
-    switch (eventType) {
-      case "engine.run.step": {
-        const step = typeof event.step === "string" ? event.step : null;
-        const status = maintenanceStepStatus(event.status);
-        if (!step || !status) {
-          return corsJson({ error: "Malformed engine.run.step" }, 400);
-        }
-        await ctx.runMutation(internal.provisioningInternal.applyRunStep, {
-          maintenanceEngineId: engineId,
-          step,
-          label: typeof event.label === "string" ? event.label : step,
-          status,
-          error: maintenanceErrorText(event.error),
-        });
-        return corsJson({ success: true, type: eventType, handled: true });
-      }
+    logger.info("maintenance webhook: event received", { type: eventType, engineId, eventId });
 
-      case "engine.ready": {
-        const url = typeof event.url === "string" ? event.url : null;
-        if (!url) {
-          return corsJson({ error: "Malformed engine.ready" }, 400);
-        }
-        await ctx.runMutation(internal.provisioningInternal.applyEngineReady, {
-          maintenanceEngineId: engineId,
-          url,
-        });
-        return corsJson({ success: true, type: eventType, handled: true });
-      }
-
-      case "engine.failed": {
-        await ctx.runMutation(internal.provisioningInternal.applyEngineFailed, {
-          maintenanceEngineId: engineId,
-          step: typeof event.step === "string" ? event.step : "unknown",
-          error: maintenanceErrorText(event.error) ?? "The engine could not be created",
-        });
-        return corsJson({ success: true, type: eventType, handled: true });
-      }
-
-      case "engine.deleted": {
-        await ctx.runMutation(internal.provisioningInternal.applyEngineDeleted, { maintenanceEngineId: engineId });
-        return corsJson({ success: true, type: eventType, handled: true });
-      }
-
-      default: {
-        logger.warn("maintenance webhook: unhandled event type", { type: eventType });
-        return corsJson({ success: true, type: eventType, handled: false });
-      }
-    }
+    // Deduping and applying are one transaction, so a redelivery of an event
+    // whose effect did not commit is applied rather than swallowed.
+    const result = await ctx.runMutation(internal.provisioningInternal.applyCallbackEvent, {
+      eventId,
+      eventType,
+      maintenanceEngineId: engineId,
+      step: typeof event.step === "string" ? event.step : undefined,
+      label: typeof event.label === "string" ? event.label : undefined,
+      stepStatus: maintenanceStepStatus(event.status) ?? undefined,
+      url: typeof event.url === "string" ? event.url : undefined,
+      error: maintenanceErrorText(event.error),
+    });
+    return corsJson({ success: true, type: eventType, ...result });
   }),
 });
 

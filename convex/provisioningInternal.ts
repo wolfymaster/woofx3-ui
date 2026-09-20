@@ -18,6 +18,8 @@ import { performRegistration } from "./registration";
  * the row.
  */
 
+type ProvisioningStepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
+
 const stepValidator = v.object({
   key: v.string(),
   label: v.string(),
@@ -229,30 +231,105 @@ export const recordDeprovisionStarted = internalMutation({
 });
 
 /**
- * Records a callback id, answering whether it is new. Delivery is at-least-once,
- * so a repeat must be acknowledged without being applied a second time.
+ * Applies one maintenance-API callback.
+ *
+ * One mutation for every event type, rather than one per type, because the
+ * dedupe record and the change it guards have to commit together: recording
+ * the id first would swallow the redelivery of an event whose effect then
+ * failed to apply.
+ *
+ * An event about an engine this deployment does not know is acknowledged
+ * rather than refused — a rejection would only make the sender retry forever.
  */
-export const claimCallbackEvent = internalMutation({
+export const applyCallbackEvent = internalMutation({
   args: {
     eventId: v.string(),
     eventType: v.string(),
-    maintenanceEngineId: v.optional(v.string()),
+    maintenanceEngineId: v.string(),
+    step: v.optional(v.string()),
+    label: v.optional(v.string()),
+    stepStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("running"),
+        v.literal("succeeded"),
+        v.literal("failed"),
+        v.literal("skipped")
+      )
+    ),
+    url: v.optional(v.string()),
+    error: v.optional(v.string()),
   },
-  handler: async (ctx, { eventId, eventType, maintenanceEngineId }): Promise<boolean> => {
+  handler: async (ctx, args): Promise<{ handled: boolean; duplicate: boolean }> => {
     const seen = await ctx.db
       .query("maintenanceEvents")
-      .withIndex("by_event", (q) => q.eq("eventId", eventId))
+      .withIndex("by_event", (q) => q.eq("eventId", args.eventId))
       .first();
     if (seen) {
-      return false;
+      return { handled: true, duplicate: true };
     }
     await ctx.db.insert("maintenanceEvents", {
-      eventId,
-      eventType,
-      maintenanceEngineId,
+      eventId: args.eventId,
+      eventType: args.eventType,
+      maintenanceEngineId: args.maintenanceEngineId,
       receivedAt: Date.now(),
     });
-    return true;
+
+    const row = await ctx.db
+      .query("engineProvisioning")
+      .withIndex("by_maintenance_engine", (q) => q.eq("maintenanceEngineId", args.maintenanceEngineId))
+      .first();
+    if (!row) {
+      logger.warn("maintenance webhook: event for an unknown engine", {
+        maintenanceEngineId: args.maintenanceEngineId,
+        type: args.eventType,
+      });
+      return { handled: false, duplicate: false };
+    }
+
+    switch (args.eventType) {
+      case "engine.run.step": {
+        if (!args.step || !args.stepStatus) {
+          return { handled: false, duplicate: false };
+        }
+        await applyRunStep(ctx, row, {
+          key: args.step,
+          label: args.label ?? args.step,
+          status: args.stepStatus,
+          error: args.error,
+        });
+        return { handled: true, duplicate: false };
+      }
+
+      case "engine.ready": {
+        if (!args.url) {
+          return { handled: false, duplicate: false };
+        }
+        await applyEngineReady(ctx, row, args.url);
+        return { handled: true, duplicate: false };
+      }
+
+      case "engine.failed": {
+        const step = args.step ?? "unknown";
+        await ctx.db.patch(row._id, {
+          status: "failed",
+          error: `${step}: ${args.error ?? "the engine could not be created"}`,
+          updatedAt: Date.now(),
+        });
+        return { handled: true, duplicate: false };
+      }
+
+      case "engine.deleted": {
+        // The instance row stays: it still owns the account's scenes, workflows
+        // and members. Removing it is the account owner's decision.
+        await ctx.db.patch(row._id, { status: "deleted", updatedAt: Date.now() });
+        return { handled: true, duplicate: false };
+      }
+
+      default: {
+        return { handled: false, duplicate: false };
+      }
+    }
   },
 });
 
@@ -278,110 +355,46 @@ export const cleanupOldEvents = internalMutation({
  * then succeeded), so a known key is updated in place and an unknown one is
  * appended — which also means the list needs no seeding from the run's plan.
  */
-export const applyRunStep = internalMutation({
-  args: {
-    maintenanceEngineId: v.string(),
-    step: v.string(),
-    label: v.string(),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("running"),
-      v.literal("succeeded"),
-      v.literal("failed"),
-      v.literal("skipped")
-    ),
-    error: v.optional(v.string()),
-  },
-  handler: async (ctx, { maintenanceEngineId, step, label, status, error }) => {
-    const row = await ctx.db
-      .query("engineProvisioning")
-      .withIndex("by_maintenance_engine", (q) => q.eq("maintenanceEngineId", maintenanceEngineId))
-      .first();
-    if (!row) {
-      logger.warn("maintenance webhook: step for an unknown engine", { maintenanceEngineId, step });
-      return;
-    }
+async function applyRunStep(
+  ctx: MutationCtx,
+  row: Doc<"engineProvisioning">,
+  step: { key: string; label: string; status: ProvisioningStepStatus; error?: string }
+): Promise<void> {
+  const steps = [...row.steps];
+  const index = steps.findIndex((existing) => existing.key === step.key);
+  if (index === -1) {
+    steps.push(step);
+  } else {
+    steps[index] = step;
+  }
 
-    const steps = [...row.steps];
-    const index = steps.findIndex((existing) => existing.key === step);
-    const next = { key: step, label, status, error };
-    if (index === -1) {
-      steps.push(next);
-    } else {
-      steps[index] = next;
-    }
-
-    // The first step report is what turns a requested engine into one that is
-    // visibly being built. Every other status stands: a late report must not
-    // pull an engine that is already registering, registered or deleted back
-    // into provisioning.
-    const rowStatus = row.status === "requested" ? "provisioning" : row.status;
-    await ctx.db.patch(row._id, { steps, status: rowStatus, updatedAt: Date.now() });
-  },
-});
+  // The first step report is what turns a requested engine into one that is
+  // visibly being built. Every other status stands: a late report must not
+  // pull an engine that is already registering, registered or deleted back
+  // into provisioning.
+  const status = row.status === "requested" ? "provisioning" : row.status;
+  await ctx.db.patch(row._id, { steps, status, updatedAt: Date.now() });
+}
 
 /**
  * The engine is serving on its public URL. This is where a managed instance
  * gets its URL, and where registration starts: the engine requires the
  * registration token this row generated, so nobody else can claim it.
  */
-export const applyEngineReady = internalMutation({
-  args: { maintenanceEngineId: v.string(), url: v.string() },
-  handler: async (ctx, { maintenanceEngineId, url }) => {
-    const row = await ctx.db
-      .query("engineProvisioning")
-      .withIndex("by_maintenance_engine", (q) => q.eq("maintenanceEngineId", maintenanceEngineId))
-      .first();
-    if (!row) {
-      logger.warn("maintenance webhook: ready for an unknown engine", { maintenanceEngineId });
-      return;
-    }
-    if (row.status === "registered") {
-      return;
-    }
-
-    await ctx.db.patch(row.instanceId, { url });
-    await ctx.db.patch(row._id, {
-      publicUrl: url,
-      status: "registering",
-      registrationAttempts: 0,
-      error: undefined,
-      updatedAt: Date.now(),
-    });
-    await ctx.scheduler.runAfter(0, internal.provisioningInternal.runRegistration, { provisioningId: row._id });
-  },
-});
-
-export const applyEngineFailed = internalMutation({
-  args: { maintenanceEngineId: v.string(), step: v.string(), error: v.string() },
-  handler: async (ctx, { maintenanceEngineId, step, error }) => {
-    const row = await ctx.db
-      .query("engineProvisioning")
-      .withIndex("by_maintenance_engine", (q) => q.eq("maintenanceEngineId", maintenanceEngineId))
-      .first();
-    if (!row) {
-      logger.warn("maintenance webhook: failure for an unknown engine", { maintenanceEngineId, step });
-      return;
-    }
-    await ctx.db.patch(row._id, { status: "failed", error: `${step}: ${error}`, updatedAt: Date.now() });
-  },
-});
-
-export const applyEngineDeleted = internalMutation({
-  args: { maintenanceEngineId: v.string() },
-  handler: async (ctx, { maintenanceEngineId }) => {
-    const row = await ctx.db
-      .query("engineProvisioning")
-      .withIndex("by_maintenance_engine", (q) => q.eq("maintenanceEngineId", maintenanceEngineId))
-      .first();
-    if (!row) {
-      return;
-    }
-    // The instance row stays: it still owns the account's scenes, workflows and
-    // members. Deleting it is the account owner's decision, on the admin page.
-    await ctx.db.patch(row._id, { status: "deleted", updatedAt: Date.now() });
-  },
-});
+async function applyEngineReady(ctx: MutationCtx, row: Doc<"engineProvisioning">, url: string): Promise<void> {
+  if (row.status === "registered") {
+    return;
+  }
+  await ctx.db.patch(row.instanceId, { url });
+  await ctx.db.patch(row._id, {
+    publicUrl: url,
+    status: "registering",
+    registrationAttempts: 0,
+    error: undefined,
+    updatedAt: Date.now(),
+  });
+  await ctx.scheduler.runAfter(0, internal.provisioningInternal.runRegistration, { provisioningId: row._id });
+}
 
 /**
  * Runs the engine handshake for a managed engine and records the outcome.
