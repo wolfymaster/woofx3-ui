@@ -1,26 +1,12 @@
 import type { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { Badge } from "@/components/ui/badge";
+import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 import { formatDuration, toneFor } from "@/lib/workflow-run-timeline";
 import { TONE_STYLE } from "./tone";
 
 export type RunRow = FunctionReturnType<typeof api.workflowRuns.listForInstance>[number];
-
-function formatTimeAgo(iso: string | undefined): string {
-  if (!iso) {
-    return "";
-  }
-  const parsed = Date.parse(iso);
-  if (Number.isNaN(parsed)) {
-    return "";
-  }
-  const seconds = Math.max(0, Math.floor((Date.now() - parsed) / 1000));
-  if (seconds < 60) return `${seconds}s ago`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
-}
 
 function durationOf(run: RunRow): number | undefined {
   if (!run.startedAt || !run.completedAt) {
