@@ -19,6 +19,10 @@ crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engine
 
 crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLog.cleanupOld);
 
+// Maintenance callback ids exist only to reject a redelivery of an event already
+// applied; once the sender has stopped retrying they are dead weight.
+crons.interval("maintenance callback id cleanup", { hours: 24 }, internal.provisioningInternal.cleanupOldEvents);
+
 // Self-heals instanceLiveState if the engine's STREAM_ONLINE/OFFLINE webhook
 // stops delivering (EventSub lapses, engine restarts) — runs regardless of
 // whether anyone has the dashboard open.
