@@ -29,6 +29,12 @@ export interface ActionRowStep {
 interface ActionRowProps {
   action: ActionRowStep;
   preset?: ActionPreset;
+  /**
+   * What to call this step, where its catalog entry's name is not the whole story — a
+   * chat command's step may be a sub-workflow task, which names neither an action nor a
+   * function (see actionStepLabel). Defaults to actionName.
+   */
+  label?: string;
   /** 1-based position in its trigger, shown on the step. */
   stepNumber: number;
   /** What this action's settings may reference — see projectedActionVariables. */
@@ -56,6 +62,7 @@ interface ActionRowProps {
 export function ActionRow({
   action,
   preset,
+  label,
   stepNumber,
   availableVariables,
   alertEditorHref,
@@ -87,7 +94,7 @@ export function ActionRow({
             {stepNumber}
           </span>
           <Icon className="h-4 w-4 shrink-0 text-primary-text" aria-hidden="true" />
-          <span className="shrink-0 text-sm font-medium">{actionName(action, preset)}</span>
+          <span className="shrink-0 text-sm font-medium">{label ?? actionName(action, preset)}</span>
           {!isExpanded && (
             <span className="truncate text-[13px] text-muted-foreground">{stepDetail(action, fields)}</span>
           )}

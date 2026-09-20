@@ -4,7 +4,7 @@ import { ActionRow } from "@/components/triggers/action-row";
 import { StepTiles } from "@/components/triggers/step-tiles";
 import { commandStepId } from "@/lib/command-drafts";
 import type { ActionPreset, TriggerConfigValues } from "@/lib/workflow-presets";
-import { presetToActionStep, resolveActionStepPreset } from "@/lib/workflow-presets-json";
+import { actionStepLabel, presetToActionStep, resolveActionStepPreset } from "@/lib/workflow-presets-json";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 interface CommandStepsEditorProps {
@@ -86,11 +86,14 @@ export function CommandStepsEditor({
             key={id}
             action={{
               id,
-              handlerType: step.action,
+              // A sub-workflow task names neither, so both can be absent here — the row
+              // falls back to the label, and stepIcon reads "" as no special icon.
+              handlerType: step.action ?? "",
               functionCall: step.function,
               parameters: (step.parameters ?? {}) as TriggerConfigValues,
             }}
             preset={resolveActionStepPreset(step, actionPresets)}
+            label={actionStepLabel(step, actionPresets)}
             stepNumber={index + 1}
             availableVariables={availableVariables}
             alertEditorHref={alertEditorHref(id)}
