@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { suggestVariantDisplayName } from "./variant-display-name";
-import { ANY_CONDITION } from "./workflow-presets-json";
 import type { TriggerPreset } from "./workflow-presets";
+import { ANY_CONDITION } from "./workflow-presets-json";
 
 const cheerTrigger = {
   id: "cheer.user.twitch",

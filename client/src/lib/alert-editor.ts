@@ -184,8 +184,7 @@ export function newLayer(row: CatalogWidget, existing: readonly Widget[], canvas
         ? { width: 1200, height: textBoxHeight(48, "New text") }
         : { width: 640, height: Math.round(640 * MEDIA_ASPECT) };
   const offset = ADD_OFFSET * (existing.length % 4);
-  const center =
-    kind === "audio" ? AUDIO_CENTER : { x: canvas.width / 2 + offset, y: canvas.height / 2 + offset };
+  const center = kind === "audio" ? AUDIO_CENTER : { x: canvas.width / 2 + offset, y: canvas.height / 2 + offset };
 
   const widget: Widget = {
     id: nextLayerId(existing),
