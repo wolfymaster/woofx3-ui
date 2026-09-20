@@ -1143,11 +1143,25 @@ http.route({
       label: typeof event.label === "string" ? event.label : undefined,
       stepStatus: maintenanceStepStatus(event.status) ?? undefined,
       url: typeof event.url === "string" ? event.url : undefined,
+      version: typeof event.version === "string" ? event.version : undefined,
+      runKind: maintenanceRunKind(event.runKind) ?? undefined,
       error: maintenanceErrorText(event.error),
     });
     return corsJson({ success: true, type: eventType, ...result });
   }),
 });
+
+/** Which kind of run an event came from; a failure means opposite things for a build and a teardown. */
+function maintenanceRunKind(value: unknown): "provision" | "deprovision" | "redeploy" | null {
+  switch (value) {
+    case "provision":
+    case "deprovision":
+    case "redeploy":
+      return value;
+    default:
+      return null;
+  }
+}
 
 /** The maintenance API's step statuses; anything else means the contract moved and the event is refused. */
 function maintenanceStepStatus(value: unknown): "pending" | "running" | "succeeded" | "failed" | "skipped" | null {

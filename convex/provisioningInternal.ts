@@ -248,6 +248,8 @@ export const applyCallbackEvent = internalMutation({
       )
     ),
     url: v.optional(v.string()),
+    version: v.optional(v.string()),
+    runKind: v.optional(v.union(v.literal("provision"), v.literal("deprovision"), v.literal("redeploy"))),
     error: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ handled: boolean; duplicate: boolean }> => {
@@ -295,17 +297,16 @@ export const applyCallbackEvent = internalMutation({
         if (!args.url) {
           return { handled: false, duplicate: false };
         }
-        await applyEngineReady(ctx, row, args.url);
+        await applyEngineReady(ctx, row, args.url, args.version);
         return { handled: true, duplicate: false };
       }
 
       case "engine.failed": {
         const step = args.step ?? "unknown";
-        // `engine.failed` does not say which kind of run failed, so the row's
-        // own state answers it: a teardown that failed must not be presented
-        // as an engine that failed to be built, because retrying those means
-        // opposite things.
-        const status = row.status === "deprovisioning" ? "deprovisioning" : "failed";
+        // A failed teardown leaves the engine deprovisioning until a retry
+        // finishes, so the row says so too: presenting it as an engine that
+        // failed to be built would offer the user the opposite repair.
+        const status = args.runKind === "deprovision" ? "deprovisioning" : "failed";
         await ctx.db.patch(row._id, {
           status,
           error: `${step}: ${args.error ?? "the maintenance API reported a failure"}`,
@@ -317,7 +318,7 @@ export const applyCallbackEvent = internalMutation({
       case "engine.deleted": {
         // The instance row stays: it still owns the account's scenes, workflows
         // and members. Removing it is the account owner's decision.
-        await ctx.db.patch(row._id, { status: "deleted", updatedAt: Date.now() });
+        await ctx.db.patch(row._id, { status: "deleted", error: undefined, updatedAt: Date.now() });
         return { handled: true, duplicate: false };
       }
 
@@ -376,13 +377,19 @@ async function applyRunStep(
  * gets its URL, and where registration starts: the engine requires the
  * registration token this row generated, so nobody else can claim it.
  */
-async function applyEngineReady(ctx: MutationCtx, row: Doc<"engineProvisioning">, url: string): Promise<void> {
+async function applyEngineReady(
+  ctx: MutationCtx,
+  row: Doc<"engineProvisioning">,
+  url: string,
+  version: string | undefined
+): Promise<void> {
   if (row.status === "registered") {
     return;
   }
   await ctx.db.patch(row.instanceId, { url });
   await ctx.db.patch(row._id, {
     publicUrl: url,
+    reportedVersion: version,
     status: "registering",
     registrationAttempts: 0,
     error: undefined,

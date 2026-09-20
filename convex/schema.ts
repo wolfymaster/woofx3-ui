@@ -189,6 +189,10 @@ export default defineSchema({
       })
     ),
     publicUrl: v.optional(v.string()),
+    // The release the engine reports running, as its ready callback gives it.
+    // Kept here so the admin page can name it without asking the maintenance
+    // API again.
+    reportedVersion: v.optional(v.string()),
     error: v.optional(v.string()),
     registrationToken: v.string(),
     // Registration is retried on a backoff after the engine reports ready;
