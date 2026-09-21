@@ -77,7 +77,7 @@ export function ReplayControls({ instanceId, engineRunId, failedStepTaskId }: Re
   const outcome = triggerId ? describeTestEventOutcome(record, waitElapsed) : null;
 
   return (
-    <div className="space-y-2" data-testid="alert-history-replay">
+    <div className="space-y-2" data-testid="alert-run-replay">
       <div className="flex flex-wrap gap-2">
         <Button
           size="sm"

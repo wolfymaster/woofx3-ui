@@ -4,7 +4,6 @@ import {
   FolderOpen,
   GraduationCap,
   HardDrive,
-  History,
   Key,
   Layers,
   LayoutDashboard,
@@ -22,12 +21,20 @@ import {
   Users,
   Workflow,
 } from "lucide-react";
+import { ALERT_EDITOR_BASE } from "@/lib/alert-editor-route";
+import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 
 export interface NavItem {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   href: string;
+  /**
+   * Paths that belong to this entry but hang beside it rather than below: Alerts keeps
+   * its editors and its runs outside `/stream/alerts`, because everything below that is
+   * read as a menu path. Listed so the entry stays marked while one of them is open.
+   */
+  owns?: string[];
 }
 
 export interface NavSection extends NavItem {
@@ -36,8 +43,7 @@ export interface NavSection extends NavItem {
 }
 
 export const STREAM_ITEMS: NavItem[] = [
-  { id: "alerts", label: "Alerts", icon: Bell, href: "/stream/alerts" },
-  { id: "alert-history", label: "Alert History", icon: History, href: "/stream/alert-history" },
+  { id: "alerts", label: "Alerts", icon: Bell, href: "/stream/alerts", owns: [ALERT_EDITOR_BASE, ALERT_RUN_BASE] },
   { id: "commands", label: "Commands", icon: MessageSquare, href: "/stream/commands" },
   { id: "counters", label: "Counters", icon: Tally5, href: "/stream/counters" },
   { id: "scenes", label: "Scenes", icon: Layers, href: "/stream/scenes" },
@@ -87,7 +93,7 @@ export function isSectionActive(section: NavSection, location: string): boolean 
 }
 
 export function isNavItemActive(item: NavItem, location: string): boolean {
-  return location === item.href || location.startsWith(`${item.href}/`);
+  return [item.href, ...(item.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
 }
 
 export function findActiveSection(location: string): NavSection | null {

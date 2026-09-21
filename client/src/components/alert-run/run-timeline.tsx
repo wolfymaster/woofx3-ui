@@ -1,14 +1,21 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
-import { Zap } from "lucide-react";
+import { AlertCircle, CheckCircle2, CircleDashed, Loader2, type LucideIcon, Zap } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { WebhookEventPayloadDialog } from "@/components/debug/webhook-event-payload-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { buildTimeline, formatDuration, type TimelineStep } from "@/lib/workflow-run-timeline";
-import { TONE_STYLE } from "./tone";
+import { buildTimeline, formatDuration, type TimelineStep, type Tone } from "@/lib/workflow-run-timeline";
+
+/** How each tone is drawn, for a step and for the run as a whole. */
+const TONE_STYLE: Record<Tone, { icon: LucideIcon; color: string; bg: string; spin: boolean }> = {
+  running: { icon: Loader2, color: "text-blue-500", bg: "bg-blue-500/10", spin: true },
+  success: { icon: CheckCircle2, color: "text-green-500", bg: "bg-green-500/10", spin: false },
+  failure: { icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10", spin: false },
+  neutral: { icon: CircleDashed, color: "text-muted-foreground", bg: "bg-muted", spin: false },
+};
 
 interface TimelineNodeProps {
   icon: ReactNode;
@@ -44,7 +51,7 @@ function StepNode({ step, continues }: { step: TimelineStep; continues: boolean 
       icon={<Icon className={cn("h-4 w-4", style.color, style.spin && "animate-spin")} />}
       iconBg={style.bg}
       continues={continues}
-      testId={`alert-history-step-${step.key}`}
+      testId={`alert-run-step-${step.key}`}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium">{step.label}</span>
@@ -96,7 +103,7 @@ export function RunTimeline({ instanceId, engineRunId, actions }: RunTimelinePro
 
   if (data === undefined) {
     return (
-      <div className="space-y-4 p-4" data-testid="alert-history-timeline-loading">
+      <div className="space-y-4 p-4" data-testid="alert-run-timeline-loading">
         <Skeleton className="h-6 w-1/2" />
         <Skeleton className="h-16 w-full" />
         <Skeleton className="h-16 w-full" />
@@ -112,7 +119,7 @@ export function RunTimeline({ instanceId, engineRunId, actions }: RunTimelinePro
   const runStyle = TONE_STYLE[timeline.tone];
 
   return (
-    <div className="p-4" data-testid="alert-history-timeline">
+    <div className="p-4" data-testid="alert-run-timeline">
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <h2 className="text-base font-semibold">{run.workflowName ?? run.workflowId}</h2>
         <Badge variant="secondary" className={cn("text-xs", runStyle.color)}>
@@ -139,7 +146,7 @@ export function RunTimeline({ instanceId, engineRunId, actions }: RunTimelinePro
           icon={<Zap className="h-4 w-4 text-amber-500" />}
           iconBg="bg-amber-500/10"
           continues={timeline.steps.length > 0}
-          testId="alert-history-trigger"
+          testId="alert-run-trigger"
         >
           {timeline.trigger ? (
             <>
