@@ -1,14 +1,12 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
-import { BellRing, History, Zap } from "lucide-react";
+import { BellRing, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Link } from "wouter";
 import { AlertFeed } from "@/components/alerts/dashboard/alert-feed";
 import { AlertFrequencyChart } from "@/components/alerts/dashboard/alert-frequency-chart";
 import { AlertStatTiles } from "@/components/alerts/dashboard/alert-stat-tiles";
 import { EmptyState } from "@/components/common/empty-state";
 import { TestEventPicker } from "@/components/test-events/test-event-picker";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -112,23 +110,15 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
           <Card>
             <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
               <h2 className="text-sm font-semibold">Recent alerts</h2>
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-xs text-muted-foreground" htmlFor="alert-failures-only">
-                  <Switch
-                    id="alert-failures-only"
-                    checked={failuresOnly}
-                    onCheckedChange={setFailuresOnly}
-                    data-testid="switch-failures-only"
-                  />
-                  Failures only
-                </label>
-                <Button asChild size="sm" variant="ghost" className="gap-1.5">
-                  <Link href="/stream/alert-history">
-                    <History className="h-3.5 w-3.5" />
-                    Full history
-                  </Link>
-                </Button>
-              </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground" htmlFor="alert-failures-only">
+                <Switch
+                  id="alert-failures-only"
+                  checked={failuresOnly}
+                  onCheckedChange={setFailuresOnly}
+                  data-testid="switch-failures-only"
+                />
+                Failures only
+              </label>
             </div>
             {alerts === undefined ? (
               <div className="space-y-2 p-4">

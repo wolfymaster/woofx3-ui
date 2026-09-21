@@ -1,7 +1,7 @@
 import { type AlertFailureCopy, describeAlertFailure } from "./alert-failure";
 
 /**
- * The shape of a recorded workflow run as the Alert History timeline draws it.
+ * The shape of a recorded workflow run as the run timeline draws it.
  *
  * Kept apart from the components because every decision here -- what a status
  * means, which step broke the run, whether a payload is worth offering -- is

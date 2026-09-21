@@ -3,7 +3,8 @@
  * It sits beside the Alerts route rather than under it: everything below
  * `/stream/alerts/` is read as a menu path.
  */
-export const ALERT_EDITOR_ROUTE = "/stream/alert-editor/:event/:triggerId/:actionId";
+export const ALERT_EDITOR_BASE = "/stream/alert-editor";
+export const ALERT_EDITOR_ROUTE = `${ALERT_EDITOR_BASE}/:event/:triggerId/:actionId`;
 
 export interface AlertEditorTarget {
   event: string;
@@ -12,5 +13,5 @@ export interface AlertEditorTarget {
 }
 
 export function alertEditorPath({ event, triggerId, actionId }: AlertEditorTarget): string {
-  return `/stream/alert-editor/${encodeURIComponent(event)}/${encodeURIComponent(triggerId)}/${encodeURIComponent(actionId)}`;
+  return `${ALERT_EDITOR_BASE}/${encodeURIComponent(event)}/${encodeURIComponent(triggerId)}/${encodeURIComponent(actionId)}`;
 }

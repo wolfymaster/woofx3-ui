@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { alertEventType, alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
+import { alertRunPath } from "@/lib/alert-run-route";
 import { alertStatusStyle } from "@/lib/alert-status";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -122,11 +123,11 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
         <Badge variant="secondary" className={cn("text-[10px]", style.color)}>
           {style.label}
         </Badge>
-        {/* `workflowId` on an alert row is the execution that fired it, which
-            is what Alert History keys a run on. Absent for a manual dispatch. */}
+        {/* `workflowId` on an alert row is the execution that fired it, which is
+            what a run is keyed on. Absent for a manual dispatch. */}
         {alert.workflowId && (
           <Button asChild size="icon" variant="ghost" className="h-7 w-7" title="Open the run that fired this">
-            <Link href={`/stream/alert-history?run=${encodeURIComponent(alert.workflowId)}`}>
+            <Link href={alertRunPath(alert.workflowId)}>
               <ScrollText className="h-3.5 w-3.5" />
               <span className="sr-only">Open the run that fired this</span>
             </Link>

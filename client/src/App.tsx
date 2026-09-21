@@ -11,6 +11,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/hooks/use-theme";
 import { ALERT_EDITOR_ROUTE } from "@/lib/alert-editor-route";
+import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import {
   COMMAND_EDITOR_ROUTE,
   COMMAND_GROUP_EDITOR_ROUTE,
@@ -24,7 +25,7 @@ import AdminEngine from "@/pages/admin/engine";
 import AdminIntegrations from "@/pages/admin/integrations";
 import AdminStorage from "@/pages/admin/storage";
 import AlertEditor from "@/pages/alert-editor";
-import AlertHistory from "@/pages/alert-history";
+import AlertRun from "@/pages/alert-run";
 import Alerts from "@/pages/alerts";
 import Assets from "@/pages/assets";
 import AcceptInvite from "@/pages/auth/accept-invite";
@@ -163,7 +164,7 @@ function AppRoutes() {
                   <Route path="/stream/alerts" component={Alerts} />
                   <Route path="/stream/alerts/*" component={Alerts} />
                   <Route path={ALERT_EDITOR_ROUTE} component={AlertEditor} />
-                  <Route path="/stream/alert-history" component={AlertHistory} />
+                  <Route path={ALERT_RUN_ROUTE} component={AlertRun} />
                   {/* Order matters: the fixed segments must be matched before :engineCommandId. */}
                   <Route path={COMMAND_STEP_ALERT_ROUTE} component={CommandStepAlertEditor} />
                   <Route path={COMMAND_GROUP_NEW_ROUTE} component={CommandGroupEditor} />
@@ -230,6 +231,10 @@ function AppRoutes() {
                     <Redirect to="/stream/scenes" />
                   </Route>
                   <Route path="/scenes/:id">{(params) => <Redirect to={`/stream/scenes/${params.id}`} />}</Route>
+                  {/* Runs are reached from the alert they fired, one at a time. */}
+                  <Route path="/stream/alert-history">
+                    <Redirect to="/stream/alerts" />
+                  </Route>
                   {/* Test events moved onto the Alerts screen, beside each event. */}
                   <Route path="/debug">
                     <Redirect to="/stream/alerts" />
