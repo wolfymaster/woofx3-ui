@@ -8,6 +8,7 @@ import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/com
 import { EmptyState } from "@/components/common/empty-state";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
+import { ResourceTriggerEditors } from "@/components/resources/resource-trigger-editors";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,7 +62,8 @@ interface ResourceKindPageProps {
  *
  * Everything that is the same for every kind lives here — finding the module
  * that provides it, listing and creating instances with the kind's own settings
- * form, keeping values fresh, showing settings and deleting. A kind supplies
+ * form, keeping values fresh, the triggers its events offer, showing settings
+ * and deleting. A kind supplies
  * only its value display and controls, so counters, timers and queues read as
  * one product.
  */
@@ -211,6 +213,8 @@ export function ResourceKindPage({
               </div>
 
               {detail(detailProps(selected))}
+
+              <ResourceTriggerEditors kind={kind} instance={selected} />
 
               <SettingsCard
                 instance={selected}
