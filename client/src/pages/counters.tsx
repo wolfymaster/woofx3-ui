@@ -1,16 +1,10 @@
-import { api } from "@convex/_generated/api";
-import { useAction } from "convex/react";
 import { Minus, Plus, RotateCcw, Tally5 } from "lucide-react";
 import { useState } from "react";
 import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { useInstance } from "@/hooks/use-instance";
-import { useToast } from "@/hooks/use-toast";
-import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { escapeDollarKeys } from "@/lib/dollar-keys";
-import { resourceActionStep } from "@/lib/resource-actions";
+import { useResourceAction } from "@/hooks/use-resource-action";
 
 const BASE_PATH = "/stream/counters";
 
@@ -45,48 +39,13 @@ function formatCount(value: number): string {
   return value.toLocaleString();
 }
 
-/**
- * The counter's number and what can be done to it. Each button runs the
- * counter's own action — the same one a workflow or a chat command would — so
- * the page never changes a value any other way, and the number shown is the one
- * the engine stored, arriving back through its change event.
- */
+/** The counter's number and what can be done to it, through the counter's own actions. */
 function CounterPanel(props: ResourceDetailProps) {
-  const { instance, moduleName, settings } = props;
-  const { instance: engineInstance } = useInstance();
-  const { actionPresets } = useWorkflowCatalog();
-  const runActions = useAction(api.moduleResourceActions.runActions);
-  const { toast } = useToast();
-  const [pending, setPending] = useState<string | null>(null);
+  const { instance, settings } = props;
+  const { run, pending } = useResourceAction(props);
   const [setTo, setSetTo] = useState("");
 
   const step = Number(settings.step) || 1;
-
-  async function run(actionId: string, parameters: Record<string, unknown> = {}) {
-    if (!engineInstance) {
-      return;
-    }
-    setPending(actionId);
-    try {
-      const action = resourceActionStep(actionPresets, moduleName, actionId, {
-        target: instance.canonicalId,
-        ...parameters,
-      });
-      await runActions({
-        instanceId: engineInstance._id,
-        label: `dashboard:${instance.canonicalId}`,
-        actions: escapeDollarKeys([action]) as unknown[],
-      });
-    } catch (err) {
-      toast({
-        title: "That didn't work",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
-    } finally {
-      setPending(null);
-    }
-  }
 
   const setValue = Number(setTo);
   const canSet = setTo.trim() !== "" && Number.isFinite(setValue);
@@ -126,7 +85,11 @@ function CounterPanel(props: ResourceDetailProps) {
           onSubmit={(e) => {
             e.preventDefault();
             if (canSet) {
-              void run("counter.set", { value: setValue }).then(() => setSetTo(""));
+              void run("counter.set", { value: setValue }).then((sent) => {
+                if (sent) {
+                  setSetTo("");
+                }
+              });
             }
           }}
         >

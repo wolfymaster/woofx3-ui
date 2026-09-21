@@ -176,7 +176,9 @@ function AppRoutes() {
                   <Route path="/stream/counters" component={Counters} />
                   <Route path="/stream/counters/*" component={Counters} />
                   <Route path="/stream/timers" component={Timers} />
+                  <Route path="/stream/timers/*" component={Timers} />
                   <Route path="/stream/queues" component={Queues} />
+                  <Route path="/stream/queues/*" component={Queues} />
                   <Route path="/stream/scenes" component={Scenes} />
                   <Route path="/stream/scenes/:id" component={Scenes} />
                   <Route path="/stream/assets" component={Assets} />
