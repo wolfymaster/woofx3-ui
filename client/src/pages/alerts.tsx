@@ -3,7 +3,7 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { Bell, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useParams } from "wouter";
+import { useLocation } from "wouter";
 import { AlertGroupRail } from "@/components/alerts/alert-group-rail";
 import { AlertsDashboard } from "@/components/alerts/dashboard/alerts-dashboard";
 import { EmptyState } from "@/components/common/empty-state";
@@ -22,6 +22,7 @@ import {
   subtreePresets,
   taxonomyLabel,
 } from "@/lib/alert-groups";
+import { decodeSegment, subPathSegments } from "@/lib/route-subpath";
 import { projectWorkflow } from "@/lib/trigger-projection";
 import { cn } from "@/lib/utils";
 
@@ -34,9 +35,7 @@ const BASE_PATH = "/stream/alerts";
  * of the engine's own records — see lib/trigger-projection.ts. Nothing is stored here.
  */
 export default function Alerts() {
-  // Everything below the Alerts route is the selected menu path, as deep as the taxonomy nests.
-  const params = useParams<{ "*"?: string }>();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { instance } = useInstance();
   const { triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
@@ -93,7 +92,8 @@ export default function Alerts() {
     return countAlertsByNode(perWorkflow);
   }, [rows, menuPathByEvent]);
 
-  const selectedPath = (params?.["*"] ?? "").split("/").filter(Boolean).map(decodeSegment);
+  // Everything below the Alerts route is the selected menu path, as deep as the taxonomy nests.
+  const selectedPath = useMemo(() => subPathSegments(location, BASE_PATH), [location]);
   const selectedId = selectedPath.length > 0 ? alertNodeId(selectedPath) : null;
   const node = selectedId === null ? undefined : findAlertNode(tree, selectedPath);
   const nodePresets = node ? subtreePresets(node) : [];
@@ -208,13 +208,4 @@ export default function Alerts() {
 function currentHash(): string | null {
   const hash = window.location.hash.slice(1);
   return hash ? decodeSegment(hash) : null;
-}
-
-/** A URL path segment decoded; one that is not valid percent-encoding is kept as written, and matches nothing. */
-function decodeSegment(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
 }

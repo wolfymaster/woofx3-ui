@@ -3,7 +3,7 @@ import type { Doc } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
 import { Loader2, type LucideIcon, Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "wouter";
+import { Link, useLocation } from "wouter";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
 import { EmptyState } from "@/components/common/empty-state";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
@@ -27,6 +27,7 @@ import { configFieldRenderers } from "@/components/workflows/trigger-config-form
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { parseConfigFields } from "@/lib/parse-config-fields";
+import { subPathSegments } from "@/lib/route-subpath";
 import { cn } from "@/lib/utils";
 
 export type ResourceInstanceDoc = Doc<"moduleResourceInstances">;
@@ -73,8 +74,7 @@ export function ResourceKindPage({
   railValue,
   detail,
 }: ResourceKindPageProps) {
-  const params = useParams<{ "*"?: string }>();
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { instance } = useInstance();
   const { toast } = useToast();
   const instanceId = instance?._id;
@@ -102,7 +102,8 @@ export function ResourceKindPage({
   }, [instanceId, kind, refreshValues]);
 
   const sorted = useMemo(() => [...(instances ?? [])].sort((a, b) => nameOf(a).localeCompare(nameOf(b))), [instances]);
-  const selectedId = decodeURIComponent(params?.["*"] ?? "");
+  // The one segment below this kind's route names the instance on show, if any.
+  const selectedId = subPathSegments(location, basePath)[0] ?? "";
   const selected = sorted.find((row) => row.resourceInstanceId === selectedId);
   const noun = kindDefinition?.name.toLowerCase() ?? kind;
 
