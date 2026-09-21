@@ -4,8 +4,6 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx, query } from "./_generated/server";
 import { getInstanceMembership } from "./lib/teamAccess";
 
-const RUN_LIMIT_DEFAULT = 50;
-
 /**
  * Milliseconds for an engine timestamp. Go marshals nanosecond precision, which
  * not every JavaScript engine parses, so the fraction is trimmed first.
@@ -33,8 +31,6 @@ function isAtLeastAsNew(incoming: string, stored: string | undefined): boolean {
   }
   return next >= current;
 }
-const RUN_LIMIT_MAX = 200;
-
 const runSnapshot = v.object({
   id: v.string(),
   workflowId: v.string(),
@@ -99,43 +95,6 @@ async function workflowName(
   const name = (workflow?.definition as { name?: unknown } | undefined)?.name;
   return typeof name === "string" && name.length > 0 ? name : undefined;
 }
-
-/**
- * Runs for one instance, newest first, each with its workflow's name.
- *
- * Deliberately does not join steps: the list shows one line per run, and
- * fetching every step of every run to render a summary would read the whole
- * history to display a page of it. The timeline loads steps for the one run
- * it is showing.
- *
- * Names are resolved once per distinct workflow rather than once per run --
- * a page of fifty runs is usually a handful of workflows firing repeatedly.
- */
-export const listForInstance = query({
-  args: {
-    instanceId: v.id("instances"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, { instanceId, limit }) => {
-    if (!(await canRead(ctx, instanceId))) {
-      return [];
-    }
-
-    const take = Math.min(Math.max(limit ?? RUN_LIMIT_DEFAULT, 1), RUN_LIMIT_MAX);
-    const runs = await ctx.db
-      .query("workflowRuns")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .order("desc")
-      .take(take);
-
-    const names = new Map<string, string | undefined>();
-    for (const workflowId of Array.from(new Set(runs.map((run) => run.workflowId)))) {
-      names.set(workflowId, await workflowName(ctx, instanceId, workflowId));
-    }
-
-    return runs.map((run) => ({ ...run, workflowName: names.get(run.workflowId) }));
-  },
-});
 
 /** One run with its steps in the order the engine executed them. */
 export const runWithSteps = query({
