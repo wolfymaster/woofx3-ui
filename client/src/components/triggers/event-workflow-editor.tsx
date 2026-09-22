@@ -41,6 +41,22 @@ interface EventWorkflowEditorProps {
   headingLevel: "h1" | "h2";
   /** Opens the test sheet on this event; no lightning icon when omitted. */
   onTest?: () => void;
+  /** Shows only the triggers pinned to one value of one condition field; see EventScope. */
+  scope?: EventScope;
+}
+
+/**
+ * One condition field held to one value: a resource page edits only the triggers for
+ * its own instance ("when Break timer ends"), while the workflow — and so every other
+ * instance's triggers — is still the one the Alerts screen would edit. A new trigger
+ * starts pinned to the value, and the pinned field reads as text rather than a picker,
+ * so it cannot be moved to another instance from here.
+ */
+export interface EventScope {
+  fieldId: string;
+  value: string;
+  /** What the sentence shows for the value, e.g. the instance's display name. */
+  label: string;
 }
 
 /** A condition value picker that is open, and on which trigger. */
@@ -67,6 +83,7 @@ export function EventWorkflowEditor({
   breadcrumb,
   headingLevel,
   onTest,
+  scope,
 }: EventWorkflowEditorProps) {
   const event = triggerPreset.event ?? "";
   const [, navigate] = useLocation();
@@ -95,16 +112,27 @@ export function EventWorkflowEditor({
   const state = draft?.value ?? null;
   const isDirty = isDraftDirty(draft);
 
-  const optionLabels = useMemo<OptionLabels>(
-    () =>
-      new Map(
-        Array.from(loadedOptions.entries()).map(([fieldId, entry]) => [
-          fieldId,
-          new Map(entry.options.map((option) => [option.value, option.label])),
-        ])
-      ),
-    [loadedOptions]
+  const optionLabels = useMemo<OptionLabels>(() => {
+    const labels = new Map(
+      Array.from(loadedOptions.entries()).map(([fieldId, entry]) => [
+        fieldId,
+        new Map(entry.options.map((option) => [option.value, option.label])),
+      ])
+    );
+    if (scope) {
+      labels.set(scope.fieldId, new Map([[scope.value, scope.label]]));
+    }
+    return labels;
+  }, [loadedOptions, scope]);
+
+  const editableFields = useMemo(
+    () => (scope ? conditionFields.filter((field) => field.id !== scope.fieldId) : conditionFields),
+    [conditionFields, scope]
   );
+  const visibleTriggers = (current: EventEditorState): ProjectedTrigger[] =>
+    scope
+      ? current.triggers.filter((trigger) => current.conditionValues[trigger.id]?.[scope.fieldId] === scope.value)
+      : current.triggers;
 
   const handleOptionsLoaded = useCallback((fieldId: string, entry: LoadedFieldOptions) => {
     setLoadedOptions((previous) => new Map(previous).set(fieldId, entry));
@@ -140,7 +168,10 @@ export function EventWorkflowEditor({
       return;
     }
     const id = nextTaskId("rule", usedIds(state));
-    const values = getDefaultConfigValues(conditionFields);
+    const values = {
+      ...getDefaultConfigValues(conditionFields),
+      ...(scope ? { [scope.fieldId]: scope.value } : {}),
+    };
     mutate((current) => ({
       ...current,
       triggers: [...current.triggers, { id, enabled: true, conditions: [], actions: [] }],
@@ -283,7 +314,8 @@ export function EventWorkflowEditor({
 
   const Heading = headingLevel;
   const ListHeading = headingLevel === "h1" ? "h2" : "h3";
-  const count = state?.triggers.length ?? 0;
+  const shown = state ? visibleTriggers(state) : [];
+  const count = shown.length;
 
   return (
     <section
@@ -373,7 +405,11 @@ export function EventWorkflowEditor({
             </p>
           )}
 
-          {count === 0 ? (
+          {count === 0 && scope ? (
+            <p className="rounded-2xl border border-dashed px-5 py-4 text-sm text-muted-foreground">
+              Nothing happens yet. Add a trigger to decide what does.
+            </p>
+          ) : count === 0 ? (
             <div className="flex flex-col items-center gap-3.5 rounded-2xl border border-dashed px-6 py-14 text-center">
               <p className="text-base font-medium">No triggers yet</p>
               <p className="max-w-[360px] text-sm text-muted-foreground">
@@ -384,7 +420,7 @@ export function EventWorkflowEditor({
               </Button>
             </div>
           ) : (
-            state.triggers.map((trigger) => {
+            shown.map((trigger) => {
               const values = state.conditionValues[trigger.id] ?? {};
               return (
                 <TriggerCard
@@ -392,7 +428,7 @@ export function EventWorkflowEditor({
                   trigger={trigger}
                   triggerPreset={triggerPreset}
                   actionPresets={actionPresets}
-                  conditionFields={conditionFields}
+                  conditionFields={editableFields}
                   conditionValues={values}
                   sentence={sentenceParts(triggerPreset.sentence, conditionFields, values, optionLabels)}
                   loadedOptions={loadedOptions}
