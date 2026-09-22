@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  counterValue,
   formatDuration,
   parseDuration,
   queueAddRefusal,
@@ -88,5 +89,33 @@ describe("queueAddRefusal", () => {
   test("a full queue refuses more", () => {
     expect(queueAddRefusal(["alice", "bob"], { capacity: 2 }, "carol")).toBe("full");
     expect(queueAddRefusal(["alice"], { capacity: 2 }, "carol")).toBeNull();
+  });
+});
+
+describe("counterValue", () => {
+  const settings = { initialValue: 7 };
+
+  test("reads the number a counter with goals stores", () => {
+    expect(counterValue({ value: 42, reached: {} }, settings)).toBe(42);
+    expect(counterValue({ value: 0, reached: { "100": 1 } }, settings)).toBe(0);
+  });
+
+  // Counters last written before they carried goals hold a bare number. Reading
+  // those as unset would show every one of them its starting value forever
+  // while the real number moved underneath.
+  test("reads a counter stored as a bare number", () => {
+    expect(counterValue(3, settings)).toBe(3);
+    expect(counterValue(0, settings)).toBe(0);
+  });
+
+  test("falls back to the starting value when nothing is stored", () => {
+    expect(counterValue(null, settings)).toBe(7);
+    expect(counterValue(undefined, settings)).toBe(7);
+    expect(counterValue({ reached: {} }, settings)).toBe(7);
+  });
+
+  test("falls back to zero when the starting value is unusable", () => {
+    expect(counterValue(null, {})).toBe(0);
+    expect(counterValue(null, { initialValue: "lots" })).toBe(0);
   });
 });

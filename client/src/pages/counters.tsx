@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useResourceAction } from "@/hooks/use-resource-action";
+import { counterValue } from "@/lib/resource-values";
 
 const BASE_PATH = "/stream/counters";
 
@@ -16,23 +17,10 @@ export default function Counters() {
       description="Numbers your stream keeps: deaths, wins, hugs given. Change them here, from a chat command, or from any workflow."
       icon={Tally5}
       basePath={BASE_PATH}
-      railValue={(props) => formatCount(counterValue(props))}
+      railValue={(props) => formatCount(counterValue(props.value, props.settings))}
       detail={(props) => <CounterPanel {...props} />}
     />
   );
-}
-
-/**
- * A counter's number reads as its starting value until something changes it,
- * and again after a session value is cleared.
- */
-function counterValue({ value, settings }: ResourceDetailProps): number {
-  const stored = Number(value);
-  if (value !== null && value !== undefined && Number.isFinite(stored)) {
-    return stored;
-  }
-  const initial = Number(settings.initialValue);
-  return Number.isFinite(initial) ? initial : 0;
 }
 
 function formatCount(value: number): string {
@@ -65,7 +53,7 @@ function CounterPanel(props: ResourceDetailProps) {
           <Minus className="h-5 w-5" />
         </Button>
         <span className="min-w-[4ch] text-center text-6xl font-semibold tabular-nums" data-testid="text-counter-value">
-          {formatCount(counterValue(props))}
+          {formatCount(counterValue(props.value, props.settings))}
         </span>
         <Button
           size="icon"
