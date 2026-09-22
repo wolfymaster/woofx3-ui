@@ -96,7 +96,9 @@ async function workflowName(
   return typeof name === "string" && name.length > 0 ? name : undefined;
 }
 
-/** One run with its steps in the order the engine executed them. */
+const RUN_ALERT_LIMIT = 50;
+
+/** One run with its steps in the order the engine executed them, and the alerts it published. */
 export const runWithSteps = query({
   args: {
     instanceId: v.id("instances"),
@@ -123,9 +125,26 @@ export const runWithSteps = query({
       .withIndex("by_run", (q) => q.eq("runId", engineRunId))
       .collect();
 
+    // `workflowId` on an alert row is the execution that published it. A run
+    // publishes a handful of alerts at most; the bound only guards a loop.
+    const alerts = await ctx.db
+      .query("engineAlerts")
+      .withIndex("by_instance_workflow", (q) => q.eq("instanceId", instanceId).eq("workflowId", engineRunId))
+      .take(RUN_ALERT_LIMIT);
+
     return {
       run: { ...run, workflowName: await workflowName(ctx, instanceId, run.workflowId) },
       steps,
+      alerts: alerts.map((alert) => ({
+        engineAlertId: alert.engineAlertId,
+        status: alert.status,
+        payload: alert.payload,
+        error: alert.error,
+        dispatchedAt: alert.dispatchedAt,
+        playedAt: alert.playedAt,
+        completedAt: alert.completedAt,
+        engineCreatedAt: alert.engineCreatedAt,
+      })),
     };
   },
 });

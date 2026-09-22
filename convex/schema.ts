@@ -987,7 +987,9 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_engine_id", ["engineAlertId"])
-    .index("by_instance_status", ["instanceId", "status"]),
+    .index("by_instance_status", ["instanceId", "status"])
+    // The alerts one run published, for that run's trace.
+    .index("by_instance_workflow", ["instanceId", "workflowId"]),
 
   // workflowRuns: durable history of runs the engine recorded, projected from
   // the db-proxy outbox. Distinct from transientEvents, which carries the live

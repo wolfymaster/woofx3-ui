@@ -1,15 +1,15 @@
 import { Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { ReplayControls } from "@/components/alert-run/replay-controls";
-import { RunTimeline } from "@/components/alert-run/run-timeline";
+import { RunTrace } from "@/components/alert-run/run-trace";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
-import { Card } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
 
 const ALERTS_PATH = "/stream/alerts";
 
 /**
- * One recorded run: the trigger that started it, every step it took, and a replay.
+ * One recorded run as a trace: the trigger that started it, every step it took and
+ * the overlay alert it published, on one time axis, with each one's payloads.
  *
  * Reached from a row in the alert feed, which knows the run that published the alert.
  * Runs fired by hand are not here — the engine does not record them, because whoever
@@ -32,23 +32,21 @@ export default function AlertRun() {
       </header>
 
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto w-full max-w-[880px] p-4 sm:p-6">
+        <div className="mx-auto w-full max-w-[1200px] p-4 sm:p-6">
           {!instance ? (
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : (
-            <Card data-testid="alert-run">
-              <RunTimeline
-                instanceId={instance._id}
-                engineRunId={engineRunId}
-                actions={({ failedStepTaskId }) => (
-                  <ReplayControls
-                    instanceId={instance._id}
-                    engineRunId={engineRunId}
-                    failedStepTaskId={failedStepTaskId}
-                  />
-                )}
-              />
-            </Card>
+            <RunTrace
+              instanceId={instance._id}
+              engineRunId={engineRunId}
+              actions={({ failedStepTaskId }) => (
+                <ReplayControls
+                  instanceId={instance._id}
+                  engineRunId={engineRunId}
+                  failedStepTaskId={failedStepTaskId}
+                />
+              )}
+            />
           )}
         </div>
       </div>

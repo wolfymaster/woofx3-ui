@@ -63,6 +63,8 @@ export interface TimelineStep {
   failure: AlertFailureCopy | null;
   inputs: string | null;
   outputs: string | null;
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface Timeline {
@@ -146,12 +148,28 @@ export function parseTrigger(raw: string | undefined): TimelineTrigger | null {
   }
 }
 
-function msBetween(start: string | undefined, end: string | undefined): number | undefined {
-  if (!start || !end) {
+/**
+ * Epoch milliseconds for an engine timestamp, or undefined when absent or unreadable.
+ *
+ * Go marshals nanosecond precision, which not every JavaScript engine parses, so
+ * the fraction is trimmed to milliseconds first.
+ */
+export function parseEngineTime(value: string | undefined): number | undefined {
+  if (!value) {
     return undefined;
   }
-  const ms = Date.parse(end) - Date.parse(start);
-  return Number.isFinite(ms) && ms >= 0 ? ms : undefined;
+  const ms = Date.parse(value.replace(/(\.\d{3})\d+/, "$1"));
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
+function msBetween(start: string | undefined, end: string | undefined): number | undefined {
+  const from = parseEngineTime(start);
+  const to = parseEngineTime(end);
+  if (from === undefined || to === undefined) {
+    return undefined;
+  }
+  const ms = to - from;
+  return ms >= 0 ? ms : undefined;
 }
 
 /** Assemble everything the timeline draws for one run. */
@@ -171,6 +189,8 @@ export function buildTimeline(run: RunRecord, steps: StepRecord[]): Timeline {
     failure: step.error ? describeAlertFailure(step.error) : null,
     inputs: presentPayload(step.inputs),
     outputs: presentPayload(step.outputs),
+    startedAt: step.startedAt,
+    completedAt: step.completedAt,
   }));
 
   // The last failed attempt, not the first: a retried step that failed and
