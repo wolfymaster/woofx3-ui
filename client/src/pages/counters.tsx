@@ -1,11 +1,11 @@
-import { Check, Minus, Plus, RotateCcw, Tally5 } from "lucide-react";
+import { Check, Circle, Minus, Plus, RotateCcw, Tally5 } from "lucide-react";
 import { useState } from "react";
 import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useResourceAction } from "@/hooks/use-resource-action";
-import { counterGoals, counterValue } from "@/lib/resource-values";
+import { type CounterGoal, counterGoals, counterValue, goalProgress } from "@/lib/resource-values";
 import { cn } from "@/lib/utils";
 
 const BASE_PATH = "/stream/counters";
@@ -117,8 +117,10 @@ function CounterPanel(props: ResourceDetailProps) {
 }
 
 /**
- * The numbers the counter's goal triggers fire on, beside those triggers, and
- * which it has reached. Goals are set in the counter's settings.
+ * The counter's progress toward the goals its goal triggers fire on, beside
+ * those triggers: a bar from where it starts to its largest goal with a mark at
+ * each, then each goal by name, reached or how far off. Goals are set in the
+ * counter's settings.
  */
 function CounterGoals(props: ResourceDetailProps) {
   const goals = counterGoals(props.value, props.settings);
@@ -131,22 +133,65 @@ function CounterGoals(props: ResourceDetailProps) {
     );
   }
 
+  const value = counterValue(props.value, props.settings);
+  const start = counterValue(null, props.settings);
+  const progress = goalProgress(value, start, goals);
+
   return (
-    <ul className="flex flex-wrap gap-2" aria-label="Goals" data-testid="list-counter-goals">
-      {goals.map(({ goal, reachedAt }) => (
-        <li
-          key={goal}
-          title={reachedAt === null ? "Not reached yet" : `First reached ${new Date(reachedAt).toLocaleString()}`}
-          className={cn(
-            "flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium tabular-nums",
-            reachedAt === null ? "text-muted-foreground" : "border-primary/40 bg-primary/10 text-foreground"
-          )}
-          data-testid={`goal-${goal}`}
-        >
-          {reachedAt !== null && <Check className="h-3.5 w-3.5 text-primary" aria-label="Reached" />}
-          {formatCount(goal)}
-        </li>
-      ))}
-    </ul>
+    <div className="space-y-4" data-testid="counter-goal-progress">
+      <div
+        className="relative h-3 rounded-full bg-muted"
+        role="progressbar"
+        aria-label={progress.next ? `Progress toward ${goalLabel(progress.next)}` : "Every goal reached"}
+        aria-valuemin={Math.min(start, goals[0].goal)}
+        aria-valuemax={goals[goals.length - 1].goal}
+        aria-valuenow={value}
+      >
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width]"
+          style={{ width: `${progress.fraction * 100}%` }}
+        />
+        {goals.map((goal, i) => (
+          <span
+            key={goal.goal}
+            className={cn(
+              "absolute top-1/2 h-5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full",
+              goal.reachedAt === null ? "bg-muted-foreground/60" : "bg-primary-foreground"
+            )}
+            style={{ left: `${progress.marks[i] * 100}%` }}
+            aria-hidden
+          />
+        ))}
+      </div>
+
+      <ul className="space-y-1.5" aria-label="Goals" data-testid="list-counter-goals">
+        {goals.map((goal) => (
+          <li
+            key={goal.goal}
+            className={cn("flex items-center gap-2 text-sm", goal === progress.next && "font-medium")}
+            data-testid={`goal-${goal.goal}`}
+          >
+            {goal.reachedAt !== null ? (
+              <Check className="h-4 w-4 shrink-0 text-primary" aria-label="Reached" />
+            ) : (
+              <Circle className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="Not reached" />
+            )}
+            <span className="tabular-nums">{formatCount(goal.goal)}</span>
+            {goal.name !== "" && <span className="truncate">{goal.name}</span>}
+            <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+              {goal.reachedAt !== null
+                ? `Reached ${new Date(goal.reachedAt).toLocaleDateString()}`
+                : goal.goal > value
+                  ? `${formatCount(goal.goal - value)} to go`
+                  : "Already past"}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
+}
+
+function goalLabel(goal: CounterGoal): string {
+  return goal.name !== "" ? `${goal.name} (${formatCount(goal.goal)})` : formatCount(goal.goal);
 }

@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { Braces } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ConfigFieldDescription, ConfigFieldLabel } from "@/components/common/config-field-label";
+import { ListField } from "@/components/common/list-field";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -586,6 +587,18 @@ export function ConfigurationForm({
         <div key={field.id}>
           {ownRenderer({ field, value: fieldValue, onChange: changeHandler, availableVariables })}
         </div>
+      );
+    }
+
+    // A list holds rows, not one value, so it takes no variable reference.
+    if (field.type === "list") {
+      return (
+        <ListField
+          key={field.id}
+          field={field as Parameters<typeof ListField>[0]["field"]}
+          value={fieldValue}
+          onChange={changeHandler}
+        />
       );
     }
 

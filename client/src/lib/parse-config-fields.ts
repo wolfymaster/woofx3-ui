@@ -5,6 +5,7 @@ import {
   type ConfigFieldSource,
   type ConfigFieldType,
   type DataShapeField,
+  LIST_ITEM_FIELD_TYPES,
 } from "@woofx3/api/ui-schema";
 
 // Taken from the SDK rather than restated, so a new field type cannot be
@@ -114,6 +115,16 @@ export function parseConfigField(item: unknown): ConfigField | null {
   const source = parseConfigFieldSource(o.source);
   if (source) {
     field.source = source;
+  }
+  if (type === "list") {
+    // A list whose rows hold nothing it can render is a half-built control.
+    const itemFields = parseConfigFields(o.itemFields).filter((item) =>
+      (LIST_ITEM_FIELD_TYPES as readonly string[]).includes(item.type)
+    );
+    if (itemFields.length === 0) {
+      return null;
+    }
+    field.itemFields = itemFields;
   }
   return field;
 }
