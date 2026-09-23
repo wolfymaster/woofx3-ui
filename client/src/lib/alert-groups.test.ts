@@ -81,6 +81,7 @@ describe("taxonomyLabel", () => {
     expect(taxonomyLabel("hypetrain")).toBe("Hype Train");
     expect(taxonomyLabel("watchstreak")).toBe("Watch Streak");
     expect(taxonomyLabel("subscription")).toBe("Subscriptions");
+    expect(taxonomyLabel("counter")).toBe("Counters");
   });
 
   test("title-cases a single word", () => {

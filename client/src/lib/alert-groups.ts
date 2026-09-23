@@ -41,6 +41,7 @@ const ALERT_AXIS_PREFIX = "alert.";
  */
 const LABEL_OVERRIDES: Record<string, string> = {
   channelpoints: "Channel Points",
+  counter: "Counters",
   subscription: "Subscriptions",
   watchstreak: "Watch Streak",
   hypetrain: "Hype Train",
