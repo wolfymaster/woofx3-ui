@@ -48,3 +48,42 @@ describe("parseConfigFields", () => {
     expect(parseConfigField({ id: "x", label: "X", type: "unknown" })).toBeNull();
   });
 });
+
+describe("list fields", () => {
+  test("parses a list with the fields of its rows", () => {
+    const [field] = parseConfigFields([
+      {
+        id: "goals",
+        label: "Goals",
+        type: "list",
+        itemFields: [
+          { id: "value", label: "Goal", type: "number", required: true },
+          { id: "name", label: "Name", type: "text" },
+        ],
+      },
+    ]);
+    expect(field.type).toBe("list");
+    expect(field.itemFields?.map((item) => [item.id, item.type, item.required])).toEqual([
+      ["value", "number", true],
+      ["name", "text", false],
+    ]);
+  });
+
+  test("drops row fields a row cannot hold, and a list left with none", () => {
+    const fields = parseConfigFields([
+      {
+        id: "goals",
+        label: "Goals",
+        type: "list",
+        itemFields: [
+          { id: "value", label: "Goal", type: "number" },
+          { id: "counter", label: "Counter", type: "resource_ref", resourceKind: "counter" },
+        ],
+      },
+      { id: "empty", label: "Empty", type: "list", itemFields: [] },
+      { id: "missing", label: "Missing", type: "list" },
+    ]);
+    expect(fields.map((field) => field.id)).toEqual(["goals"]);
+    expect(fields[0].itemFields?.map((item) => item.id)).toEqual(["value"]);
+  });
+});

@@ -29,21 +29,28 @@ export function counterValue(value: unknown, settings: Record<string, unknown>):
 
 export interface CounterGoal {
   goal: number;
+  /** "" when the goal has no name. */
+  name: string;
   /** When the counter first reached it, in milliseconds since the epoch; null while it has not. */
   reachedAt: number | null;
 }
 
 /**
- * A counter's goals, smallest first, each with when it was first reached.
+ * A counter's goals, smallest first, each with its name and when it was first
+ * reached.
  *
- * Goals come from the `goals` setting, a comma-separated list; an entry that is
- * not a number is skipped, as the module skips it. First crossings come from the
- * stored `reached` record, keyed by the goal as a string. A counter reset forgets
- * them, so a goal reads as unreached again after one.
+ * Goals come from the `goals` setting, a list of `{ value, name }` rows, or for
+ * a counter set up before goals had names, a comma-separated string of numbers.
+ * A row whose number is not a number is skipped, and two rows with one number
+ * are one goal named by the first that has a name, both as the module does
+ * (`parseGoals` in the engine's counter.js). First crossings come from the
+ * stored `reached` record, keyed by the goal as a string. A counter reset
+ * forgets them, so a goal reads as unreached again after one.
  */
 export function counterGoals(value: unknown, settings: Record<string, unknown>): CounterGoal[] {
   const raw = settings.goals;
-  if (typeof raw !== "string") {
+  const rows: unknown = typeof raw === "string" ? raw.split(",").map((part) => ({ value: part })) : raw;
+  if (!Array.isArray(rows)) {
     return [];
   }
   const reached =
@@ -52,20 +59,58 @@ export function counterGoals(value: unknown, settings: Record<string, unknown>):
       : null;
   const record = reached !== null && typeof reached === "object" ? (reached as Record<string, unknown>) : {};
 
-  const goals: number[] = [];
-  for (const part of raw.split(",")) {
-    const goal = Number(part.trim());
-    if (part.trim() !== "" && Number.isFinite(goal) && !goals.includes(goal)) {
-      goals.push(goal);
+  const goals: { goal: number; name: string }[] = [];
+  for (const row of rows) {
+    if (row === null || typeof row !== "object") {
+      continue;
+    }
+    const { value: rawValue, name: rawName } = row as { value?: unknown; name?: unknown };
+    const text = typeof rawValue === "string" ? rawValue.trim() : rawValue;
+    const goal = Number(text);
+    if (text === "" || text === null || text === undefined || !Number.isFinite(goal)) {
+      continue;
+    }
+    const name = typeof rawName === "string" ? rawName.trim() : "";
+    const existing = goals.find((entry) => entry.goal === goal);
+    if (!existing) {
+      goals.push({ goal, name });
+    } else if (existing.name === "") {
+      existing.name = name;
     }
   }
   return goals
-    .sort((a, b) => a - b)
-    .map((goal) => {
+    .sort((a, b) => a.goal - b.goal)
+    .map(({ goal, name }) => {
       const stored = record[String(goal)];
       const at = Number(stored);
-      return { goal, reachedAt: stored !== undefined && stored !== null && Number.isFinite(at) ? at : null };
+      return { goal, name, reachedAt: stored !== undefined && stored !== null && Number.isFinite(at) ? at : null };
     });
+}
+
+export interface GoalProgress {
+  /** How far along the bar the counter is, from 0 to 1. */
+  fraction: number;
+  /** Where each goal sits along the bar, from 0 to 1, in the order given. */
+  marks: number[];
+  /** The goal the counter is working toward: the smallest above its value. Null once all are passed. */
+  next: CounterGoal | null;
+}
+
+/**
+ * A counter's progress toward its goals, as a bar that runs from where the
+ * counter starts to its largest goal. A goal or a value below the start
+ * stretches the bar to take it in, so nothing falls off the left end.
+ * `goals` must be smallest first, as `counterGoals` returns them, and non-empty.
+ */
+export function goalProgress(value: number, start: number, goals: CounterGoal[]): GoalProgress {
+  const low = Math.min(start, goals[0].goal);
+  const high = Math.max(goals[goals.length - 1].goal, low + 1);
+  const along = (n: number) => Math.min(1, Math.max(0, (n - low) / (high - low)));
+  return {
+    fraction: along(value),
+    marks: goals.map((goal) => along(goal.goal)),
+    next: goals.find((goal) => goal.goal > value) ?? null,
+  };
 }
 
 export interface TimerState {

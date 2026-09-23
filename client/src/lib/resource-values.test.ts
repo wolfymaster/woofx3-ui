@@ -3,6 +3,7 @@ import {
   counterGoals,
   counterValue,
   formatDuration,
+  goalProgress,
   parseDuration,
   queueAddRefusal,
   queueCapacity,
@@ -20,16 +21,64 @@ describe("counterGoals", () => {
   test("a goal in the reached record carries when it was first reached", () => {
     const value = { value: 300, reached: { "100": 1_790_000_000_000, "250": 1_790_000_100_000 } };
     expect(counterGoals(value, { goals: "100, 250, 500" })).toEqual([
-      { goal: 100, reachedAt: 1_790_000_000_000 },
-      { goal: 250, reachedAt: 1_790_000_100_000 },
-      { goal: 500, reachedAt: null },
+      { goal: 100, name: "", reachedAt: 1_790_000_000_000 },
+      { goal: 250, name: "", reachedAt: 1_790_000_100_000 },
+      { goal: 500, name: "", reachedAt: null },
     ]);
   });
 
   test("a counter written as a bare number, or with no goals set, has nothing reached", () => {
-    expect(counterGoals(42, { goals: "10" })).toEqual([{ goal: 10, reachedAt: null }]);
+    expect(counterGoals(42, { goals: "10" })).toEqual([{ goal: 10, name: "", reachedAt: null }]);
     expect(counterGoals(42, {})).toEqual([]);
     expect(counterGoals(42, { goals: "" })).toEqual([]);
+    expect(counterGoals(42, { goals: [] })).toEqual([]);
+  });
+
+  test("goals set as rows carry their names, smallest first", () => {
+    const goals = [{ value: 250, name: " Hat " }, { value: 100 }, { value: "50", name: "Emote" }];
+    expect(counterGoals(null, { goals })).toEqual([
+      { goal: 50, name: "Emote", reachedAt: null },
+      { goal: 100, name: "", reachedAt: null },
+      { goal: 250, name: "Hat", reachedAt: null },
+    ]);
+  });
+
+  test("a row with no usable number is skipped, and a repeated number takes its first name", () => {
+    const goals = [{ value: "", name: "Unfinished" }, { name: "No number" }, { value: 10 }, { value: 10, name: "Ten" }];
+    expect(counterGoals(null, { goals })).toEqual([{ goal: 10, name: "Ten", reachedAt: null }]);
+  });
+});
+
+describe("goalProgress", () => {
+  const goals = (...values: number[]) => values.map((goal) => ({ goal, name: "", reachedAt: null }));
+
+  test("runs from the counter's start to its largest goal", () => {
+    const progress = goalProgress(50, 0, goals(100, 200));
+    expect(progress.fraction).toBe(0.25);
+    expect(progress.marks).toEqual([0.5, 1]);
+    expect(progress.next?.goal).toBe(100);
+  });
+
+  test("the next goal is the smallest above the value, so a goal just reached is behind it", () => {
+    expect(goalProgress(100, 0, goals(100, 200)).next?.goal).toBe(200);
+    expect(goalProgress(200, 0, goals(100, 200)).next).toBeNull();
+  });
+
+  test("stays on the bar past either end", () => {
+    expect(goalProgress(500, 0, goals(100)).fraction).toBe(1);
+    expect(goalProgress(-20, 0, goals(100)).fraction).toBe(0);
+  });
+
+  test("stretches to take in a goal below the start", () => {
+    const progress = goalProgress(10, 20, goals(0, 40));
+    expect(progress.marks).toEqual([0, 1]);
+    expect(progress.fraction).toBe(0.25);
+  });
+
+  test("a single goal at the start still draws a bar", () => {
+    const progress = goalProgress(0, 0, goals(0));
+    expect(progress.marks).toEqual([0]);
+    expect(Number.isFinite(progress.fraction)).toBe(true);
   });
 });
 
