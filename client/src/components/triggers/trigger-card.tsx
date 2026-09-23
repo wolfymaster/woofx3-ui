@@ -104,6 +104,10 @@ export function TriggerCard({
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
           {isUnconditional ? (
             <span className="text-base font-medium">Every {triggerPreset.name.toLowerCase()}</span>
+          ) : sentence.length === 0 ? (
+            // A trigger declaring no conditions and no sentence has nothing to read as one,
+            // and a screen listing several events under one heading has no other label for it.
+            <span className="text-base font-medium">{triggerPreset.name}</span>
           ) : (
             <ConditionSentence
               parts={sentence}

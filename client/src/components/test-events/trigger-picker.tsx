@@ -14,6 +14,10 @@ interface TriggerPickerProps {
   onSelect: (presetId: string) => void;
   /** Distinguishes this combobox from another on the same page. */
   id?: string;
+  /** What the button reads before anything is chosen. */
+  placeholder?: string;
+  /** Names this combobox and its options in tests; see the resource pages' own picker. */
+  testId?: string;
 }
 
 /**
@@ -26,7 +30,14 @@ interface TriggerPickerProps {
  * event type, because someone hunting for a raid alert may know it by any of
  * the three.
  */
-export function TriggerPicker({ sections, selectedId, onSelect, id = "test-event-trigger" }: TriggerPickerProps) {
+export function TriggerPicker({
+  sections,
+  selectedId,
+  onSelect,
+  id = "test-event-trigger",
+  placeholder = "Select a trigger…",
+  testId = "test-event",
+}: TriggerPickerProps) {
   const [open, setOpen] = useState(false);
   const selected = findSelected(sections, selectedId);
 
@@ -39,7 +50,7 @@ export function TriggerPicker({ sections, selectedId, onSelect, id = "test-event
           aria-expanded={open}
           className="h-auto w-full justify-between py-2 font-normal"
           id={id}
-          data-testid="select-test-event"
+          data-testid={`select-${testId}`}
         >
           {selected ? (
             <span className="min-w-0 text-left">
@@ -47,14 +58,14 @@ export function TriggerPicker({ sections, selectedId, onSelect, id = "test-event
               <span className="block truncate text-xs text-muted-foreground">{selected.section.label}</span>
             </span>
           ) : (
-            <span className="text-muted-foreground">Select a trigger…</span>
+            <span className="text-muted-foreground">{placeholder}</span>
           )}
           <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
         <Command>
-          <CommandInput placeholder="Search triggers…" data-testid="input-test-event-search" />
+          <CommandInput placeholder="Search triggers…" data-testid={`input-${testId}-search`} />
           <CommandList>
             <CommandEmpty>No trigger matches.</CommandEmpty>
             {sections.map((section) => (
@@ -69,7 +80,7 @@ export function TriggerPicker({ sections, selectedId, onSelect, id = "test-event
                       setOpen(false);
                     }}
                     className="items-start gap-2"
-                    data-testid={`option-test-event-${preset.id}`}
+                    data-testid={`option-${testId}-${preset.id}`}
                   >
                     <Check className={cn("mt-0.5 h-4 w-4 shrink-0", preset.id === selectedId ? "" : "opacity-0")} />
                     <span className="min-w-0">

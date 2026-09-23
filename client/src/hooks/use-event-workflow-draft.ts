@@ -3,9 +3,8 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import { useEffect, useMemo } from "react";
 import { useEventDraft } from "@/hooks/use-event-draft";
 import { type EventDraft, type EventEditorState, getDraft, isDraftDirty, setDraft } from "@/lib/event-drafts";
-import { projectWorkflow } from "@/lib/trigger-projection";
+import { eventEditorStateFor, eventWorkflowTarget } from "@/lib/event-workflow-state";
 import type { TriggerPreset } from "@/lib/workflow-presets";
-import { conditionsToFieldValues } from "@/lib/workflow-presets-json";
 
 export interface EventWorkflowDraft {
   draft: EventDraft | undefined;
@@ -31,43 +30,14 @@ export function useEventWorkflowDraft(
   const event = triggerPreset?.event ?? "";
   const draft = useEventDraft(event);
 
-  const matching = useMemo(
-    () =>
-      (workflows ?? []).filter((row) => {
-        const projected = projectWorkflow(row);
-        return projected.ok ? projected.projection.event === event : rowEvent(row) === event;
-      }),
-    [workflows, event]
-  );
-
-  // The first projectable workflow is the one this page edits. Others on the same
-  // event are left alone and pointed at the builder rather than silently merged.
-  const primary = matching.find((row) => projectWorkflow(row).ok);
-  const others = matching.filter((row) => row !== primary);
-  const unprojectable = matching.find((row) => !projectWorkflow(row).ok);
+  const { others, unprojectable } = useMemo(() => eventWorkflowTarget(workflows, event), [workflows, event]);
 
   const loaded = useMemo<EventEditorState | undefined>(() => {
     if (!triggerPreset || workflows === undefined) {
       return undefined;
     }
-    const projected = primary ? projectWorkflow(primary) : undefined;
-    if (projected?.ok === true) {
-      const { projection } = projected;
-      return {
-        engineWorkflowId: projection.engineWorkflowId,
-        name: projection.name,
-        triggers: projection.triggers,
-        shared: projection.shared,
-        conditionValues: Object.fromEntries(
-          projection.triggers.map((trigger) => [
-            trigger.id,
-            conditionsToFieldValues(conditionFields, trigger.conditions),
-          ])
-        ),
-      };
-    }
-    return { name: `${triggerPreset.name} triggers`, triggers: [], shared: [], conditionValues: {} };
-  }, [primary, conditionFields, triggerPreset, workflows]);
+    return eventEditorStateFor(workflows, triggerPreset, conditionFields);
+  }, [conditionFields, triggerPreset, workflows]);
 
   const loadedSnapshot = useMemo(() => (loaded ? JSON.stringify(loaded) : undefined), [loaded]);
 
@@ -83,9 +53,4 @@ export function useEventWorkflowDraft(
   }, [event, loaded, loadedSnapshot]);
 
   return { draft, others, unprojectable };
-}
-
-function rowEvent(row: Doc<"workflows">): string | undefined {
-  const definition = row.definition as { trigger?: { event?: string } } | undefined;
-  return definition?.trigger?.event;
 }

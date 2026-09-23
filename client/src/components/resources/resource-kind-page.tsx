@@ -8,6 +8,7 @@ import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/com
 import { EmptyState } from "@/components/common/empty-state";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
+import { ResourceActionEditors } from "@/components/resources/resource-action-editors";
 import { ResourceTriggerEditors } from "@/components/resources/resource-trigger-editors";
 import {
   AlertDialog,
@@ -220,6 +221,8 @@ export function ResourceKindPage({
               </div>
 
               {detail(detailProps(selected))}
+
+              <ResourceActionEditors key={selected.canonicalId} kind={kind} instance={selected} />
 
               <ResourceTriggerEditors
                 kind={kind}
