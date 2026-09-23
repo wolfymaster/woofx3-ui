@@ -1,13 +1,31 @@
 /**
- * How the bundled woofx3 module's timer and queue kinds store their values at
- * `state:<canonicalId>`, read back into what their pages show. The shapes and
- * the queue's rules must match `modules/woofx3/functions/timer.js` and
- * `queue.js` in the engine.
+ * How the bundled woofx3 module's counter, timer and queue kinds store their
+ * values at `state:<canonicalId>`, read back into what their pages show. The
+ * shapes and the queue's rules must match `modules/woofx3/functions/counter.js`,
+ * `timer.js` and `queue.js` in the engine.
  *
  * A value that holds nothing — never written, or cleared when a stream session
- * ended — reads the way the module reads it: a timer stopped at its full
- * duration, an empty queue.
+ * ended — reads the way the module reads it: a counter at its starting value, a
+ * timer stopped at its full duration, an empty queue.
  */
+
+/**
+ * A counter's number. Stored as `{ value, reached }` since counters gained
+ * goals; a counter last written before that holds a bare number, and reads the
+ * same rather than falling back to its starting value.
+ */
+export function counterValue(value: unknown, settings: Record<string, unknown>): number {
+  const stored =
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>).value
+      : value;
+  const number = Number(stored);
+  if (stored !== null && stored !== undefined && Number.isFinite(number)) {
+    return number;
+  }
+  const initial = Number(settings.initialValue);
+  return Number.isFinite(initial) ? initial : 0;
+}
 
 export interface TimerState {
   running: boolean;
