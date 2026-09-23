@@ -27,6 +27,47 @@ export function counterValue(value: unknown, settings: Record<string, unknown>):
   return Number.isFinite(initial) ? initial : 0;
 }
 
+export interface CounterGoal {
+  goal: number;
+  /** When the counter first reached it, in milliseconds since the epoch; null while it has not. */
+  reachedAt: number | null;
+}
+
+/**
+ * A counter's goals, smallest first, each with when it was first reached.
+ *
+ * Goals come from the `goals` setting, a comma-separated list; an entry that is
+ * not a number is skipped, as the module skips it. First crossings come from the
+ * stored `reached` record, keyed by the goal as a string. A counter reset forgets
+ * them, so a goal reads as unreached again after one.
+ */
+export function counterGoals(value: unknown, settings: Record<string, unknown>): CounterGoal[] {
+  const raw = settings.goals;
+  if (typeof raw !== "string") {
+    return [];
+  }
+  const reached =
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>).reached
+      : null;
+  const record = reached !== null && typeof reached === "object" ? (reached as Record<string, unknown>) : {};
+
+  const goals: number[] = [];
+  for (const part of raw.split(",")) {
+    const goal = Number(part.trim());
+    if (part.trim() !== "" && Number.isFinite(goal) && !goals.includes(goal)) {
+      goals.push(goal);
+    }
+  }
+  return goals
+    .sort((a, b) => a - b)
+    .map((goal) => {
+      const stored = record[String(goal)];
+      const at = Number(stored);
+      return { goal, reachedAt: stored !== undefined && stored !== null && Number.isFinite(at) ? at : null };
+    });
+}
+
 export interface TimerState {
   running: boolean;
   /** Time left at the moment it was read, never below zero. */

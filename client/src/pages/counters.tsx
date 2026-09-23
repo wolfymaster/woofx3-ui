@@ -1,13 +1,17 @@
-import { Minus, Plus, RotateCcw, Tally5 } from "lucide-react";
+import { Check, Minus, Plus, RotateCcw, Tally5 } from "lucide-react";
 import { useState } from "react";
 import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useResourceAction } from "@/hooks/use-resource-action";
-import { counterValue } from "@/lib/resource-values";
+import { counterGoals, counterValue } from "@/lib/resource-values";
+import { cn } from "@/lib/utils";
 
 const BASE_PATH = "/stream/counters";
+
+/** The event a counter fires on reaching one of its goals; must match `goal_reached` in the woofx3 module. */
+const GOAL_REACHED_EVENT = "goal.reached";
 
 export default function Counters() {
   return (
@@ -19,6 +23,7 @@ export default function Counters() {
       basePath={BASE_PATH}
       railValue={(props) => formatCount(counterValue(props.value, props.settings))}
       detail={(props) => <CounterPanel {...props} />}
+      triggerDetail={(preset, props) => (preset.event === GOAL_REACHED_EVENT ? <CounterGoals {...props} /> : null)}
     />
   );
 }
@@ -108,5 +113,40 @@ function CounterPanel(props: ResourceDetailProps) {
         To change it from chat or a workflow, add the Increment counter action and choose {instance.displayName}.
       </p>
     </Card>
+  );
+}
+
+/**
+ * The numbers the counter's goal triggers fire on, beside those triggers, and
+ * which it has reached. Goals are set in the counter's settings.
+ */
+function CounterGoals(props: ResourceDetailProps) {
+  const goals = counterGoals(props.value, props.settings);
+
+  if (goals.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="text-counter-no-goals">
+        No goals yet. Add them under Goals in Settings below.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="flex flex-wrap gap-2" aria-label="Goals" data-testid="list-counter-goals">
+      {goals.map(({ goal, reachedAt }) => (
+        <li
+          key={goal}
+          title={reachedAt === null ? "Not reached yet" : `First reached ${new Date(reachedAt).toLocaleString()}`}
+          className={cn(
+            "flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-medium tabular-nums",
+            reachedAt === null ? "text-muted-foreground" : "border-primary/40 bg-primary/10 text-foreground"
+          )}
+          data-testid={`goal-${goal}`}
+        >
+          {reachedAt !== null && <Check className="h-3.5 w-3.5 text-primary" aria-label="Reached" />}
+          {formatCount(goal)}
+        </li>
+      ))}
+    </ul>
   );
 }

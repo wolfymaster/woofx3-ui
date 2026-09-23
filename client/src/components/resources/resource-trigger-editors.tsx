@@ -2,12 +2,13 @@ import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import type { ResourceInstanceDoc } from "@/components/resources/resource-kind-page";
 import { EventWorkflowEditor } from "@/components/triggers/event-workflow-editor";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { resourceTriggers } from "@/lib/resource-triggers";
+import type { TriggerPreset } from "@/lib/workflow-presets";
 
 /**
  * What happens when something happens to this instance: one editor per trigger the
@@ -18,7 +19,16 @@ import { resourceTriggers } from "@/lib/resource-triggers";
  * condition per instance — so a resource page adds no second way to react to an
  * event, and an edit here shows up in the workflow builder like any other.
  */
-export function ResourceTriggerEditors({ kind, instance }: { kind: string; instance: ResourceInstanceDoc }) {
+export function ResourceTriggerEditors({
+  kind,
+  instance,
+  triggerDetail,
+}: {
+  kind: string;
+  instance: ResourceInstanceDoc;
+  /** What a trigger's section shows about this instance above its triggers; see ResourceKindPage. */
+  triggerDetail?: (preset: TriggerPreset) => ReactNode;
+}) {
   const { instance: engineInstance } = useInstance();
   const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
   const workflows = useQuery(api.workflows.list, engineInstance ? { instanceId: engineInstance._id } : "skip");
@@ -43,7 +53,9 @@ export function ResourceTriggerEditors({ kind, instance }: { kind: string; insta
           breadcrumb={[]}
           headingLevel="h2"
           scope={{ fieldId, value: instance.canonicalId, label }}
-        />
+        >
+          {triggerDetail?.(preset)}
+        </EventWorkflowEditor>
       ))}
     </div>
   );

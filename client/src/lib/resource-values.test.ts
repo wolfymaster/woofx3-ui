@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  counterGoals,
   counterValue,
   formatDuration,
   parseDuration,
@@ -8,6 +9,29 @@ import {
   queueEntries,
   timerState,
 } from "@/lib/resource-values";
+
+describe("counterGoals", () => {
+  test("goals read smallest first, without repeats or entries that are not numbers", () => {
+    expect(counterGoals(null, { goals: "500, 100, abc, 250, 100, " }).map((entry) => entry.goal)).toEqual([
+      100, 250, 500,
+    ]);
+  });
+
+  test("a goal in the reached record carries when it was first reached", () => {
+    const value = { value: 300, reached: { "100": 1_790_000_000_000, "250": 1_790_000_100_000 } };
+    expect(counterGoals(value, { goals: "100, 250, 500" })).toEqual([
+      { goal: 100, reachedAt: 1_790_000_000_000 },
+      { goal: 250, reachedAt: 1_790_000_100_000 },
+      { goal: 500, reachedAt: null },
+    ]);
+  });
+
+  test("a counter written as a bare number, or with no goals set, has nothing reached", () => {
+    expect(counterGoals(42, { goals: "10" })).toEqual([{ goal: 10, reachedAt: null }]);
+    expect(counterGoals(42, {})).toEqual([]);
+    expect(counterGoals(42, { goals: "" })).toEqual([]);
+  });
+});
 
 describe("timerState", () => {
   const now = 1_790_000_000_000;
