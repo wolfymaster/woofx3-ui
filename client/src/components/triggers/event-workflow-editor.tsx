@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import { ChevronRight, Loader2, Plus, Zap } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
@@ -43,6 +43,8 @@ interface EventWorkflowEditorProps {
   onTest?: () => void;
   /** Shows only the triggers pinned to one value of one condition field; see EventScope. */
   scope?: EventScope;
+  /** What the page shows about the event between its heading and its triggers. */
+  children?: ReactNode;
 }
 
 /**
@@ -84,6 +86,7 @@ export function EventWorkflowEditor({
   headingLevel,
   onTest,
   scope,
+  children,
 }: EventWorkflowEditorProps) {
   const event = triggerPreset.event ?? "";
   const [, navigate] = useLocation();
@@ -379,6 +382,8 @@ export function EventWorkflowEditor({
           </Button>
         </div>
       </header>
+
+      {children}
 
       {!state ? (
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

@@ -30,6 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { subPathSegments } from "@/lib/route-subpath";
 import { cn } from "@/lib/utils";
+import type { TriggerPreset } from "@/lib/workflow-presets";
 
 export type ResourceInstanceDoc = Doc<"moduleResourceInstances">;
 
@@ -54,6 +55,11 @@ interface ResourceKindPageProps {
   railValue: (props: ResourceDetailProps) => ReactNode;
   /** What the kind shows and lets you do, above its settings. */
   detail: (props: ResourceDetailProps) => ReactNode;
+  /**
+   * What a trigger's section shows about the instance above its triggers, such
+   * as the goals a goal trigger fires on. Null for a trigger with nothing to add.
+   */
+  triggerDetail?: (preset: TriggerPreset, props: ResourceDetailProps) => ReactNode;
 }
 
 /**
@@ -75,6 +81,7 @@ export function ResourceKindPage({
   basePath,
   railValue,
   detail,
+  triggerDetail,
 }: ResourceKindPageProps) {
   const [location, navigate] = useLocation();
   const { instance } = useInstance();
@@ -214,7 +221,11 @@ export function ResourceKindPage({
 
               {detail(detailProps(selected))}
 
-              <ResourceTriggerEditors kind={kind} instance={selected} />
+              <ResourceTriggerEditors
+                kind={kind}
+                instance={selected}
+                triggerDetail={triggerDetail && ((preset) => triggerDetail(preset, detailProps(selected)))}
+              />
 
               <SettingsCard
                 instance={selected}
