@@ -370,7 +370,7 @@ export default defineSchema({
   }).index("by_instance_user", ["instanceId", "userId"]),
 
   // macros: the instance's macro pad buttons. Shared per instance rather than per
-  // user, like streamGoals below — a dashboard *layout* is a personal workspace
+  // user, like dashboardCounters below — a dashboard *layout* is a personal workspace
   // preference, but the macro pad is the channel's, so everyone sharing the
   // account sees the same buttons in the same order.
   //
@@ -390,7 +390,7 @@ export default defineSchema({
   }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
 
   // shoutoutQueue: Twitch shoutouts waiting to be sent for an instance. Shared
-  // per instance like streamGoals below -- a shoutout is the channel's, not one
+  // per instance like dashboardCounters below -- a shoutout is the channel's, not one
   // viewer's, and everyone sharing the account should see the same queue.
   //
   // One row per entry rather than an array: the queue is reordered and pruned by
@@ -434,19 +434,24 @@ export default defineSchema({
     runScheduledFor: v.optional(v.number()),
   }).index("by_instance", ["instanceId"]),
 
-  // streamGoals: the dashboard command bar's goal cards (Bits / Subs / Followers, ...).
-  // Manually entered and manually advanced — the engine reports no running
-  // follower/sub/bits totals today (instanceLiveState carries only live state,
-  // title, game, and viewer count), so there is nothing to derive these from.
-  // Scoped per instance rather than per user: a goal is the channel's, and
-  // everyone sharing the account should see the same progress.
-  streamGoals: defineTable({
+  // dashboardCounters: which counters the dashboard command bar shows, in order.
+  // A reference and nothing more — the number, the name and the goals all stay
+  // on the counter resource, so a card cannot drift from what the counter's own
+  // page says. Scoped per instance rather than per user: the command bar is the
+  // channel's working surface, and everyone sharing the account should see the
+  // same counters on it.
+  //
+  // `canonicalId` names the counter within the instance (see
+  // moduleResourceInstances). A counter deleted out from under a row leaves it
+  // resolving to nothing; the bar skips such a row rather than showing a card
+  // with no number in it.
+  dashboardCounters: defineTable({
     instanceId: v.id("instances"),
-    label: v.string(),
-    current: v.number(),
-    target: v.number(),
+    canonicalId: v.string(),
     sortOrder: v.number(),
-  }).index("by_instance", ["instanceId"]),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_canonical", ["instanceId", "canonicalId"]),
 
   // dashboardNotes: freeform scratch text behind the dashboard's Notes rail
   // widget. Per user and per instance — notes are private working memory
