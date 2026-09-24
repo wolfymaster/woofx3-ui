@@ -179,6 +179,9 @@ export function queueEntries(value: unknown): string[] {
 /** The most entries any queue holds, whatever its settings say. */
 const QUEUE_HARD_LIMIT = 1000;
 
+/** The engine's limit on one entry: Twitch's chat message length, so any entry can be read back into chat. */
+export const QUEUE_MAX_ENTRY_LENGTH = 500;
+
 /** How many entries a queue holds before it refuses more; a capacity of 0 means the hard limit. */
 export function queueCapacity(settings: Record<string, unknown>): number {
   const capacity = Number(settings.capacity);
@@ -188,6 +191,12 @@ export function queueCapacity(settings: Record<string, unknown>): number {
 }
 
 export type QueueAddRefusal = "duplicate" | "full";
+
+/** What to tell someone about each refusal. Kept beside `queueAddRefusal` so the two cannot drift apart. */
+export const QUEUE_REFUSAL_MESSAGES: Record<QueueAddRefusal, string> = {
+  duplicate: "Already in line.",
+  full: "The queue is full.",
+};
 
 /**
  * Why the queue would refuse `entry`, or null when it would take it. The queue

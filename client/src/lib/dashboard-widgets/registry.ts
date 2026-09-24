@@ -2,6 +2,7 @@ import {
   Activity,
   BellRing,
   Grid3x3,
+  ListOrdered,
   Megaphone,
   MessagesSquare,
   NotebookPen,
@@ -19,6 +20,7 @@ import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
+import { QueueWidget } from "@/components/dashboard/widgets/queue";
 import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
@@ -87,6 +89,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: Volume2,
     category: "stream",
     component: ShoutoutWidget,
+  },
+  {
+    type: "queue",
+    label: "Queue",
+    description: "A queue's line, with add and remove — the same actions chat and workflows use.",
+    icon: ListOrdered,
+    category: "stream",
+    component: QueueWidget,
   },
   {
     type: "workflow-runs",
