@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, query } from "./_generated/server";
+import { isInstanceMember } from "./lib/teamAccess";
 
 /**
  * The storage key every resource kind keeps an instance's value under, in the
@@ -22,6 +23,9 @@ export function canonicalIdForStorageKey(key: string): string | null {
 export const listForInstance = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return {};
+    }
     const rows = await ctx.db
       .query("resourceValues")
       .withIndex("by_instance_canonical", (q) => q.eq("instanceId", instanceId))

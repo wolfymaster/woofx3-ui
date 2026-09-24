@@ -877,6 +877,7 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_module", ["moduleId"])
+    .index("by_instance_module", ["instanceId", "moduleId"])
     .index("by_instance_canonical", ["instanceId", "canonicalId"])
     .index("by_instance_kind", ["instanceId", "kind"]),
 
