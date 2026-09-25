@@ -12,7 +12,7 @@ import type { SyncStep, SyncStepContext } from "../steps";
  */
 export const groupsStep: SyncStep = {
   name: "groups",
-  run: async ({ ctx, newApi, instanceId, applicationId }: SyncStepContext) => {
+  run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
     const groups = (await newApi().listGroups()) ?? [];
     const safe = [];
     for (const g of groups) {
@@ -30,7 +30,6 @@ export const groupsStep: SyncStep = {
     }
     return await ctx.runMutation(internal.engineSyncInternal.reconcileGroups, {
       instanceId,
-      applicationId,
       snapshots: safe,
     });
   },

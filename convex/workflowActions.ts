@@ -29,7 +29,6 @@ async function waitForCompletion(ctx: ActionCtx, correlationKey: string): Promis
 
 type InstanceContext = {
   url: string;
-  applicationId: string;
   clientId: string;
   clientSecret: string;
 };
@@ -51,7 +50,6 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
   }
   return {
     url: bundle.url,
-    applicationId: bundle.applicationId,
     clientId: bundle.clientId,
     clientSecret: bundle.clientSecret,
   };

@@ -414,7 +414,6 @@ export const runRegistration = internalAction({
 
     const result = await performRegistration(ctx, {
       instanceId: row.instanceId,
-      userId: row.requestedBy,
       registrationToken: row.registrationToken,
     });
 

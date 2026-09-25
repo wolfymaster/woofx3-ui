@@ -85,12 +85,11 @@ export const clearCompletion = internalMutation({
 export const upsertFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
     engineWorkflowId: v.string(),
     definition: v.any(),
     isEnabled: v.boolean(),
   },
-  handler: async (ctx, { instanceId, applicationId, engineWorkflowId, definition, isEnabled }) => {
+  handler: async (ctx, { instanceId, engineWorkflowId, definition, isEnabled }) => {
     const storedDefinition = escapeDollarKeys(definition);
     const existing = await ctx.db
       .query("workflows")
@@ -101,14 +100,12 @@ export const upsertFromWebhook = internalMutation({
       await ctx.db.patch(existing._id, {
         definition: storedDefinition,
         isEnabled,
-        applicationId,
         updatedAt: now,
       });
       return existing._id;
     }
     return ctx.db.insert("workflows", {
       instanceId,
-      applicationId,
       engineWorkflowId,
       definition: storedDefinition,
       isEnabled,

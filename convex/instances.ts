@@ -191,14 +191,6 @@ export const getMembership = internalQuery({
 export const deleteInstanceData = internalMutation({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
-    const applications = await ctx.db
-      .query("applications")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .collect();
-    for (const app of applications) {
-      await ctx.db.delete(app._id);
-    }
-
     const platformLinks = await ctx.db
       .query("platformLinks")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -216,16 +208,6 @@ export const deleteInstanceData = internalMutation({
     }
 
     await ctx.db.delete(instanceId);
-  },
-});
-
-export const getApplicationForInstance = internalQuery({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
-    return ctx.db
-      .query("applications")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .first();
   },
 });
 
@@ -301,36 +283,14 @@ export const applyRegistration = internalMutation({
     clientId: v.string(),
     clientSecret: v.string(),
     webhookSecret: v.string(),
-    // The engine's own application scope, returned by the handshake. The engine
-    // is the authority on it; every proxied request passes it back.
-    applicationId: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, clientId, clientSecret, webhookSecret, applicationId }) => {
+  handler: async (ctx, { instanceId, clientId, clientSecret, webhookSecret }) => {
     const instance = await ctx.db.get(instanceId);
     if (!instance) {
       throw new Error("Instance not found");
     }
 
-    await ctx.db.patch(instanceId, { clientId, clientSecret, webhookSecret, applicationId });
-
-    if (!applicationId) {
-      return;
-    }
-    // Registering again returns the same application, so this is an upsert: a
-    // second row would give engine-scoped queries two answers for one engine.
-    const existing = await ctx.db
-      .query("applications")
-      .withIndex("by_instance_app", (q) => q.eq("instanceId", instanceId).eq("applicationId", applicationId))
-      .first();
-    if (existing) {
-      return;
-    }
-    await ctx.db.insert("applications", {
-      instanceId,
-      applicationId,
-      name: instance.name,
-      createdAt: Date.now(),
-    });
+    await ctx.db.patch(instanceId, { clientId, clientSecret, webhookSecret });
   },
 });
 

@@ -12,7 +12,7 @@ import type { SyncStep, SyncStepContext } from "../steps";
  * `engineSceneId` is missing from the snapshot are deleted.
  *
  * Engine `Scene` shape (see `@woofx3/api`):
- *   { id, name, accountId, widgets, createdAt }
+ *   { id, name, widgets, createdAt }
  * Only `id` and `name` are forwarded. The wire `widgets` are a lossy
  * projection of the scene's widget JSON; the full JSON, along with the
  * description and layout, arrives only through the scene webhooks. See
@@ -20,7 +20,7 @@ import type { SyncStep, SyncStepContext } from "../steps";
  */
 export const scenesStep: SyncStep = {
   name: "scenes",
-  run: async ({ ctx, newApi, instanceId, applicationId }: SyncStepContext) => {
+  run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
     type ScPage = Awaited<ReturnType<EngineApi["getScenes"]>>;
     const all: ScPage["scenes"] = [];
     let page = 1;
@@ -51,7 +51,6 @@ export const scenesStep: SyncStep = {
 
     return await ctx.runMutation(internal.engineSyncInternal.reconcileScenes, {
       instanceId,
-      applicationId,
       engineIds,
       upserts,
     });

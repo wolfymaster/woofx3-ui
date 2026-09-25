@@ -34,7 +34,6 @@ function isAtLeastAsNew(incoming: string, stored: string | undefined): boolean {
 const runSnapshot = v.object({
   id: v.string(),
   workflowId: v.string(),
-  applicationId: v.string(),
   status: v.string(),
   triggeredBy: v.optional(v.string()),
   triggerEvent: v.optional(v.string()),
@@ -48,7 +47,6 @@ const runSnapshot = v.object({
 const stepSnapshot = v.object({
   id: v.string(),
   executionId: v.string(),
-  applicationId: v.string(),
   taskId: v.string(),
   name: v.optional(v.string()),
   status: v.string(),
@@ -157,7 +155,6 @@ export const recordFromWebhook = internalMutation({
   handler: async (ctx, { instanceId, run }) => {
     const row = {
       instanceId,
-      applicationId: run.applicationId,
       engineRunId: run.id,
       workflowId: run.workflowId,
       status: run.status,
@@ -218,7 +215,6 @@ export const updateFromWebhook = internalMutation({
     // that only ever shows its outcome is better than one that vanishes.
     await ctx.db.insert("workflowRuns", {
       instanceId,
-      applicationId: run.applicationId,
       engineRunId: run.id,
       workflowId: run.workflowId,
       startedAt: run.startedAt,
@@ -237,7 +233,6 @@ export const recordStepFromWebhook = internalMutation({
   handler: async (ctx, { instanceId, step }) => {
     const row = {
       instanceId,
-      applicationId: step.applicationId,
       engineStepId: step.id,
       runId: step.executionId,
       taskId: step.taskId,

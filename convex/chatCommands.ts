@@ -91,7 +91,6 @@ export const listAvailableFunctions = query({
 export const upsertFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
     engineCommandId: v.string(),
     command: v.string(),
     actions: v.array(v.any()),
@@ -112,7 +111,6 @@ export const upsertFromWebhook = internalMutation({
       .first();
 
     const fields = {
-      applicationId: args.applicationId,
       command: args.command,
       actions: args.actions,
       cooldown: args.cooldown,

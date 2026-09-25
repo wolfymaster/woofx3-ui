@@ -14,14 +14,13 @@ export const getForInstance = query({
 export const onStreamOnline = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.optional(v.string()),
     twitchUserId: v.string(),
     startedAt: v.string(),
     streamTitle: v.optional(v.string()),
     gameName: v.optional(v.string()),
     viewerCount: v.optional(v.number()),
   },
-  handler: async (ctx, { instanceId, applicationId, twitchUserId, startedAt, streamTitle, gameName, viewerCount }) => {
+  handler: async (ctx, { instanceId, twitchUserId, startedAt, streamTitle, gameName, viewerCount }) => {
     const existing = await ctx.db
       .query("instanceLiveState")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -29,7 +28,6 @@ export const onStreamOnline = internalMutation({
 
     const patch = {
       instanceId,
-      applicationId,
       twitchUserId,
       isLive: true,
       startedAt,
@@ -70,7 +68,6 @@ export const recordPoll = internalMutation({
 
     const patch = {
       instanceId,
-      applicationId: existing?.applicationId,
       twitchUserId,
       isLive,
       startedAt: isLive ? startedAt : undefined,
@@ -100,19 +97,16 @@ export const recordPoll = internalMutation({
 export const onSessionStarted = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.optional(v.string()),
     sessionId: v.string(),
     sessionStartedAt: v.string(),
   },
-  handler: async (ctx, { instanceId, applicationId, sessionId, sessionStartedAt }) => {
+  handler: async (ctx, { instanceId, sessionId, sessionStartedAt }) => {
     const existing = await ctx.db
       .query("instanceLiveState")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .first();
 
     if (existing) {
-      // applicationId is deliberately not patched: a patch carries undefined as
-      // a deletion, and the stream writers own that field.
       await ctx.db.patch(existing._id, { sessionId, sessionStartedAt });
       return;
     }
@@ -120,7 +114,6 @@ export const onSessionStarted = internalMutation({
     // No stream event has landed yet, so nothing knows whether we are live.
     await ctx.db.insert("instanceLiveState", {
       instanceId,
-      applicationId,
       sessionId,
       sessionStartedAt,
       isLive: false,
@@ -133,10 +126,9 @@ export const onSessionStarted = internalMutation({
 export const onStreamOffline = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.optional(v.string()),
     twitchUserId: v.string(),
   },
-  handler: async (ctx, { instanceId, applicationId, twitchUserId }) => {
+  handler: async (ctx, { instanceId, twitchUserId }) => {
     const existing = await ctx.db
       .query("instanceLiveState")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -144,7 +136,6 @@ export const onStreamOffline = internalMutation({
 
     const patch = {
       instanceId,
-      applicationId,
       twitchUserId,
       isLive: false,
       startedAt: undefined,

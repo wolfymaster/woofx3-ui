@@ -55,7 +55,7 @@ What those settings are is decided by the trigger, not by the UI: `components/te
 
 ## Instance scope
 
-Most Convex-backed screens use **`useInstance()`** (`client/src/hooks/use-instance.ts`): it reads `instances.listForCurrentUser`, picks the Nanostore-selected `currentInstanceId` or falls back to the first instance, and exposes `instance`, `setInstance`, and loading state. Queries and mutations should pass `instanceId` (and often engine `applicationId` from the instance record) when talking to Convex functions that proxy to the engine.
+Most Convex-backed screens use **`useInstance()`** (`client/src/hooks/use-instance.ts`): it reads `instances.listForCurrentUser`, picks the Nanostore-selected `currentInstanceId` or falls back to the first instance, and exposes `instance`, `setInstance`, and loading state. Queries and mutations should pass `instanceId` when talking to Convex functions that proxy to the engine.
 
 ## Where data comes from (today)
 

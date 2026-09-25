@@ -12,7 +12,6 @@ async function assertInstanceMember(ctx: QueryCtx, userId: Id<"users">, instance
 
 export type CatalogBundle = {
   url: string;
-  applicationId: string;
   clientId: string | null;
   clientSecret: string | null;
   enabledTriggerIds: string[];
@@ -73,10 +72,6 @@ export async function loadCatalogBundle(
 
   return {
     url: instance.url,
-    // Until the engine-minted applicationId is populated during registration,
-    // fall back to the Convex instance id so engine-side tenant scoping still
-    // works (the engine currently treats this as an opaque accountId string).
-    applicationId: instance.applicationId ?? instanceId,
     clientId: instance.clientId ?? null,
     clientSecret: instance.clientSecret ?? null,
     enabledTriggerIds,

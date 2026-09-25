@@ -49,7 +49,6 @@ export const runSync = internalAction({
           ctx,
           newApi,
           instanceId,
-          applicationId: bundle.applicationId,
         });
         await ctx.runMutation(internal.engineSyncInternal.updateRunStep, {
           runId,

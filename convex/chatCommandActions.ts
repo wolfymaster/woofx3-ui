@@ -17,7 +17,6 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 
 type InstanceContext = {
   url: string;
-  applicationId: string;
   clientId: string;
   clientSecret: string;
 };
@@ -39,7 +38,6 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
   }
   return {
     url: bundle.url,
-    applicationId: bundle.applicationId,
     clientId: bundle.clientId,
     clientSecret: bundle.clientSecret,
   };
@@ -87,7 +85,6 @@ export const createCommand = action({
 
     await ctx.runMutation(internal.chatCommands.upsertFromWebhook, {
       instanceId: args.instanceId,
-      applicationId: result.applicationId,
       engineCommandId: result.id,
       command: result.command,
       actions: escapeDollarKeys(result.actions ?? []) as unknown[],
@@ -138,7 +135,6 @@ export const updateCommand = action({
 
     await ctx.runMutation(internal.chatCommands.upsertFromWebhook, {
       instanceId: args.instanceId,
-      applicationId: result.applicationId,
       engineCommandId: result.id,
       command: result.command,
       actions: escapeDollarKeys(result.actions ?? []) as unknown[],
@@ -197,7 +193,6 @@ export const createGroup = action({
 
     await ctx.runMutation(internal.chatCommandGroups.upsertFromWebhook, {
       instanceId: args.instanceId,
-      applicationId: result.applicationId,
       engineGroupId: result.id,
       name: result.name,
       description: result.description,
@@ -229,7 +224,6 @@ export const updateGroup = action({
 
     await ctx.runMutation(internal.chatCommandGroups.upsertFromWebhook, {
       instanceId: args.instanceId,
-      applicationId: result.applicationId,
       engineGroupId: result.id,
       name: result.name,
       description: result.description,

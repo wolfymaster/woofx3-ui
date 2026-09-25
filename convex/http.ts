@@ -469,14 +469,6 @@ http.route({
   }),
 });
 
-function extractApplicationId(event: unknown): string | undefined {
-  if (event && typeof event === "object" && "applicationId" in event) {
-    const value = (event as { applicationId?: unknown }).applicationId;
-    return typeof value === "string" ? value : undefined;
-  }
-  return undefined;
-}
-
 http.route({ path: "/api/webhooks/woofx3", method: "OPTIONS", handler: preflightHandler });
 http.route({
   path: "/api/webhooks/woofx3",
@@ -530,7 +522,6 @@ http.route({
 
     await ctx.runMutation(internal.engineEventLog.record, {
       instanceId: instance._id,
-      applicationId: extractApplicationId(envelope.data),
       eventType,
       payload: JSON.stringify(envelope.data ?? null),
       envelopeId: typeof envelope.id === "string" ? envelope.id : undefined,
@@ -680,7 +671,6 @@ http.route({
       case EngineEventType.WORKFLOW_UPDATED: {
         await ctx.runMutation(internal.workflowInternal.upsertFromWebhook, {
           instanceId: instance._id,
-          applicationId: event.applicationId,
           engineWorkflowId: event.workflow.id,
           definition: event.workflow.definition,
           isEnabled: event.workflow.isEnabled,
@@ -712,7 +702,6 @@ http.route({
       case EngineEventType.SCENE_CREATED: {
         await ctx.runMutation(internal.scenes.upsertFromWebhook, {
           instanceId: instance._id,
-          applicationId: event.applicationId,
           engineSceneId: event.scene.id,
           name: event.scene.name,
           description: event.scene.description,
@@ -729,7 +718,6 @@ http.route({
       case EngineEventType.SCENE_UPDATED: {
         await ctx.runMutation(internal.scenes.upsertFromWebhook, {
           instanceId: instance._id,
-          applicationId: event.applicationId,
           engineSceneId: event.scene.id,
           name: event.scene.name,
           description: event.scene.description,
@@ -755,7 +743,6 @@ http.route({
       case EngineEventType.COMMAND_UPDATED: {
         await ctx.runMutation(internal.chatCommands.upsertFromWebhook, {
           instanceId: instance._id,
-          applicationId: event.command.applicationId,
           engineCommandId: event.command.id,
           command: event.command.command,
           // Already `$`-escaped: the whole webhook payload is escaped on the
@@ -784,7 +771,6 @@ http.route({
       case EngineEventType.GROUP_UPDATED: {
         await ctx.runMutation(internal.chatCommandGroups.upsertFromWebhook, {
           instanceId: instance._id,
-          applicationId: event.group.applicationId,
           engineGroupId: event.group.id,
           name: event.group.name,
           description: event.group.description,
@@ -1048,7 +1034,6 @@ http.route({
       case EngineEventType.STREAM_ONLINE: {
         await ctx.runMutation(internal.instanceLiveState.onStreamOnline, {
           instanceId: instance._id,
-          applicationId: event.applicationId,
           twitchUserId: event.twitchUserId,
           startedAt: event.startedAt,
           streamTitle: event.streamTitle,
@@ -1061,7 +1046,6 @@ http.route({
       case EngineEventType.STREAM_OFFLINE: {
         await ctx.runMutation(internal.instanceLiveState.onStreamOffline, {
           instanceId: instance._id,
-          applicationId: event.applicationId,
           twitchUserId: event.twitchUserId,
         });
         return corsJson({ success: true, type: event.type });
@@ -1070,7 +1054,6 @@ http.route({
       case EngineEventType.SESSION_STARTED: {
         await ctx.runMutation(internal.instanceLiveState.onSessionStarted, {
           instanceId: instance._id,
-          applicationId: event.applicationId,
           sessionId: event.sessionId,
           sessionStartedAt: event.startedAt,
         });

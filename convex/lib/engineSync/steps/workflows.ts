@@ -14,7 +14,7 @@ import type { SyncStep, SyncStepContext } from "../steps";
  * deleted.
  *
  * Engine `Workflow` shape (see `@woofx3/api`):
- *   { id, name, description, accountId, isEnabled, definition, stats, ... }
+ *   { id, name, description, isEnabled, definition, stats, ... }
  * Only `id`, `isEnabled`, and `definition` are mirrored here — the rest
  * lives in the canonical `WorkflowDefinition` JSON. Rows with a null
  * definition are skipped: the workflows table only mirrors canonical
@@ -23,7 +23,7 @@ import type { SyncStep, SyncStepContext } from "../steps";
  */
 export const workflowsStep: SyncStep = {
   name: "workflows",
-  run: async ({ ctx, newApi, instanceId, applicationId }: SyncStepContext) => {
+  run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
     type WfPage = Awaited<ReturnType<EngineApi["getWorkflows"]>>;
     const all: WfPage["workflows"] = [];
     let page = 1;
@@ -57,7 +57,6 @@ export const workflowsStep: SyncStep = {
 
     return await ctx.runMutation(internal.engineSyncInternal.reconcileWorkflows, {
       instanceId,
-      applicationId,
       engineIds,
       upserts,
     });
