@@ -81,7 +81,6 @@ import type * as marketplace from "../marketplace.js";
 import type * as migrations_backfillAccountMembers from "../migrations/backfillAccountMembers.js";
 import type * as migrations_backfillCommandActions from "../migrations/backfillCommandActions.js";
 import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
-import type * as migrations_removeApplications from "../migrations/removeApplications.js";
 import type * as moduleAssets from "../moduleAssets.js";
 import type * as moduleDetail from "../moduleDetail.js";
 import type * as moduleEngine from "../moduleEngine.js";
@@ -210,7 +209,6 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillAccountMembers": typeof migrations_backfillAccountMembers;
   "migrations/backfillCommandActions": typeof migrations_backfillCommandActions;
   "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
-  "migrations/removeApplications": typeof migrations_removeApplications;
   moduleAssets: typeof moduleAssets;
   moduleDetail: typeof moduleDetail;
   moduleEngine: typeof moduleEngine;

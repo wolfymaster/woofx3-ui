@@ -90,8 +90,6 @@ export default defineSchema({
     accountId: v.id("accounts"),
     name: v.string(),
     url: v.string(),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     clientId: v.optional(v.string()),
     clientSecret: v.optional(v.string()),
     webhookSecret: v.optional(v.string()),
@@ -117,8 +115,6 @@ export default defineSchema({
   // engine events (and best-effort poll fallback). One row per instance.
   instanceLiveState: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     twitchUserId: v.optional(v.string()),
     isLive: v.boolean(),
     startedAt: v.optional(v.string()), // ISO from StreamOnlineEvent
@@ -134,14 +130,6 @@ export default defineSchema({
     lastUpdateSource: v.union(v.literal("webhook"), v.literal("poll")),
     lastUpdatedAt: v.number(),
   }).index("by_instance", ["instanceId"]),
-
-  // Legacy: emptied by migrations/removeApplications; delete once it has run on every deployment.
-  applications: defineTable({
-    instanceId: v.id("instances"),
-    applicationId: v.string(),
-    name: v.string(),
-    createdAt: v.number(),
-  }),
 
   // engineProvisioning: one row per managed instance, tracking the woofx3
   // maintenance API's provisioning run and the registration handshake that
@@ -250,8 +238,6 @@ export default defineSchema({
   // See docs/services/commands-ui.md in the woofx3 engine repo for the full contract.
   chatCommands: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     engineCommandId: v.string(),
     command: v.string(), // without the "!" prefix
     // The actions this command runs, in order -- the same shape a workflow step
@@ -283,8 +269,6 @@ export default defineSchema({
   // listGroups()/createGroup()/updateGroup()/deleteGroup().
   chatCommandGroups: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     engineGroupId: v.string(),
     name: v.string(),
     description: v.string(),
@@ -652,8 +636,6 @@ export default defineSchema({
   // an optional ReactFlow projection cache (nodes/edges) derived in the browser.
   workflows: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     engineWorkflowId: v.string(),
     projectionKey: v.optional(v.string()),
     definition: v.any(),
@@ -742,8 +724,6 @@ export default defineSchema({
   // scenes: scene configurations for browser sources
   scenes: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     engineSceneId: v.optional(v.string()),
     name: v.string(),
     description: v.optional(v.string()),
@@ -970,8 +950,6 @@ export default defineSchema({
   // (the browser-source queue) and `alertHistory` (the local fire log).
   engineAlerts: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     engineAlertId: v.string(), // AlertSnapshot.id
     payload: v.string(), // JSON AlertPayload envelope
     workflowId: v.optional(v.string()),
@@ -1011,8 +989,6 @@ export default defineSchema({
   // not record them.
   workflowRuns: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     engineRunId: v.string(), // WorkflowRunSnapshot.id (the engine's execution id)
     workflowId: v.string(),
     // Left open rather than a union: run statuses come from the engine's own
@@ -1040,8 +1016,6 @@ export default defineSchema({
   // resume restores. Both are JSON strings; nothing here reads inside them.
   workflowRunSteps: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     engineStepId: v.string(),
     runId: v.string(), // engineRunId of the owning run
     taskId: v.string(),
@@ -1168,8 +1142,6 @@ export default defineSchema({
   // fields (see lib/dollarKeys.ts).
   engineEventLog: defineTable({
     instanceId: v.id("instances"),
-    // Legacy: cleared by migrations/removeApplications; delete once it has run on every deployment.
-    applicationId: v.optional(v.string()),
     eventType: v.string(),
     payload: v.string(),
     source: v.union(v.literal("webhook"), v.literal("retrigger")),
