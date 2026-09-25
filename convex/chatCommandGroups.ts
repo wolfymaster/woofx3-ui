@@ -73,7 +73,6 @@ export const listMembers = query({
 export const upsertFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
     engineGroupId: v.string(),
     name: v.string(),
     description: v.string(),
@@ -89,7 +88,6 @@ export const upsertFromWebhook = internalMutation({
       .first();
 
     const fields = {
-      applicationId: args.applicationId,
       name: args.name,
       description: args.description,
       isBuiltIn: args.isBuiltIn ?? false,

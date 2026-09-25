@@ -36,7 +36,6 @@ export const dropAllInstanceSync = internalMutation({
 export const reconcileCommands = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
     snapshots: v.array(
       v.object({
         engineCommandId: v.string(),
@@ -52,7 +51,7 @@ export const reconcileCommands = internalMutation({
       })
     ),
   },
-  handler: async (ctx, { instanceId, applicationId, snapshots }) => {
+  handler: async (ctx, { instanceId, snapshots }) => {
     const now = Date.now();
     const existing = await ctx.db
       .query("chatCommands")
@@ -70,7 +69,6 @@ export const reconcileCommands = internalMutation({
     for (const snap of snapshots) {
       const found = existingByEngineId.get(snap.engineCommandId);
       const fields = {
-        applicationId,
         command: snap.command,
         actions: snap.actions,
         cooldown: snap.cooldown,
@@ -118,7 +116,6 @@ export const reconcileCommands = internalMutation({
 export const reconcileGroups = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
     snapshots: v.array(
       v.object({
         engineGroupId: v.string(),
@@ -130,7 +127,7 @@ export const reconcileGroups = internalMutation({
       })
     ),
   },
-  handler: async (ctx, { instanceId, applicationId, snapshots }) => {
+  handler: async (ctx, { instanceId, snapshots }) => {
     const now = Date.now();
     const existing = await ctx.db
       .query("chatCommandGroups")
@@ -148,7 +145,6 @@ export const reconcileGroups = internalMutation({
     for (const snap of snapshots) {
       const found = existingByEngineId.get(snap.engineGroupId);
       const fields = {
-        applicationId,
         name: snap.name,
         description: snap.description,
         isBuiltIn: snap.isBuiltIn ?? false,
@@ -225,7 +221,6 @@ export const reconcileGroups = internalMutation({
 export const reconcileWorkflows = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
     engineIds: v.array(v.string()),
     upserts: v.array(
       v.object({
@@ -235,7 +230,7 @@ export const reconcileWorkflows = internalMutation({
       })
     ),
   },
-  handler: async (ctx, { instanceId, applicationId, engineIds, upserts }) => {
+  handler: async (ctx, { instanceId, engineIds, upserts }) => {
     const now = Date.now();
 
     for (const u of upserts) {
@@ -245,7 +240,6 @@ export const reconcileWorkflows = internalMutation({
         .first();
       if (existing) {
         await ctx.db.patch(existing._id, {
-          applicationId,
           definition: u.definition,
           isEnabled: u.isEnabled,
           updatedAt: now,
@@ -253,7 +247,6 @@ export const reconcileWorkflows = internalMutation({
       } else {
         await ctx.db.insert("workflows", {
           instanceId,
-          applicationId,
           engineWorkflowId: u.engineWorkflowId,
           definition: u.definition,
           isEnabled: u.isEnabled,
@@ -297,7 +290,6 @@ export const reconcileWorkflows = internalMutation({
 export const reconcileScenes = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
     engineIds: v.array(v.string()),
     upserts: v.array(
       v.object({
@@ -306,7 +298,7 @@ export const reconcileScenes = internalMutation({
       })
     ),
   },
-  handler: async (ctx, { instanceId, applicationId, engineIds, upserts }) => {
+  handler: async (ctx, { instanceId, engineIds, upserts }) => {
     const now = Date.now();
 
     for (const u of upserts) {
@@ -316,15 +308,14 @@ export const reconcileScenes = internalMutation({
         .first();
       if (existing) {
         // Bumping updatedAt makes an open editor re-adopt the row, so only write on a real change.
-        if (existing.name !== u.name || existing.applicationId !== applicationId) {
-          await ctx.db.patch(existing._id, { applicationId, name: u.name, updatedAt: now });
+        if (existing.name !== u.name) {
+          await ctx.db.patch(existing._id, { name: u.name, updatedAt: now });
         }
       } else {
         // Its SCENE_CREATED webhook never landed. Widgets stay unset rather than
         // lossy until a SCENE_UPDATED delivers the full JSON.
         await ctx.db.insert("scenes", {
           instanceId,
-          applicationId,
           engineSceneId: u.engineSceneId,
           name: u.name,
           createdAt: now,
@@ -937,14 +928,13 @@ export const getInstanceBundle = internalQuery({
     if (!inst) {
       return null;
     }
-    if (!inst.clientId || !inst.clientSecret || !inst.applicationId) {
+    if (!inst.clientId || !inst.clientSecret) {
       return null;
     }
     return {
       url: inst.url,
       clientId: inst.clientId,
       clientSecret: inst.clientSecret,
-      applicationId: inst.applicationId,
       lastEngineActivityAt: inst.lastEngineActivityAt ?? 0,
     };
   },

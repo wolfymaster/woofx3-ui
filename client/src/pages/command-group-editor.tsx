@@ -100,7 +100,7 @@ export default function CommandGroupEditor() {
       setFormError("Group name is required.");
       return;
     }
-    // `groups` is unique on (application_id, name) in the engine, and the built-ins
+    // `groups` is unique by name in the engine, and the built-ins
     // already occupy everyone/subscriber/vip/moderator/broadcaster. Without this the
     // create is still refused, but as a raw constraint error.
     const clash = (groupsRaw ?? []).find(

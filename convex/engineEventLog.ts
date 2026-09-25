@@ -25,7 +25,6 @@ async function membershipFor(
 export const record = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.optional(v.string()),
     eventType: v.string(),
     payload: v.string(),
     envelopeId: v.optional(v.string()),

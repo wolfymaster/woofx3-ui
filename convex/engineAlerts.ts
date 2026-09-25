@@ -51,7 +51,6 @@ function normaliseStatus(raw: string): EngineAlertStatus {
 
 const snapshotValidator = v.object({
   id: v.string(),
-  applicationId: v.string(),
   payload: v.string(),
   workflowId: v.optional(v.string()),
   sourceEventId: v.optional(v.string()),
@@ -220,7 +219,6 @@ export const recordFromWebhook = internalMutation({
   handler: async (ctx, { instanceId, snapshot }) => {
     const row = {
       instanceId,
-      applicationId: snapshot.applicationId,
       engineAlertId: snapshot.id,
       payload: snapshot.payload,
       workflowId: snapshot.workflowId || undefined,
@@ -279,7 +277,6 @@ export const updateFromWebhook = internalMutation({
       // with the data we have so the row exists when subsequent events land.
       await ctx.db.insert("engineAlerts", {
         instanceId,
-        applicationId: snapshot.applicationId,
         engineAlertId: snapshot.id,
         engineCreatedAt: snapshot.createdAt,
         createdAt: Date.now(),

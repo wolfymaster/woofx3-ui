@@ -132,7 +132,6 @@ export const getBrowserSourceKeys = query({
 export const upsertFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    applicationId: v.string(),
     engineSceneId: v.string(),
     name: v.string(),
     description: v.string(),
@@ -156,7 +155,6 @@ export const upsertFromWebhook = internalMutation({
 
     const fields = {
       instanceId: args.instanceId,
-      applicationId: args.applicationId,
       engineSceneId: args.engineSceneId,
       name: args.name,
       description: args.description || undefined,

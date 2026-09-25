@@ -13,9 +13,9 @@
 
 - **Guard:** only authenticated users reach `/auth/onboarding` (wrapped in `AuthGuard` in `App.tsx`).
 - **Step 1 — Account:** creates an **account** via `accounts.createAccount` if the user does not already have one (`getMyAccount`).
-- **Step 2 — Instance:** creates an **instance** with display name, engine **URL**, and a generated `applicationId` placeholder (`uuid`) passed into `instances.create`; then sets **`$currentInstanceId`** and navigates home.
+- **Step 2 — Instance:** creates an **instance** with display name and engine **URL**, then registers it with the engine (`registration.registerInstance`); then sets **`$currentInstanceId`** and navigates home.
 
-> **Note:** The full **registration handshake** (engine stores `instanceId`, webhook URL, secret; Convex receives engine `applicationId`) is described in `CLAUDE.md`. If onboarding UI still passes a client-generated `applicationId`, that may be interim until the flow matches the documented handshake exactly.
+> **Note:** The full **registration handshake** (engine stores the callback URL and token; Convex receives the client credentials) is described in `CLAUDE.md`.
 
 ## After onboarding
 

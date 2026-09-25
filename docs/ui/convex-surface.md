@@ -39,8 +39,8 @@ Paths evolve — read `http.ts` and the imported route modules when integrating.
 
 ## Engine vs Convex (reminder)
 
-- **UI → engine (sensitive / server):** Convex **actions** `fetch` the instance’s engine URL with `applicationId` as required — not the browser.
-- **Engine → UI:** engine **webhooks** hit Convex with `instanceId` + `applicationId` for routing and upserts.
+- **UI → engine (sensitive / server):** Convex **actions** call the instance’s engine URL with its client credentials — not the browser.
+- **Engine → UI:** engine **webhooks** hit Convex with the instance’s callback token, which routes them to the instance for upserts.
 - **Browser ↔ engine (realtime):** **`WoofxTransport`** only — not used for Convex proxy calls.
 
 This file is only a map; precise contracts belong next to the functions and in `CLAUDE.md`.

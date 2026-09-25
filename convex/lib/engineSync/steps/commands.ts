@@ -12,7 +12,7 @@ import type { SyncStep, SyncStepContext } from "../steps";
  */
 export const commandsStep: SyncStep = {
   name: "commands",
-  run: async ({ ctx, newApi, instanceId, applicationId }: SyncStepContext) => {
+  run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
     const api = newApi();
     const snapshots = await api.listCommands();
     const safe = (snapshots ?? []).map((s) => ({
@@ -31,7 +31,6 @@ export const commandsStep: SyncStep = {
     }));
     return await ctx.runMutation(internal.engineSyncInternal.reconcileCommands, {
       instanceId,
-      applicationId,
       snapshots: safe,
     });
   },

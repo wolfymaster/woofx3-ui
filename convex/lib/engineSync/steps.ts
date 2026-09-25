@@ -34,7 +34,6 @@ export interface SyncStepContext {
    */
   newApi: () => EngineApi;
   instanceId: Id<"instances">;
-  applicationId: string;
 }
 
 export interface SyncStep {

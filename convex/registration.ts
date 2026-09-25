@@ -18,7 +18,7 @@ function generateSecret(byteLength = 32): string {
     .join("");
 }
 
-type RegisterResult = { ok: true; clientId: string; applicationId: string } | { ok: false; error: string };
+type RegisterResult = { ok: true; clientId: string } | { ok: false; error: string };
 
 /**
  * The registration handshake, as both onboarding paths run it: the user
@@ -26,18 +26,13 @@ type RegisterResult = { ok: true; clientId: string; applicationId: string } | { 
  * the maintenance API reports an engine ready.
  *
  * A plain function rather than its own action because both callers already run
- * in an action — an action calling an action only adds a hop. `userId` is the
- * identity the engine attributes the client record to, and `registrationToken`
- * is the secret a managed engine demands from whoever claims it; both are
- * chosen by the caller, never read from a browser request.
+ * in an action — an action calling an action only adds a hop.
+ * `registrationToken` is the secret a managed engine demands from whoever
+ * claims it; it is chosen by the caller, never read from a browser request.
  */
 export async function performRegistration(
   ctx: ActionCtx,
-  {
-    instanceId,
-    userId,
-    registrationToken,
-  }: { instanceId: Id<"instances">; userId: Id<"users">; registrationToken?: string }
+  { instanceId, registrationToken }: { instanceId: Id<"instances">; registrationToken?: string }
 ): Promise<RegisterResult> {
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
   if (!instance) {
@@ -68,8 +63,7 @@ export async function performRegistration(
 
     // `registrationToken` is only understood by an engine provisioned with
     // one; a bring-your-own engine ignores the extra option.
-    const options: RegisterClientOptions & { registrationToken?: string } = {
-      userId,
+    const options: RegisterClientOptions = {
       callbackUrl,
       callbackToken,
       ...(registrationToken ? { registrationToken } : {}),
@@ -84,10 +78,9 @@ export async function performRegistration(
       clientId: result.clientId,
       clientSecret: result.clientSecret,
       webhookSecret: callbackToken,
-      applicationId: result.applicationId,
     });
 
-    return { ok: true, clientId: result.clientId, applicationId: result.applicationId };
+    return { ok: true, clientId: result.clientId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error("registration: handshake failed", { instanceId, error: message });
@@ -115,6 +108,6 @@ export const registerInstance = action({
       throw new Error("Not authorized");
     }
 
-    return await performRegistration(ctx, { instanceId, userId });
+    return await performRegistration(ctx, { instanceId });
   },
 });
