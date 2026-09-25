@@ -5,12 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useResourceAction } from "@/hooks/use-resource-action";
-import { queueAddRefusal, queueCapacity, queueEntries } from "@/lib/resource-values";
+import {
+  QUEUE_MAX_ENTRY_LENGTH,
+  QUEUE_REFUSAL_MESSAGES,
+  queueAddRefusal,
+  queueCapacity,
+  queueEntries,
+} from "@/lib/resource-values";
 
 const BASE_PATH = "/stream/queues";
-
-/** The engine's limit on one entry: Twitch's chat message length, so any entry can be read back into chat. */
-const MAX_ENTRY_LENGTH = 500;
 
 export default function Queues() {
   return (
@@ -26,11 +29,6 @@ export default function Queues() {
   );
 }
 
-const REFUSAL_MESSAGES = {
-  duplicate: "Already in line.",
-  full: "The queue is full.",
-} as const;
-
 /** The queue's entries in order and what can be done to them, through the queue's own actions. */
 function QueuePanel(props: ResourceDetailProps) {
   const { instance, value, settings } = props;
@@ -41,7 +39,7 @@ function QueuePanel(props: ResourceDetailProps) {
   const capacity = queueCapacity(settings);
   const trimmed = entry.trim();
   const refusal = trimmed === "" ? null : queueAddRefusal(entries, settings, trimmed);
-  const canAdd = trimmed !== "" && trimmed.length <= MAX_ENTRY_LENGTH && refusal === null;
+  const canAdd = trimmed !== "" && trimmed.length <= QUEUE_MAX_ENTRY_LENGTH && refusal === null;
 
   return (
     <Card className="p-6 space-y-5">
@@ -115,7 +113,7 @@ function QueuePanel(props: ResourceDetailProps) {
           <Input
             value={entry}
             onChange={(e) => setEntry(e.target.value)}
-            maxLength={MAX_ENTRY_LENGTH}
+            maxLength={QUEUE_MAX_ENTRY_LENGTH}
             placeholder="Add someone or something to the line"
             aria-invalid={refusal !== null}
             data-testid="input-queue-entry"
@@ -125,7 +123,7 @@ function QueuePanel(props: ResourceDetailProps) {
             Add
           </Button>
         </div>
-        {refusal && <p className="text-xs text-destructive">{REFUSAL_MESSAGES[refusal]}</p>}
+        {refusal && <p className="text-xs text-destructive">{QUEUE_REFUSAL_MESSAGES[refusal]}</p>}
       </form>
 
       <p className="text-center text-xs text-muted-foreground">

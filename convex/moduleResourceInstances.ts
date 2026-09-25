@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
+import { isInstanceMember } from "./lib/teamAccess";
 
 const resourceInstanceValidator = v.object({
   id: v.string(),
@@ -18,6 +19,9 @@ const resourceInstanceValidator = v.object({
 export const listForInstance = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return [];
+    }
     return ctx.db
       .query("moduleResourceInstances")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -27,10 +31,17 @@ export const listForInstance = query({
 
 export const listByModule = query({
   args: { instanceId: v.id("instances"), moduleId: v.id("moduleRepository") },
-  handler: async (ctx, { moduleId }) => {
+  handler: async (ctx, { instanceId, moduleId }) => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return [];
+    }
+    // Scoped by instance as well as module: `moduleId` is the caller's to
+    // supply, and a moduleRepository row can be a shared catalog entry with no
+    // instance of its own, so the module alone does not bound the result to
+    // the instance the caller proved membership of.
     return ctx.db
       .query("moduleResourceInstances")
-      .withIndex("by_module", (q) => q.eq("moduleId", moduleId))
+      .withIndex("by_instance_module", (q) => q.eq("instanceId", instanceId).eq("moduleId", moduleId))
       .collect();
   },
 });
@@ -38,6 +49,9 @@ export const listByModule = query({
 export const listByKind = query({
   args: { instanceId: v.id("instances"), kind: v.string() },
   handler: async (ctx, { instanceId, kind }) => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return [];
+    }
     return ctx.db
       .query("moduleResourceInstances")
       .withIndex("by_instance_kind", (q) => q.eq("instanceId", instanceId).eq("kind", kind))

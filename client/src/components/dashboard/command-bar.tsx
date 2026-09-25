@@ -1,31 +1,28 @@
 import { api } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Clapperboard, Loader2, Maximize2, Pencil, Plus, Radio, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Check, Clapperboard, Loader2, Maximize2, Plus, Radio, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { StreamPlayerDialog } from "@/components/dashboard/stream-player-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useToast } from "@/hooks/use-toast";
+import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
+import { counterGoals, counterValue, goalProgress } from "@/lib/resource-values";
 import { cn } from "@/lib/utils";
 
 // Same public preview CDN and refresh cadence the stream-preview widget uses —
 // Twitch only regenerates the underlying image every few minutes.
 const THUMBNAIL_REFRESH_MS = 60_000;
 
-type StreamGoal = Doc<"streamGoals">;
+/** The resource kind the bar's cards are drawn from; must match the woofx3 module's counter kind. */
+const COUNTER_KIND = "counter";
+
+const COUNTERS_PATH = "/stream/counters";
 
 function StreamPreviewThumbnail({ isLive, login, title }: { isLive: boolean; login: string | null; title?: string }) {
   const [enlarged, setEnlarged] = useState(false);
@@ -88,35 +85,73 @@ function StatusPill({ isLive }: { isLive: boolean }) {
   );
 }
 
-function GoalCard({
-  goal,
+/**
+ * What one card shows about a counter. All of it is derived — the number, the
+ * name and the goals live on the counter resource itself, so a card can never
+ * disagree with the counter's own page.
+ */
+interface CounterCardData {
+  canonicalId: string;
+  name: string;
+  /** The counter's own page, where its goals are set. */
+  href: string;
+  value: number;
+  /** The goal being worked toward: the smallest above the value. Null with no goals, or all of them passed. */
+  goal: number | null;
+  /** How far along a bar running from where the counter starts to its largest goal, 0 to 1. Null with no goals. */
+  fraction: number | null;
+}
+
+function toCardData(row: ResourceInstanceDoc, value: unknown): CounterCardData {
+  const settings = resourceSettings(row);
+  const current = counterValue(value, settings);
+  const goals = counterGoals(value, settings);
+  const progress = goals.length > 0 ? goalProgress(current, counterValue(null, settings), goals) : null;
+
+  return {
+    canonicalId: row.canonicalId,
+    name: resourceName(row),
+    href: `${COUNTERS_PATH}/${row.resourceInstanceId}`,
+    value: current,
+    goal: progress?.next?.goal ?? null,
+    fraction: progress?.fraction ?? null,
+  };
+}
+
+function CounterCard({
+  counter,
   showRemaining,
   onToggleDisplay,
-  onEdit,
+  onRemove,
 }: {
-  goal: StreamGoal;
+  counter: CounterCardData;
   showRemaining: boolean;
   onToggleDisplay: () => void;
-  onEdit: () => void;
+  onRemove: () => void;
 }) {
-  const remaining = Math.max(0, goal.target - goal.current);
-  const percent = goal.target > 0 ? Math.min(100, (goal.current / goal.target) * 100) : 0;
+  const remaining = counter.goal === null ? null : Math.max(0, counter.goal - counter.value);
 
   return (
     <div
       className="shrink-0 w-[150px] rounded-lg border border-border bg-card/60 px-3 py-2"
-      data-testid={`goal-card-${goal._id}`}
+      data-testid={`counter-card-${counter.canonicalId}`}
     >
       <div className="flex items-center justify-between gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{goal.label}</span>
+        <Link
+          href={counter.href}
+          className="text-[10px] uppercase tracking-wider text-muted-foreground truncate hover:text-foreground"
+          data-testid={`link-counter-${counter.canonicalId}`}
+        >
+          {counter.name}
+        </Link>
         <button
           type="button"
           className="shrink-0 text-muted-foreground hover:text-foreground"
-          onClick={onEdit}
-          aria-label={`Edit ${goal.label}`}
-          data-testid={`button-edit-goal-${goal._id}`}
+          onClick={onRemove}
+          aria-label={`Take ${counter.name} off the command bar`}
+          data-testid={`button-unpin-counter-${counter.canonicalId}`}
         >
-          <Pencil className="h-3 w-3" />
+          <X className="h-3 w-3" />
         </button>
       </div>
       {/* Clicking any card flips every card at once — one shared display mode, not per-card. */}
@@ -124,172 +159,97 @@ function GoalCard({
         type="button"
         className="w-full text-left"
         onClick={onToggleDisplay}
-        data-testid={`button-toggle-goal-display-${goal._id}`}
+        data-testid={`button-toggle-counter-display-${counter.canonicalId}`}
       >
         <div className="text-sm font-bold tabular-nums">
-          {showRemaining ? (
+          {showRemaining && remaining !== null ? (
             `${remaining.toLocaleString()} to go`
           ) : (
             <>
-              {goal.current.toLocaleString()}
-              <span className="text-muted-foreground font-medium"> / {goal.target.toLocaleString()}</span>
+              {counter.value.toLocaleString()}
+              {counter.goal !== null && (
+                <span className="text-muted-foreground font-medium"> / {counter.goal.toLocaleString()}</span>
+              )}
             </>
           )}
         </div>
-        <div className="mt-1 h-1 w-full rounded-full bg-muted overflow-hidden">
-          <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${percent}%` }} />
+        {/* The track stays even with no goal to fill it, so every card is the same height. */}
+        <div
+          className={cn(
+            "mt-1 h-1 w-full rounded-full overflow-hidden",
+            counter.fraction === null ? "bg-transparent" : "bg-muted"
+          )}
+        >
+          {counter.fraction !== null && (
+            <div
+              className="h-full rounded-full bg-primary transition-[width]"
+              style={{ width: `${counter.fraction * 100}%` }}
+            />
+          )}
         </div>
       </button>
     </div>
   );
 }
 
-interface GoalDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  instanceId: Id<"instances">;
-  /** Null when adding a new goal. */
-  goal: StreamGoal | null;
-}
-
-function GoalDialog({ open, onOpenChange, instanceId, goal }: GoalDialogProps) {
-  const { toast } = useToast();
-  const createGoal = useMutation(api.streamGoals.create);
-  const updateGoal = useMutation(api.streamGoals.update);
-  const removeGoal = useMutation(api.streamGoals.remove);
-
-  const [label, setLabel] = useState("");
-  const [current, setCurrent] = useState("0");
-  const [target, setTarget] = useState("100");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    setLabel(goal?.label ?? "");
-    setCurrent(String(goal?.current ?? 0));
-    setTarget(String(goal?.target ?? 100));
-  }, [open, goal]);
-
-  const handleSave = async () => {
-    const parsedTarget = Number(target);
-    const parsedCurrent = Number(current);
-    if (!label.trim()) {
-      toast({ title: "Give the goal a name", variant: "destructive" });
-      return;
-    }
-    if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
-      toast({ title: "Target must be a positive number", variant: "destructive" });
-      return;
-    }
-    if (!Number.isFinite(parsedCurrent) || parsedCurrent < 0) {
-      toast({ title: "Progress must be zero or more", variant: "destructive" });
-      return;
-    }
-
-    setSaving(true);
-    try {
-      if (goal) {
-        await updateGoal({ goalId: goal._id, label, current: parsedCurrent, target: parsedTarget });
-      } else {
-        await createGoal({ instanceId, label, current: parsedCurrent, target: parsedTarget });
-      }
-      onOpenChange(false);
-    } catch (error) {
-      toast({
-        title: "Couldn't save the goal",
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRemove = async () => {
-    if (!goal) {
-      return;
-    }
-    setSaving(true);
-    try {
-      await removeGoal({ goalId: goal._id });
-      onOpenChange(false);
-    } catch (error) {
-      toast({
-        title: "Couldn't remove the goal",
-        description: error instanceof Error ? error.message : String(error),
-        variant: "destructive",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
+/** Every counter the instance has, each one on or off the bar. */
+function CounterPicker({
+  counters,
+  pinnedIds,
+  onToggle,
+}: {
+  counters: ResourceInstanceDoc[];
+  pinnedIds: Set<string>;
+  onToggle: (canonicalId: string, pinned: boolean) => void;
+}) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>{goal ? "Edit goal" : "New goal"}</DialogTitle>
-          <DialogDescription>
-            Goals are tracked by hand — the engine doesn't report running follower, sub, or bits totals yet.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="goal-label">Name</Label>
-            <Input
-              id="goal-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="Subs"
-              data-testid="input-goal-label"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="goal-current">Progress</Label>
-              <Input
-                id="goal-current"
-                type="number"
-                value={current}
-                onChange={(e) => setCurrent(e.target.value)}
-                data-testid="input-goal-current"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="goal-target">Target</Label>
-              <Input
-                id="goal-target"
-                type="number"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                data-testid="input-goal-target"
-              />
-            </div>
-          </div>
-        </div>
-        <DialogFooter className="gap-2 sm:justify-between">
-          {goal ? (
-            <Button
-              variant="ghost"
-              className="text-destructive hover:text-destructive"
-              onClick={() => void handleRemove()}
-              disabled={saving}
-              data-testid="button-remove-goal"
-            >
-              Remove
-            </Button>
-          ) : (
-            <span />
-          )}
-          <Button onClick={() => void handleSave()} disabled={saving} data-testid="button-save-goal">
-            {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="shrink-0 h-[58px] w-[92px] rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-1"
+          data-testid="button-add-counter"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-60 p-0">
+        {counters.length === 0 ? (
+          <p className="p-4 text-sm text-muted-foreground" data-testid="text-no-counters">
+            No counters yet.{" "}
+            <Link href={COUNTERS_PATH} className="underline hover:text-foreground" onClick={() => setOpen(false)}>
+              Make one
+            </Link>{" "}
+            and it can go here.
+          </p>
+        ) : (
+          <ScrollArea className="max-h-64">
+            <ul className="p-1" aria-label="Counters">
+              {counters.map((row) => {
+                const pinned = pinnedIds.has(row.canonicalId);
+                return (
+                  <li key={row.canonicalId}>
+                    <button
+                      type="button"
+                      className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted"
+                      aria-pressed={pinned}
+                      onClick={() => onToggle(row.canonicalId, pinned)}
+                      data-testid={`button-toggle-counter-${row.resourceInstanceId}`}
+                    >
+                      <Check className={cn("h-4 w-4 shrink-0", pinned ? "opacity-100" : "opacity-0")} aria-hidden />
+                      <span className="truncate">{resourceName(row)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </ScrollArea>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -300,31 +260,75 @@ interface CommandBarProps {
 
 /**
  * Full-width strip above the dashboard panels: stream preview, live pill,
- * goals, and a Clip button. Everything here reads the same
+ * counters, and a Clip button. Everything here reads the same
  * `instanceLiveState` row the stream-status and stream-preview widgets do —
  * Convex dedupes the subscription, so this is one data path, not a second.
  */
 export function CommandBar({ onDismiss }: CommandBarProps) {
   const { instance } = useInstance();
   const { toast } = useToast();
+  const instanceId = instance?._id;
 
   const liveState = useLiveState();
-  const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
-  const goals = useQuery(api.streamGoals.list, instance ? { instanceId: instance._id } : "skip");
+  const platformLinks = useQuery(api.instances.getPlatformLinks, instanceId ? { instanceId } : "skip");
+  const counters = useQuery(
+    api.moduleResourceInstances.listByKind,
+    instanceId ? { instanceId, kind: COUNTER_KIND } : "skip"
+  );
+  const values = useQuery(api.resourceValues.listForInstance, instanceId ? { instanceId } : "skip");
+  const pinnedRows = useQuery(api.dashboardCounters.list, instanceId ? { instanceId } : "skip");
+  const pinCounter = useMutation(api.dashboardCounters.add);
+  const unpinCounter = useMutation(api.dashboardCounters.remove);
+  const refreshValues = useAction(api.moduleResourceActions.refreshResourceValues);
   const createClip = useAction(api.twitchClips.createClip);
 
   const [showRemaining, setShowRemaining] = useState(false);
-  const [editingGoal, setEditingGoal] = useState<StreamGoal | null>(null);
-  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
   const [clipping, setClipping] = useState(false);
 
   const isLive = liveState?.isLive ?? false;
   const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   const login = twitchLink ? twitchLink.platformUsername.toLowerCase() : null;
 
-  const openGoalDialog = (goal: StreamGoal | null) => {
-    setEditingGoal(goal);
-    setGoalDialogOpen(true);
+  // Counter values arrive by webhook while the dashboard is open; this fills in
+  // any written before it was, or while a webhook went missing.
+  useEffect(() => {
+    if (!instanceId) {
+      return;
+    }
+    refreshValues({ instanceId, kind: COUNTER_KIND }).catch(() => {
+      // The mirror still shows the last known numbers; the next change updates it.
+    });
+  }, [instanceId, refreshValues]);
+
+  const sortedCounters = useMemo(
+    () => [...(counters ?? [])].sort((a, b) => resourceName(a).localeCompare(resourceName(b))),
+    [counters]
+  );
+
+  // A pin whose counter has since been deleted resolves to nothing and is dropped.
+  const cards = useMemo(() => {
+    const byCanonicalId = new Map((counters ?? []).map((row) => [row.canonicalId, row]));
+    return (pinnedRows ?? []).flatMap((pin) => {
+      const counter = byCanonicalId.get(pin.canonicalId);
+      return counter ? [toCardData(counter, values?.[counter.canonicalId] ?? null)] : [];
+    });
+  }, [counters, pinnedRows, values]);
+
+  const pinnedIds = useMemo(() => new Set(cards.map((card) => card.canonicalId)), [cards]);
+
+  const togglePinned = async (canonicalId: string, pinned: boolean) => {
+    if (!instanceId) {
+      return;
+    }
+    try {
+      await (pinned ? unpinCounter({ instanceId, canonicalId }) : pinCounter({ instanceId, canonicalId }));
+    } catch (error) {
+      toast({
+        title: pinned ? "Couldn't take that counter off the bar" : "Couldn't put that counter on the bar",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    }
   };
 
   const handleClip = async () => {
@@ -355,25 +359,22 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
       <StatusPill isLive={isLive} />
 
       <div className="flex-1 min-w-0 flex items-center gap-2 scroll-strip-x py-0.5">
-        {(goals ?? []).map((goal) => (
-          <GoalCard
-            key={goal._id}
-            goal={goal}
+        {cards.map((card) => (
+          <CounterCard
+            key={card.canonicalId}
+            counter={card}
             showRemaining={showRemaining}
             onToggleDisplay={() => setShowRemaining((prev) => !prev)}
-            onEdit={() => openGoalDialog(goal)}
+            onRemove={() => void togglePinned(card.canonicalId, true)}
           />
         ))}
-        <button
-          type="button"
-          className="shrink-0 h-[58px] w-[92px] rounded-lg border border-dashed border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center justify-center gap-1"
-          onClick={() => openGoalDialog(null)}
-          disabled={!instance}
-          data-testid="button-add-goal"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          Add
-        </button>
+        {instanceId && (
+          <CounterPicker
+            counters={sortedCounters}
+            pinnedIds={pinnedIds}
+            onToggle={(canonicalId, pinned) => void togglePinned(canonicalId, pinned)}
+          />
+        )}
       </div>
 
       <Button
@@ -395,15 +396,6 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
       >
         <X className="h-4 w-4" />
       </button>
-
-      {instance && (
-        <GoalDialog
-          open={goalDialogOpen}
-          onOpenChange={setGoalDialogOpen}
-          instanceId={instance._id}
-          goal={editingGoal}
-        />
-      )}
     </Card>
   );
 }

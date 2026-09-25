@@ -1,3 +1,4 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -10,6 +11,22 @@ export async function getInstanceMembership(ctx: QueryCtx, instanceId: Id<"insta
     .query("instanceMembers")
     .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
     .first();
+}
+
+/**
+ * Whether the caller is signed in and a member of the instance.
+ *
+ * For read paths that answer with nothing rather than raising: every one of
+ * these is a live `useQuery` subscription, and a throw during the moment
+ * between mount and auth resolving surfaces in the UI as a crashed panel
+ * instead of an empty one. Callers that change data should reject instead.
+ */
+export async function isInstanceMember(ctx: QueryCtx, instanceId: Id<"instances">): Promise<boolean> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    return false;
+  }
+  return (await getInstanceMembership(ctx, instanceId, userId)) !== null;
 }
 
 export async function getAccountMembership(ctx: QueryCtx, accountId: Id<"accounts">, userId: Id<"users">) {

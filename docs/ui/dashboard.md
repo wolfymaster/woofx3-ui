@@ -25,8 +25,8 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
   edit mode writes through immediately — otherwise the change would be dropped.
   Note this covers a widget's *settings*, which are per user along with the layout
   row they live in. Content that belongs to the channel rather than the viewer —
-  macros, stream goals, the shoutout queue — lives in its own instance-scoped
-  table instead.
+  macros, the command bar's counters, the shoutout queue — lives in its own
+  instance-scoped table instead.
 
 ## Widgets
 
@@ -39,10 +39,54 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `announcement` | stream | Send a coloured announcement to chat |
 | `pinned` | stream | Twitch pinned message, plus re-pinnable history — see below |
 | `shoutout` | stream | Autocomplete from chat, confirm, queue — see below |
+| `queue` | stream | One queue's line, with manual add and remove — see below |
 | `workflow-runs` | automation | Recent and in-progress executions |
 | `macro-pad` | automation | One-click buttons — see below |
 | `stream-stats` | utility | Viewers, uptime, category |
 | `notes` | utility | Per-stream scratch pad |
+
+## Command bar
+
+The strip above the panels (`client/src/components/dashboard/command-bar.tsx`):
+stream preview, live pill, counter cards, Clip. It is not a widget and is not in
+the layout — it spans the whole dashboard and is hidden per browser through the
+`$commandBarHidden` nanostore.
+
+The counter cards are a **projection of counter resources**, not a store of their
+own. A card reads its number from the `resourceValues` mirror and its name and
+goals from the counter's `moduleResourceInstances` row, through the same
+`counterValue` / `counterGoals` / `goalProgress` helpers in
+`client/src/lib/resource-values.ts` that the Counters page uses — so a card can
+never disagree with the counter's own page, and changing a goal is done in one
+place. `dashboardCounters` (`convex/dashboardCounters.ts`) holds only which
+counters are on the bar and in what order; a row whose counter has since been
+deleted resolves to nothing and is skipped.
+
+A card shows `{value} / {goal}` for the goal being worked toward — the smallest
+above the current value — and just the number once every goal is passed, or when
+the counter has none. Clicking any card flips **all** of them to `{remaining} to
+go`; the display mode is one piece of component state, not a per-card setting.
+Values arrive by webhook while the dashboard is open, and the bar calls
+`refreshResourceValues` once on mount to cover anything written before it was.
+
+## Queue widget
+
+Shows one queue resource (`client/src/components/dashboard/widgets/queue.tsx`)
+and lets you add an entry, remove any entry, and take the next one.
+
+All three go through the queue's **own engine actions** via `useResourceAction`
+— `queue.add`, `queue.remove`, `queue.next` — never a write to the mirrored
+`resourceValues` row. A change made in the widget is therefore the same change a
+chat command or a workflow would make, and it returns through the engine's
+change event rather than being guessed at locally. Whether an add would be
+refused (duplicate, full) is worked out before sending with `queueAddRefusal`,
+since a dashboard action run reports no result back.
+
+Which queue it shows lives in the widget's own config as `canonicalId`, so two
+placements can watch different queues. An unset config, or one naming a queue
+since deleted, falls back to the first queue by name — the widget is useful the
+moment it is placed, and choosing from the header dropdown is what writes the
+config. With only one queue the dropdown is replaced by a link to its page.
 
 ## Macro pad
 
@@ -52,7 +96,7 @@ per-button edit and delete.
 
 **There is one macro pad per instance, and it is shared.** The buttons and their
 order both live in the `macros` table (`convex/macros.ts`), not in the widget's
-config — the same reasoning as `streamGoals`: a dashboard layout is a personal
+config — the same reasoning as `dashboardCounters`: a dashboard layout is a personal
 workspace preference, but the macro pad is the channel's, so everyone sharing the
 account sees the same buttons in the same order. Placing the widget on two panels
 shows the same pad in both.

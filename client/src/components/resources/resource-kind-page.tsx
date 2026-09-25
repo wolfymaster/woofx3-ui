@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
 import { Loader2, type LucideIcon, Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -29,11 +28,12 @@ import { configFieldRenderers } from "@/components/workflows/trigger-config-form
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { parseConfigFields } from "@/lib/parse-config-fields";
+import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
 import { subPathSegments } from "@/lib/route-subpath";
 import { cn } from "@/lib/utils";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
-export type ResourceInstanceDoc = Doc<"moduleResourceInstances">;
+export type { ResourceInstanceDoc };
 
 export interface ResourceDetailProps {
   instance: ResourceInstanceDoc;
@@ -111,7 +111,10 @@ export function ResourceKindPage({
     });
   }, [instanceId, kind, refreshValues]);
 
-  const sorted = useMemo(() => [...(instances ?? [])].sort((a, b) => nameOf(a).localeCompare(nameOf(b))), [instances]);
+  const sorted = useMemo(
+    () => [...(instances ?? [])].sort((a, b) => resourceName(a).localeCompare(resourceName(b))),
+    [instances]
+  );
   // The one segment below this kind's route names the instance on show, if any.
   const selectedId = subPathSegments(location, basePath)[0] ?? "";
   const selected = sorted.find((row) => row.resourceInstanceId === selectedId);
@@ -120,7 +123,7 @@ export function ResourceKindPage({
   const detailProps = (row: ResourceInstanceDoc): ResourceDetailProps => ({
     instance: row,
     value: values?.[row.canonicalId] ?? null,
-    settings: settingsOf(row),
+    settings: resourceSettings(row),
     moduleName: kindDefinition?.moduleName ?? row.moduleName,
   });
 
@@ -171,7 +174,7 @@ export function ResourceKindPage({
                       aria-current={isActive ? "page" : undefined}
                       data-testid={`resource-${row.resourceInstanceId}`}
                     >
-                      <span className="truncate">{nameOf(row)}</span>
+                      <span className="truncate">{resourceName(row)}</span>
                       <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
                         {railValue(detailProps(row))}
                       </span>
@@ -205,7 +208,7 @@ export function ResourceKindPage({
             <>
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h1 className="text-2xl font-semibold tracking-tight truncate">{nameOf(selected)}</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight truncate">{resourceName(selected)}</h1>
                   <p className="text-xs font-mono text-muted-foreground break-all">{selected.canonicalId}</p>
                 </div>
                 <Button
@@ -213,7 +216,7 @@ export function ResourceKindPage({
                   size="icon"
                   className="text-destructive hover:text-destructive shrink-0"
                   onClick={() => setDeleteTarget(selected)}
-                  aria-label={`Delete ${nameOf(selected)}`}
+                  aria-label={`Delete ${resourceName(selected)}`}
                   data-testid={`button-delete-${kind}`}
                 >
                   <Trash2 className="h-4 w-4" />
@@ -233,7 +236,7 @@ export function ResourceKindPage({
               <SettingsCard
                 instance={selected}
                 schema={kindDefinition.schema}
-                settings={settingsOf(selected)}
+                settings={resourceSettings(selected)}
                 onSave={async (displayName, settings) => {
                   try {
                     await updateInstance({
@@ -277,7 +280,7 @@ export function ResourceKindPage({
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete {deleteTarget ? nameOf(deleteTarget) : noun}?</AlertDialogTitle>
+            <AlertDialogTitle>Delete {deleteTarget ? resourceName(deleteTarget) : noun}?</AlertDialogTitle>
             <AlertDialogDescription>
               Its value is gone for good, and workflows or commands that use it will stop finding it.
             </AlertDialogDescription>
@@ -295,7 +298,7 @@ export function ResourceKindPage({
                   navigate(basePath);
                 } catch (err) {
                   toast({
-                    title: `Couldn't delete ${nameOf(deleteTarget)}`,
+                    title: `Couldn't delete ${resourceName(deleteTarget)}`,
                     description: err instanceof Error ? err.message : String(err),
                     variant: "destructive",
                   });
@@ -344,7 +347,7 @@ function SettingsCard({
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setDraft({ displayName: nameOf(instance), settings: { ...settings } })}
+            onClick={() => setDraft({ displayName: resourceName(instance), settings: { ...settings } })}
             data-testid="button-edit-settings"
           >
             <Pencil className="h-3.5 w-3.5 mr-1.5" />
@@ -380,7 +383,7 @@ function SettingsCard({
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
           <div className="contents">
             <dt className="text-muted-foreground">Name</dt>
-            <dd>{nameOf(instance)}</dd>
+            <dd>{resourceName(instance)}</dd>
           </div>
           {fields.map((field) => {
             const raw = settings[field.id] ?? field.defaultValue;
@@ -416,15 +419,4 @@ function SettingsCard({
       )}
     </Card>
   );
-}
-
-function nameOf(row: ResourceInstanceDoc): string {
-  return row.displayName || row.resourceInstanceId;
-}
-
-function settingsOf(row: ResourceInstanceDoc): Record<string, unknown> {
-  const settings = row.settings;
-  return settings && typeof settings === "object" && !Array.isArray(settings)
-    ? (settings as Record<string, unknown>)
-    : {};
 }
