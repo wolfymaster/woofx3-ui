@@ -12,7 +12,7 @@ The SPA is built with **React 18**, **Vite**, and **Wouter** for client-side rou
 | Path | Guard | Purpose |
 |------|--------|---------|
 | `/auth/login`, `/auth/register` | None | Sign in / sign up |
-| `/auth/onboarding` | `AuthGuard` | Create account + first instance |
+| `/auth/onboarding` | `AuthGuard` | Create account + first instance (managed engine, or connect an existing one) |
 | Everything under the main shell | `AuthGuard` → `OnboardingGuard` | Product UI inside `BroadcastShell` |
 
 **AuthGuard** redirects unauthenticated users to `/auth/login`. **OnboardingGuard** loads `accounts.getMyAccount` and `instances.listForCurrentUser`; if there is no account or no instances, it sends the user to `/auth/onboarding`.
