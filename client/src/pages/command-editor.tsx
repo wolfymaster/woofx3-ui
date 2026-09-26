@@ -37,7 +37,6 @@ import {
 } from "@/lib/command-drafts";
 import { COMMAND_LIST_PATH, commandStepAlertPath } from "@/lib/command-editor-route";
 import { splitCommandInput } from "@/lib/command-input";
-import { commandActionVariables } from "@/lib/command-variables";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 
 /**
@@ -82,10 +81,7 @@ export default function CommandEditor() {
 
   // Follows the argument pattern as it is typed, so a `{songTitle}` just added to the
   // command name is offerable in the steps below without saving first.
-  const availableVariables = useMemo(
-    () => commandActionVariables(splitCommandInput(form?.command ?? "").argumentPattern),
-    [form?.command]
-  );
+  const argumentPattern = splitCommandInput(form?.command ?? "").argumentPattern;
 
   const edit = (change: (current: CommandEditorState) => CommandEditorState) => {
     updateCommandDraft(draftKey, change);
@@ -248,12 +244,12 @@ export default function CommandEditor() {
               actions={form.actions}
               onChange={(actions) => edit((current) => ({ ...current, actions }))}
               actionPresets={actionPresets}
-              availableVariables={availableVariables}
+              argumentPattern={argumentPattern}
               alertEditorHref={(actionId) => commandStepAlertPath(engineCommandId, actionId)}
             />
             <p className="text-xs text-muted-foreground">
               Steps run in order. Type {"{"} in a text field to use what the command captured, like the chatter's name
-              or an argument.
+              or an argument, or what an earlier step handed back.
             </p>
           </Section>
 

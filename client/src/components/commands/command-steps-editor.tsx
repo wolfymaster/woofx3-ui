@@ -3,17 +3,17 @@ import { useState } from "react";
 import { ActionRow } from "@/components/triggers/action-row";
 import { StepTiles } from "@/components/triggers/step-tiles";
 import { commandStepId } from "@/lib/command-drafts";
+import { commandStepVariables } from "@/lib/command-variables";
 import type { ActionPreset, TriggerConfigValues } from "@/lib/workflow-presets";
 import { actionStepLabel, presetToActionStep, resolveActionStepPreset } from "@/lib/workflow-presets-json";
-import type { VariableOption } from "@/lib/workflow-variables";
 
 interface CommandStepsEditorProps {
   actions: ActionStep[];
   onChange: (actions: ActionStep[]) => void;
   /** The catalog to pick from — every action installed for this instance. */
   actionPresets: ActionPreset[];
-  /** Offered in the steps' text fields; see commandActionVariables. */
-  availableVariables: VariableOption[];
+  /** The argument pattern from the command field; what it captures is offered in the steps' text fields. */
+  argumentPattern: string;
   /** Where a step's alert content is edited — its own route, like every other editor here. */
   alertEditorHref: (actionId: string) => string;
 }
@@ -33,7 +33,7 @@ export function CommandStepsEditor({
   actions,
   onChange,
   actionPresets,
-  availableVariables,
+  argumentPattern,
   alertEditorHref,
 }: CommandStepsEditorProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -95,7 +95,9 @@ export function CommandStepsEditor({
             preset={resolveActionStepPreset(step, actionPresets)}
             label={actionStepLabel(step, actionPresets)}
             stepNumber={index + 1}
-            availableVariables={availableVariables}
+            availableVariables={commandStepVariables(argumentPattern, actions, index, (candidate) =>
+              resolveActionStepPreset(candidate, actionPresets)
+            )}
             alertEditorHref={alertEditorHref(id)}
             isExpanded={expandedId === id}
             canMoveDown={index < actions.length - 1}
