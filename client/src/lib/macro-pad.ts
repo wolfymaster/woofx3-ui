@@ -10,12 +10,17 @@
 // unfilled here must not read as an engine path that the engine would then try
 // to resolve against trigger data that does not exist.
 
-export type MacroActionType = "chat-command" | "trigger-workflow" | "http-request";
+export type MacroActionType = "send-message" | "chat-command" | "trigger-workflow" | "http-request";
 
 export type MacroHttpMethod = "GET" | "POST" | "PUT" | "DELETE";
 
 export interface MacroConfig {
+  /** Sent to chat verbatim by a "send-message" button. */
+  message?: string;
+  /** A "chat-command" button's command word, without the `!`. */
   command?: string;
+  /** What follows the command word, as a chatter would type it after `!command`. */
+  commandText?: string;
   workflowId?: string;
   url?: string;
   method?: MacroHttpMethod;
@@ -75,9 +80,16 @@ const VARIABLE_PATTERN = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 /**
  * Free-text fields a variable may appear in, in the order the prompt should ask
  * for them. `workflowId` and `method` are chosen from pickers rather than typed,
- * so they are deliberately not scanned.
+ * so they are deliberately not scanned. `command` is scanned because it can
+ * hold a whole typed `!word rest` line (see chatCommandParts).
  */
-const TEMPLATE_FIELDS: ReadonlyArray<"command" | "url" | "body"> = ["command", "url", "body"];
+const TEMPLATE_FIELDS: ReadonlyArray<"message" | "command" | "commandText" | "url" | "body"> = [
+  "message",
+  "command",
+  "commandText",
+  "url",
+  "body",
+];
 
 function templateStrings(config: MacroConfig): string[] {
   const out: string[] = [];
@@ -150,4 +162,23 @@ export function applyMacroVariables(config: MacroConfig, values: Readonly<Record
     next.headers = headers;
   }
   return next;
+}
+
+/**
+ * A chat-command button's command word and the text after it. `command` is
+ * normally the bare word with the text in `commandText`, but it may instead
+ * hold a whole typed line such as `!so {{channel}}` with no `commandText`;
+ * that line is split at its first whitespace, the way chat splits it.
+ */
+export function chatCommandParts(config: MacroConfig): { command: string; text: string } {
+  const command = (config.command ?? "").trim();
+  if (config.commandText !== undefined) {
+    return { command: command.replace(/^!/, ""), text: config.commandText.trim() };
+  }
+  const line = command.replace(/^!/, "");
+  const space = line.search(/\s/);
+  if (space === -1) {
+    return { command: line, text: "" };
+  }
+  return { command: line.slice(0, space), text: line.slice(space + 1).trim() };
 }

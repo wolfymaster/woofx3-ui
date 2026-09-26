@@ -23,6 +23,7 @@ export const dashboardPanelWidgetValidator = v.object({
 });
 
 export const macroActionTypeValidator = v.union(
+  v.literal("send-message"),
   v.literal("chat-command"),
   v.literal("trigger-workflow"),
   v.literal("http-request")
@@ -31,7 +32,9 @@ export const macroActionTypeValidator = v.union(
 // Mirrors MacroConfig in client/src/lib/macro-pad.ts. Free-text fields may carry
 // `{{name}}` variables, which the browser resolves at click time.
 export const macroConfigValidator = v.object({
+  message: v.optional(v.string()),
   command: v.optional(v.string()),
+  commandText: v.optional(v.string()),
   workflowId: v.optional(v.string()),
   url: v.optional(v.string()),
   method: v.optional(v.union(v.literal("GET"), v.literal("POST"), v.literal("PUT"), v.literal("DELETE"))),

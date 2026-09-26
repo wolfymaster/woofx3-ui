@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  chatCommandParts,
   extractMacroVariables,
   type MacroActionType,
   type MacroButton,
@@ -30,21 +31,27 @@ import { MacroIconPicker } from "./macro-icon-picker";
  */
 type WorkflowOption = { id: string; name: string };
 
+/** A chat command the "Chat Command" dropdown offers, from `api.chatCommands.list`. */
+type CommandOption = { command: string; argumentPattern?: string; enabled: boolean };
+
 interface MacroConfigModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   macro: MacroButton | null;
   workflows: WorkflowOption[];
+  commands: CommandOption[];
   /** Ids are assigned by the server, so an edit is identified by `macro`, not by the payload. */
   onSave: (input: MacroInput) => void;
 }
 
-export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave }: MacroConfigModalProps) {
+export function MacroConfigModal({ open, onOpenChange, macro, workflows, commands, onSave }: MacroConfigModalProps) {
   const [label, setLabel] = useState("");
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [color, setColor] = useState<string | undefined>(undefined);
-  const [type, setType] = useState<MacroActionType>("chat-command");
+  const [type, setType] = useState<MacroActionType>("send-message");
+  const [message, setMessage] = useState("");
   const [command, setCommand] = useState("");
+  const [commandText, setCommandText] = useState("");
   const [workflowId, setWorkflowId] = useState("");
   const [httpUrl, setHttpUrl] = useState("");
   const [httpMethod, setHttpMethod] = useState<MacroHttpMethod>("GET");
@@ -60,7 +67,10 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
       setIcon(macro.icon);
       setColor(macro.color);
       setType(macro.type);
-      setCommand(macro.config.command || "");
+      setMessage(macro.config.message || "");
+      const parts = chatCommandParts(macro.config);
+      setCommand(parts.command);
+      setCommandText(parts.text);
       setWorkflowId(macro.config.workflowId || "");
       setHttpUrl(macro.config.url || "");
       setHttpMethod(macro.config.method || "GET");
@@ -70,8 +80,10 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
       setLabel("");
       setIcon(undefined);
       setColor(undefined);
-      setType("chat-command");
+      setType("send-message");
+      setMessage("");
       setCommand("");
+      setCommandText("");
       setWorkflowId("");
       setHttpUrl("");
       setHttpMethod("GET");
@@ -98,14 +110,27 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
   const variables = useMemo(
     () =>
       extractMacroVariables({
-        ...(type === "chat-command" && { command }),
+        ...(type === "send-message" && { message }),
+        ...(type === "chat-command" && { commandText }),
         ...(type === "http-request" && { url: httpUrl, body: httpBody, headers: parsedHeaders }),
       }),
-    [type, command, httpUrl, httpBody, parsedHeaders]
+    [type, message, commandText, httpUrl, httpBody, parsedHeaders]
   );
 
+  const selectedCommand = commands.find((option) => option.command === command);
+  // A button can outlive the command it runs; keep that name selectable so
+  // opening the editor does not silently blank it.
+  const commandOptions =
+    command && !selectedCommand ? [{ command, enabled: false, missing: true }, ...commands] : commands;
+
+  const isComplete =
+    label.trim().length > 0 &&
+    (type !== "send-message" || message.trim().length > 0) &&
+    (type !== "chat-command" || command.length > 0) &&
+    (type !== "trigger-workflow" || workflowId.length > 0);
+
   const handleSave = () => {
-    if (!label.trim()) {
+    if (!isComplete) {
       return;
     }
 
@@ -115,7 +140,8 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
       color,
       type,
       config: {
-        ...(type === "chat-command" && { command }),
+        ...(type === "send-message" && { message }),
+        ...(type === "chat-command" && { command, commandText }),
         ...(type === "trigger-workflow" && { workflowId }),
         ...(type === "http-request" && {
           url: httpUrl,
@@ -162,23 +188,67 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
           </div>
 
           <Tabs value={type} onValueChange={(v) => setType(v as MacroActionType)}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="send-message">Send Message</TabsTrigger>
               <TabsTrigger value="chat-command">Chat Command</TabsTrigger>
               <TabsTrigger value="trigger-workflow">Workflow</TabsTrigger>
               <TabsTrigger value="http-request">HTTP Request</TabsTrigger>
             </TabsList>
 
+            <TabsContent value="send-message" className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label htmlFor="chat-message">Message</Label>
+                <Textarea
+                  id="chat-message"
+                  placeholder="e.g., Welcome in, {{name}}!"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  rows={3}
+                  maxLength={500}
+                  data-testid="input-macro-message"
+                />
+                <p className="text-xs text-muted-foreground">Posted to chat as the broadcaster.</p>
+              </div>
+            </TabsContent>
+
             <TabsContent value="chat-command" className="space-y-4 mt-4">
               <div className="space-y-2">
                 <Label htmlFor="chat-command">Command</Label>
+                <Select value={command} onValueChange={setCommand}>
+                  <SelectTrigger id="chat-command" data-testid="select-macro-command">
+                    <SelectValue placeholder={commands.length > 0 ? "Select a command" : "No chat commands yet"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {commandOptions.map((option) => (
+                      <SelectItem key={option.command} value={option.command}>
+                        !{option.command}
+                        {"missing" in option ? " (not found)" : !option.enabled && " (disabled)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Runs the command as the broadcaster.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="chat-command-text">Arguments</Label>
                 <Input
-                  id="chat-command"
-                  placeholder="e.g., !so {{channel}}"
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  data-testid="input-macro-command"
+                  id="chat-command-text"
+                  placeholder={selectedCommand?.argumentPattern || "e.g., {{channel}}"}
+                  value={commandText}
+                  onChange={(e) => setCommandText(e.target.value)}
+                  data-testid="input-macro-command-text"
                 />
-                <p className="text-xs text-muted-foreground">The chat command to send when this macro is executed.</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedCommand?.argumentPattern ? (
+                    <>
+                      Typed after the command, as in chat. This command expects{" "}
+                      <code className="font-mono text-foreground">{selectedCommand.argumentPattern}</code>.
+                    </>
+                  ) : (
+                    "Optional. Typed after the command, as in chat."
+                  )}
+                </p>
               </div>
             </TabsContent>
 
@@ -277,7 +347,7 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!label.trim()} data-testid="button-save-macro">
+          <Button onClick={handleSave} disabled={!isComplete} data-testid="button-save-macro">
             {macro ? "Save Changes" : "Add Macro"}
           </Button>
         </DialogFooter>

@@ -10,8 +10,10 @@ import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
+import { useToast } from "@/hooks/use-toast";
 import {
   applyMacroVariables,
+  chatCommandParts,
   extractMacroVariables,
   isHexColor,
   type MacroButton,
@@ -133,11 +135,15 @@ export function MacroPadModule() {
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const listEngineWorkflows = useAction(api.moduleEngine.listWorkflows);
   const triggerWorkflow = useAction(api.workflowActions.trigger);
+  const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
+  const executeCommand = useAction(api.chatCommandActions.executeCommand);
+  const { toast } = useToast();
 
   const instanceId = instance?._id;
   const listArgs = instanceId ? { instanceId } : "skip";
 
   const macros = useQuery(api.macros.list, listArgs);
+  const commands = useQuery(api.chatCommands.list, listArgs);
   const addMacro = useMutation(api.macros.addMacro);
   const updateMacro = useMutation(api.macros.updateMacro);
   const deleteMacro = useMutation(api.macros.deleteMacro);
@@ -225,26 +231,31 @@ export function MacroPadModule() {
   // click from being swallowed as the start of a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  // Chat-command execution is still stubbed; workflow and HTTP buttons run for
-  // real. `config` arrives with every {{variable}} already resolved.
+  // `resolved` arrives with every {{variable}} already filled in.
   const runMacro = useCallback(
     async (macro: MacroButton, resolved: MacroConfig) => {
+      if (!instanceId) {
+        return;
+      }
       setIsExecuting(macro.id);
       try {
         switch (macro.type) {
-          case "chat-command":
-            if (resolved.command) {
-              // TODO: Implement chat command execution via API
-              console.log("Executing chat command:", resolved.command);
-            }
+          case "send-message":
+            await sendChatMessage({ instanceId, message: resolved.message ?? "" });
             break;
+          case "chat-command": {
+            const { command, text } = chatCommandParts(resolved);
+            await executeCommand({ instanceId, command, text });
+            break;
+          }
           case "trigger-workflow":
-            if (resolved.workflowId && instanceId) {
-              // Resolves once the request reaches the bus. The run happens in
-              // the engine and reports its own lifecycle, so there is nothing
-              // further to await here.
-              await triggerWorkflow({ instanceId, workflowNameOrId: resolved.workflowId });
+            if (!resolved.workflowId) {
+              throw new Error("This button has no workflow selected");
             }
+            // Resolves once the request reaches the bus. The run happens in
+            // the engine and reports its own lifecycle, so there is nothing
+            // further to await here.
+            await triggerWorkflow({ instanceId, workflowNameOrId: resolved.workflowId });
             break;
           case "http-request":
             if (resolved.url) {
@@ -258,12 +269,16 @@ export function MacroPadModule() {
             break;
         }
       } catch (error) {
-        console.error("Failed to execute macro:", error);
+        toast({
+          title: `"${macro.label}" failed`,
+          description: error instanceof Error ? error.message : String(error),
+          variant: "destructive",
+        });
       } finally {
         setIsExecuting(null);
       }
     },
-    [instanceId, triggerWorkflow]
+    [instanceId, triggerWorkflow, sendChatMessage, executeCommand, toast]
   );
 
   const handlePress = useCallback(
@@ -340,7 +355,7 @@ export function MacroPadModule() {
           <EmptyState
             icon={Zap}
             title="No macros yet"
-            description="Add a button to fire a chat command, a workflow, or an HTTP request in one click."
+            description="Add a button to send a chat message, run a chat command, fire a workflow, or make an HTTP request in one click."
             action={{ label: "Add Macro", onClick: handleAddMacro }}
             className="h-full py-6"
           />
@@ -377,6 +392,7 @@ export function MacroPadModule() {
         onOpenChange={setConfigModalOpen}
         macro={editingMacro}
         workflows={workflows}
+        commands={commands ?? []}
         onSave={handleSaveMacro}
       />
 

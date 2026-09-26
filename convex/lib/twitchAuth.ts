@@ -29,6 +29,19 @@ export const twitchScopesFor = internalQuery({
   },
 });
 
+/** The broadcaster's Twitch login on this instance, or null when Twitch is not
+ * connected. Internal for the same reason as twitchScopesFor. */
+export const twitchLoginFor = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<string | null> => {
+    const links = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .take(10);
+    return links.find((link) => link.platform === "twitch")?.platformUsername ?? null;
+  },
+});
+
 /**
  * Authenticates the caller, confirms the instance's Twitch link carries the
  * scope this call needs, and returns a fresh token. The scope check is what
