@@ -12,7 +12,6 @@ import {
   LayoutDashboard,
   LogOut,
   Moon,
-  Palette,
   PanelLeft,
   PanelLeftClose,
   Puzzle,
@@ -33,8 +32,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -48,6 +45,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { $commandPaletteOpen, $notifications, $sidebarCollapsed } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import type { NavigationItem } from "@/types";
+import { ThemeMenuSub } from "./theme-menu";
 
 const navigationItems: NavigationItem[] = [
   { id: "dashboard", label: "Dashboard", icon: "LayoutDashboard", href: "/" },
@@ -283,8 +281,6 @@ function TeamSwitcher({ collapsed }: { collapsed: boolean }) {
 }
 
 function UserMenu({ collapsed }: { collapsed: boolean }) {
-  const { theme, toggleTheme, preset, presets, setPreset } = useTheme();
-
   const displayName = "Demo User";
   const email = "demo@woofx3.io";
   const initials = displayName
@@ -327,34 +323,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Palette className="mr-2 h-4 w-4" />
-            Theme
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            <DropdownMenuRadioGroup value={preset.id} onValueChange={setPreset}>
-              {presets.map((p) => (
-                <DropdownMenuRadioItem key={p.id} value={p.id}>
-                  {p.name}
-                </DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        <DropdownMenuItem onClick={toggleTheme}>
-          {theme === "dark" ? (
-            <>
-              <Sun className="mr-2 h-4 w-4" />
-              Light Mode
-            </>
-          ) : (
-            <>
-              <Moon className="mr-2 h-4 w-4" />
-              Dark Mode
-            </>
-          )}
-        </DropdownMenuItem>
+        <ThemeMenuSub />
         <DropdownMenuSeparator />
         <DropdownMenuItem>
           <HelpCircle className="mr-2 h-4 w-4" />
@@ -376,7 +345,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const collapsed = useStore($sidebarCollapsed);
   const notifications = useStore($notifications);
-  const { theme, toggleTheme } = useTheme();
+  const { mode, toggleMode } = useTheme();
   const [location] = useLocation();
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -490,11 +459,11 @@ export function AppShell({ children }: AppShellProps) {
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={toggleTheme} data-testid="button-theme-toggle">
-                  {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+                <Button variant="ghost" size="icon" onClick={toggleMode} data-testid="button-theme-toggle">
+                  {mode === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>{theme === "dark" ? "Light mode" : "Dark mode"}</TooltipContent>
+              <TooltipContent>{mode === "dark" ? "Light mode" : "Dark mode"}</TooltipContent>
             </Tooltip>
 
             <div className="flex items-center gap-2 pl-2 border-l border-border">

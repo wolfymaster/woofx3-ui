@@ -299,7 +299,7 @@ function toSnakeCase(str: string): string {
 
 export default function ModuleInstall() {
   const [, navigate] = useLocation();
-  const { theme } = useTheme();
+  const { mode } = useTheme();
   const { instance } = useInstance();
   const [files, setFiles] = useState<Record<string, string>>({});
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -637,7 +637,7 @@ export default function ModuleInstall() {
                   language={selectedLanguage}
                   value={selectedContent}
                   onChange={(value) => value && handleFileChange(selectedPath, value)}
-                  theme={theme === "dark" ? "vs-dark" : "vs"}
+                  theme={mode === "dark" ? "vs-dark" : "vs"}
                   options={{
                     minimap: { enabled: false },
                     fontSize: 14,
