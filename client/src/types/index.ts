@@ -134,25 +134,6 @@ export interface Widget {
   settings: Record<string, unknown>;
 }
 
-export interface ThemePreset {
-  id: string;
-  name: string;
-  colors: {
-    primary: string;
-    primaryForeground: string;
-    background: string;
-    foreground: string;
-    card: string;
-    cardForeground: string;
-    muted: string;
-    mutedForeground: string;
-    accent: string;
-    accentForeground: string;
-    sidebar: string;
-    sidebarForeground: string;
-  };
-}
-
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {

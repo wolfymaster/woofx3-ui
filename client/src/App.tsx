@@ -9,7 +9,6 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useTheme } from "@/hooks/use-theme";
 import { ALERT_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import {
@@ -125,11 +124,6 @@ function Redirect({ to }: { to: string }) {
   }, [navigate, to]);
 
   return null;
-}
-
-function ThemeInitializer({ children }: { children: React.ReactNode }) {
-  useTheme();
-  return <>{children}</>;
 }
 
 function AppRoutes() {
@@ -268,10 +262,8 @@ function App() {
         <ConvexAuthProvider client={convex}>
           <QueryClientProvider client={queryClient}>
             <TooltipProvider>
-              <ThemeInitializer>
-                <AppRoutes />
-                <Toaster />
-              </ThemeInitializer>
+              <AppRoutes />
+              <Toaster />
             </TooltipProvider>
           </QueryClientProvider>
         </ConvexAuthProvider>

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 
 <head>
   <meta charset="UTF-8" />
@@ -7,6 +7,19 @@
   <title>woofx3 — Live stream management</title>
   <meta name="description"
     content="woofx3: live stream management with workflow automation, asset management, and scene editing. Control your broadcast like a pro." />
+  <script>
+    // Sets the mode before first paint so the page does not flash the wrong one.
+    // Mirrors the mode key and resolution in client/src/lib/theme/store.ts.
+    (() => {
+      var mode = null;
+      try {
+        mode = JSON.parse(localStorage.getItem("streamdeck-theme"));
+      } catch {}
+      if (mode === "dark" || (mode !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+        document.documentElement.classList.add("dark");
+      }
+    })();
+  </script>
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

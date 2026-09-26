@@ -31,7 +31,7 @@ interface CommandPaletteProps {
 
 export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [, navigate] = useLocation();
-  const { theme, toggleTheme } = useTheme();
+  const { mode, toggleMode } = useTheme();
 
   const runCommand = useCallback(
     (command: () => void) => {
@@ -93,8 +93,8 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
         <CommandSeparator />
 
         <CommandGroup heading="Settings">
-          <CommandItem onSelect={() => runCommand(toggleTheme)} data-testid="command-toggle-theme">
-            {theme === "dark" ? (
+          <CommandItem onSelect={() => runCommand(toggleMode)} data-testid="command-toggle-theme">
+            {mode === "dark" ? (
               <>
                 <Sun className="mr-2 h-4 w-4" />
                 <span>Switch to Light Mode</span>

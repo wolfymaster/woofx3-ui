@@ -12,12 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -29,13 +24,13 @@ import { useEngineHealth } from "@/hooks/use-engine-health";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
-import { useTheme } from "@/hooks/use-theme";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn, formatUptime } from "@/lib/utils";
 import { CommandPalette } from "./command-palette";
 import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
+import { ThemeMenuSub } from "./theme-menu";
 
 function InstanceBar() {
   const { instance, instances, setInstance } = useInstance();
@@ -180,7 +175,6 @@ function AppHeader() {
   const notifications = useStore($notifications);
   const { user } = useConvexUser();
   const { signOut } = useAuthActions();
-  const { preset, presets, setPreset } = useTheme();
   const [location] = useLocation();
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -287,18 +281,7 @@ function AppHeader() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Theme Preset</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuRadioGroup value={preset.id} onValueChange={setPreset}>
-                  {presets.map((p) => (
-                    <DropdownMenuRadioItem key={p.id} value={p.id}>
-                      {p.name}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
+            <ThemeMenuSub />
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
               <Link href="/team">Team Settings</Link>

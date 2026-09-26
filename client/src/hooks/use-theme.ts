@@ -1,72 +1,35 @@
 import { useStore } from "@nanostores/react";
-import { useCallback, useEffect } from "react";
-import { $theme, $themePreset, themePresets } from "@/lib/stores";
+import {
+  $customTheme,
+  $resolvedThemeMode,
+  $themeColors,
+  $themeMode,
+  $themePaletteId,
+  resetCustomTheme,
+  resetCustomThemeColor,
+  selectThemePalette,
+  setCustomThemeBase,
+  setCustomThemeColor,
+  setThemeMode,
+  toggleThemeMode,
+} from "@/lib/theme/store";
 
+/** Reads and changes the theme. Applying it to the page is `startThemeSync`'s job. */
 export function useTheme() {
-  const theme = useStore($theme);
-  const presetId = useStore($themePreset);
-
-  const currentPreset = themePresets.find((p) => p.id === presetId) || themePresets[0];
-
-  useEffect(() => {
-    const root = document.documentElement;
-
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-
-    localStorage.setItem("theme", theme);
-  }, [theme]);
-
-  useEffect(() => {
-    const root = document.documentElement;
-    const preset = themePresets.find((p) => p.id === presetId);
-
-    if (preset && theme === "dark") {
-      Object.entries(preset.colors).forEach(([key, value]) => {
-        const cssVar = `--${key.replace(/([A-Z])/g, "-$1").toLowerCase()}`;
-        root.style.setProperty(cssVar, value);
-      });
-    }
-
-    localStorage.setItem("themePreset", presetId);
-  }, [presetId, theme]);
-
-  useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
-    const savedPreset = localStorage.getItem("themePreset");
-
-    if (savedTheme) {
-      $theme.set(savedTheme);
-    } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-      $theme.set("dark");
-    }
-
-    if (savedPreset) {
-      $themePreset.set(savedPreset);
-    }
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    $theme.set(theme === "dark" ? "light" : "dark");
-  }, [theme]);
-
-  const setTheme = useCallback((newTheme: "light" | "dark") => {
-    $theme.set(newTheme);
-  }, []);
-
-  const setPreset = useCallback((presetId: string) => {
-    $themePreset.set(presetId);
-  }, []);
-
   return {
-    theme,
-    preset: currentPreset,
-    presets: themePresets,
-    toggleTheme,
-    setTheme,
-    setPreset,
+    /** The user's choice, which may be "system". */
+    modePreference: useStore($themeMode),
+    /** What is on screen right now. */
+    mode: useStore($resolvedThemeMode),
+    paletteId: useStore($themePaletteId),
+    colors: useStore($themeColors),
+    customTheme: useStore($customTheme),
+    setMode: setThemeMode,
+    toggleMode: toggleThemeMode,
+    selectPalette: selectThemePalette,
+    setCustomBase: setCustomThemeBase,
+    setCustomColor: setCustomThemeColor,
+    resetCustomColor: resetCustomThemeColor,
+    resetCustomTheme,
   };
 }
