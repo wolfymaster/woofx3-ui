@@ -1,14 +1,16 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { buildPreviewLayoutMessage } from "@/lib/scene-preview-layout";
+import type { Widget } from "@/types";
 
 interface LiveScenePreviewProps {
   sceneId: Id<"scenes"> | undefined;
   width: number;
   height: number;
-  /** Bumped by the editor after a save to remount the iframe — see below. */
-  reloadToken?: number;
+  /** The editor's current widgets, saved or not; the overlay is moved to match. */
+  widgets: readonly Widget[];
 }
 
 /**
@@ -29,13 +31,38 @@ interface LiveScenePreviewProps {
  * The preview's overlay token is its own, so rotating or revoking the public
  * browser-source URL leaves this untouched.
  *
- * Reflects the last-saved scene state; unsaved edits only appear after Save
- * (see docs/ui/scenes.md).
+ * The overlay renders the scene as last saved, and reloads itself whenever the
+ * engine reports a save — as does every copy open in OBS. In between, the
+ * editor's draft positions and sizes are posted into the frame on every change
+ * and on every load, so a widget follows the drag before it is saved (see
+ * docs/ui/scenes.md).
  */
-export function LiveScenePreview({ sceneId, width, height, reloadToken = 0 }: LiveScenePreviewProps) {
+export function LiveScenePreview({ sceneId, width, height, widgets }: LiveScenePreviewProps) {
   const getOrCreatePreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
   // undefined = loading; null = not ready yet (scene not synced, or mint failed).
   const [overlayUrl, setOverlayUrl] = useState<string | null | undefined>(undefined);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  // Read by the frame's load handler, which must post the layout current at
+  // load time rather than the one from the render that attached it.
+  const widgetsRef = useRef(widgets);
+  widgetsRef.current = widgets;
+
+  const postLayout = useCallback(
+    (current: readonly Widget[]) => {
+      const frame = frameRef.current?.contentWindow;
+      if (!frame || !overlayUrl) {
+        return;
+      }
+      // Addressed to the overlay's origin, so a frame that has navigated
+      // somewhere else never receives it.
+      frame.postMessage(buildPreviewLayoutMessage(current), new URL(overlayUrl).origin);
+    },
+    [overlayUrl]
+  );
+
+  useEffect(() => {
+    postLayout(widgets);
+  }, [widgets, postLayout]);
 
   useEffect(() => {
     if (!sceneId) {
@@ -75,11 +102,10 @@ export function LiveScenePreview({ sceneId, width, height, reloadToken = 0 }: Li
     // tracking CanvasWidgetHandle relies on for positioning widgets. This is a
     // preview surface only — nothing in it needs to be directly interactive.
     <iframe
-      // The overlay reads its scene config once, when the document loads, and its
-      // event stream carries only event deliveries — never config changes. Keying
-      // on the save counter as well as the URL remounts the frame after a save, so
-      // a widget the editor just added or moved actually appears.
-      key={`${overlayUrl}#${reloadToken}`}
+      ref={frameRef}
+      // Fires again each time the overlay reloads itself after a save; the
+      // reloaded page knows only the saved layout, not a drag still in progress.
+      onLoad={() => postLayout(widgetsRef.current)}
       src={overlayUrl}
       title="Scene preview"
       sandbox="allow-scripts allow-same-origin"

@@ -45,8 +45,6 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const [isSaving, setIsSaving] = useState(false);
   // Local edits must survive the SCENE_UPDATED webhook re-push after a save.
   const [isDirty, setIsDirty] = useState(false);
-  // Bumped after every save to remount the preview against the newly saved scene.
-  const [previewReloads, setPreviewReloads] = useState(0);
   // `updatedAt` of the snapshot a save was made against. A save clears isDirty as
   // soon as the engine accepts it, but the engine's SCENE_UPDATED echo takes a
   // moment to travel back through the webhook into this query — and until it
@@ -149,11 +147,6 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
           }),
         });
         setIsDirty(false);
-        // The engine renders the overlay from the scene config it reads when the
-        // page loads, and its event stream carries only event deliveries — never
-        // config changes. Nothing the editor saves shows up until the preview
-        // reloads, so remount it on every successful save.
-        setPreviewReloads((n) => n + 1);
         if (!silent) {
           toast({ title: "Scene saved" });
         }
@@ -234,7 +227,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       setScene(next);
       // Persist immediately: the preview is the engine's own overlay, so a widget
       // that exists only in local state renders nothing at all. This save (and the
-      // preview remount it triggers) is what makes adding a widget show the widget.
+      // overlay reload the engine pushes after it) is what makes adding a widget
+      // show the widget.
       void persistScene(next, { silent: true });
     },
     [scene, mutateScene, persistScene]
@@ -396,12 +390,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       renderers={configFieldRenderers}
       onChange={handleWidgetsChange}
       preview={
-        <LiveScenePreview
-          sceneId={convexSceneId}
-          width={scene.width}
-          height={scene.height}
-          reloadToken={previewReloads}
-        />
+        <LiveScenePreview sceneId={convexSceneId} width={scene.width} height={scene.height} widgets={scene.widgets} />
       }
     />
   );

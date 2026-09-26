@@ -45,6 +45,13 @@ Both surfaces render the **same engine overlay**, from the same `scene.publicUrl
 
 Each has its own overlay token, so rotating the public browser-source URL never disturbs the preview.
 
+### Live updates
+
+The overlay bakes the scene config into its page when it loads, so two things keep it current:
+
+- **While editing** — `LiveScenePreview` posts the editor's draft layout (each widget's id, position and size) into the preview frame on every change and every frame load, as a `woofx3.scene-preview.layout` message (`client/src/lib/scene-preview-layout.ts`). Scene Manager moves its widget elements to match and hides any widget the layout leaves out. Nothing is saved, and only a page that frames the overlay can send it, so OBS, which loads the overlay top-level, never acts on it. Widget settings are not part of the message; they appear after a save.
+- **After a save** — the engine's db publishes `db.scene.updated`, and Scene Manager pushes a `scene-updated` frame down the event stream of every overlay open on that scene. Each one reloads: OBS browser sources pick up the saved scene without a manual refresh, and the preview reloads too, after which the editor posts its layout again.
+
 A cached URL that is not the current `{publicUrl}/scene/{engineSceneId}?token=…` shape — anything minted before Scene Manager replaced streamware's overlay path — is treated as a cache miss and re-minted (`convex/lib/sceneOverlayUrl.ts`), and `/browser-source/{key}` shows its placeholder rather than redirecting to a dead URL.
 
 **Local Network Access.** The preview iframe carries `allow="local-network-access"`. When an engine hostname resolves to a LAN address (split-horizon DNS in dev — `streamware.dev.woofx3.tv` → `192.168.0.x`), Chrome treats the load as a public page reaching the local network and gates it behind a permission whose default allowlist is `self`; without the attribute it is auto-denied with no prompt and the overlay silently renders nothing. The attribute is inert once the engine resolves to a public address. The browser source is a top-level redirect, so it has no frame to delegate to — and OBS does not enforce Local Network Access in any case.
