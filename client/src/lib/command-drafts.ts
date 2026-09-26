@@ -25,13 +25,14 @@ export interface CommandDraft {
 export const NEW_COMMAND_KEY = "new";
 
 /**
- * How a step is addressed within its command — in the editor's row keys and in the route
- * of the step's own alert editor. A step written before ids were assigned has none, so
- * its position stands in; both callers must derive it the same way or a route stops
- * naming the step it opened.
+ * How a step is addressed within its command — in the editor's row keys, in the route of
+ * the step's own alert editor, and in the `${stepId.field}` references later steps make
+ * to its output. A step written before ids were assigned has none, so its position stands
+ * in, named as the engine names it (sequentialTasks in workflow/internal/engine/
+ * actions_run.go) — otherwise a reference to that step would never resolve.
  */
 export function commandStepId(step: ActionStep, index: number): string {
-  return step.id ?? `step-${index + 1}`;
+  return step.id ?? `action-${index + 1}`;
 }
 
 export const emptyCommand: CommandEditorState = {

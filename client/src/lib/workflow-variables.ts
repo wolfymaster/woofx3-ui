@@ -235,7 +235,12 @@ function triggerDataVariables(
     }));
 }
 
-function stepOutputVariables(stepId: string, group: string, returns: readonly DataShapeField[]): VariableOption[] {
+/** What a step's declared return value offers later steps, as `${stepId.path}` references. */
+export function stepOutputVariables(
+  stepId: string,
+  group: string,
+  returns: readonly DataShapeField[]
+): VariableOption[] {
   return returns.map((field) => ({
     value: `\${${stepId}.${field.path}}`,
     label: field.path,

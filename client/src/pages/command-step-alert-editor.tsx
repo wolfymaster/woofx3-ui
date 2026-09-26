@@ -7,10 +7,12 @@ import { AlertLayoutEditor } from "@/components/alert-editor/alert-layout-editor
 import { EmptyState } from "@/components/common/empty-state";
 import { useOpenCommandDraft } from "@/hooks/use-command-draft";
 import { useInstance } from "@/hooks/use-instance";
+import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { commandStepId, NEW_COMMAND_KEY, updateCommandDraft } from "@/lib/command-drafts";
 import { COMMAND_LIST_PATH, COMMAND_NEW_ROUTE, commandEditorPath } from "@/lib/command-editor-route";
 import { splitCommandInput } from "@/lib/command-input";
-import { commandActionVariables } from "@/lib/command-variables";
+import { commandStepVariables } from "@/lib/command-variables";
+import { resolveActionStepPreset } from "@/lib/workflow-presets-json";
 
 /**
  * One chat command step's alert content, on its own route.
@@ -27,6 +29,7 @@ export default function CommandStepAlertEditor() {
   const isNew = engineCommandId === NEW_COMMAND_KEY;
   const [, navigate] = useLocation();
   const { instance } = useInstance();
+  const { actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
   const commandsRaw = useQuery(api.chatCommands.list, instance ? { instanceId: instance._id } : "skip");
   const existing = commandsRaw?.find((doc) => doc.engineCommandId === engineCommandId);
@@ -37,8 +40,16 @@ export default function CommandStepAlertEditor() {
   const step = actions && stepIndex >= 0 ? actions[stepIndex] : undefined;
 
   const availableVariables = useMemo(
-    () => commandActionVariables(splitCommandInput(draft?.value.command ?? "").argumentPattern),
-    [draft?.value.command]
+    () =>
+      actions && stepIndex >= 0
+        ? commandStepVariables(
+            splitCommandInput(draft?.value.command ?? "").argumentPattern,
+            actions,
+            stepIndex,
+            (candidate) => resolveActionStepPreset(candidate, actionPresets)
+          )
+        : [],
+    [draft?.value.command, actions, stepIndex, actionPresets]
   );
 
   const backHref = isNew ? COMMAND_NEW_ROUTE : commandEditorPath(engineCommandId);
@@ -54,7 +65,7 @@ export default function CommandStepAlertEditor() {
     }));
   };
 
-  if (commandsRaw === undefined) {
+  if (commandsRaw === undefined || catalogLoading) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
