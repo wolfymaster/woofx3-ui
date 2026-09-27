@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import type { WidgetThemes, WidgetThemesApi } from "./lib/widgetThemes";
 
 type InstanceContext = {
   url: string;
@@ -128,5 +129,23 @@ export const getAvailableWidgets = action({
     return {
       widgets: (result.widgets ?? []).filter((w) => w.surfaces.includes("scene")),
     };
+  },
+});
+
+/**
+ * The installed themes made for one widget, for the picker behind its `theme`
+ * settings field. An action, not a query: the list lives on the engine, so the
+ * picker refetches it when `moduleRepository.installedRevision` changes.
+ */
+export const listWidgetThemes = action({
+  args: {
+    instanceId: v.id("instances"),
+    widgetCanonicalId: v.string(),
+  },
+  handler: async (ctx, args): Promise<WidgetThemes> => {
+    const bundle = await requireInstanceContext(ctx, args.instanceId);
+
+    const rpc = createEngineRpcSession<EngineApi & WidgetThemesApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return await rpc.listWidgetThemes(args.widgetCanonicalId);
   },
 });

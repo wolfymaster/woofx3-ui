@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { DEFAULT_ALERT_WIDGET_NAME } from "@convex/lib/alertWidgets";
+import { THEME_FIELD_TYPE } from "@convex/lib/widgetThemes";
 import { useAction, useQuery } from "convex/react";
 import { FileAudio, FileImage, FileVideo, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
@@ -10,6 +11,7 @@ import {
 } from "@/components/common/configuration-form";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { AlertLayoutField } from "@/components/scenes/alert-layout-field";
+import { ThemeFieldRenderer } from "@/components/scenes/theme-field";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -283,6 +285,8 @@ export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   resource_ref: ResourceRefFieldRenderer,
   "field:layout": LayoutFieldRenderer,
   "source:alertWidgets": AlertWidgetNameRenderer,
+  // A theme is chosen per widget placement, never by a workflow, so it takes no variable toggle.
+  [`field:${THEME_FIELD_TYPE}`]: ThemeFieldRenderer,
 };
 
 export function TriggerConfigForm({

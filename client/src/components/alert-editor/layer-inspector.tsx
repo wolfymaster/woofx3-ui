@@ -17,6 +17,7 @@ import {
   textBoxHeight,
   withCenter,
 } from "@/lib/alert-editor";
+import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
 import { cn } from "@/lib/utils";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
@@ -255,7 +256,7 @@ export function LayerInspector({
           <summary className="cursor-pointer text-sm font-medium text-muted-foreground">More settings</summary>
           <div className="pt-4">
             <ConfigurationForm
-              fields={moreFields as unknown as FieldDescriptor[]}
+              fields={withWidgetCanonicalId(moreFields, widget.widgetCanonicalId) as unknown as FieldDescriptor[]}
               values={widget.settings}
               onChange={(next) => setSettings(next)}
               customRenderers={configFieldRenderers}
