@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { usedByContext, usedByHeading } from "@/lib/uninstall-conflicts";
 
 const ENGINE_RESPONSE_TIMEOUT_MS = 60_000;
 
@@ -194,7 +195,8 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
               <AlertDialogTitle>Remove {module.name}?</AlertDialogTitle>
               <AlertDialogDescription>
                 This will request the engine to uninstall <span className="font-medium">{moduleLabel}</span>. The engine
-                will refuse if any workflows, scenes, or commands still use this module.
+                will refuse if any workflows, scenes, or commands still use this module, or another installed module
+                requires it.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -267,10 +269,11 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
                           )}
                           {usedBy.length > 0 && (
                             <div className="mt-1.5 pl-3">
-                              <div className="text-xs text-muted-foreground">Used by:</div>
+                              <div className="text-xs text-muted-foreground">{usedByHeading(item.resourceType)}</div>
                               <ul className="mt-1 space-y-1">
                                 {usedBy.map((user, userIdx) => {
                                   const userLabel = user.sourceName ?? user.sourceId ?? "(unnamed)";
+                                  const contextLabel = usedByContext(item.resourceType, user.context);
                                   return (
                                     <li
                                       key={`${type}-${item.resourceId ?? idx}-user-${user.sourceId ?? userIdx}`}
@@ -282,9 +285,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
                                         </Badge>
                                       )}
                                       <span>{userLabel}</span>
-                                      {user.context && (
-                                        <span className="text-muted-foreground">(as {user.context})</span>
-                                      )}
+                                      {contextLabel && <span className="text-muted-foreground">{contextLabel}</span>}
                                     </li>
                                   );
                                 })}
