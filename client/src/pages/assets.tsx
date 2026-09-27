@@ -57,6 +57,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toggle } from "@/components/ui/toggle";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useInstance } from "@/hooks/use-instance";
 import { useResourceUpload } from "@/hooks/use-resource-upload";
 import { type Resource, useResources } from "@/hooks/use-resources";
@@ -77,6 +78,9 @@ const KIND_ICONS: Record<string, React.ReactNode> = {
 
 const FILTERABLE_KINDS = ["image", "video", "audio", "other"];
 const PAGE_SIZE = 60;
+// Each search is an engine round trip through a Convex action, so wait for a
+// pause in typing rather than sending one per keystroke.
+const SEARCH_DEBOUNCE_MS = 250;
 
 // Stable keys for the loading grid — index keys are fine for a fixed list but
 // biome flags them, and a named constant reads better than a suppression.
@@ -157,7 +161,13 @@ function ResourceCard({ resource, selected, onSelect, onOpen, onRename, onDelete
       <CardContent className="p-0">
         <div className="aspect-square bg-muted/50 flex items-center justify-center overflow-hidden">
           {preview ? (
-            <img src={preview} alt={resource.name} className="w-full h-full object-cover" />
+            <img
+              src={preview}
+              alt={resource.name}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
           ) : (
             <div className="text-muted-foreground">{kindIcon(resource)}</div>
           )}
@@ -323,11 +333,21 @@ export default function Assets() {
   const { toast } = useToast();
 
   const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: "Assets" }]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const searchQuery = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
+
+  // Paging restarts when the search that reaches the engine changes, not on
+  // each keystroke, so the list doesn't jump to page 1 while the old results
+  // are still showing.
+  const [pagedSearch, setPagedSearch] = useState(searchQuery);
+  if (pagedSearch !== searchQuery) {
+    setPagedSearch(searchQuery);
+    setPage(1);
+  }
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
@@ -558,11 +578,8 @@ export default function Assets() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search assets..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="pl-9"
               data-testid="input-search-assets"
             />
