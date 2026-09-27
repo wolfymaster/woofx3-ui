@@ -1,11 +1,11 @@
-import { api } from "@convex/_generated/api";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
+import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ALERT_EDITOR_ROUTE } from "@/lib/alert-editor-route";
@@ -100,34 +100,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Redirects users who haven't completed onboarding.
-//
-// An instance row alone is not onboarding done: a managed engine has one from
-// the moment provisioning starts, and a failed bring-your-own registration
-// leaves one behind too. Only `clientId` says the handshake happened, which is
-// what every screen past this point depends on, so anything short of that goes
-// back to onboarding — where the provisioning progress screen takes over.
-function OnboardingGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useConvexAuth();
-  const account = useQuery(api.accounts.getMyAccount);
-  const instances = useQuery(api.instances.listForCurrentUser);
-  const [, navigate] = useLocation();
-  const hasRegisteredInstance = (instances ?? []).some((instance) => Boolean(instance?.clientId));
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (account === undefined || instances === undefined) return; // still loading
-
-    if (!account || !hasRegisteredInstance) {
-      navigate("/auth/onboarding");
-    }
-  }, [isAuthenticated, account, instances, hasRegisteredInstance, navigate]);
-
-  if (account === undefined || instances === undefined) return <SplashScreen />;
-  if (!account || !hasRegisteredInstance) return null;
-  return <>{children}</>;
-}
-
 /** Legacy `/settings/:tab` values that still map onto an Admin screen. */
 const ADMIN_PATHS = new Set(["engine", "integrations", "storage", "appearance"]);
 
@@ -161,8 +133,8 @@ function AppRoutes() {
       {/* Protected app routes */}
       <Route>
         <AuthGuard>
-          <OnboardingGuard>
-            <BroadcastShell>
+          <BroadcastShell>
+            <OnboardingGuard>
               <PageBoundary resetKey={location}>
                 <Switch>
                   <Route path="/" component={Dashboard} />
@@ -264,8 +236,8 @@ function AppRoutes() {
                   <Route component={NotFound} />
                 </Switch>
               </PageBoundary>
-            </BroadcastShell>
-          </OnboardingGuard>
+            </OnboardingGuard>
+          </BroadcastShell>
         </AuthGuard>
       </Route>
     </Switch>
