@@ -143,6 +143,28 @@ export function timerState(value: unknown, settings: Record<string, unknown>, no
   return { running: false, remainingMs: timerDurationMs(settings) };
 }
 
+export type TimerStatus = "Running" | "Paused" | "Finished";
+
+/**
+ * A timer that has run out can still read `running` until the engine's expiry
+ * task stops it, so running with no time left is Finished, not Running.
+ */
+export function timerStatus({ running, remainingMs }: TimerState): TimerStatus {
+  if (running && remainingMs > 0) {
+    return "Running";
+  }
+  return remainingMs > 0 ? "Paused" : "Finished";
+}
+
+/** Time left as a percentage of the timer's full duration, capped at 100 when time was added past it. */
+export function timerProgressPercent(remainingMs: number, settings: Record<string, unknown>): number {
+  const durationMs = timerDurationMs(settings);
+  return durationMs > 0 ? Math.min(100, (remainingMs / durationMs) * 100) : 0;
+}
+
+/** Seconds each quick-adjust button adds to a timer; negative takes time away. */
+export const TIMER_QUICK_ADJUSTMENTS: readonly number[] = [-30, 30, 60, 300];
+
 /**
  * `h:mm:ss`, or `m:ss` under an hour. Rounds up, so a timer with any time left
  * never shows 0:00 — the same rounding the timer actions report.
