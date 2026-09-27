@@ -701,17 +701,12 @@ The platform backend exposes:
 
 **Browser Source:**
 
-- `POST /api/browser-source/:key/claim` - Claim browser source with key
 - `PATCH /api/browser-source/alerts/:id` - Update alert state
 
 **OBS Integration:**
 
 - `GET /api/obs/commands?sceneId=` - Poll pending OBS commands
 - `PATCH /api/obs/commands/:id` - Update command state
-
-**Widget Assets:**
-
-- `GET /api/widgets/:moduleId/:directory/*` - Serve module widget files
 
 ### 7.3 Real-Time Transport
 

@@ -1,7 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { ConvexProvider, useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
@@ -51,9 +50,6 @@ import Team from "@/pages/team";
 import Timers from "@/pages/timers";
 import Workflows from "@/pages/workflows";
 import { convexClient as convex } from "./lib/convexClient";
-import { queryClient } from "./lib/queryClient";
-
-console.log("url", import.meta.env.VITE_CONVEX_URL);
 
 function SplashScreen() {
   return (
@@ -258,16 +254,12 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <ConvexProvider client={convex}>
-        <ConvexAuthProvider client={convex}>
-          <QueryClientProvider client={queryClient}>
-            <TooltipProvider>
-              <AppRoutes />
-              <Toaster />
-            </TooltipProvider>
-          </QueryClientProvider>
-        </ConvexAuthProvider>
-      </ConvexProvider>
+      <ConvexAuthProvider client={convex}>
+        <TooltipProvider>
+          <AppRoutes />
+          <Toaster />
+        </TooltipProvider>
+      </ConvexAuthProvider>
     </ErrorBoundary>
   );
 }

@@ -17,6 +17,4 @@ The old `/settings` page also had Profile, Notifications, and Security tabs. Tho
 ## Team (`/team`)
 
 - UI for **members** and **accounts** with invites and role badges (owner, admin, member, viewer).
-- Data is loaded via **TanStack Query** with **`queryFn`s that currently resolve to empty arrays** and a hard-coded `teamId` placeholder — the screen is **presentational / in progress** relative to Convex account sharing (`accounts`, membership APIs).
-
-For production behavior, Team should eventually use the same **account membership model** documented in `CLAUDE.md` (Convex-only; no engine changes for sharing).
+- Data comes from Convex: `accountMembers.listForAccount`, `accounts.listAccessibleForUser` and `invitations.listForAccount`.
