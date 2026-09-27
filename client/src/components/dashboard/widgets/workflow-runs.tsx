@@ -8,6 +8,9 @@ import { describeAlertFailure } from "@/lib/alert-failure";
 import type { WorkflowRun } from "@/lib/transport";
 import { transport } from "@/lib/transport";
 import { cn } from "@/lib/utils";
+import { mergeWorkflowRun } from "@/lib/workflow-run-list";
+
+const MAX_RUNS = 20;
 
 function formatDuration(start: Date, end?: Date): string {
   const ms = (end ?? new Date()).getTime() - start.getTime();
@@ -99,15 +102,7 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
     const instanceId = instance._id;
 
     const unsubscribe = transport.subscribeWorkflowRuns(instanceId, (run) => {
-      setRuns((prev) => {
-        const idx = prev.findIndex((r) => r.id === run.id);
-        if (idx >= 0) {
-          const next = [...prev];
-          next[idx] = run;
-          return next;
-        }
-        return [run, ...prev].slice(0, 20);
-      });
+      setRuns((prev) => mergeWorkflowRun(prev, run, MAX_RUNS));
     });
 
     return unsubscribe;
