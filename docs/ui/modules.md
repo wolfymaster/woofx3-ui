@@ -48,6 +48,8 @@ Same correlated-async pattern as install:
 3. The engine uninstalls in the background and POSTs `module.deleted` or `module.delete_failed`. The webhook processor cascade-deletes the repository row, storage blob, and trigger/action definitions (on success), or emits an `error` transient carrying the engine's conflict list (on failure).
 4. The dialog watches the transient event and closes on success / displays the conflict list on failure. A 60 s engine-response timeout guards against the engine never responding.
 
+A conflict entry with `resourceType: "module"` means other installed modules declare this one in their `requires` (theme packs, for example). Its `usedBy` entries name each dependent with the range it requires, and the dialog lists them under **Required by** rather than **Used by** (`client/src/lib/uninstall-conflicts.ts`).
+
 If the engine returns a delete webhook without a `moduleKey` (older engine build), `emitDeleteErrorForMissingKey` locates the record by name and emits the error under its stored `moduleKey` so the dialog unsticks.
 
 ## Mental model
