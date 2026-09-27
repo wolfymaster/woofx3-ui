@@ -14,7 +14,7 @@
 // fans out locally, so N widgets asking for the same type still produce one
 // registration.
 
-export type PlatformEventType = "follow" | "subscribe" | "cheer" | "raid";
+export type PlatformEventType = "follow" | "subscribe" | "subscriptionGift" | "cheer" | "raid";
 
 export type PlatformId = "twitch";
 
