@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { parseConfigField, parseConfigFields } from "./parse-config-fields";
+import type { ConfigField } from "@woofx3/api/ui-schema";
+import { parseConfigField, parseConfigFields, withWidgetCanonicalId } from "./parse-config-fields";
 
 describe("parseConfigFields", () => {
   test("parses internal source and eventPath metadata", () => {
@@ -85,5 +86,16 @@ describe("list fields", () => {
     ]);
     expect(fields.map((field) => field.id)).toEqual(["goals"]);
     expect(fields[0].itemFields?.map((item) => item.id)).toEqual(["value"]);
+  });
+});
+
+describe("withWidgetCanonicalId", () => {
+  test("attaches the widget to a theme field only", () => {
+    // `theme` is cast because the SDK's field type union gains it only with engine widget themes.
+    const themeField = { id: "theme", label: "Theme", type: "theme" } as unknown as ConfigField;
+    const colorField: ConfigField = { id: "color", label: "Color", type: "color" };
+    const [theme, color] = withWidgetCanonicalId([themeField, colorField], "timer:widget:clock");
+    expect((theme as { widgetCanonicalId?: string }).widgetCanonicalId).toBe("timer:widget:clock");
+    expect(color).toBe(colorField);
   });
 });

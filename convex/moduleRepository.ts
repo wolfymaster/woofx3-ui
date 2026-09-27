@@ -3,6 +3,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { isInstanceMember } from "./lib/teamAccess";
+import { installedModulesRevision } from "./lib/widgetThemes";
 
 /**
  * Convex storage upload URL for staging a module bundle before
@@ -50,6 +52,25 @@ export const list = query({
     }
 
     return results;
+  },
+});
+
+/**
+ * Changes whenever a module on the instance is installed, upgraded or removed,
+ * for a view that holds engine data derived from the installed set (a widget's
+ * theme list) and must refetch it. Empty for a caller who is not a member.
+ */
+export const installedRevision = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<string> => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return "";
+    }
+    const rows = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    return installedModulesRevision(rows);
   },
 });
 
