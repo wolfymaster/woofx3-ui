@@ -2,7 +2,6 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import Editor from "@monaco-editor/react";
 import { useMutation, useQuery } from "convex/react";
-import JSZip from "jszip";
 import {
   AlertCircle,
   CheckCircle2,
@@ -24,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
+import { buildModuleArchive, computeModuleKey, readModuleArchive } from "@/lib/module-archive";
 import { cn } from "@/lib/utils";
 
 interface FileNode {
@@ -275,21 +275,6 @@ async function runChecks(files: Record<string, string>): Promise<CheckResult[]> 
  * If every path shares a single top-level directory (e.g. "my-module/"),
  * return that prefix so it can be stripped when re-zipping.
  */
-function getCommonDirectoryPrefix(paths: string[]): string {
-  if (paths.length === 0) {
-    return "";
-  }
-  const firstSlash = paths[0].indexOf("/");
-  if (firstSlash === -1) {
-    return "";
-  }
-  const candidate = paths[0].slice(0, firstSlash + 1);
-  if (paths.every((p) => p.startsWith(candidate))) {
-    return candidate;
-  }
-  return "";
-}
-
 function toSnakeCase(str: string): string {
   return str
     .replace(/([a-z])([A-Z])/g, "$1_$2")
@@ -381,18 +366,7 @@ export default function ModuleInstall() {
 
   const processZipFile = useCallback(async (file: File) => {
     try {
-      const zip = await JSZip.loadAsync(file);
-      const extractedFiles: Record<string, string> = {};
-
-      await Promise.all(
-        Object.keys(zip.files).map(async (filename) => {
-          const zipEntry = zip.files[filename];
-          if (!zipEntry.dir) {
-            const content = await zipEntry.async("string");
-            extractedFiles[filename] = content;
-          }
-        })
-      );
+      const extractedFiles = readModuleArchive(new Uint8Array(await file.arrayBuffer()));
 
       setFiles(extractedFiles);
     } catch (error) {
@@ -482,14 +456,8 @@ export default function ModuleInstall() {
     setIsInstalling(true);
     setInstallError(null);
     try {
-      // Re-zip extracted files at the root (strip any common wrapper directory)
-      const zip = new JSZip();
-      const paths = Object.keys(files);
-      const commonPrefix = getCommonDirectoryPrefix(paths);
-      for (const [path, content] of Object.entries(files)) {
-        zip.file(path.slice(commonPrefix.length), content);
-      }
-      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const archive = buildModuleArchive(files);
+      const zipBlob = new Blob([archive], { type: "application/zip" });
 
       // Upload zip to Convex storage
       const uploadUrl = await generateUploadUrl();
@@ -523,22 +491,14 @@ export default function ModuleInstall() {
       // This key is passed to the engine and echoed back in the webhook,
       // then used as the correlationKey for the transient event subscription.
       const moduleId = (manifest.id as string) || toSnakeCase(name);
-      const zipArrayBuffer = await zipBlob.arrayBuffer();
-      const hashBuffer = await crypto.subtle.digest("SHA-256", zipArrayBuffer);
-      const hashHex = Array.from(new Uint8Array(hashBuffer))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      const shortHash = hashHex.slice(0, 7);
-      const moduleKey = `${moduleId}:${version}:${shortHash}`;
+      const moduleKey = await computeModuleKey(moduleId, version, archive);
 
       console.log("[module-install] moduleKey components", {
         manifestId: manifest.id,
         manifestName: manifest.name,
         moduleId,
         version,
-        zipSize: zipArrayBuffer.byteLength,
-        fullHash: hashHex,
-        shortHash,
+        zipSize: archive.byteLength,
         moduleKey,
       });
 
