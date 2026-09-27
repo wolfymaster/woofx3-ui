@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
-import { Gift, Heart, Radio, Star, UserPlus, Zap } from "lucide-react";
+import { Gift, HandHeart, Heart, Radio, Star, UserPlus, Zap } from "lucide-react";
 import { useCallback, useState } from "react";
 import { useInstance } from "@/hooks/use-instance";
 import type { DashboardWidgetProps } from "@/lib/dashboard-widgets/types";
@@ -8,12 +8,13 @@ import type { PlatformEvent, PlatformEventType } from "@/lib/platforms/types";
 import { usePlatformEvents } from "@/lib/platforms/use-platform-events";
 import { cn } from "@/lib/utils";
 
-const EVENT_TYPES: PlatformEventType[] = ["follow", "subscribe", "cheer", "raid"];
+const EVENT_TYPES: PlatformEventType[] = ["follow", "subscribe", "subscriptionGift", "cheer", "raid"];
 const MAX_EVENTS = 50;
 
 const eventDisplay: Record<PlatformEventType, { icon: typeof UserPlus; color: string; label: string }> = {
   follow: { icon: UserPlus, color: "text-blue-500", label: "Follow" },
   subscribe: { icon: Heart, color: "text-purple-500", label: "Subscribe" },
+  subscriptionGift: { icon: HandHeart, color: "text-pink-500", label: "Gift Sub" },
   cheer: { icon: Gift, color: "text-yellow-500", label: "Cheer" },
   raid: { icon: Zap, color: "text-orange-500", label: "Raid" },
 };
@@ -29,6 +30,11 @@ function formatTimeAgo(date: Date): string {
   return `${Math.floor(seconds / 3600)}h ago`;
 }
 
+export function giftedSubsDetail(amount: number, tier: string | undefined): string {
+  const subs = `${amount} gifted ${amount === 1 ? "sub" : "subs"}`;
+  return tier ? `${subs}, Tier ${tier}` : subs;
+}
+
 function EventDetail({ event }: { event: PlatformEvent }) {
   if (event.type === "cheer" && event.amount != null) {
     return <span className="text-xs text-muted-foreground">{event.amount} bits</span>;
@@ -38,6 +44,9 @@ function EventDetail({ event }: { event: PlatformEvent }) {
   }
   if (event.type === "subscribe" && event.tier) {
     return <span className="text-xs text-muted-foreground">Tier {event.tier}</span>;
+  }
+  if (event.type === "subscriptionGift" && event.amount != null) {
+    return <span className="text-xs text-muted-foreground">{giftedSubsDetail(event.amount, event.tier)}</span>;
   }
   if (event.message) {
     return <p className="text-xs text-muted-foreground truncate">{event.message}</p>;

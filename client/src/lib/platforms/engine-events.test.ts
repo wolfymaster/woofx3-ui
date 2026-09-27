@@ -25,6 +25,32 @@ describe("frameToPlatformEvent", () => {
     expect(event).toMatchObject({ type: "subscribe", userName: "ana", tier: "2000" });
   });
 
+  test("maps a subscription gift with the gifter, sub count and tier", () => {
+    const event = frameToPlatformEvent(
+      frame("channel.subscriptionGift", {
+        gifterId: "7",
+        gifterName: "ana",
+        amount: 5,
+        tier: "1000",
+        isAnonymous: false,
+      })
+    );
+    expect(event).toMatchObject({ type: "subscriptionGift", userName: "ana", amount: 5, tier: "1000" });
+  });
+
+  test("keeps an anonymous subscription gift, named Anonymous, with its sub count", () => {
+    const event = frameToPlatformEvent(
+      frame("channel.subscriptionGift", {
+        gifterId: "",
+        gifterName: "ananonymousgifter",
+        amount: 10,
+        tier: "1000",
+        isAnonymous: true,
+      })
+    );
+    expect(event).toMatchObject({ type: "subscriptionGift", userName: "Anonymous", amount: 10 });
+  });
+
   test("maps a cheer, reading the engine's `amount` rather than Twitch's `bits`", () => {
     const event = frameToPlatformEvent(
       frame("channel.cheer", { userName: "ana", amount: 500, message: "gg", isAnonymous: false })
@@ -51,7 +77,6 @@ describe("frameToPlatformEvent", () => {
   });
 
   test("drops events the widgets do not render", () => {
-    expect(frameToPlatformEvent(frame("channel.subscriptionGift", { gifterName: "ana" }))).toBeNull();
     expect(frameToPlatformEvent(frame("stream.online", { broadcasterUserName: "ana" }))).toBeNull();
     expect(frameToPlatformEvent(frame("user.message", { message: "hi" }))).toBeNull();
   });
