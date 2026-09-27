@@ -3,7 +3,7 @@
 **Routes:** `/stream/scenes` (table listing), `/stream/scenes/:id` (editor)
 **Primary files:** `client/src/pages/scenes.tsx` (listing + route split), `client/src/components/scenes/scene-canvas-editor.tsx` (editor), `client/src/components/scenes/widget-catalog-sidebar.tsx` (widget rail)
 **Convex:** `convex/scenes.ts`, `convex/sceneActions.ts`, `convex/moduleWidgets.ts`, `convex/browserSource.ts`  
-**HTTP:** `convex/http.ts` — `/browser-source/{key}` (HTML renderer), `/api/browser-source/{key}/claim` (JSON)
+**HTTP:** `convex/http.ts` — `/browser-source/{key}` (redirect to the engine overlay)
 
 ## Architecture
 
@@ -92,12 +92,6 @@ Engine-authoritative: the **engine renders the overlay**, so this route only res
 **Why a redirect, not an iframe.** Scene Manager's shell (`GET /scene/{id}?token=…`) is the only engine route that accepts the token. It trades it for an `sm_session` cookie marked `SameSite=Strict`, and the widget frames, the `/events` SSE stream, and delivery acks authenticate with that cookie alone. Framed under `convex.site`, all of those are cross-site to the top-level document, so the browser withholds the cookie and they 401 — the shell loads, but no widget or event ever arrives. After the redirect the overlay is the top-level document and the cookie flows. See `buildBrowserSourceRedirect` in `convex/lib/browserSourceHtml.ts` (unit-tested in `browserSourceHtml.test.ts`); placeholder values are HTML-escaped there too.
 
 The engine URL, token included, is visible once the redirect lands — as it already was in the old wrapper page's iframe `src`. A leaked engine URL stays valid until its token is revoked.
-
-> Note: the old `/api/widgets/{...}/index.html` stub in `convex/http.ts` is **no longer used** by the scene overlay (it predates this work and is still referenced only by the unrouted legacy alert renderer `client/src/pages/browser-source.tsx`).
-
-### JSON endpoint (`POST /api/browser-source/{key}/claim`)
-
-Returns `{ scene, slots, alertDescriptors, sourceKeyId }` — used by the legacy alert browser-source runtime (separate from scene overlays).
 
 ## Convex actions (`convex/sceneActions.ts`)
 

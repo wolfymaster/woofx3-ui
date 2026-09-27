@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import { useMutation } from "@tanstack/react-query";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { useAction } from "convex/react";
 import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
@@ -313,28 +312,7 @@ export function BasicWorkflowEditor() {
     setActiveVariantIndex(0);
   }, [step]);
 
-  const createWorkflow = useMutation({
-    mutationFn: async (definition: Omit<WorkflowDefinition, "id">) => {
-      if (!instanceId) {
-        throw new Error("No instance selected");
-      }
-      return createFromDefinition({
-        instanceId,
-        definition: escapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">,
-      });
-    },
-    onSuccess: ({ engineWorkflowId }) => {
-      toast({ title: "Workflow created" });
-      navigate(`/stream/workflows/${engineWorkflowId}`);
-    },
-    onError: (err) => {
-      toast({
-        title: "Failed to create workflow",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
-    },
-  });
+  const [isCreating, setIsCreating] = useState(false);
 
   const hasTriggerConfig = (selectedTrigger?.config?.fields?.length ?? 0) > 0;
   const triggerFields = selectedTrigger?.config?.fields ?? [];
@@ -493,22 +471,23 @@ export function BasicWorkflowEditor() {
     ];
   }, [selectedTrigger, selectedAction, allowVariants, variants, triggerConfig, actionConfig]);
 
-  const createWorkflows = useMutation({
-    mutationFn: async (definitions: Omit<WorkflowDefinition, "id">[]) => {
+  const handleCreate = async () => {
+    if (previewDefinitions.length === 0) {
+      return;
+    }
+    setIsCreating(true);
+    try {
       if (!instanceId) {
         throw new Error("No instance selected");
       }
       const ids: string[] = [];
-      for (const definition of definitions) {
+      for (const definition of previewDefinitions) {
         const result = await createFromDefinition({
           instanceId,
           definition: escapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">,
         });
         ids.push(result.engineWorkflowId);
       }
-      return ids;
-    },
-    onSuccess: (ids) => {
       toast({
         title: ids.length === 1 ? "Workflow created" : `${ids.length} workflows created`,
       });
@@ -517,24 +496,14 @@ export function BasicWorkflowEditor() {
       } else {
         navigate("/stream/workflows");
       }
-    },
-    onError: (err) => {
+    } catch (err) {
       toast({
         title: "Failed to create workflow",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
-    },
-  });
-
-  const handleCreate = () => {
-    if (previewDefinitions.length === 0) {
-      return;
-    }
-    if (previewDefinitions.length === 1) {
-      createWorkflow.mutate(previewDefinitions[0]);
-    } else {
-      createWorkflows.mutate(previewDefinitions);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -921,16 +890,8 @@ export function BasicWorkflowEditor() {
           {((step === "action" && !allowVariants && selectedAction && !selectedAction.config?.fields?.length) ||
             (step === "action" && variantsReadyNoConfig) ||
             step === "action-config") && (
-            <Button
-              onClick={handleCreate}
-              disabled={!canCreate || createWorkflow.isPending || createWorkflows.isPending}
-              data-testid="button-create-workflow"
-            >
-              {createWorkflow.isPending || createWorkflows.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4 mr-2" />
-              )}
+            <Button onClick={handleCreate} disabled={!canCreate || isCreating} data-testid="button-create-workflow">
+              {isCreating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
               Create Workflow
             </Button>
           )}
