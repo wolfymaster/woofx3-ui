@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   engineUrl: "streamdeck-engine-url",
   currentInstanceId: "woofx3-current-instance-id",
   commandBarHidden: "woofx3-command-bar-hidden",
+  hideUnusedAlerts: "woofx3-hide-unused-alerts",
 };
 
 export function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -36,6 +37,12 @@ $currentInstanceId.subscribe((value) => persistValue(STORAGE_KEYS.currentInstanc
 const initialCommandBarHidden = getStoredValue(STORAGE_KEYS.commandBarHidden, false);
 export const $commandBarHidden = atom<boolean>(initialCommandBarHidden);
 $commandBarHidden.subscribe((value) => persistValue(STORAGE_KEYS.commandBarHidden, value));
+
+// Whether the Alerts rail lists only entries with a configured alert. Off by default,
+// so a new user sees everything they could alert on; per-browser, like the command bar.
+const initialHideUnusedAlerts = getStoredValue(STORAGE_KEYS.hideUnusedAlerts, false);
+export const $hideUnusedAlerts = atom<boolean>(initialHideUnusedAlerts);
+$hideUnusedAlerts.subscribe((value) => persistValue(STORAGE_KEYS.hideUnusedAlerts, value));
 
 const initialSidebarCollapsed = getStoredValue(STORAGE_KEYS.sidebarCollapsed, false);
 export const $sidebarCollapsed = atom<boolean>(initialSidebarCollapsed);
