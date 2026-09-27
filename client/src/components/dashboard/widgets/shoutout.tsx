@@ -3,8 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { ChevronRight, Loader2, Megaphone, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -20,16 +19,6 @@ interface PendingTarget {
   displayName: string;
   profileImageUrl?: string;
   broadcasterType?: string;
-}
-
-function broadcasterBadge(broadcasterType: string | undefined): string | null {
-  if (broadcasterType === "partner") {
-    return "Partner";
-  }
-  if (broadcasterType === "affiliate") {
-    return "Affiliate";
-  }
-  return null;
 }
 
 export function ShoutoutWidget() {
@@ -140,24 +129,7 @@ export function ShoutoutWidget() {
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-3 overflow-auto p-3">
         {pending ? (
-          <div className="space-y-3 rounded-md border border-border p-3" data-testid="shoutout-confirm">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-12 w-12 shrink-0">
-                <AvatarImage src={pending.profileImageUrl} alt="" />
-                <AvatarFallback>{pending.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <div className="flex items-center gap-1.5">
-                  <span className="truncate text-sm font-semibold">{pending.displayName}</span>
-                  {broadcasterBadge(pending.broadcasterType) && (
-                    <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
-                      {broadcasterBadge(pending.broadcasterType)}
-                    </Badge>
-                  )}
-                </div>
-                <span className="text-xs text-muted-foreground">twitch.tv/{pending.login}</span>
-              </div>
-            </div>
+          <TwitchUserCard user={pending} data-testid="shoutout-confirm">
             <div className="flex gap-2">
               <Button
                 size="sm"
@@ -175,7 +147,7 @@ export function ShoutoutWidget() {
                 Cancel
               </Button>
             </div>
-          </div>
+          </TwitchUserCard>
         ) : (
           <div className="space-y-2">
             {/* shouldFilter={false}: matchChatters does the ranking, and cmdk's

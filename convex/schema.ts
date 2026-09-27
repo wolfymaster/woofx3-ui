@@ -71,9 +71,18 @@ export default defineSchema({
     .index("by_account_user", ["accountId", "userId"]),
 
   // invitations: pending team invites before acceptance
+  // An invite targets exactly one of an email address or a platform account
+  // (convex/lib/invitationTarget.ts). A platform invite matches on
+  // platformUserId; the login, name and avatar are what the platform reported
+  // when it was created, kept for display.
   invitations: defineTable({
     accountId: v.id("accounts"),
-    email: v.string(),
+    email: v.optional(v.string()),
+    platform: v.optional(v.literal("twitch")),
+    platformUserId: v.optional(v.string()),
+    platformLogin: v.optional(v.string()),
+    platformDisplayName: v.optional(v.string()),
+    platformProfileImageUrl: v.optional(v.string()),
     role: v.union(v.literal("admin"), v.literal("member")),
     token: v.string(),
     invitedByUserId: v.id("users"),
@@ -83,7 +92,8 @@ export default defineSchema({
   })
     .index("by_token", ["token"])
     .index("by_account", ["accountId"])
-    .index("by_account_email", ["accountId", "email"]),
+    .index("by_account_email", ["accountId", "email"])
+    .index("by_account_platform_user", ["accountId", "platform", "platformUserId"]),
 
   // instances: a single woofx3 deployment
   instances: defineTable({
