@@ -1,11 +1,11 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
-import { useMutation, useQuery } from "convex/react";
-import { Check, LayoutGrid, Loader2, PanelTop, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useMutation } from "convex/react";
+import { Check, LayoutGrid, PanelTop, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { CommandBar } from "@/components/dashboard/command-bar";
-import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
+import { DashboardCanvas, DashboardLayoutPicker, DashboardSkeleton } from "@/components/dashboard/dashboard-canvas";
 import { WidgetRail } from "@/components/dashboard/widget-rail";
 import { StatusBarCenterPortal } from "@/components/layout/status-bar-slot";
 import {
@@ -30,8 +30,9 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInstance } from "@/hooks/use-instance";
+import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
 import { widgetSlotId } from "@/lib/dashboard-widgets/types";
-import { $commandBarHidden } from "@/lib/stores";
+import { $commandBarHidden, $dashboardLayoutHint } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 
 type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
@@ -41,7 +42,10 @@ export default function Dashboard() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const commandBarHidden = useStore($commandBarHidden);
 
-  const panels = useQuery(api.dashboardLayouts.getPanels, instance ? { instanceId: instance._id } : "skip");
+  const layoutHint = useStore($dashboardLayoutHint);
+  // Starts with the cached instance id, alongside the membership list; the
+  // result is only rendered once `instance` confirms that id.
+  const panels = useOptimisticInstanceQuery(api.dashboardLayouts.getPanels);
   const addPanel = useMutation(api.dashboardLayouts.addPanel);
   const removePanel = useMutation(api.dashboardLayouts.removePanel);
   const renamePanel = useMutation(api.dashboardLayouts.renamePanel);
@@ -135,14 +139,17 @@ export default function Dashboard() {
     }
   }, [panels, activeIndex]);
 
+  const firstLayoutId = instance && panels && panels.length > 0 ? panels[0].layoutId : null;
+  useEffect(() => {
+    if (firstLayoutId) {
+      $dashboardLayoutHint.set(firstLayoutId);
+    }
+  }, [firstLayoutId]);
+
   const isLoading = instanceLoading || (!!instance && panels === undefined);
 
   if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <DashboardSkeleton layoutId={layoutHint} />;
   }
 
   if (!instance || !panels || panels.length === 0) {

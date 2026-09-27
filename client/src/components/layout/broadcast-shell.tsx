@@ -33,13 +33,15 @@ import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
 import { ThemeMenuSub } from "./theme-menu";
 
 function InstanceBar() {
-  const { instance, instances, setInstance } = useInstance();
+  const { instance, instances, setInstance, isLoading } = useInstance();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState("");
 
   const updateInstance = useMutation(api.instances.update);
 
-  const instanceDisplayName = instance?.name || "No Instance";
+  // Blank while the list loads: the shell paints before it arrives, and "No
+  // Instance" would flash for everyone who has one.
+  const instanceDisplayName = instance?.name || (isLoading ? "" : "No Instance");
 
   const handleEditInstance = () => {
     setEditName(instance?.name || "");

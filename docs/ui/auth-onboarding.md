@@ -46,4 +46,4 @@ The form takes an instance name and the engine's API URL. It creates the instanc
 
 ## After onboarding
 
-`OnboardingGuard` requires both an account and at least one instance before showing `BroadcastShell`. A managed engine's later lifecycle (its flag, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.
+`OnboardingGuard` requires both an account and at least one registered instance before showing a page inside `BroadcastShell`. A managed engine's later lifecycle (its flag, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.

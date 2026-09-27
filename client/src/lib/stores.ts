@@ -5,6 +5,7 @@ const STORAGE_KEYS = {
   engineUrl: "streamdeck-engine-url",
   currentInstanceId: "woofx3-current-instance-id",
   commandBarHidden: "woofx3-command-bar-hidden",
+  dashboardLayoutHint: "woofx3-dashboard-layout-hint",
 };
 
 export function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -36,6 +37,13 @@ $currentInstanceId.subscribe((value) => persistValue(STORAGE_KEYS.currentInstanc
 const initialCommandBarHidden = getStoredValue(STORAGE_KEYS.commandBarHidden, false);
 export const $commandBarHidden = atom<boolean>(initialCommandBarHidden);
 $commandBarHidden.subscribe((value) => persistValue(STORAGE_KEYS.commandBarHidden, value));
+
+// Layout of the dashboard's first panel as last seen, so the dashboard can draw
+// zone outlines on load before its panels arrive. A hint only: the loaded
+// panels always win.
+const initialDashboardLayoutHint = getStoredValue<string | null>(STORAGE_KEYS.dashboardLayoutHint, null);
+export const $dashboardLayoutHint = atom<string | null>(initialDashboardLayoutHint);
+$dashboardLayoutHint.subscribe((value) => persistValue(STORAGE_KEYS.dashboardLayoutHint, value));
 
 const initialSidebarCollapsed = getStoredValue(STORAGE_KEYS.sidebarCollapsed, false);
 export const $sidebarCollapsed = atom<boolean>(initialSidebarCollapsed);
