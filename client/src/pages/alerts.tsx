@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { useStore } from "@nanostores/react";
 import { useQuery } from "convex/react";
 import { Bell, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -19,10 +20,12 @@ import {
   countAlertsByNode,
   findAlertNode,
   flattenAlertTree,
+  pruneUnusedAlerts,
   subtreePresets,
   taxonomyLabel,
 } from "@/lib/alert-groups";
 import { decodeSegment, subPathSegments } from "@/lib/route-subpath";
+import { $hideUnusedAlerts } from "@/lib/stores";
 import { projectWorkflow } from "@/lib/trigger-projection";
 import { cn } from "@/lib/utils";
 
@@ -77,19 +80,26 @@ export default function Alerts() {
     return byEvent;
   }, [triggerPresets]);
 
-  const counts = useMemo(() => {
+  // Paused triggers count: pausing is not deleting, and the rail must still lead to a
+  // paused alert so it can be resumed.
+  const { counts, configuredEvents } = useMemo(() => {
     const perWorkflow: [string[], number][] = [];
+    const events = new Set<string>();
     for (const row of rows) {
       const projected = projectWorkflow(row);
       if (!projected.ok) {
         continue;
       }
-      const path = menuPathByEvent.get(projected.projection.event);
+      const { event, triggers } = projected.projection;
+      const path = menuPathByEvent.get(event);
       if (path) {
-        perWorkflow.push([path, projected.projection.triggers.length]);
+        perWorkflow.push([path, triggers.length]);
+      }
+      if (triggers.length > 0) {
+        events.add(event);
       }
     }
-    return countAlertsByNode(perWorkflow);
+    return { counts: countAlertsByNode(perWorkflow), configuredEvents: events };
   }, [rows, menuPathByEvent]);
 
   // Everything below the Alerts route is the selected menu path, as deep as the taxonomy nests.
@@ -103,6 +113,16 @@ export default function Alerts() {
   const nodeTrail = node ? selectedPath.map(taxonomyLabel).join(" › ") : null;
   // A lone event's title is its own name, so the trail above it stops at its parent.
   const breadcrumb = selectedPath.slice(0, -1).map(taxonomyLabel);
+
+  // Only the rail is pruned: routing, the dashboard and the test sheet read the full
+  // tree, so hiding an entry never stops its URL resolving. Nothing is pruned before
+  // the workflows arrive, or the rail would flash empty and then fill in.
+  const hideUnused = useStore($hideUnusedAlerts);
+  const railTree = useMemo(
+    () =>
+      hideUnused && workflows !== undefined ? pruneUnusedAlerts(tree, { counts, configuredEvents, selectedId }) : tree,
+    [hideUnused, workflows, tree, counts, configuredEvents, selectedId]
+  );
 
   // Leaving for an entry of the menu drops the jump marker, since that link has no #hash.
   useEffect(() => {
@@ -138,12 +158,14 @@ export default function Alerts() {
   return (
     <div className="flex h-full overflow-hidden">
       <AlertGroupRail
-        tree={tree}
+        tree={railTree}
         counts={counts}
         selectedId={selectedId}
         basePath={BASE_PATH}
         activeAnchor={activeAnchor}
         onAnchorSelect={requestScroll}
+        hideUnused={hideUnused}
+        onHideUnusedChange={(hide) => $hideUnusedAlerts.set(hide)}
       />
 
       <div className="flex-1 overflow-auto">

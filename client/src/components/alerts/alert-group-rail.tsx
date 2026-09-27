@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { type AlertNode, alertNodeId, alertSectionAnchor, anchoredPresets } from "@/lib/alert-groups";
 import { cn } from "@/lib/utils";
 
@@ -19,6 +21,9 @@ interface AlertGroupRailProps {
   activeAnchor: string | null;
   /** A jump link was followed; the page scrolls that section's heading to the top. */
   onAnchorSelect: (anchor: string) => void;
+  /** Whether `tree` has been pruned to the entries with a configured alert. */
+  hideUnused: boolean;
+  onHideUnusedChange: (hideUnused: boolean) => void;
 }
 
 /** Indent per nesting level, in pixels. */
@@ -30,7 +35,8 @@ const LEVEL_INDENT = 12;
  *
  * Every registered trigger appears, whether or not an alert exists for it yet, so the
  * rail doubles as the answer to "what can I make an alert for?" — which is why picking
- * a kind and then creating is one step rather than a separate trigger hunt.
+ * a kind and then creating is one step rather than a separate trigger hunt. A viewer
+ * who has set up their alerts can hide the rest, leaving only what they use.
  */
 export function AlertGroupRail({
   tree,
@@ -39,11 +45,29 @@ export function AlertGroupRail({
   basePath,
   activeAnchor,
   onAnchorSelect,
+  hideUnused,
+  onHideUnusedChange,
 }: AlertGroupRailProps) {
   return (
     <nav className={SIDEBAR_RAIL} aria-label="Alert groups">
+      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
+        <Label htmlFor="alert-rail-hide-unused" className="text-[13px] font-normal text-muted-foreground">
+          Hide unused alerts
+        </Label>
+        <Switch
+          id="alert-rail-hide-unused"
+          checked={hideUnused}
+          onCheckedChange={onHideUnusedChange}
+          data-testid="alert-rail-hide-unused"
+        />
+      </div>
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-2">
+          {hideUnused && tree.length === 0 && (
+            <p className="px-1 py-2 text-[13px] text-muted-foreground" data-testid="alert-rail-empty">
+              No alerts set up yet. Turn off <em>Hide unused alerts</em> to see everything you can alert on.
+            </p>
+          )}
           {tree.map((platform) => (
             <PlatformSection
               key={alertNodeId(platform.path)}
