@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { hasRecordedTriggerEvent } from "./lib/runTriggerEvent";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 /**
@@ -150,7 +151,11 @@ export const runWithSteps = query({
 const WORKFLOW_RUNS_DEFAULT_LIMIT = 25;
 const WORKFLOW_RUNS_MAX_LIMIT = 100;
 
-/** One workflow's recorded runs, newest first. Steps are left to `runWithSteps`. */
+/**
+ * One workflow's recorded runs, newest first, as list rows. The trigger event
+ * itself is left to `runWithSteps`: it can be large, and a list only needs to
+ * know whether there is one to replay.
+ */
 export const listForWorkflow = query({
   args: {
     instanceId: v.id("instances"),
@@ -162,11 +167,21 @@ export const listForWorkflow = query({
       return [];
     }
     const take = Math.min(Math.max(1, Math.floor(limit ?? WORKFLOW_RUNS_DEFAULT_LIMIT)), WORKFLOW_RUNS_MAX_LIMIT);
-    return ctx.db
+    const runs = await ctx.db
       .query("workflowRuns")
       .withIndex("by_instance_workflow", (q) => q.eq("instanceId", instanceId).eq("workflowId", workflowId))
       .order("desc")
       .take(take);
+    return runs.map((run) => ({
+      _id: run._id,
+      engineRunId: run.engineRunId,
+      status: run.status,
+      triggeredBy: run.triggeredBy,
+      error: run.error,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      hasTriggerEvent: hasRecordedTriggerEvent(run.triggerEvent),
+    }));
   },
 });
 

@@ -1,5 +1,5 @@
 import { REPLAY_ORIGIN, TEST_RUN_ORIGIN, UNRECORDED_ORIGIN } from "@convex/lib/manualRunOrigin";
-import { parseEngineTime, presentPayload, toneFor } from "@/lib/workflow-run-timeline";
+import { parseEngineTime, toneFor } from "@/lib/workflow-run-timeline";
 
 /**
  * How a row in a workflow's Runs panel reads and what it offers. Logic only,
@@ -10,7 +10,6 @@ import { parseEngineTime, presentPayload, toneFor } from "@/lib/workflow-run-tim
 export interface RunRow {
   status: string;
   triggeredBy?: string;
-  triggerEvent?: string;
   startedAt?: string;
   completedAt?: string;
 }
@@ -41,8 +40,8 @@ export function isActiveRun(run: RunRow): boolean {
  * Whether the run can be replayed: it has settled, and its trigger event was
  * recorded -- a replay re-feeds that event, and without it has nothing to run.
  */
-export function canReplayRun(run: RunRow): boolean {
-  return !isActiveRun(run) && presentPayload(run.triggerEvent) !== null;
+export function canReplayRun(run: RunRow & { hasTriggerEvent: boolean }): boolean {
+  return !isActiveRun(run) && run.hasTriggerEvent;
 }
 
 /**
