@@ -1,7 +1,7 @@
 import {
   changedFields,
   diffStreamInfo,
-  isEmptyPatch,
+  isEmptyChanges,
   type StreamInfo,
   tagsProblem,
   titleProblem,
@@ -12,16 +12,20 @@ import {
 // throw away what someone is halfway through typing.
 
 export function isDirty(saved: StreamInfo, draft: StreamInfo): boolean {
-  return !isEmptyPatch(diffStreamInfo(saved, draft));
+  return !isEmptyChanges(diffStreamInfo(saved, draft));
 }
 
 /**
- * The draft to show after a fresh read from Twitch. An untouched draft follows
- * Twitch; an edited one is kept as it is, since overwriting it would lose
- * typing to a background refresh.
+ * The draft to show after a fresh read from Twitch, merged per field: a field
+ * the editor has touched keeps the edit, since overwriting it would lose typing
+ * to a background refresh, and every untouched field follows Twitch.
  */
 export function rebaseDraft(previousSaved: StreamInfo, draft: StreamInfo, freshSaved: StreamInfo): StreamInfo {
-  return isDirty(previousSaved, draft) ? draft : freshSaved;
+  const edited = diffStreamInfo(previousSaved, draft);
+  if (isEmptyChanges(edited)) {
+    return freshSaved;
+  }
+  return { ...freshSaved, ...edited };
 }
 
 /** Why the draft cannot be saved, or null. Mirrors what `updateChannelInfo` refuses. */

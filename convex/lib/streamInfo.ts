@@ -14,10 +14,20 @@ export const MAX_TAG_LENGTH = 25;
 export const MAX_MARKER_DESCRIPTION_LENGTH = 140;
 export const MAX_PRESET_NAME_LENGTH = 60;
 
-// Twitch refuses spaces and punctuation in a tag. Letters and digits from any
-// script are accepted, so this is Unicode-aware rather than [A-Za-z0-9].
+// Twitch's documented rule is "no spaces or special characters", and its own
+// validation is the authority: a tag this pattern flags is only warned about,
+// never refused, so a tag Twitch would take is never blocked here. Marks (\p{M})
+// are included because Devanagari, Tamil and similar scripts need combining
+// vowel signs to spell a word at all.
 // biome-ignore lint/complexity/useRegexLiterals: the client TypeScript target predates the `u` literal flag
-const TAG_PATTERN = new RegExp("^[\\p{L}\\p{N}]+$", "u");
+const TAG_PATTERN = new RegExp("^[\\p{L}\\p{M}\\p{N}]+$", "u");
+
+/** Only Twitch's CDN serves box art; anything else in a preset row is refused. */
+export const BOX_ART_URL_PREFIX = "https://static-cdn.jtvnw.net/";
+/** Twitch category ids are short numeric strings; this bounds what a preset row may hold. */
+export const MAX_CATEGORY_ID_LENGTH = 32;
+export const MAX_CATEGORY_NAME_LENGTH = 200;
+export const MAX_BOX_ART_URL_LENGTH = 500;
 
 export interface StreamCategory {
   id: string;
@@ -63,7 +73,10 @@ export function titleCounter(title: string): LengthCounter {
   return lengthCounter(title, MAX_TITLE_LENGTH);
 }
 
-/** Why a single tag cannot be used, or null when Twitch will accept it. */
+/**
+ * Why a single tag cannot be used, or null. These are the rules Twitch states
+ * plainly and the backend enforces; character-class doubts are `tagWarning`.
+ */
 export function tagProblem(tag: string): string | null {
   if (tag.length === 0) {
     return "A tag can't be empty";
@@ -74,10 +87,15 @@ export function tagProblem(tag: string): string | null {
   if (characterCount(tag) > MAX_TAG_LENGTH) {
     return `Tags are limited to ${MAX_TAG_LENGTH} characters`;
   }
-  if (!TAG_PATTERN.test(tag)) {
-    return "Tags can only use letters and numbers";
-  }
   return null;
+}
+
+/** Advice about a tag Twitch will probably refuse, shown but not enforced. */
+export function tagWarning(tag: string): string | null {
+  if (tag.length === 0 || TAG_PATTERN.test(tag)) {
+    return null;
+  }
+  return "Twitch usually refuses punctuation and symbols in tags";
 }
 
 /**
@@ -123,6 +141,27 @@ export function titleProblem(title: string): string | null {
   return null;
 }
 
+/**
+ * Why a category cannot be stored or sent, or null. Twitch category ids are
+ * numeric; box art must come from Twitch's CDN, because a preset row's URL is
+ * rendered as an image for everyone on the account.
+ */
+export function categoryProblem(category: StreamCategory): string | null {
+  if (!/^\d+$/.test(category.id) || category.id.length > MAX_CATEGORY_ID_LENGTH) {
+    return "That isn't a Twitch category";
+  }
+  const nameLength = characterCount(category.name);
+  if (nameLength === 0 || nameLength > MAX_CATEGORY_NAME_LENGTH) {
+    return "That category has no usable name";
+  }
+  if (category.boxArtUrl !== undefined) {
+    if (category.boxArtUrl.length > MAX_BOX_ART_URL_LENGTH || !category.boxArtUrl.startsWith(BOX_ART_URL_PREFIX)) {
+      return "Category art must come from Twitch";
+    }
+  }
+  return null;
+}
+
 export function markerDescriptionProblem(description: string): string | null {
   if (characterCount(description) > MAX_MARKER_DESCRIPTION_LENGTH) {
     return `Marker descriptions are limited to ${MAX_MARKER_DESCRIPTION_LENGTH} characters`;
@@ -130,13 +169,60 @@ export function markerDescriptionProblem(description: string): string | null {
   return null;
 }
 
+/**
+ * Tags compare as a set, since order is not something a viewer can see, but
+ * case-sensitively: "fps" to "FPS" is a deliberate edit and must be saveable.
+ */
 function sameTags(a: readonly string[], b: readonly string[]): boolean {
-  const left = new Set(a.map((tag) => tag.toLowerCase()));
-  const right = new Set(b.map((tag) => tag.toLowerCase()));
+  const left = new Set(a);
+  const right = new Set(b);
   if (left.size !== right.size) {
     return false;
   }
   return Array.from(right).every((tag) => left.has(tag));
+}
+
+export type StreamInfoField = "title" | "category" | "tags";
+
+/** Some of a channel's fields; a present `category: null` means "clear it". */
+export type StreamInfoChanges = Partial<StreamInfo>;
+
+/**
+ * The fields of `next` that differ from `base`. Only these are sent to
+ * Twitch: re-sending a field the editor never touched would revert whatever
+ * changed it elsewhere since `base` was read (Twitch's dashboard, a moderator,
+ * a chat command). Category compares by id alone; its name and art are display.
+ */
+export function diffStreamInfo(base: StreamInfo, next: StreamInfo): StreamInfoChanges {
+  const changes: StreamInfoChanges = {};
+  if (base.title !== next.title) {
+    changes.title = next.title;
+  }
+  if ((base.category?.id ?? "") !== (next.category?.id ?? "")) {
+    changes.category = next.category;
+  }
+  if (!sameTags(base.tags, next.tags)) {
+    changes.tags = [...next.tags];
+  }
+  return changes;
+}
+
+export function changedFields(changes: StreamInfoChanges): StreamInfoField[] {
+  const fields: StreamInfoField[] = [];
+  if (changes.title !== undefined) {
+    fields.push("title");
+  }
+  if (changes.category !== undefined) {
+    fields.push("category");
+  }
+  if (changes.tags !== undefined) {
+    fields.push("tags");
+  }
+  return fields;
+}
+
+export function isEmptyChanges(changes: StreamInfoChanges): boolean {
+  return changedFields(changes).length === 0;
 }
 
 /** A Modify Channel Information body. */
@@ -146,48 +232,28 @@ export interface StreamInfoPatch {
   tags?: string[];
 }
 
-/**
- * The fields Modify Channel Information needs to turn `current` into `next`,
- * in Helix's own shape. A field that already matches is left out: sending an
- * unchanged title still counts against Twitch's edit rate limit and shows up
- * in the channel's activity as an edit.
- *
- * Tags compare as a case-insensitive set, since order and case are not
- * something a viewer can tell apart. A null category on `next` clears it,
- * which Helix spells as an empty `game_id`.
- */
-export function diffStreamInfo(current: StreamInfo, next: StreamInfo): StreamInfoPatch {
+/** `changes` in Helix's shape. A cleared category is an empty `game_id`. */
+export function toHelixPatch(changes: StreamInfoChanges): StreamInfoPatch {
   const patch: StreamInfoPatch = {};
-  if (current.title !== next.title) {
-    patch.title = next.title;
+  if (changes.title !== undefined) {
+    patch.title = changes.title;
   }
-  const currentCategoryId = current.category?.id ?? "";
-  const nextCategoryId = next.category?.id ?? "";
-  if (currentCategoryId !== nextCategoryId) {
-    patch.game_id = nextCategoryId;
+  if (changes.category !== undefined) {
+    patch.game_id = changes.category?.id ?? "";
   }
-  if (!sameTags(current.tags, next.tags)) {
-    patch.tags = [...next.tags];
+  if (changes.tags !== undefined) {
+    patch.tags = [...changes.tags];
   }
   return patch;
 }
 
-export function changedFields(patch: StreamInfoPatch): Array<"title" | "category" | "tags"> {
-  const fields: Array<"title" | "category" | "tags"> = [];
-  if (patch.title !== undefined) {
-    fields.push("title");
-  }
-  if (patch.game_id !== undefined) {
-    fields.push("category");
-  }
-  if (patch.tags !== undefined) {
-    fields.push("tags");
-  }
-  return fields;
-}
-
-export function isEmptyPatch(patch: StreamInfoPatch): boolean {
-  return changedFields(patch).length === 0;
+/**
+ * Requested fields Twitch does not hold after the write. Modify Channel
+ * Information answers 204 even when it ignores a value (an unknown game id),
+ * so success is judged by reading the channel back, not by the status.
+ */
+export function unappliedFields(requested: StreamInfoChanges, actual: StreamInfo): StreamInfoField[] {
+  return changedFields(diffStreamInfo(actual, { ...actual, ...requested }));
 }
 
 /**

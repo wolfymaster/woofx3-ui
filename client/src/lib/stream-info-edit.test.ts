@@ -15,9 +15,23 @@ describe("rebaseDraft", () => {
     expect(rebaseDraft(info(), info(), fresh)).toBe(fresh);
   });
 
-  test("an edited draft survives a fresh read", () => {
+  test("an edited field keeps the edit while untouched fields follow Twitch", () => {
+    const draft = info({ tags: ["English", "Speedrun"] });
+    const fresh = info({ title: "Changed by a mod", category: VALORANT });
+    expect(rebaseDraft(info(), draft, fresh)).toEqual({
+      title: "Changed by a mod",
+      category: VALORANT,
+      tags: ["English", "Speedrun"],
+    });
+  });
+
+  test("an edited title survives a fresh title", () => {
     const draft = info({ title: "Typing..." });
-    expect(rebaseDraft(info(), draft, info({ title: "Changed on Twitch" }))).toBe(draft);
+    expect(rebaseDraft(info(), draft, info({ title: "Changed on Twitch" })).title).toBe("Typing...");
+  });
+
+  test("a cleared category stays cleared", () => {
+    expect(rebaseDraft(info(), info({ category: null }), info({ title: "x" })).category).toBeNull();
   });
 
   test("a tag reorder is not an edit", () => {
@@ -42,7 +56,11 @@ describe("isDirty and draftProblem", () => {
 
 describe("comparePreset", () => {
   test("a matching preset is active", () => {
-    expect(comparePreset(info(), info({ tags: ["english"] }))).toEqual({ active: true, summary: "Already applied" });
+    expect(comparePreset(info(), info({ tags: ["English"] }))).toEqual({ active: true, summary: "Already applied" });
+  });
+
+  test("a preset differing only in tag case is not active", () => {
+    expect(comparePreset(info(), info({ tags: ["english"] })).summary).toBe("Changes tags");
   });
 
   test("lists what would change", () => {

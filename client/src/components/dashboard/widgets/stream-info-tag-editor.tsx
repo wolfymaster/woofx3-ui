@@ -1,4 +1,4 @@
-import { addTagProblem, MAX_TAGS } from "@convex/lib/streamInfo";
+import { addTagProblem, MAX_TAGS, tagWarning } from "@convex/lib/streamInfo";
 import { X } from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -11,14 +11,16 @@ interface TagEditorProps {
 }
 
 /**
- * Chips plus an input. Enter or a comma commits the typed tag; a tag Twitch
- * would refuse stays in the box with the reason under it, so the fix is one
- * edit away rather than a failed save later.
+ * Chips plus an input. Enter or a comma commits the typed tag; a tag that
+ * breaks a stated rule stays in the box with the reason under it, so the fix is
+ * one edit away rather than a failed save later. Punctuation only draws a
+ * warning: Twitch's own validation decides which characters it takes.
  */
 export function TagEditor({ tags, onChange, disabled }: TagEditorProps) {
   const [input, setInput] = useState("");
   const candidate = input.trim();
   const problem = candidate ? addTagProblem(tags, candidate) : null;
+  const warning = candidate && !problem ? tagWarning(candidate) : null;
 
   const commit = () => {
     if (!candidate || problem) {
@@ -95,6 +97,7 @@ export function TagEditor({ tags, onChange, disabled }: TagEditorProps) {
           {tags.length}/{MAX_TAGS}
         </span>
       </div>
+      {warning && <p className="text-xs text-amber-500">{warning}</p>}
       {problem && (
         <p id="stream-info-tag-problem" className="text-xs text-destructive" role="alert">
           {problem}
