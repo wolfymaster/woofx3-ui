@@ -46,7 +46,14 @@ export const patchTwitchToken = internalMutation({
     expiresAt: v.number(),
   },
   handler: async (ctx, { linkId, ...patch }) => {
-    await ctx.db.patch(linkId, patch);
+    await ctx.db.patch(linkId, { ...patch, authFailedAt: undefined });
+  },
+});
+
+export const markTwitchAuthFailed = internalMutation({
+  args: { linkId: v.id("platformLinks") },
+  handler: async (ctx, { linkId }) => {
+    await ctx.db.patch(linkId, { authFailedAt: Date.now() });
   },
 });
 
@@ -85,6 +92,12 @@ export const ensureFreshTwitchToken = internalAction({
     });
 
     if (!response.ok) {
+      // 400 and 401 are Twitch refusing the refresh token itself, which only a
+      // relink fixes. Anything else (5xx, rate limiting) is transient and must
+      // not tell the creator to reconnect.
+      if (response.status === 400 || response.status === 401) {
+        await ctx.runMutation(internal.platformRealtime.markTwitchAuthFailed, { linkId: link._id });
+      }
       throw new Error(`Twitch token refresh failed: ${response.status} ${await response.text()}`);
     }
 

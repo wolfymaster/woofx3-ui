@@ -288,6 +288,10 @@ export default defineSchema({
     expiresAt: v.number(),
     scopes: v.array(v.string()),
     connectedByUserId: v.optional(v.string()),
+    // When Twitch last refused this link's refresh token: the creator revoked
+    // the app or changed their password. Cleared by a relink or a successful
+    // refresh. Drives the "Reconnect Twitch" banner (lib/twitchScopeHealth.ts).
+    authFailedAt: v.optional(v.number()),
   }).index("by_instance", ["instanceId"]),
 
   // chatCommands: engine-authoritative read cache of chat commands. The engine
