@@ -7,6 +7,7 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import { getInstanceMembership } from "./lib/teamAccess";
 import {
   GET_WORKFLOW_HEALTH_METHOD,
+  isStillLoadingError,
   isUnknownMethodError,
   type ParsedWorkflowHealth,
   parseWorkflowHealthChanged,
@@ -22,8 +23,12 @@ import {
 import { logger } from "./logger";
 
 /**
- * Upper bound on failing workflows read per instance. The workflows list itself
- * shows at most 100 rows, so this leaves room without an unbounded read.
+ * Upper bound on stored error rows read per instance, so neither a replace-all
+ * merge nor listNotRunning is an unbounded read. The workflows list itself
+ * shows at most 100 rows, so a real instance stays far below it. Past the cap,
+ * a replace-all clears only the errors it read and listNotRunning under-counts;
+ * each later snapshot or resync clears another batch, so the state converges
+ * rather than sticking.
  */
 const MAX_ERROR_ROWS = 500;
 
@@ -98,6 +103,7 @@ function toStored(row: HealthRow): StoredHealthRow {
     status: row.status,
     reason: row.reason,
     sinceMs: row.sinceMs,
+    since: row.since,
     receivedAt: row.receivedAt,
   };
 }
@@ -262,6 +268,23 @@ export const finishResync = internalMutation({
   },
 });
 
+/**
+ * Give the throttle slot back after an attempt that told us nothing, so the
+ * next mount or reconnect asks again instead of waiting out the interval.
+ */
+export const releaseResync = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const row = await ctx.db
+      .query("workflowHealthSyncs")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .unique();
+    if (row !== null) {
+      await ctx.db.delete(row._id);
+    }
+  },
+});
+
 export const applyResync = internalMutation({
   args: {
     instanceId: v.id("instances"),
@@ -280,14 +303,15 @@ export const applyResync = internalMutation({
   },
 });
 
-export type ResyncResult = "skipped" | "ok" | "unsupported" | "failed";
+export type ResyncResult = "skipped" | "ok" | "unsupported" | "loading" | "failed";
 
 /**
  * Ask the engine for every workflow's health and replace what is stored.
  * Webhooks normally keep health current; this repairs a delivery Convex missed.
  * Throttled per instance (see RESYNC_MIN_INTERVAL_MS), and it never throws for
- * an engine problem: callers fire it in the background, and an engine that
- * predates the RPC simply has no health to show.
+ * an engine problem: callers fire it in the background, an engine that
+ * predates the RPC simply has no health to show, and one still loading its
+ * workflows is asked again on the next trigger.
  */
 export const resync = action({
   args: { instanceId: v.id("instances"), trigger: resyncTrigger },
@@ -314,6 +338,13 @@ export const resync = action({
         engine.clientSecret
       ).getWorkflowHealth();
     } catch (err) {
+      // An engine still loading its workflows cannot give a whole list yet, and
+      // sends its own snapshot once it can. Not a failure, and not a reason to
+      // hold the throttle.
+      if (isStillLoadingError(err)) {
+        await ctx.runMutation(internal.workflowHealth.releaseResync, { instanceId });
+        return "loading";
+      }
       const outcome = isUnknownMethodError(err, GET_WORKFLOW_HEALTH_METHOD) ? "unsupported" : "failed";
       if (outcome === "failed") {
         logger.warn("workflow health: resync failed", {

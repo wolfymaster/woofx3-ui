@@ -171,6 +171,36 @@ export interface StoredWorkflowHealth {
   status: WorkflowHealthStatus;
   reason?: string;
   sinceMs: number;
+  /** The engine's ISO `since`, for ordering below a millisecond; absent reads as a whole millisecond. */
+  since?: string;
+}
+
+const FRACTION_PATTERN = /T\d{2}:\d{2}:\d{2}\.(\d+)/;
+
+/**
+ * The nanoseconds past the whole millisecond in an ISO timestamp. The engine
+ * (Go, RFC 3339 with nanoseconds) can report two transitions inside one
+ * millisecond, which `Date.parse` cannot tell apart. Go trims trailing zeros
+ * from the fraction, so it is parsed as a number rather than compared as text.
+ */
+export function subMillisecondNanos(iso: string | undefined): number {
+  if (iso === undefined) {
+    return 0;
+  }
+  const match = FRACTION_PATTERN.exec(iso);
+  if (match === null) {
+    return 0;
+  }
+  const nanos = Number(match[1].slice(0, 9).padEnd(9, "0"));
+  return nanos % 1_000_000;
+}
+
+/** Negative, zero or positive as `a` is before, at or after `b`, to the nanosecond. */
+export function compareSince(a: { sinceMs: number; since?: string }, b: { sinceMs: number; since?: string }): number {
+  if (a.sinceMs !== b.sinceMs) {
+    return a.sinceMs - b.sinceMs;
+  }
+  return subMillisecondNanos(a.since) - subMillisecondNanos(b.since);
 }
 
 export type HealthWritePlan = "insert" | "replace" | "unchanged" | "stale";
@@ -189,14 +219,11 @@ export function planHealthWrite(
   if (existing === null) {
     return "insert";
   }
-  if (incoming.sinceMs < existing.sinceMs) {
+  const order = compareSince(incoming, existing);
+  if (order < 0) {
     return "stale";
   }
-  if (
-    incoming.sinceMs === existing.sinceMs &&
-    incoming.status === existing.status &&
-    (incoming.reason ?? "") === (existing.reason ?? "")
-  ) {
+  if (order === 0 && incoming.status === existing.status && (incoming.reason ?? "") === (existing.reason ?? "")) {
     return "unchanged";
   }
   return "replace";
@@ -273,7 +300,7 @@ export function planSnapshot(
   return planReplaceAll(
     stored,
     snapshot.entries,
-    (row) => row.sinceMs <= snapshot.atMs,
+    (row) => compareSince(row, { sinceMs: snapshot.atMs, since: snapshot.at }) <= 0,
     (row) => Math.max(snapshot.atMs, row.sinceMs + 1)
   );
 }
@@ -320,6 +347,19 @@ export function shouldResync(lastAttemptAt: number | null, now: number, trigger:
     return true;
   }
   return now - lastAttemptAt >= RESYNC_MIN_INTERVAL_MS[trigger];
+}
+
+/**
+ * The engine refuses `getWorkflowHealth()` with this while it is still loading
+ * its workflows, when any list would be partial. Must match the error thrown by
+ * getWorkflowHealth in woofx3 api/src/routes/workflows.ts.
+ */
+export const HEALTH_STILL_LOADING_MESSAGE = "the workflow engine is still loading workflows; health is not known yet";
+
+/** True when the engine answered that it has not finished loading workflows yet. */
+export function isStillLoadingError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  return message.includes(HEALTH_STILL_LOADING_MESSAGE);
 }
 
 /**

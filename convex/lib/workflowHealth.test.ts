@@ -1,5 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import {
+  compareSince,
+  HEALTH_STILL_LOADING_MESSAGE,
+  isStillLoadingError,
   isUnknownMethodError,
   MAX_REASON_LENGTH,
   type ParsedWorkflowHealth,
@@ -12,6 +15,7 @@ import {
   RESYNC_MIN_INTERVAL_MS,
   type StoredHealthRow,
   shouldResync,
+  subMillisecondNanos,
   WORKFLOW_HEALTH_CHANGED_EVENT_TYPE,
   WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE,
 } from "./workflowHealth";
@@ -211,6 +215,38 @@ describe("planResync", () => {
   });
 });
 
+describe("sub-millisecond ordering", () => {
+  it("parses Go's trimmed nanosecond fractions as numbers", () => {
+    expect(subMillisecondNanos("2026-09-28T10:00:00.000000001Z")).toBe(1);
+    expect(subMillisecondNanos("2026-09-28T10:00:00.1234567Z")).toBe(456_700);
+    expect(subMillisecondNanos("2026-09-28T10:00:00.12345Z")).toBe(450_000);
+    expect(subMillisecondNanos("2026-09-28T10:00:00.123Z")).toBe(0);
+    expect(subMillisecondNanos("2026-09-28T10:00:00Z")).toBe(0);
+    expect(subMillisecondNanos(undefined)).toBe(0);
+  });
+
+  it("orders within one millisecond where text comparison would not", () => {
+    // ".00000005" < ".0000001" as numbers, but not as strings.
+    const earlier = parsed({ since: "2026-09-28T10:00:00.00000005Z" });
+    const later = parsed({ since: "2026-09-28T10:00:00.0000001Z" });
+    expect(earlier.sinceMs).toBe(later.sinceMs);
+    expect(compareSince(earlier, later)).toBeLessThan(0);
+    expect(compareSince(later, earlier)).toBeGreaterThan(0);
+  });
+
+  it("treats an older report in the same millisecond as stale", () => {
+    const stored = { status: "ok" as const, sinceMs: T0_MS, since: "2026-09-28T10:00:00.000500Z" };
+    expect(planHealthWrite(stored, parsed({ since: "2026-09-28T10:00:00.0004Z" }))).toBe("stale");
+    expect(planHealthWrite(stored, parsed({ since: "2026-09-28T10:00:00.0006Z" }))).toBe("replace");
+  });
+
+  it("keeps an error that began after a snapshot within the same millisecond", () => {
+    const at = "2026-09-28T10:00:00.0001Z";
+    const plan = planSnapshot([row({ since: "2026-09-28T10:00:00.0002Z" })], { entries: [], at, atMs: T0_MS });
+    expect(plan.clears).toEqual([]);
+  });
+});
+
 describe("planSnapshot", () => {
   const at = "2026-09-28T12:00:00.000Z";
   const atMs = Date.parse(at);
@@ -265,6 +301,14 @@ describe("shouldResync", () => {
     expect(shouldResync(last, between, "reconnect")).toBe(true);
     expect(shouldResync(last, between, "mount")).toBe(false);
     expect(shouldResync(last, last + RESYNC_MIN_INTERVAL_MS.mount, "mount")).toBe(true);
+  });
+});
+
+describe("isStillLoadingError", () => {
+  it("recognises the engine's still-loading refusal", () => {
+    expect(isStillLoadingError(new Error(HEALTH_STILL_LOADING_MESSAGE))).toBe(true);
+    expect(isStillLoadingError(new Error("fetch failed"))).toBe(false);
+    expect(isStillLoadingError(new TypeError("'getWorkflowHealth' is not a function."))).toBe(false);
   });
 });
 
