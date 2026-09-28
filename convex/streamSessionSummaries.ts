@@ -68,3 +68,20 @@ export const listRecent = query({
       .take(take);
   },
 });
+
+/** One summarised session, or null when none is stored for it. */
+export const get = query({
+  args: {
+    instanceId: v.id("instances"),
+    sessionId: v.string(),
+  },
+  handler: async (ctx, { instanceId, sessionId }) => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return null;
+    }
+    return ctx.db
+      .query("streamSessionSummaries")
+      .withIndex("by_instance_session", (q) => q.eq("instanceId", instanceId).eq("sessionId", sessionId))
+      .unique();
+  },
+});
