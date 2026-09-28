@@ -5,17 +5,8 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { safeRelativePath } from "./lib/safeRedirect";
-import { getInstanceMembership } from "./lib/teamAccess";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
-import { canManageTwitchLink, type InstanceRole } from "./lib/twitchLinkPolicy";
-
-export const memberRole = internalQuery({
-  args: { instanceId: v.id("instances"), userId: v.id("users") },
-  handler: async (ctx, { instanceId, userId }): Promise<InstanceRole | null> => {
-    const membership = await getInstanceMembership(ctx, instanceId, userId);
-    return membership?.role ?? null;
-  },
-});
+import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 
 /** The signed-in caller, when they may connect or disconnect this instance's Twitch link. */
 async function requireTwitchLinkManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
@@ -23,7 +14,7 @@ async function requireTwitchLinkManager(ctx: ActionCtx, instanceId: Id<"instance
   if (!userId) {
     throw new Error("Not authenticated");
   }
-  const role = await ctx.runQuery(internal.twitchIntegration.memberRole, { instanceId, userId });
+  const role = await ctx.runQuery(internal.instances.memberRole, { instanceId, userId });
   if (!canManageTwitchLink(role)) {
     throw new Error("Only an owner or admin of this instance can connect or disconnect Twitch");
   }

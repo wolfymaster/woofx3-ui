@@ -29,7 +29,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 import { cn, isNewerVersion } from "@/lib/utils";
 
 export interface ModuleDetailMeta {
@@ -961,25 +960,43 @@ function IntegrationSettingButton({
   field: ManifestSettingField;
   action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "integration" }>;
 }) {
-  const handleClick = () => {
-    if (!instanceId) {
+  const startSpotify = useAction(api.spotifyConnect.start);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Spotify is the only OAuth integration Convex implements; a manifest
+  // naming another gets a disabled button rather than a dead link.
+  const supported = action.integration === "spotify";
+
+  const handleClick = async () => {
+    if (!instanceId || !supported) {
       return;
     }
-    // The current path already deep-links back to this module (modules.tsx
-    // resolves /modules/:id via routeModuleId), so redirecting to it as-is
-    // — plus whatever result params the callback appends — is enough.
-    const url = new URL(`${CONVEX_SITE_URL}/api/integrations/${action.integration}/start`);
-    url.searchParams.set("instanceId", instanceId);
-    url.searchParams.set("moduleId", moduleId);
-    url.searchParams.set("redirect_to", window.location.pathname);
-    window.location.href = url.toString();
+    setStarting(true);
+    setError(null);
+    try {
+      // The current path already deep-links back to this module (modules.tsx
+      // resolves /modules/:id via routeModuleId), so returning to it as-is
+      // — plus whatever result params the callback appends — is enough.
+      const { authorizeUrl } = await startSpotify({ instanceId, moduleId, redirectTo: window.location.pathname });
+      window.location.assign(authorizeUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStarting(false);
+    }
   };
   return (
     <div className="space-y-2">
-      <Button size="sm" variant="outline" disabled={!instanceId} onClick={handleClick}>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!instanceId || !supported || starting}
+        onClick={() => void handleClick()}
+        title={supported ? undefined : `The "${action.integration}" integration is not available`}
+      >
         {field.name}
       </Button>
       {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

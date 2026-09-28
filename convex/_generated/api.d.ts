@@ -113,6 +113,7 @@ import type * as sceneWidgets from "../sceneWidgets.js";
 import type * as scenes from "../scenes.js";
 import type * as seeds_triggerActions from "../seeds/triggerActions.js";
 import type * as shoutouts from "../shoutouts.js";
+import type * as spotifyConnect from "../spotifyConnect.js";
 import type * as spotifyIntegration from "../spotifyIntegration.js";
 import type * as storage from "../storage.js";
 import type * as streamSessionSummaries from "../streamSessionSummaries.js";
@@ -245,6 +246,7 @@ declare const fullApi: ApiFromModules<{
   scenes: typeof scenes;
   "seeds/triggerActions": typeof seeds_triggerActions;
   shoutouts: typeof shoutouts;
+  spotifyConnect: typeof spotifyConnect;
   spotifyIntegration: typeof spotifyIntegration;
   storage: typeof storage;
   streamSessionSummaries: typeof streamSessionSummaries;

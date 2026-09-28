@@ -43,3 +43,17 @@ export function safeRelativePath(value: string | null | undefined, fallback = "/
   }
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
 }
+
+/**
+ * A same-site path (clamped as `safeRelativePath` does) with result parameters
+ * added to whatever query it already has, so a target like `/settings?tab=x`
+ * keeps its own parameters instead of gaining a second `?`.
+ */
+export function withQuery(path: string | null | undefined, params: Record<string, string>, fallback = "/"): string {
+  const safe = safeRelativePath(path, fallback);
+  const url = new URL(safe, PROBE_ORIGIN);
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return `${url.pathname}${url.search}${url.hash}`;
+}

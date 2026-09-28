@@ -768,6 +768,9 @@ export default defineSchema({
     moduleId: v.string(),
     integration: v.string(),
     redirectTo: v.string(),
+    // The signed-in member who started the flow (spotifyConnect.start). Rows
+    // without one predate that check and are refused at the callback.
+    userId: v.optional(v.id("users")),
     data: v.any(),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
