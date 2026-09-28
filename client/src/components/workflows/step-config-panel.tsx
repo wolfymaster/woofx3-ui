@@ -1,9 +1,10 @@
-import type { ConditionConfig, WaitConfig } from "@woofx3/api";
+import type { ConditionConfig } from "@woofx3/api";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { parseConfigFields, withModuleName } from "@/lib/parse-config-fields";
+import type { WaitConfig } from "@/lib/wait-config";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { TriggerConfigValues } from "@/lib/workflow-presets";
 import {
@@ -199,6 +200,7 @@ function WaitConfigPanel({
 }) {
   return (
     <WaitEditor
+      key={node.id}
       wait={node.wait}
       onChange={(wait) => onUpdateWaitConfig(node.id, wait)}
       availableVariables={availableVariables}
