@@ -47,6 +47,21 @@ describe("missingTwitchCapabilities", () => {
     ]);
   });
 
+  test("a link made before the ad scopes misses only the optional Ad breaks capability", () => {
+    const granted = TWITCH_INTEGRATION_SCOPES.filter(
+      (scope) => scope !== "channel:read:ads" && scope !== "channel:manage:ads"
+    );
+    expect(missingTwitchCapabilities(granted)).toEqual([
+      { label: "Ad breaks", optional: true, missingScopes: ["channel:read:ads", "channel:manage:ads"] },
+    ]);
+    expect(twitchScopeHealth({ scopes: granted })).toEqual({
+      state: "ok",
+      optionalMissing: [
+        { label: "Ad breaks", optional: true, missingScopes: ["channel:read:ads", "channel:manage:ads"] },
+      ],
+    });
+  });
+
   test("ignores extra scopes the link happens to hold", () => {
     expect(missingTwitchCapabilities([...TWITCH_INTEGRATION_SCOPES, "channel:manage:raids"])).toEqual([]);
   });

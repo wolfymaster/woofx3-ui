@@ -40,6 +40,7 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `stream-preview` | stream | Thumbnail, click to enlarge |
 | `announcement` | stream | Send a coloured announcement to chat |
 | `pinned` | stream | Twitch pinned message, plus re-pinnable history — see below |
+| `ad-breaks` | stream | Next ad countdown, preroll-free time, snooze — see below |
 | `shoutout` | stream | Autocomplete from chat, confirm, queue — see below |
 | `moderation` | stream | Blocked terms, timeout/ban/unban, chat modes — see below |
 | `queue` | stream | One queue's line, with manual add and remove — see below |
@@ -512,6 +513,35 @@ on its own — an entry leaves the queue when it sends or when you remove it. Ev
 *attempt* is paced by the cooldown, successful or not: a refused shoutout is
 still a call to a rate-limited endpoint. The timing rules are pure and tested in
 `convex/lib/shoutoutSchedule.ts`.
+
+## Ad breaks
+
+A heads-up for mid-roll ads, so the streamer is not cut off mid-sentence: a
+countdown to the next scheduled ad, when the last one ran, the preroll-free
+time left, and a snooze button with the snoozes left and when the next one
+refills. While an ad plays the widget shows "Ad running, back in m:ss".
+
+The schedule comes from the engine (`getAdSchedule`, `snoozeNextAd`), which
+holds the broadcaster's token and calls Helix; `convex/adBreaks.ts` wraps both
+with a membership check. Any member may snooze: a snooze only pushes the next
+ad back, and it is a call a moderator running the stream makes on the spot.
+The RPC and event shapes are declared locally in `convex/lib/adBreaks.ts`
+until the shared contract carries them.
+
+Twitch pushes nothing to the browser about the schedule, and a snooze from
+Twitch's own dashboard changes it, so the widget polls every 60 seconds while
+visible and live. When the engine forwards `channel.ad_break.begin` / `.end` /
+`.upcoming` over the stream-event session, the running state starts at once
+and the schedule refreshes after each ad; without them a last ad still inside
+its length is read as running. Every countdown ticks off the shared
+`$nowPerSecond` ticker. Which state shows is decided in
+`client/src/lib/ad-break-view.ts`, pure and tested: offline, then a missing
+scope, then a running ad, then what the engine answered.
+
+The scopes (`channel:read:ads`, `channel:manage:ads`) are the optional "Ad
+breaks" capability: a link made before them raises no banner, the integrations
+page lists them as not granted, and the widget offers a reconnect. An engine
+without `getAdSchedule` reads as "update your engine".
 
 ## Data sources
 

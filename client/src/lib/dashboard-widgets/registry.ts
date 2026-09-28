@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlarmClock,
   BellRing,
   Clapperboard,
   Grid3x3,
@@ -19,6 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-panel";
+import { AdBreaksWidget } from "@/components/dashboard/widgets/ad-breaks";
 import { AlertLogWidget } from "@/components/dashboard/widgets/alert-log";
 import { AnnouncementWidget } from "@/components/dashboard/widgets/announcement";
 import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
@@ -107,6 +109,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: Pin,
     category: "stream",
     component: PinnedWidget,
+  },
+  {
+    type: "ad-breaks",
+    label: "Ad Breaks",
+    description: "Countdown to the next ad, preroll-free time, and a snooze button while you are live.",
+    icon: AlarmClock,
+    category: "stream",
+    component: AdBreaksWidget,
   },
   {
     type: "shoutout",
