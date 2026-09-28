@@ -507,6 +507,24 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
+  // streamInfoPresets: named title/category/tags combinations the Stream info
+  // widget applies to the channel in one click ("Just Chatting intro").
+  // Instance-scoped rather than per user: they describe the channel, so a
+  // moderator sharing the account applies the same presets the owner saved.
+  // The category's name and box art are copied in so the list renders without
+  // a Helix round trip; only `categoryId` is sent to Twitch.
+  streamInfoPresets: defineTable({
+    instanceId: v.id("instances"),
+    name: v.string(),
+    title: v.string(),
+    categoryId: v.optional(v.string()),
+    categoryName: v.optional(v.string()),
+    categoryBoxArtUrl: v.optional(v.string()),
+    tags: v.array(v.string()),
+    createdByUserId: v.id("users"),
+    updatedAt: v.number(),
+  }).index("by_instance_name", ["instanceId", "name"]),
+
   // pinnedMessages: history of things worth pinning in the channel's chat, kept
   // so the same message can be re-pinned across streams without retyping it.
   //
