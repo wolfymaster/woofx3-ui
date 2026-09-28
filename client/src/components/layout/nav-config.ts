@@ -4,6 +4,7 @@ import {
   FolderOpen,
   GraduationCap,
   HardDrive,
+  History,
   Key,
   Layers,
   LayoutDashboard,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { ALERT_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
+import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
 export interface NavItem {
   id: string;
@@ -49,6 +51,7 @@ export const STREAM_ITEMS: NavItem[] = [
   { id: "scenes", label: "Scenes", icon: Layers, href: "/stream/scenes" },
   { id: "timers", label: "Timers", icon: Timer, href: "/stream/timers" },
   { id: "queues", label: "Queues", icon: ListOrdered, href: "/stream/queues" },
+  { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
   { id: "assets", label: "Assets", icon: FolderOpen, href: "/stream/assets" },
   { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
 ];
