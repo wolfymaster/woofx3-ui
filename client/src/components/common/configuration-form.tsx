@@ -504,6 +504,8 @@ export type CustomFieldRenderer = (props: {
   onChange: (value: unknown) => void;
   /** The form's variables, for a renderer that holds fields of its own (e.g. a layout's widget settings). */
   availableVariables: VariableOption[];
+  /** Every field's current value, for a field whose options depend on another's (e.g. a scene's sources). */
+  values: FieldValues;
 }) => ReactNode;
 
 export interface ConfigurationFormProps {
@@ -585,7 +587,7 @@ export function ConfigurationForm({
     if (ownRenderer) {
       return (
         <div key={field.id}>
-          {ownRenderer({ field, value: fieldValue, onChange: changeHandler, availableVariables })}
+          {ownRenderer({ field, value: fieldValue, onChange: changeHandler, availableVariables, values })}
         </div>
       );
     }
@@ -670,7 +672,13 @@ export function ConfigurationForm({
           onChange={changeHandler}
           availableVariables={availableVariables}
         >
-          {customRenderers[rendererType]({ field, value: fieldValue, onChange: changeHandler, availableVariables })}
+          {customRenderers[rendererType]({
+            field,
+            value: fieldValue,
+            onChange: changeHandler,
+            availableVariables,
+            values,
+          })}
         </VariableToggleWrapper>
       );
     }
