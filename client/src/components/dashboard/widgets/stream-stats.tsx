@@ -1,9 +1,9 @@
 import { Clock, Gamepad2, Gift, HandHeart, Heart, Radio, UserPlus, Users, Zap } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
+import { Uptime } from "@/components/common/uptime";
 import { useLiveState } from "@/hooks/use-live-state";
 import type { PlatformEvent, PlatformEventType } from "@/lib/platforms/types";
 import { usePlatformEvents } from "@/lib/platforms/use-platform-events";
-import { formatUptime } from "@/lib/utils";
 
 // Every number here comes from a path that already exists: the channel facts
 // from the same `instanceLiveState` row the stream-status widget reads, and
@@ -25,7 +25,7 @@ interface SessionTallies {
 
 const EMPTY_TALLIES: SessionTallies = { follows: 0, subscribes: 0, giftedSubs: 0, bits: 0, raids: 0 };
 
-function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: string }) {
+function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2">
       <span className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -39,7 +39,6 @@ function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: stri
 
 export function StreamStatsWidget() {
   const liveState = useLiveState();
-  const [now, setNow] = useState(() => Date.now());
   const [tallies, setTallies] = useState<SessionTallies>(EMPTY_TALLIES);
 
   const isLive = liveState?.isLive ?? false;
@@ -56,14 +55,6 @@ export function StreamStatsWidget() {
     setTalliedSession(sessionId);
     setTallies(EMPTY_TALLIES);
   }
-
-  useEffect(() => {
-    if (!isLive) {
-      return;
-    }
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [isLive]);
 
   const handleEvent = useCallback((event: PlatformEvent) => {
     setTallies((prev) => {
@@ -90,12 +81,7 @@ export function StreamStatsWidget() {
 
   usePlatformEvents(EVENT_TYPES, handleEvent);
 
-  const uptime = useMemo(() => {
-    if (!isLive || !startedAt) {
-      return "—";
-    }
-    return formatUptime(startedAt, now);
-  }, [isLive, startedAt, now]);
+  const uptime = isLive && startedAt ? <Uptime startedAt={startedAt} /> : "—";
 
   return (
     <div className="h-full flex flex-col overflow-auto">

@@ -4,6 +4,7 @@ import { useMutation } from "convex/react";
 import { Activity, Bell, Check, ChevronDown, Command, MonitorPlay, Pencil, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { Uptime } from "@/components/common/uptime";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -25,7 +26,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
-import { cn, formatUptime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { CommandPalette } from "./command-palette";
 import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
@@ -121,19 +122,9 @@ function InstanceBar() {
 function StatusBar() {
   const { connected } = useEngineHealth();
   const liveState = useLiveState();
-  const [now, setNow] = useState(() => Date.now());
 
   const isLive = liveState?.isLive ?? false;
-
-  useEffect(() => {
-    if (!isLive) {
-      return;
-    }
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [isLive]);
-
-  const streamUptime = isLive && liveState?.startedAt ? formatUptime(liveState.startedAt, now) : "00:00:00";
+  const startedAt = isLive ? liveState?.startedAt : undefined;
 
   return (
     <div className="h-7 bg-card border-t border-border flex items-center px-4 text-xs shrink-0">
@@ -164,7 +155,7 @@ function StatusBar() {
         </div>
         <div className="flex items-center gap-1.5 text-muted-foreground font-system-mono">
           <Activity className="h-3 w-3" />
-          <span>{streamUptime}</span>
+          {startedAt ? <Uptime startedAt={startedAt} /> : <span>00:00:00</span>}
         </div>
       </div>
     </div>

@@ -1,28 +1,12 @@
 import { Clock, Radio, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Uptime } from "@/components/common/uptime";
 import { useLiveState } from "@/hooks/use-live-state";
-import { formatUptime } from "@/lib/utils";
 
 export function StreamStatusWidget() {
   const liveState = useLiveState();
-  const [now, setNow] = useState(() => Date.now());
 
   const isLive = liveState?.isLive ?? false;
-
-  useEffect(() => {
-    if (!isLive) {
-      return;
-    }
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [isLive]);
-
-  const uptime = useMemo(() => {
-    if (!isLive || !liveState?.startedAt) {
-      return "00:00:00";
-    }
-    return formatUptime(liveState.startedAt, now);
-  }, [isLive, liveState?.startedAt, now]);
+  const startedAt = isLive ? liveState?.startedAt : undefined;
   const viewerCount = liveState?.viewerCount ?? 0;
 
   return (
@@ -40,7 +24,7 @@ export function StreamStatusWidget() {
         </div>
         <div className="flex items-center gap-2">
           <Clock className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm">{uptime}</span>
+          {startedAt ? <Uptime startedAt={startedAt} className="text-sm" /> : <span className="text-sm">00:00:00</span>}
         </div>
       </div>
       {!isLive && (
