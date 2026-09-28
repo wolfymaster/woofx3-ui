@@ -695,10 +695,14 @@ export default defineSchema({
     status: v.union(v.literal("installing"), v.literal("installed")),
     // engineWorkflowId or engineCommandId; absent while installing.
     engineId: v.optional(v.string()),
+    // The workflow create's correlation key, so an echo that arrives after
+    // the install stopped waiting still marks the row installed.
+    correlationKey: v.optional(v.string()),
     claimedAt: v.number(),
   })
     .index("by_instance", ["instanceId"])
-    .index("by_instance_item", ["instanceId", "packId", "itemId"]),
+    .index("by_instance_item", ["instanceId", "packId", "itemId"])
+    .index("by_correlation", ["correlationKey"]),
 
   // workflows: Convex-side mirror of canonical engine WorkflowDefinition, plus
   // an optional ReactFlow projection cache (nodes/edges) derived in the browser.

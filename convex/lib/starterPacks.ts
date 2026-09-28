@@ -43,7 +43,41 @@ export interface StarterPackField {
   /** Bounds for a number field, inclusive. */
   min?: number;
   max?: number;
+  /**
+   * Longest a text field's value may be once its placeholders are filled in,
+   * estimated with PLACEHOLDER_LENGTH_ESTIMATE per placeholder.
+   */
+  maxLength?: number;
+  /** A text value used exactly as typed, spaces included, such as an OBS scene name. */
+  exact?: boolean;
+  /** An engine capability a number field needs for any value but its default. */
+  requires?: StarterFeature;
 }
+
+/** Engine capabilities that the action catalog cannot show. */
+export type StarterFeature = "delayWait";
+export type StarterFeatures = Record<StarterFeature, boolean>;
+
+/**
+ * What the engine supports beyond its action catalog.
+ *
+ * Nothing reports whether an engine supports delay waits: a delay is a wait
+ * task rather than a catalog action, and EngineInfo.version is an image tag
+ * that no release with delays carries yet. An engine without them reads a
+ * delay as an event wait for an empty event, which times out and fails the
+ * run, so a raid welcome with a pause would lose its shoutout and marker on
+ * every raid. Until an engine can say it has them, pauses stay off.
+ */
+export const STARTER_FEATURES: StarterFeatures = { delayWait: false };
+
+/** Twitch display names are at most 25 characters, the longest thing a placeholder becomes in practice. */
+export const PLACEHOLDER_LENGTH_ESTIMATE = 25;
+
+/** Longest chat message Twitch accepts. */
+const CHAT_MAX_LENGTH = 500;
+
+/** Longest stream marker description Twitch accepts. */
+const MARKER_MAX_LENGTH = 140;
 
 /** A parameter or condition value: a literal, or the value of one of the pack's fields. */
 export type StarterValue = string | number | boolean | { field: string };
@@ -144,6 +178,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         id: "raidMessage",
         label: "Chat message",
         type: "text",
+        maxLength: CHAT_MAX_LENGTH,
         defaultValue: "{raider} is raiding with {viewers} viewers! Welcome in, everyone!",
       },
       {
@@ -151,14 +186,16 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         label: "Pause before the shoutout (seconds)",
         description: "Gives raiders a moment to arrive before the shoutout card. 0 shouts out straight away.",
         type: "number",
-        defaultValue: 5,
+        defaultValue: 0,
         min: 0,
         max: 60,
+        requires: "delayWait",
       },
       {
         id: "raidMarker",
         label: "Stream marker note",
         type: "text",
+        maxLength: MARKER_MAX_LENGTH,
         defaultValue: "Raid from {raider}",
       },
     ],
@@ -207,6 +244,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         id: "followMessage",
         label: "Chat message",
         type: "text",
+        maxLength: CHAT_MAX_LENGTH,
         defaultValue: "Thanks for the follow, {user}!",
       },
     ],
@@ -234,23 +272,27 @@ export const STARTER_PACKS: readonly StarterPack[] = [
     id: "sub-hype",
     name: "Sub & gift hype",
     why: "Subs keep a channel going. Thank every new sub, resub and gifter by name, and clip the big gift bombs so the hype lives on after the stream.",
+    note: "A sub gifted to one named viewer arrives from Twitch as that viewer's sub, marked as a gift and without the gifter, so neither message thanks it. Gifts to the community are thanked through the gift message.",
     fields: [
       {
         id: "subMessage",
         label: "New sub message",
         type: "text",
+        maxLength: CHAT_MAX_LENGTH,
         defaultValue: "Thank you for subscribing, {user}!",
       },
       {
         id: "resubMessage",
         label: "Resub message",
         type: "text",
+        maxLength: CHAT_MAX_LENGTH,
         defaultValue: "{user} has been subscribed for {months} months. Thank you!",
       },
       {
         id: "giftMessage",
         label: "Gift message",
         type: "text",
+        maxLength: CHAT_MAX_LENGTH,
         defaultValue: "{gifter} just gifted {count} subs! Thank you!",
       },
       {
@@ -266,6 +308,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         id: "giftBombMarker",
         label: "Gift bomb marker note",
         type: "text",
+        maxLength: MARKER_MAX_LENGTH,
         defaultValue: "Gift bomb from {gifter}",
       },
     ],
@@ -372,6 +415,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         id: "cheerMessage",
         label: "Chat message",
         type: "text",
+        maxLength: CHAT_MAX_LENGTH,
         defaultValue: "{user} just cheered {bits} bits. Thank you!",
       },
     ],
@@ -411,12 +455,14 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         id: "socialsMessage",
         label: "!socials reply",
         type: "text",
+        maxLength: CHAT_MAX_LENGTH,
         defaultValue: "Find me elsewhere: add your links here",
       },
       {
         id: "lurkMessage",
         label: "!lurk reply",
         type: "text",
+        maxLength: CHAT_MAX_LENGTH,
         defaultValue: "{user} is lurking. Thanks for hanging out!",
       },
     ],
@@ -466,6 +512,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         label: "Break scene",
         description: "The scene's name exactly as OBS shows it.",
         type: "text",
+        exact: true,
         defaultValue: "BRB",
       },
       {
@@ -473,6 +520,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
         label: "Main scene",
         description: "The scene's name exactly as OBS shows it.",
         type: "text",
+        exact: true,
         defaultValue: "Main",
       },
     ],
@@ -591,8 +639,21 @@ export function starterPackDefaults(pack: StarterPack): StarterFieldValues {
   return values;
 }
 
-/** Chat messages longer than this are refused by Twitch. */
-const MAX_TEXT_LENGTH = 500;
+/** How long text is likely to be once its placeholders are filled in. */
+export function estimatedLength(text: string): number {
+  return text.replace(TOKEN_PATTERN, "x".repeat(PLACEHOLDER_LENGTH_ESTIMATE)).length;
+}
+
+/**
+ * Something about a value worth pointing out that is not wrong: an exact
+ * value with spaces at either end, which is legal but rarely meant.
+ */
+export function starterFieldWarning(field: StarterPackField, value: StarterFieldValue): string | null {
+  if (field.exact === true && typeof value === "string" && value !== value.trim()) {
+    return "Starts or ends with a space. OBS matches the name exactly, spaces included.";
+  }
+  return null;
+}
 
 export type StarterValuesResult =
   | { ok: true; values: StarterFieldValues }
@@ -602,7 +663,11 @@ export type StarterValuesResult =
  * Checks field values a person entered against the pack's fields, filling any
  * that were left out with their defaults. Errors are keyed by field id.
  */
-export function validateStarterValues(pack: StarterPack, input: Record<string, unknown>): StarterValuesResult {
+export function validateStarterValues(
+  pack: StarterPack,
+  input: Record<string, unknown>,
+  features: StarterFeatures
+): StarterValuesResult {
   const errors: Record<string, string> = {};
   const values: StarterFieldValues = {};
   const known = new Set(pack.fields.map((field) => field.id));
@@ -622,6 +687,10 @@ export function validateStarterValues(pack: StarterPack, input: Record<string, u
         errors[field.id] = `Enter a number from ${field.min} to ${field.max}.`;
         continue;
       }
+      if (field.requires !== undefined && !features[field.requires] && raw !== field.defaultValue) {
+        errors[field.id] = `Requires engine update. Leave it at ${field.defaultValue}.`;
+        continue;
+      }
       values[field.id] = raw;
       continue;
     }
@@ -629,9 +698,19 @@ export function validateStarterValues(pack: StarterPack, input: Record<string, u
       errors[field.id] = "This can't be empty.";
       continue;
     }
-    const text = raw.trim();
-    if (text.length > MAX_TEXT_LENGTH) {
-      errors[field.id] = `Keep it under ${MAX_TEXT_LENGTH} characters.`;
+    const text = field.exact === true ? raw : raw.trim();
+    // The engine resolves any `${...}` in a parameter, `${env.NAME}` included,
+    // and has no escape for it: text that could carry one could post the
+    // engine's environment to chat.
+    if (text.includes("${")) {
+      errors[field.id] = "Engine expressions (${...}) aren't allowed here. Use the placeholders.";
+      continue;
+    }
+    if (field.maxLength !== undefined && estimatedLength(text) > field.maxLength) {
+      errors[field.id] =
+        textTokens(text).length > 0
+          ? `Keep it under ${field.maxLength} characters, counting each placeholder as ${PLACEHOLDER_LENGTH_ESTIMATE}.`
+          : `Keep it under ${field.maxLength} characters.`;
       continue;
     }
     const allowed = new Set(fieldTokenNames(pack, field.id));

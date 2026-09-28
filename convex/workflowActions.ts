@@ -11,6 +11,17 @@ const CORRELATION_TIMEOUT_MS = 10_000;
 const CORRELATION_POLL_MS = 250;
 
 /**
+ * The engine accepted a change but its webhook echo did not arrive in time.
+ * The change may still land: the echo is only late, not refused.
+ */
+export class EngineConfirmationTimeout extends Error {
+  constructor() {
+    super("Engine did not confirm the change within 10s");
+    this.name = "EngineConfirmationTimeout";
+  }
+}
+
+/**
  * Poll the completedWorkflowOperations table for the webhook echo that
  * matches a given correlationKey. Resolves with the engineWorkflowId the
  * engine reported, or throws if the engine fails to confirm within 10s.
@@ -24,7 +35,7 @@ async function waitForCompletion(ctx: ActionCtx, correlationKey: string): Promis
     }
     await new Promise((r) => setTimeout(r, CORRELATION_POLL_MS));
   }
-  throw new Error("Engine did not confirm the change within 10s");
+  throw new EngineConfirmationTimeout();
 }
 
 export type InstanceContext = {
@@ -59,16 +70,16 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
  * Create a workflow in the engine and wait up to 10s for the webhook echo that
  * mirrors it into Convex, returning the engine-minted id. The caller has
  * already authorized the instance. Every path that creates a workflow goes
- * through here, so they all get the same confirmation and mirroring.
+ * through here, so they all get the same confirmation and mirroring. A caller
+ * that must recognise a late echo passes its own correlation key.
  */
 export async function createWorkflowInEngine(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
   instance: InstanceContext,
-  definition: Omit<WorkflowDefinition, "id">
+  definition: Omit<WorkflowDefinition, "id">,
+  correlationKey: string = crypto.randomUUID()
 ): Promise<string> {
-  const correlationKey = crypto.randomUUID();
-
   await ctx.runMutation(internal.workflowInternal.insertPending, {
     correlationKey,
     instanceId,

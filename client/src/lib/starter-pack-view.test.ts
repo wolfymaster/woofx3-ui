@@ -86,7 +86,7 @@ describe("starterStepLabel", () => {
   const delay = item.steps[1];
 
   test("names the pause with its length, and drops a pause of zero", () => {
-    expect(starterStepLabel(delay, starterPackDefaults(raid))).toBe("Pause 5 seconds");
+    expect(starterStepLabel(delay, { ...starterPackDefaults(raid), shoutoutDelaySeconds: 5 })).toBe("Pause 5 seconds");
     expect(starterStepLabel(delay, { ...starterPackDefaults(raid), shoutoutDelaySeconds: 1 })).toBe("Pause 1 second");
     expect(starterStepLabel(delay, { ...starterPackDefaults(raid), shoutoutDelaySeconds: 0 })).toBeNull();
   });

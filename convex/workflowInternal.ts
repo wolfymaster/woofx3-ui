@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { escapeDollarKeys } from "./lib/dollarKeys";
+import { completeStarterItemByCorrelation } from "./lib/starterPackLedger";
 
 /**
  * Record a pending engine round-trip so the webhook handler can correlate
@@ -58,6 +59,9 @@ export const resolveCorrelation = internalMutation({
       op,
       completedAt: Date.now(),
     });
+    if (op === "create") {
+      await completeStarterItemByCorrelation(ctx, correlationKey, engineWorkflowId);
+    }
   },
 });
 

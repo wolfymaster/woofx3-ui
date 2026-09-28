@@ -72,6 +72,7 @@ import type * as lib_sceneSerialization from "../lib/sceneSerialization.js";
 import type * as lib_sessionSummary from "../lib/sessionSummary.js";
 import type * as lib_shoutoutSchedule from "../lib/shoutoutSchedule.js";
 import type * as lib_spotifyIntegrationScopes from "../lib/spotifyIntegrationScopes.js";
+import type * as lib_starterPackLedger from "../lib/starterPackLedger.js";
 import type * as lib_starterPacks from "../lib/starterPacks.js";
 import type * as lib_teamAccess from "../lib/teamAccess.js";
 import type * as lib_twitchAuth from "../lib/twitchAuth.js";
@@ -205,6 +206,7 @@ declare const fullApi: ApiFromModules<{
   "lib/sessionSummary": typeof lib_sessionSummary;
   "lib/shoutoutSchedule": typeof lib_shoutoutSchedule;
   "lib/spotifyIntegrationScopes": typeof lib_spotifyIntegrationScopes;
+  "lib/starterPackLedger": typeof lib_starterPackLedger;
   "lib/starterPacks": typeof lib_starterPacks;
   "lib/teamAccess": typeof lib_teamAccess;
   "lib/twitchAuth": typeof lib_twitchAuth;
