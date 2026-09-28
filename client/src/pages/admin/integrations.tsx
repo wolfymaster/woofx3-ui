@@ -1,6 +1,7 @@
 import { Key } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { TwitchIntegrationCard } from "@/components/settings/twitch-integration-card";
+import { TwitchScopeStatus } from "@/components/settings/twitch-scope-status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
@@ -8,7 +9,7 @@ import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
 
 export default function AdminIntegrations() {
   const { instance } = useInstance();
-  const { isConnected, twitchLink, isLoading: twitchLoading } = useTwitchIntegration(instance?._id);
+  const { isConnected, twitchLink, isLoading: twitchLoading, health } = useTwitchIntegration(instance?._id);
 
   return (
     <div className="container mx-auto p-6">
@@ -25,6 +26,14 @@ export default function AdminIntegrations() {
             twitchLink={twitchLink}
             isLoading={twitchLoading}
           />
+          {instance && twitchLink && (
+            <TwitchScopeStatus
+              instanceId={instance._id}
+              health={health}
+              platformUsername={twitchLink.platformUsername}
+              canRelink={twitchLink.viewerCanRelink}
+            />
+          )}
           <div className="flex items-center justify-between p-4 rounded-lg border">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded bg-red-600 flex items-center justify-center text-white font-bold">

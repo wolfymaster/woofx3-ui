@@ -16,6 +16,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { twitchConnectUrl } from "@/lib/twitch-connect";
 
 interface TwitchIntegrationCardProps {
   instanceId: Id<"instances"> | undefined;
@@ -35,8 +36,7 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
 
   const handleConnect = () => {
     if (!instanceId) return;
-    const redirectTo = encodeURIComponent("/admin/integrations");
-    window.location.href = `${CONVEX_SITE_URL}/api/integrations/twitch/start?instanceId=${instanceId}&redirect_to=${redirectTo}`;
+    window.location.href = twitchConnectUrl(CONVEX_SITE_URL, instanceId, "/admin/integrations");
   };
 
   const handleDisconnect = async () => {

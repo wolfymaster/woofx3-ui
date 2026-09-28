@@ -24,7 +24,7 @@ export const upsertPlatformLink = internalMutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, args);
+      await ctx.db.patch(existing._id, { ...args, authFailedAt: undefined });
     } else {
       await ctx.db.insert("platformLinks", args);
     }
