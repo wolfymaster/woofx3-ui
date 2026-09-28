@@ -36,6 +36,7 @@ import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 import { widgetCanonicalKey } from "./lib/widgetKey";
+import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
 import { logger } from "./logger";
 import { canonicalIdForStorageKey } from "./resourceValues";
 import "./browserSource";
@@ -504,6 +505,25 @@ http.route({
         },
       });
       return corsJson({ success: true, type: eventType });
+    }
+
+    // Also ahead of the switch, for the same reason as SESSION_SUMMARY.
+    if (eventType === WORKFLOW_HEALTH_CHANGED_EVENT_TYPE || eventType === WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE) {
+      const result =
+        eventType === WORKFLOW_HEALTH_CHANGED_EVENT_TYPE
+          ? await ctx.runMutation(internal.workflowHealth.recordChangedFromWebhook, {
+              instanceId: instance._id,
+              data: event,
+            })
+          : await ctx.runMutation(internal.workflowHealth.recordSnapshotFromWebhook, {
+              instanceId: instance._id,
+              data: event,
+            });
+      if (result.outcome === "invalid") {
+        logger.warn("webhook: rejected workflow health", { instanceId: instance._id, reason: result.reason });
+        return corsJson({ error: `Invalid workflow health: ${result.reason}` }, 400);
+      }
+      return corsJson({ success: true, type: eventType, outcome: result.outcome });
     }
 
     switch (event.type) {

@@ -95,6 +95,7 @@ import type * as lib_twitchIntegrationScopes from "../lib/twitchIntegrationScope
 import type * as lib_twitchUsers from "../lib/twitchUsers.js";
 import type * as lib_webhookEndpointKey from "../lib/webhookEndpointKey.js";
 import type * as lib_widgetKey from "../lib/widgetKey.js";
+import type * as lib_workflowHealth from "../lib/workflowHealth.js";
 import type * as logger from "../logger.js";
 import type * as macroTriggers from "../macroTriggers.js";
 import type * as macros from "../macros.js";
@@ -151,6 +152,7 @@ import type * as webhookAuth from "../webhookAuth.js";
 import type * as workflowActions from "../workflowActions.js";
 import type * as workflowCatalog from "../workflowCatalog.js";
 import type * as workflowCatalogContext from "../workflowCatalogContext.js";
+import type * as workflowHealth from "../workflowHealth.js";
 import type * as workflowInternal from "../workflowInternal.js";
 import type * as workflowRuns from "../workflowRuns.js";
 import type * as workflows from "../workflows.js";
@@ -249,6 +251,7 @@ declare const fullApi: ApiFromModules<{
   "lib/twitchUsers": typeof lib_twitchUsers;
   "lib/webhookEndpointKey": typeof lib_webhookEndpointKey;
   "lib/widgetKey": typeof lib_widgetKey;
+  "lib/workflowHealth": typeof lib_workflowHealth;
   logger: typeof logger;
   macroTriggers: typeof macroTriggers;
   macros: typeof macros;
@@ -305,6 +308,7 @@ declare const fullApi: ApiFromModules<{
   workflowActions: typeof workflowActions;
   workflowCatalog: typeof workflowCatalog;
   workflowCatalogContext: typeof workflowCatalogContext;
+  workflowHealth: typeof workflowHealth;
   workflowInternal: typeof workflowInternal;
   workflowRuns: typeof workflowRuns;
   workflows: typeof workflows;

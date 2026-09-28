@@ -55,6 +55,15 @@ Both fire with the `test` origin (`convex/lib/manualRunOrigin.ts`). The engine d
 
 `components/workflows/workflow-runs-panel.tsx` lists `workflowRuns.listForWorkflow` newest first: status, start, source (`runOriginLabel`), duration, error. A row opens `pages/workflow-run.tsx`, the same trace as the alert-run page with a back link to the workflow. `listForWorkflow` returns list rows only, with `hasTriggerEvent` in place of the event JSON. **Replay** (settled runs with a recorded trigger event, after a confirmation) replays with the `replay` origin, so the replay is listed too. Dry runs carry a **Dry run** badge here and on the run page. **Stop run** (running runs) calls `workflowActions.cancelRun`. An engine with real cancel stops the run, answers with an `outcome` (`cancelled` / `already_finished`), and settles the row through `workflow.run.updated`, plus a `workflow.run.cancelled` lifecycle event for a caller watching the run (handled in `convex/http.ts`). An older engine only marks its history row — the remaining steps still run — and answers nothing, so for it the action mirrors the status into Convex itself and the confirmation says so.
 
+## Health ("Not running on its own")
+
+The engine refuses a workflow it cannot set up (bad parameters, a step naming a missing action, a trigger that fails to register). Such a workflow stays enabled but never fires by itself, so the UI marks it.
+
+- **Storage:** Convex `workflowHealth`, one row per `(instanceId, engineWorkflowId)`, separate from `workflows` so a report can land before the workflow row does. Rules and payload shapes live in `convex/lib/workflowHealth.ts`.
+- **Inputs:** the `workflow.health.snapshot` webhook (sent on engine start and api reconnect; authoritative, anything unlisted is ok), the `workflow.health.changed` webhook (one transition), and the `workflowHealth.resync` action, which calls the engine's `getWorkflowHealth()` with the snapshot's replace-all meaning. A report older than the stored one (by the engine's `since`) is ignored.
+- **Resync:** on list-page mount (at most every 5 minutes per instance) and whenever the live engine session connects (at most every minute), throttled server-side in `workflowHealthSyncs`. An engine without the RPC is recorded as `unsupported` and shows nothing.
+- **Where it shows:** a red badge with the engine's reason in a popover (`components/workflows/not-running-badge.tsx`) on list rows, the editor header, and the event trigger cards (Alerts, Counters, Timers, Queues), plus a one-line dashboard notice linking to the list. `workflowHealth.listNotRunning` returns only enabled, mirrored workflows.
+
 ## Summary
 
 | Area | Role |
@@ -64,3 +73,4 @@ Both fire with the `test` origin (`convex/lib/manualRunOrigin.ts`). The engine d
 | Presets + catalog hook | Guided creation UX |
 | `StepListEditor` | Step-by-step editing surface |
 | Test run sheet + Runs panel | Try a workflow now; its recorded runs, traces, replay, cancel |
+| Convex `workflowHealth` | Whether the engine runs each workflow on its own |
