@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, query } from "./_generated/server";
+import { isInstanceMember } from "./lib/teamAccess";
 
 const DEFAULT_TTL_MS = 60_000; // 60 seconds
 
@@ -22,6 +23,32 @@ export const get = query({
       )
       .order("desc")
       .first();
+  },
+});
+
+/**
+ * Every transient event under one correlation key, oldest first.
+ *
+ * `get` answers with the latest row, which is enough when one run answers to
+ * the key. A simulated event can start several workflows under the same key,
+ * and a caller following one of them needs all the rows to find its own. The
+ * bound is generous: rows expire after a minute.
+ */
+export const listByCorrelation = query({
+  args: {
+    instanceId: v.id("instances"),
+    correlationKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!(await isInstanceMember(ctx, args.instanceId))) {
+      return [];
+    }
+    return ctx.db
+      .query("transientEvents")
+      .withIndex("by_instance_correlation", (q) =>
+        q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey)
+      )
+      .take(200);
   },
 });
 
