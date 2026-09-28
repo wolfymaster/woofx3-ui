@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { SupporterMetric, SupporterStream } from "@convex/lib/supporters";
-import { useAction, useMutation } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { Copy, Gem, Gift, Loader2, Megaphone, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -36,6 +37,8 @@ import {
 } from "@/lib/supporters";
 
 type InstanceId = Id<"instances">;
+
+const MIN_TOTAL_DEBOUNCE_MS = 300;
 
 interface SelectedViewer {
   platformUserId: string;
@@ -120,6 +123,8 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
   const [range, setRange] = useState<SupporterRange>(LIFETIME);
   const [minTotalInput, setMinTotalInput] = useState("");
   const [minTotal, setMinTotal] = useState(1);
+  // Each keystroke would otherwise be a leaderboard read from the engine.
+  const settledMinTotal = useDebouncedValue(minTotal, MIN_TOTAL_DEBOUNCE_MS);
   const [selected, setSelected] = useState<SelectedViewer | null>(null);
 
   const streams = useActionResult(instanceId, () => listStreams({ instanceId }));
@@ -130,8 +135,13 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
   }, [streams.data]);
 
   const sessionId = rangeSessionId(range);
-  const board = useActionResult(`${instanceId}|${metric}|${rangeValue(range)}|${minTotal}`, () =>
-    readLeaderboard({ instanceId, metric, minTotal, ...(sessionId !== undefined ? { sessionId } : {}) })
+  const board = useActionResult(`${instanceId}|${metric}|${rangeValue(range)}|${settledMinTotal}`, () =>
+    readLeaderboard({
+      instanceId,
+      metric,
+      minTotal: settledMinTotal,
+      ...(sessionId !== undefined ? { sessionId } : {}),
+    })
   );
   const ranked = useMemo(() => rankSupporters(board.data ?? []), [board.data]);
 
@@ -423,6 +433,7 @@ function ViewerDetail({ instanceId, viewer }: { instanceId: InstanceId; viewer: 
   const readViewerTotals = useAction(api.supporters.viewerTotals);
   const findTwitchViewer = useAction(api.supporters.findTwitchViewer);
   const enqueueShoutout = useMutation(api.shoutouts.enqueue);
+  const canShoutOut = useQuery(api.supporters.canShoutOut, { instanceId });
   const [queueing, setQueueing] = useState(false);
 
   const totals = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
@@ -535,11 +546,20 @@ function ViewerDetail({ instanceId, viewer }: { instanceId: InstanceId; viewer: 
           <Copy className="h-4 w-4 mr-2" />
           Copy thank-you
         </Button>
-        <Button disabled={!twitch.data || queueing} onClick={() => void shoutOut()} data-testid="button-shout-out">
+        <Button
+          disabled={!twitch.data || canShoutOut !== true || queueing}
+          onClick={() => void shoutOut()}
+          data-testid="button-shout-out"
+        >
           {queueing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Megaphone className="h-4 w-4 mr-2" />}
           Shout out
         </Button>
       </div>
+      {canShoutOut === false && (
+        <p className="text-xs text-muted-foreground" data-testid="text-shoutout-unavailable">
+          To shout out from here, reconnect Twitch in Settings → Integrations and grant the shoutout permission.
+        </p>
+      )}
     </div>
   );
 }
