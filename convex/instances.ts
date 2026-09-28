@@ -265,7 +265,7 @@ export const savePlatformLink = mutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, args);
+      await ctx.db.patch(existing._id, { ...args, authFailedAt: undefined });
       return existing._id;
     }
 
