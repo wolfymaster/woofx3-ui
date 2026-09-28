@@ -62,8 +62,10 @@ viewed first, and the header shows the most viewed one as "Top clip".
 segments, and asks Helix for the broadcaster's clips created between the first
 going-live and the last going-down plus ten minutes (`clipWindow` in
 `convex/lib/recapClips.ts`), since people keep clipping the last moments right
-after a stream ends. It walks at most five Helix pages and keeps up to 100
-clips. Listing clips needs no scope, so the Twitch link's token serves as is.
+after a stream ends; a zero-length window is widened to one minute. It walks
+at most five Helix pages and keeps up to 100 clips, so a stream with more
+clips than that shows an incomplete list, and Helix itself may skip clips
+when filtering by date. Listing clips needs no scope, so the Twitch link's token serves as is.
 
 Clip data is never stored: each visit, or "Refresh", asks Twitch again, so
 view counts stay current and a clip deleted on Twitch disappears. Twitch takes
@@ -71,8 +73,10 @@ a minute or two to list a new clip, which the empty state says.
 
 Each clip shows its thumbnail (loaded lazily), title, who clipped it, views,
 length, the time it was made, and how far into the stream that was, as
-`h:mm:ss` from the first going-live (`formatStreamOffset` in
+`h:mm:ss`: the clip's VOD offset when Twitch has one, otherwise the time from
+the first going-live to the clip's creation (`formatStreamOffset` in
 `client/src/lib/recap-clips.ts`). "Copy link" copies the clip URL, "Open on
-Twitch" opens it, and "Share to chat" posts the title, clipper and link as a
+Twitch" opens it, and "Share to chat" posts "Clip: " followed by the title (whitespace collapsed),
+clipper and link as a
 chat announcement through the same `twitchBroadcast.sendAnnouncement` path as
 the thank-you message.

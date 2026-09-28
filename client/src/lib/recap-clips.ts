@@ -20,23 +20,34 @@ export function formatClipDuration(seconds: number): string {
   return `${Math.floor(whole / 60)}:${pad2(whole % 60)}`;
 }
 
+function collapseWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 /**
- * A chat line sharing one clip: its title, who clipped it, and the link. The
- * title is cut short, never the link, when the line would exceed `maxLength`.
+ * A chat line sharing one clip: "Clip: <title> (clipped by <name>) <url>".
+ * The title and name are written by viewers, so the line always opens with the
+ * fixed "Clip" label rather than their text (a title starting with "/" must
+ * never read as a chat command), and any newlines in them collapse to spaces.
+ * The title is cut short by code points, never the link, when the line would
+ * exceed `maxLength`.
  */
 export function buildClipShareMessage(
   clip: Pick<RecapClip, "title" | "creatorName" | "url">,
   maxLength: number = MAX_CHAT_MESSAGE_LENGTH
 ): string {
-  const credit = clip.creatorName.trim() === "" ? "" : ` (clipped by ${clip.creatorName.trim()})`;
-  const suffix = `${credit}: ${clip.url}`;
-  const title = clip.title.trim() === "" ? "Clip" : clip.title.trim();
-  const room = maxLength - suffix.length;
+  const creator = collapseWhitespace(clip.creatorName);
+  const tail = `${creator === "" ? "" : ` (clipped by ${creator})`} ${clip.url}`;
+  const title = Array.from(collapseWhitespace(clip.title));
+  if (title.length === 0) {
+    return `Clip${tail}`;
+  }
+  const room = maxLength - "Clip: ".length - tail.length;
   if (title.length <= room) {
-    return `${title}${suffix}`;
+    return `Clip: ${title.join("")}${tail}`;
   }
   if (room <= 1) {
-    return clip.url;
+    return `Clip${tail}`;
   }
-  return `${title.slice(0, room - 1)}…${suffix}`;
+  return `Clip: ${title.slice(0, room - 1).join("")}\u2026${tail}`;
 }

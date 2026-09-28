@@ -3,6 +3,7 @@ import {
   CLIP_WINDOW_GRACE_MS,
   clipWindow,
   type HelixClip,
+  MIN_CLIP_WINDOW_MS,
   type RecapClip,
   sortClipsByViews,
   toRecapClip,
@@ -34,6 +35,11 @@ describe("clipWindow", () => {
     expect(window).toEqual({ startedAtMs: T0, endedAtMs: T0 + HOUR });
   });
 
+  it("widens a zero-length window to the minimum", () => {
+    const window = clipWindow([{ startedAt: iso(T0), endedAt: iso(T0) }], T0);
+    expect(window).toEqual({ startedAtMs: T0, endedAtMs: T0 + MIN_CLIP_WINDOW_MS });
+  });
+
   it("is null for a session that never went live", () => {
     expect(clipWindow([], T0)).toBeNull();
   });
@@ -60,6 +66,7 @@ function helixClip(overrides: Partial<HelixClip> = {}): HelixClip {
     created_at: iso(T0 + 90_000),
     thumbnail_url: "https://example.test/thumb.jpg",
     duration: 29.8,
+    vod_offset: null,
     ...overrides,
   };
 }
@@ -79,6 +86,10 @@ describe("toRecapClip", () => {
       durationSeconds: 29.8,
       offsetMs: 90_000,
     });
+  });
+
+  it("prefers the VOD offset when Twitch has one", () => {
+    expect(toRecapClip(helixClip({ vod_offset: 3725 }), window).offsetMs).toBe(3_725_000);
   });
 
   it("clamps an offset before going live to zero", () => {

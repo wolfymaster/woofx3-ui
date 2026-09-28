@@ -87,7 +87,6 @@ function ClipRow({
             size="sm"
             onClick={handleShare}
             disabled={!canAnnounce || sending}
-            title={canAnnounce ? undefined : "Connect Twitch with chat announcement access in Settings"}
             data-testid={`button-share-clip-${clip.id}`}
           >
             {sending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <MessageSquare className="h-4 w-4 mr-2" />}
@@ -100,6 +99,11 @@ function ClipRow({
             </a>
           </Button>
         </div>
+        {!canAnnounce && (
+          <p className="text-xs text-muted-foreground">
+            Connect Twitch with chat announcement access in Settings to share clips to chat.
+          </p>
+        )}
       </div>
     </li>
   );

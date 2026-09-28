@@ -16,6 +16,9 @@ export const RECAP_CLIP_MAX_PAGES = 5;
  */
 export const CLIP_WINDOW_GRACE_MS = 10 * 60_000;
 
+/** Helix wants `ended_at` after `started_at`; a zero-length window is widened to this. */
+export const MIN_CLIP_WINDOW_MS = 60_000;
+
 interface Segment {
   startedAt: string;
   endedAt: string | null;
@@ -30,7 +33,8 @@ export interface ClipWindow {
 /**
  * The span to ask Twitch for clips in: from the first going-live to the last
  * going-down plus `CLIP_WINDOW_GRACE_MS`, never past `nowMs`. A segment still
- * open counts as running until `nowMs`. Null when the session never went live,
+ * open counts as running until `nowMs`. The window is at least
+ * `MIN_CLIP_WINDOW_MS` long, even when that reaches past `nowMs`. Null when the session never went live,
  * since there was nothing to clip.
  */
 export function clipWindow(segments: ReadonlyArray<Segment>, nowMs: number): ClipWindow | null {
@@ -48,7 +52,8 @@ export function clipWindow(segments: ReadonlyArray<Segment>, nowMs: number): Cli
   if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
     return null;
   }
-  return { startedAtMs: start, endedAtMs: Math.max(start, Math.min(end + CLIP_WINDOW_GRACE_MS, nowMs)) };
+  const cappedEnd = Math.min(end + CLIP_WINDOW_GRACE_MS, nowMs);
+  return { startedAtMs: start, endedAtMs: Math.max(start + MIN_CLIP_WINDOW_MS, cappedEnd) };
 }
 
 /** The fields of a Helix `GET /clips` entry this module reads. */
@@ -61,6 +66,8 @@ export interface HelixClip {
   created_at: string;
   thumbnail_url: string;
   duration: number;
+  /** Seconds into the VOD where the clip starts; null when there is no VOD or Twitch has not processed it yet. */
+  vod_offset: number | null;
 }
 
 export interface RecapClip {
@@ -72,12 +79,17 @@ export interface RecapClip {
   createdAt: string;
   thumbnailUrl: string;
   durationSeconds: number;
-  /** Milliseconds from going live to the clip's creation; never negative. */
+  /**
+   * Milliseconds into the stream: the clip's VOD offset when Twitch has one,
+   * otherwise the time from the first going-live to the clip's creation. Never negative.
+   */
   offsetMs: number;
 }
 
 export function toRecapClip(clip: HelixClip, window: ClipWindow): RecapClip {
   const created = Date.parse(clip.created_at);
+  const fromCreation = Number.isFinite(created) ? created - window.startedAtMs : 0;
+  const offsetMs = typeof clip.vod_offset === "number" ? clip.vod_offset * 1000 : fromCreation;
   return {
     id: clip.id,
     url: clip.url,
@@ -87,7 +99,7 @@ export function toRecapClip(clip: HelixClip, window: ClipWindow): RecapClip {
     createdAt: clip.created_at,
     thumbnailUrl: clip.thumbnail_url,
     durationSeconds: clip.duration,
-    offsetMs: Number.isFinite(created) ? Math.max(0, created - window.startedAtMs) : 0,
+    offsetMs: Math.max(0, offsetMs),
   };
 }
 

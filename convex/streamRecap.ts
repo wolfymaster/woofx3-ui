@@ -110,6 +110,9 @@ async function fetchClipsInWindow(
       throw new ConvexError(`Twitch couldn't list clips (${response.status}).`);
     }
     const body = (await response.json()) as HelixClipsPage;
+    if (!Array.isArray(body?.data)) {
+      throw new ConvexError("Twitch answered the clip list in an unexpected shape.");
+    }
     clips.push(...body.data);
     cursor = body.pagination?.cursor;
     if (!cursor || body.data.length === 0) {

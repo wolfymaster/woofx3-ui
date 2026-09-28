@@ -25,17 +25,33 @@ describe("formatClipDuration", () => {
 describe("buildClipShareMessage", () => {
   const clip = { title: "Clutch round", creatorName: "some_mod", url: "https://clips.twitch.tv/abc" };
 
-  it("names the title, the clipper and the link", () => {
-    expect(buildClipShareMessage(clip)).toBe("Clutch round (clipped by some_mod): https://clips.twitch.tv/abc");
+  it("leads with the fixed label, then the title, the clipper and the link", () => {
+    expect(buildClipShareMessage(clip)).toBe("Clip: Clutch round (clipped by some_mod) https://clips.twitch.tv/abc");
+  });
+
+  it("never lets a viewer-written title lead the line", () => {
+    expect(buildClipShareMessage({ ...clip, title: "/ban someone" }).startsWith("Clip: /ban")).toBe(true);
+  });
+
+  it("collapses newlines and runs of whitespace", () => {
+    expect(buildClipShareMessage({ ...clip, title: "line one\n\n  line\ttwo", creatorName: " a\nb " })).toBe(
+      "Clip: line one line two (clipped by a b) https://clips.twitch.tv/abc"
+    );
   });
 
   it("falls back when the title or creator is blank", () => {
-    expect(buildClipShareMessage({ ...clip, title: "  ", creatorName: "" })).toBe("Clip: https://clips.twitch.tv/abc");
+    expect(buildClipShareMessage({ ...clip, title: "  ", creatorName: "" })).toBe("Clip https://clips.twitch.tv/abc");
   });
 
   it("shortens the title, never the link, to fit", () => {
     const message = buildClipShareMessage({ ...clip, title: "x".repeat(600) });
     expect(message.length).toBe(500);
-    expect(message.endsWith("… (clipped by some_mod): https://clips.twitch.tv/abc")).toBe(true);
+    expect(message.endsWith("\u2026 (clipped by some_mod) https://clips.twitch.tv/abc")).toBe(true);
+  });
+
+  it("cuts by code points so an emoji is never split", () => {
+    const message = buildClipShareMessage({ ...clip, title: "\u{1F525}".repeat(40) }, 60);
+    expect(message).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+    expect(Array.from(message).length).toBeLessThanOrEqual(60);
   });
 });
