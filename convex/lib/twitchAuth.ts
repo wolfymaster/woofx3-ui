@@ -41,16 +41,23 @@ export async function authorizeTwitch(
   instanceId: Id<"instances">,
   requiredScope: string
 ): Promise<AuthorizedTwitchCall> {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new Error("Not authenticated");
-  }
-  const isMember = await ctx.runQuery(internal.platformRealtime.checkMembership, { instanceId, userId });
-  if (!isMember) {
-    throw new Error("Not a member of this instance");
-  }
+  await assertCallerIsMember(ctx, instanceId);
 
   return authorizeTwitchUnattended(ctx, instanceId, requiredScope);
+}
+
+/**
+ * `authorizeTwitch` for a Helix read that needs no scope at all, such as the
+ * channel's title and category. Still member-only: the token is the
+ * broadcaster's, whatever the endpoint asks of it.
+ */
+export async function authorizeTwitchUnscoped(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<AuthorizedTwitchCall> {
+  await assertCallerIsMember(ctx, instanceId);
+
+  return freshTwitchCredentials(ctx, instanceId);
 }
 
 /**
@@ -70,6 +77,21 @@ export async function authorizeTwitchUnattended(
     );
   }
 
+  return freshTwitchCredentials(ctx, instanceId);
+}
+
+async function assertCallerIsMember(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new Error("Not authenticated");
+  }
+  const isMember = await ctx.runQuery(internal.platformRealtime.checkMembership, { instanceId, userId });
+  if (!isMember) {
+    throw new Error("Not a member of this instance");
+  }
+}
+
+async function freshTwitchCredentials(ctx: ActionCtx, instanceId: Id<"instances">): Promise<AuthorizedTwitchCall> {
   const token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, { instanceId });
   if (!token) {
     throw new Error("Twitch is not connected for this instance");
