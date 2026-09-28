@@ -8,6 +8,8 @@ import {
   type TwitchLinkFacts,
   type WorkflowFacts,
 } from "@convex/lib/goLiveFacts";
+import type { StreamInfo } from "@convex/lib/streamInfo";
+import { comparePreset } from "@/lib/stream-info-edit";
 import { formatTimeAgo } from "@/lib/time-ago";
 
 // The Go live checklist's rules: what each fact the checks gather means for
@@ -24,7 +26,22 @@ export type CheckFix =
   | { kind: "route"; label: string; href: string }
   | { kind: "external"; label: string; href: string }
   | { kind: "copy"; label: string; text: string }
-  | { kind: "retry"; label: string };
+  | { kind: "retry"; label: string }
+  | { kind: "apply-preset"; label: string; presets: PresetChoice[] };
+
+/** A saved stream info preset as the checklist offers it. */
+export interface StreamInfoPresetOption {
+  id: string;
+  name: string;
+  info: StreamInfo;
+}
+
+/** A preset that would change the channel, with what applying it changes. */
+export interface PresetChoice {
+  id: string;
+  name: string;
+  summary: string;
+}
 
 export interface CheckResult {
   id: GoLiveCheckId;
@@ -184,7 +201,33 @@ export function obsCheck(facts: ObsFacts): CheckResult {
   }
 }
 
-export function streamInfoCheck(facts: StreamInfoFacts, lastGoLive: LastGoLive | null, now: number): CheckResult {
+/** The channel as the stream info check read it, in the shape presets are compared against. */
+export function streamInfoFromFacts(facts: Extract<StreamInfoFacts, { kind: "ok" }>): StreamInfo {
+  return {
+    title: facts.title,
+    category: facts.categoryId ? { id: facts.categoryId, name: facts.categoryName } : null,
+    tags: facts.tags,
+  };
+}
+
+/** Presets that would change something, in the order given. One already in place is left out. */
+export function applicablePresets(current: StreamInfo, presets: readonly StreamInfoPresetOption[]): PresetChoice[] {
+  const choices: PresetChoice[] = [];
+  for (const preset of presets) {
+    const comparison = comparePreset(current, preset.info);
+    if (!comparison.active) {
+      choices.push({ id: preset.id, name: preset.name, summary: comparison.summary });
+    }
+  }
+  return choices;
+}
+
+export function streamInfoCheck(
+  facts: StreamInfoFacts,
+  lastGoLive: LastGoLive | null,
+  now: number,
+  presets: readonly StreamInfoPresetOption[] = []
+): CheckResult {
   if (facts.kind === "unlinked") {
     return result("stream-info", "fail", "Connect Twitch to check your title and category", {
       fixes: [{ kind: "route", label: "Connect Twitch", href: INTEGRATIONS_PATH }],
@@ -214,9 +257,16 @@ export function streamInfoCheck(facts: StreamInfoFacts, lastGoLive: LastGoLive |
     `Category: ${facts.categoryName || "(none)"}`,
     `Tags: ${facts.tags.length > 0 ? facts.tags.join(", ") : "(none)"}`,
   ];
-  const fixes: CheckFix[] = [
-    { kind: "external", label: "Edit on Twitch", href: `https://dashboard.twitch.tv/u/${facts.login}/stream-manager` },
-  ];
+  const fixes: CheckFix[] = [];
+  const choices = applicablePresets(streamInfoFromFacts(facts), presets);
+  if (choices.length > 0) {
+    fixes.push({ kind: "apply-preset", label: "Apply preset", presets: choices });
+  }
+  fixes.push({
+    kind: "external",
+    label: "Edit on Twitch",
+    href: `https://dashboard.twitch.tv/u/${facts.login}/stream-manager`,
+  });
 
   if (concerns.length > 0) {
     return result("stream-info", "warn", concerns[0], { details: [...concerns.slice(1), ...current], fixes });

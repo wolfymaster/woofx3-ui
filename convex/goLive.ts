@@ -11,8 +11,8 @@ import {
   mutation,
   query,
 } from "./_generated/server";
+import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
-import { isMissingEngineMethodError } from "./lib/engineMethodSupport";
 import {
   type GoLiveCompletion,
   type GoLiveStepOutcome,
@@ -35,7 +35,7 @@ import {
 } from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
-import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
+import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
 
 // The Go live checklist: a pre-flight run just before a stream starts, so a
 // broken setup is found by the streamer rather than by their viewers.
@@ -290,8 +290,6 @@ export const checkTwitch = action({
       return { linked: false };
     }
 
-    const missingFrom = (granted: string[]) => TWITCH_INTEGRATION_SCOPES.filter((scope) => !granted.includes(scope));
-
     let accessToken: string;
     try {
       const token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, {
@@ -307,7 +305,7 @@ export const checkTwitch = action({
         login: link.login,
         tokenValid: false,
         tokenProblem: "Twitch refused to renew the connection",
-        missingScopes: missingFrom(link.scopes),
+        missingScopes: missingRequiredTwitchScopes(link.scopes),
       };
     }
 
@@ -318,7 +316,7 @@ export const checkTwitch = action({
         login: link.login,
         tokenValid: false,
         tokenProblem: "Twitch no longer accepts the connection",
-        missingScopes: missingFrom(link.scopes),
+        missingScopes: missingRequiredTwitchScopes(link.scopes),
       };
     }
     return {
@@ -326,7 +324,7 @@ export const checkTwitch = action({
       login: link.login,
       tokenValid: true,
       tokenProblem: null,
-      missingScopes: missingFrom(granted),
+      missingScopes: missingRequiredTwitchScopes(granted),
     };
   },
 });
@@ -341,19 +339,20 @@ export const checkObs = action({
       return { kind: "engine-unreachable", message: "This instance is not registered with an engine" };
     }
 
+    const engine = { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
     try {
-      const rpc = createEngineRpcSession<ObsListingApi>(instance.url, instance.clientId, instance.clientSecret);
+      const capabilities = await fetchEngineCapabilities(engine);
+      if (!hasEngineCapability(capabilities, "obs.listScenes")) {
+        return { kind: "engine-update-needed" };
+      }
+      const rpc = createEngineRpcSession<ObsListingApi>(engine.url, engine.clientId, engine.clientSecret);
       const listing = await rpc.listObsScenes();
       if (listing.available) {
         return { kind: "connected", sceneCount: listing.scenes.length };
       }
       return { kind: "disconnected", reason: listing.reason };
     } catch (error) {
-      const message = messageOf(error);
-      if (isMissingEngineMethodError(message, "listObsScenes")) {
-        return { kind: "engine-update-needed" };
-      }
-      return { kind: "engine-unreachable", message };
+      return { kind: "engine-unreachable", message: messageOf(error) };
     }
   },
 });

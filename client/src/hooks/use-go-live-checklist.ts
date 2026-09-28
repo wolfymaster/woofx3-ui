@@ -6,6 +6,7 @@ import type {
   StreamInfoFacts,
   TwitchLinkFacts,
 } from "@convex/lib/goLiveFacts";
+import type { StreamInfoField } from "@convex/lib/streamInfo";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -58,6 +59,8 @@ export interface GoLiveChecklist {
   rerun: (id: GoLiveCheckId) => void;
   setDismissed: (id: GoLiveCheckId, dismissed: boolean) => Promise<void>;
   complete: (options: { announcement?: string; dropMarker: boolean }) => Promise<GoLiveCompletion>;
+  /** Writes a saved preset's title, category and tags to Twitch; returns the fields Twitch kept its own. */
+  applyPreset: (presetId: string) => Promise<StreamInfoField[]>;
 }
 
 export function useGoLiveChecklist(): GoLiveChecklist {
@@ -67,12 +70,14 @@ export function useGoLiveChecklist(): GoLiveChecklist {
   const liveState = useLiveState();
   const local = useQuery(api.goLive.checklist, instanceId ? { instanceId } : "skip");
   const overlays = useQuery(api.goLive.overlays, instanceId ? { instanceId } : "skip");
+  const presets = useQuery(api.streamInfo.listPresets, instanceId ? { instanceId } : "skip");
 
   const checkTwitch = useAction(api.goLive.checkTwitch);
   const checkObs = useAction(api.goLive.checkObs);
   const checkStreamInfo = useAction(api.goLive.checkStreamInfo);
   const setCheckDismissed = useMutation(api.goLive.setCheckDismissed);
   const completeAction = useAction(api.goLive.complete);
+  const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
 
   const [outcomes, setOutcomes] = useState<Record<RemoteCheckId, RemoteOutcome>>({
     twitch: { kind: "running" },
@@ -152,7 +157,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
           return obsCheck(outcome.facts);
         }
         case "stream-info": {
-          return streamInfoCheck(outcome.facts, local.lastGoLive, now);
+          return streamInfoCheck(outcome.facts, local.lastGoLive, now, presets ?? []);
         }
       }
     };
@@ -166,7 +171,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
       workflowsCheck(local.workflows),
     ];
     return summarizeChecklist(results, local.dismissedCheckIds);
-  }, [local, overlays, outcomes, connected]);
+  }, [local, overlays, outcomes, connected, presets]);
 
   const setDismissed = useCallback(
     async (id: GoLiveCheckId, dismissed: boolean) => {
@@ -192,6 +197,25 @@ export function useGoLiveChecklist(): GoLiveChecklist {
     [instanceId, completeAction, runRemote]
   );
 
+  const applyPreset = useCallback(
+    async (presetId: string) => {
+      if (!instanceId) {
+        throw new Error("Pick an instance first");
+      }
+      const preset = presets?.find((candidate) => candidate.id === presetId);
+      if (!preset) {
+        throw new Error("That preset no longer exists");
+      }
+      try {
+        const { unapplied } = await updateChannelInfo({ instanceId, ...preset.info });
+        return unapplied;
+      } finally {
+        runRemote("stream-info");
+      }
+    },
+    [instanceId, presets, updateChannelInfo, runRemote]
+  );
+
   return {
     summary,
     isLive: liveState?.isLive ?? false,
@@ -200,5 +224,6 @@ export function useGoLiveChecklist(): GoLiveChecklist {
     rerun,
     setDismissed,
     complete,
+    applyPreset,
   };
 }

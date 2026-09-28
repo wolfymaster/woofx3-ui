@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { LastGoLive, OverlayFacts, StreamInfoFacts } from "@convex/lib/goLiveFacts";
 import {
+  applicablePresets,
   type CheckResult,
   engineCheck,
   erroredCheck,
@@ -10,6 +11,7 @@ import {
   SAME_STREAM_WINDOW_MS,
   STALE_CATEGORY_MS,
   streamInfoCheck,
+  streamInfoFromFacts,
   summarizeChecklist,
   twitchCheck,
   workflowsCheck,
@@ -205,6 +207,47 @@ describe("streamInfoCheck", () => {
     expect(check.summary).toContain("Same title");
     expect(check.details[0]).toContain("Category unchanged");
     expect(check.details).toContain("Tags: English, Programming");
+  });
+});
+
+describe("stream info presets", () => {
+  const current = {
+    id: "p-current",
+    name: "Today",
+    info: {
+      title: "Building a go live checklist",
+      category: { id: "509670", name: "Science & Technology" },
+      tags: ["English", "Programming"],
+    },
+  };
+  const ranked = {
+    id: "p-ranked",
+    name: "Ranked grind",
+    info: { title: "Ranked grind", category: { id: "33214", name: "Fortnite" }, tags: ["English", "Programming"] },
+  };
+
+  test("offers every preset that would change the channel, leaving out the one in place", () => {
+    const repeated = lastGoLive({ title: "Building a go live checklist" });
+    const check = streamInfoCheck(channel(), repeated, NOW, [current, ranked]);
+    expect(check.status).toBe("warn");
+    expect(check.fixes[0]).toEqual({
+      kind: "apply-preset",
+      label: "Apply preset",
+      presets: [{ id: "p-ranked", name: "Ranked grind", summary: "Changes title and category" }],
+    });
+    expect(check.fixes[1]).toMatchObject({ kind: "external" });
+  });
+
+  test("offers nothing when no preset would change anything", () => {
+    const check = streamInfoCheck(channel(), null, NOW, [current]);
+    expect(check.fixes.map((fix) => fix.kind)).toEqual(["external"]);
+  });
+
+  test("reads the checked channel in the shape presets are compared against", () => {
+    expect(streamInfoFromFacts({ ...(channel() as Extract<StreamInfoFacts, { kind: "ok" }>), categoryId: "" })).toEqual(
+      { title: "Building a go live checklist", category: null, tags: ["English", "Programming"] }
+    );
+    expect(applicablePresets(current.info, [current, ranked]).map((choice) => choice.id)).toEqual(["p-ranked"]);
   });
 });
 

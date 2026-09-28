@@ -1,6 +1,8 @@
 import type { GoLiveCompletion, GoLiveStepOutcome } from "@convex/lib/goLiveFacts";
+import type { StreamInfoField } from "@convex/lib/streamInfo";
 import {
   AlertTriangle,
+  Bookmark,
   CheckCircle2,
   ChevronRight,
   Copy,
@@ -16,6 +18,12 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage, useGoLiveChecklist } from "@/hooks/use-go-live-checklist";
@@ -50,7 +58,77 @@ function StatusIcon({ status, className }: { status: CheckStatus; className?: st
   }
 }
 
-function FixButton({ fix, onRetry }: { fix: CheckFix; onRetry: () => void }) {
+function ApplyPresetButton({
+  fix,
+  onApplyPreset,
+}: {
+  fix: Extract<CheckFix, { kind: "apply-preset" }>;
+  onApplyPreset: (presetId: string) => Promise<StreamInfoField[]>;
+}) {
+  const { toast } = useToast();
+  const [applying, setApplying] = useState(false);
+
+  const apply = async (presetId: string, name: string) => {
+    setApplying(true);
+    try {
+      const unapplied = await onApplyPreset(presetId);
+      if (unapplied.length > 0) {
+        toast({
+          title: "Twitch didn't apply everything",
+          description: `It kept its own ${unapplied.join(" and ")}.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: `Applied "${name}"` });
+      }
+    } catch (error) {
+      toast({ title: "Couldn't apply the preset", description: errorMessage(error), variant: "destructive" });
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 px-2 text-xs"
+          disabled={applying}
+          data-testid="button-go-live-apply-preset"
+        >
+          {applying ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bookmark className="h-3 w-3" />}
+          {fix.label}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {fix.presets.map((preset) => (
+          <DropdownMenuItem
+            key={preset.id}
+            onSelect={() => void apply(preset.id, preset.name)}
+            data-testid={`menuitem-go-live-preset-${preset.id}`}
+          >
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-xs font-medium">{preset.name}</span>
+              <span className="truncate text-[10px] text-muted-foreground">{preset.summary}</span>
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function FixButton({
+  fix,
+  onRetry,
+  onApplyPreset,
+}: {
+  fix: CheckFix;
+  onRetry: () => void;
+  onApplyPreset: (presetId: string) => Promise<StreamInfoField[]>;
+}) {
   const { toast } = useToast();
   const className = "h-7 gap-1.5 px-2 text-xs";
 
@@ -99,6 +177,9 @@ function FixButton({ fix, onRetry }: { fix: CheckFix; onRetry: () => void }) {
         </Button>
       );
     }
+    case "apply-preset": {
+      return <ApplyPresetButton fix={fix} onApplyPreset={onApplyPreset} />;
+    }
   }
 }
 
@@ -107,11 +188,13 @@ function CheckRow({
   compact,
   onRetry,
   onDismiss,
+  onApplyPreset,
 }: {
   check: CheckResult;
   compact: boolean;
   onRetry: () => void;
   onDismiss: () => void;
+  onApplyPreset: (presetId: string) => Promise<StreamInfoField[]>;
 }) {
   return (
     <li
@@ -134,7 +217,7 @@ function CheckRow({
         {check.fixes.length > 0 && check.status !== "pass" && (
           <div className="flex flex-wrap gap-1.5 pt-1">
             {check.fixes.map((fix) => (
-              <FixButton key={`${fix.kind}-${fix.label}`} fix={fix} onRetry={onRetry} />
+              <FixButton key={`${fix.kind}-${fix.label}`} fix={fix} onRetry={onRetry} onApplyPreset={onApplyPreset} />
             ))}
           </div>
         )}
@@ -181,7 +264,7 @@ function describeStep(outcome: GoLiveStepOutcome, done: string): string | null {
 export function GoLiveChecklist({ variant }: { variant: "page" | "widget" }) {
   const compact = variant === "widget";
   const { toast } = useToast();
-  const { summary, isLive, markerPending, runAll, rerun, setDismissed, complete } = useGoLiveChecklist();
+  const { summary, isLive, markerPending, runAll, rerun, setDismissed, complete, applyPreset } = useGoLiveChecklist();
 
   const [announce, setAnnounce] = useState(true);
   const [announcement, setAnnouncement] = useState(DEFAULT_ANNOUNCEMENT);
@@ -266,6 +349,7 @@ export function GoLiveChecklist({ variant }: { variant: "page" | "widget" }) {
               compact={compact}
               onRetry={() => rerun(check.id)}
               onDismiss={() => changeDismissed(check, true)}
+              onApplyPreset={applyPreset}
             />
           ))}
         </ul>
