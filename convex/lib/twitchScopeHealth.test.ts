@@ -35,8 +35,15 @@ describe("missingTwitchCapabilities", () => {
       (scope) => scope !== "moderator:manage:chat_messages" && scope !== "clips:edit"
     );
     expect(missingTwitchCapabilities(granted)).toEqual([
-      { label: "Clips", missingScopes: ["clips:edit"] },
-      { label: "Pinned messages", missingScopes: ["moderator:manage:chat_messages"] },
+      { label: "Clips", optional: false, missingScopes: ["clips:edit"] },
+      { label: "Pinned messages", optional: false, missingScopes: ["moderator:manage:chat_messages"] },
+    ]);
+  });
+
+  test("flags optional capabilities as optional", () => {
+    const granted = TWITCH_INTEGRATION_SCOPES.filter((scope) => scope !== "moderator:manage:chat_settings");
+    expect(missingTwitchCapabilities(granted)).toEqual([
+      { label: "Moderation: chat modes", optional: true, missingScopes: ["moderator:manage:chat_settings"] },
     ]);
   });
 
@@ -45,7 +52,9 @@ describe("missingTwitchCapabilities", () => {
   });
 
   test("only checks the scopes that are required", () => {
-    expect(missingTwitchCapabilities([], ["clips:edit"])).toEqual([{ label: "Clips", missingScopes: ["clips:edit"] }]);
+    expect(missingTwitchCapabilities([], ["clips:edit"])).toEqual([
+      { label: "Clips", optional: false, missingScopes: ["clips:edit"] },
+    ]);
   });
 });
 
@@ -63,11 +72,40 @@ describe("twitchScopeHealth", () => {
 
   test("reports the missing capabilities of a live link", () => {
     const health = twitchScopeHealth({ scopes: TWITCH_INTEGRATION_SCOPES.filter((s) => s !== "clips:edit") });
-    expect(health).toEqual({ state: "missing", missing: [{ label: "Clips", missingScopes: ["clips:edit"] }] });
+    expect(health).toEqual({
+      state: "missing",
+      missing: [{ label: "Clips", optional: false, missingScopes: ["clips:edit"] }],
+      optionalMissing: [],
+    });
   });
 
   test("a complete live link is ok", () => {
-    expect(twitchScopeHealth({ scopes: [...TWITCH_INTEGRATION_SCOPES] })).toEqual({ state: "ok" });
+    expect(twitchScopeHealth({ scopes: [...TWITCH_INTEGRATION_SCOPES] })).toEqual({ state: "ok", optionalMissing: [] });
+  });
+
+  test("a link missing only optional capabilities is ok and names them", () => {
+    const health = twitchScopeHealth({
+      scopes: TWITCH_INTEGRATION_SCOPES.filter((s) => s !== "moderator:manage:chat_settings"),
+    });
+    expect(health).toEqual({
+      state: "ok",
+      optionalMissing: [
+        { label: "Moderation: chat modes", optional: true, missingScopes: ["moderator:manage:chat_settings"] },
+      ],
+    });
+  });
+
+  test("keeps optional gaps apart from required ones", () => {
+    const health = twitchScopeHealth({
+      scopes: TWITCH_INTEGRATION_SCOPES.filter((s) => s !== "moderator:manage:chat_settings" && s !== "clips:edit"),
+    });
+    expect(health).toEqual({
+      state: "missing",
+      missing: [{ label: "Clips", optional: false, missingScopes: ["clips:edit"] }],
+      optionalMissing: [
+        { label: "Moderation: chat modes", optional: true, missingScopes: ["moderator:manage:chat_settings"] },
+      ],
+    });
   });
 });
 
@@ -79,6 +117,16 @@ describe("twitchScopeHealthKey", () => {
     });
     expect(twitchScopeHealthKey(one)).not.toBe(twitchScopeHealthKey(two));
     expect(twitchScopeHealthKey(one)).toBe(twitchScopeHealthKey(one));
+  });
+
+  test("ignores optional gaps, so granting one does not re-show a dismissed banner", () => {
+    const withOptionalGap = twitchScopeHealth({
+      scopes: TWITCH_INTEGRATION_SCOPES.filter((s) => s !== "clips:edit" && s !== "moderator:manage:chat_settings"),
+    });
+    const withoutOptionalGap = twitchScopeHealth({
+      scopes: TWITCH_INTEGRATION_SCOPES.filter((s) => s !== "clips:edit"),
+    });
+    expect(twitchScopeHealthKey(withOptionalGap)).toBe(twitchScopeHealthKey(withoutOptionalGap));
   });
 
   test("distinguishes revoked from missing", () => {

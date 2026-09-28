@@ -1,5 +1,5 @@
 import type { Id } from "@convex/_generated/dataModel";
-import type { TwitchScopeHealth } from "@convex/lib/twitchScopeHealth";
+import type { MissingTwitchCapability, TwitchScopeHealth } from "@convex/lib/twitchScopeHealth";
 import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,11 +22,44 @@ export function TwitchScopeStatus({ instanceId, health, platformUsername, canRel
     return null;
   }
 
+  const reconnect = canRelink ? (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => void connect(instanceId, "/admin/integrations")}
+      disabled={starting}
+      data-testid="button-status-reconnect-twitch"
+    >
+      {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+      Reconnect as @{platformUsername}
+    </Button>
+  ) : (
+    <span className="text-xs text-muted-foreground">Ask an instance admin to reconnect Twitch.</span>
+  );
+
   if (health.state === "ok") {
+    if (health.optionalMissing.length === 0) {
+      return (
+        <div className="flex items-center gap-2 rounded-lg border p-4 text-sm" data-testid="twitch-scope-status">
+          <CheckCircle2 className="h-4 w-4 text-green-500" />
+          <span>Every permission the app uses is granted.</span>
+        </div>
+      );
+    }
     return (
-      <div className="flex items-center gap-2 rounded-lg border p-4 text-sm" data-testid="twitch-scope-status">
-        <CheckCircle2 className="h-4 w-4 text-green-500" />
-        <span>Every permission the app uses is granted.</span>
+      <div
+        className="flex flex-wrap items-start justify-between gap-3 rounded-lg border p-4 text-sm"
+        data-testid="twitch-scope-status"
+      >
+        <div className="flex min-w-0 flex-1 items-start gap-2">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+          <div className="min-w-0 space-y-2">
+            <p>Every required permission is granted. Reconnect to add these optional ones:</p>
+            <OptionalCapabilityBadges capabilities={health.optionalMissing} />
+            {connectError && <p className="text-destructive">{connectError}</p>}
+          </div>
+        </div>
+        {reconnect}
       </div>
     );
   }
@@ -56,25 +89,33 @@ export function TwitchScopeStatus({ instanceId, health, platformUsername, canRel
                   </Badge>
                 ))}
               </div>
+              <OptionalCapabilityBadges capabilities={health.optionalMissing} />
             </>
           )}
           {connectError && <p className="text-destructive">{connectError}</p>}
         </div>
       </div>
-      {canRelink ? (
-        <Button
+      {reconnect}
+    </div>
+  );
+}
+
+function OptionalCapabilityBadges({ capabilities }: { capabilities: MissingTwitchCapability[] }) {
+  if (capabilities.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {capabilities.map((capability) => (
+        <Badge
+          key={capability.label}
           variant="outline"
-          size="sm"
-          onClick={() => void connect(instanceId, "/admin/integrations")}
-          disabled={starting}
-          data-testid="button-status-reconnect-twitch"
+          title={capability.missingScopes.join("\n")}
+          data-testid={`twitch-optional-missing-${capability.label}`}
         >
-          {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Reconnect as @{platformUsername}
-        </Button>
-      ) : (
-        <span className="text-xs text-muted-foreground">Ask an instance admin to reconnect Twitch.</span>
-      )}
+          {capability.label}: not granted (optional)
+        </Badge>
+      ))}
     </div>
   );
 }
