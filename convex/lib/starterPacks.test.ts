@@ -1,0 +1,398 @@
+import { describe, expect, test } from "bun:test";
+import {
+  buildStarterCommand,
+  buildStarterWorkflow,
+  fieldTokenNames,
+  findStarterPack,
+  missingRequirements,
+  requirementsMessage,
+  STARTER_ACTION_REFS,
+  STARTER_PACKS,
+  type StarterCatalog,
+  type StarterPack,
+  type StarterWorkflowDefinition,
+  starterItemFieldIds,
+  starterPackDefaults,
+  textTokens,
+  validateStarterValues,
+} from "./starterPacks";
+
+/** Every Twitch trigger event the packs bind to; the event subjects the Twitch module's manifest declares. */
+const TWITCH_EVENTS = [
+  "channel.follow",
+  "channel.raid",
+  "channel.subscribe",
+  "channel.resub",
+  "channel.subscriptionGift",
+  "channel.cheer",
+];
+
+/** A catalog as an up-to-date instance with the Twitch module installed has it. */
+const FULL_CATALOG: StarterCatalog = {
+  triggers: TWITCH_EVENTS.map((event) => ({
+    event,
+    canonicalRef: `woofx3_twitch:trigger:${event.replace(".", "_")}`,
+  })),
+  actions: Object.values(STARTER_ACTION_REFS).map((ref) => ({
+    canonicalRef: ref,
+    handlerType: ref.slice("woofx3:action:".length),
+  })),
+};
+
+/** Only what engines without the Twitch and OBS workflow actions have. */
+const OLD_ENGINE_CATALOG: StarterCatalog = {
+  triggers: FULL_CATALOG.triggers,
+  actions: [{ canonicalRef: STARTER_ACTION_REFS.chatReply, handlerType: "chat.reply" }],
+};
+
+const OPERATORS = new Set([
+  "eq",
+  "ne",
+  "gt",
+  "gte",
+  "lt",
+  "lte",
+  "contains",
+  "starts_with",
+  "ends_with",
+  "in",
+  "not_in",
+  "exists",
+  "not_exists",
+  "regex",
+  "between",
+]);
+
+/**
+ * The structural rules the engine applies when a workflow is saved
+ * (api/src/workflow/validate-definition.ts in the engine repo, which this
+ * repo cannot import), plus the delay wait's bounds.
+ */
+function definitionErrors(def: StarterWorkflowDefinition): string[] {
+  const errors: string[] = [];
+  if (def.name.trim() === "") {
+    errors.push("name is empty");
+  }
+  if (def.trigger.type !== "event" || def.trigger.event === "") {
+    errors.push("trigger needs an event");
+  }
+  for (const condition of def.trigger.conditions) {
+    if (!/^\$\{trigger\.data\.[A-Za-z.]+\}$/.test(condition.field)) {
+      errors.push(`condition field ${condition.field} is not a trigger.data reference`);
+    }
+    if (!OPERATORS.has(condition.operator)) {
+      errors.push(`unknown operator ${condition.operator}`);
+    }
+  }
+  if (def.tasks.length === 0) {
+    errors.push("no tasks");
+  }
+  const ids = new Set<string>();
+  for (const task of def.tasks) {
+    if (ids.has(task.id)) {
+      errors.push(`duplicate task id ${task.id}`);
+    }
+    for (const dep of task.dependsOn ?? []) {
+      if (!ids.has(dep)) {
+        errors.push(`task ${task.id} depends on ${dep}, which does not come before it`);
+      }
+    }
+    ids.add(task.id);
+    if (task.type === "action" && !task.action) {
+      errors.push(`action task ${task.id} names no action`);
+    }
+    if (task.type === "wait") {
+      const ms = task.wait?.durationMs ?? 0;
+      if (task.wait?.type !== "delay" || !Number.isInteger(ms) || ms < 1 || ms > 86_400_000) {
+        errors.push(`wait task ${task.id} is not a valid delay`);
+      }
+    }
+  }
+  return errors;
+}
+
+/** Strings in a built definition that still carry an unfilled `{name}` placeholder or a field reference. */
+function leftovers(value: unknown): string[] {
+  if (typeof value === "string") {
+    return textTokens(value).map((name) => `{${name}}`);
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(leftovers);
+  }
+  if (value && typeof value === "object") {
+    if ("field" in value && Object.keys(value).length === 1) {
+      return [JSON.stringify(value)];
+    }
+    return Object.values(value).flatMap(leftovers);
+  }
+  return [];
+}
+
+function pack(id: string): StarterPack {
+  const found = findStarterPack(id);
+  if (!found) {
+    throw new Error(`no pack ${id}`);
+  }
+  return found;
+}
+
+describe("starter pack data", () => {
+  test("pack ids are unique, and item, field and step ids are unique within their pack", () => {
+    const packIds = STARTER_PACKS.map((p) => p.id);
+    expect(new Set(packIds).size).toBe(packIds.length);
+    for (const p of STARTER_PACKS) {
+      const itemIds = p.items.map((item) => item.id);
+      expect(new Set(itemIds).size).toBe(itemIds.length);
+      const fieldIds = p.fields.map((field) => field.id);
+      expect(new Set(fieldIds).size).toBe(fieldIds.length);
+      for (const item of p.items) {
+        const stepIds = item.steps.map((step) => step.id);
+        expect(new Set(stepIds).size).toBe(stepIds.length);
+      }
+    }
+  });
+
+  test("command names are unique across packs", () => {
+    const names = STARTER_PACKS.flatMap((p) =>
+      p.items.flatMap((item) => (item.kind === "command" ? [item.command] : []))
+    );
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) {
+      expect(name).toMatch(/^[a-z0-9_-]+$/);
+    }
+  });
+
+  test("every field is read by an item, and every field an item reads is declared", () => {
+    for (const p of STARTER_PACKS) {
+      const declared = new Set(p.fields.map((field) => field.id));
+      const read = new Set(p.items.flatMap(starterItemFieldIds));
+      expect([...read].filter((id) => !declared.has(id))).toEqual([]);
+      expect([...declared].filter((id) => !read.has(id))).toEqual([]);
+    }
+  });
+
+  test("every default value passes the pack's own validation", () => {
+    for (const p of STARTER_PACKS) {
+      const result = validateStarterValues(p, {});
+      expect(result).toEqual({ ok: true, values: starterPackDefaults(p) });
+    }
+  });
+
+  test("every item builds, with defaults, into a definition the engine accepts and no placeholder left", () => {
+    for (const p of STARTER_PACKS) {
+      const values = starterPackDefaults(p);
+      for (const item of p.items) {
+        if (item.kind === "workflow") {
+          const def = buildStarterWorkflow(item, values, FULL_CATALOG);
+          expect({ item: item.id, errors: definitionErrors(def) }).toEqual({ item: item.id, errors: [] });
+          expect({ item: item.id, leftovers: leftovers(def) }).toEqual({ item: item.id, leftovers: [] });
+        } else {
+          const command = buildStarterCommand(item, values, FULL_CATALOG);
+          expect(command.actions.length).toBeGreaterThan(0);
+          expect({ item: item.id, leftovers: leftovers(command) }).toEqual({ item: item.id, leftovers: [] });
+        }
+      }
+    }
+  });
+});
+
+describe("buildStarterWorkflow", () => {
+  const raid = pack("raid-welcome");
+  const raidItem = raid.items[0];
+  if (raidItem.kind !== "workflow") {
+    throw new Error("raid welcome is a workflow");
+  }
+
+  test("chains the raid steps and fills the raider's name and id from the event", () => {
+    const def = buildStarterWorkflow(raidItem, starterPackDefaults(raid), FULL_CATALOG);
+    expect(def.trigger).toEqual({
+      type: "event",
+      event: "channel.raid",
+      conditions: [],
+      $ref: "woofx3_twitch:trigger:channel_raid",
+    });
+    expect(def.tasks.map((task) => [task.id, task.dependsOn])).toEqual([
+      ["thank-raider", undefined],
+      ["let-raiders-arrive", ["thank-raider"]],
+      ["shout-out-raider", ["let-raiders-arrive"]],
+      ["mark-raid", ["shout-out-raider"]],
+    ]);
+    expect(def.tasks[0]).toMatchObject({
+      type: "action",
+      action: "chat.reply",
+      $ref: STARTER_ACTION_REFS.chatReply,
+      parameters: {
+        message:
+          "${trigger.data.fromBroadcasterUserName} is raiding with ${trigger.data.viewers} viewers! Welcome in, everyone!",
+      },
+    });
+    expect(def.tasks[1].wait).toEqual({ type: "delay", durationMs: 5000 });
+    expect(def.tasks[2].parameters).toEqual({
+      userId: "${trigger.data.fromBroadcasterUserId}",
+      skipIfRateLimited: true,
+    });
+    expect(def.tasks[3].parameters).toEqual({ description: "Raid from ${trigger.data.fromBroadcasterUserName}" });
+  });
+
+  test("a pause of zero leaves the delay out and keeps the chain unbroken", () => {
+    const values = { ...starterPackDefaults(raid), shoutoutDelaySeconds: 0 };
+    const def = buildStarterWorkflow(raidItem, values, FULL_CATALOG);
+    expect(def.tasks.map((task) => [task.id, task.dependsOn])).toEqual([
+      ["thank-raider", undefined],
+      ["shout-out-raider", ["thank-raider"]],
+      ["mark-raid", ["shout-out-raider"]],
+    ]);
+  });
+
+  test("a number field becomes a typed condition value", () => {
+    const cheer = pack("cheer-thanks");
+    const item = cheer.items[0];
+    if (item.kind !== "workflow") {
+      throw new Error("cheer thanks is a workflow");
+    }
+    const def = buildStarterWorkflow(item, { ...starterPackDefaults(cheer), cheerMinimum: 250 }, FULL_CATALOG);
+    expect(def.trigger.conditions).toEqual([{ field: "${trigger.data.amount}", operator: "gte", value: 250 }]);
+  });
+
+  test("only thanks subscribers who were not gifted their sub", () => {
+    const subs = pack("sub-hype");
+    const item = subs.items.find((candidate) => candidate.id === "sub-thanks");
+    if (item?.kind !== "workflow") {
+      throw new Error("sub thanks is a workflow");
+    }
+    const def = buildStarterWorkflow(item, starterPackDefaults(subs), FULL_CATALOG);
+    expect(def.trigger.conditions).toEqual([{ field: "${trigger.data.isGift}", operator: "eq", value: false }]);
+  });
+
+  test("dispatches a function-backed action by its function id", () => {
+    const catalog: StarterCatalog = {
+      triggers: FULL_CATALOG.triggers,
+      actions: [{ canonicalRef: STARTER_ACTION_REFS.chatReply, functionCall: "chat.say" }],
+    };
+    const follow = pack("follower-thanks");
+    const item = follow.items[0];
+    if (item.kind !== "workflow") {
+      throw new Error("follower thanks is a workflow");
+    }
+    const def = buildStarterWorkflow(item, starterPackDefaults(follow), catalog);
+    expect(def.tasks[0]).toMatchObject({ action: "function", function: "chat.say" });
+  });
+});
+
+describe("buildStarterCommand", () => {
+  test("restricts the OBS commands to the broadcaster and moderators", () => {
+    const brb = pack("brb-scene");
+    const values = { ...starterPackDefaults(brb), brbScene: "Be Right Back" };
+    const built = brb.items.map((item) => {
+      if (item.kind !== "command") {
+        throw new Error("BRB items are commands");
+      }
+      return buildStarterCommand(item, values, FULL_CATALOG);
+    });
+    expect(built.map((command) => command.command)).toEqual(["brb", "back"]);
+    expect(built[0].restrictTo).toEqual(["broadcaster", "moderator"]);
+    expect(built[0].actions).toEqual([
+      {
+        id: "switch-to-brb",
+        action: "obs.switch_scene",
+        parameters: { sceneName: "Be Right Back" },
+        $ref: STARTER_ACTION_REFS.switchScene,
+      },
+    ]);
+  });
+
+  test("fills {user} with the chatter who ran the command", () => {
+    const handy = pack("handy-commands");
+    const lurk = handy.items.find((item) => item.id === "lurk");
+    if (lurk?.kind !== "command") {
+      throw new Error("lurk is a command");
+    }
+    const built = buildStarterCommand(lurk, starterPackDefaults(handy), FULL_CATALOG);
+    expect(built.restrictTo).toEqual([]);
+    expect(built.actions[0].parameters).toEqual({
+      message: "${trigger.data.chatter} is lurking. Thanks for hanging out!",
+    });
+  });
+});
+
+describe("validateStarterValues", () => {
+  const raid = pack("raid-welcome");
+
+  test("refuses a placeholder the field's items do not offer, naming the ones they do", () => {
+    const result = validateStarterValues(raid, { raidMessage: "Welcome {user}!" });
+    expect(result).toEqual({
+      ok: false,
+      errors: { raidMessage: "{user} isn't a placeholder here. Use {raider}, {viewers}." },
+    });
+  });
+
+  test("leaves engine expressions alone", () => {
+    const result = validateStarterValues(raid, { raidMessage: "Welcome ${trigger.data.fromBroadcasterUserLogin}!" });
+    expect(result.ok).toBe(true);
+  });
+
+  test("refuses numbers out of range or fractional, empty text and unknown fields", () => {
+    const result = validateStarterValues(raid, {
+      shoutoutDelaySeconds: 61,
+      raidMessage: "   ",
+      extra: "x",
+    });
+    expect(result).toEqual({
+      ok: false,
+      errors: {
+        extra: "This pack has no such setting.",
+        shoutoutDelaySeconds: "Enter a number from 0 to 60.",
+        raidMessage: "This can't be empty.",
+      },
+    });
+    expect(validateStarterValues(raid, { shoutoutDelaySeconds: 2.5 }).ok).toBe(false);
+  });
+
+  test("a field two items read offers only the placeholders both have", () => {
+    const subs = pack("sub-hype");
+    expect(fieldTokenNames(subs, "giftBombMarker").sort()).toEqual(["count", "gifter"]);
+    expect(fieldTokenNames(subs, "giftBombMinimum").sort()).toEqual(["count", "gifter"]);
+  });
+
+  test("trims text values", () => {
+    const result = validateStarterValues(raid, { raidMarker: "  Raid!  " });
+    expect(result.ok && result.values.raidMarker).toBe("Raid!");
+  });
+});
+
+describe("missingRequirements", () => {
+  test("an engine without the newer actions can install the chat-only packs but not the rest", () => {
+    const blocked = STARTER_PACKS.flatMap((p) =>
+      p.items
+        .filter((item) => missingRequirements(item, OLD_ENGINE_CATALOG).actions.length > 0)
+        .map((item) => `${p.id}/${item.id}`)
+    );
+    expect(blocked).toEqual([
+      "raid-welcome/raid-welcome",
+      "sub-hype/gift-bomb-clip",
+      "brb-scene/brb",
+      "brb-scene/back",
+    ]);
+    const raidItem = pack("raid-welcome").items[0];
+    expect(requirementsMessage(missingRequirements(raidItem, OLD_ENGINE_CATALOG))).toBe("Requires engine update");
+  });
+
+  test("a missing Twitch trigger asks for the Twitch module", () => {
+    const followItem = pack("follower-thanks").items[0];
+    const missing = missingRequirements(followItem, { triggers: [], actions: FULL_CATALOG.actions });
+    expect(missing).toEqual({ triggers: ["channel.follow"], actions: [] });
+    expect(requirementsMessage(missing)).toBe("Requires the Twitch module");
+  });
+
+  test("the Twitch module's own shoutout action does not stand in for the engine's", () => {
+    const raidItem = pack("raid-welcome").items[0];
+    const catalog: StarterCatalog = {
+      triggers: FULL_CATALOG.triggers,
+      actions: [
+        ...FULL_CATALOG.actions.filter((action) => action.canonicalRef !== STARTER_ACTION_REFS.shoutout),
+        { canonicalRef: "woofx3_twitch:action:twitch.shoutout", functionCall: "shoutout" },
+      ],
+    };
+    expect(missingRequirements(raidItem, catalog).actions).toEqual([STARTER_ACTION_REFS.shoutout]);
+  });
+});

@@ -47,6 +47,7 @@ const Modules = lazy(() => import("@/pages/modules"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Queues = lazy(() => import("@/pages/queues"));
 const Scenes = lazy(() => import("@/pages/scenes"));
+const StarterPacks = lazy(() => import("@/pages/starter-packs"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
 const Timers = lazy(() => import("@/pages/timers"));
@@ -164,6 +165,7 @@ function AppRoutes() {
                   <Route path="/stream/scenes" component={Scenes} />
                   <Route path="/stream/scenes/:id" component={Scenes} />
                   <Route path="/stream/assets" component={Assets} />
+                  <Route path="/stream/starter-packs" component={StarterPacks} />
                   <Route path="/stream/workflows" component={Workflows} />
                   <Route path="/stream/workflows/new" component={Workflows} />
                   <Route path="/stream/workflows/:id" component={Workflows} />
