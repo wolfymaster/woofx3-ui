@@ -36,6 +36,7 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `go-live` | stream | Pre-flight checklist before a stream; also a page at `/stream/go-live` — see below |
 | `live-events` | stream | Follows/subs/cheers/raids, pushed from the engine |
 | `activity` | stream | Tabbed events and highlights |
+| `stream-info` | stream | Title, category, tags, saved presets and stream markers — see below |
 | `stream-preview` | stream | Thumbnail, click to enlarge |
 | `announcement` | stream | Send a coloured announcement to chat |
 | `pinned` | stream | Twitch pinned message, plus re-pinnable history — see below |
@@ -324,6 +325,42 @@ engine with provenance `macro-trigger`, so these runs appear in the run history
 accepted runs bump `lastUsedAt` / `useCount`, refused or failed ones set
 `lastFailedAt` / `lastFailure`. The decision logic is pure and tested in
 `convex/lib/macroTrigger.test.ts`.
+
+## Stream info
+
+Edits the channel's title, category and tags, and drops stream markers, without
+leaving for Twitch's own dashboard. Everything goes straight to Helix from
+`convex/streamInfo.ts` under one scope, `channel:manage:broadcast` — reads
+included, although Get Channel Information needs none, so a link missing the
+scope shows a single "reconnect Twitch" state instead of a card that shows data
+and refuses every button.
+
+- **Current info** comes from Get Channel Information, plus Get Games for the
+  category's box art (the channel endpoint returns only its id and name). Twitch
+  pushes nothing when the title changes elsewhere, so the card polls every
+  minute while the tab is visible. A poll replaces the editor's contents only
+  while they are untouched (`client/src/lib/stream-info-edit.ts`), so it never
+  eats half-typed changes.
+- **Saving** is optimistic: the card shows the new values at once and puts the
+  old ones back if Twitch refuses. `updateChannelInfo` re-reads the channel and
+  sends Modify Channel Information only the fields that differ
+  (`diffStreamInfo`), so an unchanged title is never re-sent as an edit.
+- **Category** is a debounced typeahead over Search Categories; clearing it sends
+  an empty `game_id`.
+- **Tags** follow Twitch's rules, checked in both the editor and the action by
+  `convex/lib/streamInfo.ts`: at most 10, each at most 25 characters of letters
+  and digits (any script — no spaces or punctuation), no case-insensitive
+  duplicates. A refused tag stays in the input with the reason under it.
+  Titles are at most 140 characters, counted in code points so an emoji is one.
+- **Saved presets** (`streamInfoPresets`) are named title/category/tags sets,
+  instance-scoped because they describe the channel, not the viewer. Saving
+  under an existing name replaces it. Applying one runs the same optimistic save;
+  a preset that matches the channel already is marked and disabled, and the
+  others say what applying them would change.
+- **Markers** use Create Stream Marker with an optional description (at most
+  140). Twitch answers 404 when the channel is offline and 403 when there is no
+  VOD to mark (past broadcasts off, or a premiere or rerun); both become an
+  inline explanation next to the button.
 
 ## Pinned
 
