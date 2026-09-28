@@ -1,11 +1,22 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
 import type { InstanceRole } from "./lib/twitchLinkPolicy";
+
+/**
+ * An instance row as members may see it. `webhookSecret` authenticates the
+ * engine's callbacks to Convex and no browser has a use for it. `clientSecret`
+ * stays: the browser's live WebSocket to the engine authenticates with it
+ * (hooks/use-sync-engine-transport.ts).
+ */
+function withoutWebhookSecret(instance: Doc<"instances">): Omit<Doc<"instances">, "webhookSecret"> {
+  const { webhookSecret: _webhookSecret, ...rest } = instance;
+  return rest;
+}
 
 export const listForCurrentUser = query({
   args: {},
@@ -19,7 +30,7 @@ export const listForCurrentUser = query({
       .collect();
 
     const instances = await Promise.all(memberships.map((m) => ctx.db.get(m.instanceId)));
-    return instances.filter(Boolean);
+    return instances.filter((instance) => instance !== null).map(withoutWebhookSecret);
   },
 });
 
@@ -36,7 +47,8 @@ export const get = query({
       .first();
 
     if (!membership) return null;
-    return ctx.db.get(args.instanceId);
+    const instance = await ctx.db.get(args.instanceId);
+    return instance ? withoutWebhookSecret(instance) : null;
   },
 });
 

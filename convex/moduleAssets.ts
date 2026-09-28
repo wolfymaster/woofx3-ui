@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, type MutationCtx, query } from "./_generated/server";
+import { internalMutation, type MutationCtx } from "./_generated/server";
 
 const assetValidator = v.object({
   id: v.string(),
@@ -15,23 +15,6 @@ const assetValidator = v.object({
   contentType: v.optional(v.string()),
   createdByType: v.string(),
   createdByRef: v.string(),
-});
-
-export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    return ctx.db.query("moduleAssets").collect();
-  },
-});
-
-export const listByModule = query({
-  args: { moduleId: v.id("moduleRepository") },
-  handler: async (ctx, { moduleId }) => {
-    return ctx.db
-      .query("moduleAssets")
-      .withIndex("by_module", (q) => q.eq("moduleId", moduleId))
-      .collect();
-  },
 });
 
 /**

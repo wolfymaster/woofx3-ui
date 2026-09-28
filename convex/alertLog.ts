@@ -70,7 +70,7 @@ export const replay = mutation({
 
     // Get the alert history entry
     const alert = await ctx.db.get(args.alertId);
-    if (!alert) {
+    if (!alert || alert.instanceId !== args.instanceId) {
       throw new Error("Alert not found");
     }
 

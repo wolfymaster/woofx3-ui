@@ -114,7 +114,7 @@ export const requestModuleUninstall = action({
     }
 
     const module = await ctx.runQuery(api.moduleRepository.get, { moduleId });
-    if (!module) {
+    if (!module || module.instanceId !== instanceId) {
       throw new Error("Module not found");
     }
 
@@ -187,7 +187,7 @@ export const reconcileUninstall = action({
     }
 
     const module = await ctx.runQuery(api.moduleRepository.get, { moduleId });
-    if (!module) {
+    if (!module || module.instanceId !== instanceId) {
       // Already reconciled (or removed) by the time we got here.
       return { stillInstalled: false };
     }
