@@ -2,13 +2,14 @@ import type { StreamEventFrame } from "@woofx3/api";
 import type { PlatformEvent, PlatformEventType } from "./types";
 
 // The engine publishes platform-agnostic CloudEvents whose `type` is also the
-// NATS subject. Only the four the dashboard widgets render are mapped; the
-// broadcaster also carries channel.subscriptionGift and stream.online/offline,
-// which have no PlatformEventType and are dropped here rather than surfacing as
-// a half-populated row.
+// NATS subject. Only the events the dashboard widgets render are mapped; the
+// broadcaster also carries stream.online/offline, which have no
+// PlatformEventType and are dropped here rather than surfacing as a
+// half-populated row.
 const FRAME_TYPE_TO_EVENT: Record<string, PlatformEventType> = {
   "channel.follow": "follow",
   "channel.subscribe": "subscribe",
+  "channel.subscriptionGift": "subscriptionGift",
   "channel.cheer": "cheer",
   "channel.raid": "raid",
 };
@@ -62,6 +63,15 @@ export function frameToPlatformEvent(frame: StreamEventFrame): PlatformEvent | n
       return {
         ...base,
         userName: text(data.userName) ?? "Anonymous",
+        tier: text(data.tier),
+      };
+    case "subscriptionGift":
+      // `amount` is the number of subs in the gift, not currency. An anonymous
+      // gift is kept and named rather than dropped so gifted-sub counts stay whole.
+      return {
+        ...base,
+        userName: data.isAnonymous === true ? "Anonymous" : (text(data.gifterName) ?? "Unknown"),
+        amount: count(data.amount),
         tier: text(data.tier),
       };
     case "cheer":

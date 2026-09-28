@@ -1,9 +1,9 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import { Gift, Heart, Star, Trash2, UserPlus, Zap } from "lucide-react";
+import { Gift, HandHeart, Heart, Star, Trash2, UserPlus, Zap } from "lucide-react";
 import { useCallback } from "react";
-import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
+import { giftedSubsDetail, LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +21,7 @@ import type { PlatformEvent } from "@/lib/platforms/types";
 const highlightIcons: Record<string, typeof Star> = {
   follow: UserPlus,
   subscribe: Heart,
+  subscriptionGift: HandHeart,
   cheer: Gift,
   raid: Zap,
   note: Star,
@@ -96,6 +97,9 @@ function highlightDetail(event: PlatformEvent): string | undefined {
   }
   if (event.type === "subscribe" && event.tier) {
     return `Tier ${event.tier}`;
+  }
+  if (event.type === "subscriptionGift" && event.amount != null) {
+    return giftedSubsDetail(event.amount, event.tier);
   }
   return event.message;
 }
