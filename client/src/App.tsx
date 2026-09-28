@@ -23,6 +23,7 @@ import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
 import { convexClient as convex } from "./lib/convexClient";
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
+const AdminBackup = lazy(() => import("@/pages/admin/backup"));
 const AdminEngine = lazy(() => import("@/pages/admin/engine"));
 const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
 const AdminStorage = lazy(() => import("@/pages/admin/storage"));
@@ -204,6 +205,7 @@ function AppRoutes() {
                   <Route path="/admin/engine" component={AdminEngine} />
                   <Route path="/admin/integrations" component={AdminIntegrations} />
                   <Route path="/admin/storage" component={AdminStorage} />
+                  <Route path="/admin/backup" component={AdminBackup} />
                   <Route path="/admin/appearance" component={AdminAppearance} />
 
                   <Route path="/team" component={Team} />
