@@ -1,4 +1,3 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -6,7 +5,8 @@ import { action, internalAction, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { SYNC_STEPS } from "./lib/engineSync/steps";
-import { canAccessAccount } from "./lib/teamAccess";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { isInstanceMember } from "./lib/teamAccess";
 
 /**
  * Orchestrator: runs every registered sync step for an instance in order,
@@ -138,8 +138,8 @@ export const sweep = internalAction({
 
 /**
  * Reactive query the UI subscribes to. Returns the per-instance sync state,
- * the in-flight run (if any), and the last 5 runs. Returns null if the user
- * isn't authenticated or doesn't have access to the instance's account.
+ * the in-flight run (if any), and the last 5 runs. Returns null unless the
+ * caller is a member of the instance.
  *
  * Implemented with inline `ctx.db` reads because Convex queries cannot call
  * other queries via `ctx.runQuery`.
@@ -147,16 +147,7 @@ export const sweep = internalAction({
 export const getSyncState = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      return null;
-    }
-    const inst = await ctx.db.get(instanceId);
-    if (!inst) {
-      return null;
-    }
-    const allowed = await canAccessAccount(ctx, inst.accountId, userId);
-    if (!allowed) {
+    if (!(await isInstanceMember(ctx, instanceId))) {
       return null;
     }
     const syncState = await ctx.db
@@ -184,14 +175,7 @@ export const getSyncState = query({
 export const syncNow = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-    await ctx.runQuery(internal.engineSyncInternal.assertCanSyncInstance, {
-      instanceId,
-      userId,
-    });
+    const userId = await requireInstanceRoleInAction(ctx, instanceId);
     const state = await ctx.runQuery(internal.engineSyncInternal.getSyncStateForUser, {
       instanceId,
       userId,

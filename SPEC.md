@@ -282,20 +282,13 @@ The browser source overlay renders configured scenes for use in OBS or other str
 
 **Rendering Behavior:**
 
-- Browser source connects to a unique source key
-- Claims the scene configuration and alert descriptors
-- Polls for pending alerts
-- Renders alert layers with configured animations
-- Updates alert state as they complete
+- OBS loads `/browser-source/{key}`, a stable per-scene URL. The platform redirects it to the engine-rendered overlay with a current overlay token.
+- The engine's overlay queues and plays alerts itself; the platform does not poll or claim them.
 
 **Alert Lifecycle:**
 
-1. Engine sends alert webhook to platform
-2. Platform queues alert with state "pending"
-3. Browser source polls and claims alert (state "rendering")
-4. Browser source renders alert animation
-5. Browser source updates alert state to "complete"
-6. Alert moved to history
+1. The engine records each alert it dispatches and reports every lifecycle change (sent, dispatched, completed, failed, timed out, skipped, replayed) as an `alert.*` callback to `POST /api/webhooks/woofx3`.
+2. The platform mirrors those callbacks into its alert log for the Alerts dashboard, replay and failure diagnosis.
 
 **Alert Descriptors:**
 
@@ -696,17 +689,12 @@ The platform backend exposes:
 
 **Webhooks:**
 
-- `POST /api/webhooks/woofx3/alerts` - Receive alerts from engine
+- `POST /api/webhooks/woofx3` - Engine callbacks, including alert lifecycle (authenticated by the per-instance Bearer callback token)
 - `POST /api/webhooks/woofx3/notify` - Receive notifications from engine (with webhook secret validation)
 
 **Browser Source:**
 
-- `PATCH /api/browser-source/alerts/:id` - Update alert state
-
-**OBS Integration:**
-
-- `GET /api/obs/commands?sceneId=` - Poll pending OBS commands
-- `PATCH /api/obs/commands/:id` - Update command state
+- `GET /browser-source/{key}` - Redirect OBS to the engine-rendered overlay for the key's scene
 
 ### 7.3 Real-Time Transport
 
