@@ -737,6 +737,12 @@ export default defineSchema({
     state: v.string(),
     redirectTo: v.string(),
     instanceId: v.optional(v.id("instances")),
+    // The signed-in owner or admin who started an integration connect. Absent
+    // for the sign-in flow, which has no user yet.
+    userId: v.optional(v.id("users")),
+    // SHA-256 of the nonce the sign-in's browser tab keeps (lib/oauthHandoff.ts).
+    // Present only for the sign-in flow; carried to twitchPendingAuth.
+    nonceHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
@@ -753,8 +759,44 @@ export default defineSchema({
     expiresIn: v.optional(v.number()),
     obtainmentTimestamp: v.optional(v.number()),
     scopes: v.optional(v.array(v.string())),
+    // The sign-in completes only in the browser tab holding the nonce behind
+    // this hash. Rows without one are refused.
+    nonceHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_token", ["token"]),
+
+  // oauthConnectHandoffs: the result of an integration OAuth callback, held
+  // until the signed-in user who started the flow claims it with the one-time
+  // code the callback put in the browser's URL (lib/oauthHandoff.ts). Only the
+  // code's hash is stored. Rows are single use and deleted after five minutes
+  // whether or not they are claimed.
+  oauthConnectHandoffs: defineTable({
+    codeHash: v.string(),
+    provider: v.union(v.literal("twitch"), v.literal("spotify")),
+    userId: v.id("users"),
+    instanceId: v.id("instances"),
+    moduleId: v.optional(v.string()),
+    redirectTo: v.string(),
+    twitch: v.optional(
+      v.object({
+        platformUserId: v.string(),
+        platformUsername: v.string(),
+        profileImageUrl: v.optional(v.string()),
+        accessToken: v.string(),
+        refreshToken: v.string(),
+        expiresAt: v.number(),
+        scopes: v.array(v.string()),
+      })
+    ),
+    spotify: v.optional(
+      v.object({
+        clientId: v.string(),
+        authToken: v.string(),
+        refreshToken: v.string(),
+      })
+    ),
+    createdAt: v.number(),
+  }).index("by_code_hash", ["codeHash"]),
 
   // moduleIntegrationState: short-lived, one-time-use state for a module
   // setting's "integration" button (see moduleDetail.ts's ManifestSettingAction).
@@ -769,6 +811,9 @@ export default defineSchema({
     moduleId: v.string(),
     integration: v.string(),
     redirectTo: v.string(),
+    // The signed-in member who started the flow (spotifyConnect.start). Rows
+    // without one predate that check and are refused at the callback.
+    userId: v.optional(v.id("users")),
     data: v.any(),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
