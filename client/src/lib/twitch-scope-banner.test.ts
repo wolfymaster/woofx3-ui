@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { dismissReconnect, isReconnectDismissed, twitchReconnectMessage } from "./twitch-scope-banner";
+import {
+  dismissReconnect,
+  isReconnectDismissed,
+  reconnectReturnPath,
+  twitchReconnectMessage,
+} from "./twitch-scope-banner";
 
 function memoryStorage(): Pick<Storage, "getItem" | "setItem"> {
   const values = new Map<string, string>();
@@ -58,5 +63,21 @@ describe("reconnect dismissal", () => {
     };
     expect(() => dismissReconnect(broken, "a", "revoked")).not.toThrow();
     expect(isReconnectDismissed(broken, "a", "revoked")).toBe(false);
+  });
+
+  test("no storage at all reads as not dismissed", () => {
+    expect(() => dismissReconnect(null, "a", "revoked")).not.toThrow();
+    expect(isReconnectDismissed(null, "a", "revoked")).toBe(false);
+  });
+});
+
+describe("reconnectReturnPath", () => {
+  test("keeps the query string", () => {
+    expect(reconnectReturnPath("/settings", "tab=integrations")).toBe("/settings?tab=integrations");
+    expect(reconnectReturnPath("/settings", "?tab=integrations")).toBe("/settings?tab=integrations");
+  });
+
+  test("a bare path stays bare", () => {
+    expect(reconnectReturnPath("/stream/alerts", "")).toBe("/stream/alerts");
   });
 });

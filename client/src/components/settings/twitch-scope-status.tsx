@@ -9,10 +9,14 @@ import { twitchConnectUrl } from "@/lib/twitch-connect";
 interface TwitchScopeStatusProps {
   instanceId: Id<"instances">;
   health: TwitchScopeHealth;
+  /** The linked account's name, so the creator signs in to Twitch as that account and not another. */
+  platformUsername: string;
+  /** Only owners and admins may replace the link; see `viewerCanRelink` in convex/instances.ts. */
+  canRelink: boolean;
 }
 
 /** Which Twitch permissions the linked account granted, with a way to fix a gap. */
-export function TwitchScopeStatus({ instanceId, health }: TwitchScopeStatusProps) {
+export function TwitchScopeStatus({ instanceId, health, platformUsername, canRelink }: TwitchScopeStatusProps) {
   if (health.state === "unlinked") {
     return null;
   }
@@ -55,14 +59,18 @@ export function TwitchScopeStatus({ instanceId, health }: TwitchScopeStatusProps
           )}
         </div>
       </div>
-      <Button asChild variant="outline" size="sm">
-        <a
-          href={twitchConnectUrl(CONVEX_SITE_URL, instanceId, "/admin/integrations")}
-          data-testid="button-status-reconnect-twitch"
-        >
-          Reconnect Twitch
-        </a>
-      </Button>
+      {canRelink ? (
+        <Button asChild variant="outline" size="sm">
+          <a
+            href={twitchConnectUrl(CONVEX_SITE_URL, instanceId, "/admin/integrations")}
+            data-testid="button-status-reconnect-twitch"
+          >
+            Reconnect as @{platformUsername}
+          </a>
+        </Button>
+      ) : (
+        <span className="text-xs text-muted-foreground">Ask an instance admin to reconnect Twitch.</span>
+      )}
     </div>
   );
 }
