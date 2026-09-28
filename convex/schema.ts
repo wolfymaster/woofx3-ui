@@ -1181,8 +1181,9 @@ export default defineSchema({
   // progress of a run someone is waiting on and expires in a minute: these are
   // the runs nobody was watching, which is exactly why they are kept.
   //
-  // Runs fired by hand from the dashboard never reach here -- the engine does
-  // not record them.
+  // Runs fired by hand with the unrecorded `dashboard` origin never reach here;
+  // the engine does not record them. Test runs and Runs-panel replays carry an
+  // origin of their own so they do -- see lib/manualRunOrigin.ts.
   workflowRuns: defineTable({
     instanceId: v.id("instances"),
     engineRunId: v.string(), // WorkflowRunSnapshot.id (the engine's execution id)

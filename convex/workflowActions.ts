@@ -6,6 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { manualRunOrigin, UNRECORDED_ORIGIN } from "./lib/manualRunOrigin";
 
 const CORRELATION_TIMEOUT_MS = 10_000;
 const CORRELATION_POLL_MS = 250;
@@ -156,14 +157,18 @@ export const deleteByEngineId = action({
  * actions above. A run's outcome is not a webhook echo confirming a change; it
  * is a lifecycle that arrives in `transientEvents` under this key. Callers
  * subscribe with `api.transientEvents.get` and watch the run from there.
+ *
+ * `origin` decides whether the run is written to the history; see
+ * lib/manualRunOrigin.ts.
  */
 export const trigger = action({
   args: {
     instanceId: v.id("instances"),
     workflowNameOrId: v.string(),
     parameters: v.optional(v.record(v.string(), v.string())),
+    origin: v.optional(manualRunOrigin),
   },
-  handler: async (ctx, { instanceId, workflowNameOrId, parameters }): Promise<{ triggerId: string }> => {
+  handler: async (ctx, { instanceId, workflowNameOrId, parameters, origin }): Promise<{ triggerId: string }> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
     // Minted before the call, so a caller can subscribe to the outcome before
     // the run exists -- and so a lost response cannot strand a run whose
@@ -171,7 +176,13 @@ export const trigger = action({
     const triggerId = crypto.randomUUID();
 
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    await rpc.triggerWorkflowByName(workflowNameOrId, parameters ?? {}, undefined, triggerId, "dashboard");
+    await rpc.triggerWorkflowByName(
+      workflowNameOrId,
+      parameters ?? {},
+      undefined,
+      triggerId,
+      origin ?? UNRECORDED_ORIGIN
+    );
 
     return { triggerId };
   },
@@ -182,23 +193,53 @@ export const trigger = action({
  *
  * Returns the correlation key at once, like `trigger`. The replay's progress
  * arrives in transientEvents under it, and a refusal arrives there as a failure
- * carrying the engine's reason. A replay is fired by a person, so like any
- * manual run it is not written to the history.
+ * carrying the engine's reason. Whether the replay is written to the history
+ * follows `origin`, as for `trigger`.
  */
 export const replay = action({
   args: {
     instanceId: v.id("instances"),
     engineRunId: v.string(),
     fromTaskId: v.optional(v.string()),
+    origin: v.optional(manualRunOrigin),
   },
-  handler: async (ctx, { instanceId, engineRunId, fromTaskId }): Promise<{ triggerId: string }> => {
+  handler: async (ctx, { instanceId, engineRunId, fromTaskId, origin }): Promise<{ triggerId: string }> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
     const triggerId = crypto.randomUUID();
 
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    await rpc.replayWorkflowRun(engineRunId, fromTaskId, triggerId, "dashboard");
+    await rpc.replayWorkflowRun(engineRunId, fromTaskId, triggerId, origin ?? UNRECORDED_ORIGIN);
 
     return { triggerId };
+  },
+});
+
+/**
+ * Mark a recorded run cancelled.
+ *
+ * The engine's cancel writes the status onto its own history row and nothing
+ * more: a step already executing runs to its end, and the engine relays no
+ * webhook for the change. So the Convex mirror is updated here, once the engine
+ * has accepted it, or the run would read `running` until a later snapshot
+ * arrived -- which for a run stuck after an engine restart is never.
+ */
+export const cancelRun = action({
+  args: {
+    instanceId: v.id("instances"),
+    engineRunId: v.string(),
+  },
+  handler: async (ctx, { instanceId, engineRunId }): Promise<{ cancelled: true }> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    await rpc.cancelWorkflow(engineRunId, "Cancelled from the dashboard");
+
+    await ctx.runMutation(internal.workflowRuns.markCancelled, {
+      instanceId,
+      engineRunId,
+      at: new Date().toISOString(),
+    });
+    return { cancelled: true };
   },
 });
 

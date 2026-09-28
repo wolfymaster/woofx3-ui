@@ -34,6 +34,32 @@ export const get = query({
 });
 
 /**
+ * Every transient event under one correlation key, oldest first.
+ *
+ * `get` answers with the latest row, which is enough when one run answers to
+ * the key. A simulated event can start several workflows under the same key,
+ * and a caller following one of them needs all the rows to find its own. The
+ * bound is generous: rows expire after a minute.
+ */
+export const listByCorrelation = query({
+  args: {
+    instanceId: v.id("instances"),
+    correlationKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (!(await isInstanceMember(ctx, args.instanceId))) {
+      return [];
+    }
+    return ctx.db
+      .query("transientEvents")
+      .withIndex("by_instance_correlation", (q) =>
+        q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey)
+      )
+      .take(200);
+  },
+});
+
+/**
  * Emit a transient event. The event is automatically scheduled for cleanup after TTL.
  */
 export const emit = internalMutation({
