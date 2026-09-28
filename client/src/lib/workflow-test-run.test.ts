@@ -2,8 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import {
+  isStickyOutcome,
   type ListeningWorkflow,
   otherWorkflowsOnEvent,
+  resolveTestRunOutcome,
+  sampleEventRefusal,
   type TransientRunRow,
   testRunPreset,
   testRunProgress,
@@ -111,5 +114,55 @@ describe("testRunProgress", () => {
   test("carries the failure reason", () => {
     const outcome = testRunProgress([row("error", "wf", "run-1", "step exploded")], "wf", false).outcome;
     expect(outcome.kind).toBe("failed");
+  });
+});
+
+describe("sampleEventRefusal", () => {
+  test("refuses going live and going offline, and their longer forms", () => {
+    expect(sampleEventRefusal("stream.online")).toContain("stream session");
+    expect(sampleEventRefusal("stream.offline")).toContain("stream session");
+    expect(sampleEventRefusal("stream.online.twitch")).not.toBeNull();
+  });
+
+  test("allows everything else", () => {
+    expect(sampleEventRefusal("channel.raid")).toBeNull();
+    expect(sampleEventRefusal("stream.onlineish")).toBeNull();
+    expect(sampleEventRefusal(undefined)).toBeNull();
+  });
+});
+
+describe("resolveTestRunOutcome", () => {
+  const waiting = { kind: "waiting" } as const;
+  const nothing = { kind: "nothingMatched" } as const;
+  const running = { kind: "running" } as const;
+
+  test("a recorded settled run wins over live rows", () => {
+    expect(resolveTestRunOutcome(running, null, { status: "completed" }).kind).toBe("succeeded");
+    expect(resolveTestRunOutcome(running, null, { status: "failed", error: "boom" }).kind).toBe("failed");
+  });
+
+  test("a stopped run says so", () => {
+    const outcome = resolveTestRunOutcome(running, null, { status: "cancelled" });
+    expect(outcome.kind === "failed" && outcome.title).toBe("The run was stopped");
+  });
+
+  test("keeps the last live answer once the live rows expire", () => {
+    expect(resolveTestRunOutcome(nothing, running, null).kind).toBe("running");
+    expect(resolveTestRunOutcome(nothing, running, { status: "running" }).kind).toBe("running");
+  });
+
+  test("a live terminal answer beats a recorded run still catching up", () => {
+    expect(resolveTestRunOutcome({ kind: "succeeded" }, running, { status: "running" }).kind).toBe("succeeded");
+  });
+
+  test("falls back to the live reading when nothing else is known", () => {
+    expect(resolveTestRunOutcome(waiting, null, null).kind).toBe("waiting");
+    expect(resolveTestRunOutcome(nothing, null, null).kind).toBe("nothingMatched");
+  });
+
+  test("only settled answers are kept", () => {
+    expect(isStickyOutcome(running)).toBe(true);
+    expect(isStickyOutcome(waiting)).toBe(false);
+    expect(isStickyOutcome(nothing)).toBe(false);
   });
 });

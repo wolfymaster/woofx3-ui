@@ -1,7 +1,8 @@
 import { api } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Id } from "@convex/_generated/dataModel";
 import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { useAction, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { History, Loader2, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -31,7 +32,7 @@ import { workflowRunPath } from "@/lib/workflow-run-route";
 import { canReplayRun, isActiveRun, runDurationMs, runOriginLabel } from "@/lib/workflow-run-rows";
 import { formatDuration, toneFor } from "@/lib/workflow-run-timeline";
 
-type RunDoc = Doc<"workflowRuns">;
+type RunDoc = FunctionReturnType<typeof api.workflowRuns.listForWorkflow>[number];
 
 const RUN_LIMIT = 50;
 const CLOCK_TICK_MS = 1000;
@@ -66,6 +67,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
   useVisibleInterval(() => setNow(Date.now()), CLOCK_TICK_MS, hasActiveRun);
 
   const [replayingId, setReplayingId] = useState<string | null>(null);
+  const [replayTarget, setReplayTarget] = useState<RunDoc | null>(null);
   const [cancelTarget, setCancelTarget] = useState<RunDoc | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
 
@@ -96,7 +98,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
     } catch (err) {
       toast({
         variant: "destructive",
-        title: "Run could not be cancelled",
+        title: "Run could not be stopped",
         description: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -184,7 +186,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
                                 e.stopPropagation();
                                 setCancelTarget(run);
                               }}
-                              title="Cancel run"
+                              title="Stop run"
                               data-testid={`button-cancel-run-${run.engineRunId}`}
                             >
                               <Square className="h-3.5 w-3.5" />
@@ -198,7 +200,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
                               disabled={replayingId !== null}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                void handleReplay(run);
+                                setReplayTarget(run);
                               }}
                               title="Replay run"
                               data-testid={`button-replay-run-${run.engineRunId}`}
@@ -222,6 +224,40 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
       </div>
 
       <AlertDialog
+        open={replayTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReplayTarget(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replay this run?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The workflow runs again from the run's recorded trigger event, against its current steps. Its actions
+              happen for real: chat messages are sent and alerts play on your overlays. The replay is added to this
+              list.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Don't replay</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (replayTarget) {
+                  void handleReplay(replayTarget);
+                }
+                setReplayTarget(null);
+              }}
+              data-testid="button-replay-run-confirm"
+            >
+              Replay
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
         open={cancelTarget !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -231,14 +267,14 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel this run?</AlertDialogTitle>
+            <AlertDialogTitle>Stop this run?</AlertDialogTitle>
             <AlertDialogDescription>
-              The run is marked cancelled in the engine's history. A step that is already executing is not interrupted,
-              so use this to clear a run that is stuck rather than to stop one mid-action.
+              Stopping a run requires the engine test-runs update; on older engines the remaining steps still run, and
+              the run is only marked stopped until it finishes.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isCancelling}>Keep it</AlertDialogCancel>
+            <AlertDialogCancel disabled={isCancelling}>Keep it running</AlertDialogCancel>
             <AlertDialogAction
               onClick={(e) => {
                 e.preventDefault();
@@ -248,7 +284,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isCancelling && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Cancel run
+              Stop run
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

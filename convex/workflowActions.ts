@@ -217,11 +217,12 @@ export const replay = action({
 /**
  * Mark a recorded run cancelled.
  *
- * The engine's cancel writes the status onto its own history row and nothing
- * more: a step already executing runs to its end, and the engine relays no
- * webhook for the change. So the Convex mirror is updated here, once the engine
- * has accepted it, or the run would read `running` until a later snapshot
- * arrived -- which for a run stuck after an engine restart is never.
+ * On an engine without the test-runs update (engine test-runs PR, link TBD)
+ * the cancel only writes the status onto the engine's history row: the
+ * remaining steps still run, and the run's own completion overwrites the
+ * status afterwards. The engine relays no webhook for the cancel either way, so
+ * the Convex mirror is updated here once the engine has accepted it -- a later
+ * snapshot from the engine still wins.
  */
 export const cancelRun = action({
   args: {

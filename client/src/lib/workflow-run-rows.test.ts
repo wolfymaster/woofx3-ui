@@ -16,22 +16,19 @@ describe("runOriginLabel", () => {
 });
 
 describe("isActiveRun / canReplayRun", () => {
-  const event = JSON.stringify({ type: "channel.raid", data: {} });
-
   test("a running or waiting run is active and cannot be replayed", () => {
     expect(isActiveRun({ status: "running" })).toBe(true);
     expect(isActiveRun({ status: "waiting" })).toBe(true);
-    expect(canReplayRun({ status: "running", triggerEvent: event })).toBe(false);
+    expect(canReplayRun({ status: "running", hasTriggerEvent: true })).toBe(false);
   });
 
   test("a settled run with a recorded trigger event can be replayed", () => {
     expect(isActiveRun({ status: "failed" })).toBe(false);
-    expect(canReplayRun({ status: "failed", triggerEvent: event })).toBe(true);
+    expect(canReplayRun({ status: "failed", hasTriggerEvent: true })).toBe(true);
   });
 
   test("a run with no trigger event has nothing to replay", () => {
-    expect(canReplayRun({ status: "completed" })).toBe(false);
-    expect(canReplayRun({ status: "completed", triggerEvent: "{}" })).toBe(false);
+    expect(canReplayRun({ status: "completed", hasTriggerEvent: false })).toBe(false);
   });
 });
 

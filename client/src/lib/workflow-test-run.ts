@@ -3,6 +3,7 @@ import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { describeTestEventOutcome, type TestEventOutcome } from "@/lib/test-event-outcome";
 import { resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { TriggerPreset } from "@/lib/workflow-presets";
+import { toneFor } from "@/lib/workflow-run-timeline";
 
 /**
  * Decisions behind a workflow's Test run sheet, kept out of the components so
@@ -126,4 +127,78 @@ export function testRunProgress(
     executionId,
     otherWorkflowCount: others.size,
   };
+}
+
+/**
+ * Events a sample must never be published for, because the engine acts on
+ * them beyond the workflows listening: going live or offline opens or closes
+ * a stream session and marks the channel live everywhere that reads it.
+ */
+const SESSION_EVENTS = ["stream.online", "stream.offline"];
+
+/**
+ * Why a sample of `event` may not be fired, or null when it may. A refused
+ * event can still be tested with "This workflow only", which publishes nothing.
+ */
+export function sampleEventRefusal(event: string | undefined): string | null {
+  if (!event) {
+    return null;
+  }
+  const session = SESSION_EVENTS.find((refused) => event === refused || event.startsWith(`${refused}.`));
+  if (!session) {
+    return null;
+  }
+  return session === "stream.online"
+    ? "A sample going-live event would open a stream session and mark the channel live."
+    : "A sample going-offline event would close the current stream session.";
+}
+
+/** The fields of a recorded `workflowRuns` row the outcome reads. */
+export interface RecordedRunState {
+  status: string;
+  error?: string;
+}
+
+function isAnswer(outcome: TestEventOutcome): boolean {
+  return outcome.kind === "running" || outcome.kind === "succeeded" || outcome.kind === "failed";
+}
+
+/**
+ * The outcome to show for a test run, from everything known about it.
+ *
+ * The live rows expire a minute after they are written, so a long run outlives
+ * them: once they are gone the live outcome reads as "nothing matched". So a
+ * recorded run's settled status wins, then a live answer, then the last live
+ * answer the caller kept (`sticky`), and only then the live reading as-is.
+ */
+export function resolveTestRunOutcome(
+  live: TestEventOutcome,
+  sticky: TestEventOutcome | null,
+  recorded: RecordedRunState | null
+): TestEventOutcome {
+  const recordedTone = recorded ? toneFor(recorded.status) : null;
+  if (recorded && recordedTone === "success") {
+    return { kind: "succeeded" };
+  }
+  if (recorded && recordedTone === "failure") {
+    if (recorded.status === "cancelled") {
+      return { kind: "failed", title: "The run was stopped", detail: recorded.error ?? "Stopped from the dashboard." };
+    }
+    return describeTestEventOutcome({ status: "error", message: recorded.error }, true);
+  }
+  if (isAnswer(live)) {
+    return live;
+  }
+  if (sticky) {
+    return sticky;
+  }
+  if (recordedTone === "running") {
+    return { kind: "running" };
+  }
+  return live;
+}
+
+/** Whether `outcome` is worth keeping once the live rows expire. */
+export function isStickyOutcome(outcome: TestEventOutcome): boolean {
+  return isAnswer(outcome);
 }
