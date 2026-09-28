@@ -575,7 +575,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
     id: "ad-break-heads-up",
     name: "Ad break heads-up",
     why: "A mid-roll ad that lands without warning feels like being cut off. Tell chat an ad is coming so viewers can grab a drink instead of leaving.",
-    note: "Needs Twitch reconnected with ad access. Twitch sends the warning a few minutes before a scheduled ad; ads you start yourself get no warning.",
+    note: "Needs Twitch reconnected with ad access. woofx3 watches your ad schedule and warns about 60 seconds before a scheduled ad; an ad you start by hand gets no warning.",
     fields: [
       {
         id: "adWarningMessage",
@@ -609,7 +609,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
     id: "ad-break-scene",
     name: "Ad break scene",
     why: "Viewers who sit through an ad come back to whatever the stream was showing. Switch to a holding scene while the ad runs and back when it ends, so nobody returns mid-sentence.",
-    note: "Needs OBS connected to the engine and Twitch reconnected with ad access. It switches back to the main scene below, not to whichever scene was showing before the ad.",
+    note: "Needs OBS connected to the engine and Twitch reconnected with ad access. Switches when Twitch reports the ad starting, and back when woofx3 sees the ad's length run out, to the main scene below rather than whichever scene was showing before.",
     fields: [
       {
         id: "adScene",

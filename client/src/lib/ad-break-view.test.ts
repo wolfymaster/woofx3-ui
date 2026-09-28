@@ -1,27 +1,42 @@
 import { describe, expect, test } from "bun:test";
 import type { AdSchedule } from "@convex/lib/adBreaks";
-import { parseAdSchedule } from "@convex/lib/adBreaks";
-import { type AdBreakInputs, adBreakView, formatAgo, formatCountdown, runningAdFromBegin } from "./ad-break-view";
+import { normalizeTimestamp, parseAdSchedule, parseAdSnoozeResult } from "@convex/lib/adBreaks";
+import {
+  type AdBreakInputs,
+  type AdBreakView,
+  adBreakView,
+  applySnooze,
+  countdownExpired,
+  formatAgo,
+  formatCountdown,
+  runningAdFromBegin,
+  scheduleFetch,
+} from "./ad-break-view";
 
 const NOW = Date.parse("2026-09-28T20:00:00Z");
 
 function schedule(overrides: Partial<AdSchedule> = {}): AdSchedule {
   return {
-    nextAdAt: "2026-09-28T20:05:00Z",
-    lastAdAt: "2026-09-28T19:30:00Z",
+    nextAdAt: "2026-09-28T20:05:00.000Z",
+    lastAdAt: "2026-09-28T19:30:00.000Z",
     durationSeconds: 90,
     prerollFreeSeconds: 600,
     snoozeCount: 2,
-    snoozeRefreshAt: "2026-09-28T20:30:00Z",
+    snoozeRefreshAt: "2026-09-28T20:30:00.000Z",
+    serverNow: null,
     ...overrides,
   };
+}
+
+function okFetch(value: AdSchedule, receivedAt = NOW) {
+  return scheduleFetch({ state: "ok", schedule: value }, receivedAt);
 }
 
 function inputs(overrides: Partial<AdBreakInputs> = {}): AdBreakInputs {
   return {
     live: true,
     scopeGranted: true,
-    fetch: { status: "ok", result: { state: "ok", schedule: schedule() }, fetchedAt: NOW },
+    fetch: okFetch(schedule()),
     running: null,
     now: NOW,
     ...overrides,
@@ -72,9 +87,9 @@ describe("adBreakView", () => {
   });
 
   test("engine states pass through", () => {
-    const outdated = inputs({ fetch: { status: "ok", result: { state: "engineOutdated" }, fetchedAt: NOW } });
+    const outdated = inputs({ fetch: scheduleFetch({ state: "engineOutdated" }, NOW) });
     expect(adBreakView(outdated)).toEqual({ kind: "engineOutdated" });
-    const unregistered = inputs({ fetch: { status: "ok", result: { state: "unregistered" }, fetchedAt: NOW } });
+    const unregistered = inputs({ fetch: scheduleFetch({ state: "unregistered" }, NOW) });
     expect(adBreakView(unregistered)).toEqual({ kind: "unregistered" });
     expect(adBreakView(inputs({ fetch: { status: "error", message: "boom" } }))).toEqual({
       kind: "error",
@@ -103,11 +118,7 @@ describe("adBreakView", () => {
   });
 
   test("no scheduled ad and a full snooze count read as null, not zero", () => {
-    const fetch = {
-      status: "ok" as const,
-      result: { state: "ok" as const, schedule: schedule({ nextAdAt: null, lastAdAt: null, snoozeRefreshAt: null }) },
-      fetchedAt: NOW,
-    };
+    const fetch = okFetch(schedule({ nextAdAt: null, lastAdAt: null, snoozeRefreshAt: null }));
     const view = adBreakView(inputs({ fetch }));
     expect(view).toMatchObject({ secondsUntilNext: null, secondsSinceLast: null, secondsUntilSnoozeRefresh: null });
   });
@@ -132,11 +143,7 @@ describe("adBreakView", () => {
   });
 
   test("without events, a last ad still inside its length reads as running", () => {
-    const fetch = {
-      status: "ok" as const,
-      result: { state: "ok" as const, schedule: schedule({ lastAdAt: "2026-09-28T19:59:00Z", durationSeconds: 90 }) },
-      fetchedAt: NOW,
-    };
+    const fetch = okFetch(schedule({ lastAdAt: "2026-09-28T19:59:00Z", durationSeconds: 90 }));
     expect(adBreakView(inputs({ fetch }))).toEqual({ kind: "running", secondsLeft: 30 });
   });
 });
@@ -169,5 +176,104 @@ describe("parseAdSchedule", () => {
     expect(parseAdSchedule({ ...schedule(), snoozeCount: -1 })).toBeNull();
     expect(parseAdSchedule({ ...schedule(), durationSeconds: undefined })).toBeNull();
     expect(parseAdSchedule("nope")).toBeNull();
+  });
+
+  test("tolerates empty strings and epoch seconds", () => {
+    const parsed = parseAdSchedule({
+      ...schedule(),
+      nextAdAt: 1790625900,
+      lastAdAt: "",
+      snoozeRefreshAt: "1790627400",
+    });
+    expect(parsed).toMatchObject({
+      nextAdAt: "2026-09-28T20:05:00.000Z",
+      lastAdAt: null,
+      snoozeRefreshAt: "2026-09-28T20:30:00.000Z",
+    });
+  });
+
+  test("reads an absent serverNow as null", () => {
+    const { serverNow: _dropped, ...withoutServerNow } = schedule();
+    expect(parseAdSchedule(withoutServerNow)?.serverNow).toBeNull();
+  });
+});
+
+describe("normalizeTimestamp", () => {
+  test("Helix's zero means none", () => {
+    expect(normalizeTimestamp(0)).toBeNull();
+    expect(normalizeTimestamp("0")).toBeNull();
+  });
+
+  test("normalizes ISO strings", () => {
+    expect(normalizeTimestamp("2026-09-28T20:00:00Z")).toBe("2026-09-28T20:00:00.000Z");
+  });
+});
+
+describe("clock skew", () => {
+  test("countdowns follow the engine's clock, anchored at receipt", () => {
+    // The engine's clock runs ten minutes ahead of the browser's.
+    const skewed = schedule({
+      serverNow: "2026-09-28T20:10:00.000Z",
+      nextAdAt: "2026-09-28T20:15:00.000Z",
+      lastAdAt: "2026-09-28T19:40:00.000Z",
+      snoozeRefreshAt: "2026-09-28T20:40:00.000Z",
+    });
+    expect(adBreakView(inputs({ fetch: okFetch(skewed) }))).toMatchObject({
+      secondsUntilNext: 300,
+      secondsSinceLast: 1800,
+      secondsUntilSnoozeRefresh: 1800,
+    });
+  });
+
+  test("a snooze is placed with its own serverNow", () => {
+    const before = okFetch(schedule());
+    const after = applySnooze(
+      before,
+      {
+        snoozeCount: 1,
+        nextAdAt: "2026-09-28T21:10:00.000Z",
+        snoozeRefreshAt: null,
+        serverNow: "2026-09-28T21:00:00.000Z",
+      },
+      NOW
+    );
+    expect(adBreakView(inputs({ fetch: after }))).toMatchObject({
+      secondsUntilNext: 600,
+      snoozeCount: 1,
+      secondsUntilSnoozeRefresh: null,
+    });
+    expect(parseAdSnoozeResult({ snoozeCount: 1, nextAdAt: "", snoozeRefreshAt: 0 })).toEqual({
+      snoozeCount: 1,
+      nextAdAt: null,
+      snoozeRefreshAt: null,
+      serverNow: null,
+    });
+  });
+});
+
+describe("countdownExpired", () => {
+  const scheduled = (secondsUntilNext: number | null, secondsUntilSnoozeRefresh: number | null): AdBreakView => ({
+    kind: "scheduled",
+    secondsUntilNext,
+    durationSeconds: 90,
+    secondsSinceLast: null,
+    prerollFreeSeconds: 0,
+    snoozeCount: 1,
+    secondsUntilSnoozeRefresh,
+  });
+
+  test("fires once as the next ad or a snooze refill reaches zero", () => {
+    expect(countdownExpired(scheduled(1, null), scheduled(0, null))).toBe(true);
+    expect(countdownExpired(scheduled(0, null), scheduled(0, null))).toBe(false);
+    expect(countdownExpired(scheduled(10, 1), scheduled(9, 0))).toBe(true);
+    expect(countdownExpired(scheduled(10, null), scheduled(9, null))).toBe(false);
+  });
+
+  test("fires when a running ad ends", () => {
+    expect(countdownExpired({ kind: "running", secondsLeft: 1 }, scheduled(900, null))).toBe(true);
+  });
+
+  test("never on the first view", () => {
+    expect(countdownExpired(null, scheduled(0, null))).toBe(false);
   });
 });

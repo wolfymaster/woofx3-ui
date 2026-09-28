@@ -1,4 +1,4 @@
-import type { AdScheduleResult } from "@convex/lib/adBreaks";
+import { type AdSchedule, type AdScheduleResult, type AdSnoozeResult, toLocalTime } from "@convex/lib/adBreaks";
 
 /**
  * What the Ad breaks widget shows, decided from everything it knows. Pure, so
@@ -7,10 +7,61 @@ import type { AdScheduleResult } from "@convex/lib/adBreaks";
  * over anything the engine said, and a running ad wins over the schedule.
  */
 
+/** An AdSchedule with every time moved onto the local clock, in epoch ms. */
+export interface LocalAdSchedule {
+  nextAdAt: number | null;
+  lastAdAt: number | null;
+  durationSeconds: number;
+  prerollFreeSeconds: number;
+  snoozeCount: number;
+  snoozeRefreshAt: number | null;
+}
+
 export type AdScheduleFetch =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ok"; result: AdScheduleResult; fetchedAt: number };
+  | { status: "engineOutdated" }
+  | { status: "unregistered" }
+  | { status: "ok"; schedule: LocalAdSchedule; fetchedAt: number };
+
+export function localizeSchedule(schedule: AdSchedule, receivedAt: number): LocalAdSchedule {
+  return {
+    nextAdAt: toLocalTime(schedule.nextAdAt, schedule.serverNow, receivedAt),
+    lastAdAt: toLocalTime(schedule.lastAdAt, schedule.serverNow, receivedAt),
+    durationSeconds: schedule.durationSeconds,
+    prerollFreeSeconds: schedule.prerollFreeSeconds,
+    snoozeCount: schedule.snoozeCount,
+    snoozeRefreshAt: toLocalTime(schedule.snoozeRefreshAt, schedule.serverNow, receivedAt),
+  };
+}
+
+/** The widget's fetch state for an answer from `adBreaks.getSchedule`, received at `receivedAt`. */
+export function scheduleFetch(result: AdScheduleResult, receivedAt: number): AdScheduleFetch {
+  switch (result.state) {
+    case "engineOutdated":
+      return { status: "engineOutdated" };
+    case "unregistered":
+      return { status: "unregistered" };
+    case "ok":
+      return { status: "ok", schedule: localizeSchedule(result.schedule, receivedAt), fetchedAt: receivedAt };
+  }
+}
+
+/** A snooze's answer folded into the schedule it changed. */
+export function applySnooze(fetch: AdScheduleFetch, result: AdSnoozeResult, receivedAt: number): AdScheduleFetch {
+  if (fetch.status !== "ok") {
+    return fetch;
+  }
+  return {
+    ...fetch,
+    schedule: {
+      ...fetch.schedule,
+      snoozeCount: result.snoozeCount,
+      nextAdAt: toLocalTime(result.nextAdAt, result.serverNow, receivedAt),
+      snoozeRefreshAt: toLocalTime(result.snoozeRefreshAt, result.serverNow, receivedAt),
+    },
+  };
+}
 
 /** An ad break seen starting, from a channel.ad_break.begin event. */
 export interface RunningAd {
@@ -51,11 +102,11 @@ function secondsBetween(fromMs: number, toMs: number): number {
   return Math.max(0, Math.ceil((toMs - fromMs) / 1000));
 }
 
-function secondsUntil(iso: string | null, now: number): number | null {
-  if (iso === null) {
+function secondsUntil(at: number | null, now: number): number | null {
+  if (at === null) {
     return null;
   }
-  return secondsBetween(now, Date.parse(iso));
+  return secondsBetween(now, at);
 }
 
 function runningSecondsLeft(running: RunningAd, now: number): number {
@@ -82,20 +133,19 @@ export function adBreakView(inputs: AdBreakInputs): AdBreakView {
   if (fetch.status === "error") {
     return { kind: "error", message: fetch.message };
   }
-  const result = fetch.result;
-  if (result.state === "engineOutdated") {
+  if (fetch.status === "engineOutdated") {
     return { kind: "engineOutdated" };
   }
-  if (result.state === "unregistered") {
+  if (fetch.status === "unregistered") {
     return { kind: "unregistered" };
   }
-  const schedule = result.schedule;
+  const schedule = fetch.schedule;
   // Without begin events the last ad's start is the only sign one is running.
   // Its length is taken from the schedule, which describes the next break, so
   // this can be off when the two differ; a begin event, when one arrives, wins.
   if (schedule.lastAdAt !== null) {
     const inferred = runningSecondsLeft(
-      { startedAt: Date.parse(schedule.lastAdAt), durationSeconds: schedule.durationSeconds },
+      { startedAt: schedule.lastAdAt, durationSeconds: schedule.durationSeconds },
       now
     );
     if (inferred > 0) {
@@ -107,11 +157,33 @@ export function adBreakView(inputs: AdBreakInputs): AdBreakView {
     kind: "scheduled",
     secondsUntilNext: secondsUntil(schedule.nextAdAt, now),
     durationSeconds: schedule.durationSeconds,
-    secondsSinceLast: schedule.lastAdAt === null ? null : secondsBetween(Date.parse(schedule.lastAdAt), now),
+    secondsSinceLast: schedule.lastAdAt === null ? null : secondsBetween(schedule.lastAdAt, now),
     prerollFreeSeconds: Math.max(0, schedule.prerollFreeSeconds - elapsedSinceFetch),
     snoozeCount: schedule.snoozeCount,
     secondsUntilSnoozeRefresh: secondsUntil(schedule.snoozeRefreshAt, now),
   };
+}
+
+/**
+ * Whether a countdown the widget shows has just run out, so the schedule is
+ * worth asking for again: an ad due now has either started or been moved, and
+ * a snooze refill has changed the count.
+ */
+export function countdownExpired(previous: AdBreakView | null, current: AdBreakView): boolean {
+  if (previous === null) {
+    return false;
+  }
+  if (previous.kind === "running" && current.kind !== "running") {
+    return true;
+  }
+  if (previous.kind !== "scheduled" || current.kind !== "scheduled") {
+    return false;
+  }
+  const reachedZero = (before: number | null, after: number | null) => before !== null && before > 0 && after === 0;
+  return (
+    reachedZero(previous.secondsUntilNext, current.secondsUntilNext) ||
+    reachedZero(previous.secondsUntilSnoozeRefresh, current.secondsUntilSnoozeRefresh)
+  );
 }
 
 /** `m:ss` under an hour, `h:mm:ss` from there; negative reads as zero. */

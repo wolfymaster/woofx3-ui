@@ -4,7 +4,8 @@
  * Declared here rather than taken from @woofx3/api because the shared contract
  * does not carry them yet. Must match the engine's getAdSchedule and
  * snoozeNextAd return shapes and the channel.ad_break.* CloudEvent payloads.
- * Times are ISO-8601 strings; null means Twitch reported none.
+ * Times are ISO-8601 strings; null means Twitch reported none. The parsers
+ * below also normalize the looser forms described at normalizeTimestamp.
  */
 export interface AdSchedule {
   /** When the next scheduled mid-roll starts; null when none is scheduled. */
@@ -19,14 +20,25 @@ export interface AdSchedule {
   snoozeCount: number;
   /** When the next snooze is added back; null when the count is full. */
   snoozeRefreshAt: string | null;
+  /** The engine's clock when it answered; null from an engine that does not send it. */
+  serverNow: string | null;
 }
 
 export interface AdSnoozeResult {
   snoozeCount: number;
   snoozeRefreshAt: string | null;
   nextAdAt: string | null;
+  serverNow: string | null;
 }
 
+/**
+ * `begin` ({durationSeconds, isAutomatic, startedAt}) comes from Twitch
+ * EventSub. Twitch sends nothing before or after an ad, so the engine
+ * synthesizes the other two from the schedule it polls: `upcoming`
+ * ({nextAdAt, secondsUntil, durationSeconds}) shortly before a scheduled ad,
+ * and `end` ({durationSeconds, startedAt, endedAt}) once a begun ad's length
+ * has run out.
+ */
 export const AD_BREAK_EVENTS = {
   upcoming: "channel.ad_break.upcoming",
   begin: "channel.ad_break.begin",
@@ -48,12 +60,51 @@ export type AdScheduleResult =
   | { state: "engineOutdated" }
   | { state: "unregistered" };
 
-function isIsoOrNull(value: unknown): value is string | null {
-  return value === null || (typeof value === "string" && !Number.isNaN(Date.parse(value)));
-}
-
 function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+const INVALID = Symbol("invalid");
+
+/**
+ * A timestamp as ISO-8601, null for none, or INVALID. The contract says ISO or
+ * null; an empty string and Unix epoch seconds (a number or a numeric string)
+ * are also taken, since Helix itself answers with both and an engine passing
+ * a field through unconverted should not blank the widget.
+ */
+export function normalizeTimestamp(value: unknown): string | null | typeof INVALID {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) {
+      return INVALID;
+    }
+    // Helix reports "no last ad" as 0.
+    return value === 0 ? null : new Date(value * 1000).toISOString();
+  }
+  if (typeof value !== "string") {
+    return INVALID;
+  }
+  const trimmed = value.trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const seconds = Number(trimmed);
+    return seconds > 0 ? new Date(seconds * 1000).toISOString() : null;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? INVALID : new Date(parsed).toISOString();
+}
+
+function timestamps<K extends string>(r: Record<string, unknown>, keys: readonly K[]): Record<K, string | null> | null {
+  const out = {} as Record<K, string | null>;
+  for (const key of keys) {
+    const normalized = normalizeTimestamp(r[key]);
+    if (normalized === INVALID) {
+      return null;
+    }
+    out[key] = normalized;
+  }
+  return out;
 }
 
 /**
@@ -66,23 +117,18 @@ export function parseAdSchedule(raw: unknown): AdSchedule | null {
     return null;
   }
   const r = raw as Record<string, unknown>;
-  if (
-    !isIsoOrNull(r.nextAdAt) ||
-    !isIsoOrNull(r.lastAdAt) ||
-    !isIsoOrNull(r.snoozeRefreshAt) ||
-    !isCount(r.durationSeconds) ||
-    !isCount(r.prerollFreeSeconds) ||
-    !isCount(r.snoozeCount)
-  ) {
+  const times = timestamps(r, ["nextAdAt", "lastAdAt", "snoozeRefreshAt", "serverNow"] as const);
+  if (!times || !isCount(r.durationSeconds) || !isCount(r.prerollFreeSeconds) || !isCount(r.snoozeCount)) {
     return null;
   }
   return {
-    nextAdAt: r.nextAdAt,
-    lastAdAt: r.lastAdAt,
+    nextAdAt: times.nextAdAt,
+    lastAdAt: times.lastAdAt,
     durationSeconds: r.durationSeconds,
     prerollFreeSeconds: r.prerollFreeSeconds,
     snoozeCount: r.snoozeCount,
-    snoozeRefreshAt: r.snoozeRefreshAt,
+    snoozeRefreshAt: times.snoozeRefreshAt,
+    serverNow: times.serverNow,
   };
 }
 
@@ -91,8 +137,31 @@ export function parseAdSnoozeResult(raw: unknown): AdSnoozeResult | null {
     return null;
   }
   const r = raw as Record<string, unknown>;
-  if (!isCount(r.snoozeCount) || !isIsoOrNull(r.snoozeRefreshAt) || !isIsoOrNull(r.nextAdAt)) {
+  const times = timestamps(r, ["nextAdAt", "snoozeRefreshAt", "serverNow"] as const);
+  if (!times || !isCount(r.snoozeCount)) {
     return null;
   }
-  return { snoozeCount: r.snoozeCount, snoozeRefreshAt: r.snoozeRefreshAt, nextAdAt: r.nextAdAt };
+  return {
+    snoozeCount: r.snoozeCount,
+    snoozeRefreshAt: times.snoozeRefreshAt,
+    nextAdAt: times.nextAdAt,
+    serverNow: times.serverNow,
+  };
+}
+
+/**
+ * Moves an engine timestamp onto the local clock. The engine's clock and the
+ * browser's can disagree by more than a countdown can hide, so a time is kept
+ * as its distance from the engine's `serverNow`, anchored at the moment the
+ * answer arrived. Without `serverNow` the time is taken as it is.
+ */
+export function toLocalTime(iso: string | null, serverNow: string | null, receivedAt: number): number | null {
+  if (iso === null) {
+    return null;
+  }
+  const at = Date.parse(iso);
+  if (serverNow === null) {
+    return at;
+  }
+  return receivedAt + (at - Date.parse(serverNow));
 }

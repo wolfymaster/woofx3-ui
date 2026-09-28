@@ -15,10 +15,13 @@ import {
   type AdBreakView,
   type AdScheduleFetch,
   adBreakView,
+  applySnooze,
+  countdownExpired,
   formatAgo,
   formatCountdown,
   type RunningAd,
   runningAdFromBegin,
+  scheduleFetch,
 } from "@/lib/ad-break-view";
 import { $nowPerSecond } from "@/lib/now";
 import { transport } from "@/lib/transport";
@@ -47,6 +50,10 @@ export function AdBreaksWidget() {
   const [snoozing, setSnoozing] = useState(false);
   const [snoozeError, setSnoozeError] = useState<string | null>(null);
   const loaded = useRef(false);
+  // Only the newest schedule request may land: an answer started before a
+  // snooze, or before the widget went inactive, would put back what is stale.
+  const latestRequest = useRef(0);
+  const previousView = useRef<AdBreakView | null>(null);
 
   const live = liveState === undefined || linksLoading ? undefined : liveState?.isLive === true;
   const scopeGranted = !!twitchLink && AD_SCOPES.every((scope) => twitchLink.scopes.includes(scope));
@@ -56,14 +63,19 @@ export function AdBreaksWidget() {
     if (!instanceId) {
       return;
     }
+    latestRequest.current += 1;
+    const request = latestRequest.current;
     getSchedule({ instanceId })
       .then((result) => {
+        if (request !== latestRequest.current) {
+          return;
+        }
         loaded.current = true;
-        setFetchState({ status: "ok", result, fetchedAt: Date.now() });
+        setFetchState(scheduleFetch(result, Date.now()));
       })
       .catch((err: unknown) => {
         // A failed poll keeps the last schedule; only a failed first read is shown.
-        if (!loaded.current) {
+        if (request === latestRequest.current && !loaded.current) {
           setFetchState({ status: "error", message: actionErrorMessage(err) });
         }
       });
@@ -71,6 +83,7 @@ export function AdBreaksWidget() {
 
   useEffect(() => {
     if (!active) {
+      latestRequest.current += 1;
       loaded.current = false;
       setFetchState({ status: "loading" });
       setRunning(null);
@@ -104,12 +117,9 @@ export function AdBreaksWidget() {
     setSnoozeError(null);
     try {
       const result = await snoozeNextAd({ instanceId });
-      setFetchState((current) => {
-        if (current.status !== "ok" || current.result.state !== "ok") {
-          return current;
-        }
-        return { ...current, result: { state: "ok", schedule: { ...current.result.schedule, ...result } } };
-      });
+      latestRequest.current += 1;
+      const receivedAt = Date.now();
+      setFetchState((current) => applySnooze(current, result, receivedAt));
     } catch (err) {
       setSnoozeError(actionErrorMessage(err));
     } finally {
@@ -118,6 +128,15 @@ export function AdBreaksWidget() {
   };
 
   const view = adBreakView({ live, scopeGranted, fetch: fetchState, running, now });
+
+  // Runs after every render (the view is a new object each tick), comparing
+  // against the last committed view rather than one from a discarded render.
+  useEffect(() => {
+    if (countdownExpired(previousView.current, view)) {
+      refresh();
+    }
+    previousView.current = view;
+  }, [view, refresh]);
 
   return (
     <div className="flex h-full flex-col gap-3 p-4" data-testid="ad-breaks-widget">

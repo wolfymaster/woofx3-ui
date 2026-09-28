@@ -530,10 +530,14 @@ until the shared contract carries them.
 
 Twitch pushes nothing to the browser about the schedule, and a snooze from
 Twitch's own dashboard changes it, so the widget polls every 60 seconds while
-visible and live. When the engine forwards `channel.ad_break.begin` / `.end` /
-`.upcoming` over the stream-event session, the running state starts at once
-and the schedule refreshes after each ad; without them a last ad still inside
-its length is read as running. Every countdown ticks off the shared
+visible and live, and again whenever a countdown reaches zero. When the
+engine forwards the ad events over the stream-event session (`begin` from
+Twitch EventSub; `upcoming` and `end` synthesized by the engine, since Twitch
+sends neither), the running state starts at once and the schedule refreshes
+after each ad; without them a last ad still inside its length is read as
+running. Engine timestamps are placed on the browser's clock through the
+answer's `serverNow`, so a skewed clock on either side does not move the
+countdowns. Every countdown ticks off the shared
 `$nowPerSecond` ticker. Which state shows is decided in
 `client/src/lib/ad-break-view.ts`, pure and tested: offline, then a missing
 scope, then a running ad, then what the engine answered.
