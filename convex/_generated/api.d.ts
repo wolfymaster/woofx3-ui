@@ -97,7 +97,6 @@ import type * as moduleResourceInstances from "../moduleResourceInstances.js";
 import type * as moduleSettingsActions from "../moduleSettingsActions.js";
 import type * as moduleWebhook from "../moduleWebhook.js";
 import type * as moduleWidgets from "../moduleWidgets.js";
-import type * as obsCommands from "../obsCommands.js";
 import type * as obsSceneConfigs from "../obsSceneConfigs.js";
 import type * as pins from "../pins.js";
 import type * as platformRealtime from "../platformRealtime.js";
@@ -229,7 +228,6 @@ declare const fullApi: ApiFromModules<{
   moduleSettingsActions: typeof moduleSettingsActions;
   moduleWebhook: typeof moduleWebhook;
   moduleWidgets: typeof moduleWidgets;
-  obsCommands: typeof obsCommands;
   obsSceneConfigs: typeof obsSceneConfigs;
   pins: typeof pins;
   platformRealtime: typeof platformRealtime;

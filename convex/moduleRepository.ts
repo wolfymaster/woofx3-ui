@@ -355,13 +355,14 @@ export const getDeliveryData = internalQuery({
 export const resolveModuleForDetail = internalQuery({
   args: { instanceId: v.id("instances"), moduleId: v.string() },
   handler: async (ctx, { instanceId, moduleId }) => {
-    try {
-      const byId = await ctx.db.get(moduleId as Id<"moduleRepository">);
+    // `moduleId` is either a repository row id or a marketplace id; only the
+    // first normalizes.
+    const rowId = ctx.db.normalizeId("moduleRepository", moduleId);
+    if (rowId) {
+      const byId = await ctx.db.get(rowId);
       if (byId && byId.instanceId === instanceId) {
         return byId;
       }
-    } catch {
-      // not a valid _id format — fall through to prefix match
     }
 
     const all = await ctx.db

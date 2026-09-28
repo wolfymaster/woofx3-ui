@@ -187,8 +187,8 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 
 ### Backend (`convex/`)
 - Auth via `convex/auth.ts` + `convex/auth.config.ts` (self-issued JWTs from CONVEX_SITE_URL)
-- HTTP API surface in `convex/http.ts`: Twitch OAuth flow, alert webhook ingestion, browser source claim/alerts, OBS command polling, widget asset serving
-- Alert system: woofx3 POSTs to `/api/webhooks/woofx3/alerts` → alerts table → browser source polls pending alerts → renders overlays
+- HTTP API surface in `convex/http.ts`: Twitch OAuth flow, engine callbacks (`/api/webhooks/woofx3`), browser source redirects, widget asset serving
+- Alert system: the engine queues and plays alerts in its own overlay; the `/browser-source/{key}` route sends OBS there, and the engine reports each alert's lifecycle as `alert.*` callbacks mirrored into `engineAlerts`
 - Storage adapters in `convex/lib/storage/` — Convex native, R2, or local file storage per instance config
 
 ### Shared (`shared/api.ts`)
