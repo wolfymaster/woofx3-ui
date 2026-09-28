@@ -98,13 +98,45 @@ export function isAudioInputKind(inputKind: string): boolean {
   return AUDIO_INPUT_KINDS.has(inputKind) || inputKind.includes("audio");
 }
 
-export interface ObsNameGroup {
-  heading: string;
-  names: string[];
+/** One name offered by the picker; `group` is the OBS group it sits in, if any. */
+export interface ObsNameOption {
+  name: string;
+  group: string | null;
 }
 
-function unique(names: string[]): string[] {
-  return Array.from(new Set(names));
+export interface ObsNameGroup {
+  heading: string;
+  options: ObsNameOption[];
+}
+
+/** How the picker shows an option: a source inside a group reads "Group › Source". */
+export function obsNameOptionLabel(option: ObsNameOption): string {
+  return option.group === null ? option.name : `${option.group} › ${option.name}`;
+}
+
+/** Drops repeats of a name, keeping the first; OBS's order is kept. */
+function uniqueByName(options: ObsNameOption[]): ObsNameOption[] {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    if (seen.has(option.name)) {
+      return false;
+    }
+    seen.add(option.name);
+    return true;
+  });
+}
+
+function sceneOptions(scene: ObsScene): ObsNameOption[] {
+  return uniqueByName(scene.sources.map((item) => ({ name: item.name, group: item.group })));
+}
+
+/**
+ * Whether a scene field's value is blank. The engine hands names to OBS
+ * untouched, so only the empty string means "no scene" (whichever scene is live
+ * when the step runs); a value of spaces is a name OBS will not have.
+ */
+function isBlankScene(sceneValue: unknown): boolean {
+  return sceneValue === undefined || sceneValue === null || sceneValue === "";
 }
 
 /**
@@ -113,14 +145,10 @@ function unique(names: string[]): string[] {
  * is live when the step runs, and a variable is only known then).
  */
 export function scopedScene(scenes: readonly ObsScene[], sceneValue: unknown): ObsScene | null {
-  if (typeof sceneValue !== "string") {
+  if (typeof sceneValue !== "string" || sceneValue === "" || isObsNameExpression(sceneValue)) {
     return null;
   }
-  const name = sceneValue.trim();
-  if (name === "" || isObsNameExpression(name)) {
-    return null;
-  }
-  return scenes.find((scene) => scene.name === name) ?? null;
+  return scenes.find((scene) => scene.name === sceneValue) ?? null;
 }
 
 /**
@@ -133,45 +161,52 @@ export function obsNameGroups(
   values: Readonly<Record<string, unknown>>
 ): ObsNameGroup[] {
   if (source.kind === "obsScenes") {
-    return scenes.length > 0 ? [{ heading: "Scenes", names: unique(scenes.map((scene) => scene.name)) }] : [];
+    const options = uniqueByName(scenes.map((scene) => ({ name: scene.name, group: null })));
+    return options.length > 0 ? [{ heading: "Scenes", options }] : [];
   }
 
   if (source.kind === "obsSources") {
     const scene = scopedScene(scenes, values[source.sceneField]);
     const shown = scene ? [scene] : scenes;
     return shown
-      .map((s) => ({ heading: s.name, names: unique(s.sources.map((item) => item.name)) }))
-      .filter((group) => group.names.length > 0);
+      .map((s) => ({ heading: s.name, options: sceneOptions(s) }))
+      .filter((group) => group.options.length > 0);
   }
 
-  const audio: string[] = [];
-  const other: string[] = [];
+  const audio: ObsNameOption[] = [];
+  const other: ObsNameOption[] = [];
   for (const scene of scenes) {
     for (const item of scene.sources) {
       // A null kind is a nested scene or group, which has no audio of its own.
       if (item.inputKind === null) {
         continue;
       }
-      (isAudioInputKind(item.inputKind) ? audio : other).push(item.name);
+      // An input's name is global in OBS, so its group in one scene says nothing useful here.
+      (isAudioInputKind(item.inputKind) ? audio : other).push({ name: item.name, group: null });
     }
   }
-  const audioNames = unique(audio);
-  const otherNames = unique(other).filter((name) => !audioNames.includes(name));
+  const audioOptions = uniqueByName(audio);
+  const audioNames = new Set(audioOptions.map((option) => option.name));
+  const otherOptions = uniqueByName(other).filter((option) => !audioNames.has(option.name));
   const groups: ObsNameGroup[] = [];
-  if (audioNames.length > 0) {
-    groups.push({ heading: "Audio inputs", names: audioNames });
+  if (audioOptions.length > 0) {
+    groups.push({ heading: "Audio inputs", options: audioOptions });
   }
-  if (otherNames.length > 0) {
-    groups.push({ heading: audioNames.length > 0 ? "Other inputs" : "Inputs", names: otherNames });
+  if (otherOptions.length > 0) {
+    groups.push({ heading: audioOptions.length > 0 ? "Other inputs" : "Inputs", options: otherOptions });
   }
   return groups;
 }
 
+function knownNames(groups: readonly ObsNameGroup[]): string[] {
+  return groups.flatMap((group) => group.options.map((option) => option.name));
+}
+
 /**
  * Why a typed OBS name will not be found when the step runs, or null when it
- * will be (or cannot be judged yet: blank, or built from a variable). OBS
- * matches names case-sensitively, so a name differing only in case is called
- * out with the name OBS has.
+ * will be (or cannot be judged yet: empty, or built from a variable). OBS
+ * matches names exactly, so a name differing only in case, or carrying spaces at
+ * either end, is called out with the name OBS has.
  */
 export function obsNameMismatch(
   value: unknown,
@@ -179,33 +214,62 @@ export function obsNameMismatch(
   source: ObsNameSource,
   values: Readonly<Record<string, unknown>>
 ): string | null {
-  if (typeof value !== "string") {
+  if (typeof value !== "string" || value === "" || isObsNameExpression(value)) {
     return null;
   }
-  const name = value.trim();
-  if (name === "" || isObsNameExpression(name)) {
+  const known = knownNames(obsNameGroups(scenes, source, values));
+  if (known.includes(value)) {
     return null;
   }
-  const known = obsNameGroups(scenes, source, values).flatMap((group) => group.names);
-  if (known.includes(name)) {
-    return null;
+  const trimmed = value.trim();
+  if (trimmed !== value) {
+    if (known.includes(trimmed)) {
+      return `"${value}" has a space at the start or end, so it will not match OBS's "${trimmed}".`;
+    }
+    return `"${value}" has a space at the start or end. OBS matches names exactly, spaces included.`;
   }
-  const lower = name.toLowerCase();
+  const lower = value.toLowerCase();
   const caseOnly = known.find((candidate) => candidate.toLowerCase() === lower);
   if (caseOnly !== undefined) {
-    return `OBS calls this "${caseOnly}". Names are case-sensitive, so "${name}" will not match.`;
+    return `OBS calls this "${caseOnly}". Names are case-sensitive, so "${value}" will not match.`;
   }
 
   if (source.kind === "obsScenes") {
-    return `OBS has no scene named "${name}".`;
+    return `OBS has no scene named "${value}".`;
   }
   if (source.kind === "obsSources") {
     const scene = scopedScene(scenes, values[source.sceneField]);
     return scene
-      ? `Scene "${scene.name}" has no source named "${name}".`
-      : `No OBS scene has a source named "${name}".`;
+      ? `Scene "${scene.name}" has no source named "${value}".`
+      : `No OBS scene has a source named "${value}".`;
   }
   // Global audio devices set in OBS's audio settings (Desktop Audio, Mic/Aux)
   // belong to no scene, so the listing cannot show them.
-  return `No OBS scene has an input named "${name}". Global audio devices such as Desktop Audio are not listed, so a name from OBS's audio mixer may still work.`;
+  return `No OBS scene has an input named "${value}". Global audio devices such as Desktop Audio are not listed, so a name from OBS's audio mixer may still work.`;
+}
+
+/**
+ * For a source named with the scene left blank: the step acts on whichever
+ * scene is live when it runs, so a source that only some scenes hold fails in
+ * the others. Null when the scene is set, or the source is in every scene, or
+ * is not in any (obsNameMismatch speaks for that).
+ */
+export function liveSceneNote(
+  value: unknown,
+  scenes: readonly ObsScene[],
+  source: ObsNameSource,
+  values: Readonly<Record<string, unknown>>
+): string | null {
+  if (source.kind !== "obsSources" || !isBlankScene(values[source.sceneField])) {
+    return null;
+  }
+  if (typeof value !== "string" || value === "" || isObsNameExpression(value)) {
+    return null;
+  }
+  const holding = scenes.filter((scene) => scene.sources.some((item) => item.name === value));
+  if (holding.length === 0 || holding.length === scenes.length) {
+    return null;
+  }
+  const names = holding.map((scene) => `"${scene.name}"`).join(", ");
+  return `A blank scene means whichever scene is live; "${value}" is only in ${names}.`;
 }

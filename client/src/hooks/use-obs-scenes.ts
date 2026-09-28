@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ObsSceneListing } from "@convex/lib/obsScenes";
 import { useAction } from "convex/react";
+import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 /**
@@ -42,7 +43,25 @@ function subscribe(instanceId: string, listener: () => void): () => void {
   set.add(listener);
   return () => {
     set.delete(listener);
+    if (set.size === 0) {
+      listeners.delete(instanceId);
+    }
   };
+}
+
+/**
+ * The message for a failed request. `listScenes` throws its expected failures as
+ * ConvexError; anything else reaches production as a masked "Server Error", so
+ * it gets a short message of its own rather than that.
+ */
+function requestErrorMessage(err: unknown): string {
+  if (err instanceof ConvexError) {
+    const data = err.data as { message?: unknown } | undefined;
+    if (typeof data?.message === "string") {
+      return data.message;
+    }
+  }
+  return "the request failed";
 }
 
 function load(instanceId: string, fetchListing: () => Promise<ObsSceneListing>, force: boolean): void {
@@ -60,8 +79,7 @@ function load(instanceId: string, fetchListing: () => Promise<ObsSceneListing>, 
       setEntry(instanceId, { listing, fetchedAt: Date.now(), loading: false, error: null });
     },
     (err: unknown) => {
-      const message = err instanceof Error ? err.message : String(err);
-      setEntry(instanceId, { ...current, loading: false, error: message });
+      setEntry(instanceId, { ...current, loading: false, error: requestErrorMessage(err) });
     }
   );
 }
@@ -69,6 +87,8 @@ function load(instanceId: string, fetchListing: () => Promise<ObsSceneListing>, 
 export interface ObsScenesState extends ObsListingEntry {
   /** Ask OBS again now, ignoring the cached listing. */
   refresh: () => void;
+  /** Ask OBS again only when the cached listing is older than the TTL. */
+  revalidate: () => void;
 }
 
 /** OBS's scenes for the instance, as the engine last reported them. */
@@ -88,11 +108,15 @@ export function useObsScenes(instanceId: Id<"instances"> | undefined): ObsScenes
     return listScenes({ instanceId });
   }, [instanceId, listScenes]);
 
-  useEffect(() => {
+  const revalidate = useCallback(() => {
     if (instanceId) {
       load(instanceId, fetchListing, false);
     }
   }, [instanceId, fetchListing]);
+
+  useEffect(() => {
+    revalidate();
+  }, [revalidate]);
 
   const refresh = useCallback(() => {
     if (instanceId) {
@@ -100,5 +124,5 @@ export function useObsScenes(instanceId: Id<"instances"> | undefined): ObsScenes
     }
   }, [instanceId, fetchListing]);
 
-  return { ...entry, refresh };
+  return { ...entry, refresh, revalidate };
 }

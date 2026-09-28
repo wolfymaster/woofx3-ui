@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
@@ -17,21 +17,22 @@ interface ObsEngineApi extends EngineApi {
  *
  * Anything short of an answer from the engine is a listing marked unavailable
  * rather than a throw, because the picker falls back to a typed name and has
- * to say why. Only a caller who may not see the instance gets an error.
+ * to say why. Only a caller who may not see the instance gets an error, a
+ * ConvexError so its message survives production's masking of plain errors.
  */
 export const listScenes = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<ObsSceneListing> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      throw new Error("Not authenticated");
+      throw new ConvexError({ message: "Sign in again to list OBS scenes." });
     }
     const isMember = await ctx.runQuery(internal.platformRealtime.checkMembership, {
       instanceId: args.instanceId,
       userId,
     });
     if (!isMember) {
-      throw new Error("Not a member of this instance");
+      throw new ConvexError({ message: "You do not have access to this instance." });
     }
     const bundle = await ctx.runQuery(internal.engineSyncInternal.getInstanceBundle, {
       instanceId: args.instanceId,
