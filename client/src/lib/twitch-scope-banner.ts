@@ -14,12 +14,34 @@ export function twitchReconnectMessage(health: TwitchScopeHealth): string | null
 
 const DISMISSED_PREFIX = "woofx3:twitch-reconnect-dismissed:";
 
+type ReadableStorage = Pick<Storage, "getItem"> | null;
+type WritableStorage = Pick<Storage, "setItem"> | null;
+
+/**
+ * The browser's session storage, or null where reading the property itself
+ * throws (site data blocked). The banner renders in the shell on every page,
+ * so a throw here would take the whole shell down with it.
+ */
+export function sessionStorageOrNull(): Storage | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Whether the creator already dismissed this exact gap this session. Stored
  * per instance against the health key, so a different gap shows again.
- * Storage that throws (private mode, disabled) reads as not dismissed.
+ * Storage that is missing or throws reads as not dismissed.
  */
-export function isReconnectDismissed(storage: Pick<Storage, "getItem">, instanceId: string, key: string): boolean {
+export function isReconnectDismissed(storage: ReadableStorage, instanceId: string, key: string): boolean {
+  if (!storage) {
+    return false;
+  }
   try {
     return storage.getItem(DISMISSED_PREFIX + instanceId) === key;
   } catch {
@@ -27,10 +49,19 @@ export function isReconnectDismissed(storage: Pick<Storage, "getItem">, instance
   }
 }
 
-export function dismissReconnect(storage: Pick<Storage, "setItem">, instanceId: string, key: string): void {
+export function dismissReconnect(storage: WritableStorage, instanceId: string, key: string): void {
+  if (!storage) {
+    return;
+  }
   try {
     storage.setItem(DISMISSED_PREFIX + instanceId, key);
   } catch {
     // Dismissal then lasts only as long as the component's own state.
   }
+}
+
+/** Where the OAuth flow should bring the creator back to: the current path, query string included. */
+export function reconnectReturnPath(path: string, search: string): string {
+  const query = search.startsWith("?") ? search.slice(1) : search;
+  return query ? `${path}?${query}` : path;
 }

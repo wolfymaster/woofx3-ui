@@ -26,7 +26,14 @@ export default function AdminIntegrations() {
             twitchLink={twitchLink}
             isLoading={twitchLoading}
           />
-          {instance && <TwitchScopeStatus instanceId={instance._id} health={health} />}
+          {instance && twitchLink && (
+            <TwitchScopeStatus
+              instanceId={instance._id}
+              health={health}
+              platformUsername={twitchLink.platformUsername}
+              canRelink={twitchLink.viewerCanRelink}
+            />
+          )}
           <div className="flex items-center justify-between p-4 rounded-lg border">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded bg-red-600 flex items-center justify-center text-white font-bold">
