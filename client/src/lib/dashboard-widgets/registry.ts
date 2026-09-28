@@ -1,6 +1,7 @@
 import {
   Activity,
   BellRing,
+  Clapperboard,
   Grid3x3,
   History,
   ListOrdered,
@@ -25,6 +26,7 @@ import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
 import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
 import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
+import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
 import { StreamStatusWidget } from "@/components/dashboard/widgets/stream-status";
@@ -61,6 +63,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: MessagesSquare,
     category: "stream",
     component: ActivityPanelWidget,
+  },
+  {
+    type: "stream-info",
+    label: "Stream Info",
+    description: "Edit your title, category and tags, switch between saved presets, and drop stream markers.",
+    icon: Clapperboard,
+    category: "stream",
+    component: StreamInfoWidget,
   },
   {
     type: "stream-preview",
