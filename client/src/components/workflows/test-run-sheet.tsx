@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { dryRunWouldDo, ENGINE_SUPPORTS_TEST_RUN_OPTIONS } from "@convex/lib/engineTestRun";
+import { dryRunWouldDo } from "@convex/lib/engineTestRun";
 import { TEST_RUN_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -28,13 +29,25 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useInstance } from "@/hooks/use-instance";
+import {
+  rememberOptionsUnsupported,
+  type TestRunOptionsState,
+  useTestRunOptions,
+} from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import type { TestEventOutcome } from "@/lib/test-event-outcome";
 import { cn } from "@/lib/utils";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import { workflowRunPath } from "@/lib/workflow-run-route";
 import { buildTimeline, formatDuration } from "@/lib/workflow-run-timeline";
-import { isStickyOutcome, resolveTestRunOutcome, sampleEventRefusal, testRunProgress } from "@/lib/workflow-test-run";
+import {
+  describeUnmetCondition,
+  isStickyOutcome,
+  presetPlatform,
+  resolveTestRunOutcome,
+  sampleEventRefusal,
+  testRunProgress,
+} from "@/lib/workflow-test-run";
 
 /**
  * Two ways to start a test, because neither alone does everything.
@@ -74,12 +87,16 @@ export function TestRunSheet({
   preset,
   otherWorkflows,
 }: TestRunSheetProps) {
-  // Null until someone picks a tab, so the default follows the catalog loading
-  // in: the sample event once the trigger's form can be built.
+  const { instance } = useInstance();
+  const optionsState = useTestRunOptions(instance?._id);
+  const takesOptions = optionsState === "supported";
+  // Null until someone picks a tab, so the default follows what loads in:
+  // this workflow alone once the engine can hand it the sample, otherwise the
+  // sample event, which is then the only way to test with event data.
   const [pickedMode, setPickedMode] = useState<TestMode | null>(null);
   const refusal = sampleEventRefusal(preset?.event);
   const samplePreset = preset && !refusal ? preset : null;
-  const activeMode: TestMode = samplePreset ? (pickedMode ?? "event") : "direct";
+  const activeMode: TestMode = samplePreset ? (pickedMode ?? (takesOptions ? "direct" : "event")) : "direct";
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
@@ -106,18 +123,19 @@ export function TestRunSheet({
             {samplePreset && (
               <Tabs value={activeMode} onValueChange={(value) => setPickedMode(value as TestMode)}>
                 <TabsList className="w-full">
-                  <TabsTrigger value="event" className="flex-1" data-testid="tab-test-run-event">
-                    Sample event
-                  </TabsTrigger>
                   <TabsTrigger value="direct" className="flex-1" data-testid="tab-test-run-direct">
                     This workflow only
+                  </TabsTrigger>
+                  <TabsTrigger value="event" className="flex-1" data-testid="tab-test-run-event">
+                    Publish sample event
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
             )}
             {refusal && (
               <p className="text-xs text-muted-foreground" data-testid="test-run-sample-refused">
-                {refusal} A sample event is not offered for this trigger; the test below runs this workflow alone.
+                {refusal} Publishing a sample event is not offered for this trigger; the test below runs this workflow
+                alone.
               </p>
             )}
 
@@ -129,7 +147,7 @@ export function TestRunSheet({
                 otherWorkflows={otherWorkflows}
               />
             ) : (
-              <DirectTest engineWorkflowId={engineWorkflowId} hasEventTrigger={preset !== null} />
+              <DirectTest engineWorkflowId={engineWorkflowId} preset={preset} optionsState={optionsState} />
             )}
           </>
         )}
@@ -257,103 +275,234 @@ function SampleEventTest({
   );
 }
 
-function DirectTest({ engineWorkflowId, hasEventTrigger }: { engineWorkflowId: string; hasEventTrigger: boolean }) {
+/** One "This workflow only" run: what was asked, and how the engine answered. */
+interface DirectAttempt {
+  triggerData: Record<string, unknown> | undefined;
+  dryRun: boolean;
+  result: FunctionReturnType<typeof api.workflowActions.trigger>;
+}
+
+function DirectTest({
+  engineWorkflowId,
+  preset,
+  optionsState,
+}: {
+  engineWorkflowId: string;
+  preset: TriggerPreset | null;
+  optionsState: TestRunOptionsState;
+}) {
   const { instance } = useInstance();
   const { toast } = useToast();
   const trigger = useAction(api.workflowActions.trigger);
+  const takesOptions = optionsState === "supported";
   const [busy, setBusy] = useState(false);
-  const [triggerId, setTriggerId] = useState<string | null>(null);
-  // The person's choice, kept for when the engine can honour it. Until then
-  // the switch shows off: showing it on would promise a run that does nothing
-  // while the engine performs every step for real.
+  const [attempt, setAttempt] = useState<DirectAttempt | null>(null);
+  // The person's choice. The switch shows it only while the engine can honour
+  // it: showing it on for an engine that cannot would promise a run that does
+  // nothing while every step happens for real.
   const [wantsDryRun, setWantsDryRun] = useState(true);
-  const dryRun = ENGINE_SUPPORTS_TEST_RUN_OPTIONS && wantsDryRun;
+  const dryRun = takesOptions && wantsDryRun;
+  const withSample = takesOptions && preset !== null;
 
-  const run = async () => {
+  const run = async (
+    triggerData: Record<string, unknown> | undefined,
+    skipConditions: boolean
+  ): Promise<string | null> => {
     if (!instance) {
-      return;
+      return null;
     }
     setBusy(true);
-    setTriggerId(null);
+    setAttempt(null);
     try {
       const result = await trigger({
         instanceId: instance._id,
         workflowNameOrId: engineWorkflowId,
         origin: TEST_RUN_ORIGIN,
+        options: takesOptions
+          ? {
+              triggerData,
+              platform: triggerData && preset ? presetPlatform(preset) : undefined,
+              skipConditions: triggerData ? skipConditions : undefined,
+              dryRun: dryRun || undefined,
+            }
+          : undefined,
       });
-      setTriggerId(result.triggerId);
+      if (result.optionsIgnored) {
+        rememberOptionsUnsupported(instance._id);
+      }
+      setAttempt({ triggerData, dryRun, result });
+      return result.triggerId;
     } catch (err) {
       toast({
         variant: "destructive",
         title: "Test run could not be started",
         description: err instanceof Error ? err.message : String(err),
       });
+      return null;
     } finally {
       setBusy(false);
     }
   };
 
-  return (
-    <div className="flex flex-1 min-h-0 flex-col">
-      <div className="flex-1 overflow-y-auto space-y-3 text-xs text-muted-foreground">
-        <p>Starts this workflow alone, right now. No other workflow runs.</p>
-        {hasEventTrigger && (
+  const outcome = attempt ? (
+    <DirectOutcome
+      key={attempt.result.triggerId}
+      attempt={attempt}
+      engineWorkflowId={engineWorkflowId}
+      busy={busy}
+      onRunAnyway={() => void run(attempt.triggerData, true)}
+    />
+  ) : null;
+
+  const settings = (
+    <div className="space-y-3 text-xs text-muted-foreground">
+      <p>Starts this workflow alone, right now. No other workflow runs.</p>
+      {withSample ? (
+        <p>
+          The fields below become its <span className="font-mono">trigger.data</span>, and its trigger conditions are
+          checked against them.
+        </p>
+      ) : (
+        preset !== null && (
           <p>
             Its trigger conditions are skipped, and it receives no sample event: steps that read{" "}
             <span className="font-mono">trigger.data</span> get empty values.
+            {optionsState === "unsupported" && " Sample data needs the engine update that adds it."}
           </p>
-        )}
-        {!dryRun && (
-          <Alert
-            className="border-amber-500/40 text-amber-600 dark:text-amber-400"
-            data-testid="test-run-direct-warning"
-          >
-            <AlertTriangle className="h-4 w-4 !text-amber-500" />
-            <AlertTitle>Its actions happen for real</AlertTitle>
-            <AlertDescription className="text-xs text-foreground/80">
-              Chat messages are sent, alerts play on your overlays, and every other step does what it does live.
-            </AlertDescription>
-          </Alert>
-        )}
-        <div className="flex items-start justify-between gap-4 rounded-md border p-3">
-          <div className="space-y-0.5">
-            <Label htmlFor="test-run-dry-run" className="text-foreground">
-              Dry run (describe, don't do)
-            </Label>
-            <p>Steps with side effects report what they would do instead of doing it.</p>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {/* Wrapped so the tooltip still opens over a disabled switch, which receives no pointer events. */}
-              <span>
-                <Switch
-                  id="test-run-dry-run"
-                  checked={dryRun}
-                  onCheckedChange={setWantsDryRun}
-                  disabled={!ENGINE_SUPPORTS_TEST_RUN_OPTIONS}
-                  data-testid="switch-test-run-dry-run"
-                />
-              </span>
-            </TooltipTrigger>
-            {!ENGINE_SUPPORTS_TEST_RUN_OPTIONS && <TooltipContent>Needs an engine update</TooltipContent>}
-          </Tooltip>
+        )
+      )}
+      {!dryRun && (
+        <Alert className="border-amber-500/40 text-amber-600 dark:text-amber-400" data-testid="test-run-direct-warning">
+          <AlertTriangle className="h-4 w-4 !text-amber-500" />
+          <AlertTitle>Its actions happen for real</AlertTitle>
+          <AlertDescription className="text-xs text-foreground/80">
+            Chat messages are sent, alerts play on your overlays, and every other step does what it does live.
+          </AlertDescription>
+        </Alert>
+      )}
+      <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+        <div className="space-y-0.5">
+          <Label htmlFor="test-run-dry-run" className="text-foreground">
+            Dry run (describe, don't do)
+          </Label>
+          <p>Steps with side effects report what they would do instead of doing it.</p>
         </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {/* Wrapped so the tooltip still opens over a disabled switch, which receives no pointer events. */}
+            <span>
+              <Switch
+                id="test-run-dry-run"
+                checked={dryRun}
+                onCheckedChange={setWantsDryRun}
+                disabled={!takesOptions}
+                data-testid="switch-test-run-dry-run"
+              />
+            </span>
+          </TooltipTrigger>
+          {!takesOptions && <TooltipContent>{DRY_RUN_UNAVAILABLE[optionsState]}</TooltipContent>}
+        </Tooltip>
       </div>
+    </div>
+  );
+
+  if (withSample && preset) {
+    const Form = testEventFormFor(preset);
+    const runner: TestEventRunner = {
+      fire: (_target, payload) => run(payload as Record<string, unknown>, false),
+      // The form's key only says a run was asked for; what the engine said
+      // lives here, and "Run anyway" replaces it without the form knowing.
+      renderOutcome: () => outcome,
+      submitLabel: dryRun ? "Dry run" : "Run now",
+    };
+    return (
+      <>
+        <div className="border-b pb-4">{settings}</div>
+        <Form key={preset.id} preset={preset} runner={runner} />
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-1 min-h-0 flex-col">
+      <div className="flex-1 overflow-y-auto">{settings}</div>
       <div className="mt-4 pt-4 border-t shrink-0 space-y-3">
         <Button
           type="button"
           className="w-full gap-2"
           disabled={busy || !instance}
-          onClick={() => void run()}
+          onClick={() => void run(undefined, false)}
           data-testid="button-test-run-direct"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-          {busy ? "Starting…" : "Run now"}
+          {busy ? "Starting…" : dryRun ? "Dry run" : "Run now"}
         </Button>
-        {triggerId && (
-          <TestRunOutcome key={triggerId} triggerId={triggerId} engineWorkflowId={engineWorkflowId} mode="direct" />
-        )}
+        {outcome}
       </div>
+    </div>
+  );
+}
+
+const DRY_RUN_UNAVAILABLE: Record<Exclude<TestRunOptionsState, "supported">, string> = {
+  checking: "Checking what the engine supports…",
+  unsupported: "Needs an engine update",
+  unknown: "Could not reach the engine to check",
+};
+
+function DirectOutcome({
+  attempt,
+  engineWorkflowId,
+  busy,
+  onRunAnyway,
+}: {
+  attempt: DirectAttempt;
+  engineWorkflowId: string;
+  busy: boolean;
+  onRunAnyway: () => void;
+}) {
+  const { result } = attempt;
+
+  if (result.status === "conditions_not_met") {
+    return (
+      <div className="space-y-2 text-xs" data-testid="test-run-conditions-not-met">
+        <p className="font-medium text-amber-600 dark:text-amber-400">
+          The sample doesn't match this workflow's trigger conditions, so it did not run.
+        </p>
+        <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+          {result.unmetConditions.map((condition) => (
+            <li key={`${condition.field}:${condition.operator}`} className="font-mono">
+              {describeUnmetCondition(condition)}
+            </li>
+          ))}
+        </ul>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={onRunAnyway}
+          data-testid="button-test-run-skip-conditions"
+        >
+          Run anyway (skip conditions)
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {result.optionsIgnored && (
+        <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="test-run-options-ignored">
+          This engine doesn't take sample data or dry runs yet, so the workflow ran without them, for real.
+        </p>
+      )}
+      <TestRunOutcome
+        triggerId={result.triggerId}
+        engineWorkflowId={engineWorkflowId}
+        mode="direct"
+        knownExecutionId={result.executionId}
+        dryRun={result.dryRun}
+      />
     </div>
   );
 }
@@ -370,14 +519,19 @@ function TestRunOutcome({
   triggerId,
   engineWorkflowId,
   mode,
+  knownExecutionId = null,
+  dryRun = false,
 }: {
   triggerId: string;
   engineWorkflowId: string;
   mode: TestMode;
+  /** The run's id when the engine answered with it, ahead of any lifecycle row. */
+  knownExecutionId?: string | null;
+  dryRun?: boolean;
 }) {
   const { instance } = useInstance();
   const [waitElapsed, setWaitElapsed] = useState(false);
-  const [executionId, setExecutionId] = useState<string | null>(null);
+  const [executionId, setExecutionId] = useState<string | null>(knownExecutionId);
   const [sticky, setSticky] = useState<TestEventOutcome | null>(null);
   const rows = useQuery(
     api.transientEvents.listByCorrelation,
@@ -409,9 +563,15 @@ function TestRunOutcome({
   }, [liveOutcome]);
 
   const outcome = resolveTestRunOutcome(liveOutcome, sticky, recorded?.run ?? null);
+  const isDryRun = dryRun || recorded?.run.dryRun === true;
 
   return (
     <div className="space-y-3" data-testid="test-run-outcome">
+      {isDryRun && (
+        <Badge variant="outline" className="text-[10px]" data-testid="test-run-dry-run-badge">
+          Dry run: nothing left the engine
+        </Badge>
+      )}
       {outcome.kind === "waiting" && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />

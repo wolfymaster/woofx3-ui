@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import {
+  describeUnmetCondition,
   isStickyOutcome,
   type ListeningWorkflow,
   otherWorkflowsOnEvent,
+  presetPlatform,
   resolveTestRunOutcome,
   sampleEventRefusal,
   type TransientRunRow,
@@ -164,5 +166,46 @@ describe("resolveTestRunOutcome", () => {
     expect(isStickyOutcome(running)).toBe(true);
     expect(isStickyOutcome(waiting)).toBe(false);
     expect(isStickyOutcome(nothing)).toBe(false);
+  });
+});
+
+describe("presetPlatform", () => {
+  test("reads the platform axis of the taxonomy", () => {
+    expect(presetPlatform({ taxonomy: ["alert.raid", "platform.twitch"] })).toBe("twitch");
+  });
+
+  test("is undefined without one", () => {
+    expect(presetPlatform({ taxonomy: ["alert.raid"] })).toBeUndefined();
+    expect(presetPlatform({})).toBeUndefined();
+    expect(presetPlatform({ taxonomy: ["platform."] })).toBeUndefined();
+  });
+});
+
+describe("describeUnmetCondition", () => {
+  test("reads field, operator and value, quoting strings", () => {
+    expect(describeUnmetCondition({ field: "viewers", operator: "gte", value: 10 })).toBe("viewers gte 10");
+    expect(describeUnmetCondition({ field: "user", operator: "eq", value: "bob" })).toBe('user eq "bob"');
+  });
+
+  test("adds why a condition could not be evaluated", () => {
+    expect(describeUnmetCondition({ field: "x", operator: "near", value: 1, error: "unknown operator" })).toBe(
+      "x near 1 (unknown operator)"
+    );
+  });
+});
+
+describe("testRunProgress on a cancelled run", () => {
+  test("reads the cancelled lifecycle row as a stop, not a failure", () => {
+    const rows: TransientRunRow[] = [
+      { type: "workflow.run.started", status: "progress", data: { workflowId: "wf", executionId: "run-1" } },
+      {
+        type: "workflow.run.cancelled",
+        status: "error",
+        message: "cancelled: from the dashboard",
+        data: { workflowId: "wf", executionId: "run-1" },
+      },
+    ];
+    const outcome = testRunProgress(rows, "wf", false).outcome;
+    expect(outcome.kind === "failed" && outcome.title).toBe("The run was stopped");
   });
 });

@@ -23,13 +23,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useTestRunOptions } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 import { workflowRunPath } from "@/lib/workflow-run-route";
-import { canReplayRun, isActiveRun, runDurationMs, runOriginLabel } from "@/lib/workflow-run-rows";
+import { canReplayRun, describeStopOutcome, isActiveRun, runDurationMs, runOriginLabel } from "@/lib/workflow-run-rows";
 import { formatDuration, toneFor } from "@/lib/workflow-run-timeline";
 
 type RunDoc = FunctionReturnType<typeof api.workflowRuns.listForWorkflow>[number];
@@ -60,6 +61,9 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
   });
   const replay = useAction(api.workflowActions.replay);
   const cancelRun = useAction(api.workflowActions.cancelRun);
+  // Real cancel arrived with the same engine update as test-run options, so
+  // the one probe says which Stop the engine will do.
+  const optionsState = useTestRunOptions(instanceId);
 
   const [now, setNow] = useState(() => Date.now());
   const hasActiveRun = runs?.some(isActiveRun) ?? false;
@@ -93,8 +97,9 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
     }
     setIsCancelling(true);
     try {
-      await cancelRun({ instanceId, engineRunId: cancelTarget.engineRunId });
+      const result = await cancelRun({ instanceId, engineRunId: cancelTarget.engineRunId });
       setCancelTarget(null);
+      toast(describeStopOutcome(result.outcome, result.status));
     } catch (err) {
       toast({
         variant: "destructive",
@@ -157,6 +162,11 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
                           <StatusIcon className={cn("h-3 w-3", style.spin && "animate-spin")} />
                           {run.status}
                         </Badge>
+                        {run.dryRun && (
+                          <Badge variant="outline" className="ml-1.5 text-[10px]" data-testid="badge-dry-run">
+                            Dry run
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground" title={run.startedAt}>
                         {formatTimeAgo(run.startedAt, now)}
@@ -269,8 +279,9 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
           <AlertDialogHeader>
             <AlertDialogTitle>Stop this run?</AlertDialogTitle>
             <AlertDialogDescription>
-              Stopping a run requires the engine test-runs update; on older engines the remaining steps still run, and
-              the run is only marked stopped until it finishes.
+              {optionsState === "supported"
+                ? "The engine stops the run: the step in flight is abandoned, though an effect it already sent stands, and no further step runs."
+                : "Stopping a run requires the engine test-runs update; on older engines the remaining steps still run, and the run is only marked stopped until it finishes."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
