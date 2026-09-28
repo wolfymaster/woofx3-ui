@@ -72,6 +72,17 @@ export const $notifications = atom<
   }>
 >([]);
 
+/**
+ * Whether this tab is on screen. Anything that polls should pause on false:
+ * browsers throttle timers in background tabs but still run them.
+ */
+export const $documentVisible = atom<boolean>(typeof document === "undefined" ? true : !document.hidden);
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    $documentVisible.set(!document.hidden);
+  });
+}
+
 export const $commandPaletteOpen = atom<boolean>(false);
 
 export const $activeWorkflowId = atom<string | null>(null);
