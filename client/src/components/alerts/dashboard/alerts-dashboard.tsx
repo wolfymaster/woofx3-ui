@@ -13,7 +13,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useInstance } from "@/hooks/use-instance";
 import type { AlertMenuSection } from "@/lib/alert-groups";
-import { alertQueueSnapshot } from "@/lib/alert-queue";
 import { isFailureStatus } from "@/lib/alert-status";
 
 /** How many dispatches the feed shows. Enough to cover a busy hour without paging. */
@@ -55,8 +54,6 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
     }
     return names;
   }, [sections]);
-
-  const queue = useMemo(() => alertQueueSnapshot(alerts ?? []), [alerts]);
 
   const shown = useMemo(
     () => (alerts ?? []).filter((alert) => !failuresOnly || isFailureStatus(alert.status)),
@@ -114,7 +111,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
               <h2 className="text-sm font-semibold">Recent alerts</h2>
-              <AlertQueueControls instanceId={instanceId} snapshot={queue} className="ml-auto" />
+              <AlertQueueControls instanceId={instanceId} className="ml-auto" />
               <label className="flex items-center gap-2 text-xs text-muted-foreground" htmlFor="alert-failures-only">
                 <Switch
                   id="alert-failures-only"
