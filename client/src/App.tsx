@@ -1,7 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { ConvexProvider, useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
@@ -20,7 +19,6 @@ import {
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
 import { convexClient as convex } from "./lib/convexClient";
-import { queryClient } from "./lib/queryClient";
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
 const AdminEngine = lazy(() => import("@/pages/admin/engine"));
@@ -53,8 +51,6 @@ const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
 const Timers = lazy(() => import("@/pages/timers"));
 const Workflows = lazy(() => import("@/pages/workflows"));
-
-console.log("url", import.meta.env.VITE_CONVEX_URL);
 
 function SplashScreen() {
   return (
@@ -279,18 +275,14 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <ConvexProvider client={convex}>
-        <ConvexAuthProvider client={convex}>
-          <QueryClientProvider client={queryClient}>
-            <TooltipProvider>
-              <Suspense fallback={<SplashScreen />}>
-                <AppRoutes />
-              </Suspense>
-              <Toaster />
-            </TooltipProvider>
-          </QueryClientProvider>
-        </ConvexAuthProvider>
-      </ConvexProvider>
+      <ConvexAuthProvider client={convex}>
+        <TooltipProvider>
+          <Suspense fallback={<SplashScreen />}>
+            <AppRoutes />
+          </Suspense>
+          <Toaster />
+        </TooltipProvider>
+      </ConvexAuthProvider>
     </ErrorBoundary>
   );
 }
