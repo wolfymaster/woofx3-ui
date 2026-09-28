@@ -20,6 +20,7 @@ import {
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
+import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { widgetCanonicalKey } from "./lib/widgetKey";
@@ -512,7 +513,7 @@ http.route({
     // inside workflow definitions and Convex rejects reserved field names.
     const envelope = payload as CallbackEnvelope;
     const event = escapeDollarKeys(envelope.data) as CallbackEvent;
-    const eventType = event?.type ?? (payload.type as string | undefined) ?? "";
+    const eventType: string = event?.type ?? (payload.type as string | undefined) ?? "";
 
     logger.info("webhook: event received", {
       instanceId: instance._id,
@@ -534,6 +535,21 @@ http.route({
         hasData: !!payload.data,
       });
       return corsJson({ success: true, type: eventType, handled: false });
+    }
+
+    // Handled ahead of the switch because the engine types this repo builds
+    // against may predate SESSION_SUMMARY, so it cannot be a case of the
+    // CallbackEvent union. The body is validated field by field instead.
+    if (eventType === SESSION_SUMMARY_EVENT_TYPE) {
+      const result = await ctx.runMutation(internal.streamSessionSummaries.upsertFromWebhook, {
+        instanceId: instance._id,
+        data: event,
+      });
+      if (result.outcome === "invalid") {
+        logger.warn("webhook: rejected session summary", { instanceId: instance._id, reason: result.reason });
+        return corsJson({ error: `Invalid session summary: ${result.reason}` }, 400);
+      }
+      return corsJson({ success: true, type: eventType, outcome: result.outcome });
     }
 
     switch (event.type) {
