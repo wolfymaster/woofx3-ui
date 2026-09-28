@@ -64,11 +64,11 @@ import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.
 import type * as lib_inboundWebhookPath from "../lib/inboundWebhookPath.js";
 import type * as lib_inboundWebhookRelay from "../lib/inboundWebhookRelay.js";
 import type * as lib_invitationTarget from "../lib/invitationTarget.js";
-import type * as lib_maintenanceClient from "../lib/maintenanceClient.js";
-import type * as lib_maintenanceSignature from "../lib/maintenanceSignature.js";
 import type * as lib_macroExecution from "../lib/macroExecution.js";
 import type * as lib_macroTrigger from "../lib/macroTrigger.js";
 import type * as lib_macroVariables from "../lib/macroVariables.js";
+import type * as lib_maintenanceClient from "../lib/maintenanceClient.js";
+import type * as lib_maintenanceSignature from "../lib/maintenanceSignature.js";
 import type * as lib_moderation from "../lib/moderation.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
@@ -222,11 +222,11 @@ declare const fullApi: ApiFromModules<{
   "lib/inboundWebhookPath": typeof lib_inboundWebhookPath;
   "lib/inboundWebhookRelay": typeof lib_inboundWebhookRelay;
   "lib/invitationTarget": typeof lib_invitationTarget;
-  "lib/maintenanceClient": typeof lib_maintenanceClient;
-  "lib/maintenanceSignature": typeof lib_maintenanceSignature;
   "lib/macroExecution": typeof lib_macroExecution;
   "lib/macroTrigger": typeof lib_macroTrigger;
   "lib/macroVariables": typeof lib_macroVariables;
+  "lib/maintenanceClient": typeof lib_maintenanceClient;
+  "lib/maintenanceSignature": typeof lib_maintenanceSignature;
   "lib/moderation": typeof lib_moderation;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;
   "lib/moduleKey": typeof lib_moduleKey;
