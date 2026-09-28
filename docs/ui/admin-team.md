@@ -1,6 +1,6 @@
 # Admin and team
 
-**Routes:** `/admin/engine`, `/admin/integrations`, `/admin/storage`, `/admin/appearance`, `/team`
+**Routes:** `/admin/engine`, `/admin/integrations`, `/admin/storage`, `/admin/backup`, `/admin/appearance`, `/team`
 **Primary files:** `client/src/pages/admin/*.tsx`, `client/src/pages/team.tsx`
 
 ## Admin (`/admin`)
@@ -10,6 +10,10 @@ Reached from the gear icon in the header's utility cluster. It is a section like
 - **Engine** (`admin/engine.tsx`) — engine URL for the selected instance (persisted on the instance record and mirrored into the `$engineUrl` Nanostore), a connection test via the Convex action `engineHealth.testConnection` (server-side, so no CORS), registration status, `EngineSyncCard`, and the Danger Zone that deletes the instance.
 - **Integrations** (`admin/integrations.tsx`) — `TwitchIntegrationCard` plus placeholder YouTube/Discord cards and an API-keys card. The Twitch OAuth flow returns to `/admin/integrations`.
 - **Storage** (`admin/storage.tsx`) — per-instance storage provider config, via `storage.getConfig` / `storage.setConfig` actions.
+- **Backup** (`admin/backup.tsx`) — export the instance's configuration (workflows, chat commands, command groups, module resources) as a config bundle file, and import one with a preview first. Backed by the engine's `exportConfig` / `previewImport` / `importConfig` (woofx3 `docs/services/config-bundles.md`) through `convex/configBackup.ts`.
+  - Access (`configBackupAccess` in `convex/lib/configBundle.ts`): any instance member may export, since a bundle holds no secrets, tokens, module settings or live values, only configuration every member can already read. Exporting group members and per-user grants (usernames, personal data) and importing are owner/admin only.
+  - The bundle never becomes a Convex value: workflow definitions can carry `$`-prefixed keys Convex rejects. It crosses the boundary as the file's raw text, split by `chunkText` into strings below Convex's 1 MB per-string limit. The actions stay in the default runtime, whose 16 MiB argument limit covers the engine's 5 MiB bundle limit; a `"use node"` action allows only 5 MiB in total.
+  - The browser refuses a file over 5 MiB before reading it; the action checks again. Import re-plans on the engine, so the preview is advisory, and it is best-effort per item: the results table reports each item's outcome.
 - **Appearance** (`admin/appearance.tsx`) — theme mode and color preset through `useTheme`.
 
 The old `/settings` page also had Profile, Notifications, and Security tabs. Those were unwired mockups and were removed; `/settings` and `/settings/:tab` now redirect into `/admin`.
