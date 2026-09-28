@@ -25,6 +25,7 @@ import { useEngineHealth } from "@/hooks/use-engine-health";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
+import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "./command-palette";
@@ -302,6 +303,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const [location] = useLocation();
   const activeSection = findActiveSection(location);
   useSyncEngineTransport();
+  useWorkflowHealthResyncOnReconnect();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
