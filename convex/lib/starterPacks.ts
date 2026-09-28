@@ -118,6 +118,12 @@ export interface StarterWorkflowItem {
     event: string;
     label: string;
     conditions?: StarterCondition[];
+    /**
+     * The event arrived in a later engine release than the rest, so a catalog
+     * without it means the engine needs updating, not that the Twitch module
+     * is missing.
+     */
+    sinceEngineUpdate?: boolean;
   };
   /** `{name}` placeholders the pack's text may use, and the engine expression each stands for. */
   tokens: Record<string, string>;
@@ -160,6 +166,10 @@ export const COMMAND_TOKENS: Record<string, string> = {
 const RAID_TOKENS = {
   raider: "${trigger.data.fromBroadcasterUserName}",
   viewers: "${trigger.data.viewers}",
+};
+
+const AD_BREAK_TOKENS = {
+  seconds: "${trigger.data.secondsUntil}",
 };
 
 const GIFT_TOKENS = {
@@ -561,6 +571,100 @@ export const STARTER_PACKS: readonly StarterPack[] = [
       },
     ],
   },
+  {
+    id: "ad-break-heads-up",
+    name: "Ad break heads-up",
+    why: "A mid-roll ad that lands without warning feels like being cut off. Tell chat an ad is coming so viewers can grab a drink instead of leaving.",
+    note: "Needs Twitch reconnected with ad access. Twitch sends the warning a few minutes before a scheduled ad; ads you start yourself get no warning.",
+    fields: [
+      {
+        id: "adWarningMessage",
+        label: "Chat message",
+        type: "text",
+        maxLength: CHAT_MAX_LENGTH,
+        defaultValue: "Ad break in {seconds}s, grab a drink, we'll be right back!",
+      },
+    ],
+    items: [
+      {
+        kind: "workflow",
+        id: "ad-warning",
+        name: "Ad break warning",
+        description: "Warns chat before a scheduled ad break.",
+        trigger: { event: "channel.ad_break.upcoming", label: "An ad break is coming up", sinceEngineUpdate: true },
+        tokens: AD_BREAK_TOKENS,
+        steps: [
+          {
+            kind: "action",
+            id: "warn-chat",
+            label: "Warn chat",
+            action: STARTER_ACTION_REFS.chatReply,
+            parameters: { message: { field: "adWarningMessage" } },
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "ad-break-scene",
+    name: "Ad break scene",
+    why: "Viewers who sit through an ad come back to whatever the stream was showing. Switch to a holding scene while the ad runs and back when it ends, so nobody returns mid-sentence.",
+    note: "Needs OBS connected to the engine and Twitch reconnected with ad access. It switches back to the main scene below, not to whichever scene was showing before the ad.",
+    fields: [
+      {
+        id: "adScene",
+        label: "Ad break scene",
+        description: "The scene's name exactly as OBS shows it.",
+        type: "text",
+        exact: true,
+        defaultValue: "Ad Break",
+      },
+      {
+        id: "adReturnScene",
+        label: "Main scene",
+        description: "The scene's name exactly as OBS shows it.",
+        type: "text",
+        exact: true,
+        defaultValue: "Main",
+      },
+    ],
+    items: [
+      {
+        kind: "workflow",
+        id: "ad-scene-on",
+        name: "Ad break scene on",
+        description: "Switches OBS to the ad break scene when an ad starts.",
+        trigger: { event: "channel.ad_break.begin", label: "An ad break starts", sinceEngineUpdate: true },
+        tokens: {},
+        steps: [
+          {
+            kind: "action",
+            id: "switch-to-ad-scene",
+            label: "Switch to the ad break scene",
+            action: STARTER_ACTION_REFS.switchScene,
+            parameters: { sceneName: { field: "adScene" } },
+          },
+        ],
+      },
+      {
+        kind: "workflow",
+        id: "ad-scene-off",
+        name: "Ad break scene off",
+        description: "Switches OBS back to the main scene when the ad ends.",
+        trigger: { event: "channel.ad_break.end", label: "An ad break ends", sinceEngineUpdate: true },
+        tokens: {},
+        steps: [
+          {
+            kind: "action",
+            id: "switch-back-from-ad",
+            label: "Switch back to the main scene",
+            action: STARTER_ACTION_REFS.switchScene,
+            parameters: { sceneName: { field: "adReturnScene" } },
+          },
+        ],
+      },
+    ],
+  },
 ];
 
 export function findStarterPack(packId: string): StarterPack | undefined {
@@ -739,14 +843,18 @@ export interface StarterCatalog {
 export interface StarterRequirements {
   /** Trigger events the catalog has no trigger for. */
   triggers: string[];
+  /** Whether any of `triggers` is one only a newer engine offers. */
+  triggersNeedEngineUpdate: boolean;
   /** Action refs the catalog lacks. */
   actions: StarterActionRef[];
 }
 
 export function missingRequirements(item: StarterItem, catalog: StarterCatalog): StarterRequirements {
   const triggers: string[] = [];
+  let triggersNeedEngineUpdate = false;
   if (item.kind === "workflow" && !catalog.triggers.some((trigger) => trigger.event === item.trigger.event)) {
     triggers.push(item.trigger.event);
+    triggersNeedEngineUpdate = item.trigger.sinceEngineUpdate === true;
   }
   const actions = new Set<StarterActionRef>();
   for (const step of item.steps) {
@@ -754,7 +862,7 @@ export function missingRequirements(item: StarterItem, catalog: StarterCatalog):
       actions.add(step.action);
     }
   }
-  return { triggers, actions: Array.from(actions) };
+  return { triggers, triggersNeedEngineUpdate, actions: Array.from(actions) };
 }
 
 export function hasRequirements(missing: StarterRequirements): boolean {
@@ -767,7 +875,7 @@ export function hasRequirements(missing: StarterRequirements): boolean {
  * missing trigger means the platform module that provides it is not installed.
  */
 export function requirementsMessage(missing: StarterRequirements): string | null {
-  if (missing.actions.length > 0) {
+  if (missing.actions.length > 0 || missing.triggersNeedEngineUpdate) {
     return "Requires engine update";
   }
   if (missing.triggers.length > 0) {

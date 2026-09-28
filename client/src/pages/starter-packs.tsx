@@ -14,6 +14,7 @@ import {
 import type { StarterInstallOutcome } from "@convex/starterPacks";
 import { useAction, useQuery } from "convex/react";
 import {
+  AlarmClock,
   Check,
   Clapperboard,
   Gem,
@@ -23,6 +24,7 @@ import {
   MessageSquare,
   Package,
   PartyPopper,
+  Presentation,
   Rocket,
   Workflow as WorkflowIcon,
 } from "lucide-react";
@@ -62,6 +64,8 @@ const PACK_ICONS: Record<string, LucideIcon> = {
   "cheer-thanks": Gem,
   "handy-commands": MessageSquare,
   "brb-scene": Clapperboard,
+  "ad-break-heads-up": AlarmClock,
+  "ad-break-scene": Presentation,
 };
 
 type PackViews = { pack: StarterPack; views: StarterItemView[]; summary: StarterPackSummary };
