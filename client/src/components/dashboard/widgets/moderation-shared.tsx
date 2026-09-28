@@ -2,7 +2,8 @@ import type { CapabilityStatus } from "@convex/lib/moderation";
 import type { ReactNode } from "react";
 
 const PERMISSION_NAMES = {
-  blockedTerms: "manage blocked terms",
+  addBlockedTerm: "block terms",
+  removeBlockedTerm: "remove blocked terms",
   timeout: "time out users",
   ban: "ban and unban",
   chatSettings: "change chat modes",

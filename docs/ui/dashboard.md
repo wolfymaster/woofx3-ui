@@ -108,13 +108,18 @@ The widget is three stacked sections, ordered by how fast each has to happen:
 - **User** — a username box with the shoutout widget's chatter autocomplete
   (`hooks/use-chatters.ts`), then timeout presets (60s, 10m, 1h, 24h) or a
   custom duration (`90`, `10m`, `1h30m`, `2d`, up to Twitch's two weeks), and
-  Ban / Unban. Ban opens an inline confirmation with an optional reason; Unban
+  Ban / Unban. Ban opens an inline confirmation with an optional reason, focused on the
+  reason rather than the Ban button so a reflexive keypress cannot confirm; Unban
   also lifts an active timeout, since Helix treats the two the same.
 - **Chat modes** — switches for followers-only (with a minimum follow age),
   subscriber-only, emote-only and slow mode (3 to 120 seconds), via
   `PATCH /helix/chat/settings`. Only the fields being changed are sent, so a
   toggle never overwrites a mode someone else changed from Twitch. The current
-  modes are polled every minute while the tab is visible.
+  modes are polled every minute while the tab is visible; a poll that started
+  before a change is discarded (`lib/write-fence.ts`) so it cannot flip a switch
+  back, and a failed poll keeps the last known modes quietly. Turning on
+  subscriber-only, which silences most of a small channel at once, offers an
+  Undo toast.
 
 **Who may do what.** `CAPABILITY_RULES` in `convex/lib/moderation.ts` is the one
 table; every action enforces it and the widget reads it through
@@ -122,27 +127,32 @@ table; every action enforces it and the widget reads it through
 
 | Capability | Instance roles | Twitch scope |
 |------------|----------------|--------------|
-| Blocked terms | owner, admin, member | `moderator:manage:blocked_terms` |
+| Add (and list) blocked terms | owner, admin, member | `moderator:manage:blocked_terms` |
+| Remove blocked terms | owner, admin | `moderator:manage:blocked_terms` |
 | Timeout | owner, admin, member | `moderator:manage:banned_users` |
 | Ban / unban | owner, admin | `moderator:manage:banned_users` |
 | Chat modes | owner, admin | `moderator:manage:chat_settings` |
 
-Timeouts and blocked terms are open to members because they are what a helper
-covering chat reaches for, a timeout expires on its own, and a term is one click
-to remove. A ban lasts until someone lifts it and a lockdown changes chat for
-everyone, so those stay with the people who run the channel.
+Adding a term and timing someone out are open to members because they are what
+a helper covering chat reaches for, and both fail safe. Removing a term can
+silently unblock a slur, a ban lasts until someone lifts it, and a lockdown
+changes chat for everyone, so those stay with the people who run the channel.
+Members see the blocked-term list without remove buttons.
 
 `moderator:manage:chat_settings` is requested by the Twitch integration link but
 a link made before it was added does not carry it. The switches still show the
 current modes (reading needs only `moderator:read:chat_settings`) and the section
 says **Needs reconnect** until Twitch is reconnected in Settings → Integrations.
 
-Twitch refusals are turned into sentences by `describeModerationError`: trying to
-ban or time out a moderator or the broadcaster, an already-banned user, unbanning
+Twitch refusals are turned into sentences by `describeModerationError`: an
+account Twitch will not let be banned or timed out, an already-banned user, unbanning
 someone who is not banned, rate limits, and a revoked token each get their own
 message; anything else shows Twitch's text. A username Twitch cannot find is
-refused before any moderation call. Refusals are `ConvexError`s so the message
-survives production, where a plain `Error` becomes "Server Error".
+refused before any moderation call. Every failure leaves `convex/moderation.ts`
+as a `ConvexError`, including those from the shared `authorizeTwitch` and
+`fetchTwitchUser`, so the message survives production, where a plain `Error`
+becomes "Server Error". Anything that still arrives that way is shown as
+"Something went wrong (request <id>)" by `lib/action-error.ts`.
 
 Deleting a single chat message is not here: it needs the message id, and nothing
 in the dashboard receives chat messages.

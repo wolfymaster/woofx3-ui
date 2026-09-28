@@ -40,7 +40,11 @@ export function ModerationWidget() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-4 overflow-auto p-3">
-        <BlockedTermsSection instanceId={instanceId} status={access.blockedTerms} />
+        <BlockedTermsSection
+          instanceId={instanceId}
+          addStatus={access.addBlockedTerm}
+          removeStatus={access.removeBlockedTerm}
+        />
         <UserActionsSection instanceId={instanceId} timeoutStatus={access.timeout} banStatus={access.ban} />
         <ChatLockdownSection instanceId={instanceId} status={access.chatSettings} />
       </div>

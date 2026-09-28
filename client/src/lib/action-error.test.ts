@@ -14,6 +14,12 @@ describe("actionErrorMessage", () => {
     expect(actionErrorMessage(wrapped)).toBe("Twitch is not connected for this instance");
   });
 
+  test("turns production's bare Server Error into a line with the request id", () => {
+    const production = new Error("[CONVEX A(moderation:banUser)] [Request ID: 7f3a9c] Server Error");
+    expect(actionErrorMessage(production)).toBe("Something went wrong (request 7f3a9c)");
+    expect(actionErrorMessage(new Error("Server Error"))).toBe("Something went wrong");
+  });
+
   test("passes other messages through", () => {
     expect(actionErrorMessage(new Error("Network down"))).toBe("Network down");
     expect(actionErrorMessage("plain")).toBe("plain");

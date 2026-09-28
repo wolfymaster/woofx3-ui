@@ -177,6 +177,9 @@ export function UserActionsSection({
             onChange={(event) => setReason(event.target.value.slice(0, BAN_REASON_MAX_LENGTH))}
             placeholder="Reason (optional)"
             className="h-7 text-xs"
+            // Focus goes to the reason, not the Ban button, so a second press
+            // of Enter or Space after opening this card cannot ban by reflex.
+            autoFocus
             data-testid="input-ban-reason"
           />
           <div className="flex gap-2">
@@ -185,9 +188,6 @@ export function UserActionsSection({
               variant="destructive"
               className="h-7 flex-1 gap-1.5 text-xs"
               disabled={busy}
-              // The confirm card opens from a click on Ban, so focus lands here
-              // and a second deliberate press confirms.
-              autoFocus
               onClick={() => void run({ kind: "ban" })}
               data-testid="button-confirm-ban"
             >
