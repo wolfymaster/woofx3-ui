@@ -14,6 +14,11 @@ import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
  */
 const NONCE_KEY = "woofx3.twitchSignInNonce";
 
+/** Shown when `startTwitchSignIn` throws because this site may not use sessionStorage. */
+export const TWITCH_SIGN_IN_STORAGE_ERROR =
+  "Twitch sign-in needs browser storage for this site. Allow it and try again.";
+
+/** Throws when the nonce cannot be stored; callers show `TWITCH_SIGN_IN_STORAGE_ERROR`. */
 export function startTwitchSignIn(redirectTo: string): void {
   const nonce = generateOpaqueToken();
   window.sessionStorage.setItem(NONCE_KEY, nonce);

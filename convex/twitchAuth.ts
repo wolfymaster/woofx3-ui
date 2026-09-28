@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { signInNonceMatches } from "./lib/oauthHandoff";
 import { safeRelativePath } from "./lib/safeRedirect";
@@ -21,7 +22,7 @@ export const storeState = internalMutation({
     if ((instanceId === undefined) === (nonceHash === undefined)) {
       throw new Error("A sign-in needs a nonce hash and an integration connect must not have one");
     }
-    await ctx.db.insert("twitchOAuthState", {
+    const id = await ctx.db.insert("twitchOAuthState", {
       state,
       // The callback page navigates here after Twitch answers.
       redirectTo: safeRelativePath(redirectTo),
@@ -30,6 +31,17 @@ export const storeState = internalMutation({
       nonceHash,
       createdAt: Date.now(),
     });
+    // A flow abandoned on Twitch's page never reaches the callback that deletes it.
+    await ctx.scheduler.runAfter(TEN_MINUTES, internal.twitchAuth.expireState, { id });
+  },
+});
+
+export const expireState = internalMutation({
+  args: { id: v.id("twitchOAuthState") },
+  handler: async (ctx, { id }) => {
+    if (await ctx.db.get(id)) {
+      await ctx.db.delete(id);
+    }
   },
 });
 
@@ -68,12 +80,24 @@ export const storePendingAuth = internalMutation({
   },
   handler: async (ctx, args): Promise<string> => {
     const token = crypto.randomUUID();
-    await ctx.db.insert("twitchPendingAuth", {
+    const id = await ctx.db.insert("twitchPendingAuth", {
       token,
       createdAt: Date.now(),
       ...args,
     });
+    // The row holds the Twitch profile, email included; an unclaimed sign-in
+    // must not keep it.
+    await ctx.scheduler.runAfter(FIVE_MINUTES, internal.twitchAuth.expirePendingAuth, { id });
     return token;
+  },
+});
+
+export const expirePendingAuth = internalMutation({
+  args: { id: v.id("twitchPendingAuth") },
+  handler: async (ctx, { id }) => {
+    if (await ctx.db.get(id)) {
+      await ctx.db.delete(id);
+    }
   },
 });
 

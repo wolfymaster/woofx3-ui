@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { startTwitchSignIn } from "@/lib/twitch-sign-in";
+import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
 export default function Register() {
   const [, navigate] = useLocation();
@@ -24,7 +24,7 @@ export default function Register() {
     try {
       startTwitchSignIn("/auth/onboarding");
     } catch {
-      setError("Twitch sign-in needs browser storage for this site. Allow it and try again.");
+      setError(TWITCH_SIGN_IN_STORAGE_ERROR);
       setIsLoading(false);
     }
   }

@@ -27,10 +27,32 @@ function hasControlCharacter(value: string): boolean {
  */
 const MAX_NORMALIZE_PASSES = 4;
 
+/**
+ * Whether the value, percent-decoded once, would name another origin or carry
+ * a control character. Nothing here decodes a target before navigating, but a
+ * consumer that did would turn "/%2F%2Fevil.com" into "//evil.com"; refusing
+ * those up front keeps every consumer safe. Undecodable input is refused too.
+ */
+function unsafeOnceDecoded(value: string): boolean {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(value);
+  } catch {
+    return true;
+  }
+  return decoded.startsWith("//") || decoded.startsWith("/\\") || hasControlCharacter(decoded);
+}
+
 function normalizeOnce(value: string): string | null {
   // Browsers treat a backslash as a slash and drop tabs and newlines inside
   // URLs, so "/\evil.com" and "/\t/evil.com" both escape the origin.
-  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\") || hasControlCharacter(value)) {
+  if (
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value.includes("\\") ||
+    hasControlCharacter(value) ||
+    unsafeOnceDecoded(value)
+  ) {
     return null;
   }
   let parsed: URL;

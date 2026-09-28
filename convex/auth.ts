@@ -44,8 +44,6 @@ export const { auth, signIn, signOut, store } = convexAuth({
           return null;
         }
 
-        console.log("result", result);
-
         if (!result.user) {
           // Orphaned authAccounts record from a previous failed run — the linked
           // user document was never committed or was deleted. Remove it and retry.

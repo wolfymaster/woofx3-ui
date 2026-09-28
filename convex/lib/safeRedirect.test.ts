@@ -47,6 +47,18 @@ describe("safeRelativePath", () => {
       "/.%2e//evil.example",
       "/foo/%2e%2e//evil.example",
       "/./..//evil.example?x=1#y",
+      "/%2F%2Fevil.example",
+      "/%2f/evil.example",
+      "/%5C%5Cevil.example",
+      "/%5cevil.example",
+      "/%2F%5Cevil.example",
+      "/a%0A/evil.example",
+      "/a%0D%0ALocation:%20https://evil.example",
+      "/a%00",
+      "/a%09b",
+      "/a%7F",
+      "/100%",
+      "/%E0%A4%A",
     ]) {
       expect({ hostile, result: safeRelativePath(hostile) }).toEqual({ hostile, result: "/" });
     }
@@ -54,8 +66,10 @@ describe("safeRelativePath", () => {
 
   test("keeps encoded slashes and unicode slashes inside a path, where they name no host", () => {
     for (const [input, expected] of [
-      ["/%2F%2Fevil.example", "/%2F%2Fevil.example"],
-      ["/%5C%5Cevil.example", "/%5C%5Cevil.example"],
+      ["/a/%2F%2Fevil.example", "/a/%2F%2Fevil.example"],
+      ["/a%5C%5Cevil.example", "/a%5C%5Cevil.example"],
+      ["/modules?next=%2F%2Fevil.example", "/modules?next=%2F%2Fevil.example"],
+      ["/caf%C3%A9", "/caf%C3%A9"],
       ["/@evil.example", "/@evil.example"],
       ["/\uff0f\uff0fevil.example", "/%EF%BC%8F%EF%BC%8Fevil.example"],
       ["/\u2215evil.example", "/%E2%88%95evil.example"],
