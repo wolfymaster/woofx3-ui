@@ -5,6 +5,18 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
+/**
+ * The engine's operator controls over its alert queue.
+ *
+ * Must match `skipCurrentAlert` / `clearAlertQueue` on `Woofx3EngineApi` in
+ * the engine's shared/clients/typescript/api/api.ts. Declared here because the
+ * engine checkout the `@woofx3/api` alias resolves to may predate them.
+ */
+interface AlertQueueControlsApi {
+  skipCurrentAlert(): Promise<{ skipped: boolean }>;
+  clearAlertQueue(): Promise<{ cleared: number }>;
+}
+
 type InstanceContext = {
   url: string;
   clientId: string;
@@ -57,5 +69,57 @@ export const replay = action({
     const replayed = await rpc.replayAlert(engineAlertId);
 
     return { replayed };
+  },
+});
+
+/**
+ * Stop the alert that is playing now and let the queue move on to the next.
+ *
+ * The skipped row and the next dispatch both arrive back as webhooks, so
+ * nothing is written to Convex here. `skipped: false` means nothing was in
+ * flight, which is an answer rather than an error.
+ */
+export const skipCurrent = action({
+  args: {
+    instanceId: v.id("instances"),
+  },
+  handler: async (ctx, { instanceId }): Promise<{ skipped: boolean }> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+
+    const rpc = createEngineRpcSession<EngineApi & AlertQueueControlsApi>(
+      bundle.url,
+      bundle.clientId,
+      bundle.clientSecret
+    );
+    const result = await rpc.skipCurrentAlert();
+
+    return { skipped: result.skipped === true };
+  },
+});
+
+/**
+ * Drop every alert still waiting in the queue. The one playing now keeps
+ * playing; pair with `skipCurrent` to silence the overlay entirely.
+ *
+ * Returns how many were dropped. The rows turn `skipped` through webhooks.
+ */
+export const clearQueue = action({
+  args: {
+    instanceId: v.id("instances"),
+  },
+  handler: async (ctx, { instanceId }): Promise<{ cleared: number }> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+
+    const rpc = createEngineRpcSession<EngineApi & AlertQueueControlsApi>(
+      bundle.url,
+      bundle.clientId,
+      bundle.clientSecret
+    );
+    const result = await rpc.clearAlertQueue();
+    if (!Number.isInteger(result.cleared) || result.cleared < 0) {
+      throw new Error(`Engine answered clearAlertQueue with an invalid count: ${String(result.cleared)}`);
+    }
+
+    return { cleared: result.cleared };
   },
 });

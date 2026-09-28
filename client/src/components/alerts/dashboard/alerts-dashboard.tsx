@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { BellRing, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
+import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
 import { AlertFeed } from "@/components/alerts/dashboard/alert-feed";
 import { AlertFrequencyChart } from "@/components/alerts/dashboard/alert-frequency-chart";
 import { AlertStatTiles } from "@/components/alerts/dashboard/alert-stat-tiles";
@@ -12,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useInstance } from "@/hooks/use-instance";
 import type { AlertMenuSection } from "@/lib/alert-groups";
+import { alertQueueSnapshot } from "@/lib/alert-queue";
 import { isFailureStatus } from "@/lib/alert-status";
 
 /** How many dispatches the feed shows. Enough to cover a busy hour without paging. */
@@ -53,6 +55,8 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
     }
     return names;
   }, [sections]);
+
+  const queue = useMemo(() => alertQueueSnapshot(alerts ?? []), [alerts]);
 
   const shown = useMemo(
     () => (alerts ?? []).filter((alert) => !failuresOnly || isFailureStatus(alert.status)),
@@ -108,8 +112,9 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
           </Card>
 
           <Card>
-            <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
               <h2 className="text-sm font-semibold">Recent alerts</h2>
+              <AlertQueueControls instanceId={instanceId} snapshot={queue} className="ml-auto" />
               <label className="flex items-center gap-2 text-xs text-muted-foreground" htmlFor="alert-failures-only">
                 <Switch
                   id="alert-failures-only"
