@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { parseSessionSummary, planSummaryWrite, summaryColumns } from "./lib/sessionSummary";
 import { isInstanceMember } from "./lib/teamAccess";
 import { logger } from "./logger";
@@ -79,6 +79,20 @@ export const get = query({
     if (!(await isInstanceMember(ctx, instanceId))) {
       return null;
     }
+    return ctx.db
+      .query("streamSessionSummaries")
+      .withIndex("by_instance_session", (q) => q.eq("instanceId", instanceId).eq("sessionId", sessionId))
+      .unique();
+  },
+});
+
+/** The same row as `get`, for actions that have already checked membership. */
+export const getInternal = internalQuery({
+  args: {
+    instanceId: v.id("instances"),
+    sessionId: v.string(),
+  },
+  handler: async (ctx, { instanceId, sessionId }) => {
     return ctx.db
       .query("streamSessionSummaries")
       .withIndex("by_instance_session", (q) => q.eq("instanceId", instanceId).eq("sessionId", sessionId))

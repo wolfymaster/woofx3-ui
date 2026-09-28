@@ -16,6 +16,7 @@ totals can still change. Both read the same `streamSessionSummaries` rows as the
 | Totals: viewers, follows, subs, bits, raids | Stored summary | Shown |
 | Viewers per minute | Engine `getStreamSessionGauges`, through `streamRecap.loadEngineDetail` | Notice (retry when it can help) |
 | Top gifters and cheerers | Engine `getLeaderboard` (`giftedSubs`, `bits`) for the session, same action | Hidden |
+| Clips and the "Top clip" tile | Twitch Helix `GET /clips`, through `streamRecap.loadClips` | Shown (Twitch, not the engine) |
 
 The stored summary is what makes the page load instantly and survive an engine
 that is down or has lost its database. The engine detail is fetched once per
@@ -52,3 +53,26 @@ Twitch's 500-character announcement limit. "Copy thank-you message" copies it;
 "Send to chat" posts it as a chat announcement through
 `twitchBroadcast.sendAnnouncement`, which needs the
 `moderator:manage:announcements` scope on the instance's Twitch link.
+
+## Clips
+
+The Clips section lists the Twitch clips created during the session, most
+viewed first, and the header shows the most viewed one as "Top clip".
+`streamRecap.loadClips` checks instance membership, reads the stored summary's
+segments, and asks Helix for the broadcaster's clips created between the first
+going-live and the last going-down plus ten minutes (`clipWindow` in
+`convex/lib/recapClips.ts`), since people keep clipping the last moments right
+after a stream ends. It walks at most five Helix pages and keeps up to 100
+clips. Listing clips needs no scope, so the Twitch link's token serves as is.
+
+Clip data is never stored: each visit, or "Refresh", asks Twitch again, so
+view counts stay current and a clip deleted on Twitch disappears. Twitch takes
+a minute or two to list a new clip, which the empty state says.
+
+Each clip shows its thumbnail (loaded lazily), title, who clipped it, views,
+length, the time it was made, and how far into the stream that was, as
+`h:mm:ss` from the first going-live (`formatStreamOffset` in
+`client/src/lib/recap-clips.ts`). "Copy link" copies the clip URL, "Open on
+Twitch" opens it, and "Share to chat" posts the title, clipper and link as a
+chat announcement through the same `twitchBroadcast.sendAnnouncement` path as
+the thank-you message.

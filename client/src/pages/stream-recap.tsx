@@ -5,11 +5,13 @@ import { ArrowLeft, Copy, Gift, Loader2, MessageSquare, RefreshCw, Sparkles, Wif
 import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
+import { ClipsCard, TopClipTile } from "@/components/stream-recap/clips-card";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { ViewerChart } from "@/components/stream-recap/viewer-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
+import { useRecapClips } from "@/hooks/use-recap-clips";
 import { type StreamRecapEngineState, useStreamRecapEngineDetail } from "@/hooks/use-stream-recap-engine-detail";
 import { useToast } from "@/hooks/use-toast";
 import { formatLiveDuration, formatViewerFigure, liveDurationMs, type SessionSummaryRow } from "@/lib/session-summary";
@@ -344,6 +346,7 @@ function SupportersCard({
 function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: string }) {
   const platformLinks = useQuery(api.instances.getPlatformLinks, { instanceId: row.instanceId });
   const { state, retry } = useStreamRecapEngineDetail(row.instanceId, sessionId);
+  const clips = useRecapClips(row.instanceId, sessionId);
   const body: SessionBody | null = row.session && row.totals ? { session: row.session, totals: row.totals } : null;
   const segments = row.session?.segments ?? NO_SEGMENTS;
   const detail = okDetail(state);
@@ -367,7 +370,12 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
           title={title}
           description={description}
           className="pb-0"
-          actions={body?.session.status === "open" ? <OpenSessionBadge /> : undefined}
+          actions={
+            <>
+              <TopClipTile state={clips.state} />
+              {body?.session.status === "open" && <OpenSessionBadge />}
+            </>
+          }
         />
       </div>
 
@@ -403,6 +411,10 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
             </CardContent>
           </Card>
         )
+      )}
+
+      {body && (
+        <ClipsCard instanceId={row.instanceId} state={clips.state} onReload={clips.reload} canAnnounce={canAnnounce} />
       )}
     </div>
   );

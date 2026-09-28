@@ -1,8 +1,18 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import {
+  type ClipWindow,
+  clipWindow,
+  type HelixClip,
+  RECAP_CLIP_LIMIT,
+  RECAP_CLIP_MAX_PAGES,
+  type RecapClip,
+  sortClipsByViews,
+  toRecapClip,
+} from "./lib/recapClips";
 import {
   classifyEngineCallError,
   RECAP_LEADERBOARD_LIMIT,
@@ -58,5 +68,109 @@ export const loadEngineDetail = action({
       });
       return failure;
     }
+  },
+});
+
+const TWITCH_CLIPS_URL = "https://api.twitch.tv/helix/clips";
+
+export type RecapClipsResult = { status: "ok"; clips: RecapClip[] } | { status: "never_live" };
+
+interface HelixClipsPage {
+  data: HelixClip[];
+  pagination?: { cursor?: string };
+}
+
+async function fetchClipsInWindow(
+  credentials: { accessToken: string; clientId: string },
+  broadcasterUserId: string,
+  window: ClipWindow
+): Promise<HelixClip[]> {
+  const clips: HelixClip[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < RECAP_CLIP_MAX_PAGES && clips.length < RECAP_CLIP_LIMIT; page++) {
+    const params = new URLSearchParams({
+      broadcaster_id: broadcasterUserId,
+      started_at: new Date(window.startedAtMs).toISOString(),
+      ended_at: new Date(window.endedAtMs).toISOString(),
+      first: String(RECAP_CLIP_LIMIT - clips.length),
+    });
+    if (cursor) {
+      params.set("after", cursor);
+    }
+    const response = await fetch(`${TWITCH_CLIPS_URL}?${params}`, {
+      headers: { Authorization: `Bearer ${credentials.accessToken}`, "Client-Id": credentials.clientId },
+    });
+    if (response.status === 401) {
+      throw new ConvexError("Twitch rejected this channel's connection. Reconnect Twitch in Settings, Integrations.");
+    }
+    if (response.status === 429) {
+      throw new ConvexError("Twitch is rate-limiting requests right now. Try again in a minute.");
+    }
+    if (!response.ok) {
+      throw new ConvexError(`Twitch couldn't list clips (${response.status}).`);
+    }
+    const body = (await response.json()) as HelixClipsPage;
+    clips.push(...body.data);
+    cursor = body.pagination?.cursor;
+    if (!cursor || body.data.length === 0) {
+      break;
+    }
+  }
+  return clips.slice(0, RECAP_CLIP_LIMIT);
+}
+
+/**
+ * The Twitch clips made while a recapped session was live, most viewed first.
+ * Fetched from Helix on every call and never stored: view counts keep moving
+ * after the stream, and a clip deleted on Twitch should vanish from the recap.
+ * Listing clips needs no scope, so the broadcaster's link token serves as is.
+ */
+export const loadClips = action({
+  args: {
+    instanceId: v.id("instances"),
+    sessionId: v.string(),
+  },
+  handler: async (ctx, { instanceId, sessionId }): Promise<RecapClipsResult> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("Not authenticated");
+    }
+    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+    if (!membership) {
+      throw new ConvexError("Not authorized");
+    }
+    const row = await ctx.runQuery(internal.streamSessionSummaries.getInternal, { instanceId, sessionId });
+    if (!row) {
+      throw new ConvexError("There's no recap for this stream.");
+    }
+    const window = clipWindow(row.session?.segments ?? [], Date.now());
+    if (window === null) {
+      return { status: "never_live" };
+    }
+
+    const clientId = process.env.AUTH_TWITCH_ID;
+    if (!clientId) {
+      throw new ConvexError("Twitch isn't configured for this dashboard (AUTH_TWITCH_ID is not set).");
+    }
+    let token: { accessToken: string; broadcasterUserId: string } | null;
+    try {
+      token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, { instanceId });
+    } catch (error) {
+      logger.warn("stream recap: twitch token refresh failed", {
+        instanceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new ConvexError("Couldn't refresh the Twitch connection. Reconnect Twitch in Settings, Integrations.");
+    }
+    if (!token) {
+      throw new ConvexError("Twitch isn't connected for this instance. Connect it in Settings, Integrations.");
+    }
+
+    const clips = await fetchClipsInWindow(
+      { accessToken: token.accessToken, clientId },
+      token.broadcasterUserId,
+      window
+    );
+    return { status: "ok", clips: sortClipsByViews(clips.map((clip) => toRecapClip(clip, window))) };
   },
 });
