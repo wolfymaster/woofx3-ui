@@ -40,6 +40,7 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `announcement` | stream | Send a coloured announcement to chat |
 | `pinned` | stream | Twitch pinned message, plus re-pinnable history — see below |
 | `shoutout` | stream | Autocomplete from chat, confirm, queue — see below |
+| `moderation` | stream | Blocked terms, timeout/ban/unban, chat modes — see below |
 | `queue` | stream | One queue's line, with manual add and remove — see below |
 | `timer` | stream | One timer's countdown, with start, pause and add time — see below |
 | `workflow-runs` | automation | Recent and in-progress executions |
@@ -133,6 +134,62 @@ the counter has none. Clicking any card flips **all** of them to `{remaining} to
 go`; the display mode is one piece of component state, not a per-card setting.
 Values arrive by webhook while the dashboard is open, and the bar calls
 `refreshResourceValues` once on mount to cover anything written before it was.
+
+## Moderation
+
+For a streamer with nobody else modding: block a phrase, time out or ban a user,
+or lock chat down, in seconds and without leaving the dashboard. Every call goes
+straight to Helix from `convex/moderation.ts` with the broadcaster's token, the
+same path as the announcement and shoutout controls; the engine exposes no
+moderation methods.
+
+The widget is three stacked sections, ordered by how fast each has to happen:
+
+- **Block a phrase** — a quick-add box (2 to 500 characters, `*` as a wildcard,
+  Twitch's own rules) above a collapsed list of the channel's blocked terms,
+  each removable. The list is read from `GET /helix/moderation/blocked_terms`,
+  following the cursor up to 2000 terms, and is loaded once rather than polled.
+- **User** — a username box with the shoutout widget's chatter autocomplete
+  (`hooks/use-chatters.ts`), then timeout presets (60s, 10m, 1h, 24h) or a
+  custom duration (`90`, `10m`, `1h30m`, `2d`, up to Twitch's two weeks), and
+  Ban / Unban. Ban opens an inline confirmation with an optional reason; Unban
+  also lifts an active timeout, since Helix treats the two the same.
+- **Chat modes** — switches for followers-only (with a minimum follow age),
+  subscriber-only, emote-only and slow mode (3 to 120 seconds), via
+  `PATCH /helix/chat/settings`. Only the fields being changed are sent, so a
+  toggle never overwrites a mode someone else changed from Twitch. The current
+  modes are polled every minute while the tab is visible.
+
+**Who may do what.** `CAPABILITY_RULES` in `convex/lib/moderation.ts` is the one
+table; every action enforces it and the widget reads it through
+`moderation.access` only to disable and explain.
+
+| Capability | Instance roles | Twitch scope |
+|------------|----------------|--------------|
+| Blocked terms | owner, admin, member | `moderator:manage:blocked_terms` |
+| Timeout | owner, admin, member | `moderator:manage:banned_users` |
+| Ban / unban | owner, admin | `moderator:manage:banned_users` |
+| Chat modes | owner, admin | `moderator:manage:chat_settings` |
+
+Timeouts and blocked terms are open to members because they are what a helper
+covering chat reaches for, a timeout expires on its own, and a term is one click
+to remove. A ban lasts until someone lifts it and a lockdown changes chat for
+everyone, so those stay with the people who run the channel.
+
+`moderator:manage:chat_settings` is requested by the Twitch integration link but
+a link made before it was added does not carry it. The switches still show the
+current modes (reading needs only `moderator:read:chat_settings`) and the section
+says **Needs reconnect** until Twitch is reconnected in Settings → Integrations.
+
+Twitch refusals are turned into sentences by `describeModerationError`: trying to
+ban or time out a moderator or the broadcaster, an already-banned user, unbanning
+someone who is not banned, rate limits, and a revoked token each get their own
+message; anything else shows Twitch's text. A username Twitch cannot find is
+refused before any moderation call. Refusals are `ConvexError`s so the message
+survives production, where a plain `Error` becomes "Server Error".
+
+Deleting a single chat message is not here: it needs the message id, and nothing
+in the dashboard receives chat messages.
 
 ## Queue widget
 
