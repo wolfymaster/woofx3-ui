@@ -3,10 +3,14 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { readMemberRole } from "./instances";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import type { OAuthErrorCode } from "./lib/oauthErrors";
+import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
-import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
+import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
+import { claimHandoff } from "./oauthConnectHandoff";
 
 /** The signed-in caller, when they may connect or disconnect this instance's Twitch link. */
 async function requireTwitchLinkManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
@@ -52,36 +56,101 @@ export const startConnect = action({
       response_type: "code",
       scope: TWITCH_INTEGRATION_SCOPES.join(" "),
       state,
+      // Twitch skips its consent screen for an account that authorized this
+      // app before; forcing it means a connect never completes unseen.
+      force_verify: "true",
     });
     return { authorizeUrl: `https://id.twitch.tv/oauth2/authorize?${params}` };
   },
 });
 
-export const upsertPlatformLink = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    platform: v.string(),
-    platformUserId: v.string(),
-    platformUsername: v.string(),
-    profileImageUrl: v.optional(v.string()),
-    channelId: v.string(),
-    accessToken: v.string(),
-    refreshToken: v.string(),
-    expiresAt: v.number(),
-    scopes: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
+type ConnectRefusal = { ok: false; error: OAuthErrorCode; detail?: string };
+
+export type FinishConnectResult = { ok: true; redirectTo: string } | ConnectRefusal;
+
+type CompletedConnect = { ok: true; redirectTo: string; instanceId: Id<"instances"> };
+
+/**
+ * Claims the Twitch result the OAuth callback stored under `codeHash` and
+ * writes the instance's link. Claiming, the role check, the relink check and
+ * the write happen in this one transaction.
+ */
+export const completeConnect = internalMutation({
+  args: { codeHash: v.string(), userId: v.id("users") },
+  handler: async (ctx, { codeHash, userId }): Promise<CompletedConnect | ConnectRefusal> => {
+    const claim = await claimHandoff(ctx, codeHash, "twitch", userId);
+    if (!claim.ok) {
+      return { ok: false, error: claim.error };
+    }
+    const { instanceId, redirectTo, twitch } = claim.row;
+    if (!twitch) {
+      throw new Error("Twitch handoff without a Twitch result");
+    }
+    if (!canManageTwitchLink(await readMemberRole(ctx, instanceId, userId))) {
+      return { ok: false, error: "not_permitted" };
+    }
+
     const existing = await ctx.db
       .query("platformLinks")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .filter((q) => q.eq(q.field("platform"), args.platform))
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .filter((q) => q.eq(q.field("platform"), "twitch"))
       .first();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, args);
-    } else {
-      await ctx.db.insert("platformLinks", args);
+    const refusal = relinkRefusal(existing, twitch.platformUserId);
+    if (refusal) {
+      return { ok: false, error: "relink_mismatch", detail: refusal };
     }
+
+    const link = {
+      instanceId,
+      platform: "twitch",
+      platformUserId: twitch.platformUserId,
+      platformUsername: twitch.platformUsername,
+      profileImageUrl: twitch.profileImageUrl,
+      channelId: twitch.platformUserId,
+      accessToken: twitch.accessToken,
+      refreshToken: twitch.refreshToken,
+      expiresAt: twitch.expiresAt,
+      scopes: twitch.scopes,
+      connectedByUserId: userId,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id, link);
+    } else {
+      await ctx.db.insert("platformLinks", link);
+    }
+    return { ok: true, redirectTo, instanceId };
+  },
+});
+
+/**
+ * Finishes a Twitch connect from the browser that the OAuth callback
+ * redirected, with the one-time code it was given. Only the signed-in user
+ * who started the connect can finish it, so a connect link opened by anyone
+ * else links nothing.
+ */
+export const finishConnect = action({
+  args: { code: v.string() },
+  handler: async (ctx, { code }): Promise<FinishConnectResult> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return { ok: false, error: "not_signed_in" };
+    }
+    if (!isOpaqueToken(code)) {
+      return { ok: false, error: "connect_code_invalid" };
+    }
+    const result = await ctx.runMutation(internal.twitchIntegration.completeConnect, {
+      codeHash: await hashOpaqueToken(code),
+      userId,
+    });
+    if (!result.ok) {
+      return result;
+    }
+    try {
+      await ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId: result.instanceId });
+    } catch (err) {
+      console.error("[twitch-connect] engine sync failed after saving the link", String(err));
+    }
+    return { ok: true, redirectTo: result.redirectTo };
   },
 });
 

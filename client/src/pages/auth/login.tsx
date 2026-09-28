@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { startTwitchSignIn } from "@/lib/twitch-sign-in";
 
 function getLoginNextPath(): string {
   if (typeof window === "undefined") {
@@ -31,8 +31,12 @@ export default function Login() {
   function handleTwitchLogin() {
     setError(null);
     setIsLoading(true);
-    const redirectTo = encodeURIComponent(getLoginNextPath());
-    window.location.href = `${CONVEX_SITE_URL}/api/auth/twitch/start?redirect_to=${redirectTo}`;
+    try {
+      startTwitchSignIn(getLoginNextPath());
+    } catch {
+      setError("Twitch sign-in needs browser storage for this site. Allow it and try again.");
+      setIsLoading(false);
+    }
   }
 
   async function handlePasswordLogin(e: React.FormEvent) {

@@ -6,7 +6,7 @@ import { useLocation } from "wouter";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { startTwitchSignIn } from "@/lib/twitch-sign-in";
 
 function getTokenFromLocation(): string | null {
   if (typeof window === "undefined") {
@@ -17,7 +17,7 @@ function getTokenFromLocation(): string | null {
 
 function signInWithTwitch(token: string | null) {
   const back = token ? `/auth/accept-invite?token=${encodeURIComponent(token)}` : "/";
-  window.location.href = `${CONVEX_SITE_URL}/api/auth/twitch/start?redirect_to=${encodeURIComponent(back)}`;
+  startTwitchSignIn(back);
 }
 
 export default function AcceptInvite() {
