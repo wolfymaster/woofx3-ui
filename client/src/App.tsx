@@ -18,6 +18,7 @@ import {
   COMMAND_NEW_ROUTE,
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
+import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
 import { convexClient as convex } from "./lib/convexClient";
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
@@ -50,6 +51,7 @@ const Scenes = lazy(() => import("@/pages/scenes"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
 const Timers = lazy(() => import("@/pages/timers"));
+const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
 function SplashScreen() {
@@ -168,6 +170,7 @@ function AppRoutes() {
                   <Route path="/stream/workflows/new" component={Workflows} />
                   <Route path="/stream/workflows/:id" component={Workflows} />
                   <Route path="/stream/workflows/:id/edit" component={Workflows} />
+                  <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
                   {/* Modules section */}
                   <Route path="/modules/install" component={ModuleInstall} />

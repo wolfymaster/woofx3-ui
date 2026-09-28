@@ -1,9 +1,9 @@
 # Workflows
 
-**Routes:** `/stream/workflows`, `/stream/workflows/new`, `/stream/workflows/:id`
+**Routes:** `/stream/workflows`, `/stream/workflows/new`, `/stream/workflows/:id`, `/stream/workflows/:id/runs/:engineRunId`
 **Primary files:** `client/src/pages/workflows.tsx`, `client/src/components/workflows/basic-editor.tsx`, `client/src/components/workflows/step-list-editor.tsx`, `client/src/lib/workflow-display.ts`, `client/src/hooks/use-workflow-catalog.ts`
 
-`pages/workflows.tsx` serves all three routes and picks one of three screens from the location: the list, the create flow, or the editor.
+`pages/workflows.tsx` serves the first three routes and picks one of three screens from the location: the list, the create flow, or the editor.
 
 ## List view (`/stream/workflows`)
 
@@ -25,6 +25,20 @@ Modelled on the Chat Commands page: `PageHeader`, an All / Enabled / Disabled ta
 - A header bar (back, click-to-rename title, enabled badge, **Save**, and a kebab with *View JSON* and *Delete*) above **`StepListEditor`**, which reads the workflow id from the route itself.
 - The screen is keyed by workflow id, so switching workflows resets the in-progress definition rather than carrying the previous one's draft into the next save.
 - Saves go through `workflowActions.updateFromDefinition` with `escapeDollarKeys` applied (the engine's `$`-prefixed keys are not legal Convex field names).
+- **Steps / Runs** tabs in the header. The step editor stays mounted behind the Runs tab so unsaved edits survive the switch; `?tab=runs` opens the editor on Runs.
+
+### Test run
+
+**Test run** opens `components/workflows/test-run-sheet.tsx`, which runs the *saved* workflow in one of two ways:
+
+- **Sample event** (event triggers whose trigger is in the catalog): the trigger's generated test form (`components/test-events/`), firing the workflow's own event through `useFireTestEvent`. It runs exactly as live — conditions evaluated, `trigger.data` filled — but every other enabled workflow on that event runs too, so the sheet lists them first (`otherWorkflowsOnEvent`).
+- **This workflow only**: `workflowActions.trigger` by engine id. Nothing else runs, but the engine skips the trigger conditions and hands the run no sample event, so `trigger.data` is empty.
+
+Both fire with the `test` origin (`convex/lib/manualRunOrigin.ts`). The engine does not record runs whose origin is `dashboard`, and any other origin is recorded, so a test run lands in the Runs tab with a full trace. Progress is read from `transientEvents.listByCorrelation` (filtered to this workflow by `testRunProgress`, since a sample event can start several workflows under one key) and then from the recorded run's steps (`workflowRuns.runWithSteps`), both pushed by Convex rather than polled.
+
+### Runs
+
+`components/workflows/workflow-runs-panel.tsx` lists `workflowRuns.listForWorkflow` newest first: status, start, source (`runOriginLabel`), duration, error. A row opens `pages/workflow-run.tsx`, the same trace as the alert-run page with a back link to the workflow. **Replay** (settled runs with a recorded trigger event) replays with the `replay` origin, so the replay is listed too. **Cancel** (running runs) calls `workflowActions.cancelRun`: the engine only marks its history row cancelled — a step already executing is not interrupted — and relays no webhook for it, so the action mirrors the status into Convex itself.
 
 ## Summary
 
@@ -34,3 +48,4 @@ Modelled on the Chat Commands page: `PageHeader`, an All / Enabled / Disabled ta
 | `lib/workflow-display.ts` | Name, description, step count, trigger label shared by list and editor |
 | Presets + catalog hook | Guided creation UX |
 | `StepListEditor` | Step-by-step editing surface |
+| Test run sheet + Runs panel | Try a workflow now; its recorded runs, traces, replay, cancel |

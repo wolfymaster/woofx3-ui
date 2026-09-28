@@ -1,3 +1,4 @@
+import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { ReplayControls } from "@/components/alert-run/replay-controls";
@@ -5,17 +6,16 @@ import { RunTrace } from "@/components/alert-run/run-trace";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { useInstance } from "@/hooks/use-instance";
 import { decodeRouteParam } from "@/lib/route-param";
-
-const ALERTS_PATH = "/stream/alerts";
+import { workflowRunsPath } from "@/lib/workflow-run-route";
 
 /**
- * One recorded run as a trace: the trigger that started it, every step it took and
- * the overlay alert it published, on one time axis, with each one's payloads.
- *
- * Reached from a row in the alert feed, which knows the run that published the alert.
+ * One recorded run of a workflow as a trace, reached from the workflow's Runs
+ * panel or a test run. The same trace the alert feed opens, with a back link to
+ * the workflow; replays started here are recorded, so they join its runs.
  */
-export default function AlertRun() {
-  const params = useParams<{ engineRunId: string }>();
+export default function WorkflowRun() {
+  const params = useParams<{ id: string; engineRunId: string }>();
+  const engineWorkflowId = decodeRouteParam(params.id);
   const engineRunId = decodeRouteParam(params.engineRunId);
   const [, navigate] = useLocation();
   const { instance } = useInstance();
@@ -23,9 +23,9 @@ export default function AlertRun() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <header className="flex shrink-0 items-center gap-3 border-b px-2 py-2 sm:h-16 sm:px-4 sm:py-0">
-        <EditorBackLink label="alerts" onClick={() => navigate(ALERTS_PATH)} />
+        <EditorBackLink label="workflow" onClick={() => navigate(workflowRunsPath(engineWorkflowId))} />
         <div className="min-w-0">
-          <h1 className="text-[17px] font-semibold leading-tight">Alert run</h1>
+          <h1 className="text-[17px] font-semibold leading-tight">Workflow run</h1>
           <p className="truncate font-mono text-[13px] text-muted-foreground">{engineRunId}</p>
         </div>
       </header>
@@ -43,6 +43,7 @@ export default function AlertRun() {
                   instanceId={instance._id}
                   engineRunId={engineRunId}
                   failedStepTaskId={failedStepTaskId}
+                  origin={REPLAY_ORIGIN}
                 />
               )}
             />

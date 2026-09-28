@@ -25,7 +25,7 @@ import { parseEventData } from "@/lib/test-event-json";
  * learning about it — and the JSON view stays one click away for the payload a
  * form cannot express.
  */
-export function ShapeTestEventForm({ preset }: TestEventProps) {
+export function ShapeTestEventForm({ preset, runner }: TestEventProps) {
   const fields = useMemo(() => testEventFields(preset), [preset]);
   const [values, setValues] = useState<Record<string, unknown>>(() => initialValues(fields));
   const [jsonText, setJsonText] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export function ShapeTestEventForm({ preset }: TestEventProps) {
   const payload = jsonText === null ? fieldPayload : parsedJson?.ok ? parsedJson.payload : null;
 
   return (
-    <TestEventForm preset={preset} payload={payload}>
+    <TestEventForm preset={preset} runner={runner} payload={payload}>
       {jsonText === null ? (
         fields.map((field) => (
           <TestEventFieldControl key={field.path} field={field} value={values[field.path]} onChange={setValue} />

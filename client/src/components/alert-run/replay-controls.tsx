@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { isRecordedOrigin, type ManualRunOrigin, UNRECORDED_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { useAction, useQuery } from "convex/react";
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, StepForward } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,16 +24,23 @@ interface ReplayControlsProps {
   engineRunId: string;
   /** The step that ended the run, when it ended by failing. Offers resume from it. */
   failedStepTaskId: string | null;
+  /** Whether the replay is written to the history; see convex/lib/manualRunOrigin.ts. */
+  origin?: ManualRunOrigin;
 }
 
 /**
  * Replay a recorded run, whole or from the step that failed, and show how the
  * replay went.
  *
- * The outcome is shown here rather than as a new entry in the list because a
- * replay is a manual run, and manual runs are not recorded.
+ * The outcome is shown here because an unrecorded replay has nowhere else to
+ * appear; a recorded one also shows up in its workflow's runs.
  */
-export function ReplayControls({ instanceId, engineRunId, failedStepTaskId }: ReplayControlsProps) {
+export function ReplayControls({
+  instanceId,
+  engineRunId,
+  failedStepTaskId,
+  origin = UNRECORDED_ORIGIN,
+}: ReplayControlsProps) {
   const replay = useAction(api.workflowActions.replay);
   const { toast } = useToast();
   const [busy, setBusy] = useState<Mode | null>(null);
@@ -61,7 +69,7 @@ export function ReplayControls({ instanceId, engineRunId, failedStepTaskId }: Re
     // Cleared first so the previous replay's outcome cannot be read as this one's.
     setTriggerId(null);
     try {
-      const result = await replay({ instanceId, engineRunId, fromTaskId });
+      const result = await replay({ instanceId, engineRunId, fromTaskId, origin });
       setTriggerId(result.triggerId);
     } catch (err) {
       toast({
@@ -124,7 +132,9 @@ export function ReplayControls({ instanceId, engineRunId, failedStepTaskId }: Re
       {outcome?.kind === "succeeded" && (
         <p className="flex items-center gap-2 text-xs text-green-500" data-testid="replay-outcome-succeeded">
           <CheckCircle2 className="h-3.5 w-3.5" />
-          Replay completed. Replays are not added to the history.
+          {isRecordedOrigin(origin)
+            ? "Replay completed. It is listed in this workflow's runs."
+            : "Replay completed. Replays are not added to the history."}
         </p>
       )}
       {outcome?.kind === "nothingMatched" && (
