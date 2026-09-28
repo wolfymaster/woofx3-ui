@@ -736,6 +736,9 @@ export default defineSchema({
     state: v.string(),
     redirectTo: v.string(),
     instanceId: v.optional(v.id("instances")),
+    // The signed-in owner or admin who started an integration connect. Absent
+    // for the sign-in flow, which has no user yet.
+    userId: v.optional(v.id("users")),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 

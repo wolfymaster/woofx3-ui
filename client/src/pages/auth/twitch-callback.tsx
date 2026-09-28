@@ -1,3 +1,4 @@
+import { safeRelativePath } from "@convex/lib/safeRedirect";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
@@ -9,13 +10,16 @@ export default function TwitchCallback() {
   const { signIn } = useAuthActions();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const called = useRef(false);
-  const [error, setError] = useState<string | null>(null);
+  // Set by the Convex callback when Twitch answered but the connect was refused.
+  const [error, setError] = useState<string | null>(() => new URLSearchParams(window.location.search).get("error"));
   const [message, setMessage] = useState("Processing...");
-  const redirectTo = useRef(new URLSearchParams(window.location.search).get("redirect_to") ?? "/");
+  // Anything but a path on this site is dropped: this page navigates to it,
+  // and the value arrives in a URL anyone can craft.
+  const redirectTo = useRef(safeRelativePath(new URLSearchParams(window.location.search).get("redirect_to")));
   const mode = useRef(new URLSearchParams(window.location.search).get("mode") ?? "login");
 
   useEffect(() => {
-    if (isLoading) {
+    if (isLoading || error) {
       return;
     }
     if (mode.current === "connect") {
@@ -83,12 +87,17 @@ export default function TwitchCallback() {
     return () => {
       cancelled = true;
     };
-  }, [signIn, isLoading, isAuthenticated, navigate]);
+  }, [signIn, isLoading, isAuthenticated, navigate, error]);
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-4">
         <pre className="text-destructive text-sm whitespace-pre-wrap">{error}</pre>
+        {mode.current === "connect" && (
+          <a href={redirectTo.current} className="text-sm underline">
+            Back
+          </a>
+        )}
       </div>
     );
   }

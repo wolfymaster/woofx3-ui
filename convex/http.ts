@@ -22,7 +22,7 @@ import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
-import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
+import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
 import { widgetCanonicalKey } from "./lib/widgetKey";
 import { logger } from "./logger";
 import { canonicalIdForStorageKey } from "./resourceValues";
@@ -61,6 +61,20 @@ auth.addHttpRoutes(http);
 
 function assert(condition: unknown, msg: string): asserts condition {
   if (!condition) throw new Error(`[twitch-oauth] ASSERT FAILED: ${msg}`);
+}
+
+/**
+ * Back to the callback page in connect mode with an error to show. The
+ * creator is signed in already, so the login page's error slot is the wrong
+ * place for a connect that was refused.
+ */
+function connectErrorRedirect(siteUrl: string, redirectTo: string, message: string) {
+  logger.error("twitch connect refused", { message });
+  const params = new URLSearchParams({ mode: "connect", error: message, redirect_to: redirectTo });
+  return new Response(null, {
+    status: 302,
+    headers: { Location: `${siteUrl}/auth/twitch/callback?${params}` },
+  });
 }
 
 function errorRedirect(siteUrl: string, step: string, detail: string) {
@@ -125,7 +139,20 @@ http.route({
     if (!stateResult) {
       return errorRedirect(siteUrl, "invalid_state", "state not found or expired");
     }
-    const { redirectTo, instanceId } = stateResult;
+    const { redirectTo, instanceId, userId } = stateResult;
+
+    // An integration state is minted only by twitchIntegration.startConnect,
+    // for an owner or admin. Checked again here because a role can be taken
+    // away in the minutes the creator spends on Twitch's consent page.
+    if (instanceId) {
+      if (!userId) {
+        return connectErrorRedirect(siteUrl, redirectTo, "This connect request was not started by a signed-in user.");
+      }
+      const role = await ctx.runQuery(internal.twitchIntegration.memberRole, { instanceId, userId });
+      if (!canManageTwitchLink(role)) {
+        return connectErrorRedirect(siteUrl, redirectTo, "Only an owner or admin of this instance can connect Twitch.");
+      }
+    }
 
     logger.info("state valid, exchanging code", { isIntegration: !!instanceId });
 
@@ -168,6 +195,15 @@ http.route({
     logger.info("got twitch user", { login: twitchUser.login, id: twitchUser.id });
 
     if (instanceId) {
+      const { link: existingLink } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
+        instanceId,
+        platform: "twitch",
+      });
+      const refusal = relinkRefusal(existingLink, twitchUser.id);
+      if (refusal) {
+        return connectErrorRedirect(siteUrl, redirectTo, refusal);
+      }
+
       const expiresAt = Date.now() + tokenData.expires_in * 1000;
       const scopes = Array.isArray(tokenData.scope) ? tokenData.scope : tokenData.scope.split(" ");
 
@@ -211,44 +247,6 @@ http.route({
     return new Response(null, {
       status: 302,
       headers: { Location: dest },
-    });
-  }),
-});
-
-http.route({
-  path: "/api/integrations/twitch/start",
-  method: "GET",
-  handler: httpAction(async (ctx, request) => {
-    assert(process.env.AUTH_TWITCH_ID, "AUTH_TWITCH_ID env var is not set");
-    assert(process.env.AUTH_TWITCH_REDIRECT_URI, "AUTH_TWITCH_REDIRECT_URI env var is not set");
-
-    const url = new URL(request.url);
-    const instanceId = url.searchParams.get("instanceId");
-    const redirectTo = url.searchParams.get("redirect_to") ?? "/settings?tab=integrations";
-    const state = crypto.randomUUID();
-
-    if (!instanceId) {
-      return errorRedirect(process.env.SITE_URL ?? "", "missing_params", "instanceId is required");
-    }
-
-    await ctx.runMutation(internal.twitchAuth.storeState, {
-      state,
-      redirectTo,
-      instanceId: instanceId as Id<"instances">,
-    });
-
-    const params = new URLSearchParams({
-      client_id: process.env.AUTH_TWITCH_ID,
-      redirect_uri: process.env.AUTH_TWITCH_REDIRECT_URI,
-      response_type: "code",
-      scope: TWITCH_INTEGRATION_SCOPES.join(" "),
-      state,
-    });
-
-    logger.info("redirecting to twitch for integration", { state, redirectTo, instanceId });
-    return new Response(null, {
-      status: 302,
-      headers: { Location: `https://id.twitch.tv/oauth2/authorize?${params}` },
     });
   }),
 });
