@@ -2,7 +2,15 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import {
+  type ActionCtx,
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { isMissingEngineMethodError } from "./lib/engineMethodSupport";
 import {
@@ -14,9 +22,17 @@ import {
   type OverlayFacts,
   type StreamInfoFacts,
   type TwitchLinkFacts,
+  type WorkflowFacts,
 } from "./lib/goLiveFacts";
+import { isMarkerRequestPending } from "./lib/goLiveMarker";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
-import { authorizeTwitch, authorizeTwitchUnscoped } from "./lib/twitchAuth";
+import {
+  type AuthorizedTwitchCall,
+  authorizeTwitchUnattended,
+  authorizeTwitchUnscoped,
+  freshTwitchCredentials,
+  missingTwitchScopeMessage,
+} from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
@@ -33,9 +49,9 @@ const TWITCH_VALIDATE_URL = "https://id.twitch.tv/oauth2/validate";
 const SEND_SCOPE = "user:write:chat";
 const MARKER_SCOPE = "channel:manage:broadcast";
 const MARKER_DESCRIPTION = "Stream start";
-const MAX_SCENES_READ = 500;
 const MAX_SOURCE_KEYS_READ = 500;
-const MAX_WORKFLOWS_READ = 1000;
+/** Past this many enabled workflows the checklist just says "20+". */
+const WORKFLOW_COUNT_CAP = 20;
 
 /** The stub surface these checks call. Declared here because the shared contract may predate listObsScenes. */
 interface ObsListingApi {
@@ -72,8 +88,8 @@ export const checklist = query({
   ): Promise<{
     dismissedCheckIds: string[];
     lastGoLive: LastGoLive | null;
-    overlays: OverlayFacts;
-    workflows: { total: number; enabled: number };
+    markerPending: boolean;
+    workflows: WorkflowFacts;
   } | null> => {
     if (!(await isInstanceMember(ctx, args.instanceId))) {
       return null;
@@ -84,10 +100,56 @@ export const checklist = query({
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
       .first();
 
-    const scenes = await ctx.db
+    // Workflow documents carry whole definitions, so read only as many as the
+    // answer needs: enabled ones up to the cap, and one of any kind when none is.
+    const enabled = await ctx.db
+      .query("workflows")
+      .withIndex("by_instance_enabled", (q) => q.eq("instanceId", args.instanceId).eq("isEnabled", true))
+      .take(WORKFLOW_COUNT_CAP + 1);
+    const anyWorkflow =
+      enabled.length > 0 ||
+      (await ctx.db
+        .query("workflows")
+        .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+        .first()) !== null;
+
+    return {
+      dismissedCheckIds: row?.dismissedCheckIds ?? [],
+      lastGoLive: row?.lastCompletedAt
+        ? {
+            completedAt: row.lastCompletedAt,
+            title: row.lastTitle ?? null,
+            categoryId: row.lastCategoryId ?? null,
+            categoryName: row.lastCategoryName ?? null,
+          }
+        : null,
+      // Date.now() in a query is fixed at run time; a request that lapses
+      // while the page is open simply reads as pending until the next change.
+      markerPending: isMarkerRequestPending(row?.pendingMarkerRequestedAt, Date.now()),
+      workflows: {
+        any: anyWorkflow,
+        enabled: Math.min(enabled.length, WORKFLOW_COUNT_CAP),
+        enabledCapped: enabled.length > WORKFLOW_COUNT_CAP,
+      },
+    };
+  },
+});
+
+/**
+ * Kept apart from `checklist` because a browser source loading its URL
+ * rewrites the key's lastUsedAt; only this query reruns when that happens.
+ */
+export const overlays = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<OverlayFacts | null> => {
+    if (!(await isInstanceMember(ctx, args.instanceId))) {
+      return null;
+    }
+
+    const scene = await ctx.db
       .query("scenes")
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .take(MAX_SCENES_READ);
+      .first();
 
     // Preview keys belong to the scene editor's own canvas; only the others
     // are what a streamer pastes into OBS.
@@ -103,31 +165,11 @@ export const checklist = query({
     );
     const featured = byRecentUse[0] ?? null;
 
-    const workflows = await ctx.db
-      .query("workflows")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .take(MAX_WORKFLOWS_READ);
-
     return {
-      dismissedCheckIds: row?.dismissedCheckIds ?? [],
-      lastGoLive: row?.lastCompletedAt
-        ? {
-            completedAt: row.lastCompletedAt,
-            title: row.lastTitle ?? null,
-            categoryId: row.lastCategoryId ?? null,
-            categoryName: row.lastCategoryName ?? null,
-          }
-        : null,
-      overlays: {
-        sceneCount: scenes.length,
-        browserSourceKeyCount: sourceKeys.length,
-        featuredKey: featured?.key ?? null,
-        lastLoadedAt: featured?.lastUsedAt ?? null,
-      },
-      workflows: {
-        total: workflows.length,
-        enabled: workflows.filter((workflow) => workflow.isEnabled).length,
-      },
+      hasScene: scene !== null,
+      browserSourceKeyCount: sourceKeys.length,
+      featuredKey: featured?.key ?? null,
+      lastLoadedAt: featured?.lastUsedAt ?? null,
     };
   },
 });
@@ -184,17 +226,6 @@ export const twitchLinkSummary = internalQuery({
       return null;
     }
     return { login: twitch.platformUsername, scopes: twitch.scopes };
-  },
-});
-
-export const isLive = internalQuery({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<boolean> => {
-    const live = await ctx.db
-      .query("instanceLiveState")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .first();
-    return live?.isLive ?? false;
   },
 });
 
@@ -358,6 +389,7 @@ export const complete = action({
     instanceId: v.id("instances"),
     /** Posted to chat as the broadcaster when present. */
     announcement: v.optional(v.string()),
+    /** Dropped now when live, else when the stream next goes live. */
     dropMarker: v.boolean(),
   },
   handler: async (ctx, args): Promise<GoLiveCompletion> => {
@@ -371,12 +403,32 @@ export const complete = action({
       throw new ConvexError(`Chat messages are limited to ${MAX_CHAT_MESSAGE_LENGTH} characters`);
     }
 
+    const link: { login: string; scopes: string[] } | null = await ctx.runQuery(internal.goLive.twitchLinkSummary, {
+      instanceId: args.instanceId,
+    });
+    if (!link) {
+      throw new ConvexError("Connect Twitch in Settings → Integrations before finishing the checklist");
+    }
+    // One token for every Helix call below; the membership check above
+    // already stands in for authorizeTwitch's, and scopes are checked per step.
+    let twitch: AuthorizedTwitchCall;
+    try {
+      twitch = await freshTwitchCredentials(ctx, args.instanceId);
+    } catch (error) {
+      throw new ConvexError(`Twitch needs reconnecting: ${messageOf(error)}`);
+    }
+    const requireScope = (scope: string) => {
+      if (!link.scopes.includes(scope)) {
+        throw new Error(missingTwitchScopeMessage(scope));
+      }
+    };
+
     // Each step reports its own outcome: a chat send refused by automod should
     // not stop the marker, and neither should hide the other's result.
     let announcement: GoLiveStepOutcome = { status: "skipped", reason: "No announcement was asked for" };
     if (announcementText) {
       try {
-        const twitch = await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
+        requireScope(SEND_SCOPE);
         await sendChatMessage(twitch, announcementText, { pin: false });
         announcement = { status: "done" };
       } catch (error) {
@@ -386,34 +438,93 @@ export const complete = action({
 
     let marker: GoLiveStepOutcome = { status: "skipped", reason: "No stream marker was asked for" };
     if (args.dropMarker) {
-      const live: boolean = await ctx.runQuery(internal.goLive.isLive, { instanceId: args.instanceId });
-      if (!live) {
-        marker = { status: "skipped", reason: "You're not live yet, and Twitch only marks a live stream" };
-      } else {
-        try {
-          const twitch = await authorizeTwitch(ctx, args.instanceId, MARKER_SCOPE);
+      try {
+        requireScope(MARKER_SCOPE);
+        const request: "live" | "queued" = await ctx.runMutation(internal.goLive.requestStreamStartMarker, {
+          instanceId: args.instanceId,
+          requestedAt: Date.now(),
+        });
+        if (request === "live") {
           await createStreamMarker(twitch, MARKER_DESCRIPTION);
           marker = { status: "done" };
-        } catch (error) {
-          marker = { status: "failed", message: messageOf(error) };
+        } else {
+          marker = { status: "queued", reason: "The marker will be dropped when your stream goes live." };
         }
+      } catch (error) {
+        marker = { status: "failed", message: messageOf(error) };
       }
     }
 
-    let channel: { title: string; categoryId: string; categoryName: string } | undefined;
-    try {
-      const twitch = await authorizeTwitchUnscoped(ctx, args.instanceId);
-      const info = await fetchChannelInfo(twitch);
-      channel = { title: info.title, categoryId: info.categoryId, categoryName: info.categoryName };
-    } catch {
-      channel = undefined;
+    // A run where everything asked for failed did not finish the checklist, so
+    // it must not become the "last go-live" the next title check compares to.
+    const requested = [announcement, marker].filter((outcome) => outcome.status !== "skipped");
+    const allFailed = requested.length > 0 && requested.every((outcome) => outcome.status === "failed");
+    if (!allFailed) {
+      let channel: { title: string; categoryId: string; categoryName: string } | undefined;
+      try {
+        const info = await fetchChannelInfo(twitch);
+        channel = { title: info.title, categoryId: info.categoryId, categoryName: info.categoryName };
+      } catch {
+        channel = undefined;
+      }
+      await ctx.runMutation(internal.goLive.recordCompletion, {
+        instanceId: args.instanceId,
+        completedAt: Date.now(),
+        channel,
+      });
     }
-    await ctx.runMutation(internal.goLive.recordCompletion, {
-      instanceId: args.instanceId,
-      completedAt: Date.now(),
-      channel,
-    });
 
     return { announcement, marker };
+  },
+});
+
+/**
+ * Decides, in one transaction with the live state, whether the marker can be
+ * dropped now or must wait: checking live-ness in the action and writing the
+ * request afterwards would lose a request made just as the stream started.
+ */
+export const requestStreamStartMarker = internalMutation({
+  args: { instanceId: v.id("instances"), requestedAt: v.number() },
+  handler: async (ctx, args): Promise<"live" | "queued"> => {
+    const live = await ctx.db
+      .query("instanceLiveState")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .first();
+    if (live?.isLive) {
+      return "live";
+    }
+
+    const row = await ctx.db
+      .query("goLiveChecklists")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .first();
+    if (row) {
+      await ctx.db.patch(row._id, { pendingMarkerRequestedAt: args.requestedAt, updatedAt: args.requestedAt });
+    } else {
+      await ctx.db.insert("goLiveChecklists", {
+        instanceId: args.instanceId,
+        dismissedCheckIds: [],
+        pendingMarkerRequestedAt: args.requestedAt,
+        updatedAt: args.requestedAt,
+      });
+    }
+    return "queued";
+  },
+});
+
+/**
+ * Drops a marker requested before the stream started; scheduled by
+ * claimPendingStreamStartMarker when the stream goes live. Nobody is waiting
+ * on the result, so a failure is logged rather than thrown.
+ */
+export const dropStreamStartMarker = internalAction({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<void> => {
+    try {
+      const twitch = await authorizeTwitchUnattended(ctx, args.instanceId, MARKER_SCOPE);
+      await createStreamMarker(twitch, MARKER_DESCRIPTION);
+    } catch (error) {
+      console.warn(`[goLive] Couldn't drop the requested stream start marker: ${messageOf(error)}`);
+    }
   },
 });

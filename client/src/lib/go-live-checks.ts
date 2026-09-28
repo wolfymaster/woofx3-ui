@@ -6,6 +6,7 @@ import {
   type OverlayFacts,
   type StreamInfoFacts,
   type TwitchLinkFacts,
+  type WorkflowFacts,
 } from "@convex/lib/goLiveFacts";
 import { formatTimeAgo } from "@/lib/time-ago";
 
@@ -137,7 +138,7 @@ export function twitchCheck(facts: TwitchLinkFacts): CheckResult {
  * URL is recorded, which says the URL has worked, not that it is loaded now.
  */
 export function overlaysCheck(facts: OverlayFacts, browserSourceUrl: string | null, now: number): CheckResult {
-  if (facts.sceneCount === 0) {
+  if (!facts.hasScene) {
     return result("overlays", "fail", "There are no scenes yet, so OBS has no overlay to show", {
       fixes: [{ kind: "route", label: "Create a scene", href: SCENES_PATH }],
     });
@@ -223,12 +224,11 @@ export function streamInfoCheck(facts: StreamInfoFacts, lastGoLive: LastGoLive |
   return result("stream-info", "pass", facts.title.trim(), { details: current.slice(1), fixes });
 }
 
-export function workflowsCheck(counts: { total: number; enabled: number }): CheckResult {
-  if (counts.enabled === 0) {
-    const summary =
-      counts.total === 0
-        ? "You have no workflows, so nothing will react to follows, subs or raids"
-        : "None of your workflows are turned on, so nothing will react to follows, subs or raids";
+export function workflowsCheck(facts: WorkflowFacts): CheckResult {
+  if (facts.enabled === 0) {
+    const summary = facts.any
+      ? "None of your workflows are turned on, so nothing will react to follows, subs or raids"
+      : "You have no workflows, so nothing will react to follows, subs or raids";
     return result("workflows", "warn", summary, {
       fixes: [
         { kind: "route", label: "Browse starter packs", href: STARTER_PACKS_PATH },
@@ -236,7 +236,10 @@ export function workflowsCheck(counts: { total: number; enabled: number }): Chec
       ],
     });
   }
-  return result("workflows", "pass", `${plural(counts.enabled, "workflow is", "workflows are")} turned on`);
+  if (facts.enabledCapped) {
+    return result("workflows", "pass", `${facts.enabled}+ workflows are turned on`);
+  }
+  return result("workflows", "pass", `${plural(facts.enabled, "workflow is", "workflows are")} turned on`);
 }
 
 export type ChecklistOverall = CheckStatus;

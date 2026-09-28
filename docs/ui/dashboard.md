@@ -61,10 +61,10 @@ Convex actions in `convex/goLive.ts` for exactly that reason.
 |-------|--------|-------|
 | Engine | `$engineConnected` from the transport | No request of its own |
 | Twitch connection | `goLive.checkTwitch` | Validates the token with Twitch and diffs its scopes against `TWITCH_INTEGRATION_SCOPES` |
-| Overlays | `goLive.checklist` | Scenes and OBS browser-source keys. Nothing reports whether an overlay is open in OBS right now, so the best case is a warning with the URL to copy and when a browser source last loaded one |
+| Overlays | `goLive.overlays` | Scenes and OBS browser-source keys. Nothing reports whether an overlay is open in OBS right now, so the best case is a warning with the URL to copy and when a browser source last loaded one |
 | OBS | `goLive.checkObs` | Engine `listObsScenes`; an engine without the method reads as "update the engine" |
 | Stream info | `goLive.checkStreamInfo` | Helix `GET /channels`; warns about no title or category, a title identical to the last completed checklist, or a category unchanged for over a week |
-| Workflows | `goLive.checklist` | Warns when none is enabled |
+| Workflows | `goLive.checklist` | Warns when none is enabled; counts enabled workflows only up to 20 through `workflows.by_instance_enabled` |
 
 Whether a fact passes, warns or fails is decided in `lib/go-live-checks.ts`,
 pure and tested, next to the fix each result offers. "Fail" is kept for what
@@ -73,12 +73,20 @@ warning. A check can be dismissed (an instance without OBS, say): dismissals
 live in `goLiveChecklists`, one row per instance shared by the whole team, and
 never count toward the verdict.
 
+Overlays have their own query because a browser source loading its URL
+rewrites the key's `lastUsedAt`, and only that query should rerun.
+
 Finishing the checklist (`goLive.complete`) optionally posts an editable
-announcement to chat and, only while live, drops a "Stream start" stream
-marker. Each step reports its own outcome so one refusal does not hide the
-other. It also records the channel's title and category, which is what the
-next run's "same title as last time" is measured against: Twitch keeps no
-history of either.
+announcement to chat and drops a "Stream start" stream marker. Twitch only
+marks a live broadcast, and the checklist usually runs before going live, so
+an offline request is stored on the `goLiveChecklists` row and claimed by
+whichever writer first flips `instanceLiveState` to live (the STREAM_ONLINE
+webhook or the poll), which schedules `goLive.dropStreamStartMarker`. A
+request older than two hours is dropped unused (`lib/goLiveMarker.ts`). Each
+step reports its own outcome so one refusal does not hide the other. Unless
+every requested step failed, it also records the channel's title and
+category, which is what the next run's "same title as last time" is measured
+against: Twitch keeps no history of either.
 
 ## Recent streams
 

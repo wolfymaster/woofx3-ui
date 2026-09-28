@@ -50,7 +50,7 @@ export interface LastGoLive {
 }
 
 export interface OverlayFacts {
-  sceneCount: number;
+  hasScene: boolean;
   /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
   browserSourceKeyCount: number;
   /** The key most recently loaded by a browser source, else the newest one. */
@@ -59,8 +59,19 @@ export interface OverlayFacts {
   lastLoadedAt: number | null;
 }
 
+export interface WorkflowFacts {
+  /** Whether the instance has any workflow at all, enabled or not. */
+  any: boolean;
+  /** Enabled workflows, counted up to a cap. */
+  enabled: number;
+  /** True when there are more enabled workflows than `enabled` says. */
+  enabledCapped: boolean;
+}
+
 export type GoLiveStepOutcome =
   | { status: "done" }
+  /** Waiting on something outside the request, such as the stream going live. */
+  | { status: "queued"; reason: string }
   | { status: "skipped"; reason: string }
   | { status: "failed"; message: string };
 

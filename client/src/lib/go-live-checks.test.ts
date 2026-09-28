@@ -41,7 +41,7 @@ function lastGoLive(overrides: Partial<LastGoLive> = {}): LastGoLive {
 }
 
 function overlays(overrides: Partial<OverlayFacts> = {}): OverlayFacts {
-  return { sceneCount: 1, browserSourceKeyCount: 1, featuredKey: "abc", lastLoadedAt: NOW - 60_000, ...overrides };
+  return { hasScene: true, browserSourceKeyCount: 1, featuredKey: "abc", lastLoadedAt: NOW - 60_000, ...overrides };
 }
 
 describe("engineCheck", () => {
@@ -102,7 +102,7 @@ describe("twitchCheck", () => {
 
 describe("overlaysCheck", () => {
   test("fails without any scene", () => {
-    expect(overlaysCheck(overlays({ sceneCount: 0, browserSourceKeyCount: 0 }), null, NOW).status).toBe("fail");
+    expect(overlaysCheck(overlays({ hasScene: false, browserSourceKeyCount: 0 }), null, NOW).status).toBe("fail");
   });
 
   test("fails when scenes exist but none has a browser-source URL", () => {
@@ -210,7 +210,7 @@ describe("streamInfoCheck", () => {
 
 describe("workflowsCheck", () => {
   test("warns with starter packs and workflows when nothing is on", () => {
-    const check = workflowsCheck({ total: 2, enabled: 0 });
+    const check = workflowsCheck({ any: true, enabled: 0, enabledCapped: false });
     expect(check.status).toBe("warn");
     expect(check.fixes.map((fix) => (fix.kind === "route" ? fix.href : ""))).toEqual([
       "/stream/starter-packs",
@@ -219,16 +219,20 @@ describe("workflowsCheck", () => {
   });
 
   test("passes with at least one enabled workflow", () => {
-    expect(workflowsCheck({ total: 3, enabled: 1 })).toMatchObject({
+    expect(workflowsCheck({ any: true, enabled: 1, enabledCapped: false })).toMatchObject({
       status: "pass",
       summary: "1 workflow is turned on",
     });
   });
 });
 
+test("workflowsCheck says when the enabled count hit its cap", () => {
+  expect(workflowsCheck({ any: true, enabled: 20, enabledCapped: true }).summary).toBe("20+ workflows are turned on");
+});
+
 describe("summarizeChecklist", () => {
   const pass = engineCheck(true);
-  const warn = workflowsCheck({ total: 0, enabled: 0 });
+  const warn = workflowsCheck({ any: false, enabled: 0, enabledCapped: false });
   const fail = twitchCheck({ linked: false });
 
   test("the worst status wins", () => {

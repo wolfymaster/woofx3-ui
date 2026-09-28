@@ -60,6 +60,10 @@ export async function authorizeTwitchUnscoped(
   return freshTwitchCredentials(ctx, instanceId);
 }
 
+export function missingTwitchScopeMessage(scope: string): string {
+  return `Your Twitch connection is missing the "${scope}" permission. Reconnect Twitch in Settings → Integrations to grant it.`;
+}
+
 /**
  * The same token and scope work without the caller check, for a scheduled job
  * that has no authenticated user behind it. Never reachable from a client:
@@ -72,9 +76,7 @@ export async function authorizeTwitchUnattended(
 ): Promise<AuthorizedTwitchCall> {
   const scopes: string[] = await ctx.runQuery(internal.lib.twitchAuth.twitchScopesFor, { instanceId });
   if (!scopes.includes(requiredScope)) {
-    throw new Error(
-      `Your Twitch connection is missing the "${requiredScope}" permission. Reconnect Twitch in Settings → Integrations to grant it.`
-    );
+    throw new Error(missingTwitchScopeMessage(requiredScope));
   }
 
   return freshTwitchCredentials(ctx, instanceId);
@@ -91,7 +93,14 @@ async function assertCallerIsMember(ctx: ActionCtx, instanceId: Id<"instances">)
   }
 }
 
-async function freshTwitchCredentials(ctx: ActionCtx, instanceId: Id<"instances">): Promise<AuthorizedTwitchCall> {
+/**
+ * A fresh token with no caller or scope check. Only for an action that has
+ * already checked both itself, so several Helix calls can share one token.
+ */
+export async function freshTwitchCredentials(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<AuthorizedTwitchCall> {
   const token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, { instanceId });
   if (!token) {
     throw new Error("Twitch is not connected for this instance");

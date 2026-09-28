@@ -161,6 +161,9 @@ function describeStep(outcome: GoLiveStepOutcome, done: string): string | null {
     case "done": {
       return done;
     }
+    case "queued": {
+      return outcome.reason;
+    }
     case "skipped": {
       return null;
     }
@@ -178,7 +181,7 @@ function describeStep(outcome: GoLiveStepOutcome, done: string): string | null {
 export function GoLiveChecklist({ variant }: { variant: "page" | "widget" }) {
   const compact = variant === "widget";
   const { toast } = useToast();
-  const { summary, isLive, runAll, rerun, setDismissed, complete } = useGoLiveChecklist();
+  const { summary, isLive, markerPending, runAll, rerun, setDismissed, complete } = useGoLiveChecklist();
 
   const [announce, setAnnounce] = useState(true);
   const [announcement, setAnnouncement] = useState(DEFAULT_ANNOUNCEMENT);
@@ -221,7 +224,7 @@ export function GoLiveChecklist({ variant }: { variant: "page" | "widget" }) {
     try {
       const result = await complete({
         announcement: announce ? announcement : undefined,
-        dropMarker: dropMarker && isLive,
+        dropMarker,
       });
       report(result);
     } catch (error) {
@@ -322,17 +325,18 @@ export function GoLiveChecklist({ variant }: { variant: "page" | "widget" }) {
           <div className="flex items-center gap-2">
             <Checkbox
               id={`go-live-marker-${variant}`}
-              checked={dropMarker && isLive}
-              disabled={!isLive}
+              checked={dropMarker}
               onCheckedChange={(checked) => setDropMarker(checked === true)}
             />
-            <Label
-              htmlFor={`go-live-marker-${variant}`}
-              className={cn("text-xs font-normal", !isLive && "text-muted-foreground")}
-            >
-              {isLive ? 'Drop a "Stream start" marker' : 'Drop a "Stream start" marker (once you are live)'}
+            <Label htmlFor={`go-live-marker-${variant}`} className="text-xs font-normal">
+              {isLive ? 'Drop a "Stream start" marker now' : 'Drop a "Stream start" marker when I go live'}
             </Label>
           </div>
+          {markerPending && !isLive && (
+            <p className="text-xs text-muted-foreground" data-testid="text-go-live-marker-pending">
+              A "Stream start" marker is waiting for your stream to go live (requests expire after two hours).
+            </p>
+          )}
           <Button
             className="w-full gap-1.5"
             size={compact ? "sm" : "default"}

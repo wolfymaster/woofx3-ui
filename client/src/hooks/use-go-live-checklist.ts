@@ -52,6 +52,8 @@ export interface GoLiveChecklist {
   /** Null until the instance and its checklist row have loaded. */
   summary: ChecklistSummary | null;
   isLive: boolean;
+  /** A "Stream start" marker is waiting for the stream to go live. */
+  markerPending: boolean;
   runAll: () => void;
   rerun: (id: GoLiveCheckId) => void;
   setDismissed: (id: GoLiveCheckId, dismissed: boolean) => Promise<void>;
@@ -64,6 +66,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
   const { connected } = useEngineHealth();
   const liveState = useLiveState();
   const local = useQuery(api.goLive.checklist, instanceId ? { instanceId } : "skip");
+  const overlays = useQuery(api.goLive.overlays, instanceId ? { instanceId } : "skip");
 
   const checkTwitch = useAction(api.goLive.checkTwitch);
   const checkObs = useAction(api.goLive.checkObs);
@@ -129,7 +132,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
   );
 
   const summary = useMemo((): ChecklistSummary | null => {
-    if (!local) {
+    if (!local || !overlays) {
       return null;
     }
     const now = Date.now();
@@ -153,17 +156,17 @@ export function useGoLiveChecklist(): GoLiveChecklist {
         }
       }
     };
-    const featuredKey = local.overlays.featuredKey;
+    const featuredKey = overlays.featuredKey;
     const results: CheckResult[] = [
       engineCheck(connected),
       remote("twitch"),
-      overlaysCheck(local.overlays, featuredKey ? browserSourceUrlForKey(featuredKey) : null, now),
+      overlaysCheck(overlays, featuredKey ? browserSourceUrlForKey(featuredKey) : null, now),
       remote("obs"),
       remote("stream-info"),
       workflowsCheck(local.workflows),
     ];
     return summarizeChecklist(results, local.dismissedCheckIds);
-  }, [local, outcomes, connected]);
+  }, [local, overlays, outcomes, connected]);
 
   const setDismissed = useCallback(
     async (id: GoLiveCheckId, dismissed: boolean) => {
@@ -192,6 +195,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
   return {
     summary,
     isLive: liveState?.isLive ?? false,
+    markerPending: local?.markerPending ?? false,
     runAll,
     rerun,
     setDismissed,

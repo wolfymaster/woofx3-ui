@@ -521,6 +521,10 @@ export default defineSchema({
     lastTitle: v.optional(v.string()),
     lastCategoryId: v.optional(v.string()),
     lastCategoryName: v.optional(v.string()),
+    // Set when "Stream start" was asked for before going live; the marker is
+    // dropped by whichever writer first flips instanceLiveState to live, and
+    // a request older than lib/goLiveMarker.ts's window is ignored.
+    pendingMarkerRequestedAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_instance", ["instanceId"]),
 
@@ -721,6 +725,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_instance", ["instanceId"])
+    .index("by_instance_enabled", ["instanceId", "isEnabled"])
     .index("by_engine_id", ["instanceId", "engineWorkflowId"]),
 
   // pendingWorkflowOperations: correlation records awaiting a webhook echo
