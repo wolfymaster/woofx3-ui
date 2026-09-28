@@ -1,5 +1,6 @@
-import type { ConditionConfig, TaskDefinition, WaitConfig, WorkflowDefinition } from "@woofx3/api";
+import type { ConditionConfig, TaskDefinition, WorkflowDefinition } from "@woofx3/api";
 import type { TriggerConfig as EngineTriggerConfig } from "@woofx3/api/workflow-definition";
+import type { WaitConfig } from "./wait-config";
 
 /** Engine embeds JSON-Schema-style `$ref`/`function` fields the shared TS schema doesn't declare. */
 type TriggerBlockWithRef = EngineTriggerConfig & { $ref?: string };
@@ -269,7 +270,9 @@ function convertNodeToTask(node: StepNode): TaskDefinition {
   return {
     id: node.id,
     type: "wait",
-    wait: node.wait,
+    // The editor's WaitConfig declares the delay wait itself, which an engine type without it
+    // does not accept; the two are the same shape once the engine declares it.
+    wait: node.wait as TaskDefinition["wait"],
   };
 }
 
