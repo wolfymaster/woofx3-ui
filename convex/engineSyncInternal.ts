@@ -6,7 +6,7 @@ import { reconcileEndpoints } from "./inboundWebhooks";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
-import { canAccessAccount } from "./lib/teamAccess";
+import { getInstanceMembership } from "./lib/teamAccess";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
 // pre-spec deployment. Safe to delete after the first prod deploy.
@@ -1160,12 +1160,7 @@ export const findInstancesMissingSyncRow = internalQuery({
 export const getSyncStateForUser = internalQuery({
   args: { instanceId: v.id("instances"), userId: v.id("users") },
   handler: async (ctx, { instanceId, userId }) => {
-    const inst = await ctx.db.get(instanceId);
-    if (!inst) {
-      return null;
-    }
-    const allowed = await canAccessAccount(ctx, inst.accountId, userId);
-    if (!allowed) {
+    if (!(await getInstanceMembership(ctx, instanceId, userId))) {
       return null;
     }
     const syncState = await ctx.db
@@ -1179,22 +1174,6 @@ export const getSyncStateForUser = internalQuery({
       .take(5);
     const currentRun = recentRuns.find((r) => r.status === "running") ?? null;
     return { syncState, currentRun, recentRuns };
-  },
-});
-
-/** Throws if user can't access; otherwise returns nothing. */
-export const assertCanSyncInstance = internalQuery({
-  args: { instanceId: v.id("instances"), userId: v.id("users") },
-  handler: async (ctx, { instanceId, userId }) => {
-    const inst = await ctx.db.get(instanceId);
-    if (!inst) {
-      throw new Error("Instance not found");
-    }
-    const allowed = await canAccessAccount(ctx, inst.accountId, userId);
-    if (!allowed) {
-      throw new Error("Not authorized for this instance");
-    }
-    return true;
   },
 });
 

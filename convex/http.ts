@@ -39,7 +39,6 @@ import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE
 import { logger } from "./logger";
 import { canonicalIdForStorageKey } from "./resourceValues";
 import "./browserSource";
-import "./obsCommands";
 import "./moduleWebhook";
 
 const http = httpRouter();
@@ -389,63 +388,6 @@ http.route({
     return redirect(
       `${siteUrl}${withQuery(redirectTo, { integration: "spotify", connect_code: handoffCode }, "/modules")}`
     );
-  }),
-});
-
-http.route({ path: "/api/webhooks/woofx3/alerts", method: "OPTIONS", handler: preflightHandler });
-http.route({
-  path: "/api/webhooks/woofx3/alerts",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const payload = await request.json();
-
-    logger.info("webhook: alerts endpoint hit", {
-      eventType: payload.eventType,
-      instanceId: payload.instanceId,
-      user: payload.user,
-    });
-
-    if (!payload.instanceId || !payload.eventType || !payload.user) {
-      logger.warn("webhook: alerts missing required fields", {
-        hasInstanceId: !!payload.instanceId,
-        hasEventType: !!payload.eventType,
-        hasUser: !!payload.user,
-      });
-      return corsJson({ error: "Missing required fields" }, 400);
-    }
-
-    const instanceId = payload.instanceId as string;
-    const scene = await ctx.runQuery(internal.browserSource.getDefaultScene, { instanceId });
-
-    if (!scene) {
-      return corsJson({ error: "No scene found for instance" }, 404);
-    }
-
-    const now = Date.now();
-    const alertDescriptor = await ctx.runQuery(internal.browserSource.getAlertDescriptor, {
-      sceneId: scene._id,
-      alertType: payload.eventType,
-    });
-
-    const ttl = alertDescriptor?.ttl ?? 300;
-    const priority = alertDescriptor?.priority ?? 0;
-
-    const alertId = await ctx.runMutation(internal.browserSource.createAlert, {
-      instanceId: scene.instanceId,
-      sceneId: scene._id,
-      sourceKey: payload.sourceKey ?? "",
-      alertType: payload.eventType,
-      user: payload.user,
-      amount: payload.amount,
-      message: payload.message,
-      tier: payload.tier,
-      rawPayload: payload,
-      priority,
-      ttl,
-      expiresAt: now + ttl * 1000,
-    });
-
-    return corsJson({ success: true, alertId });
   }),
 });
 
@@ -1197,115 +1139,6 @@ function maintenanceErrorText(value: unknown): string | undefined {
   }
   return typeof error.code === "string" ? `${error.code}: ${error.message}` : error.message;
 }
-
-http.route({ pathPrefix: "/api/browser-source/alerts/", method: "OPTIONS", handler: preflightHandler });
-http.route({
-  pathPrefix: "/api/browser-source/alerts/",
-  method: "PATCH",
-  handler: httpAction(async (ctx, request) => {
-    const url = new URL(request.url);
-    const alertId = url.pathname.split("/").pop();
-    const body = await request.json();
-
-    if (!alertId) {
-      return corsJson({ error: "Missing alertId" }, 400);
-    }
-
-    const newState = body.state as "rendering" | "complete" | "cancelled" | "expired" | undefined;
-
-    if (!newState) {
-      return corsJson({ error: "Missing state in request body" }, 400);
-    }
-
-    const validStates = ["rendering", "complete", "cancelled", "expired"];
-    if (!validStates.includes(newState)) {
-      return corsJson({ error: "Invalid state" }, 400);
-    }
-
-    await ctx.runMutation(internal.browserSource.updateAlertState, {
-      alertId: alertId as string,
-      state: newState,
-      completedAt: newState === "complete" ? Date.now() : undefined,
-    });
-
-    if (newState === "complete" || newState === "cancelled" || newState === "expired") {
-      const alert = await ctx.runQuery(internal.browserSource.getAlert, { alertId: alertId as string });
-      if (alert && "_id" in alert && "instanceId" in alert && "sceneId" in alert) {
-        const typedAlert = alert as {
-          instanceId: string;
-          sceneId: string;
-          alertType: string;
-          user: string;
-          amount?: number;
-          message?: string;
-          tier?: string;
-          createdAt: number;
-        };
-        await ctx.runMutation(internal.browserSource.createAlertHistory, {
-          instanceId: typedAlert.instanceId as any,
-          sceneId: typedAlert.sceneId as any,
-          alertType: typedAlert.alertType,
-          user: typedAlert.user,
-          amount: typedAlert.amount,
-          message: typedAlert.message,
-          tier: typedAlert.tier,
-          state: newState,
-          createdAt: typedAlert.createdAt,
-        });
-      }
-    }
-
-    return corsJson({ success: true });
-  }),
-});
-
-http.route({ path: "/api/obs/commands", method: "OPTIONS", handler: preflightHandler });
-http.route({
-  path: "/api/obs/commands",
-  method: "GET",
-  handler: httpAction(async (ctx, request) => {
-    const url = new URL(request.url);
-    const sceneId = url.searchParams.get("sceneId");
-
-    if (!sceneId) {
-      return corsJson({ error: "Missing sceneId" }, 400);
-    }
-
-    const commands = await ctx.runQuery(internal.obsCommands.getPendingCommands, {
-      sceneId: sceneId as string,
-    });
-
-    return corsJson({ commands });
-  }),
-});
-
-http.route({ pathPrefix: "/api/obs/commands/", method: "OPTIONS", handler: preflightHandler });
-http.route({
-  pathPrefix: "/api/obs/commands/",
-  method: "PATCH",
-  handler: httpAction(async (ctx, request) => {
-    const url = new URL(request.url);
-    const commandId = url.pathname.split("/").pop();
-    const body = await request.json();
-
-    if (!commandId) {
-      return corsJson({ error: "Missing commandId" }, 400);
-    }
-
-    const newState = body.state as "executing" | "complete" | "cancelled" | "expired" | undefined;
-
-    if (!newState) {
-      return corsJson({ error: "Missing state in request body" }, 400);
-    }
-
-    await ctx.runMutation(internal.obsCommands.updateCommandState, {
-      commandId: commandId as string,
-      state: newState,
-    });
-
-    return corsJson({ success: true });
-  }),
-});
 
 http.route({
   pathPrefix: "/browser-source/",
