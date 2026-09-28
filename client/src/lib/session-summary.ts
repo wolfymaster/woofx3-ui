@@ -43,3 +43,20 @@ export function formatViewerFigure(value: number | null): string {
   }
   return Math.round(value).toLocaleString();
 }
+
+function countOf(count: number, one: string, many: string): string {
+  return `${count.toLocaleString()} ${count === 1 ? one : many}`;
+}
+
+/**
+ * Subs for one line of text, e.g. "12 subs · 5 gifted". The engine's `subs`
+ * excludes gifted subs (the two add up without counting a gift twice), so they
+ * are shown side by side, never one as part of the other.
+ */
+export function formatSubsBreakdown(subs: number, giftedSubs: number): string {
+  const taken = countOf(subs, "sub", "subs");
+  if (giftedSubs === 0) {
+    return taken;
+  }
+  return `${taken} · ${giftedSubs.toLocaleString()} gifted`;
+}

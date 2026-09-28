@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { formatLiveDuration, formatViewerFigure, liveDurationMs } from "./session-summary";
+import { formatLiveDuration, formatSubsBreakdown, formatViewerFigure, liveDurationMs } from "./session-summary";
 
 describe("liveDurationMs", () => {
   it("adds up segments and skips the gaps between them", () => {
@@ -32,5 +32,23 @@ describe("formatViewerFigure", () => {
     expect(formatViewerFigure(null)).toBe("—");
     expect(formatViewerFigure(0)).toBe("0");
     expect(formatViewerFigure(61.5)).toBe("62");
+  });
+});
+
+describe("formatSubsBreakdown", () => {
+  it("shows taken and gifted subs side by side", () => {
+    expect(formatSubsBreakdown(12, 5)).toBe("12 subs · 5 gifted");
+  });
+
+  it("leaves out gifted subs when there were none", () => {
+    expect(formatSubsBreakdown(1, 0)).toBe("1 sub");
+  });
+
+  it("keeps a zero taken count when only gifts came in", () => {
+    expect(formatSubsBreakdown(0, 2)).toBe("0 subs · 2 gifted");
+  });
+
+  it("groups thousands", () => {
+    expect(formatSubsBreakdown(1200, 3400)).toBe(`${(1200).toLocaleString()} subs · ${(3400).toLocaleString()} gifted`);
   });
 });

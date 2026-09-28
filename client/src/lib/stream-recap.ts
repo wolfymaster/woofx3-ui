@@ -125,10 +125,21 @@ function formatCount(value: number): string {
   return value.toLocaleString("en-US");
 }
 
+/**
+ * Mentions for the top `THANK_YOU_PER_LIST` of one leaderboard. The cut is made
+ * before unnamed entries are dropped, so a nameless #1 leaves a shorter list
+ * rather than promoting #4 into the "top". `userName` is the display name on
+ * the viewer's latest event, which Twitch chat resolves as a mention.
+ */
 function mentions(supporters: ReadonlyArray<RecapSupporter>, unit: (total: number) => string): string[] {
-  return supporters
-    .filter((supporter) => supporter.userName !== null && supporter.userName.trim() !== "")
-    .map((supporter) => `@${supporter.userName?.trim()} (${unit(supporter.total)})`);
+  const mentioned: string[] = [];
+  for (const supporter of supporters.slice(0, THANK_YOU_PER_LIST)) {
+    const name = supporter.userName?.trim() ?? "";
+    if (name !== "") {
+      mentioned.push(`@${name} (${unit(supporter.total)})`);
+    }
+  }
+  return mentioned;
 }
 
 function giftUnit(total: number): string {
@@ -152,18 +163,17 @@ function compose(gifters: string[], cheerers: string[]): string {
 }
 
 /**
- * A chat-ready thank-you naming the top gifters and cheerers, or null when no
- * supporter has a name to mention. Only named supporters appear: the engine
- * never attributes anonymous gifts or cheers, and a nameless id would mean
- * nothing in chat. When the line would exceed `maxLength`, the lowest-ranked
+ * A chat-ready thank-you naming the top gifters and cheerers, or null when none
+ * of them has a name to mention. Only named supporters appear: an id with no
+ * name on record would mean nothing in chat. When the line would exceed `maxLength`, the lowest-ranked
  * name of the longer list is dropped until it fits.
  */
 export function buildThankYouMessage(
   supporters: { gifters: ReadonlyArray<RecapSupporter>; cheerers: ReadonlyArray<RecapSupporter> },
   maxLength: number = MAX_CHAT_MESSAGE_LENGTH
 ): string | null {
-  const gifters = mentions(supporters.gifters, giftUnit).slice(0, THANK_YOU_PER_LIST);
-  const cheerers = mentions(supporters.cheerers, bitsUnit).slice(0, THANK_YOU_PER_LIST);
+  const gifters = mentions(supporters.gifters, giftUnit);
+  const cheerers = mentions(supporters.cheerers, bitsUnit);
   while (gifters.length + cheerers.length > 0) {
     const message = compose(gifters, cheerers);
     if (message.length <= maxLength) {

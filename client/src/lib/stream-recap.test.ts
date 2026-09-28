@@ -133,6 +133,15 @@ describe("buildThankYouMessage", () => {
     expect(message).toBe("Thank you for an amazing stream! Top cheerers: @dave (1 bit). You all made it happen <3");
   });
 
+  it("does not promote a supporter below the top three past an unnamed one", () => {
+    const message = buildThankYouMessage({
+      gifters: [supporter(null, 40), supporter("b", 30), supporter("c", 20), supporter("d", 10)],
+      cheerers: [],
+    });
+    expect(message).toContain("@b (30 subs), @c (20 subs).");
+    expect(message).not.toContain("@d");
+  });
+
   it("is null when there is no one to thank", () => {
     expect(buildThankYouMessage({ gifters: [], cheerers: [supporter(null, 100)] })).toBeNull();
   });

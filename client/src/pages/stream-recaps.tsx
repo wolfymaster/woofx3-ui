@@ -3,9 +3,16 @@ import { useQuery } from "convex/react";
 import { ChevronRight, History, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
+import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Card } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
-import { formatLiveDuration, formatViewerFigure, liveDurationMs, type SessionSummaryRow } from "@/lib/session-summary";
+import {
+  formatLiveDuration,
+  formatSubsBreakdown,
+  formatViewerFigure,
+  liveDurationMs,
+  type SessionSummaryRow,
+} from "@/lib/session-summary";
 import { streamRecapPath } from "@/lib/stream-recap-route";
 
 /** The most the summary listing returns in one read. */
@@ -31,14 +38,17 @@ function RecapRow({ row }: { row: SessionSummaryRow }) {
       data-testid={`link-recap-${row.sessionId}`}
     >
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium">{heading}</div>
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {heading}
+          {session?.status === "open" && <OpenSessionBadge />}
+        </div>
         <div className="text-xs text-muted-foreground tabular-nums">{subheading}</div>
       </div>
       {totals && (
         <div className="hidden sm:flex gap-6 text-right text-xs text-muted-foreground tabular-nums">
           <span>Peak {formatViewerFigure(totals.peakViewers)}</span>
           <span>{totals.follows.toLocaleString()} follows</span>
-          <span>{(totals.subs + totals.giftedSubs).toLocaleString()} subs</span>
+          <span>{formatSubsBreakdown(totals.subs, totals.giftedSubs)}</span>
           <span>{totals.bits.toLocaleString()} bits</span>
         </div>
       )}
@@ -68,7 +78,7 @@ export default function StreamRecaps() {
       <div className="py-16 text-center" data-testid="recaps-empty">
         <History className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
         <p className="text-sm text-muted-foreground">
-          No finished streams yet. A stream's recap appears once the next one starts.
+          No stream recaps yet. A stream's recap appears once the next one starts.
         </p>
       </div>
     );

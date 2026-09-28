@@ -5,6 +5,7 @@ import { ArrowLeft, Copy, Gift, Loader2, MessageSquare, RefreshCw, Sparkles, Wif
 import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
+import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { ViewerChart } from "@/components/stream-recap/viewer-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -85,7 +86,7 @@ function StatTile({ label, value, detail }: { label: string; value: string; deta
 function TotalsGrid({ totals }: { totals: SessionBody["totals"] }) {
   const plural = (count: number, one: string, many: string) => `${count.toLocaleString()} ${count === 1 ? one : many}`;
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="recap-totals">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3" data-testid="recap-totals">
       <StatTile label="Peak viewers" value={formatViewerFigure(totals.peakViewers)} />
       <StatTile
         label="Average viewers"
@@ -95,11 +96,8 @@ function TotalsGrid({ totals }: { totals: SessionBody["totals"] }) {
         }
       />
       <StatTile label="Follows" value={totals.follows.toLocaleString()} />
-      <StatTile
-        label="Subs"
-        value={totals.subs.toLocaleString()}
-        detail={`${totals.giftedSubs.toLocaleString()} gifted`}
-      />
+      <StatTile label="Subs" value={totals.subs.toLocaleString()} detail="New and renewed" />
+      <StatTile label="Gifted subs" value={totals.giftedSubs.toLocaleString()} />
       <StatTile label="Bits" value={totals.bits.toLocaleString()} detail={plural(totals.cheers, "cheer", "cheers")} />
       <StatTile
         label="Raids"
@@ -110,6 +108,14 @@ function TotalsGrid({ totals }: { totals: SessionBody["totals"] }) {
   );
 }
 
+interface EngineProblem {
+  message: string;
+  /** The engine's own error text, when it gave one. */
+  errorText?: string;
+  /** Whether trying again could help; a refusal or a missing session will not change on retry. */
+  retryable: boolean;
+}
+
 function EngineNotice({ state, onRetry }: { state: StreamRecapEngineState; onRetry: () => void }) {
   if (state.kind === "loading") {
     return (
@@ -118,38 +124,70 @@ function EngineNotice({ state, onRetry }: { state: StreamRecapEngineState; onRet
       </div>
     );
   }
-  const message = engineProblem(state);
-  if (message === null) {
+  const problem = engineProblem(state);
+  if (problem === null) {
     return null;
   }
   return (
     <div className="flex flex-col items-center gap-3 py-8 text-center" data-testid="recap-engine-notice">
       <WifiOff className="h-6 w-6 text-muted-foreground/60" />
-      <p className="text-sm text-muted-foreground max-w-sm">{message}</p>
-      <Button variant="outline" size="sm" onClick={onRetry} data-testid="button-recap-retry">
-        <RefreshCw className="h-4 w-4 mr-2" />
-        Try again
-      </Button>
+      <p className="text-sm text-muted-foreground max-w-sm">{problem.message}</p>
+      {problem.errorText && (
+        <p
+          className="max-w-sm break-words font-mono text-xs text-muted-foreground"
+          data-testid="text-recap-engine-error"
+        >
+          {problem.errorText}
+        </p>
+      )}
+      {problem.retryable && (
+        <Button variant="outline" size="sm" onClick={onRetry} data-testid="button-recap-retry">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Try again
+        </Button>
+      )}
     </div>
   );
 }
 
-function engineProblem(state: StreamRecapEngineState): string | null {
+function engineProblem(state: StreamRecapEngineState): EngineProblem | null {
   if (state.kind === "error") {
-    return `Couldn't load this from the engine: ${state.message}`;
+    return { message: "Couldn't load this from the engine.", errorText: state.message, retryable: true };
   }
   if (state.kind !== "loaded") {
     return null;
   }
-  switch (state.detail.status) {
+  const detail = state.detail;
+  switch (detail.status) {
     case "ok":
       return null;
     case "unregistered":
-      return "This instance isn't registered with an engine, so viewer history and supporters aren't available.";
+      return {
+        message: "This instance isn't registered with an engine, so viewer history and supporters aren't available.",
+        retryable: false,
+      };
     case "unknown_session":
-      return "The engine no longer has this session. It may have been merged into another one.";
+      return {
+        message: "The engine no longer has this session. It may have been merged into another one.",
+        retryable: false,
+      };
+    case "rejected":
+      return {
+        message: "The engine refused this dashboard's credentials. Register the engine again under Admin, Engine.",
+        retryable: false,
+      };
     case "unreachable":
-      return "The engine is offline or didn't answer, so viewer history and supporters can't be shown right now.";
+      return {
+        message: "The engine is offline or didn't answer, so viewer history and supporters can't be shown right now.",
+        errorText: detail.message,
+        retryable: true,
+      };
+    case "failed":
+      return {
+        message: "The engine couldn't load viewer history and supporters for this stream.",
+        errorText: detail.message,
+        retryable: true,
+      };
   }
 }
 
@@ -325,7 +363,12 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
     <div className="space-y-6">
       <div>
         <BackLink />
-        <PageHeader title={title} description={description} className="pb-0" />
+        <PageHeader
+          title={title}
+          description={description}
+          className="pb-0"
+          actions={body?.session.status === "open" ? <OpenSessionBadge /> : undefined}
+        />
       </div>
 
       {body && (
@@ -365,6 +408,19 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
   );
 }
 
+function RecapNotFound() {
+  return (
+    <div className="container mx-auto p-6">
+      <BackLink />
+      <div className="py-16 text-center" data-testid="recap-not-found">
+        <p className="text-sm text-muted-foreground">
+          There's no recap for this stream. A recap appears once the engine sends the stream's summary.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function StreamRecap() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = sessionIdFromParam(params.sessionId);
@@ -381,22 +437,13 @@ export default function StreamRecap() {
       </div>
     );
   }
+  if (sessionId === "" || row === null) {
+    return <RecapNotFound />;
+  }
   if (row === undefined) {
     return (
       <div className="container mx-auto p-6 flex justify-center py-16">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-  if (row === null) {
-    return (
-      <div className="container mx-auto p-6">
-        <BackLink />
-        <div className="py-16 text-center" data-testid="recap-not-found">
-          <p className="text-sm text-muted-foreground">
-            There's no recap for this stream. A recap appears once the engine sends the stream's summary.
-          </p>
-        </div>
       </div>
     );
   }

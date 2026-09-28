@@ -68,9 +68,12 @@ export interface RecapViewerSample {
 }
 
 /**
- * What the recap page gets from the engine. `unreachable` covers an engine
- * that is offline or refused the call; the recap still renders from the
- * stored summary in that case.
+ * What the recap page gets from the engine. Every status but `ok` still leaves
+ * the recap rendering from the stored summary:
+ * - `rejected`: the engine refused this instance's client credentials, so
+ *   re-registering the engine, not retrying, is the fix.
+ * - `unreachable`: no answer, or an HTTP failure before any RPC ran.
+ * - `failed`: the engine answered with an error of its own.
  */
 export type StreamRecapEngineDetail =
   | {
@@ -81,7 +84,45 @@ export type StreamRecapEngineDetail =
     }
   | { status: "unregistered" }
   | { status: "unknown_session" }
-  | { status: "unreachable" };
+  | { status: "rejected" }
+  | { status: "unreachable"; message: string }
+  | { status: "failed"; message: string };
+
+type EngineCallFailure = Extract<StreamRecapEngineDetail, { status: "rejected" | "unreachable" | "failed" }>;
+
+/** Longest engine error text passed on to the page. */
+export const MAX_ENGINE_ERROR_LENGTH = 200;
+
+// Must match the error woofx3 api/src/gateway.ts throws from authenticate().
+const INVALID_CREDENTIALS_MESSAGE = "Invalid client credentials";
+
+// capnweb's HTTP batch transport throws this prefix when the POST itself gets a
+// non-2xx answer, before any RPC in the batch ran.
+const HTTP_BATCH_FAILURE_PREFIX = "RPC request failed:";
+
+function shorten(message: string): string {
+  const trimmed = message.trim();
+  if (trimmed.length <= MAX_ENGINE_ERROR_LENGTH) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, MAX_ENGINE_ERROR_LENGTH - 1)}…`;
+}
+
+/**
+ * Sorts a thrown engine call into what the page can say about it. fetch throws
+ * a TypeError when the host cannot be reached at all, which is the common case
+ * for an engine that is switched off.
+ */
+export function classifyEngineCallError(error: unknown): EngineCallFailure {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes(INVALID_CREDENTIALS_MESSAGE)) {
+    return { status: "rejected" };
+  }
+  if (error instanceof TypeError || message.startsWith(HTTP_BATCH_FAILURE_PREFIX)) {
+    return { status: "unreachable", message: shorten(message) };
+  }
+  return { status: "failed", message: shorten(message) };
+}
 
 /**
  * Builds the recap payload from raw engine answers, copying only the fields

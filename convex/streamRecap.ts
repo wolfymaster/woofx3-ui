@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import {
+  classifyEngineCallError,
   RECAP_LEADERBOARD_LIMIT,
   type StreamRecapEngineApi,
   type StreamRecapEngineDetail,
@@ -36,8 +37,9 @@ export const loadEngineDetail = action({
     }
     const { url, clientId, clientSecret } = instance;
 
-    // Each capnweb HTTP batch session is consumed by its first call, so every
-    // RPC gets its own session; they still run concurrently.
+    // A capnweb HTTP batch session sends its batch on the first await and is
+    // spent after that, so each RPC gets its own session; they still run
+    // concurrently.
     const session = () => createEngineRpcSession<StreamRecapEngineApi>(url, clientId, clientSecret);
     try {
       const [gauges, cheerers, gifters] = await Promise.all([
@@ -47,12 +49,14 @@ export const loadEngineDetail = action({
       ]);
       return toRecapEngineDetail(gauges, cheerers, gifters);
     } catch (error) {
+      const failure = classifyEngineCallError(error);
       logger.warn("stream recap: engine call failed", {
         instanceId,
         sessionId,
+        status: failure.status,
         error: error instanceof Error ? error.message : String(error),
       });
-      return { status: "unreachable" };
+      return failure;
     }
   },
 });

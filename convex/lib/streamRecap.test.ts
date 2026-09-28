@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { type Leaderboard, RECAP_LEADERBOARD_LIMIT, toRecapEngineDetail } from "./streamRecap";
+import {
+  classifyEngineCallError,
+  type Leaderboard,
+  MAX_ENGINE_ERROR_LENGTH,
+  RECAP_LEADERBOARD_LIMIT,
+  toRecapEngineDetail,
+} from "./streamRecap";
 
 function leaderboard(metric: Leaderboard["metric"], count: number): Leaderboard {
   return {
@@ -53,5 +59,35 @@ describe("toRecapEngineDetail", () => {
     }
     expect(detail.topCheerers).toHaveLength(RECAP_LEADERBOARD_LIMIT);
     expect(detail.topGifters).toHaveLength(RECAP_LEADERBOARD_LIMIT);
+  });
+});
+
+describe("classifyEngineCallError", () => {
+  it("reads the gateway's credential refusal as rejected", () => {
+    expect(classifyEngineCallError(new Error("Invalid client credentials"))).toEqual({ status: "rejected" });
+  });
+
+  it("reads a failed fetch as unreachable", () => {
+    expect(classifyEngineCallError(new TypeError("fetch failed"))).toEqual({
+      status: "unreachable",
+      message: "fetch failed",
+    });
+  });
+
+  it("reads a non-2xx batch response as unreachable", () => {
+    expect(classifyEngineCallError(new Error("RPC request failed: 502 Bad Gateway")).status).toBe("unreachable");
+  });
+
+  it("passes any other engine error on as failed, shortened", () => {
+    const failure = classifyEngineCallError(new Error("x".repeat(500)));
+    expect(failure.status).toBe("failed");
+    if (failure.status !== "failed") {
+      throw new Error("expected failed");
+    }
+    expect(failure.message.length).toBe(MAX_ENGINE_ERROR_LENGTH);
+  });
+
+  it("handles a thrown non-Error", () => {
+    expect(classifyEngineCallError("boom")).toEqual({ status: "failed", message: "boom" });
   });
 });
