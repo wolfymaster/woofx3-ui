@@ -34,6 +34,11 @@ export interface ConfigExportOptions {
 export interface ConfigImportOptions {
   onConflict?: ConfigConflictPolicy;
   include?: ConfigSection[];
+  /**
+   * Also apply the bundle's group members and per-user command grants. Off by
+   * default: a shared file would otherwise grant access to whoever it names.
+   */
+  applyMembers?: boolean;
 }
 
 export interface ConfigBundleRequirement {
@@ -57,7 +62,13 @@ export type ConfigImportReasonCode =
   | "unknown_action"
   | "unknown_group"
   | "unknown_workflow"
-  | "invalid";
+  | "invalid"
+  /** Every free name the rename policy tries is taken. */
+  | "rename_exhausted"
+  /** Applying members would grant these usernames access; the message names them. */
+  | "grants_access"
+  /** A workflow runs moderation or stream-editing actions. */
+  | "privileged_action";
 
 export interface ConfigImportReason {
   code: ConfigImportReasonCode;
@@ -90,6 +101,7 @@ export interface ConfigImportResultItem {
   outcome: ConfigImportOutcome;
   name?: string;
   id?: string;
+  /** Why it failed or conflicted; an item whose dependency failed says "dependency X failed". */
   error?: string;
 }
 

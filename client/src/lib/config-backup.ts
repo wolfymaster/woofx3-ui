@@ -4,6 +4,7 @@ import {
   type ConfigImportOutcome,
   type ConfigImportPlan,
   type ConfigImportReason,
+  type ConfigImportReasonCode,
   type ConfigItemKind,
   type ConfigSection,
 } from "@convex/lib/configBundle";
@@ -58,14 +59,64 @@ export function groupByKind<T extends { kind: ConfigItemKind }>(items: readonly 
   })).filter((group) => group.items.length > 0);
 }
 
+export const IMPORT_REASON_LABELS: Record<ConfigImportReasonCode, string> = {
+  identical: "Already here",
+  name_collision: "Name taken",
+  renamed: "Renamed",
+  overwrite: "Replaces yours",
+  not_owned: "Owned by a module",
+  missing_module: "Missing module",
+  module_version_mismatch: "Module version differs",
+  unknown_resource_kind: "Unknown resource kind",
+  unknown_action: "Unknown action",
+  unknown_group: "Unknown group",
+  unknown_workflow: "Unknown workflow",
+  invalid: "Invalid",
+  rename_exhausted: "No free name",
+  grants_access: "Grants access",
+  privileged_action: "Privileged actions",
+};
+
+/**
+ * A short label for a reason code. The engine may add codes this UI does not
+ * know yet; those fall back to the code itself, and the reason's message is
+ * shown beside it either way.
+ */
+export function reasonLabel(code: string): string {
+  return (IMPORT_REASON_LABELS as Record<string, string | undefined>)[code] ?? code.replaceAll("_", " ");
+}
+
+/**
+ * Non-blocking reasons the creator should read before applying: who would get
+ * access, and workflows that can moderate chat or edit the stream.
+ */
+const ATTENTION_CODES: ReadonlySet<string> = new Set<ConfigImportReasonCode>(["grants_access", "privileged_action"]);
+
 export function splitReasons(reasons: readonly ConfigImportReason[]): {
   blocking: ConfigImportReason[];
-  warnings: ConfigImportReason[];
+  attention: ConfigImportReason[];
+  notes: ConfigImportReason[];
 } {
   return {
     blocking: reasons.filter((reason) => reason.blocking),
-    warnings: reasons.filter((reason) => !reason.blocking),
+    attention: reasons.filter((reason) => !reason.blocking && ATTENTION_CODES.has(reason.code)),
+    notes: reasons.filter((reason) => !reason.blocking && !ATTENTION_CODES.has(reason.code)),
   };
+}
+
+export interface AccessGrant {
+  kind: ConfigItemKind;
+  key: string;
+  message: string;
+}
+
+/** Every `grants_access` reason in the plan: who applying members would give access, and through what. */
+export function accessGrants(plan: ConfigImportPlan): AccessGrant[] {
+  return plan.items.flatMap((item) =>
+    item.reasons
+      .filter((reason) => reason.code === "grants_access")
+      .map((reason) => ({ kind: item.kind, key: item.key, message: reason.message }))
+  );
 }
 
 /** How many items an import of this plan would write. */

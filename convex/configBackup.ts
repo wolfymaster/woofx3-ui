@@ -160,12 +160,13 @@ export const previewImport = action({
     bundleChunks: v.array(v.string()),
     onConflict: conflictPolicyValidator,
     include: sectionsValidator,
+    applyMembers: v.boolean(),
   },
-  handler: async (ctx, { instanceId, bundleChunks, onConflict, include }): Promise<ConfigImportPlan> => {
+  handler: async (ctx, { instanceId, bundleChunks, onConflict, include, applyMembers }): Promise<ConfigImportPlan> => {
     const bundleText = joinBundle(bundleChunks);
     assertSections(include);
     const engine = await connect(ctx, instanceId, ["canImport"]);
-    return await callEngine("Preview", () => engine.previewImport(bundleText, { onConflict, include }));
+    return await callEngine("Preview", () => engine.previewImport(bundleText, { onConflict, include, applyMembers }));
   },
 });
 
@@ -176,11 +177,15 @@ export const importConfig = action({
     bundleChunks: v.array(v.string()),
     onConflict: conflictPolicyValidator,
     include: sectionsValidator,
+    applyMembers: v.boolean(),
   },
-  handler: async (ctx, { instanceId, bundleChunks, onConflict, include }): Promise<ConfigImportResult> => {
+  handler: async (
+    ctx,
+    { instanceId, bundleChunks, onConflict, include, applyMembers }
+  ): Promise<ConfigImportResult> => {
     const bundleText = joinBundle(bundleChunks);
     assertSections(include);
     const engine = await connect(ctx, instanceId, ["canImport"]);
-    return await callEngine("Import", () => engine.importConfig(bundleText, { onConflict, include }));
+    return await callEngine("Import", () => engine.importConfig(bundleText, { onConflict, include, applyMembers }));
   },
 });

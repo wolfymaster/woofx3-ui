@@ -7,13 +7,14 @@ import {
   type ConfigImportAction,
   type ConfigImportOutcome,
   type ConfigImportPlan,
+  type ConfigImportReason,
   type ConfigImportResult,
   type ConfigSection,
   chunkText,
 } from "@convex/lib/configBundle";
 import { useAction, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
-import { Download, FileUp, Loader2, PackageX, Upload } from "lucide-react";
+import { Download, FileUp, Loader2, PackageX, Upload, UserPlus } from "lucide-react";
 import { useRef, useState } from "react";
 import { Link } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
@@ -38,12 +39,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import {
+  type AccessGrant,
+  accessGrants,
   backupFileName,
   backupFileProblem,
   CONFIG_SECTION_LABELS,
   groupByKind,
   IMPORT_ACTION_LABELS,
   IMPORT_OUTCOME_LABELS,
+  reasonLabel,
   splitReasons,
   writeCount,
 } from "@/lib/config-backup";
@@ -209,6 +213,49 @@ function ExportCard({
   );
 }
 
+const REASON_TONE_CLASS = {
+  blocking: "text-destructive",
+  attention: "text-amber-700 dark:text-amber-400",
+  notes: "text-muted-foreground",
+} as const;
+
+function ReasonList({ reasons }: { reasons: ConfigImportReason[] }) {
+  const split = splitReasons(reasons);
+  const tones = ["blocking", "attention", "notes"] as const;
+  return (
+    <ul className="space-y-1">
+      {tones.flatMap((tone) =>
+        split[tone].map((reason) => (
+          <li key={`${reason.code}:${reason.message}`} className={REASON_TONE_CLASS[tone]}>
+            <span className="font-medium">{reasonLabel(reason.code)}:</span> {reason.message}
+          </li>
+        ))
+      )}
+    </ul>
+  );
+}
+
+function AccessGrantsWarning({ grants }: { grants: AccessGrant[] }) {
+  return (
+    <Alert className="border-amber-500/50">
+      <UserPlus className="h-4 w-4" />
+      <AlertTitle>This import gives people access</AlertTitle>
+      <AlertDescription>
+        <p className="mb-2">
+          Applying members from this file adds these people to your groups and commands. Only continue if you know them.
+        </p>
+        <ul className="list-disc pl-5">
+          {grants.map((grant) => (
+            <li key={`${grant.kind}:${grant.key}:${grant.message}`}>
+              <span className="font-mono">{grant.key}</span>: {grant.message}
+            </li>
+          ))}
+        </ul>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 function PlanView({ plan }: { plan: ConfigImportPlan }) {
   const groups = groupByKind(plan.items);
 
@@ -263,7 +310,6 @@ function PlanView({ plan }: { plan: ConfigImportPlan }) {
               </TableHeader>
               <TableBody>
                 {group.items.map((item) => {
-                  const { blocking, warnings } = splitReasons(item.reasons);
                   return (
                     <TableRow key={`${item.kind}:${item.key}`}>
                       <TableCell className="font-mono text-xs">
@@ -276,18 +322,7 @@ function PlanView({ plan }: { plan: ConfigImportPlan }) {
                         <Badge variant={ACTION_BADGE[item.action]}>{IMPORT_ACTION_LABELS[item.action]}</Badge>
                       </TableCell>
                       <TableCell className="text-xs">
-                        <ul className="space-y-1">
-                          {blocking.map((reason) => (
-                            <li key={`${reason.code}:${reason.message}`} className="text-destructive">
-                              {reason.message}
-                            </li>
-                          ))}
-                          {warnings.map((reason) => (
-                            <li key={`${reason.code}:${reason.message}`} className="text-muted-foreground">
-                              {reason.message}
-                            </li>
-                          ))}
-                        </ul>
+                        <ReasonList reasons={item.reasons} />
                       </TableCell>
                     </TableRow>
                   );
@@ -370,6 +405,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
   const [fileProblem, setFileProblem] = useState<string | null>(null);
   const [sections, setSections] = useState<ConfigSection[]>([...CONFIG_SECTIONS]);
   const [onConflict, setOnConflict] = useState<ConfigConflictPolicy>("skip");
+  const [applyMembers, setApplyMembers] = useState(false);
   const [plan, setPlan] = useState<ConfigImportPlan | null>(null);
   const [result, setResult] = useState<ConfigImportResult | null>(null);
   const [busy, setBusy] = useState<"preview" | "import" | null>(null);
@@ -403,7 +439,15 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setBusy("preview");
     setResult(null);
     try {
-      setPlan(await previewImport({ instanceId, bundleChunks: file.chunks, onConflict, include: sections }));
+      setPlan(
+        await previewImport({
+          instanceId,
+          bundleChunks: file.chunks,
+          onConflict,
+          include: sections,
+          applyMembers,
+        })
+      );
     } catch (error) {
       setPlan(null);
       toast({ title: "Could not read the backup", description: errorMessage(error), variant: "destructive" });
@@ -419,7 +463,13 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setConfirming(false);
     setBusy("import");
     try {
-      const outcome = await importConfig({ instanceId, bundleChunks: file.chunks, onConflict, include: sections });
+      const outcome = await importConfig({
+        instanceId,
+        bundleChunks: file.chunks,
+        onConflict,
+        include: sections,
+        applyMembers,
+      });
       setResult(outcome);
       setPlan(null);
       toast({
@@ -436,6 +486,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
 
   const disabled = !canImport || busy !== null;
   const writes = plan ? writeCount(plan) : 0;
+  const grants = plan && applyMembers ? accessGrants(plan) : [];
 
   return (
     <Card>
@@ -513,6 +564,25 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
           </p>
         </div>
 
+        <div className="flex items-start gap-3 rounded-md border p-3">
+          <Checkbox
+            id="import-members"
+            checked={applyMembers}
+            disabled={disabled}
+            onCheckedChange={(checked) => {
+              setApplyMembers(checked === true);
+              resetOutcome();
+            }}
+          />
+          <div className="space-y-0.5">
+            <Label htmlFor="import-members">Also apply group members and per-user command access from this file</Label>
+            <p className="text-xs text-muted-foreground">
+              Off by default: a file from someone else could give their chosen usernames access to your commands. Turn
+              this on to restore your own backup's members; the preview lists everyone who would get access.
+            </p>
+          </div>
+        </div>
+
         <div className="flex flex-wrap gap-3">
           <Button onClick={handlePreview} disabled={disabled || !file || sections.length === 0}>
             {busy === "preview" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -528,6 +598,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
           </Button>
         </div>
 
+        {grants.length > 0 && <AccessGrantsWarning grants={grants} />}
         {plan && <PlanView plan={plan} />}
         {result && <ResultView result={result} />}
 
@@ -539,6 +610,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
                 {plan
                   ? `${plan.summary.create} items will be created and ${plan.summary.update} of yours replaced. `
                   : ""}
+                {grants.length > 0 ? "People listed in the file will be given access. " : ""}
                 This cannot be undone from here, so export a backup first if you might want to go back. The engine
                 checks everything again as it applies, so the outcome can differ from the preview if something changed
                 meanwhile.

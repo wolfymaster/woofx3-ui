@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import type { ConfigImportPlan, ConfigImportPlanItem } from "@convex/lib/configBundle";
-import { backupFileName, backupFileProblem, groupByKind, splitReasons, writeCount } from "./config-backup";
+import {
+  accessGrants,
+  backupFileName,
+  backupFileProblem,
+  groupByKind,
+  reasonLabel,
+  splitReasons,
+  writeCount,
+} from "./config-backup";
 
 function item(kind: ConfigImportPlanItem["kind"], key: string): ConfigImportPlanItem {
   return { kind, key, action: "create", targetName: key, reasons: [] };
@@ -24,13 +32,55 @@ describe("groupByKind", () => {
 });
 
 describe("splitReasons", () => {
-  it("separates blocking reasons from warnings", () => {
-    const { blocking, warnings } = splitReasons([
+  it("separates blocking reasons, reasons to read before applying, and notes", () => {
+    const { blocking, attention, notes } = splitReasons([
       { code: "missing_module", message: "counter is not installed", blocking: true },
       { code: "renamed", message: "imported as Raid (imported)", blocking: false },
+      { code: "grants_access", message: "grants alice, bob", blocking: false },
+      { code: "privileged_action", message: "bans chatters", blocking: false },
+      { code: "rename_exhausted", message: "no free name", blocking: true },
     ]);
-    expect(blocking.map((reason) => reason.code)).toEqual(["missing_module"]);
-    expect(warnings.map((reason) => reason.code)).toEqual(["renamed"]);
+    expect(blocking.map((reason) => reason.code)).toEqual(["missing_module", "rename_exhausted"]);
+    expect(attention.map((reason) => reason.code)).toEqual(["grants_access", "privileged_action"]);
+    expect(notes.map((reason) => reason.code)).toEqual(["renamed"]);
+  });
+});
+
+describe("reasonLabel", () => {
+  it("labels known codes", () => {
+    expect(reasonLabel("grants_access")).toBe("Grants access");
+  });
+
+  it("falls back to the code for one this UI does not know", () => {
+    expect(reasonLabel("some_new_code")).toBe("some new code");
+  });
+});
+
+describe("accessGrants", () => {
+  it("collects every grants_access reason with the item it belongs to", () => {
+    const plan: ConfigImportPlan = {
+      onConflict: "skip",
+      items: [
+        {
+          ...item("group", "VIPs"),
+          reasons: [
+            { code: "grants_access", message: "adds alice and bob to VIPs", blocking: false },
+            { code: "renamed", message: "renamed", blocking: false },
+          ],
+        },
+        item("workflow", "Raid"),
+        {
+          ...item("command", "vanish"),
+          reasons: [{ code: "grants_access", message: "grants carol", blocking: false }],
+        },
+      ],
+      summary: { create: 3, update: 0, skip: 0, conflict: 0 },
+      missingModules: [],
+    };
+    expect(accessGrants(plan)).toEqual([
+      { kind: "group", key: "VIPs", message: "adds alice and bob to VIPs" },
+      { kind: "command", key: "vanish", message: "grants carol" },
+    ]);
   });
 });
 
