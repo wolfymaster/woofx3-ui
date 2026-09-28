@@ -2,18 +2,22 @@ import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+interface EmptyStateAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface EmptyStateProps {
   icon: LucideIcon;
   title: string;
   description: string;
-  action?: {
-    label: string;
-    onClick: () => void;
-  };
+  action?: EmptyStateAction;
+  /** A lesser alternative to `action`, shown beside it. */
+  secondaryAction?: EmptyStateAction;
   className?: string;
 }
 
-export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action, secondaryAction, className }: EmptyStateProps) {
   return (
     <div
       className={cn("flex flex-col items-center justify-center py-16 px-4 text-center", className)}
@@ -28,10 +32,19 @@ export function EmptyState({ icon: Icon, title, description, action, className }
       <p className="text-muted-foreground max-w-sm mb-6" data-testid="text-empty-description">
         {description}
       </p>
-      {action && (
-        <Button onClick={action.onClick} data-testid="button-empty-action">
-          {action.label}
-        </Button>
+      {(action || secondaryAction) && (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {action && (
+            <Button onClick={action.onClick} data-testid="button-empty-action">
+              {action.label}
+            </Button>
+          )}
+          {secondaryAction && (
+            <Button variant="outline" onClick={secondaryAction.onClick} data-testid="button-empty-secondary-action">
+              {secondaryAction.label}
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );

@@ -28,6 +28,30 @@ export const list = query({
 });
 
 /**
+ * Whether the instance has any workflow at all, for pointing a new streamer at
+ * the starter packs. Null while the caller's membership cannot be confirmed,
+ * so a signed-out moment does not read as an empty instance.
+ */
+export const hasAny = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<boolean | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    const membership = await getInstanceMembership(ctx, instanceId, userId);
+    if (!membership) {
+      return null;
+    }
+    const first = await ctx.db
+      .query("workflows")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    return first !== null;
+  },
+});
+
+/**
  * Fetch a single workflow row by engineWorkflowId. Returns null when the
  * caller has no membership, the instance does not exist, or the row has
  * not been mirrored yet (e.g. webhook has not landed).

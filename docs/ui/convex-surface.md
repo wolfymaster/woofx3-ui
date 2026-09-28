@@ -7,7 +7,7 @@ Convex is the **multi-tenant control plane**: auth, accounts, instances, assets,
 | Area | Typical Convex files |
 |------|----------------------|
 | Identity & tenants | `auth.ts`, `users.ts`, `accounts.ts`, `instances.ts` |
-| Workflows (UI + sync) | `workflows.ts`, `workflowCatalog.ts`, `workflowCatalogContext.ts`, `workflowTemplates.ts`, `seeds/triggerActions.ts` |
+| Workflows (UI + sync) | `workflows.ts`, `workflowCatalog.ts`, `workflowCatalogContext.ts`, `starterPacks.ts`, `seeds/triggerActions.ts` |
 | Modules | `moduleRepository.ts`, `moduleEngine.ts`, `moduleWebhook.ts`, `moduleWidgets.ts`, `triggerDefinitions.ts`, `actionDefinitions.ts`, `inboundWebhooks.ts` (third-party webhook endpoints) |
 | Async realtime bus | `transientEvents.ts` — ephemeral per-instance `{correlationKey → progress/success/error}` entries used by the UI to observe async engine round-trips; TTL-cleaned by a scheduled mutation |
 | Media | `assets.ts`, `folders.ts`, `lib/storage/*` |
