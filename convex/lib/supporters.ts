@@ -20,6 +20,13 @@ export const STREAM_PICKER_LIMIT = 50;
 /** Most recent live streams a viewer's per-stream totals cover. */
 export const VIEWER_RECENT_STREAMS = 5;
 
+/**
+ * Sessions read to find those live streams. Some sessions were never live, so
+ * this reads a few times as many; a run of more dead sessions than that just
+ * shows fewer streams.
+ */
+export const VIEWER_STREAM_SCAN = VIEWER_RECENT_STREAMS * 3;
+
 /** Must match `StreamSessionSegment` in the woofx3 engine's `@woofx3/api` (api.ts). */
 export interface EngineStreamSegment {
   id: string;
@@ -174,4 +181,19 @@ export function recentLiveStreams(streams: readonly SupporterStream[], count: nu
 /** Whether `minTotal` is one the engine accepts: an integer of at least 1. */
 export function isValidMinTotal(minTotal: number): boolean {
   return Number.isSafeInteger(minTotal) && minTotal >= 1;
+}
+
+/**
+ * capnweb's refusal of a method the engine does not expose, e.g.
+ * `'getLeaderboard' is not a function.` from an engine that predates it.
+ */
+const UNKNOWN_METHOD = /'([\w.]+)' is not a function/;
+
+/** What to tell the user when an engine call for `what` failed. */
+export function engineFailureMessage(what: string, err: unknown): string {
+  const reason = err instanceof Error ? err.message : String(err);
+  if (UNKNOWN_METHOD.test(reason)) {
+    return "Your engine is too old for supporter stats. Update it to the latest release to use this page.";
+  }
+  return `Could not load ${what} from your engine: ${reason}`;
 }

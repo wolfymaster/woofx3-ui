@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   attributedSupporters,
   type EngineLeaderboardEntry,
+  engineFailureMessage,
   isValidMinTotal,
   recentLiveStreams,
   type SupporterStream,
@@ -67,5 +68,18 @@ describe("isValidMinTotal", () => {
     expect(isValidMinTotal(0)).toBe(false);
     expect(isValidMinTotal(2.5)).toBe(false);
     expect(isValidMinTotal(Number.NaN)).toBe(false);
+  });
+});
+
+describe("engineFailureMessage", () => {
+  it("asks for an engine update when a method is missing", () => {
+    const err = new TypeError("'getLeaderboard' is not a function.");
+    expect(engineFailureMessage("the leaderboard", err)).toContain("Update it");
+  });
+
+  it("passes other failures through with what was being loaded", () => {
+    expect(engineFailureMessage("your streams", new Error("fetch failed"))).toBe(
+      "Could not load your streams from your engine: fetch failed"
+    );
   });
 });
