@@ -37,7 +37,6 @@ import type * as http from "../http.js";
 import type * as inboundWebhooks from "../inboundWebhooks.js";
 import type * as instanceLiveState from "../instanceLiveState.js";
 import type * as instances from "../instances.js";
-import type * as instanceViewer from "../instanceViewer.js";
 import type * as invitations from "../invitations.js";
 import type * as lib_alertWidgets from "../lib/alertWidgets.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
@@ -187,7 +186,6 @@ declare const fullApi: ApiFromModules<{
   inboundWebhooks: typeof inboundWebhooks;
   instanceLiveState: typeof instanceLiveState;
   instances: typeof instances;
-  instanceViewer: typeof instanceViewer;
   invitations: typeof invitations;
   "lib/alertWidgets": typeof lib_alertWidgets;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;

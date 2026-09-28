@@ -4,8 +4,8 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import type { InstanceRole } from "./lib/instanceRoles";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
-import type { InstanceRole } from "./lib/twitchLinkPolicy";
 
 /**
  * An instance row as members may see it. `webhookSecret` authenticates the

@@ -3,7 +3,7 @@
  * Pure, so the rules can be tested without a Convex runtime.
  */
 
-export type InstanceRole = "owner" | "admin" | "member";
+import type { InstanceRole } from "./instanceRoles";
 
 /**
  * Connecting replaces the channel every member's automation runs against and
