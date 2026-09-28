@@ -1,16 +1,27 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
+import { safeRelativePath } from "./lib/safeRedirect";
 
 const TEN_MINUTES = 10 * 60 * 1000;
 const FIVE_MINUTES = 5 * 60 * 1000;
 
 export const storeState = internalMutation({
-  args: { state: v.string(), redirectTo: v.string(), instanceId: v.optional(v.id("instances")) },
-  handler: async (ctx, { state, redirectTo, instanceId }) => {
+  args: {
+    state: v.string(),
+    redirectTo: v.string(),
+    instanceId: v.optional(v.id("instances")),
+    userId: v.optional(v.id("users")),
+  },
+  handler: async (ctx, { state, redirectTo, instanceId, userId }) => {
+    if ((instanceId === undefined) !== (userId === undefined)) {
+      throw new Error("An integration connect needs both the instance and the user who started it");
+    }
     await ctx.db.insert("twitchOAuthState", {
       state,
-      redirectTo,
+      // The callback page navigates here after Twitch answers.
+      redirectTo: safeRelativePath(redirectTo),
       instanceId,
+      userId,
       createdAt: Date.now(),
     });
   },
@@ -32,7 +43,11 @@ export const validateAndConsumeState = internalMutation({
       return null;
     }
 
-    return { redirectTo: record.redirectTo, instanceId: record.instanceId ?? null };
+    return {
+      redirectTo: record.redirectTo,
+      instanceId: record.instanceId ?? null,
+      userId: record.userId ?? null,
+    };
   },
 });
 

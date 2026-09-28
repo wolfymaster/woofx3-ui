@@ -241,38 +241,6 @@ export const getPlatformLinks = query({
   },
 });
 
-export const savePlatformLink = mutation({
-  args: {
-    instanceId: v.id("instances"),
-    platform: v.string(),
-    platformUserId: v.string(),
-    platformUsername: v.string(),
-    channelId: v.string(),
-    accessToken: v.string(),
-    refreshToken: v.string(),
-    expiresAt: v.number(),
-    scopes: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    // Upsert: replace existing link for this platform on this instance
-    const existing = await ctx.db
-      .query("platformLinks")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .filter((q) => q.eq(q.field("platform"), args.platform))
-      .first();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, args);
-      return existing._id;
-    }
-
-    return ctx.db.insert("platformLinks", args);
-  },
-});
-
 /**
  * Internal mutation used by the registration action to persist handshake results.
  * Not exposed to clients.

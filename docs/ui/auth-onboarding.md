@@ -6,7 +6,7 @@
 
 ## Login and registration
 
-- **Convex Auth** provides session handling; Twitch OAuth is initiated through **Convex HTTP routes** (e.g. `/api/auth/twitch/start` → Twitch → callback) that validate state and complete sign-in.
+- **Convex Auth** provides session handling; Twitch OAuth is initiated through **Convex HTTP routes** (e.g. `/api/auth/twitch/start` → Twitch → callback) that validate state and complete sign-in. Connecting Twitch to an instance (as opposed to signing in) starts from the authenticated action `twitchIntegration.startConnect`, which only an instance owner or admin may call: it mints the one-time OAuth state, records who started it, and returns Twitch's authorize URL. The shared callback re-checks that role and refuses a relink to a different Twitch account than the one already linked (`convex/lib/twitchLinkPolicy.ts`); a refusal lands on `/auth/twitch/callback?mode=connect&error=…`. Every `redirect_to` is clamped to a same-site path (`convex/lib/safeRedirect.ts`) when stored and again on the callback page before it navigates.
 - Password provider routes are registered via `auth.addHttpRoutes` in `http.ts`.
 
 ## Onboarding

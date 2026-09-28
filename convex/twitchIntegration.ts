@@ -1,7 +1,70 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalAction, internalMutation, internalQuery } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { safeRelativePath } from "./lib/safeRedirect";
+import { getInstanceMembership } from "./lib/teamAccess";
+import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
+import { canManageTwitchLink, type InstanceRole } from "./lib/twitchLinkPolicy";
+
+export const memberRole = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }): Promise<InstanceRole | null> => {
+    const membership = await getInstanceMembership(ctx, instanceId, userId);
+    return membership?.role ?? null;
+  },
+});
+
+/** The signed-in caller, when they may connect or disconnect this instance's Twitch link. */
+async function requireTwitchLinkManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new Error("Not authenticated");
+  }
+  const role = await ctx.runQuery(internal.twitchIntegration.memberRole, { instanceId, userId });
+  if (!canManageTwitchLink(role)) {
+    throw new Error("Only an owner or admin of this instance can connect or disconnect Twitch");
+  }
+  return userId;
+}
+
+/**
+ * Start connecting (or reconnecting) Twitch for an instance: records who asked
+ * in a one-time OAuth state and returns Twitch's authorize URL for the browser
+ * to navigate to. Minting the state here, behind authentication, is what ties
+ * the callback to an owner or admin; the HTTP callback accepts nothing else.
+ */
+export const startConnect = action({
+  args: { instanceId: v.id("instances"), redirectTo: v.string() },
+  handler: async (ctx, { instanceId, redirectTo }): Promise<{ authorizeUrl: string }> => {
+    const userId = await requireTwitchLinkManager(ctx, instanceId);
+
+    const clientId = process.env.AUTH_TWITCH_ID;
+    const redirectUri = process.env.AUTH_TWITCH_REDIRECT_URI;
+    if (!clientId || !redirectUri) {
+      throw new Error("AUTH_TWITCH_ID and AUTH_TWITCH_REDIRECT_URI must be set");
+    }
+
+    const state = crypto.randomUUID();
+    await ctx.runMutation(internal.twitchAuth.storeState, {
+      state,
+      redirectTo: safeRelativePath(redirectTo, "/admin/integrations"),
+      instanceId,
+      userId,
+    });
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: TWITCH_INTEGRATION_SCOPES.join(" "),
+      state,
+    });
+    return { authorizeUrl: `https://id.twitch.tv/oauth2/authorize?${params}` };
+  },
+});
 
 export const upsertPlatformLink = internalMutation({
   args: {
@@ -93,6 +156,7 @@ export const disconnect = action({
     platform: v.string(),
   },
   handler: async (ctx, { instanceId, platform }) => {
+    await requireTwitchLinkManager(ctx, instanceId);
     const { link, instance } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
       instanceId,
       platform,
