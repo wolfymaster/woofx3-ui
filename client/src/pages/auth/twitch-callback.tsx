@@ -1,48 +1,103 @@
+import { api } from "@convex/_generated/api";
+import { oauthErrorMessage } from "@convex/lib/oauthErrors";
 import { safeRelativePath } from "@convex/lib/safeRedirect";
 import { useAuthActions } from "@convex-dev/auth/react";
-import { useConvexAuth } from "convex/react";
+import { useAction, useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { takeTwitchSignInNonce } from "@/lib/twitch-sign-in";
+
+/**
+ * What the Convex Twitch callback handed this page, read once on mount. The
+ * one-time `token` and `code` are then dropped from the address bar so they
+ * do not stay in history.
+ */
+function readCallbackParams() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    mode: params.get("mode") === "connect" ? ("connect" as const) : ("login" as const),
+    // Only ever a code: the text shown for it is fixed (lib/oauthErrors.ts),
+    // because anyone can put anything in this query string.
+    errorCode: params.get("error"),
+    token: params.get("token"),
+    connectCode: params.get("code"),
+    // Anything but a path on this site is dropped: this page navigates to it.
+    redirectTo: safeRelativePath(params.get("redirect_to")),
+  };
+}
+
+/** `detail` is text from our own server's response, never from the URL. */
+type Failure = { code: string; detail?: string };
 
 export default function TwitchCallback() {
   const [, navigate] = useLocation();
   const { signIn } = useAuthActions();
+  const finishConnect = useAction(api.twitchIntegration.finishConnect);
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const [callback] = useState(readCallbackParams);
   const called = useRef(false);
-  // Set by the Convex callback when Twitch answered but the connect was refused.
-  const [error, setError] = useState<string | null>(() => new URLSearchParams(window.location.search).get("error"));
+  const [failure, setFailure] = useState<Failure | null>(() =>
+    callback.errorCode === null ? null : { code: callback.errorCode }
+  );
   const [message, setMessage] = useState("Processing...");
-  // Anything but a path on this site is dropped: this page navigates to it,
-  // and the value arrives in a URL anyone can craft.
-  const redirectTo = useRef(safeRelativePath(new URLSearchParams(window.location.search).get("redirect_to")));
-  const mode = useRef(new URLSearchParams(window.location.search).get("mode") ?? "login");
 
   useEffect(() => {
-    if (isLoading || error) {
+    if (callback.token !== null || callback.connectCode !== null) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, [callback]);
+
+  useEffect(() => {
+    if (isLoading || failure || callback.mode !== "connect" || called.current) {
       return;
     }
-    if (mode.current === "connect") {
-      setMessage("Twitch connected successfully! Redirecting...");
-      const timer = setTimeout(() => {
-        window.location.href = redirectTo.current;
-      }, 1500);
-      return () => clearTimeout(timer);
+    called.current = true;
+    if (!callback.connectCode) {
+      setFailure({ code: "connect_code_invalid" });
+      return;
+    }
+    if (!isAuthenticated) {
+      setFailure({ code: "not_signed_in" });
+      return;
+    }
+    setMessage("Finishing the Twitch connection...");
+    finishConnect({ code: callback.connectCode })
+      .then((result) => {
+        if (!result.ok) {
+          setFailure({ code: result.error, detail: result.detail });
+          return;
+        }
+        setMessage("Twitch connected successfully! Redirecting...");
+        window.location.href = safeRelativePath(result.redirectTo);
+      })
+      .catch((err: unknown) => {
+        console.error("[twitch-callback] finishConnect failed:", String(err));
+        setFailure({ code: "unexpected" });
+      });
+  }, [callback, failure, finishConnect, isAuthenticated, isLoading]);
+
+  useEffect(() => {
+    if (isLoading || failure || callback.mode !== "login") {
+      return;
     }
     if (isAuthenticated) {
-      navigate(redirectTo.current);
+      navigate(callback.redirectTo);
       return;
     }
     if (called.current) {
       return;
     }
-
     called.current = true;
 
-    const token = new URLSearchParams(window.location.search).get("token");
-
+    const token = callback.token;
     if (!token) {
-      setError("No token in callback URL");
+      setFailure({ code: "missing_params" });
+      return;
+    }
+    const nonce = takeTwitchSignInNonce();
+    if (!nonce) {
+      setFailure({ code: "sign_in_not_started_here" });
       return;
     }
 
@@ -53,16 +108,19 @@ export default function TwitchCallback() {
         return;
       }
 
-      signIn("twitch", { token })
+      // The server consumes the pending sign-in on the first attempt that
+      // reaches it, so a retry helps only when the connection dropped before
+      // the request was delivered.
+      signIn("twitch", { token, nonce })
         .then((result) => {
           if (cancelled) {
             return;
           }
           cancelled = true;
           if (result.signingIn) {
-            window.location.href = redirectTo.current;
+            window.location.href = callback.redirectTo;
           } else {
-            setError("Sign-in did not complete — please try again");
+            setFailure({ code: "sign_in_failed" });
           }
         })
         .catch((err: unknown) => {
@@ -72,12 +130,11 @@ export default function TwitchCallback() {
           const msg = String(err);
           console.error("[twitch-callback] signIn error:", msg);
           if (msg.includes("Connection lost") && retriesLeft > 0) {
-            console.log("[twitch-callback] WebSocket dropped, retrying in 1.5s...");
             setTimeout(() => {
               attempt(retriesLeft - 1);
             }, 1500);
           } else {
-            setError(msg);
+            setFailure({ code: "sign_in_failed" });
           }
         });
     };
@@ -87,17 +144,18 @@ export default function TwitchCallback() {
     return () => {
       cancelled = true;
     };
-  }, [signIn, isLoading, isAuthenticated, navigate, error]);
+  }, [callback, signIn, isLoading, isAuthenticated, navigate, failure]);
 
-  if (error) {
+  if (failure) {
+    const back = callback.mode === "connect" ? callback.redirectTo : "/auth/login";
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-4">
-        <pre className="text-destructive text-sm whitespace-pre-wrap">{error}</pre>
-        {mode.current === "connect" && (
-          <a href={redirectTo.current} className="text-sm underline">
-            Back
-          </a>
-        )}
+        <p className="text-destructive text-sm max-w-md text-center">
+          {failure.detail ?? oauthErrorMessage(failure.code, "Twitch")}
+        </p>
+        <a href={back} className="text-sm underline">
+          Back
+        </a>
       </div>
     );
   }

@@ -1,8 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
 import type { InstanceRole } from "./lib/twitchLinkPolicy";
@@ -290,15 +290,24 @@ export const getByWebhookSecret = internalQuery({
   },
 });
 
-/** The user's role on the instance, or null when they are not a member. For actions, which cannot read the db. */
+/** The user's role on the instance, or null when they are not a member. */
+export async function readMemberRole(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  userId: Id<"users">
+): Promise<InstanceRole | null> {
+  const membership = await ctx.db
+    .query("instanceMembers")
+    .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
+    .first();
+  return membership?.role ?? null;
+}
+
+/** `readMemberRole` for actions, which cannot read the db. */
 export const memberRole = internalQuery({
   args: { instanceId: v.id("instances"), userId: v.id("users") },
   handler: async (ctx, { instanceId, userId }): Promise<InstanceRole | null> => {
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
-      .first();
-    return membership?.role ?? null;
+    return await readMemberRole(ctx, instanceId, userId);
   },
 });
 
@@ -310,10 +319,6 @@ export const viewerRole = query({
     if (!userId) {
       return null;
     }
-    const membership = await ctx.db
-      .query("instanceMembers")
-      .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
-      .first();
-    return membership?.role ?? null;
+    return await readMemberRole(ctx, instanceId, userId);
   },
 });

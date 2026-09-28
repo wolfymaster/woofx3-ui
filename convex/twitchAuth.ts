@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
+import { signInNonceMatches } from "./lib/oauthHandoff";
 import { safeRelativePath } from "./lib/safeRedirect";
 
 const TEN_MINUTES = 10 * 60 * 1000;
@@ -11,10 +12,14 @@ export const storeState = internalMutation({
     redirectTo: v.string(),
     instanceId: v.optional(v.id("instances")),
     userId: v.optional(v.id("users")),
+    nonceHash: v.optional(v.string()),
   },
-  handler: async (ctx, { state, redirectTo, instanceId, userId }) => {
+  handler: async (ctx, { state, redirectTo, instanceId, userId, nonceHash }) => {
     if ((instanceId === undefined) !== (userId === undefined)) {
       throw new Error("An integration connect needs both the instance and the user who started it");
+    }
+    if ((instanceId === undefined) === (nonceHash === undefined)) {
+      throw new Error("A sign-in needs a nonce hash and an integration connect must not have one");
     }
     await ctx.db.insert("twitchOAuthState", {
       state,
@@ -22,6 +27,7 @@ export const storeState = internalMutation({
       redirectTo: safeRelativePath(redirectTo),
       instanceId,
       userId,
+      nonceHash,
       createdAt: Date.now(),
     });
   },
@@ -47,6 +53,7 @@ export const validateAndConsumeState = internalMutation({
       redirectTo: record.redirectTo,
       instanceId: record.instanceId ?? null,
       userId: record.userId ?? null,
+      nonceHash: record.nonceHash ?? null,
     };
   },
 });
@@ -57,6 +64,7 @@ export const storePendingAuth = internalMutation({
     displayName: v.string(),
     email: v.string(),
     profileImage: v.string(),
+    nonceHash: v.string(),
   },
   handler: async (ctx, args): Promise<string> => {
     const token = crypto.randomUUID();
@@ -69,9 +77,14 @@ export const storePendingAuth = internalMutation({
   },
 });
 
+/**
+ * Redeems a pending sign-in once. The row is deleted on every attempt, and
+ * the profile is released only to the browser presenting the nonce the
+ * sign-in started with, so a callback link completed elsewhere signs nobody in.
+ */
 export const lookupPendingAuth = internalMutation({
-  args: { token: v.string() },
-  handler: async (ctx, { token }) => {
+  args: { token: v.string(), nonceHash: v.string() },
+  handler: async (ctx, { token, nonceHash }) => {
     const record = await ctx.db
       .query("twitchPendingAuth")
       .withIndex("by_token", (q) => q.eq("token", token))
@@ -80,8 +93,11 @@ export const lookupPendingAuth = internalMutation({
     if (!record) {
       return null;
     }
+    await ctx.db.delete(record._id);
     if (Date.now() - record.createdAt > FIVE_MINUTES) {
-      await ctx.db.delete(record._id);
+      return null;
+    }
+    if (!signInNonceMatches(record.nonceHash, nonceHash)) {
       return null;
     }
 
