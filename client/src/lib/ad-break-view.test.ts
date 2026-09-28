@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { AdSchedule } from "@convex/lib/adBreaks";
 import { parseAdSchedule } from "@convex/lib/adBreaks";
-import {
-  type AdBreakInputs,
-  adBreakView,
-  formatAgo,
-  formatCountdown,
-  runningAdFromBegin,
-} from "./ad-break-view";
+import { type AdBreakInputs, adBreakView, formatAgo, formatCountdown, runningAdFromBegin } from "./ad-break-view";
 
 const NOW = Date.parse("2026-09-28T20:00:00Z");
 
@@ -67,7 +61,9 @@ describe("adBreakView", () => {
   });
 
   test("offline wins over everything, a running ad included", () => {
-    const view = adBreakView(inputs({ live: false, scopeGranted: false, running: { startedAt: NOW, durationSeconds: 60 } }));
+    const view = adBreakView(
+      inputs({ live: false, scopeGranted: false, running: { startedAt: NOW, durationSeconds: 60 } })
+    );
     expect(view).toEqual({ kind: "offline" });
   });
 
@@ -129,7 +125,10 @@ describe("adBreakView", () => {
 
   test("a begin event shows even before the first schedule arrives", () => {
     const running = { startedAt: NOW, durationSeconds: 30 };
-    expect(adBreakView(inputs({ running, fetch: { status: "loading" } }))).toEqual({ kind: "running", secondsLeft: 30 });
+    expect(adBreakView(inputs({ running, fetch: { status: "loading" } }))).toEqual({
+      kind: "running",
+      secondsLeft: 30,
+    });
   });
 
   test("without events, a last ad still inside its length reads as running", () => {
@@ -144,9 +143,9 @@ describe("adBreakView", () => {
 
 describe("runningAdFromBegin", () => {
   test("reads the payload's start and length", () => {
-    expect(runningAdFromBegin({ durationSeconds: 60, startedAt: "2026-09-28T20:00:00Z", isAutomatic: true }, 0)).toEqual(
-      { startedAt: NOW, durationSeconds: 60 }
-    );
+    expect(
+      runningAdFromBegin({ durationSeconds: 60, startedAt: "2026-09-28T20:00:00Z", isAutomatic: true }, 0)
+    ).toEqual({ startedAt: NOW, durationSeconds: 60 });
   });
 
   test("falls back to receipt time for a missing start", () => {

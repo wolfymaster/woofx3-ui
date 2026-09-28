@@ -198,8 +198,7 @@ function AdBreakBody({ view, snoozing, onSnooze }: { view: AdBreakView; snoozing
             </Row>
             <Row label="Snoozes left">
               {view.snoozeCount}
-              {view.secondsUntilSnoozeRefresh !== null &&
-                ` (+1 in ${formatCountdown(view.secondsUntilSnoozeRefresh)})`}
+              {view.secondsUntilSnoozeRefresh !== null && ` (+1 in ${formatCountdown(view.secondsUntilSnoozeRefresh)})`}
             </Row>
           </div>
           <Button
