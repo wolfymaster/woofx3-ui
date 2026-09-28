@@ -1,10 +1,9 @@
 import type { Id } from "@convex/_generated/dataModel";
 import type { TwitchScopeHealth } from "@convex/lib/twitchScopeHealth";
-import { CheckCircle2, TriangleAlert } from "lucide-react";
+import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
-import { twitchConnectUrl } from "@/lib/twitch-connect";
+import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 
 interface TwitchScopeStatusProps {
   instanceId: Id<"instances">;
@@ -17,6 +16,8 @@ interface TwitchScopeStatusProps {
 
 /** Which Twitch permissions the linked account granted, with a way to fix a gap. */
 export function TwitchScopeStatus({ instanceId, health, platformUsername, canRelink }: TwitchScopeStatusProps) {
+  const { connect, starting, error: connectError } = useTwitchConnect();
+
   if (health.state === "unlinked") {
     return null;
   }
@@ -57,16 +58,19 @@ export function TwitchScopeStatus({ instanceId, health, platformUsername, canRel
               </div>
             </>
           )}
+          {connectError && <p className="text-destructive">{connectError}</p>}
         </div>
       </div>
       {canRelink ? (
-        <Button asChild variant="outline" size="sm">
-          <a
-            href={twitchConnectUrl(CONVEX_SITE_URL, instanceId, "/admin/integrations")}
-            data-testid="button-status-reconnect-twitch"
-          >
-            Reconnect as @{platformUsername}
-          </a>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void connect(instanceId, "/admin/integrations")}
+          disabled={starting}
+          data-testid="button-status-reconnect-twitch"
+        >
+          {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Reconnect as @{platformUsername}
         </Button>
       ) : (
         <span className="text-xs text-muted-foreground">Ask an instance admin to reconnect Twitch.</span>

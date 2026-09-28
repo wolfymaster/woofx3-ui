@@ -1,12 +1,11 @@
 import { twitchScopeHealthKey } from "@convex/lib/twitchScopeHealth";
-import { TriangleAlert, X } from "lucide-react";
+import { Loader2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useInstance } from "@/hooks/use-instance";
+import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
-import { twitchConnectUrl } from "@/lib/twitch-connect";
 import {
   dismissReconnect,
   isReconnectDismissed,
@@ -30,6 +29,7 @@ export function TwitchReconnectBanner() {
   const { health, twitchLink } = useTwitchIntegration(instanceId);
   const [location] = useLocation();
   const search = useSearch();
+  const { connect, starting, error: connectError } = useTwitchConnect();
   // Instance and gap together, so switching instances never carries a
   // dismissal across to one whose gap happens to match.
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -55,15 +55,21 @@ export function TwitchReconnectBanner() {
       data-testid="banner-twitch-reconnect"
     >
       <TriangleAlert className="h-4 w-4 shrink-0 text-amber-500" />
-      <p className="min-w-0 flex-1">{message}</p>
+      <p className="min-w-0 flex-1">
+        {message}
+        {connectError && <span className="block text-destructive">{connectError}</span>}
+      </p>
       {twitchLink.viewerCanRelink ? (
-        <Button asChild size="sm" variant="outline" className="h-7 shrink-0">
-          <a
-            href={twitchConnectUrl(CONVEX_SITE_URL, instanceId, reconnectReturnPath(location, search))}
-            data-testid="button-banner-reconnect-twitch"
-          >
-            Reconnect as @{twitchLink.platformUsername}
-          </a>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 shrink-0"
+          onClick={() => void connect(instanceId, reconnectReturnPath(location, search))}
+          disabled={starting}
+          data-testid="button-banner-reconnect-twitch"
+        >
+          {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Reconnect as @{twitchLink.platformUsername}
         </Button>
       ) : (
         <span className="shrink-0 text-xs text-muted-foreground">Ask an instance admin to reconnect Twitch.</span>
