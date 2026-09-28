@@ -4,9 +4,9 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalQuery, type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
 import { executeMacroPlan, loadMacroEngineContext, valuesFromPairs } from "./lib/macroExecution";
-import { planMacroRun } from "./lib/macroTrigger";
+import { CHAT_COMMAND_RUN_RESTRICTION, macroBehaviorFingerprint, planMacroRun } from "./lib/macroTrigger";
 import { getInstanceMembership } from "./lib/teamAccess";
-import { deleteTriggerForMacro } from "./macroTriggers";
+import { deleteTriggerForMacro, findTriggerForMacro, isInstanceManager } from "./macroTriggers";
 import { macroActionTypeValidator, macroConfigValidator } from "./schema";
 
 // A pad is a hand-built set of buttons; this is a sanity ceiling, not a product
@@ -44,6 +44,26 @@ async function requireMacro(ctx: MutationCtx, instanceId: Id<"instances">, macro
     throw new Error("Macro not found");
   }
   return macro;
+}
+
+/**
+ * A macro with a trigger URL runs, from anywhere, whatever it is set to do, so
+ * only an owner or admin may change that or delete it. Label, icon and color
+ * stay open to every member.
+ */
+async function requireManagerIfTriggered(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  macroId: Id<"macros">,
+  userId: Id<"users">,
+  intent: string
+): Promise<void> {
+  if (!(await findTriggerForMacro(ctx, macroId))) {
+    return;
+  }
+  if (!(await isInstanceManager(ctx, instanceId, userId))) {
+    throw new Error(`This macro has a remote trigger URL, so only an owner or admin can ${intent}`);
+  }
 }
 
 export const list = query({
@@ -114,8 +134,13 @@ export const updateMacro = mutation({
     config: macroConfigValidator,
   },
   handler: async (ctx, args) => {
-    await requireMember(ctx, args.instanceId);
-    await requireMacro(ctx, args.instanceId, args.macroId);
+    const userId = await requireMember(ctx, args.instanceId);
+    const macro = await requireMacro(ctx, args.instanceId, args.macroId);
+    const changesBehavior =
+      macroBehaviorFingerprint(args.type, args.config) !== macroBehaviorFingerprint(macro.type, macro.config);
+    if (changesBehavior) {
+      await requireManagerIfTriggered(ctx, args.instanceId, args.macroId, userId, "change what it does");
+    }
 
     // icon and color are cleared by omission, so they are patched explicitly
     // rather than spread — a button losing its color must actually persist.
@@ -142,8 +167,9 @@ export const deleteMacro = mutation({
     macroId: v.id("macros"),
   },
   handler: async (ctx, args) => {
-    await requireMember(ctx, args.instanceId);
+    const userId = await requireMember(ctx, args.instanceId);
     await requireMacro(ctx, args.instanceId, args.macroId);
+    await requireManagerIfTriggered(ctx, args.instanceId, args.macroId, userId, "delete it");
     await deleteTriggerForMacro(ctx, args.macroId);
     await ctx.db.delete(args.macroId);
   },
@@ -188,7 +214,8 @@ export const runContext = internalQuery({
       return null;
     }
     const engine = await loadMacroEngineContext(ctx, instanceId);
-    return { type: macro.type, config: macro.config, engine };
+    const isManager = membership.role === "owner" || membership.role === "admin";
+    return { type: macro.type, config: macro.config, engine, isManager };
   },
 });
 
@@ -219,6 +246,12 @@ export const run = action({
     const planned = planMacroRun(context.type, context.config, valuesFromPairs(values));
     if (!planned.ok) {
       throw new Error(planned.error);
+    }
+    // A chat-command macro runs as the broadcaster, who holds every command
+    // grant; letting any member press it would hand them the broadcaster's
+    // commands (a ban, a raid) regardless of their own chat permissions.
+    if (planned.plan.kind === "chat-command" && !context.isManager) {
+      throw new Error(CHAT_COMMAND_RUN_RESTRICTION);
     }
     const result = await executeMacroPlan(context.engine, planned.plan, "dashboard");
     return { triggerId: result.triggerId ?? null };

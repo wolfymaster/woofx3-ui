@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { macroTriggerUrl } from "@convex/lib/macroTrigger";
+import { macroTriggerEndpoint, macroTriggerUrl } from "@convex/lib/macroTrigger";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Check, Copy, Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 import { extractMacroVariables, type MacroButton } from "@/lib/macro-pad";
-import { macroTriggerExamples, macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
+import { type MacroTriggerTarget, macroTriggerExamples, macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
 
 interface MacroRemoteTriggerProps {
   instanceId: Id<"instances">;
@@ -44,17 +44,39 @@ function CopyButton({ text, label }: { text: string; label: string }) {
  * The URL, shown once right after it is minted: only a hash is stored, so
  * closing the editor loses it for good and the answer is to rotate.
  */
-function RevealedTrigger({ url, variables, allowGet }: { url: string; variables: string[]; allowGet: boolean }) {
-  const examples = macroTriggerExamples(url, variables, allowGet);
+function RevealedTrigger({
+  target,
+  variables,
+  allowGet,
+}: {
+  target: MacroTriggerTarget;
+  variables: string[];
+  allowGet: boolean;
+}) {
+  const examples = macroTriggerExamples(target, variables, allowGet);
   return (
     <div
       className="space-y-3 rounded-md border border-primary/40 bg-primary/5 p-3"
       data-testid="macro-trigger-revealed"
     >
-      <p className="text-xs font-medium">Copy this URL now. It will not be shown again.</p>
-      <div className="flex items-center gap-2">
-        <code className="flex-1 min-w-0 break-all rounded bg-muted px-2 py-1 text-xs">{url}</code>
-        <CopyButton text={url} label="Copy trigger URL" />
+      <p className="text-xs font-medium">Copy the token now. It will not be shown again.</p>
+      <div className="space-y-1">
+        <p className="text-[11px] text-muted-foreground">
+          Token, sent as <code className="font-mono">Authorization: Bearer …</code> to {target.endpoint}
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 min-w-0 break-all rounded bg-muted px-2 py-1 text-xs">{target.token}</code>
+          <CopyButton text={target.token} label="Copy trigger token" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <p className="text-[11px] text-muted-foreground">
+          Full URL, for a device that cannot set headers. Prefer the header: a URL ends up in logs and history.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="flex-1 min-w-0 break-all rounded bg-muted px-2 py-1 text-xs">{target.url}</code>
+          <CopyButton text={target.url} label="Copy trigger URL" />
+        </div>
       </div>
       {examples.map((example) => (
         <div key={example.id} className="space-y-1">
@@ -80,6 +102,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
   const issueToken = useAction(api.macroTriggers.issueToken);
   const revoke = useMutation(api.macroTriggers.revoke);
   const setAllowGet = useMutation(api.macroTriggers.setAllowGet);
+  const reconfirm = useMutation(api.macroTriggers.reconfirm);
 
   const macroId = macro.id as Id<"macros">;
   const [revealedToken, setRevealedToken] = useState<string | null>(null);
@@ -166,6 +189,41 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
         <p className="text-xs text-muted-foreground">Only an owner or admin of this instance can change it.</p>
       )}
 
+      {trigger?.needsConfirmation && (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/50 p-2"
+          data-testid="macro-trigger-needs-confirmation"
+        >
+          <p className="flex-1 text-xs">
+            This macro changed since its URL was approved, or whoever approved it is no longer an owner or admin. The
+            URL refuses presses until{" "}
+            {status.canManage ? "you re-confirm what it does now" : "an owner or admin re-confirms it"}.
+          </p>
+          {status.canManage && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  await reconfirm({ instanceId, macroId });
+                })
+              }
+              data-testid="button-reconfirm-macro-trigger"
+            >
+              Re-confirm
+            </Button>
+          )}
+        </div>
+      )}
+
+      {trigger?.lastFailure &&
+        trigger.lastFailedAt !== undefined &&
+        trigger.lastFailedAt > (trigger.lastUsedAt ?? 0) && (
+          <p className="text-xs text-destructive">Last press failed: {trigger.lastFailure}</p>
+        )}
+
       {confirming && (
         <div className="flex flex-wrap items-center gap-2 rounded-md border border-destructive/40 p-2">
           <p className="flex-1 text-xs">
@@ -191,7 +249,11 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
 
       {trigger && revealedToken && (
         <RevealedTrigger
-          url={macroTriggerUrl(CONVEX_SITE_URL, revealedToken)}
+          target={{
+            endpoint: macroTriggerEndpoint(CONVEX_SITE_URL),
+            url: macroTriggerUrl(CONVEX_SITE_URL, revealedToken),
+            token: revealedToken,
+          }}
           variables={variables}
           allowGet={trigger.allowGet}
         />
@@ -241,7 +303,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
       {variables.length > 0 && trigger && (
         <p className="text-xs text-muted-foreground">
           Send {variables.map((name) => `"${name}"`).join(", ")} as JSON body fields or query parameters; a request
-          missing any of them is refused.
+          missing any of them, or with a line break or other control character in one, is refused.
         </p>
       )}
 

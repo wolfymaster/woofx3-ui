@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CHAT_COMMAND_RUN_RESTRICTION } from "@convex/lib/macroTrigger";
 import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -33,6 +34,10 @@ interface MacroTileProps {
   variableCount: number;
   /** Status line of the macro's remote trigger, or undefined when it has none. */
   remoteTriggerStatus: string | undefined;
+  /** Why this viewer may not press the button, or undefined when they may. */
+  runBlockedReason: string | undefined;
+  /** Why this viewer may not delete the button, or undefined when they may. */
+  deleteBlockedReason: string | undefined;
   onRun: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -44,6 +49,8 @@ function MacroTile({
   isExecuting,
   variableCount,
   remoteTriggerStatus,
+  runBlockedReason,
+  deleteBlockedReason,
   onRun,
   onEdit,
   onDelete,
@@ -68,11 +75,12 @@ function MacroTile({
       ref={setNodeRef}
       style={style}
       className={cn("relative aspect-square", isDragging && "z-10 opacity-80")}
+      title={!isEditMode ? runBlockedReason : undefined}
       data-testid={`macro-tile-${macro.id}`}
     >
       <button
         type="button"
-        disabled={isEditMode || isExecuting}
+        disabled={isEditMode || isExecuting || (!isEditMode && runBlockedReason !== undefined)}
         onClick={onRun}
         style={tint}
         className={cn(
@@ -133,6 +141,8 @@ function MacroTile({
               size="icon"
               className="h-5 w-5 bg-background/80 text-destructive hover:text-destructive"
               onClick={onDelete}
+              disabled={deleteBlockedReason !== undefined}
+              title={deleteBlockedReason}
               data-testid={`button-delete-macro-${macro.id}`}
             >
               <Trash2 className="h-3 w-3" />
@@ -197,6 +207,10 @@ export function MacroPadModule() {
     }
     return counts;
   }, [macros]);
+
+  // Until the role is known, members and managers alike see buttons enabled;
+  // the server refuses what the role does not allow either way.
+  const canManage = remoteTriggers?.canManage ?? true;
 
   const remoteTriggerStatuses = useMemo(() => {
     const statuses: Record<string, string> = {};
@@ -391,6 +405,14 @@ export function MacroPadModule() {
                       isExecuting={isExecuting === macro.id}
                       variableCount={variableCounts[macro.id] ?? 0}
                       remoteTriggerStatus={remoteTriggerStatuses[macro.id]}
+                      runBlockedReason={
+                        macro.type === "chat-command" && !canManage ? CHAT_COMMAND_RUN_RESTRICTION : undefined
+                      }
+                      deleteBlockedReason={
+                        macro.id in remoteTriggerStatuses && !canManage
+                          ? "This macro has a remote trigger URL, so only an owner or admin can delete it"
+                          : undefined
+                      }
                       onRun={() => handlePress(macro)}
                       onEdit={() => {
                         setEditingMacro(macro);
