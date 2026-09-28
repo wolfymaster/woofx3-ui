@@ -3,6 +3,8 @@
 // Helix call lives here; which token it runs with, and who may ask, is the
 // caller's decision.
 
+import { ConvexError } from "convex/values";
+
 const TWITCH_USERS_URL = "https://api.twitch.tv/helix/users";
 const TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 
@@ -66,7 +68,7 @@ export async function fetchTwitchUser(
     headers: { Authorization: `Bearer ${credentials.accessToken}`, "Client-Id": credentials.clientId },
   });
   if (!response.ok) {
-    throw new Error(`Twitch user lookup failed: ${response.status} ${await response.text()}`);
+    throw new ConvexError(`Twitch user lookup failed: ${response.status} ${await response.text()}`);
   }
   return twitchUserFromHelix(await response.json());
 }

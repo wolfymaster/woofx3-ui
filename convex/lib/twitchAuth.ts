@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { type ActionCtx, internalQuery } from "../_generated/server";
@@ -8,6 +8,9 @@ import { type ActionCtx, internalQuery } from "../_generated/server";
 // broadcaster's behalf. One copy deliberately: the scope check below is the
 // only thing that turns a silent 401 into something actionable, and a second
 // copy is how that protection drifts out of sync.
+//
+// Every refusal is a ConvexError: production replaces a plain Error's message
+// with "Server Error", and these messages are the ones a creator can act on.
 
 export interface AuthorizedTwitchCall {
   accessToken: string;
@@ -76,7 +79,7 @@ export async function authorizeTwitchUnattended(
 ): Promise<AuthorizedTwitchCall> {
   const scopes: string[] = await ctx.runQuery(internal.lib.twitchAuth.twitchScopesFor, { instanceId });
   if (!scopes.includes(requiredScope)) {
-    throw new Error(missingTwitchScopeMessage(requiredScope));
+    throw new ConvexError(missingTwitchScopeMessage(requiredScope));
   }
 
   return freshTwitchCredentials(ctx, instanceId);
@@ -85,11 +88,11 @@ export async function authorizeTwitchUnattended(
 async function assertCallerIsMember(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
-    throw new Error("Not authenticated");
+    throw new ConvexError("Not authenticated");
   }
   const isMember = await ctx.runQuery(internal.platformRealtime.checkMembership, { instanceId, userId });
   if (!isMember) {
-    throw new Error("Not a member of this instance");
+    throw new ConvexError("Not a member of this instance");
   }
 }
 
@@ -103,12 +106,12 @@ export async function freshTwitchCredentials(
 ): Promise<AuthorizedTwitchCall> {
   const token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, { instanceId });
   if (!token) {
-    throw new Error("Twitch is not connected for this instance");
+    throw new ConvexError("Twitch is not connected for this instance");
   }
 
   const clientId = process.env.AUTH_TWITCH_ID;
   if (!clientId) {
-    throw new Error("AUTH_TWITCH_ID env var is not set");
+    throw new ConvexError("AUTH_TWITCH_ID env var is not set");
   }
 
   return { accessToken: token.accessToken, broadcasterUserId: token.broadcasterUserId, clientId };

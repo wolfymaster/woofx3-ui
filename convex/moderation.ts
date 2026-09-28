@@ -34,9 +34,10 @@ import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/tw
 //
 // Every failure leaves as a ConvexError carrying the sentence to show: in
 // production Convex replaces a plain Error's message with "Server Error", and
-// a streamer mid-raid needs "reconnect Twitch", not a request id. Helpers
-// shared with other modules (authorizeTwitch, fetchTwitchUser) throw plain
-// Errors, so their calls go through `readable`.
+// a streamer mid-raid needs "reconnect Twitch", not a request id. Calls that
+// can still fail with a plain Error (fetch, a token refresh inside
+// authorizeTwitch, a network failure inside fetchTwitchUser) go through
+// `readable`.
 
 const HELIX = "https://api.twitch.tv/helix";
 const BLOCKED_TERMS_URL = `${HELIX}/moderation/blocked_terms`;
