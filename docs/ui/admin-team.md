@@ -16,7 +16,8 @@ The old `/settings` page also had Profile, Notifications, and Security tabs. Tho
 
 ## Team (`/team`)
 
-- UI for **members** and **accounts** with invites and role badges (owner, admin, member, viewer).
-- Data is loaded via **TanStack Query** with **`queryFn`s that currently resolve to empty arrays** and a hard-coded `teamId` placeholder — the screen is **presentational / in progress** relative to Convex account sharing (`accounts`, membership APIs).
-
-For production behavior, Team should eventually use the same **account membership model** documented in `CLAUDE.md` (Convex-only; no engine changes for sharing).
+- Members and pending invitations for the selected instance's account, from `convex/accountMembers.ts` and `convex/invitations.ts`. Sharing is Convex-only; the engine is never involved.
+- **Invite** (`/team/invite`, `client/src/pages/team-invite.tsx`) invites one person by **Twitch username** (the default) or by **email**, and returns a link for the inviter to share.
+  - Twitch: `invitations.lookupTwitchUser` (team managers only) looks the login up on Helix and returns a confirmation card, with partner/affiliate badges, plus moderator/VIP when the account's Twitch link already has a scope that can read them. `invitations.create` takes only the Twitch user id and looks the profile up again on the server, so the stored name and avatar never come from the client. The lookup uses the account's Twitch link token when there is one, and an app token (client credentials) otherwise.
+  - An invitation targets exactly one of an email or a platform account (`convex/lib/invitationTarget.ts`). A Twitch invite is accepted only by a user whose `twitch` auth account has the same Twitch user id. Logins can change, so they are only used for display.
+- **Accept** (`/auth/accept-invite?token=…`): for a Twitch invite, the page shows whose Twitch account the link is for (`invitations.previewByToken`) and offers Twitch sign-in directly.

@@ -1,10 +1,12 @@
 import { api } from "@convex/_generated/api";
-import { useConvexAuth, useMutation } from "convex/react";
+import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Loader2, MonitorPlay } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
 
 function getTokenFromLocation(): string | null {
   if (typeof window === "undefined") {
@@ -13,17 +15,24 @@ function getTokenFromLocation(): string | null {
   return new URLSearchParams(window.location.search).get("token");
 }
 
+function signInWithTwitch(token: string | null) {
+  const back = token ? `/auth/accept-invite?token=${encodeURIComponent(token)}` : "/";
+  window.location.href = `${CONVEX_SITE_URL}/api/auth/twitch/start?redirect_to=${encodeURIComponent(back)}`;
+}
+
 export default function AcceptInvite() {
   const [, navigate] = useLocation();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const accept = useMutation(api.invitations.accept);
+  const token = getTokenFromLocation();
+  const preview = useQuery(api.invitations.previewByToken, token ? { token } : "skip");
+  const twitchTarget = preview?.target.kind === "twitch" ? preview.target : null;
 
   const [status, setStatus] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
   const ranAccept = useRef(false);
 
   const runAccept = useCallback(async () => {
-    const token = getTokenFromLocation();
     if (!token) {
       setStatus("error");
       setMessage("Missing invitation token. Use the full link from your invite.");
@@ -40,14 +49,21 @@ export default function AcceptInvite() {
       setStatus("error");
       setMessage(e instanceof Error ? e.message : "Could not accept invitation.");
     }
-  }, [accept, navigate]);
+  }, [accept, navigate, token]);
 
   useEffect(() => {
     if (authLoading) {
       return;
     }
     if (!isAuthenticated) {
-      const token = getTokenFromLocation();
+      // A Twitch invite stays here to show whose account to sign in with, and
+      // offers that sign-in itself; anything else goes to the general login.
+      if (token && preview === undefined) {
+        return;
+      }
+      if (preview?.target.kind === "twitch") {
+        return;
+      }
       const next = token
         ? `/auth/login?next=${encodeURIComponent(`/auth/accept-invite?token=${token}`)}`
         : "/auth/login";
@@ -59,7 +75,7 @@ export default function AcceptInvite() {
     }
     ranAccept.current = true;
     void runAccept();
-  }, [authLoading, isAuthenticated, navigate, runAccept]);
+  }, [authLoading, isAuthenticated, navigate, runAccept, token, preview]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -80,6 +96,32 @@ export default function AcceptInvite() {
             <div className="flex items-center gap-2 text-muted-foreground text-sm">
               <Loader2 className="h-4 w-4 animate-spin" />
               Processing…
+            </div>
+          ) : null}
+          {twitchTarget && (!isAuthenticated || status === "error") ? (
+            <div className="space-y-2">
+              <p className="text-sm">
+                {preview?.accountName ? `This invitation to ${preview.accountName} is for` : "This invitation is for"}{" "}
+                this Twitch account. Sign in with it to join.
+              </p>
+              <TwitchUserCard
+                user={{
+                  login: twitchTarget.login ?? "",
+                  displayName: twitchTarget.displayName ?? twitchTarget.login ?? "Twitch user",
+                  profileImageUrl: twitchTarget.profileImageUrl ?? undefined,
+                }}
+                data-testid="card-invite-twitch-account"
+              >
+                {!isAuthenticated ? (
+                  <Button
+                    className="w-full"
+                    onClick={() => signInWithTwitch(token)}
+                    data-testid="button-invite-twitch-sign-in"
+                  >
+                    Continue with Twitch
+                  </Button>
+                ) : null}
+              </TwitchUserCard>
             </div>
           ) : null}
           {message ? <p className="text-sm">{message}</p> : null}
