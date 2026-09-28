@@ -1,3 +1,4 @@
+import type { Id } from "@convex/_generated/dataModel";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/lib/macro-pad";
 import { MacroColorPicker } from "./macro-color-picker";
 import { MacroIconPicker } from "./macro-icon-picker";
+import { MacroRemoteTrigger } from "./macro-remote-trigger";
 
 /**
  * Minimal shape the picker needs — only `id` + `name` are read. Sourced from
@@ -31,6 +33,7 @@ import { MacroIconPicker } from "./macro-icon-picker";
 type WorkflowOption = { id: string; name: string };
 
 interface MacroConfigModalProps {
+  instanceId: Id<"instances"> | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   macro: MacroButton | null;
@@ -39,7 +42,7 @@ interface MacroConfigModalProps {
   onSave: (input: MacroInput) => void;
 }
 
-export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave }: MacroConfigModalProps) {
+export function MacroConfigModal({ instanceId, open, onOpenChange, macro, workflows, onSave }: MacroConfigModalProps) {
   const [label, setLabel] = useState("");
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [color, setColor] = useState<string | undefined>(undefined);
@@ -131,7 +134,7 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{macro ? "Edit Macro" : "Add Macro"}</DialogTitle>
           <DialogDescription>Configure a macro button that can execute actions when pressed.</DialogDescription>
@@ -271,6 +274,12 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
               </p>
             )}
           </div>
+
+          {macro && instanceId && (
+            <div className="rounded-md border border-border p-3">
+              <MacroRemoteTrigger instanceId={instanceId} macro={macro} />
+            </div>
+          )}
         </div>
 
         <DialogFooter>

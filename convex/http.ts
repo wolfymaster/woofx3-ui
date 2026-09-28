@@ -17,6 +17,14 @@ import {
   toHttpResponse,
   withEngineTimeout,
 } from "./lib/inboundWebhookRelay";
+import { executeMacroPlan, MacroRunRefused, valuesToPairs } from "./lib/macroExecution";
+import {
+  hashTriggerToken,
+  MAX_TRIGGER_BODY_BYTES,
+  parseMacroTriggerPath,
+  parseTriggerValues,
+  triggerRefusalResponse,
+} from "./lib/macroTrigger";
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
@@ -1438,5 +1446,84 @@ const inboundWebhookHandler = httpAction(async (ctx, request) => {
 
 http.route({ pathPrefix: "/api/webhooks/", method: "POST", handler: inboundWebhookHandler });
 http.route({ pathPrefix: "/api/webhooks/", method: "GET", handler: inboundWebhookHandler });
+
+/** How long a remote macro trigger waits for the engine to accept the run. */
+const MACRO_TRIGGER_ENGINE_TIMEOUT_MS = 10_000;
+
+/** Provenance for runs fired by a trigger URL. Unlike "dashboard", these are recorded in the run history. */
+const MACRO_TRIGGER_PROVENANCE = "macro-trigger";
+
+function macroTriggerJson(
+  status: number,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {}
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers },
+  });
+}
+
+// A macro's remote trigger URL: /api/macros/trigger/<token>. POST always; GET
+// only for a trigger that opted in. A malformed token and an unknown one get
+// the same 404, and neither touches anything but an index lookup.
+const macroTriggerHandler = httpAction(async (ctx, request) => {
+  const url = new URL(request.url);
+  const token = parseMacroTriggerPath(url.pathname);
+  if (!token) {
+    const refusal = triggerRefusalResponse({ outcome: "not-found" });
+    return macroTriggerJson(refusal.status, refusal.body, refusal.headers);
+  }
+  const method = request.method === "GET" ? "GET" : "POST";
+
+  if (Number(request.headers.get("content-length") ?? "0") > MAX_TRIGGER_BODY_BYTES) {
+    return macroTriggerJson(413, { ok: false, error: "body too large" });
+  }
+  const bodyBytes = method === "POST" ? await request.arrayBuffer() : new ArrayBuffer(0);
+  if (bodyBytes.byteLength > MAX_TRIGGER_BODY_BYTES) {
+    return macroTriggerJson(413, { ok: false, error: "body too large" });
+  }
+  const parsed = parseTriggerValues({
+    contentType: request.headers.get("content-type"),
+    body: new TextDecoder().decode(bodyBytes),
+    query: url.searchParams,
+  });
+  if (!parsed.ok) {
+    return macroTriggerJson(400, { ok: false, error: parsed.error });
+  }
+
+  const claim = await ctx.runMutation(internal.macroTriggers.claim, {
+    tokenHash: await hashTriggerToken(token),
+    method,
+    values: valuesToPairs(parsed.values),
+  });
+  if (claim.outcome !== "run") {
+    const refusal = triggerRefusalResponse(claim);
+    return macroTriggerJson(refusal.status, refusal.body, refusal.headers);
+  }
+
+  try {
+    const result = await withEngineTimeout(
+      executeMacroPlan(claim.engine, claim.plan, MACRO_TRIGGER_PROVENANCE),
+      MACRO_TRIGGER_ENGINE_TIMEOUT_MS
+    );
+    return macroTriggerJson(202, { ok: true, ...(result.triggerId ? { triggerId: result.triggerId } : {}) });
+  } catch (err) {
+    if (err instanceof MacroRunRefused) {
+      return macroTriggerJson(409, { ok: false, error: err.message });
+    }
+    const timedOut = err instanceof EngineTimeoutError;
+    // The engine's own error text can carry internals; the caller only learns
+    // that the engine did not take the run.
+    logger.warn("macro trigger: engine call failed", { error: String(err), timedOut });
+    return macroTriggerJson(timedOut ? 504 : 502, {
+      ok: false,
+      error: timedOut ? "the engine did not answer in time" : "the engine did not accept the run",
+    });
+  }
+});
+
+http.route({ pathPrefix: "/api/macros/trigger/", method: "POST", handler: macroTriggerHandler });
+http.route({ pathPrefix: "/api/macros/trigger/", method: "GET", handler: macroTriggerHandler });
 
 export default http;

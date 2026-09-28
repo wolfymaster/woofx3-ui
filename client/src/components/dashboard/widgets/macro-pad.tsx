@@ -4,20 +4,21 @@ import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor,
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Check, GripVertical, Loader2, Pencil, Plus, SlidersHorizontal, Trash2, Zap } from "lucide-react";
+import { Check, GripVertical, Loader2, Pencil, Plus, Radio, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
+import { useToast } from "@/hooks/use-toast";
 import {
   applyMacroVariables,
   extractMacroVariables,
   isHexColor,
   type MacroButton,
-  type MacroConfig,
   type MacroInput,
 } from "@/lib/macro-pad";
+import { macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
 import { cn } from "@/lib/utils";
 import { MacroIconPreview } from "./macro-icon-picker";
 import { MacroConfigModal } from "./macro-pad-config-modal";
@@ -30,12 +31,23 @@ interface MacroTileProps {
   isEditMode: boolean;
   isExecuting: boolean;
   variableCount: number;
+  /** Status line of the macro's remote trigger, or undefined when it has none. */
+  remoteTriggerStatus: string | undefined;
   onRun: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function MacroTile({ macro, isEditMode, isExecuting, variableCount, onRun, onEdit, onDelete }: MacroTileProps) {
+function MacroTile({
+  macro,
+  isEditMode,
+  isExecuting,
+  variableCount,
+  remoteTriggerStatus,
+  onRun,
+  onEdit,
+  onDelete,
+}: MacroTileProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: macro.id,
     disabled: !isEditMode,
@@ -92,6 +104,17 @@ function MacroTile({ macro, isEditMode, isExecuting, variableCount, onRun, onEdi
         )}
       </button>
 
+      {remoteTriggerStatus && !isEditMode && (
+        <span
+          className="absolute top-1 left-1 text-muted-foreground/70"
+          title={`Remote trigger: ${remoteTriggerStatus}`}
+          data-testid={`macro-remote-indicator-${macro.id}`}
+        >
+          <Radio className="h-3 w-3" />
+          <span className="sr-only">Remote trigger: {remoteTriggerStatus}</span>
+        </span>
+      )}
+
       {isEditMode && (
         <>
           <GripVertical className="absolute bottom-1 left-1 h-3.5 w-3.5 text-muted-foreground/60 pointer-events-none" />
@@ -132,12 +155,14 @@ export function MacroPadModule() {
   const [pendingMacro, setPendingMacro] = useState<MacroButton | null>(null);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const listEngineWorkflows = useAction(api.moduleEngine.listWorkflows);
-  const triggerWorkflow = useAction(api.workflowActions.trigger);
+  const runMacroOnServer = useAction(api.macros.run);
+  const { toast } = useToast();
 
   const instanceId = instance?._id;
   const listArgs = instanceId ? { instanceId } : "skip";
 
   const macros = useQuery(api.macros.list, listArgs);
+  const remoteTriggers = useQuery(api.macroTriggers.listForInstance, listArgs);
   const addMacro = useMutation(api.macros.addMacro);
   const updateMacro = useMutation(api.macros.updateMacro);
   const deleteMacro = useMutation(api.macros.deleteMacro);
@@ -172,6 +197,14 @@ export function MacroPadModule() {
     }
     return counts;
   }, [macros]);
+
+  const remoteTriggerStatuses = useMemo(() => {
+    const statuses: Record<string, string> = {};
+    for (const trigger of remoteTriggers?.triggers ?? []) {
+      statuses[trigger.macroId] = macroTriggerStatusLabel(trigger);
+    }
+    return statuses;
+  }, [remoteTriggers]);
 
   const handleAddMacro = useCallback(() => {
     setEditingMacro(null);
@@ -225,45 +258,45 @@ export function MacroPadModule() {
   // click from being swallowed as the start of a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  // Chat-command execution is still stubbed; workflow and HTTP buttons run for
-  // real. `config` arrives with every {{variable}} already resolved.
+  // Chat-command and workflow macros run in Convex through the same path as a
+  // remote trigger URL. HTTP-request macros are fetched from here, in the
+  // browser, so a target on the streamer's local network stays reachable.
   const runMacro = useCallback(
-    async (macro: MacroButton, resolved: MacroConfig) => {
+    async (macro: MacroButton, values: Record<string, string>) => {
+      if (!instanceId) {
+        return;
+      }
       setIsExecuting(macro.id);
       try {
-        switch (macro.type) {
-          case "chat-command":
-            if (resolved.command) {
-              // TODO: Implement chat command execution via API
-              console.log("Executing chat command:", resolved.command);
-            }
-            break;
-          case "trigger-workflow":
-            if (resolved.workflowId && instanceId) {
-              // Resolves once the request reaches the bus. The run happens in
-              // the engine and reports its own lifecycle, so there is nothing
-              // further to await here.
-              await triggerWorkflow({ instanceId, workflowNameOrId: resolved.workflowId });
-            }
-            break;
-          case "http-request":
-            if (resolved.url) {
-              const response = await fetch(resolved.url, {
-                method: resolved.method || "GET",
-                headers: resolved.headers || {},
-                body: resolved.body ? JSON.stringify(JSON.parse(resolved.body)) : undefined,
-              });
-              console.log("HTTP request result:", response.status);
-            }
-            break;
+        if (macro.type === "http-request") {
+          const resolved = applyMacroVariables(macro.config, values);
+          if (resolved.url) {
+            const response = await fetch(resolved.url, {
+              method: resolved.method || "GET",
+              headers: resolved.headers || {},
+              body: resolved.body ? JSON.stringify(JSON.parse(resolved.body)) : undefined,
+            });
+            console.log("HTTP request result:", response.status);
+          }
+        } else {
+          await runMacroOnServer({
+            instanceId,
+            macroId: macro.id as Id<"macros">,
+            values: Object.entries(values).map(([name, value]) => ({ name, value })),
+          });
         }
       } catch (error) {
         console.error("Failed to execute macro:", error);
+        toast({
+          title: `Couldn't run ${macro.label}`,
+          description: error instanceof Error ? error.message : String(error),
+          variant: "destructive",
+        });
       } finally {
         setIsExecuting(null);
       }
     },
-    [instanceId, triggerWorkflow]
+    [instanceId, runMacroOnServer, toast]
   );
 
   const handlePress = useCallback(
@@ -275,7 +308,7 @@ export function MacroPadModule() {
         setPendingMacro(macro);
         return;
       }
-      void runMacro(macro, macro.config);
+      void runMacro(macro, {});
     },
     [isEditMode, runMacro]
   );
@@ -287,7 +320,7 @@ export function MacroPadModule() {
       }
       const macro = pendingMacro;
       setPendingMacro(null);
-      void runMacro(macro, applyMacroVariables(macro.config, values));
+      void runMacro(macro, values);
     },
     [pendingMacro, runMacro]
   );
@@ -357,6 +390,7 @@ export function MacroPadModule() {
                       isEditMode={isEditMode}
                       isExecuting={isExecuting === macro.id}
                       variableCount={variableCounts[macro.id] ?? 0}
+                      remoteTriggerStatus={remoteTriggerStatuses[macro.id]}
                       onRun={() => handlePress(macro)}
                       onEdit={() => {
                         setEditingMacro(macro);
@@ -373,6 +407,7 @@ export function MacroPadModule() {
       </div>
 
       <MacroConfigModal
+        instanceId={instanceId}
         open={configModalOpen}
         onOpenChange={setConfigModalOpen}
         macro={editingMacro}
