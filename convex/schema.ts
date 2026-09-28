@@ -507,6 +507,23 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
+  // goLiveChecklists: one row per instance for the Go live checklist. Shared by
+  // everyone on the instance, like the channel it describes: a check dismissed
+  // because this setup has no OBS stays dismissed for the moderator too.
+  //
+  // The last* fields are the channel's title and category as they stood when
+  // the checklist was last completed. Twitch keeps no history of either, so
+  // this is what "same title as last time" is measured against.
+  goLiveChecklists: defineTable({
+    instanceId: v.id("instances"),
+    dismissedCheckIds: v.array(v.string()),
+    lastCompletedAt: v.optional(v.number()),
+    lastTitle: v.optional(v.string()),
+    lastCategoryId: v.optional(v.string()),
+    lastCategoryName: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
   // pinnedMessages: history of things worth pinning in the channel's chat, kept
   // so the same message can be re-pinned across streams without retyping it.
   //
