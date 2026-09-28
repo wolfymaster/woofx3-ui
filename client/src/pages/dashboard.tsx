@@ -7,6 +7,7 @@ import { CommandBar } from "@/components/dashboard/command-bar";
 import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { PanelTabs } from "@/components/dashboard/panel-tabs";
+import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { WidgetRail } from "@/components/dashboard/widget-rail";
 import { StatusBarCenterPortal } from "@/components/layout/status-bar-slot";
 import {
@@ -320,6 +321,7 @@ export default function Dashboard() {
         )}
 
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
+        <StarterPacksNudge instanceId={instance._id} />
 
         <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
           <CarouselContent>

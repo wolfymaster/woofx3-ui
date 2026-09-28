@@ -11,6 +11,7 @@ import {
   ListOrdered,
   MessageSquare,
   MessageSquarePlus,
+  PackagePlus,
   Palette,
   Puzzle,
   Radio,
@@ -25,6 +26,8 @@ import {
 import { ALERT_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
+
+export const STARTER_PACKS_PATH = "/stream/starter-packs";
 
 export interface NavItem {
   id: string;
@@ -54,6 +57,7 @@ export const STREAM_ITEMS: NavItem[] = [
   { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
   { id: "assets", label: "Assets", icon: FolderOpen, href: "/stream/assets" },
   { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
+  { id: "starter-packs", label: "Starter Packs", icon: PackagePlus, href: STARTER_PACKS_PATH },
 ];
 
 export const HELP_ITEMS: NavItem[] = [
