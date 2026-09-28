@@ -1,10 +1,12 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { History, Loader2 } from "lucide-react";
+import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { formatLiveDuration, formatViewerFigure, liveDurationMs, type SessionSummaryRow } from "@/lib/session-summary";
+import { streamRecapPath } from "@/lib/stream-recap-route";
 
 const RECENT_STREAM_LIMIT = 10;
 
@@ -33,7 +35,11 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
   const startedOn = new Date(session.startedAt).toLocaleDateString(undefined, DATE_FORMAT);
 
   return (
-    <div className="px-3 py-2.5 space-y-2" data-testid={`recent-stream-${row._id}`}>
+    <Link
+      href={streamRecapPath(row.sessionId)}
+      className="block px-3 py-2.5 space-y-2 hover:bg-muted/50 transition-colors"
+      data-testid={`recent-stream-${row._id}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">{startedOn}</span>
         <span className="text-xs text-muted-foreground tabular-nums">
@@ -53,7 +59,7 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
           {totals.raids === 1 ? "1 raid" : `${totals.raids} raids`}, {totals.raiders.toLocaleString()} raiders
         </p>
       )}
-    </div>
+    </Link>
   );
 }
 

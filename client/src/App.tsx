@@ -18,6 +18,7 @@ import {
   COMMAND_NEW_ROUTE,
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
+import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { convexClient as convex } from "./lib/convexClient";
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
@@ -47,6 +48,8 @@ const Modules = lazy(() => import("@/pages/modules"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Queues = lazy(() => import("@/pages/queues"));
 const Scenes = lazy(() => import("@/pages/scenes"));
+const StreamRecap = lazy(() => import("@/pages/stream-recap"));
+const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
 const Timers = lazy(() => import("@/pages/timers"));
@@ -161,6 +164,8 @@ function AppRoutes() {
                   <Route path="/stream/timers/*" component={Timers} />
                   <Route path="/stream/queues" component={Queues} />
                   <Route path="/stream/queues/*" component={Queues} />
+                  <Route path={STREAM_RECAPS_PATH} component={StreamRecaps} />
+                  <Route path={STREAM_RECAP_ROUTE} component={StreamRecap} />
                   <Route path="/stream/scenes" component={Scenes} />
                   <Route path="/stream/scenes/:id" component={Scenes} />
                   <Route path="/stream/assets" component={Assets} />
