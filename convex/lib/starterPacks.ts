@@ -1,4 +1,5 @@
 import type { ActionStep, ConditionConfig, ConditionOperator, TaskDefinition, WorkflowDefinition } from "@woofx3/api";
+import type { EngineCapability } from "./engineCapabilities";
 
 /**
  * Starter packs: curated sets of workflows and chat commands a new streamer
@@ -59,16 +60,22 @@ export type StarterFeature = "delayWait";
 export type StarterFeatures = Record<StarterFeature, boolean>;
 
 /**
- * What the engine supports beyond its action catalog.
- *
- * Nothing reports whether an engine supports delay waits: a delay is a wait
- * task rather than a catalog action, and EngineInfo.version is an image tag
- * that no release with delays carries yet. An engine without them reads a
- * delay as an event wait for an empty event, which times out and fails the
- * run, so a raid welcome with a pause would lose its shoutout and marker on
- * every raid. Until an engine can say it has them, pauses stay off.
+ * The engine capability behind each starter feature. A delay is a wait task
+ * rather than a catalog action, so the catalog cannot say whether the engine
+ * has it. An engine without delays reads one as an event wait for an empty
+ * event, which times out and fails the run, so a raid welcome with a pause
+ * would lose its shoutout and marker on every raid.
  */
-export const STARTER_FEATURES: StarterFeatures = { delayWait: false };
+const STARTER_FEATURE_CAPABILITIES: Record<StarterFeature, EngineCapability> = {
+  delayWait: "workflow.delayWait",
+};
+
+export const NO_STARTER_FEATURES: StarterFeatures = { delayWait: false };
+
+/** What the engine supports beyond its action catalog, from the capability ids it lists. */
+export function starterFeaturesFrom(capabilities: readonly string[]): StarterFeatures {
+  return { delayWait: capabilities.includes(STARTER_FEATURE_CAPABILITIES.delayWait) };
+}
 
 /** Twitch display names are at most 25 characters, the longest thing a placeholder becomes in practice. */
 export const PLACEHOLDER_LENGTH_ESTIMATE = 25;

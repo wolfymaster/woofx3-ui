@@ -6,6 +6,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
 import { createCommandInEngine } from "./chatCommandActions";
 import { canonicalRefFromProjectionKey } from "./lib/canonicalRef";
+import { fetchEngineCapabilities } from "./lib/engineCapabilities";
 import {
   buildStarterCommand,
   buildStarterWorkflow,
@@ -13,11 +14,11 @@ import {
   hasRequirements,
   missingRequirements,
   requirementsMessage,
-  STARTER_FEATURES,
   STARTER_PACKS,
   type StarterCatalog,
   type StarterCommandItem,
   type StarterItem,
+  starterFeaturesFrom,
   starterItemKey,
   validateStarterValues,
 } from "./lib/starterPacks";
@@ -276,7 +277,8 @@ export const install = action({
     if (!pack) {
       throw new Error(`Unknown starter pack "${packId}"`);
     }
-    const checked = validateStarterValues(pack, values, STARTER_FEATURES);
+    const capabilities = await fetchEngineCapabilities(instance);
+    const checked = validateStarterValues(pack, values, starterFeaturesFrom(capabilities.capabilities));
     if (!checked.ok) {
       throw new Error(Object.values(checked.errors).join(" "));
     }

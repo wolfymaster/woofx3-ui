@@ -4,8 +4,10 @@ import { useAction } from "convex/react";
 import { ListX, Loader2, SkipForward } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import { clearResultToast, skipResultToast } from "@/lib/alert-queue";
+import { ALERT_QUEUE_CONTROL_CAPABILITIES, capabilitySupport } from "@/lib/engine-capabilities";
 import { cn } from "@/lib/utils";
 
 interface AlertQueueControlsProps {
@@ -29,7 +31,12 @@ export function AlertQueueControls({ instanceId, className }: AlertQueueControls
   const [pending, setPending] = useState<Pending>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
 
+  const { state: capabilities } = useEngineCapabilities(instanceId);
+  const support = capabilitySupport(capabilities, ALERT_QUEUE_CONTROL_CAPABILITIES, "any");
   const busy = pending !== null;
+  const unavailable = support !== "supported";
+  const unavailableTitle =
+    support === "unsupported" ? "Needs engine update" : support === "unknown" ? "Couldn't check the engine" : undefined;
 
   const run = async (kind: Exclude<Pending, null>) => {
     setPending(kind);
@@ -98,9 +105,9 @@ export function AlertQueueControls({ instanceId, className }: AlertQueueControls
         size="sm"
         variant="outline"
         className="h-7 px-2 text-xs"
-        disabled={busy}
+        disabled={busy || unavailable}
         onClick={() => void run("skip")}
-        title="Stop the alert playing now"
+        title={unavailableTitle ?? "Stop the alert playing now"}
         data-testid="button-alert-queue-skip"
       >
         {pending === "skip" ? (
@@ -114,14 +121,19 @@ export function AlertQueueControls({ instanceId, className }: AlertQueueControls
         size="sm"
         variant="outline"
         className="h-7 px-2 text-xs"
-        disabled={busy}
+        disabled={busy || unavailable}
         onClick={() => setConfirmingClear(true)}
-        title="Drop every alert still waiting to play"
+        title={unavailableTitle ?? "Drop every alert still waiting to play"}
         data-testid="button-alert-queue-clear"
       >
         <ListX className="h-3.5 w-3.5" />
         Clear queue
       </Button>
+      {support === "unsupported" && (
+        <span className="text-xs text-muted-foreground" data-testid="text-alert-queue-needs-update">
+          Needs engine update
+        </span>
+      )}
     </div>
   );
 }
