@@ -2,10 +2,12 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import {
   fieldTokenNames,
+  STARTER_FEATURES,
   STARTER_PACKS,
   type StarterFieldValues,
   type StarterPack,
   type StarterPackField,
+  starterFieldWarning,
   starterPackDefaults,
   validateStarterValues,
 } from "@convex/lib/starterPacks";
@@ -207,6 +209,8 @@ function FieldInput({
 }) {
   const inputId = `starter-field-${pack.id}-${field.id}`;
   const tokens = field.type === "text" ? fieldTokenNames(pack, field.id) : [];
+  const unsupported = field.requires !== undefined && !STARTER_FEATURES[field.requires];
+  const warning = starterFieldWarning(field, value);
 
   return (
     <div className="space-y-1.5">
@@ -219,6 +223,7 @@ function FieldInput({
           max={field.max}
           value={Number.isNaN(value) ? "" : value}
           onChange={(e) => onChange(e.target.value === "" ? Number.NaN : Number(e.target.value))}
+          disabled={unsupported}
           className="max-w-[10rem]"
         />
       ) : tokens.length > 0 ? (
@@ -242,6 +247,8 @@ function FieldInput({
         </div>
       )}
       {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+      {unsupported && <p className="text-xs text-muted-foreground">Requires engine update.</p>}
+      {warning && <p className="text-xs text-amber-600 dark:text-amber-400">{warning}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
@@ -279,18 +286,32 @@ function ItemPreview({ entry, values }: { entry: PackViews; values: StarterField
   );
 }
 
-function outcomeSummary(pack: StarterPack, results: StarterInstallOutcome[]): { title: string; problems: string[] } {
+interface OutcomeSummary {
+  title: string;
+  /** Items that did not install. */
+  problems: string[];
+  /** Items the engine is still confirming. */
+  notices: string[];
+}
+
+function outcomeSummary(pack: StarterPack, results: StarterInstallOutcome[]): OutcomeSummary {
+  const describe = (result: StarterInstallOutcome) => {
+    const item = pack.items.find((candidate) => candidate.id === result.itemId);
+    return `${item ? starterItemTitle(item) : result.itemId}: ${result.message ?? result.outcome}`;
+  };
   const installed = results.filter((result) => result.outcome === "installed").length;
-  const problems = results
-    .filter((result) => result.outcome === "failed" || result.outcome === "busy")
-    .map((result) => {
-      const item = pack.items.find((candidate) => candidate.id === result.itemId);
-      return `${item ? starterItemTitle(item) : result.itemId}: ${result.message ?? result.outcome}`;
-    });
+  const problems = results.filter((result) => result.outcome === "failed" || result.outcome === "busy").map(describe);
+  const notices = results.filter((result) => result.outcome === "pending").map(describe);
   if (installed === 0) {
-    return { title: problems.length > 0 ? "Nothing was installed" : "Already installed", problems };
+    const title =
+      problems.length > 0
+        ? "Nothing was installed"
+        : notices.length > 0
+          ? "Waiting on the engine"
+          : "Already installed";
+    return { title, problems, notices };
   }
-  return { title: `Installed ${installed} item${installed === 1 ? "" : "s"}`, problems };
+  return { title: `Installed ${installed} item${installed === 1 ? "" : "s"}`, problems, notices };
 }
 
 function InstallDialog({
@@ -308,7 +329,7 @@ function InstallDialog({
   const [draft, setDraft] = useState<DraftValues>(() => starterPackDefaults(pack));
   const [installing, setInstalling] = useState(false);
 
-  const checked = useMemo(() => validateStarterValues(pack, draft), [pack, draft]);
+  const checked = useMemo(() => validateStarterValues(pack, draft, STARTER_FEATURES), [pack, draft]);
   const errors = checked.ok ? {} : checked.errors;
   const previewValues: StarterFieldValues = checked.ok ? checked.values : draft;
 
@@ -319,10 +340,11 @@ function InstallDialog({
     setInstalling(true);
     try {
       const { results } = await install({ instanceId, packId: pack.id, values: checked.values });
-      const { title, problems } = outcomeSummary(pack, results);
+      const { title, problems, notices } = outcomeSummary(pack, results);
+      const lines = [...problems, ...notices];
       toast({
         title,
-        description: problems.length > 0 ? problems.join("; ") : undefined,
+        description: lines.length > 0 ? lines.join("; ") : undefined,
         variant: problems.length > 0 ? "destructive" : undefined,
       });
       if (problems.length === 0) {

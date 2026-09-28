@@ -13,6 +13,7 @@ import {
   hasRequirements,
   missingRequirements,
   requirementsMessage,
+  STARTER_FEATURES,
   STARTER_PACKS,
   type StarterCatalog,
   type StarterCommandItem,
@@ -21,7 +22,7 @@ import {
   validateStarterValues,
 } from "./lib/starterPacks";
 import { getInstanceMembership } from "./lib/teamAccess";
-import { createWorkflowInEngine } from "./workflowActions";
+import { createWorkflowInEngine, EngineConfirmationTimeout } from "./workflowActions";
 import type { CatalogBundle } from "./workflowCatalogContext";
 
 /**
@@ -31,13 +32,20 @@ import type { CatalogBundle } from "./workflowCatalogContext";
  */
 const INSTALL_CLAIM_TTL_MS = 60_000;
 
+/**
+ * How long a workflow item waits for a late webhook echo before another
+ * install may try it again. Longer than INSTALL_CLAIM_TTL_MS because the engine
+ * may already have created the workflow, and a retry would duplicate it.
+ */
+const INSTALL_ECHO_TTL_MS = 5 * 60_000;
+
 /** Whether an item is in place, as the Starter packs page shows it. */
 export type StarterItemState = "installed" | "installing" | "conflict" | "available";
 
 /** How one item of an install went. */
 export type StarterInstallOutcome = {
   itemId: string;
-  outcome: "installed" | "already-installed" | "conflict" | "busy" | "unavailable" | "failed";
+  outcome: "installed" | "already-installed" | "pending" | "conflict" | "busy" | "unavailable" | "failed";
   message?: string;
 };
 
@@ -64,7 +72,8 @@ async function engineObjectExists(ctx: QueryCtx, row: ItemRow): Promise<boolean>
 
 async function rowState(ctx: QueryCtx, row: ItemRow, now: number): Promise<"installed" | "installing" | "stale"> {
   if (row.status === "installing") {
-    return now - row.claimedAt < INSTALL_CLAIM_TTL_MS ? "installing" : "stale";
+    const ttl = row.correlationKey === undefined ? INSTALL_CLAIM_TTL_MS : INSTALL_ECHO_TTL_MS;
+    return now - row.claimedAt < ttl ? "installing" : "stale";
   }
   return (await engineObjectExists(ctx, row)) ? "installed" : "stale";
 }
@@ -140,8 +149,9 @@ export const claimItem = internalMutation({
     itemId: v.string(),
     kind: v.union(v.literal("workflow"), v.literal("command")),
     commandName: v.optional(v.string()),
+    correlationKey: v.optional(v.string()),
   },
-  handler: async (ctx, { instanceId, packId, itemId, kind, commandName }): Promise<ItemClaim> => {
+  handler: async (ctx, { instanceId, packId, itemId, kind, commandName, correlationKey }): Promise<ItemClaim> => {
     const now = Date.now();
     const existing = await ctx.db
       .query("starterPackItems")
@@ -166,6 +176,7 @@ export const claimItem = internalMutation({
       itemId,
       kind,
       status: "installing",
+      correlationKey,
       claimedAt: now,
     });
     return { state: "claimed", rowId };
@@ -175,6 +186,9 @@ export const claimItem = internalMutation({
 export const completeItem = internalMutation({
   args: { rowId: v.id("starterPackItems"), engineId: v.string() },
   handler: async (ctx, { rowId, engineId }) => {
+    if (!(await ctx.db.get(rowId))) {
+      return;
+    }
     await ctx.db.patch(rowId, { status: "installed", engineId });
   },
 });
@@ -182,6 +196,9 @@ export const completeItem = internalMutation({
 export const releaseItem = internalMutation({
   args: { rowId: v.id("starterPackItems") },
   handler: async (ctx, { rowId }) => {
+    if (!(await ctx.db.get(rowId))) {
+      return;
+    }
     await ctx.db.delete(rowId);
   },
 });
@@ -259,7 +276,7 @@ export const install = action({
     if (!pack) {
       throw new Error(`Unknown starter pack "${packId}"`);
     }
-    const checked = validateStarterValues(pack, values);
+    const checked = validateStarterValues(pack, values, STARTER_FEATURES);
     if (!checked.ok) {
       throw new Error(Object.values(checked.errors).join(" "));
     }
@@ -294,12 +311,14 @@ export const install = action({
       if (!hasRequirements(missing)) {
         return { itemId: item.id, outcome: "unavailable", message: requirementsMessage(missing) ?? undefined };
       }
+      const correlationKey = item.kind === "workflow" ? crypto.randomUUID() : undefined;
       const claim = await ctx.runMutation(internal.starterPacks.claimItem, {
         instanceId,
         packId: pack.id,
         itemId: item.id,
         kind: item.kind,
         commandName: item.kind === "command" ? item.command : undefined,
+        correlationKey,
       });
       if (claim.state === "installed") {
         return { itemId: item.id, outcome: "already-installed" };
@@ -319,12 +338,21 @@ export const install = action({
                 instanceId,
                 instance,
                 // Carries a delay wait, which the shared WorkflowDefinition type does not model yet.
-                buildStarterWorkflow(item, checked.values, catalog) as unknown as Omit<WorkflowDefinition, "id">
+                buildStarterWorkflow(item, checked.values, catalog) as unknown as Omit<WorkflowDefinition, "id">,
+                correlationKey
               )
             : await installCommand(item);
         await ctx.runMutation(internal.starterPacks.completeItem, { rowId: claim.rowId, engineId });
         return { itemId: item.id, outcome: "installed" };
       } catch (err) {
+        if (err instanceof EngineConfirmationTimeout) {
+          // The row keeps its correlation key; the echo marks it installed when it lands.
+          return {
+            itemId: item.id,
+            outcome: "pending",
+            message: "The engine has not confirmed it yet. It will show as installed once it does.",
+          };
+        }
         await ctx.runMutation(internal.starterPacks.releaseItem, { rowId: claim.rowId });
         return { itemId: item.id, outcome: "failed", message: errorMessage(err) };
       }
