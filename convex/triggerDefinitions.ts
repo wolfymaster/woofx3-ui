@@ -1,14 +1,7 @@
 import { v } from "convex/values";
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 
-export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    return ctx.db.query("triggerDefinitions").collect();
-  },
-});
-
-export const listByModule = query({
+export const listByModule = internalQuery({
   args: { moduleId: v.id("moduleRepository") },
   handler: async (ctx, { moduleId }) => {
     return ctx.db
