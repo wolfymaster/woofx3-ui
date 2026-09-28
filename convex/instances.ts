@@ -5,6 +5,7 @@ import type { Doc } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import type { InstanceRole } from "./lib/twitchLinkPolicy";
 
 /**
  * An instance row as members may see it. `webhookSecret` authenticates the
@@ -286,5 +287,33 @@ export const getByWebhookSecret = internalQuery({
       .query("instances")
       .withIndex("by_webhook_secret", (q) => q.eq("webhookSecret", webhookSecret))
       .first();
+  },
+});
+
+/** The user's role on the instance, or null when they are not a member. For actions, which cannot read the db. */
+export const memberRole = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }): Promise<InstanceRole | null> => {
+    const membership = await ctx.db
+      .query("instanceMembers")
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
+      .first();
+    return membership?.role ?? null;
+  },
+});
+
+/** The signed-in caller's role on the instance, or null when signed out or not a member. */
+export const viewerRole = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<InstanceRole | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    const membership = await ctx.db
+      .query("instanceMembers")
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
+      .first();
+    return membership?.role ?? null;
   },
 });

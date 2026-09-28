@@ -3,7 +3,6 @@ import type { CallbackEnvelope, CallbackEvent } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
@@ -18,10 +17,9 @@ import {
   withEngineTimeout,
 } from "./lib/inboundWebhookRelay";
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
-import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
+import { withQuery } from "./lib/safeRedirect";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
-import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
 import { widgetCanonicalKey } from "./lib/widgetKey";
 import { logger } from "./logger";
@@ -148,7 +146,7 @@ http.route({
       if (!userId) {
         return connectErrorRedirect(siteUrl, redirectTo, "This connect request was not started by a signed-in user.");
       }
-      const role = await ctx.runQuery(internal.twitchIntegration.memberRole, { instanceId, userId });
+      const role = await ctx.runQuery(internal.instances.memberRole, { instanceId, userId });
       if (!canManageTwitchLink(role)) {
         return connectErrorRedirect(siteUrl, redirectTo, "Only an owner or admin of this instance can connect Twitch.");
       }
@@ -258,74 +256,11 @@ function moduleIntegrationErrorRedirect(
   message: string
 ): Response {
   logger.error("module integration oauth failed", { integration, message });
-  const params = new URLSearchParams({ integration, status: "error", message });
   return new Response(null, {
     status: 302,
-    headers: { Location: `${siteUrl}${redirectTo}?${params}` },
+    headers: { Location: `${siteUrl}${withQuery(redirectTo, { integration, status: "error", message }, "/modules")}` },
   });
 }
-
-http.route({
-  path: "/api/integrations/spotify/start",
-  method: "GET",
-  handler: httpAction(async (ctx, request) => {
-    assert(process.env.SPOTIFY_REDIRECT_URI, "SPOTIFY_REDIRECT_URI env var is not set");
-    const siteUrl = process.env.SITE_URL ?? "";
-
-    const url = new URL(request.url);
-    const instanceId = url.searchParams.get("instanceId");
-    const moduleId = url.searchParams.get("moduleId");
-    const redirectTo = url.searchParams.get("redirect_to") ?? "/modules";
-
-    if (!instanceId || !moduleId) {
-      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "instanceId and moduleId are required");
-    }
-
-    let clientId: string;
-    try {
-      clientId = await ctx.runAction(internal.spotifyIntegration.resolveClientId, {
-        instanceId: instanceId as Id<"instances">,
-        moduleId,
-      });
-    } catch (err) {
-      return moduleIntegrationErrorRedirect(
-        siteUrl,
-        redirectTo,
-        "spotify",
-        err instanceof Error ? err.message : String(err)
-      );
-    }
-
-    const state = crypto.randomUUID();
-    const codeVerifier = generateCodeVerifier();
-    const codeChallenge = await computeCodeChallenge(codeVerifier);
-
-    await ctx.runMutation(internal.moduleIntegrationState.storeState, {
-      state,
-      instanceId: instanceId as Id<"instances">,
-      moduleId,
-      integration: "spotify",
-      redirectTo,
-      data: { clientId, codeVerifier },
-    });
-
-    const params = new URLSearchParams({
-      client_id: clientId,
-      response_type: "code",
-      redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
-      scope: SPOTIFY_INTEGRATION_SCOPES.join(" "),
-      state,
-      code_challenge: codeChallenge,
-      code_challenge_method: "S256",
-    });
-
-    logger.info("redirecting to spotify for integration", { state, redirectTo, instanceId, moduleId });
-    return new Response(null, {
-      status: 302,
-      headers: { Location: `https://accounts.spotify.com/authorize?${params}` },
-    });
-  }),
-});
 
 http.route({
   path: "/api/integrations/spotify/callback",
@@ -348,7 +283,12 @@ http.route({
     if (!stateResult || stateResult.integration !== "spotify") {
       return moduleIntegrationErrorRedirect(siteUrl, "/modules", "spotify", "state not found or expired");
     }
-    const { instanceId, moduleId, redirectTo, data } = stateResult;
+    const { instanceId, moduleId, redirectTo, userId, data } = stateResult;
+    // spotifyConnect.start mints states only for a member; checked again in
+    // case the membership went away while the user was on Spotify's page.
+    if (!userId || (await ctx.runQuery(internal.instances.memberRole, { instanceId, userId })) === null) {
+      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "Not a member of this instance");
+    }
     const { clientId, codeVerifier } = (data ?? {}) as { clientId?: string; codeVerifier?: string };
     if (!clientId || !codeVerifier) {
       return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "malformed OAuth state");
@@ -406,7 +346,9 @@ http.route({
     logger.info("spotify integration connected", { instanceId, moduleId });
     return new Response(null, {
       status: 302,
-      headers: { Location: `${siteUrl}${redirectTo}?integration=spotify&status=connected` },
+      headers: {
+        Location: `${siteUrl}${withQuery(redirectTo, { integration: "spotify", status: "connected" }, "/modules")}`,
+      },
     });
   }),
 });
