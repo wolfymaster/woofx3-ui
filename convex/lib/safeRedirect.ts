@@ -20,6 +20,35 @@ function hasControlCharacter(value: string): boolean {
   return false;
 }
 
+/**
+ * Parsing collapses dot segments, so a value that passed the prefix checks
+ * can still come out as `//host` ("/..//evil.com", "/%2e%2e//evil.com").
+ * Each pass re-checks its own output until the path stops changing.
+ */
+const MAX_NORMALIZE_PASSES = 4;
+
+function normalizeOnce(value: string): string | null {
+  // Browsers treat a backslash as a slash and drop tabs and newlines inside
+  // URLs, so "/\evil.com" and "/\t/evil.com" both escape the origin.
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\") || hasControlCharacter(value)) {
+    return null;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(value, PROBE_ORIGIN);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== PROBE_ORIGIN) {
+    return null;
+  }
+  const result = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  if (result.startsWith("//") || result.startsWith("/\\")) {
+    return null;
+  }
+  return result;
+}
+
 export function safeRelativePath(value: string | null | undefined, fallback = "/"): string {
   if (!fallback.startsWith("/") || fallback.startsWith("//")) {
     throw new Error(`fallback must be a site-relative path, got ${fallback}`);
@@ -27,21 +56,18 @@ export function safeRelativePath(value: string | null | undefined, fallback = "/
   if (typeof value !== "string" || value.length === 0) {
     return fallback;
   }
-  // Browsers treat a backslash as a slash and drop tabs and newlines inside
-  // URLs, so "/\evil.com" and "/\t/evil.com" both escape the origin.
-  if (!value.startsWith("/") || value.includes("\\") || hasControlCharacter(value)) {
-    return fallback;
+  let current = value;
+  for (let pass = 0; pass < MAX_NORMALIZE_PASSES; pass += 1) {
+    const next = normalizeOnce(current);
+    if (next === null) {
+      return fallback;
+    }
+    if (next === current) {
+      return next;
+    }
+    current = next;
   }
-  let parsed: URL;
-  try {
-    parsed = new URL(value, PROBE_ORIGIN);
-  } catch {
-    return fallback;
-  }
-  if (parsed.origin !== PROBE_ORIGIN) {
-    return fallback;
-  }
-  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  return fallback;
 }
 
 /**
