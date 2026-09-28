@@ -5,13 +5,11 @@ import { ListX, Loader2, SkipForward } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { type AlertQueueSnapshot, clearConfirmLabel, clearResultToast, skipResultToast } from "@/lib/alert-queue";
+import { clearResultToast, skipResultToast } from "@/lib/alert-queue";
 import { cn } from "@/lib/utils";
 
 interface AlertQueueControlsProps {
   instanceId: Id<"instances">;
-  /** What the alert log shows of the queue; worded into the buttons, never used to disable them. */
-  snapshot: AlertQueueSnapshot;
   className?: string;
 }
 
@@ -20,11 +18,11 @@ type Pending = "skip" | "clear" | null;
 /**
  * Skip the playing alert, or drop everything still waiting.
  *
- * Neither control is gated on the log: the log is a recent window that lags
- * the engine, and a raid train is exactly when the two disagree. Clearing asks
- * first, inline, because it throws away alerts a viewer paid for.
+ * Neither control is gated on the alert log, which cannot tell a waiting alert
+ * from a playing one (see lib/alert-queue.ts). Clearing asks first, inline,
+ * because it throws away alerts a viewer paid for.
  */
-export function AlertQueueControls({ instanceId, snapshot, className }: AlertQueueControlsProps) {
+export function AlertQueueControls({ instanceId, className }: AlertQueueControlsProps) {
   const skipCurrent = useAction(api.alertActions.skipCurrent);
   const clearQueue = useAction(api.alertActions.clearQueue);
   const { toast } = useToast();
@@ -49,7 +47,9 @@ export function AlertQueueControls({ instanceId, snapshot, className }: AlertQue
       });
     } finally {
       setPending(null);
-      setConfirmingClear(false);
+      if (kind === "clear") {
+        setConfirmingClear(false);
+      }
     }
   };
 
@@ -65,7 +65,7 @@ export function AlertQueueControls({ instanceId, snapshot, className }: AlertQue
         }}
         data-testid="alert-queue-confirm-clear"
       >
-        <span className="text-xs text-muted-foreground">{clearConfirmLabel(snapshot.waiting)}</span>
+        <span className="text-xs text-muted-foreground">Drop every alert still waiting?</span>
         <Button
           size="sm"
           variant="destructive"
@@ -100,7 +100,7 @@ export function AlertQueueControls({ instanceId, snapshot, className }: AlertQue
         className="h-7 px-2 text-xs"
         disabled={busy}
         onClick={() => void run("skip")}
-        title={snapshot.playing ? "Stop the alert playing now" : "Stop the alert playing now, if any"}
+        title="Stop the alert playing now"
         data-testid="button-alert-queue-skip"
       >
         {pending === "skip" ? (
@@ -120,7 +120,7 @@ export function AlertQueueControls({ instanceId, snapshot, className }: AlertQue
         data-testid="button-alert-queue-clear"
       >
         <ListX className="h-3.5 w-3.5" />
-        {snapshot.waiting > 0 ? `Clear queue (${snapshot.waiting})` : "Clear queue"}
+        Clear queue
       </Button>
     </div>
   );

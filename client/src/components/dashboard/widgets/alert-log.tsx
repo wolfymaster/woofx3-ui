@@ -1,14 +1,12 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { BellRing, Loader2 } from "lucide-react";
-import { useMemo } from "react";
 import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import { alertQueueSnapshot } from "@/lib/alert-queue";
 import { alertStatusStyle, isFailureStatus } from "@/lib/alert-status";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -68,7 +66,6 @@ export function AlertLogWidget() {
   const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: ALERT_LIMIT } : "skip");
 
   const failures = alerts?.filter((alert) => isFailureStatus(alert.status)).length ?? 0;
-  const queue = useMemo(() => alertQueueSnapshot(alerts ?? []), [alerts]);
 
   return (
     <div className="flex flex-col h-full">
@@ -83,7 +80,7 @@ export function AlertLogWidget() {
             </Badge>
           )}
         </div>
-        {instanceId && <AlertQueueControls instanceId={instanceId} snapshot={queue} />}
+        {instanceId && <AlertQueueControls instanceId={instanceId} />}
       </div>
 
       <ScrollArea className="flex-1 min-h-0">

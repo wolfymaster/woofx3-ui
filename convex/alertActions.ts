@@ -9,8 +9,7 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
  * The engine's operator controls over its alert queue.
  *
  * Must match `skipCurrentAlert` / `clearAlertQueue` on `Woofx3EngineApi` in
- * the engine's shared/clients/typescript/api/api.ts. Declared here because the
- * engine checkout the `@woofx3/api` alias resolves to may predate them.
+ * the engine's shared/clients/typescript/api/api.ts.
  */
 interface AlertQueueControlsApi {
   skipCurrentAlert(): Promise<{ skipped: boolean }>;
