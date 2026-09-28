@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { TWITCH_INTEGRATION_SCOPES } from "./twitchIntegrationScopes";
 import {
+  missingRequiredTwitchScopes,
   missingTwitchCapabilities,
   TWITCH_CAPABILITIES,
   twitchScopeHealth,
@@ -146,5 +147,21 @@ describe("twitchScopeHealthKey", () => {
 
   test("distinguishes revoked from missing", () => {
     expect(twitchScopeHealthKey({ state: "revoked" })).toBe("revoked");
+  });
+});
+
+describe("missingRequiredTwitchScopes", () => {
+  test("leaves out the scopes of optional capabilities", () => {
+    const optionalScopes = TWITCH_CAPABILITIES.filter((capability) => capability.optional).flatMap(
+      (capability) => capability.scopes
+    );
+    expect(optionalScopes.length).toBeGreaterThan(0);
+    const allButOptional = TWITCH_INTEGRATION_SCOPES.filter((scope) => !optionalScopes.includes(scope));
+    expect(missingRequiredTwitchScopes(allButOptional)).toEqual([]);
+  });
+
+  test("names the required scopes a link lacks", () => {
+    const withoutClips = TWITCH_INTEGRATION_SCOPES.filter((scope) => scope !== "clips:edit");
+    expect(missingRequiredTwitchScopes(withoutClips)).toEqual(["clips:edit"]);
   });
 });

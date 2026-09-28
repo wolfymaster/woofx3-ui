@@ -35,7 +35,7 @@ import {
 } from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
-import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
+import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
 
 // The Go live checklist: a pre-flight run just before a stream starts, so a
 // broken setup is found by the streamer rather than by their viewers.
@@ -290,8 +290,6 @@ export const checkTwitch = action({
       return { linked: false };
     }
 
-    const missingFrom = (granted: string[]) => TWITCH_INTEGRATION_SCOPES.filter((scope) => !granted.includes(scope));
-
     let accessToken: string;
     try {
       const token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, {
@@ -307,7 +305,7 @@ export const checkTwitch = action({
         login: link.login,
         tokenValid: false,
         tokenProblem: "Twitch refused to renew the connection",
-        missingScopes: missingFrom(link.scopes),
+        missingScopes: missingRequiredTwitchScopes(link.scopes),
       };
     }
 
@@ -318,7 +316,7 @@ export const checkTwitch = action({
         login: link.login,
         tokenValid: false,
         tokenProblem: "Twitch no longer accepts the connection",
-        missingScopes: missingFrom(link.scopes),
+        missingScopes: missingRequiredTwitchScopes(link.scopes),
       };
     }
     return {
@@ -326,7 +324,7 @@ export const checkTwitch = action({
       login: link.login,
       tokenValid: true,
       tokenProblem: null,
-      missingScopes: missingFrom(granted),
+      missingScopes: missingRequiredTwitchScopes(granted),
     };
   },
 });

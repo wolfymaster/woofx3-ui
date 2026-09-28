@@ -107,6 +107,17 @@ export function missingTwitchCapabilities(
   return missing;
 }
 
+/**
+ * Scopes of required capabilities absent from `granted`, in TWITCH_CAPABILITIES
+ * order. An optional capability's scopes are left out, so a link that lacks
+ * only those is not reported as needing a reconnect.
+ */
+export function missingRequiredTwitchScopes(granted: readonly string[]): string[] {
+  return missingTwitchCapabilities(granted)
+    .filter((capability) => !capability.optional)
+    .flatMap((capability) => capability.missingScopes);
+}
+
 export function twitchScopeHealth(link: TwitchLinkScopes | null | undefined): TwitchScopeHealth {
   if (!link) {
     return { state: "unlinked" };
