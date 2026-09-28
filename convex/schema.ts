@@ -1147,8 +1147,9 @@ export default defineSchema({
   // progress of a run someone is waiting on and expires in a minute: these are
   // the runs nobody was watching, which is exactly why they are kept.
   //
-  // Runs fired by hand from the dashboard never reach here -- the engine does
-  // not record them.
+  // Runs fired by hand with the unrecorded `dashboard` origin never reach here;
+  // the engine does not record them. Test runs and Runs-panel replays carry an
+  // origin of their own so they do -- see lib/manualRunOrigin.ts.
   workflowRuns: defineTable({
     instanceId: v.id("instances"),
     engineRunId: v.string(), // WorkflowRunSnapshot.id (the engine's execution id)
@@ -1160,6 +1161,9 @@ export default defineSchema({
     triggeredBy: v.optional(v.string()),
     // The originating CloudEvent, verbatim. What a replay re-feeds.
     triggerEvent: v.optional(v.string()),
+    // A dry run: its side-effecting steps recorded what they would have done
+    // instead of doing it. Absent for a real run.
+    dryRun: v.optional(v.boolean()),
     error: v.optional(v.string()),
     startedAt: v.optional(v.string()),
     completedAt: v.optional(v.string()),

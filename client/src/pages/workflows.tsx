@@ -8,6 +8,7 @@ import {
   Loader2,
   MoreVertical,
   Pencil,
+  Play,
   Plus,
   Save,
   Search,
@@ -18,7 +19,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -48,6 +49,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
 import StepListEditor from "@/components/workflows/step-list-editor";
+import { TestRunSheet } from "@/components/workflows/test-run-sheet";
+import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -60,6 +63,8 @@ import {
   workflowStepCount,
   workflowTriggerLabel,
 } from "@/lib/workflow-display";
+import { type WorkflowEditorTab, workflowEditorTab } from "@/lib/workflow-run-route";
+import { otherWorkflowsOnEvent, testRunPreset, workflowEventTrigger } from "@/lib/workflow-test-run";
 
 type WorkflowRow = Doc<"workflows">;
 type EnabledFilter = "all" | "enabled" | "disabled";
@@ -406,7 +411,11 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
   const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
+  const { catalogTriggers, triggerPresets } = useWorkflowCatalog();
+  const search = useSearch();
 
+  const [tab, setTab] = useState<WorkflowEditorTab>(() => workflowEditorTab(search));
+  const [testRunOpen, setTestRunOpen] = useState(false);
   const [currentDefinition, setCurrentDefinition] = useState<WorkflowDefinition | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showJson, setShowJson] = useState(false);
@@ -439,6 +448,21 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       </div>
     );
   }
+
+  const eventTrigger = workflowEventTrigger(workflow.definition);
+  const testPreset = eventTrigger ? testRunPreset(eventTrigger, catalogTriggers, triggerPresets) : null;
+  const otherWorkflows = eventTrigger
+    ? otherWorkflowsOnEvent(
+        workflows.map((row) => ({
+          engineWorkflowId: row.engineWorkflowId,
+          isEnabled: row.isEnabled,
+          name: workflowName(row),
+          definition: row.definition,
+        })),
+        engineWorkflowId,
+        eventTrigger.event
+      )
+    : [];
 
   const startEditingTitle = () => {
     setEditedTitle(name);
@@ -565,6 +589,26 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
         </div>
 
         <div className="flex items-center gap-2">
+          <Tabs value={tab} onValueChange={(value) => setTab(value as WorkflowEditorTab)}>
+            <TabsList>
+              <TabsTrigger value="steps" data-testid="tab-workflow-steps">
+                Steps
+              </TabsTrigger>
+              <TabsTrigger value="runs" data-testid="tab-workflow-runs">
+                Runs
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setTestRunOpen(true)}
+            disabled={!instance}
+            data-testid="button-workflow-test-run"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Test run
+          </Button>
           <Button size="sm" onClick={handleSave} disabled={!currentDefinition || isSaving}>
             <Save className="h-4 w-4 mr-2" />
             {isSaving ? "Saving…" : "Save"}
@@ -593,9 +637,25 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
+      <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
         <StepListEditor onDefinitionChange={setCurrentDefinition} />
       </div>
+      {tab === "runs" && instance && (
+        <div className="flex-1 overflow-hidden">
+          <WorkflowRunsPanel instanceId={instance._id as Id<"instances">} engineWorkflowId={engineWorkflowId} />
+        </div>
+      )}
+
+      <TestRunSheet
+        open={testRunOpen}
+        onOpenChange={setTestRunOpen}
+        engineWorkflowId={engineWorkflowId}
+        workflowName={name}
+        isEnabled={workflow.isEnabled}
+        preset={testPreset}
+        otherWorkflows={otherWorkflows}
+      />
 
       <Sheet open={showJson} onOpenChange={setShowJson}>
         <SheetContent className="w-[500px] sm:max-w-none">
