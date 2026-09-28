@@ -208,7 +208,7 @@ CORS and its headers are visible to anyone with dashboard access.
 ### Trigger macros from a Stream Deck or phone
 
 Any `chat-command` or `trigger-workflow` macro can get a **remote trigger**: a
-secret URL that presses the button with a single HTTP request, so an Elgato
+secret token that presses the button with a single HTTP request, so an Elgato
 Stream Deck, Bitfocus Companion, Touch Portal, or a phone shortcut can drive the
 show without the dashboard open.
 
@@ -216,57 +216,86 @@ show without the dashboard open.
 
 1. On the dashboard, open the macro pad's edit mode and click the pencil on the
    macro.
-2. Switch on **Remote trigger**. Only an owner or admin of the instance can do this.
-3. Copy the URL, or one of the ready-made examples, right away. **It is shown once**:
-   woofx3 keeps only a SHA-256 hash of it, so if you lose it, click **Rotate** to get
-   a new one (the old URL stops working at the same moment).
-4. Switch Remote trigger off to revoke the URL. Deleting the macro revokes it too.
+2. Switch on **Remote trigger**. Only an owner or admin of the instance can do this,
+   and doing it approves what the macro does right now.
+3. Copy the token (or the full URL, or one of the ready-made examples) right away.
+   **It is shown once**: woofx3 keeps only a SHA-256 hash of it, so if you lose it,
+   click **Rotate** to get a new one (the old one stops working at the same moment).
+4. Switch Remote trigger off to revoke it.
 
-A tile with a remote trigger shows a small radio icon; hover it for when the URL
-was last used and how many times.
+A tile with a remote trigger shows a small radio icon; hover it for when it was
+last used, how many presses the engine accepted, and whether the last one failed.
+
+**Who can change a triggered macro.** A trigger runs whatever its macro is set to
+do, from anywhere, so once a macro has one, only an owner or admin can change its
+action type, its command, workflow or other settings, or delete it. Other members
+can still rename it and change its icon and color. As a second line of defense the
+trigger remembers the exact action it was approved for: if the macro's action
+changes anyway (an admin edits it, say), or the person who approved it stops being
+an owner or admin, the trigger answers `409` and the editor shows **Re-confirm**
+until an owner or admin approves the macro as it now stands.
 
 **Calling it**
 
-- `POST https://<your-convex-site>/api/macros/trigger/<token>` fires the macro.
-  The answer is `202 {"ok":true}` (plus a `triggerId` for a workflow run).
+- Send `POST https://<your-convex-site>/api/macros/trigger` with the header
+  `Authorization: Bearer <token>`. A device that cannot set headers can put the
+  token in the path instead: `POST …/api/macros/trigger/<token>`. Prefer the
+  header: a URL ends up in places a header does not, including browser history,
+  proxy logs and Convex's own request logs.
+- The answer is `202 {"ok":true}` (plus a `triggerId` for a workflow run) once the
+  engine has accepted the run.
 - If the macro has <code v-pre>{{variables}}</code>, send them as a JSON body
   (`{"channel":"bob"}`), a form body, or query parameters. A request missing one
-  gets `400` naming the missing variables.
+  gets `400` naming the missing variables, and so does a value containing a line
+  break or any other control character.
 - GET is refused (`405`) unless you switch on **Also accept GET** for that macro.
   Only do that for a device that can do nothing else: chat apps and browsers fetch
   pasted links to build previews, so a GET URL can fire by accident.
-- Each URL accepts one press a second, with bursts of up to five; beyond that it
-  answers `429` with a `Retry-After` header.
-- An unknown or revoked URL answers `404`.
+- Requests from a web page are refused with `403`: browsers attach an `Origin`
+  header and the devices above do not. A device or tool that does send `Origin`
+  (a browser extension, a web-based deck) cannot use remote triggers.
+- Each trigger accepts one press a second, with bursts of up to five; beyond that
+  it answers `429` with a `Retry-After` header.
+- An unknown or revoked token, or one whose macro or instance is gone or whose
+  instance is not connected to its engine, answers `404`.
+- `409` means the run was refused with a reason in the body: the macro needs
+  re-confirming, no Twitch account is linked, or the engine refused the command
+  (for example "Command is disabled"). `502` / `504` mean the engine could not be
+  reached or did not answer within 10 seconds.
 
-Treat the URL like a password: anyone who has it can press that one button (and
+Treat the token like a password: anyone who has it can press that one button (and
 nothing else). Rotate it if it shows up on stream or in a screenshot.
 
 **Elgato Stream Deck**
 
-The built-in *Website* action can only send GET, so use a free plugin that can POST:
+The built-in *Website* action can only open a URL, so use a free plugin that can
+send a POST with a header:
 
 1. Install **API Ninja** (BarRaider) or **Web Requests** from the Stream Deck store.
 2. Drag its action onto a key.
-3. Set the method to **POST** and paste the trigger URL.
+3. Set the method to **POST**, the URL to `https://<your-convex-site>/api/macros/trigger`,
+   and add the header `Authorization: Bearer <token>`.
 4. If the macro has variables, set the content type to `application/json` and the
    body to a JSON object, e.g. `{"channel":"bob"}`.
 
 If you did switch on *Also accept GET*, the built-in *Website* action works too:
-paste the URL (variables go in the query string, `?channel=bob`) and tick
-**GET request in background** so no browser window opens.
+paste the full URL with the token in it (variables go in the query string,
+`?channel=bob`) and tick **GET request in background** so no browser window opens.
 
 **Bitfocus Companion**
 
 1. Add a connection of type **Generic: HTTP Requests**.
 2. On a button, add the connection's **POST** action.
-3. Paste the trigger URL. For variables, set the body to a JSON object and add the
-   header `Content-Type: application/json`.
+3. Set the URL to `https://<your-convex-site>/api/macros/trigger` and the header to
+   `{"Authorization":"Bearer <token>"}`. For variables, set the body to a JSON object
+   and add `"Content-Type":"application/json"` to the header.
 
 **iOS Shortcuts**
 
-1. Create a shortcut with the **Get Contents of URL** action and paste the trigger URL.
-2. Expand the action, set **Method** to **POST**.
+1. Create a shortcut with the **Get Contents of URL** action and set the URL to
+   `https://<your-convex-site>/api/macros/trigger`.
+2. Expand the action, set **Method** to **POST**, and add a header named
+   `Authorization` with the value `Bearer <token>`.
 3. For variables, set **Request Body** to **JSON** and add one text field per
    variable (an *Ask for Input* action before it lets the shortcut prompt you).
 4. Add the shortcut to the home screen, or run it from Siri or the Action button.
@@ -276,14 +305,22 @@ where a target on the local network (OBS, a light controller) is reachable. Run
 from Convex they would reach a different network and turn Convex into a proxy for
 any URL with the macro's headers attached. Point the device at that URL directly.
 
-**How it works.** `convex/http.ts` routes `/api/macros/trigger/` to one handler.
-It reads at most 8 KB of body, hashes the token and calls
+**Chat-command macros run as the broadcaster**, whether pressed on the dashboard or
+through a trigger, so they can run any command the streamer could type. On the
+dashboard only owners and admins can press them; other members see the button
+disabled.
+
+**How it works.** `convex/http.ts` routes `/api/macros/trigger` and
+`/api/macros/trigger/<token>` to one handler. It refuses a request carrying
+`Origin`, reads at most 8 KB of body, hashes the token and calls
 `macroTriggers.claim`, a single mutation that looks the hash up in the
-`macroTriggers` table, checks the method, spends a rate-limit token, validates
-the variables and stamps `lastUsedAt` / `useCount`. The handler then calls the
+`macroTriggers` table, checks the method, spends a rate-limit token, checks the
+approval still stands, and validates the variables. The handler then calls the
 engine with provenance `macro-trigger`, so these runs appear in the run history
-(dashboard presses, provenance `dashboard`, do not). The decision logic is pure and
-tested in `convex/lib/macroTrigger.test.ts`.
+(dashboard presses, provenance `dashboard`, do not), and records the outcome:
+accepted runs bump `lastUsedAt` / `useCount`, refused or failed ones set
+`lastFailedAt` / `lastFailure`. The decision logic is pure and tested in
+`convex/lib/macroTrigger.test.ts`.
 
 ## Pinned
 

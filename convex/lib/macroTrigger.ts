@@ -14,8 +14,12 @@ import {
   type MacroConfig,
 } from "./macroVariables";
 
-/** Every trigger URL lives under this prefix; the token is the one segment after it. */
-export const MACRO_TRIGGER_PATH_PREFIX = "/api/macros/trigger/";
+/**
+ * The trigger endpoint. A token either follows it as one more path segment or
+ * rides in an `Authorization: Bearer` header on the bare path.
+ */
+export const MACRO_TRIGGER_PATH = "/api/macros/trigger";
+export const MACRO_TRIGGER_PATH_PREFIX = `${MACRO_TRIGGER_PATH}/`;
 
 /**
  * Marks the string as a woofx3 macro token, so a token pasted somewhere it
@@ -83,7 +87,48 @@ export function parseMacroTriggerPath(pathname: string): string | null {
 }
 
 export function macroTriggerUrl(siteUrl: string, token: string): string {
-  return `${siteUrl.replace(/\/+$/, "")}${MACRO_TRIGGER_PATH_PREFIX}${token}`;
+  return `${macroTriggerEndpoint(siteUrl)}/${token}`;
+}
+
+/** The bare endpoint, for devices that send the token in a header. */
+export function macroTriggerEndpoint(siteUrl: string): string {
+  return `${siteUrl.replace(/\/+$/, "")}${MACRO_TRIGGER_PATH}`;
+}
+
+/**
+ * The token a request presents, from its `Authorization: Bearer` header or its
+ * path, or null when it presents none, a malformed one, or two that disagree.
+ * The header form keeps the secret out of the URL, which proxies, browser
+ * history and request logs record.
+ */
+export function resolveTriggerToken(pathname: string, authorization: string | null): string | null {
+  const bare = pathname === MACRO_TRIGGER_PATH || pathname === MACRO_TRIGGER_PATH_PREFIX;
+  const pathToken = bare ? null : parseMacroTriggerPath(pathname);
+  if (!bare && pathToken === null) {
+    return null;
+  }
+  if (authorization === null) {
+    return pathToken;
+  }
+  const match = /^Bearer\s+(\S+)\s*$/i.exec(authorization);
+  if (!match || !isWellFormedTriggerToken(match[1])) {
+    return null;
+  }
+  if (pathToken !== null && pathToken !== match[1]) {
+    return null;
+  }
+  return match[1];
+}
+
+/**
+ * Whether the request came from a web page. Browsers attach `Origin` to every
+ * cross-origin POST, and the devices this endpoint serves send none, so a
+ * request carrying one is a page trying to fire the macro (a pasted URL in a
+ * form, a malicious site replaying a leaked token) and is refused before the
+ * token is looked at.
+ */
+export function isBrowserRequest(origin: string | null): boolean {
+  return origin !== null && origin !== "";
 }
 
 // ---------------------------------------------------------------------------
@@ -144,6 +189,18 @@ export function takeRateToken(
 // Request parsing
 // ---------------------------------------------------------------------------
 
+// A newline in a value would let one `{{var}}` smuggle a second line into a
+// chat command, and the other control characters have no business in one.
+export function hasControlCharacter(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export type ParsedValues = { ok: true; values: Record<string, string> } | { ok: false; error: string };
 
 function addValue(values: Record<string, string>, key: string, raw: unknown): string | null {
@@ -158,6 +215,9 @@ function addValue(values: Record<string, string>, key: string, raw: unknown): st
   const value = String(raw);
   if (value.length > MAX_VARIABLE_VALUE_LENGTH) {
     return `"${key}" is longer than ${MAX_VARIABLE_VALUE_LENGTH} characters`;
+  }
+  if (hasControlCharacter(value)) {
+    return `"${key}" contains a control character`;
   }
   values[key] = value;
   return null;
@@ -222,6 +282,9 @@ export function parseTriggerValues(input: {
 // ---------------------------------------------------------------------------
 // Planning a run
 // ---------------------------------------------------------------------------
+
+/** Shown to members, who may not run chat-command macros from the dashboard (see macros.run). */
+export const CHAT_COMMAND_RUN_RESTRICTION = "Only owners and admins can run chat-command macros from the dashboard";
 
 export type MacroRunPlan =
   | { kind: "trigger-workflow"; workflowNameOrId: string }
@@ -312,6 +375,10 @@ export function planMacroRun(
   if (missing.length > 0) {
     return { ok: false, status: 400, error: `missing variables: ${missing.join(", ")}` };
   }
+  const tainted = extractMacroVariables(config).filter((name) => hasControlCharacter(values[name] ?? ""));
+  if (tainted.length > 0) {
+    return { ok: false, status: 400, error: `control characters are not allowed in: ${tainted.join(", ")}` };
+  }
   const resolved = applyMacroVariables(config, values);
 
   if (type === "trigger-workflow") {
@@ -327,6 +394,34 @@ export function planMacroRun(
     return { ok: false, status: 422, error: "this macro's command must start with ! followed by the command name" };
   }
   return { ok: true, plan: { kind: "chat-command", ...parsed } };
+}
+
+// ---------------------------------------------------------------------------
+// Confirmed configuration
+// ---------------------------------------------------------------------------
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalJson).join(",")}]`;
+  }
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * What a macro does, as a string that is equal for equal behavior whatever
+ * the key order. A trigger stores the fingerprint an owner or admin approved;
+ * a macro whose fingerprint has moved on does not run from its URL until one
+ * of them approves again. Label, icon and color are left out: they change how
+ * the button looks, not what it does.
+ */
+export function macroBehaviorFingerprint(type: MacroActionType, config: MacroConfig): string {
+  return canonicalJson({ type, config });
 }
 
 // ---------------------------------------------------------------------------
@@ -349,7 +444,14 @@ export type TriggerDecision =
  * one that is set up right.
  */
 export function decideTrigger(input: {
-  trigger: { allowGet: boolean; bucket: RateBucket } | null;
+  trigger: {
+    allowGet: boolean;
+    bucket: RateBucket;
+    /** The behavior an owner or admin approved when minting or re-confirming. */
+    confirmedFingerprint: string;
+    /** Whether whoever approved it still holds the owner or admin role. */
+    confirmerIsManager: boolean;
+  } | null;
   macro: { type: MacroActionType; config: MacroConfig } | null;
   method: "GET" | "POST";
   values: Readonly<Record<string, string>>;
@@ -365,6 +467,22 @@ export function decideTrigger(input: {
   const rate = takeRateToken(trigger.bucket, input.now);
   if (!rate.allowed) {
     return { outcome: "rate-limited", retryAfterMs: rate.retryAfterMs, bucket: rate.bucket };
+  }
+  if (macroBehaviorFingerprint(macro.type, macro.config) !== trigger.confirmedFingerprint) {
+    return {
+      outcome: "refused",
+      status: 409,
+      error: "the macro changed since this URL was issued; an owner or admin must re-confirm it",
+      bucket: rate.bucket,
+    };
+  }
+  if (!trigger.confirmerIsManager) {
+    return {
+      outcome: "refused",
+      status: 409,
+      error: "whoever approved this URL is no longer an owner or admin; an owner or admin must re-confirm it",
+      bucket: rate.bucket,
+    };
   }
   const planned = planMacroRun(macro.type, macro.config, input.values);
   if (!planned.ok) {
@@ -386,6 +504,7 @@ export interface TriggerResponse {
 export function triggerRefusalResponse(
   refusal:
     | { outcome: "not-found" }
+    | { outcome: "browser-origin" }
     | { outcome: "method-not-allowed" }
     | { outcome: "rate-limited"; retryAfterMs: number }
     | { outcome: "refused"; status: number; error: string }
@@ -393,6 +512,13 @@ export function triggerRefusalResponse(
   switch (refusal.outcome) {
     case "not-found": {
       return { status: 404, body: { ok: false, error: "not found" }, headers: {} };
+    }
+    case "browser-origin": {
+      return {
+        status: 403,
+        body: { ok: false, error: "trigger URLs cannot be called from a web page" },
+        headers: {},
+      };
     }
     case "method-not-allowed": {
       return {
@@ -412,4 +538,37 @@ export function triggerRefusalResponse(
       return { status: refusal.status, body: { ok: false, error: refusal.error }, headers: {} };
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Engine errors
+// ---------------------------------------------------------------------------
+
+/** Longest engine reason passed back to a caller. */
+const MAX_ENGINE_REASON_LENGTH = 200;
+
+/**
+ * Whether an error from an engine RPC means the call never got an answer, as
+ * opposed to the engine answering with a refusal. capnweb revives an error the
+ * engine threw as a plain Error carrying the engine's message, so the
+ * transport's own failures are recognized by shape: a fetch that failed
+ * (TypeError), a non-2xx batch response, or a reply capnweb could not parse.
+ */
+export function isEngineTransportFailure(err: unknown): boolean {
+  if (!(err instanceof Error)) {
+    return true;
+  }
+  if (err instanceof TypeError) {
+    return true;
+  }
+  return err.message.startsWith("RPC request failed:") || err.message.startsWith("bad RPC message");
+}
+
+/** The engine's refusal text, trimmed to something safe to hand a caller. */
+export function engineRefusalReason(err: Error): string {
+  const reason = err.message.trim();
+  if (reason === "") {
+    return "the engine refused the command";
+  }
+  return reason.length > MAX_ENGINE_REASON_LENGTH ? `${reason.slice(0, MAX_ENGINE_REASON_LENGTH)}...` : reason;
 }

@@ -453,8 +453,19 @@ export default defineSchema({
     createdAt: v.number(),
     /** When the current token was minted, if it replaced an earlier one. */
     rotatedAt: v.optional(v.number()),
+    // What the URL is allowed to do: macroBehaviorFingerprint of the macro as
+    // an owner or admin last approved it (by minting, rotating or
+    // re-confirming), and who approved it. A macro edited since, or an
+    // approver who has since lost the role, stops the URL until re-confirmed.
+    confirmedFingerprint: v.string(),
+    confirmedBy: v.id("users"),
+    confirmedAt: v.number(),
+    /** Last press the engine accepted, and how many it has accepted. */
     lastUsedAt: v.optional(v.number()),
     useCount: v.number(),
+    /** Last press that got as far as the engine and was not accepted, and why. */
+    lastFailedAt: v.optional(v.number()),
+    lastFailure: v.optional(v.string()),
     rateTokens: v.number(),
     rateRefilledAt: v.number(),
   })

@@ -1,7 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
-import type { MacroRunPlan } from "./macroTrigger";
+import { engineRefusalReason, isEngineTransportFailure, type MacroRunPlan } from "./macroTrigger";
 
 export interface MacroEngineContext {
   url: string;
@@ -46,7 +46,17 @@ export async function executeMacroPlan(
   if (!engine.broadcasterLogin) {
     throw new MacroRunRefused("link a Twitch account before running chat-command macros");
   }
-  const result = await rpc.executeCommand(plan.commandName, engine.broadcasterLogin, plan.text);
+  let result: { success: boolean; message: string };
+  try {
+    result = await rpc.executeCommand(plan.commandName, engine.broadcasterLogin, plan.text);
+  } catch (err) {
+    // executeCommand refuses by throwing ("Command is disabled", a permission
+    // denial, an unknown command); those are answers, not outages.
+    if (err instanceof Error && !isEngineTransportFailure(err)) {
+      throw new MacroRunRefused(engineRefusalReason(err));
+    }
+    throw err;
+  }
   if (!result.success) {
     throw new MacroRunRefused(result.message || `the engine refused "!${plan.commandName}"`);
   }

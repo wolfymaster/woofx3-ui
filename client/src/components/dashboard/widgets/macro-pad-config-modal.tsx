@@ -1,4 +1,6 @@
+import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -68,6 +70,15 @@ export function MacroConfigModal({
   const [httpMethod, setHttpMethod] = useState<MacroHttpMethod>("GET");
   const [httpHeaders, setHttpHeaders] = useState("");
   const [httpBody, setHttpBody] = useState("");
+
+  // A macro with a trigger URL does, from anywhere, whatever it is set to do;
+  // macros.updateMacro enforces that only a manager may change that.
+  const triggerStatus = useQuery(api.macroTriggers.listForInstance, instanceId ? { instanceId } : "skip");
+  const behaviorLocked =
+    macro !== null &&
+    triggerStatus !== undefined &&
+    !triggerStatus.canManage &&
+    triggerStatus.triggers.some((trigger) => trigger.macroId === macro.id);
 
   // `open` deliberately triggers the reset branch even when `macro` (e.g.
   // repeatedly null for "Add Macro") doesn't change identity between opens.
@@ -163,7 +174,10 @@ export function MacroConfigModal({
       },
     };
 
-    onSave(newMacro);
+    // A locked macro keeps its stored behavior exactly: the editor splits an
+    // older `!word rest` command into word and arguments, which would read as a
+    // behavior change and be refused.
+    onSave(behaviorLocked && macro ? { ...newMacro, type: macro.type, config: macro.config } : newMacro);
   };
 
   return (
@@ -198,139 +212,148 @@ export function MacroConfigModal({
             <MacroColorPicker value={color} onChange={setColor} />
           </div>
 
-          <Tabs value={type} onValueChange={(v) => setType(v as MacroActionType)}>
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="send-message">Send Message</TabsTrigger>
-              <TabsTrigger value="chat-command">Chat Command</TabsTrigger>
-              <TabsTrigger value="trigger-workflow">Workflow</TabsTrigger>
-              <TabsTrigger value="http-request">HTTP Request</TabsTrigger>
-            </TabsList>
+          {behaviorLocked && (
+            <p className="text-xs text-muted-foreground" data-testid="macro-behavior-locked">
+              This macro has a remote trigger URL, so only an owner or admin can change what it does. You can still
+              change its label, icon and color.
+            </p>
+          )}
 
-            <TabsContent value="send-message" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="chat-message">Message</Label>
-                <Textarea
-                  id="chat-message"
-                  placeholder="e.g., Welcome in, {{name}}!"
-                  value={message}
-                  onChange={(e) => setMessage(e.target.value)}
-                  rows={3}
-                  maxLength={500}
-                  data-testid="input-macro-message"
-                />
-                <p className="text-xs text-muted-foreground">Posted to chat as the broadcaster.</p>
-              </div>
-            </TabsContent>
+          <fieldset disabled={behaviorLocked} className="min-w-0">
+            <Tabs value={type} onValueChange={(v) => setType(v as MacroActionType)}>
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="send-message">Send Message</TabsTrigger>
+                <TabsTrigger value="chat-command">Chat Command</TabsTrigger>
+                <TabsTrigger value="trigger-workflow">Workflow</TabsTrigger>
+                <TabsTrigger value="http-request">HTTP Request</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="chat-command" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="chat-command">Command</Label>
-                <Select value={command} onValueChange={setCommand}>
-                  <SelectTrigger id="chat-command" data-testid="select-macro-command">
-                    <SelectValue placeholder={commands.length > 0 ? "Select a command" : "No chat commands yet"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {commandOptions.map((option) => (
-                      <SelectItem key={option.command} value={option.command}>
-                        !{option.command}
-                        {"missing" in option ? " (not found)" : !option.enabled && " (disabled)"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">Runs the command as the broadcaster.</p>
-              </div>
+              <TabsContent value="send-message" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="chat-message">Message</Label>
+                  <Textarea
+                    id="chat-message"
+                    placeholder="e.g., Welcome in, {{name}}!"
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={3}
+                    maxLength={500}
+                    data-testid="input-macro-message"
+                  />
+                  <p className="text-xs text-muted-foreground">Posted to chat as the broadcaster.</p>
+                </div>
+              </TabsContent>
 
-              <div className="space-y-2">
-                <Label htmlFor="chat-command-text">Arguments</Label>
-                <Input
-                  id="chat-command-text"
-                  placeholder={selectedCommand?.argumentPattern || "e.g., {{channel}}"}
-                  value={commandText}
-                  onChange={(e) => setCommandText(e.target.value)}
-                  data-testid="input-macro-command-text"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {selectedCommand?.argumentPattern ? (
-                    <>
-                      Typed after the command, as in chat. This command expects{" "}
-                      <code className="font-mono text-foreground">{selectedCommand.argumentPattern}</code>.
-                    </>
-                  ) : (
-                    "Optional. Typed after the command, as in chat."
-                  )}
-                </p>
-              </div>
-            </TabsContent>
+              <TabsContent value="chat-command" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="chat-command">Command</Label>
+                  <Select value={command} onValueChange={setCommand}>
+                    <SelectTrigger id="chat-command" data-testid="select-macro-command">
+                      <SelectValue placeholder={commands.length > 0 ? "Select a command" : "No chat commands yet"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {commandOptions.map((option) => (
+                        <SelectItem key={option.command} value={option.command}>
+                          !{option.command}
+                          {"missing" in option ? " (not found)" : !option.enabled && " (disabled)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Runs the command as the broadcaster.</p>
+                </div>
 
-            <TabsContent value="trigger-workflow" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="workflow-select">Workflow</Label>
-                <Select value={workflowId} onValueChange={setWorkflowId}>
-                  <SelectTrigger id="workflow-select">
-                    <SelectValue placeholder="Select a workflow" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {workflows.map((workflow) => (
-                      <SelectItem key={workflow.id} value={workflow.id}>
-                        {workflow.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">The workflow to trigger when this macro is executed.</p>
-              </div>
-            </TabsContent>
+                <div className="space-y-2">
+                  <Label htmlFor="chat-command-text">Arguments</Label>
+                  <Input
+                    id="chat-command-text"
+                    placeholder={selectedCommand?.argumentPattern || "e.g., {{channel}}"}
+                    value={commandText}
+                    onChange={(e) => setCommandText(e.target.value)}
+                    data-testid="input-macro-command-text"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {selectedCommand?.argumentPattern ? (
+                      <>
+                        Typed after the command, as in chat. This command expects{" "}
+                        <code className="font-mono text-foreground">{selectedCommand.argumentPattern}</code>.
+                      </>
+                    ) : (
+                      "Optional. Typed after the command, as in chat."
+                    )}
+                  </p>
+                </div>
+              </TabsContent>
 
-            <TabsContent value="http-request" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="http-url">URL</Label>
-                <Input
-                  id="http-url"
-                  placeholder="https://api.example.com/{{target}}"
-                  value={httpUrl}
-                  onChange={(e) => setHttpUrl(e.target.value)}
-                />
-              </div>
+              <TabsContent value="trigger-workflow" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="workflow-select">Workflow</Label>
+                  <Select value={workflowId} onValueChange={setWorkflowId}>
+                    <SelectTrigger id="workflow-select">
+                      <SelectValue placeholder="Select a workflow" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workflows.map((workflow) => (
+                        <SelectItem key={workflow.id} value={workflow.id}>
+                          {workflow.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">The workflow to trigger when this macro is executed.</p>
+                </div>
+              </TabsContent>
 
-              <div className="space-y-2">
-                <Label htmlFor="http-method">Method</Label>
-                <Select value={httpMethod} onValueChange={(v) => setHttpMethod(v as MacroHttpMethod)}>
-                  <SelectTrigger id="http-method">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GET">GET</SelectItem>
-                    <SelectItem value="POST">POST</SelectItem>
-                    <SelectItem value="PUT">PUT</SelectItem>
-                    <SelectItem value="DELETE">DELETE</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <TabsContent value="http-request" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="http-url">URL</Label>
+                  <Input
+                    id="http-url"
+                    placeholder="https://api.example.com/{{target}}"
+                    value={httpUrl}
+                    onChange={(e) => setHttpUrl(e.target.value)}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="http-headers">Headers (JSON)</Label>
-                <Textarea
-                  id="http-headers"
-                  placeholder='{"Authorization": "Bearer token"}'
-                  value={httpHeaders}
-                  onChange={(e) => setHttpHeaders(e.target.value)}
-                  rows={3}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="http-method">Method</Label>
+                  <Select value={httpMethod} onValueChange={(v) => setHttpMethod(v as MacroHttpMethod)}>
+                    <SelectTrigger id="http-method">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="POST">POST</SelectItem>
+                      <SelectItem value="PUT">PUT</SelectItem>
+                      <SelectItem value="DELETE">DELETE</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="http-body">Body (JSON)</Label>
-                <Textarea
-                  id="http-body"
-                  placeholder='{"key": "value"}'
-                  value={httpBody}
-                  onChange={(e) => setHttpBody(e.target.value)}
-                  rows={4}
-                />
-              </div>
-            </TabsContent>
-          </Tabs>
+                <div className="space-y-2">
+                  <Label htmlFor="http-headers">Headers (JSON)</Label>
+                  <Textarea
+                    id="http-headers"
+                    placeholder='{"Authorization": "Bearer token"}'
+                    value={httpHeaders}
+                    onChange={(e) => setHttpHeaders(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="http-body">Body (JSON)</Label>
+                  <Textarea
+                    id="http-body"
+                    placeholder='{"key": "value"}'
+                    value={httpBody}
+                    onChange={(e) => setHttpBody(e.target.value)}
+                    rows={4}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
+          </fieldset>
 
           <div className="rounded-md border border-border p-3 space-y-1.5" data-testid="macro-variables-hint">
             <p className="text-xs font-medium">Variables</p>

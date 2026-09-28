@@ -19,9 +19,12 @@ import {
 import { executeMacroPlan, MacroRunRefused, valuesToPairs } from "./lib/macroExecution";
 import {
   hashTriggerToken,
+  isBrowserRequest,
+  MACRO_TRIGGER_PATH,
+  MACRO_TRIGGER_PATH_PREFIX,
   MAX_TRIGGER_BODY_BYTES,
-  parseMacroTriggerPath,
   parseTriggerValues,
+  resolveTriggerToken,
   triggerRefusalResponse,
 } from "./lib/macroTrigger";
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
@@ -1431,15 +1434,23 @@ function macroTriggerJson(
   });
 }
 
-// A macro's remote trigger URL: /api/macros/trigger/<token>. POST always; GET
-// only for a trigger that opted in. A malformed token and an unknown one get
-// the same 404, and neither touches anything but an index lookup.
+// A macro's remote trigger: POST /api/macros/trigger/<token>, or POST
+// /api/macros/trigger with `Authorization: Bearer <token>`. GET only for a
+// trigger that opted in. Requests from a web page are refused before the token
+// is looked at, and a malformed token and an unknown one get the same 404.
 const macroTriggerHandler = httpAction(async (ctx, request) => {
+  const refuse = (refusal: Parameters<typeof triggerRefusalResponse>[0]) => {
+    const response = triggerRefusalResponse(refusal);
+    return macroTriggerJson(response.status, response.body, response.headers);
+  };
+
+  if (isBrowserRequest(request.headers.get("origin"))) {
+    return refuse({ outcome: "browser-origin" });
+  }
   const url = new URL(request.url);
-  const token = parseMacroTriggerPath(url.pathname);
+  const token = resolveTriggerToken(url.pathname, request.headers.get("authorization"));
   if (!token) {
-    const refusal = triggerRefusalResponse({ outcome: "not-found" });
-    return macroTriggerJson(refusal.status, refusal.body, refusal.headers);
+    return refuse({ outcome: "not-found" });
   }
   const method = request.method === "GET" ? "GET" : "POST";
 
@@ -1465,32 +1476,43 @@ const macroTriggerHandler = httpAction(async (ctx, request) => {
     values: valuesToPairs(parsed.values),
   });
   if (claim.outcome !== "run") {
-    const refusal = triggerRefusalResponse(claim);
-    return macroTriggerJson(refusal.status, refusal.body, refusal.headers);
+    return refuse(claim);
   }
+
+  // Bookkeeping must never change the answer the device gets.
+  const recordOutcome = async (failure?: string) => {
+    try {
+      await ctx.runMutation(internal.macroTriggers.recordOutcome, { triggerId: claim.triggerId, failure });
+    } catch (err) {
+      logger.warn("macro trigger: failed to record outcome", { error: String(err) });
+    }
+  };
 
   try {
     const result = await withEngineTimeout(
       executeMacroPlan(claim.engine, claim.plan, MACRO_TRIGGER_PROVENANCE),
       MACRO_TRIGGER_ENGINE_TIMEOUT_MS
     );
+    await recordOutcome();
     return macroTriggerJson(202, { ok: true, ...(result.triggerId ? { triggerId: result.triggerId } : {}) });
   } catch (err) {
     if (err instanceof MacroRunRefused) {
+      await recordOutcome(err.message);
       return macroTriggerJson(409, { ok: false, error: err.message });
     }
     const timedOut = err instanceof EngineTimeoutError;
-    // The engine's own error text can carry internals; the caller only learns
-    // that the engine did not take the run.
+    // A transport failure's text can carry internals (hosts, stack traces);
+    // the caller only learns that the engine did not take the run.
     logger.warn("macro trigger: engine call failed", { error: String(err), timedOut });
-    return macroTriggerJson(timedOut ? 504 : 502, {
-      ok: false,
-      error: timedOut ? "the engine did not answer in time" : "the engine did not accept the run",
-    });
+    const error = timedOut ? "the engine did not answer in time" : "the engine did not accept the run";
+    await recordOutcome(error);
+    return macroTriggerJson(timedOut ? 504 : 502, { ok: false, error });
   }
 });
 
-http.route({ pathPrefix: "/api/macros/trigger/", method: "POST", handler: macroTriggerHandler });
-http.route({ pathPrefix: "/api/macros/trigger/", method: "GET", handler: macroTriggerHandler });
+http.route({ path: MACRO_TRIGGER_PATH, method: "POST", handler: macroTriggerHandler });
+http.route({ path: MACRO_TRIGGER_PATH, method: "GET", handler: macroTriggerHandler });
+http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "POST", handler: macroTriggerHandler });
+http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macroTriggerHandler });
 
 export default http;

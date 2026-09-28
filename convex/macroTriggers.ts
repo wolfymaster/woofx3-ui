@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
 import { loadMacroEngineContext, type MacroEngineContext, valuesFromPairs } from "./lib/macroExecution";
 import {
@@ -11,19 +11,28 @@ import {
   generateTriggerToken,
   hashTriggerToken,
   type MacroRunPlan,
+  macroBehaviorFingerprint,
 } from "./lib/macroTrigger";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 // Same sanity ceiling as the pad itself (convex/macros.ts): one trigger per macro.
 const MAX_TRIGGERS = 200;
 
+/** Longest failure reason kept on a trigger row. */
+const MAX_FAILURE_LENGTH = 300;
+
 const variablePairsValidator = v.array(v.object({ name: v.string(), value: v.string() }));
 
 /**
- * A trigger URL fires a macro with nobody signed in, so minting, rotating and
- * revoking one is limited to the instance's owners and admins.
+ * Owners and admins. A trigger URL fires a macro with nobody signed in, so
+ * minting, rotating, re-confirming and revoking one are theirs alone, and so is
+ * changing what a macro with a live URL does.
  */
-async function canManageTriggers(ctx: QueryCtx, instanceId: Id<"instances">, userId: Id<"users">): Promise<boolean> {
+export async function isInstanceManager(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  userId: Id<"users">
+): Promise<boolean> {
   const membership = await getInstanceMembership(ctx, instanceId, userId);
   return membership?.role === "owner" || membership?.role === "admin";
 }
@@ -33,13 +42,13 @@ async function requireTriggerManager(ctx: MutationCtx, instanceId: Id<"instances
   if (!userId) {
     throw new Error("Not authenticated");
   }
-  if (!(await canManageTriggers(ctx, instanceId, userId))) {
+  if (!(await isInstanceManager(ctx, instanceId, userId))) {
     throw new Error("Only an instance owner or admin can manage remote triggers");
   }
   return userId;
 }
 
-function findTriggerForMacro(ctx: QueryCtx, macroId: Id<"macros">) {
+export function findTriggerForMacro(ctx: QueryCtx, macroId: Id<"macros">) {
   return ctx.db
     .query("macroTriggers")
     .withIndex("by_macro", (q) => q.eq("macroId", macroId))
@@ -52,6 +61,14 @@ export async function deleteTriggerForMacro(ctx: MutationCtx, macroId: Id<"macro
   if (trigger) {
     await ctx.db.delete(trigger._id);
   }
+}
+
+/** Whether the trigger's approval still stands: same behavior, approver still a manager. */
+async function approvalStands(ctx: QueryCtx, trigger: Doc<"macroTriggers">, macro: Doc<"macros">): Promise<boolean> {
+  if (macroBehaviorFingerprint(macro.type, macro.config) !== trigger.confirmedFingerprint) {
+    return false;
+  }
+  return isInstanceManager(ctx, trigger.instanceId, trigger.confirmedBy);
 }
 
 /**
@@ -73,16 +90,27 @@ export const listForInstance = query({
       .query("macroTriggers")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .take(MAX_TRIGGERS);
-    return {
-      canManage: membership.role === "owner" || membership.role === "admin",
-      triggers: rows.map((row) => ({
+    const triggers = [];
+    for (const row of rows) {
+      const macro = await ctx.db.get(row.macroId);
+      if (!macro) {
+        continue;
+      }
+      triggers.push({
         macroId: row.macroId,
         allowGet: row.allowGet,
         createdAt: row.createdAt,
         rotatedAt: row.rotatedAt,
         lastUsedAt: row.lastUsedAt,
         useCount: row.useCount,
-      })),
+        lastFailedAt: row.lastFailedAt,
+        lastFailure: row.lastFailure,
+        needsConfirmation: !(await approvalStands(ctx, row, macro)),
+      });
+    }
+    return {
+      canManage: membership.role === "owner" || membership.role === "admin",
+      triggers,
     };
   },
 });
@@ -95,7 +123,7 @@ export const storeTokenHash = internalMutation({
     tokenHash: v.string(),
   },
   handler: async (ctx, { instanceId, macroId, userId, tokenHash }) => {
-    if (!(await canManageTriggers(ctx, instanceId, userId))) {
+    if (!(await isInstanceManager(ctx, instanceId, userId))) {
       throw new Error("Only an instance owner or admin can manage remote triggers");
     }
     const macro = await ctx.db.get(macroId);
@@ -106,12 +134,18 @@ export const storeTokenHash = internalMutation({
       throw new Error("Only chat-command and workflow macros can have a remote trigger");
     }
 
+    // Minting approves the macro as it stands now.
     const now = Date.now();
+    const approval = {
+      confirmedFingerprint: macroBehaviorFingerprint(macro.type, macro.config),
+      confirmedBy: userId,
+      confirmedAt: now,
+    };
     const existing = await findTriggerForMacro(ctx, macroId);
     if (existing) {
       // Replacing the hash is the whole rotation: the old URL stops matching
       // in the same transaction the new one starts to.
-      await ctx.db.patch(existing._id, { tokenHash, rotatedAt: now });
+      await ctx.db.patch(existing._id, { tokenHash, rotatedAt: now, ...approval });
       return;
     }
     await ctx.db.insert("macroTriggers", {
@@ -122,6 +156,7 @@ export const storeTokenHash = internalMutation({
       createdBy: userId,
       createdAt: now,
       useCount: 0,
+      ...approval,
       ...rateBucketFields(fullRateBucket(now)),
     });
   },
@@ -144,6 +179,28 @@ export const issueToken = action({
     const tokenHash = await hashTriggerToken(token);
     await ctx.runMutation(internal.macroTriggers.storeTokenHash, { instanceId, macroId, userId, tokenHash });
     return { token };
+  },
+});
+
+/**
+ * Approve what the macro does now, keeping its URL. Needed after the macro's
+ * action changes, or after whoever last approved it stops being an owner or
+ * admin; until then the URL answers 409.
+ */
+export const reconfirm = mutation({
+  args: { instanceId: v.id("instances"), macroId: v.id("macros") },
+  handler: async (ctx, { instanceId, macroId }) => {
+    const userId = await requireTriggerManager(ctx, instanceId);
+    const trigger = await findTriggerForMacro(ctx, macroId);
+    const macro = await ctx.db.get(macroId);
+    if (!trigger || trigger.instanceId !== instanceId || !macro || macro.instanceId !== instanceId) {
+      throw new Error("This macro has no remote trigger");
+    }
+    await ctx.db.patch(trigger._id, {
+      confirmedFingerprint: macroBehaviorFingerprint(macro.type, macro.config),
+      confirmedBy: userId,
+      confirmedAt: Date.now(),
+    });
   },
 });
 
@@ -180,17 +237,18 @@ export type ClaimResult =
   | { outcome: "method-not-allowed" }
   | { outcome: "rate-limited"; retryAfterMs: number }
   | { outcome: "refused"; status: number; error: string }
-  | { outcome: "run"; plan: MacroRunPlan; engine: MacroEngineContext };
+  | { outcome: "run"; triggerId: Id<"macroTriggers">; plan: MacroRunPlan; engine: MacroEngineContext };
 
 /**
  * Everything the trigger route decides before it calls the engine, in one
  * transaction: find the trigger by token hash, check the method, spend a
- * rate-limit token, and plan the run. Usage is stamped only on a run that
- * reaches the engine call.
+ * rate-limit token, check the approval still stands, and plan the run. The
+ * route reports how the engine answered through recordOutcome.
  *
- * An unknown hash, a trigger whose macro or instance is gone, and a revoked
- * trigger all answer the same `not-found`, so the route cannot tell a caller
- * which of them it hit.
+ * An unknown hash, a revoked trigger, and a trigger whose macro or instance
+ * is gone or whose instance is not registered with an engine all answer the
+ * same `not-found`, before anything is written, so the route cannot tell a
+ * caller which of them it hit.
  */
 export const claim = internalMutation({
   args: {
@@ -207,16 +265,20 @@ export const claim = internalMutation({
       return { outcome: "not-found" };
     }
     const macro = await ctx.db.get(trigger.macroId);
-    const now = Date.now();
+    const engine = await loadMacroEngineContext(ctx, trigger.instanceId);
+    const live = macro !== null && macro.instanceId === trigger.instanceId && engine !== null;
+
     const decision = decideTrigger({
       trigger: {
         allowGet: trigger.allowGet,
         bucket: { tokens: trigger.rateTokens, refilledAt: trigger.rateRefilledAt },
+        confirmedFingerprint: trigger.confirmedFingerprint,
+        confirmerIsManager: await isInstanceManager(ctx, trigger.instanceId, trigger.confirmedBy),
       },
-      macro: macro && macro.instanceId === trigger.instanceId ? macro : null,
+      macro: live ? macro : null,
       method,
       values: valuesFromPairs(values),
-      now,
+      now: Date.now(),
     });
     if ("bucket" in decision) {
       await ctx.db.patch(trigger._id, rateBucketFields(decision.bucket));
@@ -237,15 +299,32 @@ export const claim = internalMutation({
       }
     }
 
-    const engine = await loadMacroEngineContext(ctx, trigger.instanceId);
-    if (!engine) {
-      return { outcome: "refused", status: 503, error: "this instance is not connected to its engine" };
+    if (engine === null) {
+      throw new Error("claim: a trigger that decided to run must have an engine context");
     }
     if (decision.plan.kind === "chat-command" && !engine.broadcasterLogin) {
       return { outcome: "refused", status: 409, error: "link a Twitch account before running chat-command macros" };
     }
+    return { outcome: "run", triggerId: trigger._id, plan: decision.plan, engine };
+  },
+});
 
-    await ctx.db.patch(trigger._id, { lastUsedAt: now, useCount: trigger.useCount + 1 });
-    return { outcome: "run", plan: decision.plan, engine };
+/** How the engine answered a claimed run. Only accepted runs count as uses. */
+export const recordOutcome = internalMutation({
+  args: {
+    triggerId: v.id("macroTriggers"),
+    failure: v.optional(v.string()),
+  },
+  handler: async (ctx, { triggerId, failure }) => {
+    const trigger = await ctx.db.get(triggerId);
+    if (!trigger) {
+      return;
+    }
+    const now = Date.now();
+    if (failure === undefined) {
+      await ctx.db.patch(triggerId, { lastUsedAt: now, useCount: trigger.useCount + 1 });
+      return;
+    }
+    await ctx.db.patch(triggerId, { lastFailedAt: now, lastFailure: failure.slice(0, MAX_FAILURE_LENGTH) });
   },
 });

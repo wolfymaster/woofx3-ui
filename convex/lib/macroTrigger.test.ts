@@ -2,13 +2,19 @@ import { describe, expect, test } from "bun:test";
 import {
   canTriggerRemotely,
   decideTrigger,
+  engineRefusalReason,
   fullRateBucket,
   generateTriggerToken,
+  hasControlCharacter,
   hashTriggerToken,
+  isBrowserRequest,
+  isEngineTransportFailure,
   isWellFormedTriggerToken,
+  MACRO_TRIGGER_PATH,
   MACRO_TRIGGER_PATH_PREFIX,
   MACRO_TRIGGER_RATE_LIMIT,
   MAX_VARIABLE_VALUE_LENGTH,
+  macroBehaviorFingerprint,
   macroTriggerUrl,
   missingMacroVariables,
   parseChatCommand,
@@ -16,9 +22,11 @@ import {
   parseTriggerValues,
   planMacroRun,
   type RateBucket,
+  resolveTriggerToken,
   takeRateToken,
   triggerRefusalResponse,
 } from "./macroTrigger";
+import type { MacroActionType, MacroConfig } from "./macroVariables";
 
 describe("generateTriggerToken", () => {
   test("is well formed", () => {
@@ -175,6 +183,11 @@ describe("parseTriggerValues", () => {
     expect(parseTriggerValues({ contentType: null, body: '{"a":null}', query: none }).ok).toBe(false);
   });
 
+  test("refuses control characters in a body or query value", () => {
+    expect(parseTriggerValues({ contentType: null, body: '{"a":"x\\ny"}', query: none }).ok).toBe(false);
+    expect(parseTriggerValues({ contentType: null, body: "", query: new URLSearchParams("a=x%0Dy") }).ok).toBe(false);
+  });
+
   test("refuses an overlong value", () => {
     const body = JSON.stringify({ a: "x".repeat(MAX_VARIABLE_VALUE_LENGTH + 1) });
     expect(parseTriggerValues({ contentType: null, body, query: none }).ok).toBe(false);
@@ -207,6 +220,11 @@ describe("missingMacroVariables", () => {
 });
 
 describe("planMacroRun", () => {
+  test("refuses a control character in a used variable, as the dashboard path must too", () => {
+    const result = planMacroRun("chat-command", { command: "!so {{channel}}" }, { channel: "bob\r\n!ban x" });
+    expect(result).toEqual({ ok: false, status: 400, error: "control characters are not allowed in: channel" });
+  });
+
   test("plans a workflow run", () => {
     expect(planMacroRun("trigger-workflow", { workflowId: "wf-1" }, {})).toEqual({
       ok: true,
@@ -267,8 +285,16 @@ describe("planMacroRun", () => {
 
 describe("decideTrigger", () => {
   const now = 5_000_000;
-  const fullTrigger = (allowGet: boolean) => ({ allowGet, bucket: fullRateBucket(now) });
   const workflowMacro = { type: "trigger-workflow" as const, config: { workflowId: "wf-1" } };
+  const chatMacro = { type: "chat-command" as const, config: { command: "!so {{channel}}" } };
+  const approvedFor = (macro: { type: MacroActionType; config: MacroConfig }) =>
+    macroBehaviorFingerprint(macro.type, macro.config);
+  const fullTrigger = (allowGet: boolean, macro: { type: MacroActionType; config: MacroConfig } = workflowMacro) => ({
+    allowGet,
+    bucket: fullRateBucket(now),
+    confirmedFingerprint: approvedFor(macro),
+    confirmerIsManager: true,
+  });
 
   test("an unknown token and a deleted macro look the same", () => {
     expect(decideTrigger({ trigger: null, macro: workflowMacro, method: "POST", values: {}, now })).toEqual({
@@ -310,7 +336,7 @@ describe("decideTrigger", () => {
 
   test("an empty bucket is rate limited", () => {
     const decision = decideTrigger({
-      trigger: { allowGet: false, bucket: { tokens: 0, refilledAt: now } },
+      trigger: { ...fullTrigger(false), bucket: { tokens: 0, refilledAt: now } },
       macro: workflowMacro,
       method: "POST",
       values: {},
@@ -321,8 +347,8 @@ describe("decideTrigger", () => {
 
   test("a bad request still spends its token, so a spammer cannot probe for free", () => {
     const decision = decideTrigger({
-      trigger: fullTrigger(false),
-      macro: { type: "chat-command", config: { command: "!so {{channel}}" } },
+      trigger: fullTrigger(false, chatMacro),
+      macro: chatMacro,
       method: "POST",
       values: {},
       now,
@@ -330,11 +356,129 @@ describe("decideTrigger", () => {
     expect(decision).toMatchObject({ outcome: "refused", status: 400 });
     expect("bucket" in decision && decision.bucket.tokens).toBe(MACRO_TRIGGER_RATE_LIMIT.burst - 1);
   });
+
+  test("a macro edited since the URL was approved is refused with 409", () => {
+    const edited = { type: "chat-command" as const, config: { command: "!ban {{channel}}" } };
+    const decision = decideTrigger({
+      trigger: fullTrigger(false, chatMacro),
+      macro: edited,
+      method: "POST",
+      values: { channel: "bob" },
+      now,
+    });
+    expect(decision).toMatchObject({ outcome: "refused", status: 409 });
+    if (decision.outcome === "refused") {
+      expect(decision.error).toContain("re-confirm");
+    }
+  });
+
+  test("an approver who lost the owner or admin role stops the URL with 409", () => {
+    const decision = decideTrigger({
+      trigger: { ...fullTrigger(false), confirmerIsManager: false },
+      macro: workflowMacro,
+      method: "POST",
+      values: {},
+      now,
+    });
+    expect(decision).toMatchObject({ outcome: "refused", status: 409 });
+  });
+
+  test("a control character in a value is refused with 400", () => {
+    const decision = decideTrigger({
+      trigger: fullTrigger(false, chatMacro),
+      macro: chatMacro,
+      method: "POST",
+      values: { channel: "bob\n!ban alice" },
+      now,
+    });
+    expect(decision).toMatchObject({ outcome: "refused", status: 400 });
+  });
+});
+
+describe("macroBehaviorFingerprint", () => {
+  test("ignores key order and undefined fields", () => {
+    expect(macroBehaviorFingerprint("http-request", { url: "u", method: "POST", headers: { b: "2", a: "1" } })).toBe(
+      macroBehaviorFingerprint("http-request", {
+        headers: { a: "1", b: "2" },
+        method: "POST",
+        url: "u",
+        body: undefined,
+      })
+    );
+  });
+
+  test("changes with the type or any config value", () => {
+    const base = macroBehaviorFingerprint("chat-command", { command: "!so" });
+    expect(macroBehaviorFingerprint("chat-command", { command: "!ban" })).not.toBe(base);
+    expect(macroBehaviorFingerprint("trigger-workflow", { command: "!so" })).not.toBe(base);
+  });
+});
+
+describe("resolveTriggerToken", () => {
+  const token = generateTriggerToken();
+  const other = generateTriggerToken();
+
+  test("takes the token from the path", () => {
+    expect(resolveTriggerToken(`${MACRO_TRIGGER_PATH_PREFIX}${token}`, null)).toBe(token);
+  });
+
+  test("takes the token from a Bearer header on the bare path, with or without a trailing slash", () => {
+    expect(resolveTriggerToken(MACRO_TRIGGER_PATH, `Bearer ${token}`)).toBe(token);
+    expect(resolveTriggerToken(MACRO_TRIGGER_PATH_PREFIX, `bearer ${token}`)).toBe(token);
+  });
+
+  test("accepts both when they agree and refuses when they do not", () => {
+    expect(resolveTriggerToken(`${MACRO_TRIGGER_PATH_PREFIX}${token}`, `Bearer ${token}`)).toBe(token);
+    expect(resolveTriggerToken(`${MACRO_TRIGGER_PATH_PREFIX}${token}`, `Bearer ${other}`)).toBeNull();
+  });
+
+  test("refuses no token, a malformed header and a malformed path", () => {
+    expect(resolveTriggerToken(MACRO_TRIGGER_PATH, null)).toBeNull();
+    expect(resolveTriggerToken(MACRO_TRIGGER_PATH, token)).toBeNull();
+    expect(resolveTriggerToken(MACRO_TRIGGER_PATH, "Bearer nope")).toBeNull();
+    expect(resolveTriggerToken(`${MACRO_TRIGGER_PATH_PREFIX}nope`, `Bearer ${token}`)).toBeNull();
+  });
+});
+
+describe("isBrowserRequest", () => {
+  test("any Origin marks a browser; none or empty does not", () => {
+    expect(isBrowserRequest("https://evil.example")).toBe(true);
+    expect(isBrowserRequest("null")).toBe(true);
+    expect(isBrowserRequest(null)).toBe(false);
+    expect(isBrowserRequest("")).toBe(false);
+  });
+});
+
+describe("hasControlCharacter", () => {
+  test("flags C0 controls and DEL, not ordinary text", () => {
+    expect(hasControlCharacter("a\nb")).toBe(true);
+    expect(hasControlCharacter("a\u0000")).toBe(true);
+    expect(hasControlCharacter("a\u007f")).toBe(true);
+    expect(hasControlCharacter("bob ross é 🙂")).toBe(false);
+  });
+});
+
+describe("engine errors", () => {
+  test("transport failures are told apart from the engine's refusals", () => {
+    expect(isEngineTransportFailure(new TypeError("fetch failed"))).toBe(true);
+    expect(isEngineTransportFailure(new Error("RPC request failed: 502 Bad Gateway"))).toBe(true);
+    expect(isEngineTransportFailure(new Error("bad RPC message: {}"))).toBe(true);
+    expect(isEngineTransportFailure("boom")).toBe(true);
+    expect(isEngineTransportFailure(new Error("Command is disabled"))).toBe(false);
+    expect(isEngineTransportFailure(new Error('You do not have permission to use "ban"'))).toBe(false);
+  });
+
+  test("a refusal reason is trimmed and bounded", () => {
+    expect(engineRefusalReason(new Error("  Command is disabled "))).toBe("Command is disabled");
+    expect(engineRefusalReason(new Error(""))).toBe("the engine refused the command");
+    expect(engineRefusalReason(new Error("x".repeat(500))).length).toBe(203);
+  });
 });
 
 describe("triggerRefusalResponse", () => {
   test("maps each refusal to its status", () => {
     expect(triggerRefusalResponse({ outcome: "not-found" }).status).toBe(404);
+    expect(triggerRefusalResponse({ outcome: "browser-origin" }).status).toBe(403);
     expect(triggerRefusalResponse({ outcome: "method-not-allowed" })).toMatchObject({
       status: 405,
       headers: { Allow: "POST" },
