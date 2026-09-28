@@ -1,11 +1,14 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import {
+  diffStreamInfo,
+  isEmptyChanges,
   lengthCounter,
   MAX_MARKER_DESCRIPTION_LENGTH,
   MAX_PRESET_NAME_LENGTH,
   STREAM_INFO_SCOPE,
   type StreamInfo,
+  type StreamInfoChanges,
   titleCounter,
 } from "@convex/lib/streamInfo";
 import { useAction, useMutation, useQuery } from "convex/react";
@@ -100,9 +103,17 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
   // after it and put the old values back on screen.
   const generation = useRef(0);
 
+  // Read by the poll, which must not restart whenever the card's state changes.
+  const savedCategory = useRef<StreamInfo["category"]>(null);
+  savedCategory.current = edit?.saved.category ?? null;
+
   const refresh = useCallback(() => {
     const started = generation.current;
-    getChannelInfo({ instanceId })
+    const known = savedCategory.current;
+    getChannelInfo({
+      instanceId,
+      knownBoxArt: known?.boxArtUrl ? { categoryId: known.id, boxArtUrl: known.boxArtUrl } : undefined,
+    })
       .then((fresh) => {
         if (started !== generation.current) {
           return;
@@ -125,28 +136,32 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
   useVisibleInterval(refresh, REFRESH_MS, !saving);
 
   /**
-   * Shows `next` straight away and puts the previous state back if Twitch
-   * refuses. Inputs are disabled while this runs, so the rollback cannot
-   * discard anything typed after the save began.
+   * Sends only `changes`, shows them straight away, and puts the previous
+   * state back if Twitch refuses. Inputs are disabled while this runs, so the
+   * rollback cannot discard anything typed after the save began.
    */
-  const save = async (next: StreamInfo, successTitle: string) => {
-    if (!edit || saving) {
+  const save = async (changes: StreamInfoChanges, successTitle: string) => {
+    if (!edit || saving || isEmptyChanges(changes)) {
       return;
     }
     const before = edit;
+    const optimistic = { ...edit.saved, ...changes };
     generation.current += 1;
-    setEdit({ saved: next, draft: next });
+    setEdit({ saved: optimistic, draft: optimistic });
     setSaving(true);
     try {
-      const result = await updateChannelInfo({
-        instanceId,
-        title: next.title,
-        category: next.category,
-        tags: next.tags,
-      });
+      const result = await updateChannelInfo({ instanceId, ...changes });
       generation.current += 1;
-      setEdit({ saved: result, draft: result });
-      toast({ title: successTitle });
+      setEdit({ saved: result.info, draft: result.info });
+      if (result.unapplied.length > 0) {
+        toast({
+          title: "Twitch didn't apply everything",
+          description: `It kept its own ${result.unapplied.join(" and ")}.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: successTitle });
+      }
     } catch (error) {
       generation.current += 1;
       setEdit(before);
@@ -219,7 +234,7 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
             <Button
               size="sm"
               className="flex-1 gap-1.5"
-              onClick={() => void save(draft, "Stream info updated")}
+              onClick={() => void save(diffStreamInfo(saved, draft), "Stream info updated")}
               disabled={saving || !dirty || problem !== null}
               data-testid="button-stream-info-save"
             >

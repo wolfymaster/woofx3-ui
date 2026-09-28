@@ -2,11 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   addTagProblem,
   categoriesFromHelix,
+  categoryProblem,
   changedFields,
   channelInfoFromHelix,
   characterCount,
   diffStreamInfo,
-  isEmptyPatch,
+  isEmptyChanges,
   lengthCounter,
   MAX_TAGS,
   markerDescriptionProblem,
@@ -14,8 +15,11 @@ import {
   sizedBoxArtUrl,
   tagProblem,
   tagsProblem,
+  tagWarning,
   titleCounter,
   titleProblem,
+  toHelixPatch,
+  unappliedFields,
 } from "./streamInfo";
 
 const JUST_CHATTING = { id: "509658", name: "Just Chatting" };
@@ -31,19 +35,22 @@ describe("tagProblem", () => {
     expect(tagProblem("GTA5")).toBeNull();
   });
 
-  test("accepts letters from other scripts", () => {
-    expect(tagProblem("日本語")).toBeNull();
-    expect(tagProblem("Español")).toBeNull();
+  test("accepts letters from other scripts, including combining marks", () => {
+    for (const tag of ["日本語", "Español", "हिन्दी", "தமிழ்"]) {
+      expect(tagProblem(tag)).toBeNull();
+      expect(tagWarning(tag)).toBeNull();
+    }
   });
 
   test("rejects spaces with a reason naming them", () => {
     expect(tagProblem("Just Chatting")).toBe("Tags can't contain spaces");
   });
 
-  test("rejects punctuation and symbols", () => {
-    expect(tagProblem("rock-n-roll")).toBe("Tags can only use letters and numbers");
-    expect(tagProblem("C++")).toBe("Tags can only use letters and numbers");
-    expect(tagProblem("no_underscores")).toBe("Tags can only use letters and numbers");
+  test("only warns about punctuation and symbols: Twitch decides", () => {
+    for (const tag of ["rock-n-roll", "C++", "no_underscores"]) {
+      expect(tagProblem(tag)).toBeNull();
+      expect(tagWarning(tag)).toBe("Twitch usually refuses punctuation and symbols in tags");
+    }
   });
 
   test("rejects over 25 characters but allows exactly 25", () => {
@@ -115,35 +122,89 @@ describe("titles and counters", () => {
 });
 
 describe("diffStreamInfo", () => {
-  test("nothing changed is an empty patch", () => {
-    const patch = diffStreamInfo(info(), info());
-    expect(patch).toEqual({});
-    expect(isEmptyPatch(patch)).toBe(true);
+  test("nothing changed is empty", () => {
+    const changes = diffStreamInfo(info(), info());
+    expect(changes).toEqual({});
+    expect(isEmptyChanges(changes)).toBe(true);
   });
 
   test("includes only the fields that differ", () => {
-    const patch = diffStreamInfo(info(), info({ title: "Ranked grind", category: VALORANT }));
-    expect(patch).toEqual({ title: "Ranked grind", game_id: VALORANT.id });
-    expect(changedFields(patch)).toEqual(["title", "category"]);
+    const changes = diffStreamInfo(info(), info({ title: "Ranked grind", category: VALORANT }));
+    expect(changes).toEqual({ title: "Ranked grind", category: VALORANT });
+    expect(changedFields(changes)).toEqual(["title", "category"]);
   });
 
-  test("tags compare as a case-insensitive set", () => {
-    expect(diffStreamInfo(info(), info({ tags: ["chill", "ENGLISH"] }))).toEqual({});
-    expect(diffStreamInfo(info(), info({ tags: ["English"] }))).toEqual({ tags: ["English"] });
+  test("tag order is not a change", () => {
+    expect(diffStreamInfo(info(), info({ tags: ["Chill", "English"] }))).toEqual({});
+  });
+
+  test("tag case is a change, so fps to FPS can be saved", () => {
+    expect(diffStreamInfo(info({ tags: ["fps"] }), info({ tags: ["FPS"] }))).toEqual({ tags: ["FPS"] });
+  });
+
+  test("tag sets of equal size with a repeat still differ", () => {
     expect(diffStreamInfo(info({ tags: ["a", "b"] }), info({ tags: ["a", "a"] }))).toEqual({ tags: ["a", "a"] });
   });
 
-  test("clearing tags sends an empty list", () => {
-    expect(diffStreamInfo(info(), info({ tags: [] }))).toEqual({ tags: [] });
-  });
-
-  test("clearing the category sends an empty game_id", () => {
-    expect(diffStreamInfo(info(), info({ category: null }))).toEqual({ game_id: "" });
+  test("clearing the category is a present null", () => {
+    const changes = diffStreamInfo(info(), info({ category: null }));
+    expect(changes).toEqual({ category: null });
+    expect(changedFields(changes)).toEqual(["category"]);
   });
 
   test("category name or art differences alone are not a change", () => {
     const renamed = info({ category: { ...JUST_CHATTING, name: "Just chatting", boxArtUrl: "x" } });
     expect(diffStreamInfo(info(), renamed)).toEqual({});
+  });
+});
+
+describe("toHelixPatch", () => {
+  test("sends only the given fields, in Helix's shape", () => {
+    expect(toHelixPatch({ tags: ["a"] })).toEqual({ tags: ["a"] });
+    expect(toHelixPatch({ title: "t", category: VALORANT })).toEqual({ title: "t", game_id: VALORANT.id });
+  });
+
+  test("a cleared category is an empty game_id, cleared tags an empty list", () => {
+    expect(toHelixPatch({ category: null, tags: [] })).toEqual({ game_id: "", tags: [] });
+  });
+});
+
+describe("unappliedFields", () => {
+  test("nothing when Twitch holds what was asked", () => {
+    expect(unappliedFields({ title: "New", category: VALORANT }, info({ title: "New", category: VALORANT }))).toEqual(
+      []
+    );
+  });
+
+  test("names a field Twitch ignored", () => {
+    expect(unappliedFields({ title: "New", category: { id: "999", name: "Bogus" } }, info({ title: "New" }))).toEqual([
+      "category",
+    ]);
+  });
+
+  test("fields not asked for are never reported", () => {
+    expect(unappliedFields({ tags: ["English", "Chill"] }, info({ title: "Changed elsewhere" }))).toEqual([]);
+  });
+});
+
+describe("categoryProblem", () => {
+  test("accepts a Twitch category with CDN art", () => {
+    expect(
+      categoryProblem({ ...JUST_CHATTING, boxArtUrl: "https://static-cdn.jtvnw.net/ttv-boxart/509658-52x72.jpg" })
+    ).toBeNull();
+    expect(categoryProblem(JUST_CHATTING)).toBeNull();
+  });
+
+  test("refuses art from anywhere else", () => {
+    expect(categoryProblem({ ...JUST_CHATTING, boxArtUrl: "https://evil.example/x.jpg" })).toBe(
+      "Category art must come from Twitch"
+    );
+  });
+
+  test("refuses a non-numeric or oversized id and an empty name", () => {
+    expect(categoryProblem({ id: "abc", name: "x" })).toBe("That isn't a Twitch category");
+    expect(categoryProblem({ id: "1".repeat(33), name: "x" })).toBe("That isn't a Twitch category");
+    expect(categoryProblem({ id: "1", name: "" })).toBe("That category has no usable name");
   });
 });
 

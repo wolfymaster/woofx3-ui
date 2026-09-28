@@ -3,17 +3,23 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, type MutationCtx, mutation, query } from "./_generated/server";
 import {
+  BOX_ART_URL_PREFIX,
   categoriesFromHelix,
+  categoryProblem,
   channelInfoFromHelix,
-  diffStreamInfo,
-  isEmptyPatch,
+  characterCount,
+  isEmptyChanges,
   MAX_PRESET_NAME_LENGTH,
   markerDescriptionProblem,
   STREAM_INFO_SCOPE,
   type StreamCategory,
   type StreamInfo,
+  type StreamInfoChanges,
+  type StreamInfoField,
   tagsProblem,
   titleProblem,
+  toHelixPatch,
+  unappliedFields,
 } from "./lib/streamInfo";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
@@ -21,8 +27,9 @@ import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 // Title, category and tags for the dashboard's Stream info widget, plus stream
 // markers and the named presets that apply a whole set in one click.
 //
-// Straight to Helix, like convex/twitchBroadcast.ts: Convex already holds a
-// refreshable broadcaster token, and the engine has no channel-editing method.
+// Straight to Helix, like convex/twitchBroadcast.ts and convex/pins.ts, rather
+// than through the engine: Convex already holds a refreshable broadcaster
+// token, so editing the channel keeps working while no engine is running.
 // Every call runs under channel:manage:broadcast, reads included. Reading
 // channel information needs no scope on Helix, but the widget exists to edit,
 // and one scope gate keeps "reconnect Twitch" a single, predictable state
@@ -98,16 +105,34 @@ async function fetchCategory(call: AuthorizedTwitchCall, categoryId: string): Pr
   return categoriesFromHelix(await response.json())[0] ?? null;
 }
 
+/**
+ * The channel with its category's box art. `known` is art the caller already
+ * has, reused when the category has not changed so a poll costs one Helix
+ * call instead of two.
+ */
+async function readChannel(
+  call: AuthorizedTwitchCall,
+  known?: { categoryId: string; boxArtUrl: string }
+): Promise<StreamInfo> {
+  const info = await fetchChannelInfo(call);
+  if (!info.category) {
+    return info;
+  }
+  if (known && known.categoryId === info.category.id && known.boxArtUrl.startsWith(BOX_ART_URL_PREFIX)) {
+    return { ...info, category: { ...info.category, boxArtUrl: known.boxArtUrl } };
+  }
+  const category = await fetchCategory(call, info.category.id);
+  return { ...info, category: category ?? info.category };
+}
+
 export const getChannelInfo = action({
-  args: { instanceId: v.id("instances") },
+  args: {
+    instanceId: v.id("instances"),
+    knownBoxArt: v.optional(v.object({ categoryId: v.string(), boxArtUrl: v.string() })),
+  },
   handler: async (ctx, args): Promise<StreamInfo> => {
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    const info = await fetchChannelInfo(call);
-    if (!info.category) {
-      return info;
-    }
-    const category = await fetchCategory(call, info.category.id);
-    return { ...info, category: category ?? info.category };
+    return readChannel(call, args.knownBoxArt);
   },
 });
 
@@ -131,46 +156,61 @@ export const searchCategories = action({
   },
 });
 
-function assertValidInfo(title: string, tags: string[]): void {
-  const problem = titleProblem(title) ?? tagsProblem(tags);
+function assertValidChanges(changes: StreamInfoChanges): void {
+  const problem =
+    (changes.title !== undefined ? titleProblem(changes.title) : null) ??
+    (changes.tags !== undefined ? tagsProblem(changes.tags) : null) ??
+    (changes.category ? categoryProblem(changes.category) : null);
   if (problem) {
     throw new Error(problem);
   }
 }
 
 /**
- * Sets the channel to the given title, category and tags, sending Twitch only
- * the fields that differ from what it holds right now. The diff runs against a
- * fresh read rather than the caller's copy, which may be minutes old: a field
- * that already matches is never re-sent, so it cannot count as an edit.
+ * Writes only the fields the caller passes: an omitted field is left as
+ * Twitch has it, so a title changed elsewhere since the widget loaded is not
+ * reverted by a save that only touched tags. `category: null` clears it.
+ *
+ * Returns the channel as Twitch holds it afterwards, with any requested field
+ * Twitch did not take. It answers 204 even when it ignores a value, so the
+ * read-back is the only honest answer; Twitch's own 400 message decides tag
+ * characters, which the widget only warns about.
  */
 export const updateChannelInfo = action({
   args: {
     instanceId: v.id("instances"),
-    title: v.string(),
-    category: categoryValidator,
-    tags: v.array(v.string()),
+    title: v.optional(v.string()),
+    category: v.optional(categoryValidator),
+    tags: v.optional(v.array(v.string())),
   },
-  handler: async (ctx, args): Promise<StreamInfo> => {
-    const next: StreamInfo = { title: args.title.trim(), category: args.category, tags: args.tags };
-    assertValidInfo(next.title, next.tags);
+  handler: async (ctx, args): Promise<{ info: StreamInfo; unapplied: StreamInfoField[] }> => {
+    const changes: StreamInfoChanges = {};
+    if (args.title !== undefined) {
+      changes.title = args.title.trim();
+    }
+    if (args.category !== undefined) {
+      changes.category = args.category;
+    }
+    if (args.tags !== undefined) {
+      changes.tags = args.tags;
+    }
+    if (isEmptyChanges(changes)) {
+      throw new Error("Nothing to update");
+    }
+    assertValidChanges(changes);
 
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    const current = await fetchChannelInfo(call);
-    const patch = diffStreamInfo(current, next);
-    if (isEmptyPatch(patch)) {
-      return next;
-    }
-
     const response = await fetch(`${TWITCH_CHANNELS_URL}?broadcaster_id=${call.broadcasterUserId}`, {
       method: "PATCH",
       headers: { ...helixHeaders(call), "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
+      body: JSON.stringify(toHelixPatch(changes)),
     });
     if (!response.ok) {
       throw await helixFailure("Couldn't update your stream info", response);
     }
-    return next;
+
+    const info = await readChannel(call);
+    return { info, unapplied: unappliedFields(changes, info) };
   },
 });
 
@@ -192,15 +232,14 @@ export const createMarker = action({
       ),
     });
 
-    // Helix answers 404 when the channel is not live, and 403 when the stream
-    // is live but has no VOD to mark: past broadcasts are off, or it is a
-    // premiere or rerun.
+    // Helix answers 404 both when the channel is not live and when it has no
+    // VOD to mark (past broadcasts are off), and does not say which. The user
+    // id is the token's own, so the third documented 404, an unknown user, is
+    // not a case here. A 403 (token user is not the owner or an editor) is
+    // left to helixFailure, which carries Twitch's message.
     if (response.status === 404) {
-      throw new Error("You're offline. Markers can only be added while you're live.");
-    }
-    if (response.status === 403) {
       throw new Error(
-        "Twitch can't mark this stream. Turn on \"Store past broadcasts\" in Twitch's VOD settings; premieres and reruns can't be marked."
+        "Not live, or past broadcasts are off (Twitch VOD settings); reruns and premieres can't be marked."
       );
     }
     if (!response.ok) {
@@ -281,11 +320,11 @@ export const savePreset = mutation({
     if (!name) {
       throw new Error("A preset needs a name");
     }
-    if (name.length > MAX_PRESET_NAME_LENGTH) {
+    if (characterCount(name) > MAX_PRESET_NAME_LENGTH) {
       throw new Error(`Preset names are limited to ${MAX_PRESET_NAME_LENGTH} characters`);
     }
     const title = args.title.trim();
-    assertValidInfo(title, args.tags);
+    assertValidChanges({ title, tags: args.tags, category: args.category });
 
     const fields = {
       title,
