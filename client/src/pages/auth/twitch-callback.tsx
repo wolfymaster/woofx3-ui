@@ -101,22 +101,18 @@ export default function TwitchCallback() {
       return;
     }
 
-    let cancelled = false;
+    // Set when this effect is cleaned up (its dependencies changed, or the
+    // page unmounted). It stops further retries only: the effect does not run
+    // the sign-in again (`called`), so the outcome of the request already in
+    // flight is always reported, or the page would spin forever.
+    let stopRetrying = false;
 
     const attempt = (retriesLeft: number) => {
-      if (cancelled) {
-        return;
-      }
-
       // The server consumes the pending sign-in on the first attempt that
       // reaches it, so a retry helps only when the connection dropped before
       // the request was delivered.
       signIn("twitch", { token, nonce })
         .then((result) => {
-          if (cancelled) {
-            return;
-          }
-          cancelled = true;
           if (result.signingIn) {
             window.location.href = callback.redirectTo;
           } else {
@@ -124,13 +120,14 @@ export default function TwitchCallback() {
           }
         })
         .catch((err: unknown) => {
-          if (cancelled) {
-            return;
-          }
           const msg = String(err);
           console.error("[twitch-callback] signIn error:", msg);
-          if (msg.includes("Connection lost") && retriesLeft > 0) {
+          if (msg.includes("Connection lost") && retriesLeft > 0 && !stopRetrying) {
             setTimeout(() => {
+              if (stopRetrying) {
+                setFailure({ code: "sign_in_failed" });
+                return;
+              }
               attempt(retriesLeft - 1);
             }, 1500);
           } else {
@@ -142,7 +139,7 @@ export default function TwitchCallback() {
     attempt(3);
 
     return () => {
-      cancelled = true;
+      stopRetrying = true;
     };
   }, [callback, signIn, isLoading, isAuthenticated, navigate, failure]);
 

@@ -6,7 +6,7 @@ import { useLocation } from "wouter";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { startTwitchSignIn } from "@/lib/twitch-sign-in";
+import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
 function getTokenFromLocation(): string | null {
   if (typeof window === "undefined") {
@@ -15,9 +15,15 @@ function getTokenFromLocation(): string | null {
   return new URLSearchParams(window.location.search).get("token");
 }
 
-function signInWithTwitch(token: string | null) {
+/** Starts Twitch sign-in back to this invitation; false when it could not start. */
+function signInWithTwitch(token: string | null): boolean {
   const back = token ? `/auth/accept-invite?token=${encodeURIComponent(token)}` : "/";
-  startTwitchSignIn(back);
+  try {
+    startTwitchSignIn(back);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export default function AcceptInvite() {
@@ -115,7 +121,11 @@ export default function AcceptInvite() {
                 {!isAuthenticated ? (
                   <Button
                     className="w-full"
-                    onClick={() => signInWithTwitch(token)}
+                    onClick={() => {
+                      if (!signInWithTwitch(token)) {
+                        setMessage(TWITCH_SIGN_IN_STORAGE_ERROR);
+                      }
+                    }}
                     data-testid="button-invite-twitch-sign-in"
                   >
                     Continue with Twitch
