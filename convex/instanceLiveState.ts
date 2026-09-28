@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
+import { claimPendingStreamStartMarker } from "./lib/goLiveMarker";
 import { isInstanceMember } from "./lib/teamAccess";
 
 export const getForInstance = query({
@@ -50,6 +51,9 @@ export const onStreamOnline = internalMutation({
     } else {
       await ctx.db.insert("instanceLiveState", patch);
     }
+    if (!existing?.isLive) {
+      await claimPendingStreamStartMarker(ctx, instanceId, patch.lastUpdatedAt);
+    }
   },
 });
 
@@ -89,6 +93,9 @@ export const recordPoll = internalMutation({
       await ctx.db.patch(existing._id, patch);
     } else {
       await ctx.db.insert("instanceLiveState", patch);
+    }
+    if (isLive && !existing?.isLive) {
+      await claimPendingStreamStartMarker(ctx, instanceId, patch.lastUpdatedAt);
     }
   },
 });

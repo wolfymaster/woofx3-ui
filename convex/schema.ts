@@ -567,6 +567,27 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_instance_name", ["instanceId", "name"]),
 
+  // goLiveChecklists: one row per instance for the Go live checklist. Shared by
+  // everyone on the instance, like the channel it describes: a check dismissed
+  // because this setup has no OBS stays dismissed for the moderator too.
+  //
+  // The last* fields are the channel's title and category as they stood when
+  // the checklist was last completed. Twitch keeps no history of either, so
+  // this is what "same title as last time" is measured against.
+  goLiveChecklists: defineTable({
+    instanceId: v.id("instances"),
+    dismissedCheckIds: v.array(v.string()),
+    lastCompletedAt: v.optional(v.number()),
+    lastTitle: v.optional(v.string()),
+    lastCategoryId: v.optional(v.string()),
+    lastCategoryName: v.optional(v.string()),
+    // Set when "Stream start" was asked for before going live; the marker is
+    // dropped by whichever writer first flips instanceLiveState to live, and
+    // a request older than lib/goLiveMarker.ts's window is ignored.
+    pendingMarkerRequestedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
   // pinnedMessages: history of things worth pinning in the channel's chat, kept
   // so the same message can be re-pinned across streams without retyping it.
   //
@@ -779,6 +800,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_instance", ["instanceId"])
+    .index("by_instance_enabled", ["instanceId", "isEnabled"])
     .index("by_engine_id", ["instanceId", "engineWorkflowId"]),
 
   // pendingWorkflowOperations: correlation records awaiting a webhook echo
