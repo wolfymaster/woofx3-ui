@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   currentInstanceId: "woofx3-current-instance-id",
   commandBarHidden: "woofx3-command-bar-hidden",
   hideUnusedAlerts: "woofx3-hide-unused-alerts",
+  dashboardLayoutHint: "woofx3-dashboard-layout-hint",
 };
 
 export function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -43,6 +44,13 @@ $commandBarHidden.subscribe((value) => persistValue(STORAGE_KEYS.commandBarHidde
 const initialHideUnusedAlerts = getStoredValue(STORAGE_KEYS.hideUnusedAlerts, false);
 export const $hideUnusedAlerts = atom<boolean>(initialHideUnusedAlerts);
 $hideUnusedAlerts.subscribe((value) => persistValue(STORAGE_KEYS.hideUnusedAlerts, value));
+
+// Layout of the dashboard's first panel as last seen, so the dashboard can draw
+// zone outlines on load before its panels arrive. A hint only: the loaded
+// panels always win.
+const initialDashboardLayoutHint = getStoredValue<string | null>(STORAGE_KEYS.dashboardLayoutHint, null);
+export const $dashboardLayoutHint = atom<string | null>(initialDashboardLayoutHint);
+$dashboardLayoutHint.subscribe((value) => persistValue(STORAGE_KEYS.dashboardLayoutHint, value));
 
 const initialSidebarCollapsed = getStoredValue(STORAGE_KEYS.sidebarCollapsed, false);
 export const $sidebarCollapsed = atom<boolean>(initialSidebarCollapsed);
