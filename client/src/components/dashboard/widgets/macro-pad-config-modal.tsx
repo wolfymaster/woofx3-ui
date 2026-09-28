@@ -1,3 +1,6 @@
+import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +25,7 @@ import {
 } from "@/lib/macro-pad";
 import { MacroColorPicker } from "./macro-color-picker";
 import { MacroIconPicker } from "./macro-icon-picker";
+import { MacroRemoteTrigger } from "./macro-remote-trigger";
 
 /**
  * Minimal shape the picker needs — only `id` + `name` are read. Sourced from
@@ -31,6 +35,7 @@ import { MacroIconPicker } from "./macro-icon-picker";
 type WorkflowOption = { id: string; name: string };
 
 interface MacroConfigModalProps {
+  instanceId: Id<"instances"> | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   macro: MacroButton | null;
@@ -39,7 +44,7 @@ interface MacroConfigModalProps {
   onSave: (input: MacroInput) => void;
 }
 
-export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave }: MacroConfigModalProps) {
+export function MacroConfigModal({ instanceId, open, onOpenChange, macro, workflows, onSave }: MacroConfigModalProps) {
   const [label, setLabel] = useState("");
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [color, setColor] = useState<string | undefined>(undefined);
@@ -50,6 +55,15 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
   const [httpMethod, setHttpMethod] = useState<MacroHttpMethod>("GET");
   const [httpHeaders, setHttpHeaders] = useState("");
   const [httpBody, setHttpBody] = useState("");
+
+  // A macro with a trigger URL does, from anywhere, whatever it is set to do;
+  // macros.updateMacro enforces that only a manager may change that.
+  const triggerStatus = useQuery(api.macroTriggers.listForInstance, instanceId ? { instanceId } : "skip");
+  const behaviorLocked =
+    macro !== null &&
+    triggerStatus !== undefined &&
+    !triggerStatus.canManage &&
+    triggerStatus.triggers.some((trigger) => trigger.macroId === macro.id);
 
   // `open` deliberately triggers the reset branch even when `macro` (e.g.
   // repeatedly null for "Add Macro") doesn't change identity between opens.
@@ -131,7 +145,7 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{macro ? "Edit Macro" : "Add Macro"}</DialogTitle>
           <DialogDescription>Configure a macro button that can execute actions when pressed.</DialogDescription>
@@ -161,95 +175,104 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
             <MacroColorPicker value={color} onChange={setColor} />
           </div>
 
-          <Tabs value={type} onValueChange={(v) => setType(v as MacroActionType)}>
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="chat-command">Chat Command</TabsTrigger>
-              <TabsTrigger value="trigger-workflow">Workflow</TabsTrigger>
-              <TabsTrigger value="http-request">HTTP Request</TabsTrigger>
-            </TabsList>
+          {behaviorLocked && (
+            <p className="text-xs text-muted-foreground" data-testid="macro-behavior-locked">
+              This macro has a remote trigger URL, so only an owner or admin can change what it does. You can still
+              change its label, icon and color.
+            </p>
+          )}
 
-            <TabsContent value="chat-command" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="chat-command">Command</Label>
-                <Input
-                  id="chat-command"
-                  placeholder="e.g., !so {{channel}}"
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  data-testid="input-macro-command"
-                />
-                <p className="text-xs text-muted-foreground">The chat command to send when this macro is executed.</p>
-              </div>
-            </TabsContent>
+          <fieldset disabled={behaviorLocked} className="min-w-0">
+            <Tabs value={type} onValueChange={(v) => setType(v as MacroActionType)}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="chat-command">Chat Command</TabsTrigger>
+                <TabsTrigger value="trigger-workflow">Workflow</TabsTrigger>
+                <TabsTrigger value="http-request">HTTP Request</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="trigger-workflow" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="workflow-select">Workflow</Label>
-                <Select value={workflowId} onValueChange={setWorkflowId}>
-                  <SelectTrigger id="workflow-select">
-                    <SelectValue placeholder="Select a workflow" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {workflows.map((workflow) => (
-                      <SelectItem key={workflow.id} value={workflow.id}>
-                        {workflow.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">The workflow to trigger when this macro is executed.</p>
-              </div>
-            </TabsContent>
+              <TabsContent value="chat-command" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="chat-command">Command</Label>
+                  <Input
+                    id="chat-command"
+                    placeholder="e.g., !so {{channel}}"
+                    value={command}
+                    onChange={(e) => setCommand(e.target.value)}
+                    data-testid="input-macro-command"
+                  />
+                  <p className="text-xs text-muted-foreground">The chat command to send when this macro is executed.</p>
+                </div>
+              </TabsContent>
 
-            <TabsContent value="http-request" className="space-y-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="http-url">URL</Label>
-                <Input
-                  id="http-url"
-                  placeholder="https://api.example.com/{{target}}"
-                  value={httpUrl}
-                  onChange={(e) => setHttpUrl(e.target.value)}
-                />
-              </div>
+              <TabsContent value="trigger-workflow" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="workflow-select">Workflow</Label>
+                  <Select value={workflowId} onValueChange={setWorkflowId}>
+                    <SelectTrigger id="workflow-select">
+                      <SelectValue placeholder="Select a workflow" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {workflows.map((workflow) => (
+                        <SelectItem key={workflow.id} value={workflow.id}>
+                          {workflow.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">The workflow to trigger when this macro is executed.</p>
+                </div>
+              </TabsContent>
 
-              <div className="space-y-2">
-                <Label htmlFor="http-method">Method</Label>
-                <Select value={httpMethod} onValueChange={(v) => setHttpMethod(v as MacroHttpMethod)}>
-                  <SelectTrigger id="http-method">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GET">GET</SelectItem>
-                    <SelectItem value="POST">POST</SelectItem>
-                    <SelectItem value="PUT">PUT</SelectItem>
-                    <SelectItem value="DELETE">DELETE</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              <TabsContent value="http-request" className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="http-url">URL</Label>
+                  <Input
+                    id="http-url"
+                    placeholder="https://api.example.com/{{target}}"
+                    value={httpUrl}
+                    onChange={(e) => setHttpUrl(e.target.value)}
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="http-headers">Headers (JSON)</Label>
-                <Textarea
-                  id="http-headers"
-                  placeholder='{"Authorization": "Bearer token"}'
-                  value={httpHeaders}
-                  onChange={(e) => setHttpHeaders(e.target.value)}
-                  rows={3}
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="http-method">Method</Label>
+                  <Select value={httpMethod} onValueChange={(v) => setHttpMethod(v as MacroHttpMethod)}>
+                    <SelectTrigger id="http-method">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="POST">POST</SelectItem>
+                      <SelectItem value="PUT">PUT</SelectItem>
+                      <SelectItem value="DELETE">DELETE</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="http-body">Body (JSON)</Label>
-                <Textarea
-                  id="http-body"
-                  placeholder='{"key": "value"}'
-                  value={httpBody}
-                  onChange={(e) => setHttpBody(e.target.value)}
-                  rows={4}
-                />
-              </div>
-            </TabsContent>
-          </Tabs>
+                <div className="space-y-2">
+                  <Label htmlFor="http-headers">Headers (JSON)</Label>
+                  <Textarea
+                    id="http-headers"
+                    placeholder='{"Authorization": "Bearer token"}'
+                    value={httpHeaders}
+                    onChange={(e) => setHttpHeaders(e.target.value)}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="http-body">Body (JSON)</Label>
+                  <Textarea
+                    id="http-body"
+                    placeholder='{"key": "value"}'
+                    value={httpBody}
+                    onChange={(e) => setHttpBody(e.target.value)}
+                    rows={4}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
+          </fieldset>
 
           <div className="rounded-md border border-border p-3 space-y-1.5" data-testid="macro-variables-hint">
             <p className="text-xs font-medium">Variables</p>
@@ -271,6 +294,12 @@ export function MacroConfigModal({ open, onOpenChange, macro, workflows, onSave 
               </p>
             )}
           </div>
+
+          {macro && instanceId && (
+            <div className="rounded-md border border-border p-3">
+              <MacroRemoteTrigger instanceId={instanceId} macro={macro} />
+            </div>
+          )}
         </div>
 
         <DialogFooter>
