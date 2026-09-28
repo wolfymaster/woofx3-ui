@@ -2,6 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { BellRing, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
+import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
 import { AlertFeed } from "@/components/alerts/dashboard/alert-feed";
 import { AlertFrequencyChart } from "@/components/alerts/dashboard/alert-frequency-chart";
 import { AlertStatTiles } from "@/components/alerts/dashboard/alert-stat-tiles";
@@ -108,8 +109,9 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
           </Card>
 
           <Card>
-            <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
               <h2 className="text-sm font-semibold">Recent alerts</h2>
+              <AlertQueueControls instanceId={instanceId} className="ml-auto" />
               <label className="flex items-center gap-2 text-xs text-muted-foreground" htmlFor="alert-failures-only">
                 <Switch
                   id="alert-failures-only"
