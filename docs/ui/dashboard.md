@@ -193,12 +193,97 @@ foreground so any choice stays readable.
 Buttons support **variables**: any <code v-pre>{{name}}</code> written into the command,
 URL, body, or a header value is collected from the user in a prompt before the macro runs.
 The <code v-pre>{{…}}</code> delimiter is deliberately distinct from the workflow engine's `${…}`
-and the shared TS resolver's `{…}` (see `client/src/lib/macro-pad.ts` for why) —
+and the shared TS resolver's `{…}` (see `convex/lib/macroVariables.ts` for why) —
 variable names are restricted to `[A-Za-z0-9_]`.
 
-Execution of `chat-command` and `trigger-workflow` is **not yet wired** to the
-engine; both log to the console. `http-request` currently fetches straight from the
-browser, so it is subject to CORS and exposes any header secret client-side.
+`chat-command` and `trigger-workflow` macros run in Convex through `macros.run`,
+the same `planMacroRun` / `executeMacroPlan` path a remote trigger uses
+(`convex/lib/macroTrigger.ts`, `convex/lib/macroExecution.ts`). A workflow macro
+calls the engine's `triggerWorkflowByName`; a chat-command macro must be a
+`!command` and calls the engine's `executeCommand` as the linked Twitch
+broadcaster, exactly as if they had typed it — the engine cannot post a plain chat
+message. `http-request` fetches straight from the browser, so it is subject to
+CORS and its headers are visible to anyone with dashboard access.
+
+### Trigger macros from a Stream Deck or phone
+
+Any `chat-command` or `trigger-workflow` macro can get a **remote trigger**: a
+secret URL that presses the button with a single HTTP request, so an Elgato
+Stream Deck, Bitfocus Companion, Touch Portal, or a phone shortcut can drive the
+show without the dashboard open.
+
+**Turning it on**
+
+1. On the dashboard, open the macro pad's edit mode and click the pencil on the
+   macro.
+2. Switch on **Remote trigger**. Only an owner or admin of the instance can do this.
+3. Copy the URL, or one of the ready-made examples, right away. **It is shown once**:
+   woofx3 keeps only a SHA-256 hash of it, so if you lose it, click **Rotate** to get
+   a new one (the old URL stops working at the same moment).
+4. Switch Remote trigger off to revoke the URL. Deleting the macro revokes it too.
+
+A tile with a remote trigger shows a small radio icon; hover it for when the URL
+was last used and how many times.
+
+**Calling it**
+
+- `POST https://<your-convex-site>/api/macros/trigger/<token>` fires the macro.
+  The answer is `202 {"ok":true}` (plus a `triggerId` for a workflow run).
+- If the macro has <code v-pre>{{variables}}</code>, send them as a JSON body
+  (`{"channel":"bob"}`), a form body, or query parameters. A request missing one
+  gets `400` naming the missing variables.
+- GET is refused (`405`) unless you switch on **Also accept GET** for that macro.
+  Only do that for a device that can do nothing else: chat apps and browsers fetch
+  pasted links to build previews, so a GET URL can fire by accident.
+- Each URL accepts one press a second, with bursts of up to five; beyond that it
+  answers `429` with a `Retry-After` header.
+- An unknown or revoked URL answers `404`.
+
+Treat the URL like a password: anyone who has it can press that one button (and
+nothing else). Rotate it if it shows up on stream or in a screenshot.
+
+**Elgato Stream Deck**
+
+The built-in *Website* action can only send GET, so use a free plugin that can POST:
+
+1. Install **API Ninja** (BarRaider) or **Web Requests** from the Stream Deck store.
+2. Drag its action onto a key.
+3. Set the method to **POST** and paste the trigger URL.
+4. If the macro has variables, set the content type to `application/json` and the
+   body to a JSON object, e.g. `{"channel":"bob"}`.
+
+If you did switch on *Also accept GET*, the built-in *Website* action works too:
+paste the URL (variables go in the query string, `?channel=bob`) and tick
+**GET request in background** so no browser window opens.
+
+**Bitfocus Companion**
+
+1. Add a connection of type **Generic: HTTP Requests**.
+2. On a button, add the connection's **POST** action.
+3. Paste the trigger URL. For variables, set the body to a JSON object and add the
+   header `Content-Type: application/json`.
+
+**iOS Shortcuts**
+
+1. Create a shortcut with the **Get Contents of URL** action and paste the trigger URL.
+2. Expand the action, set **Method** to **POST**.
+3. For variables, set **Request Body** to **JSON** and add one text field per
+   variable (an *Ask for Input* action before it lets the shortcut prompt you).
+4. Add the shortcut to the home screen, or run it from Siri or the Action button.
+
+**Why HTTP-request macros cannot have one.** They run from the viewer's browser,
+where a target on the local network (OBS, a light controller) is reachable. Run
+from Convex they would reach a different network and turn Convex into a proxy for
+any URL with the macro's headers attached. Point the device at that URL directly.
+
+**How it works.** `convex/http.ts` routes `/api/macros/trigger/` to one handler.
+It reads at most 8 KB of body, hashes the token and calls
+`macroTriggers.claim`, a single mutation that looks the hash up in the
+`macroTriggers` table, checks the method, spends a rate-limit token, validates
+the variables and stamps `lastUsedAt` / `useCount`. The handler then calls the
+engine with provenance `macro-trigger`, so these runs appear in the run history
+(dashboard presses, provenance `dashboard`, do not). The decision logic is pure and
+tested in `convex/lib/macroTrigger.test.ts`.
 
 ## Pinned
 

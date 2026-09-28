@@ -52,8 +52,8 @@ export const macroActionTypeValidator = v.union(
   v.literal("http-request")
 );
 
-// Mirrors MacroConfig in client/src/lib/macro-pad.ts. Free-text fields may carry
-// `{{name}}` variables, which the browser resolves at click time.
+// Mirrors MacroConfig in convex/lib/macroVariables.ts. Free-text fields may
+// carry `{{name}}` variables, resolved each time the macro runs.
 export const macroConfigValidator = v.object({
   message: v.optional(v.string()),
   command: v.optional(v.string()),
@@ -434,6 +434,33 @@ export default defineSchema({
     sortOrder: v.number(),
     updatedAt: v.number(),
   }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
+
+  // macroTriggers: a macro's remote trigger URL, at most one per macro. The URL
+  // carries a random token; only its SHA-256 hash is stored, so the row cannot
+  // be turned back into a working URL (see convex/lib/macroTrigger.ts).
+  //
+  // A table of its own rather than fields on `macros`: every press writes the
+  // rate-limit bucket and usage counters, and keeping that churn off the macro
+  // row keeps it off every dashboard subscribed to the pad.
+  macroTriggers: defineTable({
+    instanceId: v.id("instances"),
+    macroId: v.id("macros"),
+    tokenHash: v.string(),
+    // GET is opt-in: some devices can only send GET, but a GET URL also fires
+    // when a chat app or browser prefetches a pasted link.
+    allowGet: v.boolean(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    /** When the current token was minted, if it replaced an earlier one. */
+    rotatedAt: v.optional(v.number()),
+    lastUsedAt: v.optional(v.number()),
+    useCount: v.number(),
+    rateTokens: v.number(),
+    rateRefilledAt: v.number(),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_macro", ["macroId"])
+    .index("by_instance", ["instanceId"]),
 
   // shoutoutQueue: Twitch shoutouts waiting to be sent for an instance. Shared
   // per instance like dashboardCounters below -- a shoutout is the channel's, not one

@@ -1,8 +1,12 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
+import { action, internalQuery, type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
+import { executeMacroPlan, loadMacroEngineContext, valuesFromPairs } from "./lib/macroExecution";
+import { canTriggerRemotely, planMacroRun } from "./lib/macroTrigger";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { deleteTriggerForMacro } from "./macroTriggers";
 import { macroActionTypeValidator, macroConfigValidator } from "./schema";
 
 // A pad is a hand-built set of buttons; this is a sanity ceiling, not a product
@@ -123,6 +127,12 @@ export const updateMacro = mutation({
       config: args.config,
       updatedAt: Date.now(),
     });
+    // A macro that cannot run from a trigger URL (see canTriggerRemotely) would
+    // leave a URL that only ever answers 422, and the editor offers no way to
+    // revoke it.
+    if (!canTriggerRemotely(args.type)) {
+      await deleteTriggerForMacro(ctx, args.macroId);
+    }
   },
 });
 
@@ -134,6 +144,7 @@ export const deleteMacro = mutation({
   handler: async (ctx, args) => {
     await requireMember(ctx, args.instanceId);
     await requireMacro(ctx, args.instanceId, args.macroId);
+    await deleteTriggerForMacro(ctx, args.macroId);
     await ctx.db.delete(args.macroId);
   },
 });
@@ -158,5 +169,58 @@ export const reorderMacros = mutation({
         await ctx.db.patch(macro._id, { sortOrder: index, updatedAt: Date.now() });
       }
     }
+  },
+});
+
+export const runContext = internalQuery({
+  args: {
+    instanceId: v.id("instances"),
+    macroId: v.id("macros"),
+    userId: v.id("users"),
+  },
+  handler: async (ctx, { instanceId, macroId, userId }) => {
+    const membership = await getInstanceMembership(ctx, instanceId, userId);
+    if (!membership) {
+      return null;
+    }
+    const macro = await ctx.db.get(macroId);
+    if (!macro || macro.instanceId !== instanceId) {
+      return null;
+    }
+    const engine = await loadMacroEngineContext(ctx, instanceId);
+    return { type: macro.type, config: macro.config, engine };
+  },
+});
+
+/**
+ * Run a macro from the dashboard. The remote trigger route plans and executes
+ * through the same planMacroRun and executeMacroPlan, so a pad press and a
+ * Stream Deck press do the same thing. HTTP-request macros are refused here:
+ * the pad fetches those from the browser.
+ */
+export const run = action({
+  args: {
+    instanceId: v.id("instances"),
+    macroId: v.id("macros"),
+    values: v.array(v.object({ name: v.string(), value: v.string() })),
+  },
+  handler: async (ctx, { instanceId, macroId, values }): Promise<{ triggerId: string | null }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    const context = await ctx.runQuery(internal.macros.runContext, { instanceId, macroId, userId });
+    if (!context) {
+      throw new Error("Macro not found");
+    }
+    if (!context.engine) {
+      throw new Error("Instance is not registered with the engine");
+    }
+    const planned = planMacroRun(context.type, context.config, valuesFromPairs(values));
+    if (!planned.ok) {
+      throw new Error(planned.error);
+    }
+    const result = await executeMacroPlan(context.engine, planned.plan, "dashboard");
+    return { triggerId: result.triggerId ?? null };
   },
 });
