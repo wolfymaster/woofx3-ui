@@ -46,7 +46,7 @@ export function StorageSettings() {
   // Both settings change the engine for everyone on the instance, so the
   // server accepts them from an owner or admin only. Undefined while loading,
   // which keeps the form read-only rather than flashing editable.
-  const viewerRole = useQuery(api.instanceViewer.role, instance ? { instanceId: instance._id } : "skip");
+  const viewerRole = useQuery(api.instances.viewerRole, instance ? { instanceId: instance._id } : "skip");
   const canEdit = roleSatisfies(viewerRole, "admin");
 
   const [config, setConfigState] = useState<StorageConfig>({
