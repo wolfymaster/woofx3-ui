@@ -52,6 +52,7 @@ const Queues = lazy(() => import("@/pages/queues"));
 const Scenes = lazy(() => import("@/pages/scenes"));
 const StreamRecap = lazy(() => import("@/pages/stream-recap"));
 const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
+const Supporters = lazy(() => import("@/pages/supporters"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
 const Timers = lazy(() => import("@/pages/timers"));
@@ -171,6 +172,7 @@ function AppRoutes() {
                   <Route path={STREAM_RECAP_ROUTE} component={StreamRecap} />
                   <Route path="/stream/scenes" component={Scenes} />
                   <Route path="/stream/scenes/:id" component={Scenes} />
+                  <Route path="/stream/supporters" component={Supporters} />
                   <Route path="/stream/assets" component={Assets} />
                   <Route path="/stream/workflows" component={Workflows} />
                   <Route path="/stream/workflows/new" component={Workflows} />

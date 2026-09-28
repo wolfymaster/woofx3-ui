@@ -4,6 +4,7 @@ import {
   CircleHelp,
   FolderOpen,
   GraduationCap,
+  HandHeart,
   HardDrive,
   History,
   Key,
@@ -55,6 +56,7 @@ export const STREAM_ITEMS: NavItem[] = [
   { id: "timers", label: "Timers", icon: Timer, href: "/stream/timers" },
   { id: "queues", label: "Queues", icon: ListOrdered, href: "/stream/queues" },
   { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
+  { id: "supporters", label: "Supporters", icon: HandHeart, href: "/stream/supporters" },
   { id: "assets", label: "Assets", icon: FolderOpen, href: "/stream/assets" },
   { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
 ];
