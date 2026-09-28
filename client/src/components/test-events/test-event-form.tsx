@@ -9,9 +9,22 @@ import { useInstance } from "@/hooks/use-instance";
 import { describeTestEventOutcome, type RunRecord } from "@/lib/test-event-outcome";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
+/**
+ * How a form fires its event and reports what happened, for a caller that
+ * needs something other than the Alerts sheet's behaviour.
+ */
+export interface TestEventRunner {
+  /** Resolves to the correlation key the outcome arrives under, or null when nothing was published. */
+  fire: (preset: TriggerPreset, payload: object) => Promise<string | null>;
+  renderOutcome: (triggerId: string) => ReactNode;
+  submitLabel: string;
+}
+
 /** Props every test-event form takes. */
 export interface TestEventProps {
   preset: TriggerPreset;
+  /** Absent for the Alerts sheet's behaviour: fire unrecorded, report the latest run. */
+  runner?: TestEventRunner;
 }
 
 interface TestEventFormProps extends TestEventProps {
@@ -28,7 +41,24 @@ interface TestEventFormProps extends TestEventProps {
  * really does mean nothing was listening, which is why the copy can say so
  * rather than hedging.
  */
-const OUTCOME_TIMEOUT_MS = 8000;
+export const TEST_EVENT_OUTCOME_TIMEOUT_MS = 8000;
+
+/** The latest run under `triggerId`. Keyed by it, so a new fire starts a new wait. */
+function DefaultTestEventOutcome({ triggerId }: { triggerId: string }) {
+  const { instance } = useInstance();
+  const [waitElapsed, setWaitElapsed] = useState(false);
+  const record = useQuery(
+    api.transientEvents.get,
+    instance ? { instanceId: instance._id, correlationKey: triggerId } : "skip"
+  );
+
+  useEffect(() => {
+    const timer = setTimeout(() => setWaitElapsed(true), TEST_EVENT_OUTCOME_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return <TestEventOutcome record={record} waitElapsed={waitElapsed} />;
+}
 
 function TestEventOutcome({ record, waitElapsed }: { record: RunRecord | null | undefined; waitElapsed: boolean }) {
   const outcome = describeTestEventOutcome(record, waitElapsed);
@@ -81,26 +111,10 @@ function TestEventOutcome({ record, waitElapsed }: { record: RunRecord | null | 
  * hook mints a correlation key, the engine echoes it onto the run lifecycle, and
  * the outcome arrives here as a transient record keyed by that same id.
  */
-export function TestEventForm({ preset, payload, children }: TestEventFormProps) {
-  const fire = useFireTestEvent();
-  const { instance } = useInstance();
+export function TestEventForm({ preset, payload, runner, children }: TestEventFormProps) {
+  const fireTestEvent = useFireTestEvent();
   const [busy, setBusy] = useState(false);
   const [triggerId, setTriggerId] = useState<string | null>(null);
-  const [waitElapsed, setWaitElapsed] = useState(false);
-
-  const record = useQuery(
-    api.transientEvents.get,
-    triggerId && instance ? { instanceId: instance._id, correlationKey: triggerId } : "skip"
-  );
-
-  useEffect(() => {
-    if (!triggerId) {
-      return;
-    }
-    setWaitElapsed(false);
-    const timer = setTimeout(() => setWaitElapsed(true), OUTCOME_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [triggerId]);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -112,7 +126,7 @@ export function TestEventForm({ preset, payload, children }: TestEventFormProps)
     // for this one's while the new event is still in flight.
     setTriggerId(null);
     try {
-      setTriggerId(await fire(preset, payload));
+      setTriggerId(await (runner ? runner.fire(preset, payload) : fireTestEvent(preset, payload)));
     } finally {
       setBusy(false);
     }
@@ -129,9 +143,14 @@ export function TestEventForm({ preset, payload, children }: TestEventFormProps)
           data-testid="button-trigger-test-event"
         >
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-          {busy ? "Triggering…" : "Trigger"}
+          {busy ? "Triggering…" : (runner?.submitLabel ?? "Trigger")}
         </Button>
-        {triggerId && <TestEventOutcome record={record} waitElapsed={waitElapsed} />}
+        {triggerId &&
+          (runner ? (
+            runner.renderOutcome(triggerId)
+          ) : (
+            <DefaultTestEventOutcome key={triggerId} triggerId={triggerId} />
+          ))}
       </div>
     </form>
   );
