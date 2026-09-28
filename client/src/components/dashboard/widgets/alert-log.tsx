@@ -1,11 +1,14 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { BellRing, Loader2 } from "lucide-react";
+import { useMemo } from "react";
+import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
+import { alertQueueSnapshot } from "@/lib/alert-queue";
 import { alertStatusStyle, isFailureStatus } from "@/lib/alert-status";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -65,18 +68,22 @@ export function AlertLogWidget() {
   const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: ALERT_LIMIT } : "skip");
 
   const failures = alerts?.filter((alert) => isFailureStatus(alert.status)).length ?? 0;
+  const queue = useMemo(() => alertQueueSnapshot(alerts ?? []), [alerts]);
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <Badge variant="secondary" className="text-xs">
-          {alerts?.length ?? 0} recent
-        </Badge>
-        {failures > 0 && (
-          <Badge variant="secondary" className="text-xs text-red-500">
-            {failures} failed
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-border shrink-0">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs">
+            {alerts?.length ?? 0} recent
           </Badge>
-        )}
+          {failures > 0 && (
+            <Badge variant="secondary" className="text-xs text-red-500">
+              {failures} failed
+            </Badge>
+          )}
+        </div>
+        {instanceId && <AlertQueueControls instanceId={instanceId} snapshot={queue} />}
       </div>
 
       <ScrollArea className="flex-1 min-h-0">
