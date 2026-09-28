@@ -1195,6 +1195,9 @@ export default defineSchema({
     triggeredBy: v.optional(v.string()),
     // The originating CloudEvent, verbatim. What a replay re-feeds.
     triggerEvent: v.optional(v.string()),
+    // A dry run: its side-effecting steps recorded what they would have done
+    // instead of doing it. Absent for a real run.
+    dryRun: v.optional(v.boolean()),
     error: v.optional(v.string()),
     startedAt: v.optional(v.string()),
     completedAt: v.optional(v.string()),

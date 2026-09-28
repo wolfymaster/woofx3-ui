@@ -1,3 +1,4 @@
+import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "@convex/lib/engineTestRun";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { describeTestEventOutcome, type TestEventOutcome } from "@/lib/test-event-outcome";
@@ -78,8 +79,35 @@ export function otherWorkflowsOnEvent(workflows: ListeningWorkflow[], selfId: st
     .sort((a, b) => a.localeCompare(b));
 }
 
+const STOPPED_TITLE = "The run was stopped";
+const STOPPED_DETAIL = "Stopped from the dashboard.";
+
+/**
+ * The platform a sample from `preset` claims to come from, for
+ * `${trigger.platform}` conditions: the `platform.*` axis of its taxonomy.
+ */
+export function presetPlatform(preset: Pick<TriggerPreset, "taxonomy">): string | undefined {
+  const axis = preset.taxonomy?.find((entry) => entry.startsWith("platform."));
+  const platform = axis?.slice("platform.".length);
+  return platform ? platform : undefined;
+}
+
+/** How an unmet trigger condition reads, e.g. `viewers gte 10`. */
+export function describeUnmetCondition(condition: {
+  field: string;
+  operator: string;
+  value: unknown;
+  error?: string;
+}): string {
+  const value = typeof condition.value === "string" ? `"${condition.value}"` : JSON.stringify(condition.value);
+  const base = `${condition.field} ${condition.operator} ${value ?? "nothing"}`;
+  return condition.error ? `${base} (${condition.error})` : base;
+}
+
 /** The fields of a `transientEvents` row a test run's progress reads. */
 export interface TransientRunRow {
+  /** The lifecycle event that wrote the row, e.g. `workflow.run.cancelled`. */
+  type?: string;
   status: "progress" | "success" | "error";
   message?: string;
   data?: unknown;
@@ -123,7 +151,10 @@ export function testRunProgress(
   const executionId = own.map((row) => rowField(row, "executionId")).find((id): id is string => !!id) ?? null;
 
   return {
-    outcome: describeTestEventOutcome(latest, waitElapsed),
+    outcome:
+      latest?.type === WORKFLOW_RUN_CANCELLED_EVENT_TYPE
+        ? { kind: "failed", title: STOPPED_TITLE, detail: latest.message ?? STOPPED_DETAIL }
+        : describeTestEventOutcome(latest, waitElapsed),
     executionId,
     otherWorkflowCount: others.size,
   };
@@ -182,7 +213,7 @@ export function resolveTestRunOutcome(
   }
   if (recorded && recordedTone === "failure") {
     if (recorded.status === "cancelled") {
-      return { kind: "failed", title: "The run was stopped", detail: recorded.error ?? "Stopped from the dashboard." };
+      return { kind: "failed", title: STOPPED_TITLE, detail: recorded.error ?? STOPPED_DETAIL };
     }
     return describeTestEventOutcome({ status: "error", message: recorded.error }, true);
   }

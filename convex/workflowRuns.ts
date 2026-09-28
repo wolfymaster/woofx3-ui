@@ -38,6 +38,7 @@ const runSnapshot = v.object({
   status: v.string(),
   triggeredBy: v.optional(v.string()),
   triggerEvent: v.optional(v.string()),
+  dryRun: v.optional(v.boolean()),
   error: v.optional(v.string()),
   startedAt: v.optional(v.string()),
   completedAt: v.optional(v.string()),
@@ -181,6 +182,7 @@ export const listForWorkflow = query({
       startedAt: run.startedAt,
       completedAt: run.completedAt,
       hasTriggerEvent: hasRecordedTriggerEvent(run.triggerEvent),
+      dryRun: run.dryRun === true,
     }));
   },
 });
@@ -225,6 +227,7 @@ export const recordFromWebhook = internalMutation({
       status: run.status,
       triggeredBy: run.triggeredBy,
       triggerEvent: run.triggerEvent,
+      dryRun: run.dryRun,
       error: run.error,
       startedAt: run.startedAt,
       completedAt: run.completedAt,
@@ -265,6 +268,7 @@ export const updateFromWebhook = internalMutation({
       completedAt: run.completedAt,
       triggeredBy: run.triggeredBy,
       triggerEvent: run.triggerEvent,
+      dryRun: run.dryRun,
       engineUpdatedAt: run.updatedAt,
     };
 

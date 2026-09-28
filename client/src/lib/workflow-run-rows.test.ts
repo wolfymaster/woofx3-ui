@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { canReplayRun, isActiveRun, runDurationMs, runOriginLabel } from "@/lib/workflow-run-rows";
+import { canReplayRun, describeStopOutcome, isActiveRun, runDurationMs, runOriginLabel } from "@/lib/workflow-run-rows";
 
 describe("runOriginLabel", () => {
   test("names the dashboard's own origins", () => {
@@ -48,5 +48,13 @@ describe("runDurationMs", () => {
     expect(runDurationMs({ status: "completed" }, 0)).toBeUndefined();
     expect(runDurationMs({ status: "completed", startedAt }, 0)).toBeUndefined();
     expect(runDurationMs({ status: "completed", startedAt, completedAt: "2026-09-28T11:00:00Z" }, 0)).toBeUndefined();
+  });
+});
+
+describe("describeStopOutcome", () => {
+  test("says whether the engine stopped the run, found it finished, or only marked it", () => {
+    expect(describeStopOutcome("cancelled", "cancelled").title).toBe("Run stopped");
+    expect(describeStopOutcome("already_finished", "completed").description).toContain("completed");
+    expect(describeStopOutcome("marked", "cancelled").description).toContain("still run");
   });
 });

@@ -8,6 +8,7 @@ import { auth } from "./auth";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "./lib/engineTestRun";
 import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
 import {
   buildForwardedRequest,
@@ -548,6 +549,39 @@ http.route({
         return corsJson({ error: `Invalid workflow health: ${result.reason}` }, 400);
       }
       return corsJson({ success: true, type: eventType, outcome: result.outcome });
+    }
+
+    // Handled ahead of the switch for the same reason as SESSION_SUMMARY: the
+    // engine types this repo builds against may predate the event. Written to
+    // transientEvents like the other workflow.run.* lifecycle events, for a
+    // caller watching the run's triggerId; the history row settles through
+    // WORKFLOW_RUN_UPDATED.
+    if (eventType === WORKFLOW_RUN_CANCELLED_EVENT_TYPE) {
+      const cancelled = event as unknown as {
+        workflowId?: string;
+        executionId?: string;
+        triggerId?: string;
+        triggeredBy?: string;
+        reason?: string;
+        occurredAt?: string;
+      };
+      if (!cancelled.triggerId) {
+        return corsJson({ success: true, type: eventType, handled: false });
+      }
+      await ctx.runMutation(internal.transientEvents.emit, {
+        instanceId: instance._id,
+        correlationKey: cancelled.triggerId,
+        type: eventType,
+        status: "error",
+        message: cancelled.reason,
+        data: {
+          workflowId: cancelled.workflowId,
+          executionId: cancelled.executionId,
+          triggeredBy: cancelled.triggeredBy,
+          occurredAt: cancelled.occurredAt,
+        },
+      });
+      return corsJson({ success: true, type: eventType });
     }
 
     switch (event.type) {

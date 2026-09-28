@@ -59,3 +59,21 @@ export function runDurationMs(run: RunRow, now: number): number | undefined {
   }
   return ended - started;
 }
+
+/** What `workflowActions.cancelRun` reported, in a toast. */
+export function describeStopOutcome(
+  outcome: "cancelled" | "already_finished" | "marked",
+  status: string
+): { title: string; description?: string } {
+  switch (outcome) {
+    case "cancelled":
+      return { title: "Run stopped" };
+    case "already_finished":
+      return { title: "The run had already finished", description: `It ended ${status} before it could be stopped.` };
+    default:
+      return {
+        title: "Run marked stopped",
+        description: "This engine only marks the run: its remaining steps still run.",
+      };
+  }
+}

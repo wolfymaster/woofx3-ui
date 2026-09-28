@@ -6,6 +6,16 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import {
+  buildTriggerOptions,
+  type CancelWorkflowResult,
+  classifyOptionsProbe,
+  OPTIONS_PROBE_WORKFLOW,
+  type OptionsSupport,
+  optionsWereIgnored,
+  type TestRunEngineApi,
+  type UnmetTriggerCondition,
+} from "./lib/engineTestRun";
 import { manualRunOrigin, UNRECORDED_ORIGIN } from "./lib/manualRunOrigin";
 
 const CORRELATION_TIMEOUT_MS = 10_000;
@@ -167,24 +177,85 @@ export const trigger = action({
     workflowNameOrId: v.string(),
     parameters: v.optional(v.record(v.string(), v.string())),
     origin: v.optional(manualRunOrigin),
+    // Test-run options; see lib/engineTestRun.ts. An engine without them
+    // ignores them and runs the workflow as if none were given, which
+    // `optionsIgnored` reports.
+    options: v.optional(
+      v.object({
+        triggerData: v.optional(v.record(v.string(), v.any())),
+        platform: v.optional(v.string()),
+        skipConditions: v.optional(v.boolean()),
+        dryRun: v.optional(v.boolean()),
+      })
+    ),
   },
-  handler: async (ctx, { instanceId, workflowNameOrId, parameters, origin }): Promise<{ triggerId: string }> => {
+  handler: async (ctx, { instanceId, workflowNameOrId, parameters, origin, options }): Promise<TriggerResult> => {
+    const built = buildTriggerOptions(options ?? {});
+    if (!built.ok) {
+      throw new Error(built.error);
+    }
     const bundle = await requireInstanceContext(ctx, instanceId);
     // Minted before the call, so a caller can subscribe to the outcome before
     // the run exists -- and so a lost response cannot strand a run whose
     // result nobody can then find.
     const triggerId = crypto.randomUUID();
+    const hasOptions = Object.keys(built.options).length > 0;
 
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    await rpc.triggerWorkflowByName(
+    const rpc = createEngineRpcSession<TestRunEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const response = await rpc.triggerWorkflowByName(
       workflowNameOrId,
       parameters ?? {},
       undefined,
       triggerId,
-      origin ?? UNRECORDED_ORIGIN
+      origin ?? UNRECORDED_ORIGIN,
+      hasOptions ? built.options : undefined
     );
 
-    return { triggerId };
+    return {
+      triggerId,
+      status: response.status,
+      executionId: response.executionId || null,
+      unmetConditions: response.unmetConditions ?? [],
+      dryRun: response.dryRun === true,
+      optionsIgnored: optionsWereIgnored(built.options, response),
+    };
+  },
+});
+
+interface TriggerResult {
+  triggerId: string;
+  /** `requested`, `started` or `conditions_not_met`; see lib/engineTestRun.ts. */
+  status: string;
+  /** Set when the engine answered with the run it started. */
+  executionId: string | null;
+  unmetConditions: UnmetTriggerCondition[];
+  dryRun: boolean;
+  /** True when options were sent and the engine, predating them, ran without them. */
+  optionsIgnored: boolean;
+}
+
+/**
+ * Whether the instance's engine takes test-run options (sample trigger data,
+ * skip conditions, dry run). The probe can start no run on any engine; see
+ * `classifyOptionsProbe`.
+ */
+export const testRunCapabilities = action({
+  args: {
+    instanceId: v.id("instances"),
+  },
+  handler: async (ctx, { instanceId }): Promise<{ options: OptionsSupport }> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+    const rpc = createEngineRpcSession<TestRunEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    try {
+      await rpc.triggerWorkflowByName(OPTIONS_PROBE_WORKFLOW, {}, undefined, undefined, undefined, {
+        platform: "probe",
+      });
+    } catch (err) {
+      return { options: classifyOptionsProbe(err) };
+    }
+    // Only an engine that ignored the options and still found a workflow
+    // could answer; neither engine can, so this is not an answer to trust.
+    return { options: "unknown" };
   },
 });
 
@@ -215,34 +286,49 @@ export const replay = action({
 });
 
 /**
- * Mark a recorded run cancelled.
+ * Stop a recorded run.
  *
- * On an engine without the test-runs update (engine test-runs PR, link TBD)
- * the cancel only writes the status onto the engine's history row: the
- * remaining steps still run, and the run's own completion overwrites the
- * status afterwards. The engine relays no webhook for the cancel either way, so
- * the Convex mirror is updated here once the engine has accepted it -- a later
- * snapshot from the engine still wins.
+ * An engine with real cancel (wolfymaster/woofx3#172) stops the run and
+ * reports its settled status back through the usual run webhooks, and answers
+ * with an `outcome`. An older engine answers with nothing, having only written
+ * the status onto its history row -- the remaining steps still run -- and
+ * relays no webhook for it, so for that engine the Convex mirror is updated
+ * here and a later snapshot from the engine still wins.
  */
 export const cancelRun = action({
   args: {
     instanceId: v.id("instances"),
     engineRunId: v.string(),
   },
-  handler: async (ctx, { instanceId, engineRunId }): Promise<{ cancelled: true }> => {
+  handler: async (ctx, { instanceId, engineRunId }): Promise<CancelRunResult> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
 
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    await rpc.cancelWorkflow(engineRunId, "Cancelled from the dashboard");
+    const rpc = createEngineRpcSession<TestRunEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    const result: CancelWorkflowResult | undefined | null = await rpc.cancelWorkflow(
+      engineRunId,
+      "Cancelled from the dashboard"
+    );
+    if (result?.outcome) {
+      return { outcome: result.outcome, status: result.status };
+    }
 
     await ctx.runMutation(internal.workflowRuns.markCancelled, {
       instanceId,
       engineRunId,
       at: new Date().toISOString(),
     });
-    return { cancelled: true };
+    return { outcome: "marked", status: "cancelled" };
   },
 });
+
+interface CancelRunResult {
+  /**
+   * `cancelled` / `already_finished` as the engine reported them, or `marked`
+   * when an older engine only marked the history row and the steps keep running.
+   */
+  outcome: "cancelled" | "already_finished" | "marked";
+  status: string;
+}
 
 /**
  * Toggle a workflow's enabled state on the engine. Waits for the engine's
