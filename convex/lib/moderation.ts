@@ -16,19 +16,21 @@ export const MODERATION_SCOPES = {
   readChatSettings: "moderator:read:chat_settings",
 } as const;
 
-export type ModerationCapability = "blockedTerms" | "timeout" | "ban" | "chatSettings";
+export type ModerationCapability = "addBlockedTerm" | "removeBlockedTerm" | "timeout" | "ban" | "chatSettings";
 
 interface CapabilityRule {
   scope: string;
   roles: readonly InstanceRole[];
 }
 
-// Timeouts and blocked terms are open to every member: both are what a helper
-// covering chat reaches for, a timeout expires on its own and a term is one
-// click to remove. A ban is permanent until someone undoes it, and a lockdown
-// changes chat for everyone, so those stay with the people who run the channel.
+// Adding a blocked term and timing someone out are open to every member: both
+// are what a helper covering chat reaches for, and both fail safe (a term can
+// be removed, a timeout expires). The rest stays with the people who run the
+// channel: removing a term can silently unblock a slur, a ban lasts until
+// someone lifts it, and a lockdown changes chat for everyone.
 export const CAPABILITY_RULES: Record<ModerationCapability, CapabilityRule> = {
-  blockedTerms: { scope: MODERATION_SCOPES.blockedTerms, roles: ["owner", "admin", "member"] },
+  addBlockedTerm: { scope: MODERATION_SCOPES.blockedTerms, roles: ["owner", "admin", "member"] },
+  removeBlockedTerm: { scope: MODERATION_SCOPES.blockedTerms, roles: ["owner", "admin"] },
   timeout: { scope: MODERATION_SCOPES.bans, roles: ["owner", "admin", "member"] },
   ban: { scope: MODERATION_SCOPES.bans, roles: ["owner", "admin"] },
   chatSettings: { scope: MODERATION_SCOPES.chatSettings, roles: ["owner", "admin"] },
@@ -59,7 +61,8 @@ export function moderationAccess(
   scopes: readonly string[] | null
 ): Record<ModerationCapability, CapabilityStatus> {
   return {
-    blockedTerms: capabilityStatus("blockedTerms", role, scopes),
+    addBlockedTerm: capabilityStatus("addBlockedTerm", role, scopes),
+    removeBlockedTerm: capabilityStatus("removeBlockedTerm", role, scopes),
     timeout: capabilityStatus("timeout", role, scopes),
     ban: capabilityStatus("ban", role, scopes),
     chatSettings: capabilityStatus("chatSettings", role, scopes),
@@ -324,7 +327,7 @@ export function describeModerationError(operation: ModerationOperation, status: 
         : "That user is banned, so a timeout would do nothing.";
     }
     if (text.includes("may not be banned") || text.includes("cannot be banned") || text.includes("can't be banned")) {
-      return "Twitch won't ban or time out a moderator or the broadcaster.";
+      return "Twitch won't let that account be banned or timed out.";
     }
   }
   if (operation === "unban" && text.includes("not banned")) {

@@ -9,12 +9,15 @@ import {
 } from "@convex/lib/moderation";
 import { useAction } from "convex/react";
 import { Loader2 } from "lucide-react";
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ToastAction } from "@/components/ui/toast";
+import { useToast } from "@/hooks/use-toast";
 import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { actionErrorMessage } from "@/lib/action-error";
+import { createWriteFence } from "@/lib/write-fence";
 import { CapabilityNote, SectionHeading } from "./moderation-shared";
 
 /** Modes can be changed from Twitch itself or by another mod, and nothing is pushed, so they are polled. */
@@ -24,16 +27,22 @@ const DEFAULT_FOLLOWER_MINUTES = 10;
 const DEFAULT_SLOW_SECONDS = 30;
 
 export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"instances">; status: CapabilityStatus }) {
+  const { toast } = useToast();
   const getChatSettings = useAction(api.moderation.getChatSettings);
   const updateChatSettings = useAction(api.moderation.updateChatSettings);
 
   const [settings, setSettings] = useState<ChatSettings | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Only a failed first read is shown; a failed poll keeps the last known modes quietly, as pinned.tsx does. */
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // The duration pickers keep a choice while their mode is off, so turning the
   // mode on uses what was picked rather than Twitch's default.
   const [followerMinutes, setFollowerMinutes] = useState(DEFAULT_FOLLOWER_MINUTES);
   const [slowSeconds, setSlowSeconds] = useState(DEFAULT_SLOW_SECONDS);
+  const fence = useRef(createWriteFence()).current;
+  const loaded = useRef(false);
+  const writing = useRef(false);
 
   const adopt = useCallback((next: ChatSettings) => {
     setSettings(next);
@@ -46,26 +55,63 @@ export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"in
   }, []);
 
   const refresh = useCallback(() => {
+    // A read started mid-write could answer with the modes from before it.
+    if (writing.current) {
+      return;
+    }
+    const current = fence.read();
     getChatSettings({ instanceId })
-      .then(adopt)
-      .catch((err: unknown) => setError(actionErrorMessage(err)));
-  }, [instanceId, getChatSettings, adopt]);
+      .then((next) => {
+        loaded.current = true;
+        setLoadError(null);
+        if (current()) {
+          adopt(next);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!loaded.current) {
+          setLoadError(actionErrorMessage(err));
+        }
+      });
+  }, [instanceId, getChatSettings, adopt, fence]);
 
   useEffect(() => {
     refresh();
   }, [refresh]);
   useVisibleInterval(refresh, SETTINGS_REFRESH_MS);
 
-  const apply = async (patch: ChatSettingsPatch) => {
+  const apply = async (patch: ChatSettingsPatch): Promise<boolean> => {
+    fence.write();
+    writing.current = true;
     setBusy(true);
     setError(null);
     try {
       adopt(await updateChatSettings({ instanceId, patch }));
+      return true;
     } catch (err) {
       setError(actionErrorMessage(err));
+      return false;
     } finally {
+      writing.current = false;
       setBusy(false);
     }
+  };
+
+  // Subscriber-only silences most of a small channel's chat at once, so it is
+  // the one switch with an undo on hand rather than a confirmation in the way.
+  const setSubscriberMode = async (on: boolean) => {
+    const applied = await apply({ subscriberMode: on });
+    if (!applied || !on) {
+      return;
+    }
+    toast({
+      title: "Subscriber-only chat is on",
+      action: (
+        <ToastAction altText="Turn subscriber-only off" onClick={() => void apply({ subscriberMode: false })}>
+          Undo
+        </ToastAction>
+      ),
+    });
   };
 
   const disabled = status !== "ready" || busy || settings === null;
@@ -118,7 +164,7 @@ export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"in
         label="Subscriber-only"
         checked={settings?.subscriberMode ?? false}
         disabled={disabled}
-        onCheckedChange={(on) => void apply({ subscriberMode: on })}
+        onCheckedChange={(on) => void setSubscriberMode(on)}
       />
 
       <ModeRow
@@ -166,7 +212,7 @@ export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"in
       </ModeRow>
 
       <CapabilityNote status={status} capability="chatSettings" />
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {(error ?? loadError) && <p className="text-xs text-destructive">{error ?? loadError}</p>}
     </section>
   );
 }

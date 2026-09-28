@@ -20,7 +20,8 @@ const TODAYS_SCOPES = [MODERATION_SCOPES.blockedTerms, MODERATION_SCOPES.bans, M
 describe("capabilityStatus", () => {
   test("everything is not-linked without a Twitch link", () => {
     expect(moderationAccess("owner", null)).toEqual({
-      blockedTerms: "not-linked",
+      addBlockedTerm: "not-linked",
+      removeBlockedTerm: "not-linked",
       timeout: "not-linked",
       ban: "not-linked",
       chatSettings: "not-linked",
@@ -29,16 +30,18 @@ describe("capabilityStatus", () => {
 
   test("an owner with every scope can do everything", () => {
     expect(moderationAccess("owner", ALL_SCOPES)).toEqual({
-      blockedTerms: "ready",
+      addBlockedTerm: "ready",
+      removeBlockedTerm: "ready",
       timeout: "ready",
       ban: "ready",
       chatSettings: "ready",
     });
   });
 
-  test("a member may time out and block terms but not ban or lock down", () => {
+  test("a member may time out and add terms but not remove terms, ban or lock down", () => {
     expect(moderationAccess("member", ALL_SCOPES)).toEqual({
-      blockedTerms: "ready",
+      addBlockedTerm: "ready",
+      removeBlockedTerm: "not-allowed",
       timeout: "ready",
       ban: "not-allowed",
       chatSettings: "not-allowed",
@@ -47,7 +50,8 @@ describe("capabilityStatus", () => {
 
   test("a link granted before the chat settings scope needs a reconnect for lockdown only", () => {
     expect(moderationAccess("admin", TODAYS_SCOPES)).toEqual({
-      blockedTerms: "ready",
+      addBlockedTerm: "ready",
+      removeBlockedTerm: "ready",
       timeout: "ready",
       ban: "ready",
       chatSettings: "needs-reconnect",
@@ -175,9 +179,9 @@ describe("describeModerationError", () => {
     expect(helixErrorMessage("<html>")).toBe("");
   });
 
-  test("names the moderator case", () => {
+  test("names an account Twitch will not ban", () => {
     expect(describeModerationError("ban", 400, "The user specified in the user_id field may not be banned.")).toBe(
-      "Twitch won't ban or time out a moderator or the broadcaster."
+      "Twitch won't let that account be banned or timed out."
     );
   });
 

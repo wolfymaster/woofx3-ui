@@ -16,7 +16,15 @@ interface BlockedTerm {
   text: string;
 }
 
-export function BlockedTermsSection({ instanceId, status }: { instanceId: Id<"instances">; status: CapabilityStatus }) {
+export function BlockedTermsSection({
+  instanceId,
+  addStatus,
+  removeStatus,
+}: {
+  instanceId: Id<"instances">;
+  addStatus: CapabilityStatus;
+  removeStatus: CapabilityStatus;
+}) {
   const listBlockedTerms = useAction(api.moderation.listBlockedTerms);
   const addBlockedTerm = useAction(api.moderation.addBlockedTerm);
   const removeBlockedTerm = useAction(api.moderation.removeBlockedTerm);
@@ -25,11 +33,14 @@ export function BlockedTermsSection({ instanceId, status }: { instanceId: Id<"in
   const [truncated, setTruncated] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  /** One removal at a time, so a double click cannot send the same DELETE twice. */
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** Session-local, not persisted: the list is reference, the input is the point. */
   const [listOpen, setListOpen] = useState(false);
 
-  const ready = status === "ready";
+  const ready = addStatus === "ready";
+  const canRemove = removeStatus === "ready";
 
   // Twitch pushes nothing when terms change, and the list is only needed when
   // opened or edited, so it loads once rather than on a timer.
@@ -68,12 +79,18 @@ export function BlockedTermsSection({ instanceId, status }: { instanceId: Id<"in
   };
 
   const handleRemove = async (termId: string) => {
+    if (removingId !== null) {
+      return;
+    }
+    setRemovingId(termId);
     setError(null);
     try {
       await removeBlockedTerm({ instanceId, termId });
       setTerms((current) => (current ?? []).filter((term) => term.id !== termId));
     } catch (err) {
       setError(actionErrorMessage(err));
+    } finally {
+      setRemovingId(null);
     }
   };
 
@@ -106,7 +123,7 @@ export function BlockedTermsSection({ instanceId, status }: { instanceId: Id<"in
           Block
         </Button>
       </form>
-      <CapabilityNote status={status} capability="blockedTerms" />
+      <CapabilityNote status={addStatus} capability="addBlockedTerm" />
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {ready && terms !== null && terms.length > 0 && (
@@ -121,22 +138,35 @@ export function BlockedTermsSection({ instanceId, status }: { instanceId: Id<"in
               {terms.map((term) => (
                 <li
                   key={term.id}
-                  className="flex max-w-full items-center gap-1 rounded-md border border-border py-0.5 pl-2 pr-0.5 text-xs"
+                  className={cn(
+                    "flex max-w-full items-center gap-1 rounded-md border border-border py-0.5 pl-2 text-xs",
+                    canRemove ? "pr-0.5" : "pr-2"
+                  )}
                 >
                   <span className="truncate">{term.text}</span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => void handleRemove(term.id)}
-                    aria-label={`Unblock "${term.text}"`}
-                    data-testid={`button-remove-blocked-term-${term.id}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
+                  {canRemove && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive"
+                      disabled={removingId !== null}
+                      onClick={() => void handleRemove(term.id)}
+                      aria-label={`Unblock "${term.text}"`}
+                      data-testid={`button-remove-blocked-term-${term.id}`}
+                    >
+                      {removingId === term.id ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <X className="h-3 w-3" />
+                      )}
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
+            <div className="pt-1.5">
+              <CapabilityNote status={removeStatus} capability="removeBlockedTerm" />
+            </div>
           </CollapsibleContent>
         </Collapsible>
       )}
