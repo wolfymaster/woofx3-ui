@@ -48,6 +48,7 @@ import Queues from "@/pages/queues";
 import Scenes from "@/pages/scenes";
 
 import Team from "@/pages/team";
+import TeamInvite from "@/pages/team-invite";
 import Timers from "@/pages/timers";
 import Workflows from "@/pages/workflows";
 import { convexClient as convex } from "./lib/convexClient";
@@ -205,6 +206,7 @@ function AppRoutes() {
                   <Route path="/admin/appearance" component={AdminAppearance} />
 
                   <Route path="/team" component={Team} />
+                  <Route path="/team/invite" component={TeamInvite} />
 
                   {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}
                   <Route path="/alerts">

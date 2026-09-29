@@ -1,34 +1,14 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
-import {
-  Building2,
-  Copy,
-  Crown,
-  Link as LinkIcon,
-  Mail,
-  MoreHorizontal,
-  Search,
-  Shield,
-  Trash2,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { Building2, Crown, Mail, MoreHorizontal, Search, Shield, Trash2, UserPlus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,8 +17,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useConvexUser } from "@/hooks/use-convex-auth";
@@ -69,17 +47,11 @@ export default function Team() {
   const accounts = useQuery(api.accounts.listAccessibleForUser);
   const inviteData = useQuery(api.invitations.listForAccount, accountId ? { accountId } : "skip");
 
-  const createInvite = useMutation(api.invitations.create);
   const revokeInvite = useMutation(api.invitations.revoke);
   const removeMember = useMutation(api.accountMembers.removeMember);
   const updateMemberRole = useMutation(api.accountMembers.updateMemberRole);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [isInviting, setIsInviting] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "member">("member");
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const [inviteSubmitting, setInviteSubmitting] = useState(false);
 
   const members = teamData?.members ?? [];
   const canManage = teamData?.canManage ?? false;
@@ -89,54 +61,6 @@ export default function Team() {
     const q = searchQuery.toLowerCase();
     return members.filter((m) => m.name.toLowerCase().includes(q) || (m.email ?? "").toLowerCase().includes(q));
   }, [members, searchQuery]);
-
-  async function handleInvite() {
-    if (!accountId || !inviteEmail.trim()) {
-      return;
-    }
-    setInviteSubmitting(true);
-    setInviteLink(null);
-    try {
-      const { token } = await createInvite({
-        accountId,
-        email: inviteEmail.trim(),
-        role: inviteRole,
-      });
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const url = `${origin}/auth/accept-invite?token=${encodeURIComponent(token)}`;
-      setInviteLink(url);
-      toast({ title: "Invitation created", description: "Share the link with your teammate." });
-    } catch (e: unknown) {
-      toast({
-        title: "Could not invite",
-        description: e instanceof Error ? e.message : "Unknown error",
-        variant: "destructive",
-      });
-    } finally {
-      setInviteSubmitting(false);
-    }
-  }
-
-  function closeInviteDialog(open: boolean) {
-    setIsInviting(open);
-    if (!open) {
-      setInviteEmail("");
-      setInviteRole("member");
-      setInviteLink(null);
-    }
-  }
-
-  async function copyInviteLink() {
-    if (!inviteLink) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(inviteLink);
-      toast({ title: "Copied", description: "Invite link copied to clipboard." });
-    } catch {
-      toast({ title: "Copy failed", variant: "destructive" });
-    }
-  }
 
   if (!instance) {
     return (
@@ -180,82 +104,12 @@ export default function Team() {
                   </CardDescription>
                 </div>
                 {canManage ? (
-                  <Dialog open={isInviting} onOpenChange={closeInviteDialog}>
-                    <DialogTrigger asChild>
-                      <Button data-testid="button-invite-member">
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Invite Member
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Invite Team Member</DialogTitle>
-                        <DialogDescription>
-                          They must sign in with the same email you enter. We&apos;ll give you a link to share.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="invite-email">Email Address</Label>
-                          <Input
-                            id="invite-email"
-                            type="email"
-                            placeholder="colleague@example.com"
-                            value={inviteEmail}
-                            onChange={(e) => setInviteEmail(e.target.value)}
-                            data-testid="input-invite-email"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Role</Label>
-                          <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as "admin" | "member")}>
-                            <SelectTrigger data-testid="select-invite-role">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="admin">Admin</SelectItem>
-                              <SelectItem value="member">Member</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <p className="text-xs text-muted-foreground">
-                            {inviteRole === "admin" && "Can manage team settings and members."}
-                            {inviteRole === "member" &&
-                              "Can use workflows, assets, and engine features for this account."}
-                          </p>
-                        </div>
-                        {inviteLink ? (
-                          <div className="space-y-2">
-                            <Label>Invite link</Label>
-                            <div className="flex gap-2">
-                              <Input readOnly value={inviteLink} className="font-mono text-xs" />
-                              <Button type="button" size="icon" variant="outline" onClick={copyInviteLink}>
-                                <Copy className="h-4 w-4" />
-                              </Button>
-                            </div>
-                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                              <LinkIcon className="h-3 w-3" />
-                              Recipient opens this link while signed in with the invited email.
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
-                      <DialogFooter className="gap-2 sm:gap-0">
-                        <Button variant="outline" onClick={() => closeInviteDialog(false)}>
-                          {inviteLink ? "Done" : "Cancel"}
-                        </Button>
-                        {!inviteLink ? (
-                          <Button
-                            onClick={handleInvite}
-                            disabled={!inviteEmail.trim() || inviteSubmitting}
-                            data-testid="button-send-invite"
-                          >
-                            <Mail className="h-4 w-4 mr-2" />
-                            Create invite
-                          </Button>
-                        ) : null}
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                  <Button asChild data-testid="button-invite-member">
+                    <Link href="/team/invite">
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Invite Member
+                    </Link>
+                  </Button>
                 ) : null}
               </div>
             </CardHeader>
@@ -294,10 +148,7 @@ export default function Team() {
                     {pendingInvites.map((inv) => (
                       <TableRow key={inv._id} data-testid={`row-invite-${inv._id}`}>
                         <TableCell>
-                          <div>
-                            <p className="font-medium">{inv.email}</p>
-                            <p className="text-sm text-muted-foreground">Invitation pending</p>
-                          </div>
+                          <PendingInviteIdentity invite={inv} />
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={cn("capitalize", roleColors[inv.role])}>
@@ -513,6 +364,48 @@ export default function Team() {
           </div>
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+interface PendingInvite {
+  email?: string;
+  platform?: "twitch";
+  platformLogin?: string;
+  platformDisplayName?: string;
+  platformProfileImageUrl?: string;
+}
+
+/** Who a pending invite is for: the Twitch face and name it was created with, or the email. */
+function PendingInviteIdentity({ invite }: { invite: PendingInvite }) {
+  if (invite.platform === "twitch") {
+    const name = invite.platformDisplayName ?? invite.platformLogin ?? "Twitch user";
+    return (
+      <div className="flex items-center gap-3">
+        <Avatar>
+          <AvatarImage src={invite.platformProfileImageUrl} alt="" />
+          <AvatarFallback className="text-xs">{name.slice(0, 2).toUpperCase()}</AvatarFallback>
+        </Avatar>
+        <div>
+          <p className="font-medium">{name}</p>
+          <p className="text-sm text-muted-foreground">
+            {invite.platformLogin ? `twitch.tv/${invite.platformLogin} · ` : ""}Invitation pending
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-3">
+      <Avatar>
+        <AvatarFallback className="text-xs">
+          <Mail className="h-4 w-4" />
+        </AvatarFallback>
+      </Avatar>
+      <div>
+        <p className="font-medium">{invite.email}</p>
+        <p className="text-sm text-muted-foreground">Invitation pending</p>
+      </div>
     </div>
   );
 }

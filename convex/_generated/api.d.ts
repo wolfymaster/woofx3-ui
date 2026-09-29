@@ -58,6 +58,7 @@ import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/wo
 import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.js";
 import type * as lib_inboundWebhookPath from "../lib/inboundWebhookPath.js";
 import type * as lib_inboundWebhookRelay from "../lib/inboundWebhookRelay.js";
+import type * as lib_invitationTarget from "../lib/invitationTarget.js";
 import type * as lib_maintenanceClient from "../lib/maintenanceClient.js";
 import type * as lib_maintenanceSignature from "../lib/maintenanceSignature.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
@@ -73,6 +74,7 @@ import type * as lib_spotifyIntegrationScopes from "../lib/spotifyIntegrationSco
 import type * as lib_teamAccess from "../lib/teamAccess.js";
 import type * as lib_twitchAuth from "../lib/twitchAuth.js";
 import type * as lib_twitchIntegrationScopes from "../lib/twitchIntegrationScopes.js";
+import type * as lib_twitchUsers from "../lib/twitchUsers.js";
 import type * as lib_webhookEndpointKey from "../lib/webhookEndpointKey.js";
 import type * as lib_widgetKey from "../lib/widgetKey.js";
 import type * as logger from "../logger.js";
@@ -186,6 +188,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inboundWebhookDelivery": typeof lib_inboundWebhookDelivery;
   "lib/inboundWebhookPath": typeof lib_inboundWebhookPath;
   "lib/inboundWebhookRelay": typeof lib_inboundWebhookRelay;
+  "lib/invitationTarget": typeof lib_invitationTarget;
   "lib/maintenanceClient": typeof lib_maintenanceClient;
   "lib/maintenanceSignature": typeof lib_maintenanceSignature;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;
@@ -201,6 +204,7 @@ declare const fullApi: ApiFromModules<{
   "lib/teamAccess": typeof lib_teamAccess;
   "lib/twitchAuth": typeof lib_twitchAuth;
   "lib/twitchIntegrationScopes": typeof lib_twitchIntegrationScopes;
+  "lib/twitchUsers": typeof lib_twitchUsers;
   "lib/webhookEndpointKey": typeof lib_webhookEndpointKey;
   "lib/widgetKey": typeof lib_widgetKey;
   logger: typeof logger;
