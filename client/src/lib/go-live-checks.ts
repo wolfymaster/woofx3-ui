@@ -184,13 +184,13 @@ export function overlaysCheck(facts: OverlayFacts, browserSourceUrl: string | nu
 
 /**
  * The field whose options the OBS check asks for: the scene picker of the
- * bundled module's "Switch OBS scene" action. The check asks exactly as that
+ * OBS platform module's "Switch OBS scene" action. The check asks exactly as that
  * picker does, so it needs no OBS-specific engine call, and its answer is what
  * the streamer's workflows will meet: the scene list, or the scene manager's
  * reason for having none.
  */
 export const OBS_SCENES_FIELD: FieldOptionsReference = {
-  moduleId: "woofx3",
+  moduleId: "woofx3_obs",
   declaration: "action",
   declarationId: "obs.switch_scene",
   fieldId: "sceneName",
@@ -207,7 +207,7 @@ export type ObsFacts =
   | { kind: "connected"; sceneCount: number }
   /** The scene manager answered with a reason instead of scenes, e.g. OBS is not connected. */
   | { kind: "disconnected"; reason: string }
-  /** The engine has no OBS scene field to ask: it predates the bundled OBS actions or field references. */
+  /** The engine has no OBS scene field to ask: the OBS module is missing or older, or the engine predates field references. */
   | { kind: "unsupported" }
   /** Nothing answered in time. */
   | { kind: "no-answer" }
@@ -222,7 +222,7 @@ export interface FieldOptionsReplyEvent {
 
 /**
  * Phrases in the engine's refusal to send the request that mean it has nothing
- * to send, rather than that it failed to: the bundled module or its OBS field
+ * to send, rather than that it failed to: the OBS module or its scene field
  * is missing, or the engine still takes a request descriptor instead of a
  * field reference. Must match the errors of `dispatchFieldOptionsRequest` in
  * the engine's api/src/routes/field-options.ts and field-options-reference.ts.
@@ -277,7 +277,11 @@ export function obsCheck(facts: ObsFacts): CheckResult {
       return result("obs", "warn", facts.reason, { fixes: [RETRY] });
     }
     case "unsupported": {
-      return result("obs", "warn", "Your engine doesn't report OBS status, so it can't be checked from here.");
+      return result(
+        "obs",
+        "warn",
+        "OBS status can't be checked from here. Install the OBS module, or update it and your engine."
+      );
     }
     case "no-answer": {
       return result("obs", "warn", "OBS didn't answer. Check that the scene manager is running.", {

@@ -134,9 +134,9 @@ describe("overlaysCheck", () => {
 });
 
 describe("OBS_SCENES_FIELD", () => {
-  test("names the bundled module's scene picker, as the workflow builder asks for it", () => {
+  test("names the OBS module's scene picker, as the workflow builder asks for it", () => {
     expect(OBS_SCENES_FIELD).toEqual({
-      moduleId: "woofx3",
+      moduleId: "woofx3_obs",
       declaration: "action",
       declarationId: "obs.switch_scene",
       fieldId: "sceneName",
@@ -183,11 +183,11 @@ describe("obsFactsFromReply", () => {
 });
 
 describe("obsFactsFromDispatchError", () => {
-  test("reads an engine without the bundled OBS field as unsupported", () => {
+  test("reads an engine without the OBS module's field as unsupported", () => {
     for (const message of [
-      'dispatchFieldOptionsRequest: module "woofx3" is not installed',
-      'dispatchFieldOptionsRequest: module "woofx3" declares no action "obs.switch_scene"',
-      'dispatchFieldOptionsRequest: no field "sceneName" of woofx3:action:obs.switch_scene',
+      'dispatchFieldOptionsRequest: module "woofx3_obs" is not installed',
+      'dispatchFieldOptionsRequest: module "woofx3_obs" declares no action "obs.switch_scene"',
+      'dispatchFieldOptionsRequest: no field "sceneName" of woofx3_obs:action:obs.switch_scene',
       "Unsupported descriptor kind: undefined",
     ]) {
       expect(obsFactsFromDispatchError(message)).toEqual({ kind: "unsupported" });
@@ -221,7 +221,7 @@ describe("obsCheck", () => {
   test("warns rather than failing when the engine cannot report OBS status", () => {
     const check = obsCheck({ kind: "unsupported" });
     expect(check.status).toBe("warn");
-    expect(check.summary).toContain("Your engine doesn't report OBS status");
+    expect(check.summary).toContain("Install the OBS module");
   });
 
   test("warns when nothing answers in time", () => {
