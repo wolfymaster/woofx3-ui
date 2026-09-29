@@ -11,6 +11,7 @@ import {
   adHelixErrorMessage,
   helixErrorText,
   parseHelixAdSchedule,
+  parseHelixBody,
   parseHelixSnoozeResult,
 } from "./lib/adBreaks";
 import { type AuthorizedTwitchCall, authorizeTwitch, missingTwitchScopeMessage } from "./lib/twitchAuth";
@@ -60,7 +61,11 @@ async function callHelix(
   if (!response.ok) {
     throw new ConvexError(adHelixErrorMessage(operation, response.status, helixErrorText(await response.text())));
   }
-  return response.json();
+  const parsed = parseHelixBody(operation, await response.text());
+  if (!parsed.ok) {
+    throw new ConvexError(parsed.message);
+  }
+  return parsed.body;
 }
 
 export const getSchedule = action({

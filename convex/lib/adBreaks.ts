@@ -55,28 +55,50 @@ export const AD_SCOPE_MISSING_MESSAGE = "Reconnect Twitch to allow ad controls."
 
 export type AdHelixOperation = "read" | "snooze";
 
+function failurePrefix(operation: AdHelixOperation): string {
+  return operation === "read" ? "Could not read the ad schedule" : "Could not snooze the next ad";
+}
+
 /**
  * The sentence for a failed Helix ads call. Helix reports a token without the
  * ads scope as a 401 whose message names the scope, or as a 403; both mean
  * the link needs regranting, not that it is broken. A 400 on a snooze is Twitch
- * refusing it for a reason the streamer can act on ("no snoozes left",
- * "channel is not live"), so Twitch's own message is the one to show.
+ * refusing it for a reason the streamer can act on ("channel is not live"), so
+ * Twitch's own message is the one to show. Snooze Next Ad also answers 429
+ * when no snoozes are left, not only when rate limited, so a snooze's 429
+ * shows Twitch's message too; "rate-limiting" would send the streamer to
+ * retry a call that cannot succeed until a snooze refills.
  */
 export function adHelixErrorMessage(operation: AdHelixOperation, status: number, twitchMessage: string): string {
-  const what = operation === "read" ? "Could not read the ad schedule" : "Could not snooze the next ad";
+  const what = failurePrefix(operation);
   if (status === 403 || (status === 401 && /scope/i.test(twitchMessage))) {
     return AD_SCOPE_MISSING_MESSAGE;
   }
   if (status === 401) {
     return `${what}: Twitch rejected the connection. Reconnect Twitch in Settings → Integrations.`;
   }
+  if ((status === 400 || status === 429) && operation === "snooze" && twitchMessage !== "") {
+    return twitchMessage;
+  }
   if (status === 429) {
     return `${what}: Twitch is rate-limiting this. Try again in a moment.`;
   }
-  if (status === 400 && operation === "snooze" && twitchMessage !== "") {
-    return twitchMessage;
-  }
   return `${what}: ${twitchMessage || `Twitch answered ${status}`}`;
+}
+
+export type HelixBody = { ok: true; body: unknown } | { ok: false; message: string };
+
+/**
+ * A 2xx Helix answer's text as JSON. A body that is not JSON (a proxy's HTML
+ * page, a truncated answer) comes back as a sentence for the caller to raise,
+ * not as a SyntaxError that production would mask.
+ */
+export function parseHelixBody(operation: AdHelixOperation, text: string): HelixBody {
+  try {
+    return { ok: true, body: JSON.parse(text) };
+  } catch {
+    return { ok: false, message: `${failurePrefix(operation)}: Twitch answered with something that is not JSON.` };
+  }
 }
 
 /** The `message` of a Helix error body (`{ error, status, message }`), or the raw text. */

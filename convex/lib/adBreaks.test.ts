@@ -5,6 +5,7 @@ import {
   helixErrorText,
   normalizeTimestamp,
   parseHelixAdSchedule,
+  parseHelixBody,
   parseHelixSnoozeResult,
   toLocalTime,
 } from "./adBreaks";
@@ -112,6 +113,15 @@ describe("adHelixErrorMessage", () => {
     );
   });
 
+  test("a snooze's 429 shows Twitch's reason, since Twitch also sends it when no snoozes are left", () => {
+    expect(adHelixErrorMessage("snooze", 429, "The channel has no snoozes remaining")).toBe(
+      "The channel has no snoozes remaining"
+    );
+    expect(adHelixErrorMessage("snooze", 429, "")).toBe(
+      "Could not snooze the next ad: Twitch is rate-limiting this. Try again in a moment."
+    );
+  });
+
   test("429 reads as rate limited", () => {
     expect(adHelixErrorMessage("read", 429, "")).toBe(
       "Could not read the ad schedule: Twitch is rate-limiting this. Try again in a moment."
@@ -120,6 +130,19 @@ describe("adHelixErrorMessage", () => {
 
   test("anything else carries the status when Twitch gave no reason", () => {
     expect(adHelixErrorMessage("read", 500, "")).toBe("Could not read the ad schedule: Twitch answered 500");
+  });
+});
+
+describe("parseHelixBody", () => {
+  test("parses a JSON body", () => {
+    expect(parseHelixBody("read", '{"data":[]}')).toEqual({ ok: true, body: { data: [] } });
+  });
+
+  test("turns a non-JSON body into a sentence", () => {
+    expect(parseHelixBody("snooze", "<html>Bad Gateway</html>")).toEqual({
+      ok: false,
+      message: "Could not snooze the next ad: Twitch answered with something that is not JSON.",
+    });
   });
 });
 
