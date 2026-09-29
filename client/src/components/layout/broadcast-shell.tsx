@@ -32,6 +32,7 @@ import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, UTILITY_SECTIONS
 import { SectionSidebar } from "./section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
 import { ThemeMenuSub } from "./theme-menu";
+import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
 
 function InstanceBar() {
   const { instance, instances, setInstance, isLoading } = useInstance();
@@ -320,6 +321,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
         <InstanceBar />
         <AppHeader />
+        <TwitchReconnectBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {activeSection?.children && (

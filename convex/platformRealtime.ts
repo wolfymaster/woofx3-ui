@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { isRevokedRefreshResponse, refreshOutcomeApplies } from "./lib/twitchRefresh";
 
 // Twitch token custody for the Convex functions that need it (twitchClips,
 // twitchBroadcast). Tokens never leave the server: getTwitchLink and
@@ -41,12 +42,27 @@ export const getTwitchLink = internalQuery({
 export const patchTwitchToken = internalMutation({
   args: {
     linkId: v.id("platformLinks"),
+    usedRefreshToken: v.string(),
     accessToken: v.string(),
     refreshToken: v.string(),
     expiresAt: v.number(),
   },
-  handler: async (ctx, { linkId, ...patch }) => {
-    await ctx.db.patch(linkId, patch);
+  handler: async (ctx, { linkId, usedRefreshToken, ...patch }): Promise<boolean> => {
+    if (!refreshOutcomeApplies(await ctx.db.get(linkId), usedRefreshToken)) {
+      return false;
+    }
+    await ctx.db.patch(linkId, { ...patch, authFailedAt: undefined });
+    return true;
+  },
+});
+
+export const markTwitchAuthFailed = internalMutation({
+  args: { linkId: v.id("platformLinks"), usedRefreshToken: v.string() },
+  handler: async (ctx, { linkId, usedRefreshToken }) => {
+    if (!refreshOutcomeApplies(await ctx.db.get(linkId), usedRefreshToken)) {
+      return;
+    }
+    await ctx.db.patch(linkId, { authFailedAt: Date.now() });
   },
 });
 
@@ -85,13 +101,23 @@ export const ensureFreshTwitchToken = internalAction({
     });
 
     if (!response.ok) {
-      throw new Error(`Twitch token refresh failed: ${response.status} ${await response.text()}`);
+      const body = await response.text();
+      if (isRevokedRefreshResponse(response.status, body)) {
+        await ctx.runMutation(internal.platformRealtime.markTwitchAuthFailed, {
+          linkId: link._id,
+          usedRefreshToken: link.refreshToken,
+        });
+      }
+      throw new Error(`Twitch token refresh failed: ${response.status} ${body}`);
     }
 
     const data = (await response.json()) as { access_token: string; refresh_token: string; expires_in: number };
 
+    // Not written when a relink replaced the link meanwhile; the token is
+    // still valid for this one call, so it is returned either way.
     await ctx.runMutation(internal.platformRealtime.patchTwitchToken, {
       linkId: link._id,
+      usedRefreshToken: link.refreshToken,
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       expiresAt: Date.now() + data.expires_in * 1000,

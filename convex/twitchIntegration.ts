@@ -114,7 +114,8 @@ export const completeConnect = internalMutation({
       connectedByUserId: userId,
     };
     if (existing) {
-      await ctx.db.patch(existing._id, link);
+      // A fresh grant supersedes a refresh Twitch refused earlier.
+      await ctx.db.patch(existing._id, { ...link, authFailedAt: undefined });
     } else {
       await ctx.db.insert("platformLinks", link);
     }

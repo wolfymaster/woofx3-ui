@@ -249,9 +249,18 @@ export const getPlatformLinks = query({
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
       .collect();
 
+    // Relinking replaces the channel every member's automation runs against,
+    // so only an owner or admin is offered it. Carried on each link rather
+    // than as a separate query so the shell's reconnect banner stays on this
+    // one subscription.
+    const viewerCanRelink = membership.role === "owner" || membership.role === "admin";
+
     // Tokens never leave the backend — every caller that needs one goes
     // through platformRealtime.ensureFreshTwitchToken instead.
-    return links.map(({ accessToken: _accessToken, refreshToken: _refreshToken, ...rest }) => rest);
+    return links.map(({ accessToken: _accessToken, refreshToken: _refreshToken, ...rest }) => ({
+      ...rest,
+      viewerCanRelink,
+    }));
   },
 });
 
