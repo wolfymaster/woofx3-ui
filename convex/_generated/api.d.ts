@@ -118,6 +118,7 @@ import type * as moduleSettingsActions from "../moduleSettingsActions.js";
 import type * as moduleWebhook from "../moduleWebhook.js";
 import type * as moduleWidgets from "../moduleWidgets.js";
 import type * as oauthConnectHandoff from "../oauthConnectHandoff.js";
+import type * as obsCommands from "../obsCommands.js";
 import type * as pins from "../pins.js";
 import type * as platformRealtime from "../platformRealtime.js";
 import type * as provisioning from "../provisioning.js";
@@ -273,6 +274,7 @@ declare const fullApi: ApiFromModules<{
   moduleWebhook: typeof moduleWebhook;
   moduleWidgets: typeof moduleWidgets;
   oauthConnectHandoff: typeof oauthConnectHandoff;
+  obsCommands: typeof obsCommands;
   pins: typeof pins;
   platformRealtime: typeof platformRealtime;
   provisioning: typeof provisioning;
