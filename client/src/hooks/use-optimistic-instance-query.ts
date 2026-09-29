@@ -1,6 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { type RequestForQueries, useQueries } from "convex/react";
-import type { FunctionReference, FunctionReturnType } from "convex/server";
+import { type FunctionReference, type FunctionReturnType, getFunctionName, makeFunctionReference } from "convex/server";
 import { useMemo } from "react";
 import { useInstance } from "@/hooks/use-instance";
 
@@ -21,12 +21,19 @@ export function useOptimisticInstanceQuery<Query extends InstanceQuery>(
 ): FunctionReturnType<Query> | undefined {
   const { optimisticInstanceId, isLoading } = useInstance();
 
+  // Memoized on the function's name, never on `query` itself: every read of
+  // `api.x.y` builds a new proxy, so a reference-keyed memo hands useQueries a
+  // new request each render, and its subscription resets state during render
+  // until React gives up with "Too many re-renders". useQuery keys the same way.
+  const queryName = getFunctionName(query);
   const queries = useMemo((): RequestForQueries => {
     if (!optimisticInstanceId) {
       return {};
     }
-    return { result: { query, args: { instanceId: optimisticInstanceId } } };
-  }, [query, optimisticInstanceId]);
+    return {
+      result: { query: makeFunctionReference<"query">(queryName), args: { instanceId: optimisticInstanceId } },
+    };
+  }, [queryName, optimisticInstanceId]);
   const result: unknown = useQueries(queries).result;
 
   if (result instanceof Error) {
