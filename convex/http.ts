@@ -1200,50 +1200,6 @@ function maintenanceErrorText(value: unknown): string | undefined {
   return typeof error.code === "string" ? `${error.code}: ${error.message}` : error.message;
 }
 
-http.route({ pathPrefix: "/api/browser-source/", method: "OPTIONS", handler: preflightHandler });
-http.route({
-  pathPrefix: "/api/browser-source/",
-  method: "POST",
-  handler: httpAction(async (ctx, request) => {
-    const url = new URL(request.url);
-    if (!url.pathname.endsWith("/claim")) {
-      return new Response("Not found", { status: 404, headers: CORS_HEADERS });
-    }
-    const segments = url.pathname.split("/").filter(Boolean);
-    const key = segments[segments.length - 2];
-
-    if (!key) {
-      return corsJson({ error: "Missing source key" }, 400);
-    }
-
-    const sourceKey = await ctx.runQuery(internal.browserSource.getSourceKeyByKey, { key });
-
-    if (!sourceKey) {
-      const debugInfo = await ctx.runQuery(internal.browserSource.getAllBrowserSourceKeys, {});
-      return corsJson(
-        {
-          error: "Invalid source key",
-          debug: { requestedKey: key.substring(0, 8) + "...", ...debugInfo },
-        },
-        401
-      );
-    }
-
-    await ctx.runMutation(internal.browserSource.updateSourceKeyLastUsed, {
-      keyId: sourceKey._id,
-      lastUsedAt: Date.now(),
-    });
-
-    const scene = await ctx.runQuery(internal.browserSource.getScene, { sceneId: sourceKey.sceneId });
-    const slots = await ctx.runQuery(internal.browserSource.getSceneSlots, { sceneId: sourceKey.sceneId });
-    const alertDescriptors = await ctx.runQuery(internal.browserSource.getAlertDescriptorsForScene, {
-      sceneId: sourceKey.sceneId,
-    });
-
-    return corsJson({ scene, slots, alertDescriptors, sourceKeyId: sourceKey._id });
-  }),
-});
-
 http.route({ pathPrefix: "/api/browser-source/alerts/", method: "OPTIONS", handler: preflightHandler });
 http.route({
   pathPrefix: "/api/browser-source/alerts/",
@@ -1350,43 +1306,6 @@ http.route({
     });
 
     return corsJson({ success: true });
-  }),
-});
-
-http.route({ pathPrefix: "/api/widgets/", method: "OPTIONS", handler: preflightHandler });
-http.route({
-  pathPrefix: "/api/widgets/",
-  method: "GET",
-  handler: httpAction(async (ctx, request) => {
-    const url = new URL(request.url);
-    const pathParts = url.pathname.split("/").filter(Boolean);
-
-    if (pathParts.length < 5) {
-      return new Response("Not found", { status: 404, headers: CORS_HEADERS });
-    }
-
-    const moduleId = pathParts[2];
-    const directory = pathParts[3];
-    const file = pathParts.slice(4).join("/");
-
-    // TODO: Integrate with barkloader's storage system to fetch actual widget assets
-    // This placeholder response should be replaced with actual asset fetching logic
-    const contentTypes: Record<string, string> = {
-      html: "text/html",
-      js: "application/javascript",
-      css: "text/css",
-      json: "application/json",
-      png: "image/png",
-      jpg: "image/jpeg",
-      svg: "image/svg+xml",
-    };
-
-    const ext = file.split(".").pop() || "";
-    const contentType = contentTypes[ext] || "text/plain";
-
-    return new Response(`Widget file: ${file} for module ${moduleId}/${directory}`, {
-      headers: { "Content-Type": contentType, ...CORS_HEADERS },
-    });
   }),
 });
 

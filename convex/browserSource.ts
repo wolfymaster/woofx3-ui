@@ -80,29 +80,6 @@ export const getSourceKeyByKey = internalQuery({
   },
 });
 
-export const getAllBrowserSourceKeys = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const keys = await ctx.db.query("browserSourceKeys").collect();
-    return keys.map((k) => ({
-      keyPrefix: k.key.substring(0, 8),
-      total: keys.length,
-      keys: keys.map((k) => k.key.substring(0, 8)),
-    }));
-  },
-});
-
-export const getAllBrowserSourceKeysDebug = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const keys = await ctx.db.query("browserSourceKeys").collect();
-    return keys.map((k) => ({
-      key: k.key,
-      sceneId: k.sceneId,
-    }));
-  },
-});
-
 export const updateSourceKeyLastUsed = internalMutation({
   args: { keyId: v.id("browserSourceKeys"), lastUsedAt: v.number() },
   handler: async (ctx, args) => {
@@ -114,26 +91,6 @@ export const getScene = internalQuery({
   args: { sceneId: v.id("scenes") },
   handler: async (ctx, args) => {
     return await ctx.db.get(args.sceneId);
-  },
-});
-
-export const getSceneSlots = internalQuery({
-  args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("sceneSlots")
-      .withIndex("by_scene", (q) => q.eq("sceneId", args.sceneId))
-      .collect();
-  },
-});
-
-export const getAlertDescriptorsForScene = internalQuery({
-  args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("alertDescriptors")
-      .withIndex("by_scene", (q) => q.eq("sceneId", args.sceneId))
-      .collect();
   },
 });
 

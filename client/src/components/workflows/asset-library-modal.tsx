@@ -20,12 +20,8 @@ import { type Resource, useResources } from "@/hooks/use-resources";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-// Asset picker for config fields that take a media value.
-//
-// Rebuilt on the engine-backed resource API. The previous version fetched
-// `/api/assets` through @tanstack/react-query — a REST surface that has not
-// existed since the Convex migration, which made every `type: "asset"` config
-// field silently non-functional.
+// Asset picker for config fields that take a media value, backed by the
+// engine resource API.
 
 /** What a caller receives on select. Deliberately narrow: config values are
  *  persisted, so only the fields a consumer needs are handed over. */
