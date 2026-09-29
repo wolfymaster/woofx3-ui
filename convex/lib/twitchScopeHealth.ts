@@ -17,6 +17,12 @@ export interface TwitchCapability {
   /** What the creator loses without it, as the banner lists it. */
   label: string;
   scopes: readonly string[];
+  /**
+   * A capability few creators use. Its absence is listed on the integrations
+   * page but never raises the shell banner, which would otherwise nag every
+   * member of every instance linked before the scope was requested.
+   */
+  optional?: boolean;
 }
 
 /**
@@ -48,6 +54,9 @@ export const TWITCH_CAPABILITIES: readonly TwitchCapability[] = [
       "moderator:read:warnings",
     ],
   },
+  // Changing chat modes (follower-only, subscriber-only, emote-only, slow).
+  // The Moderation capability's read scope already shows the current modes.
+  { label: "Moderation: chat modes", scopes: ["moderator:manage:chat_settings"], optional: true },
   { label: "Announcements and shoutouts", scopes: ["moderator:manage:announcements", "moderator:manage:shoutouts"] },
   { label: "Pinned messages", scopes: ["moderator:manage:chat_messages", "moderator:read:chat_messages"] },
   {
@@ -58,15 +67,20 @@ export const TWITCH_CAPABILITIES: readonly TwitchCapability[] = [
 
 export interface MissingTwitchCapability {
   label: string;
+  optional: boolean;
   /** The scopes of this capability the link lacks, in TWITCH_CAPABILITIES order. */
   missingScopes: string[];
 }
 
+/**
+ * `missing` holds only required capabilities, so it alone decides whether a
+ * reconnect is needed; `optionalMissing` is informational.
+ */
 export type TwitchScopeHealth =
   | { state: "unlinked" }
   | { state: "revoked" }
-  | { state: "missing"; missing: MissingTwitchCapability[] }
-  | { state: "ok" };
+  | { state: "missing"; missing: MissingTwitchCapability[]; optionalMissing: MissingTwitchCapability[] }
+  | { state: "ok"; optionalMissing: MissingTwitchCapability[] };
 
 /** The fields of a `platformLinks` row this reads; tokens are never needed. */
 export interface TwitchLinkScopes {
@@ -75,7 +89,7 @@ export interface TwitchLinkScopes {
   authFailedAt?: number;
 }
 
-/** Capabilities with at least one required scope absent from `granted`. */
+/** Capabilities, required and optional, with at least one requested scope absent from `granted`. */
 export function missingTwitchCapabilities(
   granted: readonly string[],
   required: readonly string[] = TWITCH_INTEGRATION_SCOPES
@@ -86,7 +100,7 @@ export function missingTwitchCapabilities(
   for (const capability of TWITCH_CAPABILITIES) {
     const missingScopes = capability.scopes.filter((scope) => needed.has(scope) && !have.has(scope));
     if (missingScopes.length > 0) {
-      missing.push({ label: capability.label, missingScopes });
+      missing.push({ label: capability.label, optional: capability.optional === true, missingScopes });
     }
   }
   return missing;
@@ -100,11 +114,13 @@ export function twitchScopeHealth(link: TwitchLinkScopes | null | undefined): Tw
   if (link.authFailedAt !== undefined) {
     return { state: "revoked" };
   }
-  const missing = missingTwitchCapabilities(link.scopes);
+  const all = missingTwitchCapabilities(link.scopes);
+  const missing = all.filter((capability) => !capability.optional);
+  const optionalMissing = all.filter((capability) => capability.optional);
   if (missing.length > 0) {
-    return { state: "missing", missing };
+    return { state: "missing", missing, optionalMissing };
   }
-  return { state: "ok" };
+  return { state: "ok", optionalMissing };
 }
 
 /**

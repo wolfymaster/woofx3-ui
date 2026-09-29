@@ -21,11 +21,22 @@ describe("twitchReconnectMessage", () => {
     const message = twitchReconnectMessage({
       state: "missing",
       missing: [
-        { label: "Clips", missingScopes: ["clips:edit"] },
-        { label: "Pinned messages", missingScopes: ["moderator:manage:chat_messages"] },
+        { label: "Clips", optional: false, missingScopes: ["clips:edit"] },
+        { label: "Pinned messages", optional: false, missingScopes: ["moderator:manage:chat_messages"] },
+      ],
+      optionalMissing: [
+        { label: "Moderation: chat modes", optional: true, missingScopes: ["moderator:manage:chat_settings"] },
       ],
     });
     expect(message).toContain("Clips, Pinned messages");
+    expect(message).not.toContain("chat modes");
+  });
+
+  test("says nothing when only optional capabilities are missing", () => {
+    const optionalMissing = [
+      { label: "Moderation: chat modes", optional: true, missingScopes: ["moderator:manage:chat_settings"] },
+    ];
+    expect(twitchReconnectMessage({ state: "ok", optionalMissing })).toBeNull();
   });
 
   test("explains a revoked link", () => {
@@ -33,7 +44,7 @@ describe("twitchReconnectMessage", () => {
   });
 
   test("says nothing for a healthy or absent link", () => {
-    expect(twitchReconnectMessage({ state: "ok" })).toBeNull();
+    expect(twitchReconnectMessage({ state: "ok", optionalMissing: [] })).toBeNull();
     expect(twitchReconnectMessage({ state: "unlinked" })).toBeNull();
   });
 });

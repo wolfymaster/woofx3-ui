@@ -11,6 +11,7 @@ import {
   Pin,
   Radio,
   Rocket,
+  Shield,
   Timer,
   Tv,
   Volume2,
@@ -23,6 +24,7 @@ import { AnnouncementWidget } from "@/components/dashboard/widgets/announcement"
 import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
 import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
+import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
@@ -113,6 +115,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: Volume2,
     category: "stream",
     component: ShoutoutWidget,
+  },
+  {
+    type: "moderation",
+    label: "Moderation",
+    description: "Block a phrase, time out or ban someone, and lock chat down without leaving the dashboard.",
+    icon: Shield,
+    category: "stream",
+    component: ModerationWidget,
   },
   {
     type: "queue",
