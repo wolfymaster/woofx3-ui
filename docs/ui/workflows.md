@@ -26,6 +26,15 @@ Modelled on the Chat Commands page: `PageHeader`, an All / Enabled / Disabled ta
 - The screen is keyed by workflow id, so switching workflows resets the in-progress definition rather than carrying the previous one's draft into the next save.
 - Saves go through `workflowActions.updateFromDefinition` with `escapeDollarKeys` applied (the engine's `$`-prefixed keys are not legal Convex field names).
 
+## Health ("Not running on its own")
+
+The engine refuses a workflow it cannot set up (bad parameters, a step naming a missing action, a trigger that fails to register). Such a workflow stays enabled but never fires by itself, so the UI marks it.
+
+- **Storage:** Convex `workflowHealth`, one row per `(instanceId, engineWorkflowId)`, separate from `workflows` so a report can land before the workflow row does. Rules and payload shapes live in `convex/lib/workflowHealth.ts`.
+- **Inputs:** the `workflow.health.snapshot` webhook (sent on engine start and api reconnect; authoritative, anything unlisted is ok), the `workflow.health.changed` webhook (one transition), and the `workflowHealth.resync` action, which calls the engine's `getWorkflowHealth()` with the snapshot's replace-all meaning. A report older than the stored one (by the engine's `since`) is ignored.
+- **Resync:** on list-page mount (at most every 5 minutes per instance) and whenever the live engine session connects (at most every minute), throttled server-side in `workflowHealthSyncs`. An engine without the RPC is recorded as `unsupported` and shows nothing.
+- **Where it shows:** a red badge with the engine's reason in a popover (`components/workflows/not-running-badge.tsx`) on list rows, the editor header, and the event trigger cards (Alerts, Counters, Timers, Queues), plus a one-line dashboard notice linking to the list. `workflowHealth.listNotRunning` returns only enabled, mirrored workflows.
+
 ## Summary
 
 | Area | Role |
@@ -34,3 +43,4 @@ Modelled on the Chat Commands page: `PageHeader`, an All / Enabled / Disabled ta
 | `lib/workflow-display.ts` | Name, description, step count, trigger label shared by list and editor |
 | Presets + catalog hook | Guided creation UX |
 | `StepListEditor` | Step-by-step editing surface |
+| Convex `workflowHealth` | Whether the engine runs each workflow on its own |

@@ -735,6 +735,33 @@ export default defineSchema({
     .index("by_instance_enabled", ["instanceId", "isEnabled"])
     .index("by_engine_id", ["instanceId", "engineWorkflowId"]),
 
+  // workflowHealth: whether the engine runs each stored workflow on its own,
+  // from the workflow.health.* webhooks and the getWorkflowHealth() resync
+  // (convex/lib/workflowHealth.ts). Its own table rather than fields on
+  // `workflows` because a report can arrive before that row is mirrored, and
+  // because a health change should not rewrite a row carrying the definition.
+  // Ok rows are kept: their `sinceMs` is what makes a late error redelivery stale.
+  workflowHealth: defineTable({
+    instanceId: v.id("instances"),
+    engineWorkflowId: v.string(),
+    status: v.union(v.literal("ok"), v.literal("error")),
+    reason: v.optional(v.string()),
+    since: v.string(), // ISO, as the engine sent it
+    sinceMs: v.number(), // since parsed, for ordering reports
+    receivedAt: v.number(),
+  })
+    .index("by_engine_id", ["instanceId", "engineWorkflowId"])
+    .index("by_instance_status", ["instanceId", "status"]),
+
+  // workflowHealthSyncs: one row per instance holding the last
+  // getWorkflowHealth() resync attempt, so page mounts and reconnects across
+  // tabs share one throttle. "unsupported" means the engine predates the RPC.
+  workflowHealthSyncs: defineTable({
+    instanceId: v.id("instances"),
+    attemptedAt: v.number(),
+    outcome: v.optional(v.union(v.literal("ok"), v.literal("unsupported"), v.literal("failed"))),
+  }).index("by_instance", ["instanceId"]),
+
   // pendingWorkflowOperations: correlation records awaiting a webhook echo
   pendingWorkflowOperations: defineTable({
     correlationKey: v.string(),

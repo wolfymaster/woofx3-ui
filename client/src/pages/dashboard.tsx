@@ -22,6 +22,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Carousel, type CarouselApi, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { NotRunningNotice } from "@/components/workflows/not-running-notice";
 import { useInstance } from "@/hooks/use-instance";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
 import {
@@ -318,6 +319,8 @@ export default function Dashboard() {
             </Button>
           </div>
         )}
+
+        <NotRunningNotice />
 
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
 
