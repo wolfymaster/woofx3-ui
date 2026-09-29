@@ -2,37 +2,28 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { InternalConfigFieldSource } from "@woofx3/api/ui-schema";
 import { useAction, useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { type FieldOption, parseFieldOptionsReply } from "@/lib/field-options";
 
-export type FieldOption = { value: string; label: string };
-
-export function defaultTransform(data: unknown): FieldOption[] {
-  if (!Array.isArray(data)) {
-    return [];
-  }
-  const out: FieldOption[] = [];
-  for (const item of data) {
-    if (typeof item === "string") {
-      out.push({ value: item, label: item });
-      continue;
-    }
-    if (item && typeof item === "object") {
-      const o = item as Record<string, unknown>;
-      if (typeof o.value === "string" && typeof o.label === "string") {
-        out.push({ value: o.value, label: o.label });
-      }
-    }
-  }
-  return out;
+export interface FieldOptionsState {
+  options: FieldOption[];
+  loading: boolean;
+  error: string | null;
+  empty: boolean;
+  /** Ask the worker again, e.g. after the streamer added a scene. */
+  refresh: () => void;
 }
 
 export function useFieldOptions(
   instanceId: Id<"instances"> | undefined,
   source: InternalConfigFieldSource | undefined
-): { options: FieldOption[]; loading: boolean; error: string | null; empty: boolean } {
+): FieldOptionsState {
   const dispatch = useAction(api.fieldOptions.dispatch);
   const [correlationKey, setCorrelationKey] = useState<string | null>(null);
+  const [requestCount, setRequestCount] = useState(0);
+  const refresh = useCallback(() => setRequestCount((count) => count + 1), []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: requestCount is the refresh signal, not read here
   useEffect(() => {
     if (!instanceId || !source) {
       setCorrelationKey(null);
@@ -43,7 +34,7 @@ export function useFieldOptions(
     dispatch({ instanceId, descriptor: source, correlationKey: key }).catch(() => {
       /* errors surface via transientEvents */
     });
-  }, [instanceId, source, dispatch]);
+  }, [instanceId, source, dispatch, requestCount]);
 
   const event = useQuery(
     api.transientEvents.get,
@@ -52,20 +43,15 @@ export function useFieldOptions(
 
   return useMemo(() => {
     if (!instanceId || !source) {
-      return { options: [], loading: false, error: null, empty: true };
+      return { options: [], loading: false, error: null, empty: true, refresh };
     }
     if (event === undefined || event === null) {
-      return { options: [], loading: true, error: null, empty: false };
+      return { options: [], loading: true, error: null, empty: false, refresh };
     }
     if (event.status === "error") {
-      return { options: [], loading: false, error: event.message ?? "Request failed", empty: true };
+      return { options: [], loading: false, error: event.message ?? "Request failed", empty: true, refresh };
     }
-    const options = defaultTransform(event.data);
-    return {
-      options,
-      loading: false,
-      error: null,
-      empty: options.length === 0,
-    };
-  }, [instanceId, source, event]);
+    const { options, error } = parseFieldOptionsReply(event.data);
+    return { options, loading: false, error, empty: options.length === 0, refresh };
+  }, [instanceId, source, event, refresh]);
 }
