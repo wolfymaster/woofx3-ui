@@ -32,11 +32,6 @@ import { logger } from "./logger";
  */
 const MAX_ERROR_ROWS = 500;
 
-/** getWorkflowHealth ships with the engine's health reporting and is not yet in @woofx3/api here. */
-interface WorkflowHealthEngineApi extends EngineApi {
-  getWorkflowHealth(): Promise<unknown>;
-}
-
 type HealthRow = Doc<"workflowHealth">;
 
 async function healthRow(
@@ -332,7 +327,7 @@ export const resync = action({
     const fetchStartedAt = Date.now();
     let result: unknown;
     try {
-      result = await createEngineRpcSession<WorkflowHealthEngineApi>(
+      result = await createEngineRpcSession<EngineApi>(
         engine.url,
         engine.clientId,
         engine.clientSecret
