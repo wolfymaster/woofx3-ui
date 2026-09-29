@@ -6,6 +6,7 @@ import { action, internalMutation, internalQuery, mutation, type QueryCtx, query
 import { planRepin } from "./lib/pinStrategy";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { authorizeTwitch } from "./lib/twitchAuth";
+import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
 
 // Twitch chat pinning, and the local history it is driven from.
 //
@@ -22,14 +23,10 @@ import { authorizeTwitch } from "./lib/twitchAuth";
 // These endpoints are in open beta as of 2026-05-15 and may change.
 
 const TWITCH_PINS_URL = "https://api.twitch.tv/helix/chat/pins";
-const TWITCH_MESSAGES_URL = "https://api.twitch.tv/helix/chat/messages";
 
 const PIN_MANAGE_SCOPE = "moderator:manage:chat_messages";
 const PIN_READ_SCOPE = "moderator:read:chat_messages";
 const SEND_SCOPE = "user:write:chat";
-
-/** Twitch rejects a chat message longer than this, so refuse before spending a call. */
-const MAX_MESSAGE_LENGTH = 500;
 
 const MAX_HISTORY_READ = 100;
 
@@ -234,46 +231,6 @@ export const knownMessages = internalQuery({
   },
 });
 
-/** Posts `text` to chat and pins it in one request, returning the new message id. */
-async function sendAndPin(
-  accessToken: string,
-  clientId: string,
-  broadcasterUserId: string,
-  text: string
-): Promise<string> {
-  const response = await fetch(TWITCH_MESSAGES_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Client-Id": clientId,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      broadcaster_id: broadcasterUserId,
-      sender_id: broadcasterUserId,
-      message: text,
-      pin: true,
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Twitch send-and-pin failed: ${response.status} ${await response.text()}`);
-  }
-
-  const body = (await response.json()) as {
-    data?: Array<{ message_id?: string; is_sent?: boolean; drop_reason?: { code?: string; message?: string } }>;
-  };
-  const result = body.data?.[0];
-  // Twitch answers 200 and still drops the message — automod, a duplicate, a
-  // banned term. Treating that as success would record an id nobody ever saw.
-  if (!result?.is_sent) {
-    throw new Error(result?.drop_reason?.message ?? "Twitch accepted the message but did not send it");
-  }
-  if (!result.message_id) {
-    throw new Error("Twitch sent the message but returned no id");
-  }
-  return result.message_id;
-}
-
 async function pinExisting(
   accessToken: string,
   clientId: string,
@@ -298,8 +255,8 @@ export const pinNewMessage = action({
     if (!text) {
       throw new Error("A pinned message needs some text");
     }
-    if (text.length > MAX_MESSAGE_LENGTH) {
-      throw new Error(`Chat messages are limited to ${MAX_MESSAGE_LENGTH} characters`);
+    if (text.length > MAX_CHAT_MESSAGE_LENGTH) {
+      throw new Error(`Chat messages are limited to ${MAX_CHAT_MESSAGE_LENGTH} characters`);
     }
 
     const userId = await getAuthUserId(ctx);
@@ -307,10 +264,10 @@ export const pinNewMessage = action({
       throw new Error("Not authenticated");
     }
     // Both scopes are needed: one to post the message, one to pin it.
-    const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
+    const twitch = await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
     await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
 
-    const messageId = await sendAndPin(accessToken, clientId, broadcasterUserId, text);
+    const messageId = await sendChatMessage(twitch, text, { pin: true });
     await ctx.runMutation(internal.pins.recordPinned, {
       instanceId: args.instanceId,
       userId,
@@ -344,7 +301,7 @@ export const repinFromHistory = action({
       throw new Error("History entry not found");
     }
 
-    const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
+    const twitch = await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
     // null, not undefined: Convex turns an undefined return into null across
     // the function boundary. planRepin takes undefined for "boundary unknown",
     // so the conversion happens here rather than widening its signature to
@@ -363,7 +320,7 @@ export const repinFromHistory = action({
 
     if (plan.kind === "repin") {
       try {
-        await pinExisting(accessToken, clientId, broadcasterUserId, plan.messageId);
+        await pinExisting(twitch.accessToken, twitch.clientId, twitch.broadcasterUserId, plan.messageId);
       } catch {
         // The id outlived the rule's guess — post the text instead. This is the
         // path planRepin exists to keep rare, not to replace.
@@ -373,7 +330,7 @@ export const repinFromHistory = action({
 
     if (resent) {
       await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
-      messageId = await sendAndPin(accessToken, clientId, broadcasterUserId, entry.content);
+      messageId = await sendChatMessage(twitch, entry.content, { pin: true });
     }
 
     await ctx.runMutation(internal.pins.recordPinned, {

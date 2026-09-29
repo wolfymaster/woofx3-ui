@@ -13,6 +13,7 @@ import {
   Palette,
   Puzzle,
   Radio,
+  Rocket,
   ScrollText,
   Server,
   Settings,
@@ -43,6 +44,7 @@ export interface NavSection extends NavItem {
 }
 
 export const STREAM_ITEMS: NavItem[] = [
+  { id: "go-live", label: "Go live", icon: Rocket, href: "/stream/go-live" },
   { id: "alerts", label: "Alerts", icon: Bell, href: "/stream/alerts", owns: [ALERT_EDITOR_BASE, ALERT_RUN_BASE] },
   { id: "commands", label: "Commands", icon: MessageSquare, href: "/stream/commands" },
   { id: "counters", label: "Counters", icon: Tally5, href: "/stream/counters" },
@@ -68,7 +70,9 @@ export const ADMIN_ITEMS: NavItem[] = [
 
 export const MAIN_NAV_SECTIONS: NavSection[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/" },
-  { id: "stream", label: "Stream", icon: Radio, href: STREAM_ITEMS[0].href, children: STREAM_ITEMS },
+  // Lands on Alerts, like the /stream redirect in App.tsx, rather than on the
+  // first entry: Go live leads the list for visibility, not as the section's home.
+  { id: "stream", label: "Stream", icon: Radio, href: "/stream/alerts", children: STREAM_ITEMS },
   { id: "modules", label: "Modules", icon: Puzzle, href: "/modules" },
   { id: "help", label: "Help", icon: CircleHelp, href: HELP_ITEMS[0].href, children: HELP_ITEMS },
 ];

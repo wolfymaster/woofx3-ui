@@ -40,6 +40,7 @@ const Commands = lazy(() => import("@/pages/commands"));
 const Counters = lazy(() => import("@/pages/counters"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const Feedback = lazy(() => import("@/pages/feedback"));
+const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
 const ModuleInstall = lazy(() => import("@/pages/module-install"));
@@ -143,6 +144,7 @@ function AppRoutes() {
                   <Route path="/stream">
                     <Redirect to="/stream/alerts" />
                   </Route>
+                  <Route path="/stream/go-live" component={GoLive} />
                   <Route path="/stream/alerts" component={Alerts} />
                   <Route path="/stream/alerts/*" component={Alerts} />
                   <Route path={ALERT_EDITOR_ROUTE} component={AlertEditor} />
