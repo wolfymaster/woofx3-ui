@@ -12,18 +12,26 @@ import type { ActionStep, ConditionConfig, ConditionOperator, TaskDefinition, Wo
  * function id and `$ref` an engine task needs.
  */
 
+/** Modules whose actions packs use, by id. */
+export const STARTER_MODULES = {
+  /** The engine's bundled module: chat replies and OBS. */
+  engine: "woofx3",
+  /** The Twitch platform module, which also provides every trigger the packs bind to. */
+  twitch: "woofx3_twitch",
+} as const;
+
 /**
- * Canonical refs of the actions packs use. Every one belongs to the engine's
- * own `woofx3` module, so an instance without one is running an engine that
- * predates it. Twitch has a module action also named `twitch.shoutout` with a
- * different parameter shape, which is why actions match on the full ref.
+ * Canonical refs of the actions packs use. Platform actions come from the
+ * platform's module rather than the engine, so a missing Twitch action means
+ * the Twitch module is absent or older than the packs, while a missing
+ * `woofx3` action means the engine is.
  */
 export const STARTER_ACTION_REFS = {
   chatReply: "woofx3:action:chat.reply",
-  shoutout: "woofx3:action:twitch.shoutout",
-  clip: "woofx3:action:twitch.clip",
-  marker: "woofx3:action:twitch.marker",
   switchScene: "woofx3:action:obs.switch_scene",
+  shoutout: "woofx3_twitch:action:twitch.shoutout",
+  clip: "woofx3_twitch:action:twitch.clip",
+  marker: "woofx3_twitch:action:twitch.marker",
 } as const;
 
 export type StarterActionRef = (typeof STARTER_ACTION_REFS)[keyof typeof STARTER_ACTION_REFS];
@@ -221,7 +229,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
             id: "shout-out-raider",
             label: "Shout out the raider",
             action: STARTER_ACTION_REFS.shoutout,
-            parameters: { userId: "${trigger.data.fromBroadcasterUserId}", skipIfRateLimited: true },
+            parameters: { user: "${trigger.data.fromBroadcasterUserId}", skipIfRateLimited: true },
           },
           {
             kind: "action",
@@ -741,6 +749,12 @@ export interface StarterRequirements {
   triggers: string[];
   /** Action refs the catalog lacks. */
   actions: StarterActionRef[];
+  /** Whether the catalog has anything from the Twitch module, which tells a missing module from an outdated one. */
+  twitchModuleInstalled: boolean;
+}
+
+function refModule(ref: string): string {
+  return ref.slice(0, ref.indexOf(":"));
 }
 
 export function missingRequirements(item: StarterItem, catalog: StarterCatalog): StarterRequirements {
@@ -754,7 +768,10 @@ export function missingRequirements(item: StarterItem, catalog: StarterCatalog):
       actions.add(step.action);
     }
   }
-  return { triggers, actions: Array.from(actions) };
+  const twitchModuleInstalled = [...catalog.triggers, ...catalog.actions].some(
+    (entry) => entry.canonicalRef !== undefined && refModule(entry.canonicalRef) === STARTER_MODULES.twitch
+  );
+  return { triggers, actions: Array.from(actions), twitchModuleInstalled };
 }
 
 export function hasRequirements(missing: StarterRequirements): boolean {
@@ -762,16 +779,23 @@ export function hasRequirements(missing: StarterRequirements): boolean {
 }
 
 /**
- * Why an item cannot be installed, in the streamer's terms. Every action a pack
- * uses belongs to the engine, so a missing one means the engine is too old; a
- * missing trigger means the platform module that provides it is not installed.
+ * Why an item cannot be installed, in the streamer's terms. Every trigger a
+ * pack binds to comes from the Twitch module, as do the Twitch actions; the
+ * rest are the engine's own. A Twitch module that is installed but lacks
+ * something is an older version, which updating the module fixes.
  */
 export function requirementsMessage(missing: StarterRequirements): string | null {
-  if (missing.actions.length > 0) {
+  const missingTwitchAction = missing.actions.some((ref) => refModule(ref) === STARTER_MODULES.twitch);
+  const missingEngineAction = missing.actions.some((ref) => refModule(ref) === STARTER_MODULES.engine);
+  const needsTwitch = missing.triggers.length > 0 || missingTwitchAction;
+  if (needsTwitch && !missing.twitchModuleInstalled) {
+    return "Requires the Twitch module";
+  }
+  if (missingEngineAction) {
     return "Requires engine update";
   }
-  if (missing.triggers.length > 0) {
-    return "Requires the Twitch module";
+  if (needsTwitch) {
+    return "Requires the Twitch module (update it)";
   }
   return null;
 }
