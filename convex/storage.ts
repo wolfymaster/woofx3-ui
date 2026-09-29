@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 
 export const getConfig = action({
   args: {
@@ -46,10 +47,9 @@ export const setConfig = action({
     config: v.record(v.string(), v.any()),
   },
   handler: async (ctx, args): Promise<{ success: boolean }> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    // Replaces the engine's storage backend and its S3 credentials for
+    // everyone on the instance, so it is an owner's or admin's change.
+    const userId = await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
 
     const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null = await ctx.runQuery(
       internal.workflowCatalogContext.catalogContextForUser,
