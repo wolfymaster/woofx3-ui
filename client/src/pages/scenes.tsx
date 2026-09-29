@@ -5,6 +5,8 @@ import { Layers, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
+import { HelpTip } from "@/components/common/help-tip";
+import { PageIntro } from "@/components/common/page-intro";
 import { PageHeader } from "@/components/layout/page-header";
 import { CreateSceneDialog } from "@/components/scenes/create-scene-dialog";
 import { SceneCanvasEditor } from "@/components/scenes/scene-canvas-editor";
@@ -24,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
@@ -145,7 +148,23 @@ function SceneListScreen() {
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
-      <PageHeader title="Scenes" description="Browser source overlays — pick one to lay out its widgets." />
+      <PageHeader
+        title="Scenes"
+        description="Browser source overlays — pick one to lay out its widgets."
+        actions={
+          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+            Adding a scene to OBS
+            <HelpTip term="browserSource" align="end">
+              <ol className="list-decimal pl-4 space-y-1">
+                <li>Open the scene and copy its browser source URL from the link button.</li>
+                <li>In OBS, add a source to your scene and choose Browser.</li>
+                <li>Paste the URL and set the width and height to the scene&apos;s size.</li>
+              </ol>
+            </HelpTip>
+          </span>
+        }
+      />
+      <PageIntro introId="scenes" onTry={() => setCreateOpen(true)} />
 
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -222,32 +241,42 @@ function SceneListScreen() {
                       <TableCell className="text-muted-foreground">{(scene.widgets ?? []).length}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            disabled={isSyncing}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openScene(scene);
-                            }}
-                            title="Edit scene"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            disabled={isSyncing}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteTarget(scene);
-                            }}
-                            title="Delete scene"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                disabled={isSyncing}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openScene(scene);
+                                }}
+                                aria-label="Edit scene"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit scene</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                disabled={isSyncing}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteTarget(scene);
+                                }}
+                                aria-label="Delete scene"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete scene</TooltipContent>
+                          </Tooltip>
                         </div>
                       </TableCell>
                     </TableRow>

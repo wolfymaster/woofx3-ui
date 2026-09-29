@@ -4,6 +4,7 @@ import { useAction, useConvexAuth, useMutation, useQuery } from "convex/react";
 import { Building2, Check, Loader2, MonitorPlay, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { HelpTip } from "@/components/common/help-tip";
 import { ManagedEngineStep } from "@/components/onboarding/managed-engine-step";
 import { ProvisioningProgress } from "@/components/onboarding/provisioning-progress";
 import { Button } from "@/components/ui/button";
@@ -236,7 +237,10 @@ export default function Onboarding() {
             {!provisioningInstanceId && step === 1 && !showManagedStep && (
               <form onSubmit={handleInstanceStep} className="space-y-4">
                 <div>
-                  <Label htmlFor="instance-name">Instance Name</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="instance-name">Instance Name</Label>
+                    <HelpTip term="instance" />
+                  </div>
                   <Input
                     id="instance-name"
                     value={instanceName}
@@ -247,7 +251,12 @@ export default function Onboarding() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="instance-url">woofx3 API URL</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor="instance-url">woofx3 API URL</Label>
+                    <HelpTip term="engine">
+                      <p>This is the address your engine answers on, such as localhost:8080 or engine.example.com.</p>
+                    </HelpTip>
+                  </div>
                   <Input
                     id="instance-url"
                     value={instanceUrl}

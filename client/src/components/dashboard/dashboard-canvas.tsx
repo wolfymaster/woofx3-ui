@@ -1,5 +1,6 @@
 import { LayoutTemplate, Plus, X } from "lucide-react";
 import { memo, type ReactNode, useCallback, useMemo } from "react";
+import { HelpTip } from "@/components/common/help-tip";
 import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
@@ -70,10 +71,14 @@ export function DashboardLayoutPicker({ onSelect }: DashboardLayoutPickerProps) 
     <div className="h-full flex flex-col items-center justify-center p-8">
       <div className="text-center max-w-md mb-8">
         <LayoutTemplate className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-        <h2 className="text-xl font-semibold mb-2">Choose a Dashboard Layout</h2>
+        <h2 className="flex items-center justify-center gap-1.5 text-xl font-semibold mb-2">
+          Choose a Dashboard Layout
+          <HelpTip term="panel" align="center" />
+        </h2>
         <p className="text-muted-foreground">
           Pick the arrangement of widget areas for this page. A page keeps the layout it was created with — to use a
-          different one, delete the page and add a new one.
+          different one, delete the page and add a new one.{" "}
+          <HelpTip term="zone" align="center" className="align-middle" />
         </p>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 w-full max-w-2xl">

@@ -254,9 +254,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const header = (
     <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
       <div className="flex items-center gap-3 min-w-0">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/stream/scenes")} title="Back to scenes">
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" onClick={() => navigate("/stream/scenes")} aria-label="Back to scenes">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Back to scenes</TooltipContent>
+        </Tooltip>
         <Input
           value={scene.name}
           onChange={(e) => mutateScene((prev) => ({ ...prev, name: e.target.value }))}

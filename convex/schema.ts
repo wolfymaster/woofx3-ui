@@ -65,6 +65,10 @@ export const macroConfigValidator = v.object({
   body: v.optional(v.string()),
 });
 
+// Pages that show a first-visit intro. Must match PAGE_INTROS in
+// client/src/lib/page-intros.ts.
+export const pageIntroIdValidator = v.union(v.literal("workflows"), v.literal("scenes"), v.literal("modules"));
+
 // Shared shape for dashboardLayouts.panels (and its legacy `pages` alias below).
 const dashboardPanelValidator = v.array(
   v.object({
@@ -534,6 +538,15 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_canonical", ["instanceId", "canonicalId"]),
+
+  // pageIntroDismissals: first-visit page intros a user has closed. Per user rather
+  // than per instance: an intro explains what a page is for, which a person
+  // needs to learn once, not once per account they belong to.
+  pageIntroDismissals: defineTable({
+    userId: v.id("users"),
+    introId: pageIntroIdValidator,
+    dismissedAt: v.number(),
+  }).index("by_user_and_intro", ["userId", "introId"]),
 
   // dashboardNotes: freeform scratch text behind the dashboard's Notes rail
   // widget. Per user and per instance — notes are private working memory

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { alertEventType, alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
@@ -118,25 +119,34 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
         {/* `workflowId` on an alert row is the execution that fired it, which is
             what a run is keyed on. Absent for a manual dispatch. */}
         {alert.workflowId && (
-          <Button asChild size="icon" variant="ghost" className="h-7 w-7" title="Open the run that fired this">
-            <Link href={alertRunPath(alert.workflowId)}>
-              <ScrollText className="h-3.5 w-3.5" />
-              <span className="sr-only">Open the run that fired this</span>
-            </Link>
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button asChild size="icon" variant="ghost" className="h-7 w-7">
+                <Link href={alertRunPath(alert.workflowId)}>
+                  <ScrollText className="h-3.5 w-3.5" />
+                  <span className="sr-only">Open the run that fired this</span>
+                </Link>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Open the run that fired this</TooltipContent>
+          </Tooltip>
         )}
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          disabled={busy}
-          onClick={() => void start()}
-          title="Play this alert again"
-          data-testid={`button-replay-alert-${alert._id}`}
-        >
-          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
-          <span className="sr-only">Play this alert again</span>
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              disabled={busy}
+              onClick={() => void start()}
+              data-testid={`button-replay-alert-${alert._id}`}
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+              <span className="sr-only">Play this alert again</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Play this alert again</TooltipContent>
+        </Tooltip>
       </div>
     </li>
   );

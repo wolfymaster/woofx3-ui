@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { flattenPayload, formatPayload, type PayloadFieldKind } from "@/lib/payload-fields";
 import { cn } from "@/lib/utils";
@@ -87,10 +88,15 @@ export function PayloadPanel({ title, value, raw, testId }: PayloadPanelProps) {
               </ToggleGroupItem>
             </ToggleGroup>
           )}
-          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => void copy()} title={`Copy ${title}`}>
-            <Copy className="h-3.5 w-3.5" />
-            <span className="sr-only">Copy {title}</span>
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => void copy()}>
+                <Copy className="h-3.5 w-3.5" />
+                <span className="sr-only">Copy {title}</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Copy {title}</TooltipContent>
+          </Tooltip>
         </div>
       </header>
 

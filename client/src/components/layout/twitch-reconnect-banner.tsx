@@ -3,6 +3,7 @@ import { Loader2, TriangleAlert, X } from "lucide-react";
 import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
@@ -74,17 +75,21 @@ export function TwitchReconnectBanner() {
       ) : (
         <span className="shrink-0 text-xs text-muted-foreground">Ask an instance admin to reconnect Twitch.</span>
       )}
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-7 w-7 shrink-0"
-        onClick={dismiss}
-        title="Hide until the next session"
-        data-testid="button-banner-dismiss-twitch"
-      >
-        <X className="h-4 w-4" />
-        <span className="sr-only">Hide until the next session</span>
-      </Button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 shrink-0"
+            onClick={dismiss}
+            data-testid="button-banner-dismiss-twitch"
+          >
+            <X className="h-4 w-4" />
+            <span className="sr-only">Hide until the next session</span>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Hide until the next session</TooltipContent>
+      </Tooltip>
     </div>
   );
 }

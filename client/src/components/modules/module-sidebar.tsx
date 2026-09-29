@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { Check, Loader2, Store } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation } from "wouter";
+import { HelpTip } from "@/components/common/help-tip";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { getCategoryColor, getCategoryCounts } from "@/components/modules/module-category";
 import { Button } from "@/components/ui/button";
@@ -64,8 +65,9 @@ export function ModuleSidebar({
 
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-1">
-          <div className="px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+          <div className="flex items-center justify-between px-2 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
             Categories
+            <HelpTip term="module" />
           </div>
           <button
             type="button"

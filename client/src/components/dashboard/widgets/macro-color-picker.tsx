@@ -1,6 +1,7 @@
 import { Ban } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { isHexColor, MACRO_COLOR_PRESETS } from "@/lib/macro-pad";
 import { cn } from "@/lib/utils";
 
@@ -34,36 +35,43 @@ export function MacroColorPicker({ value, onChange }: MacroColorPickerProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5 flex-wrap">
-        <button
-          type="button"
-          title="No color"
-          aria-label="No color"
-          aria-pressed={value === undefined}
-          className={cn(
-            "h-6 w-6 rounded-full border-2 flex items-center justify-center text-muted-foreground",
-            value === undefined ? "border-foreground" : "border-transparent"
-          )}
-          onClick={() => onChange(undefined)}
-          data-testid="swatch-macro-none"
-        >
-          <Ban className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              aria-label="No color"
+              aria-pressed={value === undefined}
+              className={cn(
+                "h-6 w-6 rounded-full border-2 flex items-center justify-center text-muted-foreground",
+                value === undefined ? "border-foreground" : "border-transparent"
+              )}
+              onClick={() => onChange(undefined)}
+              data-testid="swatch-macro-none"
+            >
+              <Ban className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>No color</TooltipContent>
+        </Tooltip>
 
         {MACRO_COLOR_PRESETS.map((preset) => (
-          <button
-            key={preset.value}
-            type="button"
-            title={preset.label}
-            aria-label={preset.label}
-            aria-pressed={value === preset.value}
-            className={cn(
-              "h-6 w-6 rounded-full border-2 transition-colors",
-              value === preset.value ? "border-foreground" : "border-transparent"
-            )}
-            style={{ backgroundColor: preset.value }}
-            onClick={() => onChange(preset.value)}
-            data-testid={`swatch-macro-${preset.label.toLowerCase()}`}
-          />
+          <Tooltip key={preset.value}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={preset.label}
+                aria-pressed={value === preset.value}
+                className={cn(
+                  "h-6 w-6 rounded-full border-2 transition-colors",
+                  value === preset.value ? "border-foreground" : "border-transparent"
+                )}
+                style={{ backgroundColor: preset.value }}
+                onClick={() => onChange(preset.value)}
+                data-testid={`swatch-macro-${preset.label.toLowerCase()}`}
+              />
+            </TooltipTrigger>
+            <TooltipContent>{preset.label}</TooltipContent>
+          </Tooltip>
         ))}
       </div>
 

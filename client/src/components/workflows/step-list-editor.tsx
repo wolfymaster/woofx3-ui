@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { type CatalogActionRow, type CatalogTriggerRow, useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
@@ -632,21 +633,28 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
           </div>
           <div className="mt-4 pt-4 border-t flex items-center justify-between gap-2 shrink-0">
             {selectedNode && selectedNode.type !== "trigger" ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-destructive hover:text-destructive"
-                disabled={!canRemoveSelected}
-                onClick={() => setDeleteConfirmOpen(true)}
-                title={
-                  canRemoveSelected
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={canRemoveSelected ? undefined : 0} className="inline-flex">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive hover:text-destructive"
+                      disabled={!canRemoveSelected}
+                      onClick={() => setDeleteConfirmOpen(true)}
+                      aria-label="Delete step"
+                      data-testid="button-delete-step"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {canRemoveSelected
                     ? "Delete step"
-                    : "A workflow needs at least one action — add another action before removing this one."
-                }
-                data-testid="button-delete-step"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                    : "A workflow needs at least one action — add another action before removing this one."}
+                </TooltipContent>
+              </Tooltip>
             ) : (
               <div />
             )}

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { errorMessage, useGoLiveChecklist } from "@/hooks/use-go-live-checklist";
 import { useToast } from "@/hooks/use-toast";
 import type { CheckFix, ChecklistOverall, CheckResult, CheckStatus } from "@/lib/go-live-checks";
@@ -223,17 +224,21 @@ function CheckRow({
         )}
       </div>
       {check.status !== "running" && check.status !== "pass" && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 shrink-0 text-muted-foreground"
-          onClick={onDismiss}
-          aria-label={`Dismiss the ${check.title} check`}
-          title="Dismiss: stop checking this"
-          data-testid={`button-dismiss-${check.id}`}
-        >
-          <EyeOff className="h-3.5 w-3.5" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0 text-muted-foreground"
+              onClick={onDismiss}
+              aria-label={`Dismiss the ${check.title} check`}
+              data-testid={`button-dismiss-${check.id}`}
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Dismiss: stop checking this</TooltipContent>
+        </Tooltip>
       )}
     </li>
   );

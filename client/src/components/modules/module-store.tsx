@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { featuredInOrder } from "@convex/lib/marketplaceImages";
 import { useQuery } from "convex/react";
 import { AlertCircle, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import {
   getCategoryBannerStyle,
@@ -25,9 +25,11 @@ interface ModuleStoreProps {
   catalog: MarketplaceCatalog;
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
+  /** Rendered above the search bar, inside the store's scroll area. */
+  header?: ReactNode;
 }
 
-export function ModuleStore({ catalog, selectedCategory, onSelectCategory }: ModuleStoreProps) {
+export function ModuleStore({ catalog, selectedCategory, onSelectCategory, header }: ModuleStoreProps) {
   const { instance } = useInstance();
   const [, navigate] = useLocation();
   const { list: marketplaceList, loading: marketplaceLoading, error: marketplaceError, refetch } = catalog;
@@ -119,6 +121,7 @@ export function ModuleStore({ catalog, selectedCategory, onSelectCategory }: Mod
   return (
     <div className="flex-1 overflow-auto">
       <div className="max-w-[1600px] mx-auto w-full p-6 lg:p-8 space-y-8">
+        {header}
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

@@ -36,6 +36,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -354,9 +355,15 @@ function CommandsTab({
                           Restricted
                         </Badge>
                         {cmd.groupIds.length === 0 && cmd.usernames.length === 0 && (
-                          <span title="No groups or usernames granted — invocable by no one">
-                            <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
-                          </span>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <AlertTriangle className="h-3.5 w-3.5 text-destructive" />
+                                <span className="sr-only">No groups or usernames granted — invocable by no one</span>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>No groups or usernames granted — invocable by no one</TooltipContent>
+                          </Tooltip>
                         )}
                       </div>
                     )}

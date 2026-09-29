@@ -151,7 +151,6 @@ const EventRow = memo(function EventRow({ event, index, isPending, measureRef, o
           onClick={() => onRetrigger(event._id, event.eventType)}
           disabled={isPending}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-          title="Retrigger event"
         >
           <RotateCcw className="h-3.5 w-3.5" />
           {isPending ? "Retriggering…" : "Retrigger"}

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
 import { commandNameToSubjectSegment } from "@/lib/command-slug";
 import { cn } from "@/lib/utils";
@@ -368,15 +369,20 @@ function VariableToggleWrapper({
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={toggle}
-        className="absolute right-0 top-0 text-muted-foreground hover:text-foreground"
-        title={variableMode ? "Use a fixed value" : "Reference a variable instead"}
-        data-testid={`button-toggle-variable-${field.id}`}
-      >
-        <Braces className="h-3.5 w-3.5" />
-      </button>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={toggle}
+            className="absolute right-0 top-0 text-muted-foreground hover:text-foreground"
+            aria-label={variableMode ? "Use a fixed value" : "Reference a variable instead"}
+            data-testid={`button-toggle-variable-${field.id}`}
+          >
+            <Braces className="h-3.5 w-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>{variableMode ? "Use a fixed value" : "Reference a variable instead"}</TooltipContent>
+      </Tooltip>
       {variableMode ? (
         <div className="space-y-2 pr-6">
           <Label>

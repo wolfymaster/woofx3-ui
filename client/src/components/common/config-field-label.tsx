@@ -1,6 +1,5 @@
-import { Info } from "lucide-react";
+import { HelpTip } from "@/components/common/help-tip";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface ConfigFieldLabelProps {
   htmlFor?: string;
@@ -20,25 +19,14 @@ export function ConfigFieldLabel({ htmlFor, label, required, hint, examplePayloa
         {required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
       {showInfo && (
-        <Popover>
-          <PopoverTrigger asChild>
-            <button
-              type="button"
-              className="text-muted-foreground hover:text-foreground"
-              aria-label={`More info about ${label}`}
-            >
-              <Info className="h-3.5 w-3.5" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent className="max-w-sm text-sm" align="start">
-            {hint && <p className="text-muted-foreground mb-2">{hint}</p>}
-            {examplePayload && (
-              <pre className="text-xs bg-muted rounded-md p-2 overflow-x-auto whitespace-pre-wrap font-mono">
-                {examplePayload}
-              </pre>
-            )}
-          </PopoverContent>
-        </Popover>
+        <HelpTip label={label}>
+          {hint && <p>{hint}</p>}
+          {examplePayload && (
+            <pre className="text-xs text-foreground bg-muted rounded-md p-2 overflow-x-auto whitespace-pre-wrap font-mono">
+              {examplePayload}
+            </pre>
+          )}
+        </HelpTip>
       )}
     </div>
   );
