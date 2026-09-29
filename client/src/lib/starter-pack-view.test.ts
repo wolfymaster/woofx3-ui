@@ -17,8 +17,9 @@ const TWITCH_TRIGGERS = [
   "channel.subscriptionGift",
 ];
 
+/** An instance whose Twitch module predates its workflow actions, on an engine without the OBS actions. */
 const CHAT_ONLY: StarterCatalog = {
-  triggers: TWITCH_TRIGGERS.map((event) => ({ event })),
+  triggers: TWITCH_TRIGGERS.map((event) => ({ event, canonicalRef: `woofx3_twitch:trigger:${event}` })),
   actions: [{ canonicalRef: STARTER_ACTION_REFS.chatReply, handlerType: "chat.reply" }],
 };
 
@@ -38,11 +39,11 @@ describe("starterItemView", () => {
     expect(starterItemView(raid, item, CHAT_ONLY, states)).toEqual({ state: "installed" });
   });
 
-  test("an item the engine cannot run yet is held back", () => {
+  test("an item the Twitch module cannot run yet is held back", () => {
     const raid = pack("raid-welcome");
     expect(starterItemView(raid, raid.items[0], CHAT_ONLY, {})).toEqual({
       state: "unavailable",
-      reason: "Requires engine update",
+      reason: "Requires the Twitch module (update it)",
     });
   });
 
