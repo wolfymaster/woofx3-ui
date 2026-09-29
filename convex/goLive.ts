@@ -11,7 +11,6 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import {
   type GoLiveCompletion,
@@ -339,20 +338,21 @@ export const checkObs = action({
       return { kind: "engine-unreachable", message: "This instance is not registered with an engine" };
     }
 
-    const engine = { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
     try {
-      const capabilities = await fetchEngineCapabilities(engine);
-      if (!hasEngineCapability(capabilities, "obs.listScenes")) {
-        return { kind: "engine-update-needed" };
-      }
-      const rpc = createEngineRpcSession<ObsListingApi>(engine.url, engine.clientId, engine.clientSecret);
+      const rpc = createEngineRpcSession<ObsListingApi>(instance.url, instance.clientId, instance.clientSecret);
       const listing = await rpc.listObsScenes();
       if (listing.available) {
         return { kind: "connected", sceneCount: listing.scenes.length };
       }
       return { kind: "disconnected", reason: listing.reason };
     } catch (error) {
-      return { kind: "engine-unreachable", message: messageOf(error) };
+      const message = messageOf(error);
+      // capnweb's refusal of a method the engine does not expose. Engines
+      // read OBS through a module rather than an engine RPC, so most do not.
+      if (message.includes("'listObsScenes' is not a function")) {
+        return { kind: "unknown" };
+      }
+      return { kind: "engine-unreachable", message };
     }
   },
 });

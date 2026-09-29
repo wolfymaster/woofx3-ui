@@ -32,7 +32,7 @@ export function AlertQueueControls({ instanceId, className }: AlertQueueControls
   const [confirmingClear, setConfirmingClear] = useState(false);
 
   const { state: capabilities } = useEngineCapabilities(instanceId);
-  const support = capabilitySupport(capabilities, ALERT_QUEUE_CONTROL_CAPABILITIES, "any");
+  const support = capabilitySupport(capabilities, ALERT_QUEUE_CONTROL_CAPABILITIES);
   const busy = pending !== null;
   const unavailable = support !== "supported";
   const unavailableTitle =

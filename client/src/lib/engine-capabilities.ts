@@ -14,14 +14,10 @@ export type EngineCapabilitiesState =
  */
 export type CapabilitySupport = "checking" | "supported" | "unsupported" | "unknown";
 
-/**
- * Support for a feature that needs every id in `required` (`mode: "all"`) or
- * any one of them (`mode: "any"`). A legacy engine supports none.
- */
+/** Support for a feature that needs every id in `required`. A legacy engine supports none. */
 export function capabilitySupport(
   state: EngineCapabilitiesState,
-  required: readonly EngineCapability[],
-  mode: "all" | "any" = "all"
+  required: readonly EngineCapability[]
 ): CapabilitySupport {
   if (required.length === 0) {
     throw new Error("capabilitySupport: no capability ids given");
@@ -32,21 +28,12 @@ export function capabilitySupport(
   if (state.status === "error") {
     return "unknown";
   }
-  const has = (id: EngineCapability) => state.report.capabilities.includes(id);
-  const supported = mode === "all" ? required.every(has) : required.some(has);
+  const supported = required.every((id) => state.report.capabilities.includes(id));
   return supported ? "supported" : "unsupported";
 }
 
-/**
- * The alert skip and clear controls. `alerts.skipClear` is the id the engine
- * declares for `skipCurrentAlert` and `clearAlertQueue`; `alerts.queueControls`
- * names the same controls and is accepted so either spelling of the engine
- * contract turns them on.
- */
-export const ALERT_QUEUE_CONTROL_CAPABILITIES: readonly EngineCapability[] = [
-  "alerts.skipClear",
-  "alerts.queueControls",
-];
+/** The alert skip, clear and replay controls, with the result shapes the dashboard reads. */
+export const ALERT_QUEUE_CONTROL_CAPABILITIES: readonly EngineCapability[] = ["alerts.queueControls"];
 
 /** Stream session history plus leaderboards and viewer totals, which the supporters page reads together. */
 export const SUPPORTER_CAPABILITIES: readonly EngineCapability[] = ["analytics.sessions", "analytics.aggregates"];

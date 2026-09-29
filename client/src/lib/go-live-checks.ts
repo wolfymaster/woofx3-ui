@@ -192,8 +192,8 @@ export function obsCheck(facts: ObsFacts): CheckResult {
         fixes: [RETRY],
       });
     }
-    case "engine-update-needed": {
-      return result("obs", "warn", "Your engine is too old to report OBS status. Update it to check OBS from here.");
+    case "unknown": {
+      return result("obs", "warn", "Your engine doesn't report OBS status, so it can't be checked from here.");
     }
     case "engine-unreachable": {
       return result("obs", "warn", "Couldn't ask the engine about OBS", { details: [facts.message], fixes: [RETRY] });

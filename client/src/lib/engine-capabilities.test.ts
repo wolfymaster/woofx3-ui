@@ -17,16 +17,15 @@ const LOADING: EngineCapabilitiesState = { status: "loading" };
 const FAILED: EngineCapabilitiesState = { status: "error", message: "fetch failed" };
 
 describe("capabilitySupport", () => {
-  test("needs every id by default", () => {
+  test("needs every id", () => {
     const state = ready("analytics.sessions", "analytics.aggregates");
     expect(capabilitySupport(state, ["analytics.sessions", "analytics.aggregates"])).toBe("supported");
     expect(capabilitySupport(state, ["analytics.sessions", "analytics.gauges"])).toBe("unsupported");
   });
 
-  test("any mode needs one of them", () => {
-    expect(capabilitySupport(ready("alerts.skipClear"), ALERT_QUEUE_CONTROL_CAPABILITIES, "any")).toBe("supported");
-    expect(capabilitySupport(ready("alerts.queueControls"), ALERT_QUEUE_CONTROL_CAPABILITIES, "any")).toBe("supported");
-    expect(capabilitySupport(ready("obs.control"), ALERT_QUEUE_CONTROL_CAPABILITIES, "any")).toBe("unsupported");
+  test("alert queue controls need alerts.queueControls", () => {
+    expect(capabilitySupport(ready("alerts.queueControls"), ALERT_QUEUE_CONTROL_CAPABILITIES)).toBe("supported");
+    expect(capabilitySupport(ready("obs.control"), ALERT_QUEUE_CONTROL_CAPABILITIES)).toBe("unsupported");
   });
 
   test("a legacy engine supports nothing", () => {

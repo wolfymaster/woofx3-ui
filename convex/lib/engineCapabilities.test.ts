@@ -10,9 +10,9 @@ describe("parseEngineCapabilities", () => {
   test("keeps known ids, sorted and unique", () => {
     const report = parseEngineCapabilities({
       schema: 1,
-      capabilities: ["workflow.health", "obs.listScenes", "workflow.health"],
+      capabilities: ["workflow.health", "obs.control", "workflow.health"],
     });
-    expect(report).toEqual({ legacy: false, capabilities: ["obs.listScenes", "workflow.health"] });
+    expect(report).toEqual({ legacy: false, capabilities: ["obs.control", "workflow.health"] });
     expect(hasEngineCapability(report, "workflow.health")).toBe(true);
     expect(hasEngineCapability(report, "config.bundles")).toBe(false);
   });

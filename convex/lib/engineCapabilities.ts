@@ -16,15 +16,11 @@ import { createEngineRpcSession } from "./engineInstanceUrl";
 /** The ids this UI gates on. Ids an engine lists beyond these are ignored. */
 export const ENGINE_CAPABILITY_IDS = [
   "alerts.queueControls",
-  "alerts.skipClear",
   "analytics.aggregates",
   "analytics.gauges",
   "analytics.sessions",
   "config.bundles",
   "obs.control",
-  "obs.listScenes",
-  "twitch.streamInfo",
-  "twitch.workflowActions",
   "widgets.themes",
   "workflow.delayWait",
   "workflow.dryRun",

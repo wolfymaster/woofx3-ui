@@ -352,7 +352,7 @@ describe("validateStarterValues", () => {
   test("delays follow the engine's workflow.delayWait capability", () => {
     expect(starterFeaturesFrom([])).toEqual({ delayWait: false });
     expect(starterFeaturesFrom(["workflow.dryRun"])).toEqual({ delayWait: false });
-    expect(starterFeaturesFrom(["obs.listScenes", "workflow.delayWait"])).toEqual({ delayWait: true });
+    expect(starterFeaturesFrom(["obs.control", "workflow.delayWait"])).toEqual({ delayWait: true });
   });
 
   test("counts each placeholder at a display name's length against a field's limit", () => {

@@ -26,8 +26,8 @@ export type TwitchLinkFacts =
 export type ObsFacts =
   | { kind: "connected"; sceneCount: number }
   | { kind: "disconnected"; reason: string }
-  /** The engine predates the OBS listing call, so the question cannot be asked. */
-  | { kind: "engine-update-needed" }
+  /** The engine does not answer the OBS listing call, so the question cannot be asked. */
+  | { kind: "unknown" }
   | { kind: "engine-unreachable"; message: string };
 
 export type StreamInfoFacts =

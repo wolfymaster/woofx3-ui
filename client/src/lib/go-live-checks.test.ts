@@ -145,10 +145,10 @@ describe("obsCheck", () => {
     expect(check.fixes).toEqual([{ kind: "retry", label: "Check again" }]);
   });
 
-  test("asks for an engine update rather than failing when the engine cannot answer", () => {
-    const check = obsCheck({ kind: "engine-update-needed" });
+  test("warns rather than failing when the engine cannot report OBS status", () => {
+    const check = obsCheck({ kind: "unknown" });
     expect(check.status).toBe("warn");
-    expect(check.summary).toContain("Update");
+    expect(check.summary).toContain("can't be checked");
   });
 });
 
