@@ -2,21 +2,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-
-const descriptorValidator = v.object({
-  kind: v.literal("internal"),
-  request: v.object({
-    event: v.string(),
-    payload: v.optional(v.any()),
-  }),
-  timeoutMs: v.optional(v.number()),
-});
+import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import { type FieldOptionsApi, fieldOptionsReferenceValidator } from "./lib/fieldOptions";
 
 export const dispatch = action({
   args: {
     instanceId: v.id("instances"),
-    descriptor: descriptorValidator,
+    reference: fieldOptionsReferenceValidator,
     correlationKey: v.string(),
   },
   handler: async (ctx, args) => {
@@ -31,8 +23,8 @@ export const dispatch = action({
     if (!bundle?.clientId || !bundle.clientSecret) {
       throw new Error("Instance is not registered with the engine");
     }
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    await rpc.dispatchFieldOptionsRequest(args.descriptor, args.correlationKey);
+    const rpc = createEngineRpcSession<FieldOptionsApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    await rpc.dispatchFieldOptionsRequest(args.reference, args.correlationKey);
     return { correlationKey: args.correlationKey };
   },
 });

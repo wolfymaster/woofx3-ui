@@ -1,17 +1,17 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import { useAction, useQuery } from "convex/react";
 import { useCallback, useMemo, useState } from "react";
+import { dispatchErrorMessage } from "@/lib/field-options-request";
 
-export interface InternalSettingActionRequest {
-  event: string;
-  payload?: Record<string, unknown>;
-}
-
+/**
+ * Press a module settings button whose `action` is `internal`. The engine
+ * sends the request the installed manifest declares for `reference`.
+ */
 export function useInternalSettingAction(
   instanceId: Id<"instances"> | undefined,
-  request: InternalSettingActionRequest | undefined,
-  timeoutMs?: number
+  reference: FieldOptionsReference | undefined
 ): {
   trigger: () => void;
   status: "idle" | "pending" | "success" | "error";
@@ -20,17 +20,18 @@ export function useInternalSettingAction(
 } {
   const dispatch = useAction(api.fieldOptions.dispatch);
   const [correlationKey, setCorrelationKey] = useState<string | null>(null);
+  const [failure, setFailure] = useState<{ correlationKey: string; message: string } | null>(null);
 
   const trigger = useCallback(() => {
-    if (!instanceId || !request) {
+    if (!instanceId || !reference) {
       return;
     }
     const key = crypto.randomUUID();
     setCorrelationKey(key);
-    dispatch({ instanceId, descriptor: { kind: "internal", request, timeoutMs }, correlationKey: key }).catch(() => {
-      /* errors surface via transientEvents */
+    dispatch({ instanceId, reference, correlationKey: key }).catch((error: unknown) => {
+      setFailure({ correlationKey: key, message: dispatchErrorMessage(error) });
     });
-  }, [instanceId, request, timeoutMs, dispatch]);
+  }, [instanceId, reference, dispatch]);
 
   const event = useQuery(
     api.transientEvents.get,
@@ -41,6 +42,9 @@ export function useInternalSettingAction(
     if (!correlationKey) {
       return { trigger, status: "idle" as const, message: null, data: undefined };
     }
+    if (failure !== null && failure.correlationKey === correlationKey) {
+      return { trigger, status: "error" as const, message: failure.message, data: undefined };
+    }
     if (event === undefined || event === null) {
       return { trigger, status: "pending" as const, message: null, data: undefined };
     }
@@ -48,5 +52,5 @@ export function useInternalSettingAction(
       return { trigger, status: "error" as const, message: event.message ?? "Request failed", data: undefined };
     }
     return { trigger, status: "success" as const, message: event.message ?? null, data: event.data };
-  }, [trigger, correlationKey, event]);
+  }, [trigger, correlationKey, failure, event]);
 }
