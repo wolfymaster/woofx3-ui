@@ -22,6 +22,17 @@ const CORRELATION_TIMEOUT_MS = 10_000;
 const CORRELATION_POLL_MS = 250;
 
 /**
+ * The engine accepted a change but its webhook echo did not arrive in time.
+ * The change may still land: the echo is only late, not refused.
+ */
+export class EngineConfirmationTimeout extends Error {
+  constructor() {
+    super("Engine did not confirm the change within 10s");
+    this.name = "EngineConfirmationTimeout";
+  }
+}
+
+/**
  * Poll the completedWorkflowOperations table for the webhook echo that
  * matches a given correlationKey. Resolves with the engineWorkflowId the
  * engine reported, or throws if the engine fails to confirm within 10s.
@@ -35,10 +46,10 @@ async function waitForCompletion(ctx: ActionCtx, correlationKey: string): Promis
     }
     await new Promise((r) => setTimeout(r, CORRELATION_POLL_MS));
   }
-  throw new Error("Engine did not confirm the change within 10s");
+  throw new EngineConfirmationTimeout();
 }
 
-type InstanceContext = {
+export type InstanceContext = {
   url: string;
   clientId: string;
   clientSecret: string;
@@ -67,9 +78,39 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
 }
 
 /**
+ * Create a workflow in the engine and wait up to 10s for the webhook echo that
+ * mirrors it into Convex, returning the engine-minted id. The caller has
+ * already authorized the instance. Every path that creates a workflow goes
+ * through here, so they all get the same confirmation and mirroring. A caller
+ * that must recognise a late echo passes its own correlation key.
+ */
+export async function createWorkflowInEngine(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  instance: InstanceContext,
+  definition: Omit<WorkflowDefinition, "id">,
+  correlationKey: string = crypto.randomUUID()
+): Promise<string> {
+  await ctx.runMutation(internal.workflowInternal.insertPending, {
+    correlationKey,
+    instanceId,
+    op: "create",
+    expiresAt: Date.now() + CORRELATION_TIMEOUT_MS + 5_000,
+  });
+
+  const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+  await rpc.createWorkflow({
+    definition,
+    correlationKey,
+  });
+
+  return waitForCompletion(ctx, correlationKey);
+}
+
+/**
  * Create a workflow in the engine from a canonical WorkflowDefinition.
- * Waits up to 10s for the engine's webhook echo before returning, so the
- * caller receives the engine-minted id before navigating.
+ * Waits for the engine's webhook echo before returning, so the caller
+ * receives the engine-minted id before navigating.
  */
 export const createFromDefinition = action({
   args: {
@@ -78,23 +119,8 @@ export const createFromDefinition = action({
   },
   handler: async (ctx, { instanceId, definition }): Promise<{ engineWorkflowId: string }> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
-    const correlationKey = crypto.randomUUID();
-
-    await ctx.runMutation(internal.workflowInternal.insertPending, {
-      correlationKey,
-      instanceId,
-      op: "create",
-      expiresAt: Date.now() + CORRELATION_TIMEOUT_MS + 5_000,
-    });
-
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const engineDefinition = unescapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">;
-    await rpc.createWorkflow({
-      definition: engineDefinition,
-      correlationKey,
-    });
-
-    const engineWorkflowId = await waitForCompletion(ctx, correlationKey);
+    const engineWorkflowId = await createWorkflowInEngine(ctx, instanceId, bundle, engineDefinition);
     return { engineWorkflowId };
   },
 });
