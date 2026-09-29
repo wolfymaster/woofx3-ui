@@ -1,7 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { type AlertQueueEngineApi, readReplayResult } from "./lib/alertQueueResults";
+import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 
 export const list = query({
   args: {
@@ -84,9 +85,16 @@ export const replay = mutation({
     }
 
     // Call the engine to replay the alert
-    const engineApi = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+    const engineApi = createEngineRpcSession<AlertQueueEngineApi>(
+      instance.url,
+      instance.clientId,
+      instance.clientSecret
+    );
 
-    await engineApi.replayAlert(alert._id);
+    const result = readReplayResult(await engineApi.replayAlert(alert._id));
+    if (!result.ok) {
+      throw new Error(`The engine did not replay this alert: ${result.reason ?? "no reason given"}`);
+    }
 
     return { success: true };
   },

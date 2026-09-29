@@ -3,7 +3,16 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
-import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import {
+  type AlertClearResult,
+  type AlertQueueEngineApi,
+  type AlertReplayResult,
+  type AlertSkipResult,
+  readClearResult,
+  readReplayResult,
+  readSkipResult,
+} from "./lib/alertQueueResults";
+import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 
 type InstanceContext = {
   url: string;
@@ -36,13 +45,13 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
 /**
  * Play a recorded alert again.
  *
- * The engine re-publishes the stored envelope under a fresh envelope id, so
- * the replay flows through the queue manager as a new dispatch and gets its
- * own row; the original is marked `replayed`. Both changes arrive back here as
- * webhooks, which is why nothing is written to Convex on this path.
+ * The engine re-dispatches the stored envelope under a fresh envelope id to
+ * every open overlay, records it as a new row and marks the original
+ * `replayed`. Both changes arrive back here as webhooks, which is why nothing
+ * is written to Convex on this path.
  *
- * `replayed: false` means the engine would not replay it -- an id it no longer
- * has, or a payload it cannot parse -- rather than a transport failure, which
+ * `ok: false` is the engine declining with a `reason` (no overlay is open, the
+ * scene manager did not answer, an id it no longer has); a transport failure
  * throws.
  */
 export const replay = action({
@@ -50,12 +59,47 @@ export const replay = action({
     instanceId: v.id("instances"),
     engineAlertId: v.string(),
   },
-  handler: async (ctx, { instanceId, engineAlertId }): Promise<{ replayed: boolean }> => {
+  handler: async (ctx, { instanceId, engineAlertId }): Promise<AlertReplayResult> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
 
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    const replayed = await rpc.replayAlert(engineAlertId);
+    const rpc = createEngineRpcSession<AlertQueueEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return readReplayResult(await rpc.replayAlert(engineAlertId));
+  },
+});
 
-    return { replayed };
+/**
+ * End the alert playing on every open overlay and let the next one start.
+ *
+ * The skipped row and the next dispatch both arrive back as webhooks, so
+ * nothing is written to Convex here. `skipped: 0` with `ok` means nothing was
+ * playing, an answer rather than an error.
+ */
+export const skipCurrent = action({
+  args: {
+    instanceId: v.id("instances"),
+  },
+  handler: async (ctx, { instanceId }): Promise<AlertSkipResult> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+
+    const rpc = createEngineRpcSession<AlertQueueEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return readSkipResult(await rpc.skipCurrentAlert());
+  },
+});
+
+/**
+ * Drop every alert still waiting on every open overlay. The one playing now
+ * keeps playing; pair with `skipCurrent` to silence the overlay entirely.
+ *
+ * Returns how many were dropped. The rows turn `skipped` through webhooks.
+ */
+export const clearQueue = action({
+  args: {
+    instanceId: v.id("instances"),
+  },
+  handler: async (ctx, { instanceId }): Promise<AlertClearResult> => {
+    const bundle = await requireInstanceContext(ctx, instanceId);
+
+    const rpc = createEngineRpcSession<AlertQueueEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return readClearResult(await rpc.clearAlertQueue());
   },
 });

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { alertEventType, alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
+import { replayResultToast } from "@/lib/alert-queue";
 import { alertRunPath } from "@/lib/alert-run-route";
 import { alertStatusStyle } from "@/lib/alert-status";
 import { formatTimeAgo } from "@/lib/time-ago";
@@ -65,19 +66,10 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
   const start = async () => {
     setBusy(true);
     try {
-      const { replayed } = await replay({ instanceId, engineAlertId: alert.engineAlertId });
-      if (replayed) {
-        // The new dispatch and this row's `replayed` status both arrive as
-        // webhooks, so the list updates itself; the toast only confirms that
-        // the engine took the request.
-        toast({ title: "Replaying", description: "The engine re-published this alert." });
-      } else {
-        toast({
-          variant: "destructive",
-          title: "Nothing to replay",
-          description: "The engine no longer has this alert, or its stored payload cannot be read.",
-        });
-      }
+      // The new dispatch and this row's `replayed` status both arrive as
+      // webhooks, so the list updates itself; the toast only reports what the
+      // engine answered.
+      toast(replayResultToast(await replay({ instanceId, engineAlertId: alert.engineAlertId })));
     } catch (err) {
       toast({
         variant: "destructive",
