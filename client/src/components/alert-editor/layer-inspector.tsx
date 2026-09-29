@@ -171,7 +171,6 @@ export function LayerInspector({
             value: widget.settings.src,
             onChange: (value) => setSettings({ src: value }),
             availableVariables,
-            values: widget.settings,
           })}
         </div>
       )}

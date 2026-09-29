@@ -21,7 +21,6 @@ import { alertTargetChoices } from "@/lib/alert-target";
 import type { ConfigField, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
 import { AssetLibraryModal, type SelectedAsset } from "./asset-library-modal";
-import { ObsNameFieldRenderer } from "./obs-name-field";
 
 // ---------------------------------------------------------------------------
 // Media field — uses AssetLibraryModal, so it lives here as a custom renderer
@@ -284,10 +283,9 @@ interface TriggerConfigFormProps {
 /**
  * The renderers ConfigurationForm cannot supply generically, because they need
  * pickers wired to app state — the asset library, the resource instance list,
- * the alert widget names, OBS's scenes and the layout canvas. Exported so every
- * surface that renders a ConfigField gets the same controls: a `resource_ref` in
- * a widget's settings must pick a resource the same way one in a trigger's
- * config does.
+ * the alert widget names and the layout canvas. Exported so every surface that
+ * renders a ConfigField gets the same controls: a `resource_ref` in a widget's
+ * settings must pick a resource the same way one in a trigger's config does.
  */
 export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   media: MediaFieldRenderer,
@@ -295,9 +293,6 @@ export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   resource_ref: ResourceRefFieldRenderer,
   "field:layout": LayoutFieldRenderer,
   "source:alertWidgets": AlertWidgetNameRenderer,
-  "source:obsScenes": ObsNameFieldRenderer,
-  "source:obsSources": ObsNameFieldRenderer,
-  "source:obsInputs": ObsNameFieldRenderer,
   // A theme is chosen per widget placement, never by a workflow, so it takes no variable toggle.
   [`field:${THEME_FIELD_TYPE}`]: ThemeFieldRenderer,
 };

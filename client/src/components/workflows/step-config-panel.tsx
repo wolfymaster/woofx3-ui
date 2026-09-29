@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
-import { withObsNameSources } from "@/lib/obs-name-fields";
 import { parseConfigFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { TriggerConfigValues } from "@/lib/workflow-presets";
@@ -148,10 +147,7 @@ function ActionConfigPanel({
   onUpdateActionId: (oldId: string, newId: string) => void;
 }) {
   const catalogRow = resolveCatalogAction(node, catalog);
-  const fields = withObsNameSources(
-    withModuleName(parseConfigFields(catalogRow?.configFields), catalogRow?.moduleName),
-    node.action
-  );
+  const fields = withModuleName(parseConfigFields(catalogRow?.configFields), catalogRow?.moduleName);
   return (
     <div className="space-y-6">
       <StepIdField id={node.id} existingStepIds={existingStepIds} onUpdateActionId={onUpdateActionId} />
