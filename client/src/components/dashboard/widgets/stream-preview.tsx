@@ -1,34 +1,20 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { Maximize2, Radio } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { LiveThumbnail } from "@/components/dashboard/live-thumbnail";
 import { StreamPlayerDialog } from "@/components/dashboard/stream-player-dialog";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
-
-// Twitch's live-preview CDN image, refreshed periodically via a cache-busting
-// query param (Twitch itself only regenerates the underlying image every few
-// minutes, so a 60s poll on our side is plenty). No auth/token needed — it's
-// a public static image, unlike the EventSub layer in lib/platforms/.
-const THUMBNAIL_REFRESH_MS = 60_000;
 
 export function StreamPreviewWidget() {
   const { instance } = useInstance();
   const liveState = useLiveState();
   const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
   const [enlarged, setEnlarged] = useState(false);
-  const [thumbnailTick, setThumbnailTick] = useState(0);
 
   const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   const isLive = liveState?.isLive ?? false;
-
-  useEffect(() => {
-    if (!isLive) {
-      return;
-    }
-    const interval = setInterval(() => setThumbnailTick((tick) => tick + 1), THUMBNAIL_REFRESH_MS);
-    return () => clearInterval(interval);
-  }, [isLive]);
 
   if (!twitchLink) {
     return (
@@ -53,8 +39,8 @@ export function StreamPreviewWidget() {
         >
           {isLive ? (
             <>
-              <img
-                src={`https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-440x248.jpg?ts=${thumbnailTick}`}
+              <LiveThumbnail
+                login={login}
                 alt={liveState?.streamTitle ?? "Stream preview"}
                 className="w-full h-full object-cover"
               />

@@ -1,7 +1,7 @@
 import { alertWidgetName, nextAlertWidgetName } from "@convex/lib/alertWidgets";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
@@ -68,11 +68,28 @@ export function WidgetLayoutCanvas({
     [catalogRowFor]
   );
 
-  const editWidget = useCallback(
-    (widgetId: string, change: (widget: Widget) => Widget) => {
-      onChange((prev) => prev.map((w) => (w.id === widgetId ? change(w) : w)), "edit");
+  // Callers rebuild `onChange` whenever their state changes, which during a drag
+  // is every frame. Reading it through a ref keeps the per-widget callbacks
+  // below stable, so the memoized handles that didn't move skip re-rendering.
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  const editWidget = useCallback((widgetId: string, change: (widget: Widget) => Widget) => {
+    onChangeRef.current((prev) => prev.map((w) => (w.id === widgetId ? change(w) : w)), "edit");
+  }, []);
+
+  const moveWidget = useCallback(
+    (widgetId: string, x: number, y: number) => {
+      editWidget(widgetId, (w) => ({ ...w, position: { x: Math.max(0, x), y: Math.max(0, y) } }));
     },
-    [onChange]
+    [editWidget]
+  );
+
+  const resizeWidget = useCallback(
+    (widgetId: string, width: number, height: number) => {
+      editWidget(widgetId, (w) => ({ ...w, size: { width, height } }));
+    },
+    [editWidget]
   );
 
   const addWidget = useCallback(
@@ -197,14 +214,9 @@ export function WidgetLayoutCanvas({
                 widget={widget}
                 isSelected={selectedWidgetId === widget.id}
                 scale={zoom}
-                onSelect={() => setSelectedWidgetId(widget.id)}
-                onMove={(dx, dy) =>
-                  editWidget(widget.id, (w) => ({
-                    ...w,
-                    position: { x: Math.max(0, w.position.x + dx), y: Math.max(0, w.position.y + dy) },
-                  }))
-                }
-                onResize={(w, h) => editWidget(widget.id, (prev) => ({ ...prev, size: { width: w, height: h } }))}
+                onSelect={setSelectedWidgetId}
+                onMove={moveWidget}
+                onResize={resizeWidget}
               />
             ))}
           </div>
