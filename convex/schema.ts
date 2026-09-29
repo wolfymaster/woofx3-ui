@@ -2,6 +2,29 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// Must match SessionSummarySession and SessionSummaryTotals in
+// convex/lib/sessionSummary.ts, which validates the webhook body before it
+// reaches these.
+const sessionSummarySessionValidator = v.object({
+  status: v.union(v.literal("open"), v.literal("closed")),
+  startedAt: v.string(),
+  endedAt: v.union(v.string(), v.null()),
+  segments: v.array(v.object({ id: v.string(), startedAt: v.string(), endedAt: v.union(v.string(), v.null()) })),
+});
+
+const sessionSummaryTotalsValidator = v.object({
+  bits: v.number(),
+  cheers: v.number(),
+  subs: v.number(),
+  giftedSubs: v.number(),
+  follows: v.number(),
+  raids: v.number(),
+  raiders: v.number(),
+  peakViewers: v.union(v.number(), v.null()),
+  averageViewers: v.union(v.number(), v.null()),
+  viewerSampleMinutes: v.number(),
+});
+
 // One placed widget on a dashboard panel. Exported so convex/dashboardLayouts.ts's
 // setPanelWidgets argument validator is literally the same shape the table stores —
 // they drifted apart once before, and a mutation validator that is missing a field
@@ -143,6 +166,30 @@ export default defineSchema({
     lastUpdateSource: v.union(v.literal("webhook"), v.literal("poll")),
     lastUpdatedAt: v.number(),
   }).index("by_instance", ["instanceId"]),
+
+  // streamSessionSummaries: one row per ended engine session, written by the
+  // SESSION_SUMMARY webhook (convex/lib/sessionSummary.ts). Channel totals only,
+  // never per-viewer detail: this is the copy of a stream's history that
+  // outlives the engine's own database. Keyed on (instanceId, sessionId) because
+  // session ids are only unique within one engine. A row is replaced only by a
+  // snapshot with a newer generatedAt.
+  //
+  // session, totals and sessionStartedAtMs are absent when schemaVersion is one
+  // this deployment does not interpret; rawPayload holds the body instead.
+  streamSessionSummaries: defineTable({
+    instanceId: v.id("instances"),
+    sessionId: v.string(),
+    schemaVersion: v.number(),
+    generatedAt: v.string(), // ISO, as the engine sent it
+    generatedAtMs: v.number(), // generatedAt parsed, for ordering repeats
+    sessionStartedAtMs: v.optional(v.number()), // session.startedAt parsed, for newest-first listing
+    session: v.optional(sessionSummarySessionValidator),
+    totals: v.optional(sessionSummaryTotalsValidator),
+    rawPayload: v.optional(v.string()),
+    receivedAt: v.number(),
+  })
+    .index("by_instance_session", ["instanceId", "sessionId"])
+    .index("by_instance_started", ["instanceId", "sessionStartedAtMs"]),
 
   // engineProvisioning: one row per managed instance, tracking the woofx3
   // maintenance API's provisioning run and the registration handshake that

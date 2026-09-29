@@ -2,6 +2,7 @@ import {
   Activity,
   BellRing,
   Grid3x3,
+  History,
   ListOrdered,
   Megaphone,
   MessagesSquare,
@@ -21,6 +22,7 @@ import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
+import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
 import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
@@ -121,6 +123,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: Activity,
     category: "utility",
     component: StreamStatsWidget,
+  },
+  {
+    type: "recent-streams",
+    label: "Recent Streams",
+    description: "Viewers, follows, subs and bits for each of your last finished streams.",
+    icon: History,
+    category: "utility",
+    component: RecentStreamsWidget,
   },
   {
     type: "notes",

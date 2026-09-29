@@ -43,7 +43,27 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `workflow-runs` | automation | Recent and in-progress executions |
 | `macro-pad` | automation | One-click buttons — see below |
 | `stream-stats` | utility | Viewers, uptime, category |
+| `recent-streams` | utility | Totals for the last finished sessions, from `streamSessionSummaries` — see below |
 | `notes` | utility | Per-stream scratch pad |
+
+## Recent streams
+
+`recent-streams` lists the instance's last ten finished sessions from
+`streamSessionSummaries` (`convex/streamSessionSummaries.ts`), newest first.
+Each row is one engine session: the time actually live (its segments added up,
+so the gaps a session spans across brief dropouts are left out), peak and
+average viewers, and the session's follows, subs, gifted subs, bits and raids.
+
+Rows arrive by the engine's `session.summary` webhook, which fires when a
+session *ends*. A session ends when the next broadcast past the engine's grace
+window begins, not when its own stream goes offline, so the stream that just
+finished appears once the next one starts, and the one in progress never
+appears here. A session that was never live is a real row with every figure at
+zero and no viewer figures. Each delivery is a whole snapshot; the table keeps
+one row per `(instanceId, sessionId)` and replaces it only with a snapshot whose
+`generatedAt` is newer, so redeliveries and re-summaries are harmless. A
+snapshot with a `schemaVersion` this deployment does not know is kept as raw
+JSON and shown as unreadable rather than guessed at.
 
 ## Command bar
 
