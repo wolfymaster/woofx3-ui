@@ -3,7 +3,7 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ConvexProvider, useConvexAuth, useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
@@ -19,40 +19,40 @@ import {
   COMMAND_NEW_ROUTE,
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
-import AdminAppearance from "@/pages/admin/appearance";
-import AdminEngine from "@/pages/admin/engine";
-import AdminIntegrations from "@/pages/admin/integrations";
-import AdminStorage from "@/pages/admin/storage";
-import AlertEditor from "@/pages/alert-editor";
-import AlertRun from "@/pages/alert-run";
-import Alerts from "@/pages/alerts";
-import Assets from "@/pages/assets";
-import AcceptInvite from "@/pages/auth/accept-invite";
-import Login from "@/pages/auth/login";
-import Onboarding from "@/pages/auth/onboarding";
-import Register from "@/pages/auth/register";
-import TwitchCallback from "@/pages/auth/twitch-callback";
-import CommandEditor from "@/pages/command-editor";
-import CommandGroupEditor from "@/pages/command-group-editor";
-import CommandStepAlertEditor from "@/pages/command-step-alert-editor";
-import Commands from "@/pages/commands";
-import Counters from "@/pages/counters";
-import Dashboard from "@/pages/dashboard";
-import Feedback from "@/pages/feedback";
-import Learning from "@/pages/learning";
-import Logs from "@/pages/logs";
-import ModuleInstall from "@/pages/module-install";
-import Modules from "@/pages/modules";
-import NotFound from "@/pages/not-found";
-import Queues from "@/pages/queues";
-import Scenes from "@/pages/scenes";
-
-import Team from "@/pages/team";
-import TeamInvite from "@/pages/team-invite";
-import Timers from "@/pages/timers";
-import Workflows from "@/pages/workflows";
 import { convexClient as convex } from "./lib/convexClient";
 import { queryClient } from "./lib/queryClient";
+
+const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
+const AdminEngine = lazy(() => import("@/pages/admin/engine"));
+const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
+const AdminStorage = lazy(() => import("@/pages/admin/storage"));
+const AlertEditor = lazy(() => import("@/pages/alert-editor"));
+const AlertRun = lazy(() => import("@/pages/alert-run"));
+const Alerts = lazy(() => import("@/pages/alerts"));
+const Assets = lazy(() => import("@/pages/assets"));
+const AcceptInvite = lazy(() => import("@/pages/auth/accept-invite"));
+const Login = lazy(() => import("@/pages/auth/login"));
+const Onboarding = lazy(() => import("@/pages/auth/onboarding"));
+const Register = lazy(() => import("@/pages/auth/register"));
+const TwitchCallback = lazy(() => import("@/pages/auth/twitch-callback"));
+const CommandEditor = lazy(() => import("@/pages/command-editor"));
+const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
+const CommandStepAlertEditor = lazy(() => import("@/pages/command-step-alert-editor"));
+const Commands = lazy(() => import("@/pages/commands"));
+const Counters = lazy(() => import("@/pages/counters"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Feedback = lazy(() => import("@/pages/feedback"));
+const Learning = lazy(() => import("@/pages/learning"));
+const Logs = lazy(() => import("@/pages/logs"));
+const ModuleInstall = lazy(() => import("@/pages/module-install"));
+const Modules = lazy(() => import("@/pages/modules"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Queues = lazy(() => import("@/pages/queues"));
+const Scenes = lazy(() => import("@/pages/scenes"));
+const Team = lazy(() => import("@/pages/team"));
+const TeamInvite = lazy(() => import("@/pages/team-invite"));
+const Timers = lazy(() => import("@/pages/timers"));
+const Workflows = lazy(() => import("@/pages/workflows"));
 
 console.log("url", import.meta.env.VITE_CONVEX_URL);
 
@@ -64,6 +64,25 @@ function SplashScreen() {
         <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     </div>
+  );
+}
+
+// Fills only the content area, so the shell stays mounted while a page chunk loads.
+function PageLoading() {
+  return (
+    <div className="h-full w-full flex items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
+// The error boundary sits outside the Suspense so a page chunk that fails to
+// load (a stale deploy whose hashed chunk is gone) is caught here, not above the shell.
+function PageBoundary({ resetKey, children }: { resetKey: string; children: React.ReactNode }) {
+  return (
+    <ErrorBoundary resetKey={resetKey}>
+      <Suspense fallback={<PageLoading />}>{children}</Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -148,7 +167,7 @@ function AppRoutes() {
         <AuthGuard>
           <OnboardingGuard>
             <BroadcastShell>
-              <ErrorBoundary resetKey={location}>
+              <PageBoundary resetKey={location}>
                 <Switch>
                   <Route path="/" component={Dashboard} />
 
@@ -248,7 +267,7 @@ function AppRoutes() {
 
                   <Route component={NotFound} />
                 </Switch>
-              </ErrorBoundary>
+              </PageBoundary>
             </BroadcastShell>
           </OnboardingGuard>
         </AuthGuard>
@@ -264,7 +283,9 @@ function App() {
         <ConvexAuthProvider client={convex}>
           <QueryClientProvider client={queryClient}>
             <TooltipProvider>
-              <AppRoutes />
+              <Suspense fallback={<SplashScreen />}>
+                <AppRoutes />
+              </Suspense>
               <Toaster />
             </TooltipProvider>
           </QueryClientProvider>
