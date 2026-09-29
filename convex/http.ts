@@ -16,6 +16,17 @@ import {
   toHttpResponse,
   withEngineTimeout,
 } from "./lib/inboundWebhookRelay";
+import { executeMacroPlan, MacroRunRefused, valuesToPairs } from "./lib/macroExecution";
+import {
+  hashTriggerToken,
+  isBrowserRequest,
+  MACRO_TRIGGER_PATH,
+  MACRO_TRIGGER_PATH_PREFIX,
+  MAX_TRIGGER_BODY_BYTES,
+  parseTriggerValues,
+  resolveTriggerToken,
+  triggerRefusalResponse,
+} from "./lib/macroTrigger";
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
@@ -1425,5 +1436,103 @@ const inboundWebhookHandler = httpAction(async (ctx, request) => {
 
 http.route({ pathPrefix: "/api/webhooks/", method: "POST", handler: inboundWebhookHandler });
 http.route({ pathPrefix: "/api/webhooks/", method: "GET", handler: inboundWebhookHandler });
+
+/** How long a remote macro trigger waits for the engine to accept the run. */
+const MACRO_TRIGGER_ENGINE_TIMEOUT_MS = 10_000;
+
+/** Provenance for runs fired by a trigger URL. Unlike "dashboard", these are recorded in the run history. */
+const MACRO_TRIGGER_PROVENANCE = "macro-trigger";
+
+function macroTriggerJson(
+  status: number,
+  body: Record<string, unknown>,
+  headers: Record<string, string> = {}
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store", ...headers },
+  });
+}
+
+// A macro's remote trigger: POST /api/macros/trigger/<token>, or POST
+// /api/macros/trigger with `Authorization: Bearer <token>`. GET only for a
+// trigger that opted in. Requests from a web page are refused before the token
+// is looked at, and a malformed token and an unknown one get the same 404.
+const macroTriggerHandler = httpAction(async (ctx, request) => {
+  const refuse = (refusal: Parameters<typeof triggerRefusalResponse>[0]) => {
+    const response = triggerRefusalResponse(refusal);
+    return macroTriggerJson(response.status, response.body, response.headers);
+  };
+
+  if (isBrowserRequest(request.headers.get("origin"))) {
+    return refuse({ outcome: "browser-origin" });
+  }
+  const url = new URL(request.url);
+  const token = resolveTriggerToken(url.pathname, request.headers.get("authorization"));
+  if (!token) {
+    return refuse({ outcome: "not-found" });
+  }
+  const method = request.method === "GET" ? "GET" : "POST";
+
+  if (Number(request.headers.get("content-length") ?? "0") > MAX_TRIGGER_BODY_BYTES) {
+    return macroTriggerJson(413, { ok: false, error: "body too large" });
+  }
+  const bodyBytes = method === "POST" ? await request.arrayBuffer() : new ArrayBuffer(0);
+  if (bodyBytes.byteLength > MAX_TRIGGER_BODY_BYTES) {
+    return macroTriggerJson(413, { ok: false, error: "body too large" });
+  }
+  const parsed = parseTriggerValues({
+    contentType: request.headers.get("content-type"),
+    body: new TextDecoder().decode(bodyBytes),
+    query: url.searchParams,
+  });
+  if (!parsed.ok) {
+    return macroTriggerJson(400, { ok: false, error: parsed.error });
+  }
+
+  const claim = await ctx.runMutation(internal.macroTriggers.claim, {
+    tokenHash: await hashTriggerToken(token),
+    method,
+    values: valuesToPairs(parsed.values),
+  });
+  if (claim.outcome !== "run") {
+    return refuse(claim);
+  }
+
+  // Bookkeeping must never change the answer the device gets.
+  const recordOutcome = async (failure?: string) => {
+    try {
+      await ctx.runMutation(internal.macroTriggers.recordOutcome, { triggerId: claim.triggerId, failure });
+    } catch (err) {
+      logger.warn("macro trigger: failed to record outcome", { error: String(err) });
+    }
+  };
+
+  try {
+    const result = await withEngineTimeout(
+      executeMacroPlan(claim.engine, claim.plan, MACRO_TRIGGER_PROVENANCE),
+      MACRO_TRIGGER_ENGINE_TIMEOUT_MS
+    );
+    await recordOutcome();
+    return macroTriggerJson(202, { ok: true, ...(result.triggerId ? { triggerId: result.triggerId } : {}) });
+  } catch (err) {
+    if (err instanceof MacroRunRefused) {
+      await recordOutcome(err.message);
+      return macroTriggerJson(409, { ok: false, error: err.message });
+    }
+    const timedOut = err instanceof EngineTimeoutError;
+    // A transport failure's text can carry internals (hosts, stack traces);
+    // the caller only learns that the engine did not take the run.
+    logger.warn("macro trigger: engine call failed", { error: String(err), timedOut });
+    const error = timedOut ? "the engine did not answer in time" : "the engine did not accept the run";
+    await recordOutcome(error);
+    return macroTriggerJson(timedOut ? 504 : 502, { ok: false, error });
+  }
+});
+
+http.route({ path: MACRO_TRIGGER_PATH, method: "POST", handler: macroTriggerHandler });
+http.route({ path: MACRO_TRIGGER_PATH, method: "GET", handler: macroTriggerHandler });
+http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "POST", handler: macroTriggerHandler });
+http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macroTriggerHandler });
 
 export default http;
