@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { TWITCH_INTEGRATION_SCOPES } from "./twitchIntegrationScopes";
 import {
+  missingRequiredTwitchScopes,
   missingTwitchCapabilities,
   TWITCH_CAPABILITIES,
   twitchScopeHealth,
@@ -45,6 +46,21 @@ describe("missingTwitchCapabilities", () => {
     expect(missingTwitchCapabilities(granted)).toEqual([
       { label: "Moderation: chat modes", optional: true, missingScopes: ["moderator:manage:chat_settings"] },
     ]);
+  });
+
+  test("a link made before the ad scopes misses only the optional Ad breaks capability", () => {
+    const granted = TWITCH_INTEGRATION_SCOPES.filter(
+      (scope) => scope !== "channel:read:ads" && scope !== "channel:manage:ads"
+    );
+    expect(missingTwitchCapabilities(granted)).toEqual([
+      { label: "Ad breaks", optional: true, missingScopes: ["channel:read:ads", "channel:manage:ads"] },
+    ]);
+    expect(twitchScopeHealth({ scopes: granted })).toEqual({
+      state: "ok",
+      optionalMissing: [
+        { label: "Ad breaks", optional: true, missingScopes: ["channel:read:ads", "channel:manage:ads"] },
+      ],
+    });
   });
 
   test("ignores extra scopes the link happens to hold", () => {
@@ -131,5 +147,21 @@ describe("twitchScopeHealthKey", () => {
 
   test("distinguishes revoked from missing", () => {
     expect(twitchScopeHealthKey({ state: "revoked" })).toBe("revoked");
+  });
+});
+
+describe("missingRequiredTwitchScopes", () => {
+  test("leaves out the scopes of optional capabilities", () => {
+    const optionalScopes = TWITCH_CAPABILITIES.filter((capability) => capability.optional).flatMap(
+      (capability) => capability.scopes
+    );
+    expect(optionalScopes.length).toBeGreaterThan(0);
+    const allButOptional = TWITCH_INTEGRATION_SCOPES.filter((scope) => !optionalScopes.includes(scope));
+    expect(missingRequiredTwitchScopes(allButOptional)).toEqual([]);
+  });
+
+  test("names the required scopes a link lacks", () => {
+    const withoutClips = TWITCH_INTEGRATION_SCOPES.filter((scope) => scope !== "clips:edit");
+    expect(missingRequiredTwitchScopes(withoutClips)).toEqual(["clips:edit"]);
   });
 });

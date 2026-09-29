@@ -42,6 +42,7 @@ export const TWITCH_CAPABILITIES: readonly TwitchCapability[] = [
   },
   { label: "Stream title and category", scopes: ["channel:manage:broadcast"] },
   { label: "Clips", scopes: ["clips:edit"] },
+  { label: "Ad breaks", scopes: ["channel:read:ads", "channel:manage:ads"], optional: true },
   { label: "Polls and predictions", scopes: ["channel:read:polls", "channel:read:predictions"] },
   {
     label: "Moderation",
@@ -104,6 +105,17 @@ export function missingTwitchCapabilities(
     }
   }
   return missing;
+}
+
+/**
+ * Scopes of required capabilities absent from `granted`, in TWITCH_CAPABILITIES
+ * order. An optional capability's scopes are left out, so a link that lacks
+ * only those is not reported as needing a reconnect.
+ */
+export function missingRequiredTwitchScopes(granted: readonly string[]): string[] {
+  return missingTwitchCapabilities(granted)
+    .filter((capability) => !capability.optional)
+    .flatMap((capability) => capability.missingScopes);
 }
 
 export function twitchScopeHealth(link: TwitchLinkScopes | null | undefined): TwitchScopeHealth {

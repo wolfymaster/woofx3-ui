@@ -21,7 +21,7 @@ An instance with no workflows gets an empty state pointing at the starter packs 
 
 **Primary files:** `client/src/pages/starter-packs.tsx`, `convex/lib/starterPacks.ts`, `convex/starterPacks.ts`
 
-Curated sets of workflows and chat commands (raid welcome, follower thanks, sub and gift hype, cheer thanks, handy commands, BRB scene) that a new streamer installs in one click. The dashboard shows a banner linking here while the instance has no workflows (`api.workflows.hasAny`).
+Curated sets of workflows and chat commands (raid welcome, follower thanks, sub and gift hype, cheer thanks, handy commands, BRB scene, ad break heads-up, ad break scene) that a new streamer installs in one click. The dashboard shows a banner linking here while the instance has no workflows (`api.workflows.hasAny`).
 
 - The packs are pure data in `convex/lib/starterPacks.ts`. Each names its actions by canonical ref and its triggers by event subject, and is resolved against the instance's catalog when installed, so the definitions carry the same handler type, function id and `$ref` the create wizard writes.
 - A pack's editable fields (message text, scene names, thresholds) accept `{name}` placeholders, such as `{raider}`, which become engine expressions such as `${trigger.data.fromBroadcasterUserName}`. A placeholder a field's items do not offer is refused, and so is any raw `${...}`: the engine resolves every expression in a parameter, `${env.NAME}` included, with no way to escape one. Lengths are checked against Twitch's limits (500 for chat, 140 for markers), counting each placeholder as 25 characters. Scene names are used exactly as typed and only flagged when they start or end with a space.
@@ -29,10 +29,10 @@ Curated sets of workflows and chat commands (raid welcome, follower thanks, sub 
 - Twitch actions (`woofx3_twitch:action:twitch.shoutout`, `twitch.clip`, `twitch.marker`) come from the Twitch platform module, like every trigger the packs bind to. OBS scene switches (`woofx3_obs:action:obs.switch_scene`) come from the OBS platform module. Chat replies (`woofx3:action:chat.reply`) are the engine's own. Availability is read from the instance's action catalog, per item:
   - **Requires the Twitch module**: the catalog has nothing from `woofx3_twitch`, and the item needs a Twitch trigger or action.
   - **Requires the OBS module**: the catalog has nothing from `woofx3_obs`, and the item switches scenes.
-  - **Requires engine update**: an engine action is missing.
+  - **Requires engine update**: an engine action is missing, or an ad-break trigger is (`sinceEngineUpdate`), since those arrived in a later engine release.
   - **Requires the Twitch module (update it)** / **Requires the OBS module (update it)**: the module is installed but lacks an action or input the item uses, which means it is an older version.
 
-  The rest of the pack still installs.
+  The ad break scene is its own pack rather than part of the heads-up so a streamer without OBS can take the chat warning alone. The rest of the pack still installs.
 - `starterPacks.install` checks membership, then creates each item through `createWorkflowInEngine` / `createCommandInEngine`, the same helpers behind `workflowActions.createFromDefinition` and `chatCommandActions.createCommand`.
 - Installs are idempotent: the `starterPackItems` table records each item as `installing` before the engine call and `installed` with its engine id after, so a repeat or concurrent install skips it. A workflow row also records the create's correlation key; if the engine's echo arrives after the install stopped waiting, `workflowInternal.resolveCorrelation` marks the row installed, and until then the row blocks a retry for five minutes rather than one. An item whose workflow or command has since been deleted counts as not installed again. A command whose name is already taken is skipped as a conflict.
 

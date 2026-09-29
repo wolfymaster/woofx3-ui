@@ -1,13 +1,16 @@
+import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import {
   GO_LIVE_CHECK_IDS,
   type GoLiveCheckId,
   type LastGoLive,
-  type ObsFacts,
   type OverlayFacts,
   type StreamInfoFacts,
   type TwitchLinkFacts,
   type WorkflowFacts,
 } from "@convex/lib/goLiveFacts";
+import type { StreamInfo } from "@convex/lib/streamInfo";
+import { parseFieldOptionsReply } from "@/lib/field-options";
+import { comparePreset } from "@/lib/stream-info-edit";
 import { formatTimeAgo } from "@/lib/time-ago";
 
 // The Go live checklist's rules: what each fact the checks gather means for
@@ -24,7 +27,22 @@ export type CheckFix =
   | { kind: "route"; label: string; href: string }
   | { kind: "external"; label: string; href: string }
   | { kind: "copy"; label: string; text: string }
-  | { kind: "retry"; label: string };
+  | { kind: "retry"; label: string }
+  | { kind: "apply-preset"; label: string; presets: PresetChoice[] };
+
+/** A saved stream info preset as the checklist offers it. */
+export interface StreamInfoPresetOption {
+  id: string;
+  name: string;
+  info: StreamInfo;
+}
+
+/** A preset that would change the channel, with what applying it changes. */
+export interface PresetChoice {
+  id: string;
+  name: string;
+  summary: string;
+}
 
 export interface CheckResult {
   id: GoLiveCheckId;
@@ -164,19 +182,111 @@ export function overlaysCheck(facts: OverlayFacts, browserSourceUrl: string | nu
   });
 }
 
+/**
+ * The field whose options the OBS check asks for: the scene picker of the
+ * OBS platform module's "Switch OBS scene" action. The check asks exactly as that
+ * picker does, so it needs no OBS-specific engine call, and its answer is what
+ * the streamer's workflows will meet: the scene list, or the scene manager's
+ * reason for having none.
+ */
+export const OBS_SCENES_FIELD: FieldOptionsReference = {
+  moduleId: "woofx3_obs",
+  declaration: "action",
+  declarationId: "obs.switch_scene",
+  fieldId: "sceneName",
+};
+
+/**
+ * How long the check waits for the scene list. Longer than the field's own
+ * 5s request timeout plus the engine's retries while the scene manager boots,
+ * so an answer the engine relays late still lands.
+ */
+export const OBS_CHECK_TIMEOUT_MS = 15_000;
+
+export type ObsFacts =
+  | { kind: "connected"; sceneCount: number }
+  /** The scene manager answered with a reason instead of scenes, e.g. OBS is not connected. */
+  | { kind: "disconnected"; reason: string }
+  /** The engine has no OBS scene field to ask: the OBS module is missing or older, or the engine predates field references. */
+  | { kind: "unsupported" }
+  /** Nothing answered in time. */
+  | { kind: "no-answer" }
+  | { kind: "engine-unreachable"; message: string };
+
+/** A transient event relaying the engine's reply to a field-options request. */
+export interface FieldOptionsReplyEvent {
+  status: "progress" | "success" | "error";
+  message?: string;
+  data?: unknown;
+}
+
+/**
+ * Phrases in the engine's refusal to send the request that mean it has nothing
+ * to send, rather than that it failed to: the OBS module or its scene field
+ * is missing, or the engine still takes a request descriptor instead of a
+ * field reference. Must match the errors of `dispatchFieldOptionsRequest` in
+ * the engine's api/src/routes/field-options.ts and field-options-reference.ts.
+ */
+const UNSUPPORTED_DISPATCH_PATTERNS: readonly RegExp[] = [
+  /is not installed/,
+  /declares no /,
+  /: no (top-level )?field /,
+  /Unsupported descriptor kind/,
+  /is not a function/,
+];
+
+/** NATS's answers when nobody replied: a timeout, or no subscriber on the subject at all. */
+const NO_ANSWER_PATTERN = /time(d)?\s?out|no responders/i;
+
+/** What a refused field-options dispatch says about OBS. */
+export function obsFactsFromDispatchError(message: string): ObsFacts {
+  if (UNSUPPORTED_DISPATCH_PATTERNS.some((pattern) => pattern.test(message))) {
+    return { kind: "unsupported" };
+  }
+  return { kind: "engine-unreachable", message };
+}
+
+/** What the engine's reply says about OBS, or null while it is only progress. */
+export function obsFactsFromReply(event: FieldOptionsReplyEvent): ObsFacts | null {
+  if (event.status === "progress") {
+    return null;
+  }
+  if (event.status === "error") {
+    const reason = event.message?.trim() || "The engine gave no reason";
+    if (NO_ANSWER_PATTERN.test(reason)) {
+      return { kind: "no-answer" };
+    }
+    return { kind: "disconnected", reason };
+  }
+  if (!Array.isArray(event.data)) {
+    const { error } = parseFieldOptionsReply(event.data);
+    if (error !== null) {
+      return { kind: "disconnected", reason: error };
+    }
+    return { kind: "engine-unreachable", message: "The engine answered with something other than a scene list" };
+  }
+  return { kind: "connected", sceneCount: parseFieldOptionsReply(event.data).options.length };
+}
+
 export function obsCheck(facts: ObsFacts): CheckResult {
   switch (facts.kind) {
     case "connected": {
-      return result("obs", "pass", `OBS is connected (${plural(facts.sceneCount, "scene", "scenes")})`);
+      return result("obs", "pass", `OBS connected — ${plural(facts.sceneCount, "scene", "scenes")}`);
     }
     case "disconnected": {
-      return result("obs", "warn", "OBS isn't connected. The scene manager keeps retrying in the background.", {
-        details: [facts.reason],
+      return result("obs", "warn", facts.reason, { fixes: [RETRY] });
+    }
+    case "unsupported": {
+      return result(
+        "obs",
+        "warn",
+        "OBS status can't be checked from here. Install the OBS module, or update it and your engine."
+      );
+    }
+    case "no-answer": {
+      return result("obs", "warn", "OBS didn't answer. Check that the scene manager is running.", {
         fixes: [RETRY],
       });
-    }
-    case "engine-update-needed": {
-      return result("obs", "warn", "Your engine is too old to report OBS status. Update it to check OBS from here.");
     }
     case "engine-unreachable": {
       return result("obs", "warn", "Couldn't ask the engine about OBS", { details: [facts.message], fixes: [RETRY] });
@@ -184,7 +294,33 @@ export function obsCheck(facts: ObsFacts): CheckResult {
   }
 }
 
-export function streamInfoCheck(facts: StreamInfoFacts, lastGoLive: LastGoLive | null, now: number): CheckResult {
+/** The channel as the stream info check read it, in the shape presets are compared against. */
+export function streamInfoFromFacts(facts: Extract<StreamInfoFacts, { kind: "ok" }>): StreamInfo {
+  return {
+    title: facts.title,
+    category: facts.categoryId ? { id: facts.categoryId, name: facts.categoryName } : null,
+    tags: facts.tags,
+  };
+}
+
+/** Presets that would change something, in the order given. One already in place is left out. */
+export function applicablePresets(current: StreamInfo, presets: readonly StreamInfoPresetOption[]): PresetChoice[] {
+  const choices: PresetChoice[] = [];
+  for (const preset of presets) {
+    const comparison = comparePreset(current, preset.info);
+    if (!comparison.active) {
+      choices.push({ id: preset.id, name: preset.name, summary: comparison.summary });
+    }
+  }
+  return choices;
+}
+
+export function streamInfoCheck(
+  facts: StreamInfoFacts,
+  lastGoLive: LastGoLive | null,
+  now: number,
+  presets: readonly StreamInfoPresetOption[] = []
+): CheckResult {
   if (facts.kind === "unlinked") {
     return result("stream-info", "fail", "Connect Twitch to check your title and category", {
       fixes: [{ kind: "route", label: "Connect Twitch", href: INTEGRATIONS_PATH }],
@@ -214,9 +350,16 @@ export function streamInfoCheck(facts: StreamInfoFacts, lastGoLive: LastGoLive |
     `Category: ${facts.categoryName || "(none)"}`,
     `Tags: ${facts.tags.length > 0 ? facts.tags.join(", ") : "(none)"}`,
   ];
-  const fixes: CheckFix[] = [
-    { kind: "external", label: "Edit on Twitch", href: `https://dashboard.twitch.tv/u/${facts.login}/stream-manager` },
-  ];
+  const fixes: CheckFix[] = [];
+  const choices = applicablePresets(streamInfoFromFacts(facts), presets);
+  if (choices.length > 0) {
+    fixes.push({ kind: "apply-preset", label: "Apply preset", presets: choices });
+  }
+  fixes.push({
+    kind: "external",
+    label: "Edit on Twitch",
+    href: `https://dashboard.twitch.tv/u/${facts.login}/stream-manager`,
+  });
 
   if (concerns.length > 0) {
     return result("stream-info", "warn", concerns[0], { details: [...concerns.slice(1), ...current], fixes });

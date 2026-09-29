@@ -19,16 +19,9 @@ export type TwitchLinkFacts =
       /** False when Twitch refused the token and it could not be refreshed. */
       tokenValid: boolean;
       tokenProblem: string | null;
-      /** Scopes the connect flow asks for that this link was never granted. */
+      /** Scopes of required Twitch capabilities this link was never granted; optional ones are left out. */
       missingScopes: string[];
     };
-
-export type ObsFacts =
-  | { kind: "connected"; sceneCount: number }
-  | { kind: "disconnected"; reason: string }
-  /** The engine predates the OBS listing call, so the question cannot be asked. */
-  | { kind: "engine-update-needed" }
-  | { kind: "engine-unreachable"; message: string };
 
 export type StreamInfoFacts =
   | { kind: "unlinked" }

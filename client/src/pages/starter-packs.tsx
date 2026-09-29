@@ -2,11 +2,13 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import {
   fieldTokenNames,
-  STARTER_FEATURES,
+  NO_STARTER_FEATURES,
   STARTER_PACKS,
+  type StarterFeatures,
   type StarterFieldValues,
   type StarterPack,
   type StarterPackField,
+  starterFeaturesFrom,
   starterFieldWarning,
   starterPackDefaults,
   validateStarterValues,
@@ -14,6 +16,7 @@ import {
 import type { StarterInstallOutcome } from "@convex/starterPacks";
 import { useAction, useQuery } from "convex/react";
 import {
+  AlarmClock,
   Check,
   Clapperboard,
   Gem,
@@ -23,6 +26,7 @@ import {
   MessageSquare,
   Package,
   PartyPopper,
+  Presentation,
   Rocket,
   Workflow as WorkflowIcon,
 } from "lucide-react";
@@ -43,6 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -62,6 +67,8 @@ const PACK_ICONS: Record<string, LucideIcon> = {
   "cheer-thanks": Gem,
   "handy-commands": MessageSquare,
   "brb-scene": Clapperboard,
+  "ad-break-heads-up": AlarmClock,
+  "ad-break-scene": Presentation,
 };
 
 type PackViews = { pack: StarterPack; views: StarterItemView[]; summary: StarterPackSummary };
@@ -199,17 +206,19 @@ function FieldInput({
   field,
   value,
   error,
+  features,
   onChange,
 }: {
   pack: StarterPack;
   field: StarterPackField;
   value: string | number;
   error: string | undefined;
+  features: StarterFeatures;
   onChange: (value: string | number) => void;
 }) {
   const inputId = `starter-field-${pack.id}-${field.id}`;
   const tokens = field.type === "text" ? fieldTokenNames(pack, field.id) : [];
-  const unsupported = field.requires !== undefined && !STARTER_FEATURES[field.requires];
+  const unsupported = field.requires !== undefined && !features[field.requires];
   const warning = starterFieldWarning(field, value);
 
   return (
@@ -327,9 +336,17 @@ function InstallDialog({
   const { toast } = useToast();
   const install = useAction(api.starterPacks.install);
   const [draft, setDraft] = useState<DraftValues>(() => starterPackDefaults(pack));
+  const { state: capabilities } = useEngineCapabilities(instanceId);
+  // Until the engine answers, a feature it may lack stays off; the install
+  // action checks again against the engine's own answer.
+  const features = useMemo(
+    () =>
+      capabilities.status === "ready" ? starterFeaturesFrom(capabilities.report.capabilities) : NO_STARTER_FEATURES,
+    [capabilities]
+  );
   const [installing, setInstalling] = useState(false);
 
-  const checked = useMemo(() => validateStarterValues(pack, draft, STARTER_FEATURES), [pack, draft]);
+  const checked = useMemo(() => validateStarterValues(pack, draft, features), [pack, draft, features]);
   const errors = checked.ok ? {} : checked.errors;
   const previewValues: StarterFieldValues = checked.ok ? checked.values : draft;
 
@@ -380,6 +397,7 @@ function InstallDialog({
                 field={field}
                 value={draft[field.id]}
                 error={errors[field.id]}
+                features={features}
                 onChange={(value) => setDraft((current) => ({ ...current, [field.id]: value }))}
               />
             ))}

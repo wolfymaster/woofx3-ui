@@ -11,14 +11,11 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { createEngineRpcSession } from "./lib/engineInstanceUrl";
-import { isMissingEngineMethodError } from "./lib/engineMethodSupport";
 import {
   type GoLiveCompletion,
   type GoLiveStepOutcome,
   isGoLiveCheckId,
   type LastGoLive,
-  type ObsFacts,
   type OverlayFacts,
   type StreamInfoFacts,
   type TwitchLinkFacts,
@@ -35,15 +32,16 @@ import {
 } from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
-import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
+import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
 
 // The Go live checklist: a pre-flight run just before a stream starts, so a
 // broken setup is found by the streamer rather than by their viewers.
 //
-// Each check that has to ask something outside Convex (Twitch, the engine) is
-// its own action, so the browser runs them side by side and shows each result
-// as it lands instead of waiting for the slowest. What Convex already holds
-// arrives through the `checklist` query.
+// Each check that has to ask Twitch is its own action, so the browser runs them
+// side by side and shows each result as it lands instead of waiting for the
+// slowest. The OBS check asks the engine through the generic field-options
+// request (fieldOptions.dispatch), as a scene picker would. What Convex
+// already holds arrives through the `checklist` query.
 
 const TWITCH_VALIDATE_URL = "https://id.twitch.tv/oauth2/validate";
 const SEND_SCOPE = "user:write:chat";
@@ -52,11 +50,6 @@ const MARKER_DESCRIPTION = "Stream start";
 const MAX_SOURCE_KEYS_READ = 500;
 /** Past this many enabled workflows the checklist just says "20+". */
 const WORKFLOW_COUNT_CAP = 20;
-
-/** The stub surface these checks call. Declared here because the shared contract may predate listObsScenes. */
-interface ObsListingApi {
-  listObsScenes(): Promise<{ available: true; scenes: unknown[] } | { available: false; reason: string }>;
-}
 
 async function requireMemberForAction(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
   const userId = await getAuthUserId(ctx);
@@ -262,7 +255,7 @@ export const recordCompletion = internalMutation({
 });
 
 // ---------------------------------------------------------------------------
-// Checks that ask Twitch or the engine
+// Checks that ask Twitch
 // ---------------------------------------------------------------------------
 
 /** Scopes Twitch reports for the token, or null when it refuses the token outright. */
@@ -290,8 +283,6 @@ export const checkTwitch = action({
       return { linked: false };
     }
 
-    const missingFrom = (granted: string[]) => TWITCH_INTEGRATION_SCOPES.filter((scope) => !granted.includes(scope));
-
     let accessToken: string;
     try {
       const token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, {
@@ -307,7 +298,7 @@ export const checkTwitch = action({
         login: link.login,
         tokenValid: false,
         tokenProblem: "Twitch refused to renew the connection",
-        missingScopes: missingFrom(link.scopes),
+        missingScopes: missingRequiredTwitchScopes(link.scopes),
       };
     }
 
@@ -318,7 +309,7 @@ export const checkTwitch = action({
         login: link.login,
         tokenValid: false,
         tokenProblem: "Twitch no longer accepts the connection",
-        missingScopes: missingFrom(link.scopes),
+        missingScopes: missingRequiredTwitchScopes(link.scopes),
       };
     }
     return {
@@ -326,35 +317,8 @@ export const checkTwitch = action({
       login: link.login,
       tokenValid: true,
       tokenProblem: null,
-      missingScopes: missingFrom(granted),
+      missingScopes: missingRequiredTwitchScopes(granted),
     };
-  },
-});
-
-export const checkObs = action({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<ObsFacts> => {
-    await requireMemberForAction(ctx, args.instanceId);
-
-    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: args.instanceId });
-    if (!instance?.clientId || !instance.clientSecret) {
-      return { kind: "engine-unreachable", message: "This instance is not registered with an engine" };
-    }
-
-    try {
-      const rpc = createEngineRpcSession<ObsListingApi>(instance.url, instance.clientId, instance.clientSecret);
-      const listing = await rpc.listObsScenes();
-      if (listing.available) {
-        return { kind: "connected", sceneCount: listing.scenes.length };
-      }
-      return { kind: "disconnected", reason: listing.reason };
-    } catch (error) {
-      const message = messageOf(error);
-      if (isMissingEngineMethodError(message, "listObsScenes")) {
-        return { kind: "engine-update-needed" };
-      }
-      return { kind: "engine-unreachable", message };
-    }
   },
 });
 

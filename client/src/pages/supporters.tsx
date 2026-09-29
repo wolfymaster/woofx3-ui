@@ -4,6 +4,7 @@ import type { SupporterMetric, SupporterStream } from "@convex/lib/supporters";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Copy, Gem, Gift, Loader2, Megaphone, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
 import { PageHeader } from "@/components/layout/page-header";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
@@ -14,8 +15,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
+import { SUPPORTER_CAPABILITIES } from "@/lib/engine-capabilities";
 import {
   formatMetricEvents,
   formatMetricTotal,
@@ -99,6 +102,7 @@ async function copyToClipboard(text: string): Promise<void> {
 
 export default function Supporters() {
   const { instance } = useInstance();
+  const capabilities = useEngineCapabilities(instance?._id);
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
@@ -107,7 +111,14 @@ export default function Supporters() {
         description="The viewers who cheer and gift subs, all time or for one stream. Look anyone up before a thank-you or a VIP decision."
       />
       {instance ? (
-        <SupportersView instanceId={instance._id} />
+        <EngineFeatureGate
+          support={capabilities.support(...SUPPORTER_CAPABILITIES)}
+          state={capabilities.state}
+          feature="Supporter stats"
+          onRetry={capabilities.refresh}
+        >
+          <SupportersView instanceId={instance._id} />
+        </EngineFeatureGate>
       ) : (
         <p className="text-sm text-muted-foreground">No instance available yet.</p>
       )}
