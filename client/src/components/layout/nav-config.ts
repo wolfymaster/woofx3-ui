@@ -1,4 +1,5 @@
 import {
+  ArchiveRestore,
   Bell,
   CircleHelp,
   FolderOpen,
@@ -68,6 +69,7 @@ export const ADMIN_ITEMS: NavItem[] = [
   { id: "engine", label: "Engine", icon: Server, href: "/admin/engine" },
   { id: "integrations", label: "Integrations", icon: Key, href: "/admin/integrations" },
   { id: "storage", label: "Storage", icon: HardDrive, href: "/admin/storage" },
+  { id: "backup", label: "Backup", icon: ArchiveRestore, href: "/admin/backup" },
   { id: "appearance", label: "Appearance", icon: Palette, href: "/admin/appearance" },
 ];
 
