@@ -56,7 +56,7 @@ function catalogEntry(ref: string): StarterCatalog["actions"][number] {
   return {
     canonicalRef: ref,
     handlerType: "function",
-    functionCall: manifestId.replace("twitch.", ""),
+    functionCall: manifestId.replace(/^(twitch|obs)\./, ""),
     configFields: fields,
   };
 }
@@ -76,8 +76,8 @@ const FULL_CATALOG: StarterCatalog = {
   actions: Object.values(STARTER_ACTION_REFS).map(catalogEntry),
 };
 
-/** An engine without the OBS workflow actions, with an up-to-date Twitch module. */
-const OLD_ENGINE_CATALOG: StarterCatalog = {
+/** An up-to-date Twitch module without the OBS module. */
+const NO_OBS_CATALOG: StarterCatalog = {
   triggers: FULL_CATALOG.triggers,
   actions: FULL_CATALOG.actions.filter((action) => action.canonicalRef !== STARTER_ACTION_REFS.switchScene),
 };
@@ -343,7 +343,8 @@ describe("buildStarterCommand", () => {
     expect(built[0].actions).toEqual([
       {
         id: "switch-to-brb",
-        action: "obs.switch_scene",
+        action: "function",
+        function: "switch_scene",
         parameters: { sceneName: "Be Right Back" },
         $ref: STARTER_ACTION_REFS.switchScene,
       },
@@ -464,10 +465,23 @@ describe("missingRequirements", () => {
     expect(blockedItems(FULL_CATALOG)).toEqual([]);
   });
 
-  test("an engine without the OBS actions holds back only the scene commands", () => {
-    expect(blockedItems(OLD_ENGINE_CATALOG)).toEqual(["brb-scene/brb", "brb-scene/back"]);
+  test("without the OBS module, only the scene commands are held back, and they ask for the module", () => {
+    expect(blockedItems(NO_OBS_CATALOG)).toEqual(["brb-scene/brb", "brb-scene/back"]);
     const brb = pack("brb-scene").items[0];
-    expect(requirementsMessage(missingRequirements(brb, OLD_ENGINE_CATALOG))).toBe("Requires engine update");
+    const missing = missingRequirements(brb, NO_OBS_CATALOG);
+    expect(missing.obsModuleInstalled).toBe(false);
+    expect(requirementsMessage(missing)).toBe("Requires the OBS module");
+  });
+
+  test("an OBS module that lacks an input a scene command sets asks for an update", () => {
+    const olderObs: StarterCatalog = {
+      triggers: FULL_CATALOG.triggers,
+      actions: FULL_CATALOG.actions.map((action) =>
+        action.canonicalRef === STARTER_ACTION_REFS.switchScene ? { ...action, configFields: [] } : action
+      ),
+    };
+    const brb = pack("brb-scene").items[0];
+    expect(requirementsMessage(missingRequirements(brb, olderObs))).toBe("Requires the OBS module (update it)");
   });
 
   test("an older Twitch module holds back the items that clip or mark, and asks for an update", () => {
@@ -484,16 +498,21 @@ describe("missingRequirements", () => {
   });
 
   test("without the Twitch module, its triggers and actions ask for the module", () => {
-    const engineOnly: StarterCatalog = {
+    const noTwitch: StarterCatalog = {
       triggers: [],
       actions: [catalogEntry(STARTER_ACTION_REFS.chatReply), catalogEntry(STARTER_ACTION_REFS.switchScene)],
     };
     const followItem = pack("follower-thanks").items[0];
-    const missing = missingRequirements(followItem, engineOnly);
-    expect(missing).toEqual({ triggers: ["channel.follow"], actions: [], twitchModuleInstalled: false });
+    const missing = missingRequirements(followItem, noTwitch);
+    expect(missing).toEqual({
+      triggers: ["channel.follow"],
+      actions: [],
+      twitchModuleInstalled: false,
+      obsModuleInstalled: true,
+    });
     expect(requirementsMessage(missing)).toBe("Requires the Twitch module");
     const raidItem = pack("raid-welcome").items[0];
-    expect(requirementsMessage(missingRequirements(raidItem, engineOnly))).toBe("Requires the Twitch module");
+    expect(requirementsMessage(missingRequirements(raidItem, noTwitch))).toBe("Requires the Twitch module");
   });
 
   test("raid welcome needs twitch.marker, so Twitch module 0.7.0 (shoutout, no marker) never runs it", () => {

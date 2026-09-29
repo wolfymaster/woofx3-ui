@@ -17,7 +17,7 @@ const TWITCH_TRIGGERS = [
   "channel.subscriptionGift",
 ];
 
-/** An instance whose Twitch module predates its workflow actions, on an engine without the OBS actions. */
+/** An instance whose Twitch module predates its workflow actions, without the OBS module. */
 const CHAT_ONLY: StarterCatalog = {
   triggers: TWITCH_TRIGGERS.map((event) => ({ event, canonicalRef: `woofx3_twitch:trigger:${event}` })),
   actions: [{ canonicalRef: STARTER_ACTION_REFS.chatReply, handlerType: "chat.reply" }],
@@ -68,7 +68,7 @@ describe("starterPackSummary", () => {
   test("a pack with nothing ready names the reason", () => {
     const brb = pack("brb-scene");
     const views = brb.items.map((item) => starterItemView(brb, item, CHAT_ONLY, {}));
-    expect(starterPackSummary(views).blockedReason).toBe("Requires engine update");
+    expect(starterPackSummary(views).blockedReason).toBe("Requires the OBS module");
   });
 
   test("a fully installed pack is not blocked", () => {

@@ -14,21 +14,23 @@ import type { ActionStep, ConditionConfig, ConditionOperator, TaskDefinition, Wo
 
 /** Modules whose actions packs use, by id. */
 export const STARTER_MODULES = {
-  /** The engine's bundled module: chat replies and OBS. */
+  /** The engine's bundled module: chat replies. */
   engine: "woofx3",
   /** The Twitch platform module, which also provides every trigger the packs bind to. */
   twitch: "woofx3_twitch",
+  /** The OBS platform module: scene switches. */
+  obs: "woofx3_obs",
 } as const;
 
 /**
  * Canonical refs of the actions packs use. Platform actions come from the
- * platform's module rather than the engine, so a missing Twitch action means
- * the Twitch module is absent or older than the packs, while a missing
+ * platform's module rather than the engine, so a missing Twitch or OBS action
+ * means that module is absent or older than the packs, while a missing
  * `woofx3` action means the engine is.
  */
 export const STARTER_ACTION_REFS = {
   chatReply: "woofx3:action:chat.reply",
-  switchScene: "woofx3:action:obs.switch_scene",
+  switchScene: "woofx3_obs:action:obs.switch_scene",
   shoutout: "woofx3_twitch:action:twitch.shoutout",
   clip: "woofx3_twitch:action:twitch.clip",
   marker: "woofx3_twitch:action:twitch.marker",
@@ -517,7 +519,7 @@ export const STARTER_PACKS: readonly StarterPack[] = [
     id: "brb-scene",
     name: "BRB scene",
     why: "Step away without touching OBS: type !brb to switch to your break scene and !back to return.",
-    note: "Needs OBS connected to the engine. Only you and your moderators can run these commands.",
+    note: "Needs the OBS module, connected to OBS. Only you and your moderators can run these commands.",
     fields: [
       {
         id: "brbScene",
@@ -755,6 +757,8 @@ export interface StarterRequirements {
   actions: StarterActionRef[];
   /** Whether the catalog has anything from the Twitch module, which tells a missing module from an outdated one. */
   twitchModuleInstalled: boolean;
+  /** The same for the OBS module. */
+  obsModuleInstalled: boolean;
 }
 
 function refModule(ref: string): string {
@@ -808,10 +812,15 @@ export function missingRequirements(item: StarterItem, catalog: StarterCatalog):
       actions.add(step.action);
     }
   }
-  const twitchModuleInstalled = [...catalog.triggers, ...catalog.actions].some(
-    (entry) => entry.canonicalRef !== undefined && refModule(entry.canonicalRef) === STARTER_MODULES.twitch
-  );
-  return { triggers, actions: Array.from(actions), twitchModuleInstalled };
+  const catalogEntries = [...catalog.triggers, ...catalog.actions];
+  const hasModule = (moduleId: string) =>
+    catalogEntries.some((entry) => entry.canonicalRef !== undefined && refModule(entry.canonicalRef) === moduleId);
+  return {
+    triggers,
+    actions: Array.from(actions),
+    twitchModuleInstalled: hasModule(STARTER_MODULES.twitch),
+    obsModuleInstalled: hasModule(STARTER_MODULES.obs),
+  };
 }
 
 export function hasRequirements(missing: StarterRequirements): boolean {
@@ -820,22 +829,29 @@ export function hasRequirements(missing: StarterRequirements): boolean {
 
 /**
  * Why an item cannot be installed, in the streamer's terms. Every trigger a
- * pack binds to comes from the Twitch module, as do the Twitch actions; the
- * rest are the engine's own. A Twitch module that is installed but lacks
- * something is an older version, which updating the module fixes.
+ * pack binds to comes from the Twitch module, as do the Twitch actions; scene
+ * switches come from the OBS module; the rest are the engine's own. A
+ * platform module that is installed but lacks something is an older version,
+ * which updating the module fixes.
  */
 export function requirementsMessage(missing: StarterRequirements): string | null {
-  const missingTwitchAction = missing.actions.some((ref) => refModule(ref) === STARTER_MODULES.twitch);
-  const missingEngineAction = missing.actions.some((ref) => refModule(ref) === STARTER_MODULES.engine);
-  const needsTwitch = missing.triggers.length > 0 || missingTwitchAction;
+  const missingFrom = (moduleId: string) => missing.actions.some((ref) => refModule(ref) === moduleId);
+  const needsTwitch = missing.triggers.length > 0 || missingFrom(STARTER_MODULES.twitch);
+  const needsObs = missingFrom(STARTER_MODULES.obs);
   if (needsTwitch && !missing.twitchModuleInstalled) {
     return "Requires the Twitch module";
   }
-  if (missingEngineAction) {
+  if (needsObs && !missing.obsModuleInstalled) {
+    return "Requires the OBS module";
+  }
+  if (missingFrom(STARTER_MODULES.engine)) {
     return "Requires engine update";
   }
   if (needsTwitch) {
     return "Requires the Twitch module (update it)";
+  }
+  if (needsObs) {
+    return "Requires the OBS module (update it)";
   }
   return null;
 }
