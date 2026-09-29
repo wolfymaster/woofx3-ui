@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import { isInstanceMember } from "./lib/teamAccess";
 import { dashboardPanelWidgetValidator } from "./schema";
 
 type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
@@ -13,7 +14,10 @@ export const getPanels = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<DashboardPanel[]> => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) {
+    // Subscribed with the instance id cached from the last session before
+    // membership is confirmed; a layout saved for an instance the caller has
+    // since lost must not come back.
+    if (!userId || !(await isInstanceMember(ctx, args.instanceId))) {
       return [];
     }
 

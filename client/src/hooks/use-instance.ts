@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
 import { useQuery } from "convex/react";
 import { useEffect } from "react";
+import { selectInstance } from "@/lib/instance-selection";
 import { $currentInstanceId } from "@/lib/stores";
 
 export function useInstance() {
@@ -10,22 +11,13 @@ export function useInstance() {
   const instances = useQuery(api.instances.listForCurrentUser);
 
   const list = instances ?? [];
+  const { instance, optimisticInstanceId } = selectInstance(instances, instanceId);
 
   useEffect(() => {
-    if (instances === undefined || instances.length === 0) {
-      return;
+    if (instance && instance._id !== instanceId) {
+      $currentInstanceId.set(instance._id);
     }
-    const first = instances.find((i) => i !== null);
-    if (!first) {
-      return;
-    }
-    if (!instanceId || !instances.some((i) => i !== null && i._id === instanceId)) {
-      $currentInstanceId.set(first._id);
-    }
-  }, [instances, instanceId]);
-
-  const instance =
-    (instanceId ? list.find((i) => i !== null && i._id === instanceId) : null) ?? list.find(Boolean) ?? null;
+  }, [instance, instanceId]);
 
   function setInstance(id: string) {
     $currentInstanceId.set(id);
@@ -36,6 +28,14 @@ export function useInstance() {
     instances: list,
     setInstance,
     isLoading: instances === undefined,
+    /**
+     * Before the membership list loads, the id selected last session; after,
+     * the confirmed instance's id. Lets instance-scoped queries subscribe
+     * alongside the list instead of a round trip after it. Only for queries
+     * that answer an instance the caller is not a member of with nothing; read
+     * them through useOptimisticInstanceQuery.
+     */
+    optimisticInstanceId: optimisticInstanceId as Id<"instances"> | null,
   };
 }
 
