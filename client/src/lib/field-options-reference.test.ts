@@ -21,8 +21,8 @@ describe("fieldOptionsOwnerFromCanonicalId", () => {
       declaration: "trigger",
       declarationId: "channelpoints_redeem",
     });
-    expect(fieldOptionsOwnerFromCanonicalId("woofx3:action:obs.switch_scene")).toEqual({
-      moduleId: "woofx3",
+    expect(fieldOptionsOwnerFromCanonicalId("woofx3_obs:action:obs.switch_scene")).toEqual({
+      moduleId: "woofx3_obs",
       declaration: "action",
       declarationId: "obs.switch_scene",
     });
