@@ -10,7 +10,7 @@ import {
   resolveMode,
   resolveThemeColors,
 } from "./resolve";
-import { resolveThemeTokens } from "./tokens";
+import { changedThemeTokens, resolveThemeTokens } from "./tokens";
 
 describe("color", () => {
   test("converts hex to the stylesheet's HSL triple", () => {
@@ -81,6 +81,25 @@ describe("resolveThemeTokens", () => {
   test("puts readable text on the primary fill", () => {
     const tokens = resolveThemeTokens({ ...getPalette("gruvbox").dark, primary: "#fabd2f" });
     expect(tokens["--primary-foreground"]).toBe(hexToHslTriple("#282828"));
+  });
+});
+
+describe("changedThemeTokens", () => {
+  test("returns every token when nothing has been applied yet", () => {
+    const tokens = resolveThemeTokens(getPalette(DEFAULT_PALETTE_ID).dark);
+    expect(changedThemeTokens({}, tokens)).toEqual(Object.entries(tokens));
+  });
+
+  test("returns nothing when the tokens are unchanged", () => {
+    const tokens = resolveThemeTokens(getPalette(DEFAULT_PALETTE_ID).dark);
+    expect(changedThemeTokens(tokens, { ...tokens })).toEqual([]);
+  });
+
+  test("returns only the tokens a single color edit touches", () => {
+    const colors = getPalette(DEFAULT_PALETTE_ID).dark;
+    const before = resolveThemeTokens(colors);
+    const after = resolveThemeTokens({ ...colors, chart1: "#123456" });
+    expect(changedThemeTokens(before, after)).toEqual([["--chart-1", hexToHslTriple("#123456")]]);
   });
 });
 
