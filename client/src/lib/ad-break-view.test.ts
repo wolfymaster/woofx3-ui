@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { AdSchedule } from "@convex/lib/adBreaks";
-import { normalizeTimestamp, parseAdSchedule, parseAdSnoozeResult } from "@convex/lib/adBreaks";
 import {
   type AdBreakInputs,
   type AdBreakView,
@@ -23,13 +22,13 @@ function schedule(overrides: Partial<AdSchedule> = {}): AdSchedule {
     prerollFreeSeconds: 600,
     snoozeCount: 2,
     snoozeRefreshAt: "2026-09-28T20:30:00.000Z",
-    serverNow: null,
+    serverNow: "2026-09-28T20:00:00.000Z",
     ...overrides,
   };
 }
 
 function okFetch(value: AdSchedule, receivedAt = NOW) {
-  return scheduleFetch({ state: "ok", schedule: value }, receivedAt);
+  return scheduleFetch(value, receivedAt);
 }
 
 function inputs(overrides: Partial<AdBreakInputs> = {}): AdBreakInputs {
@@ -82,15 +81,11 @@ describe("adBreakView", () => {
     expect(view).toEqual({ kind: "offline" });
   });
 
-  test("a missing scope wins over what the engine said", () => {
+  test("a missing scope wins over what Twitch said", () => {
     expect(adBreakView(inputs({ scopeGranted: false }))).toEqual({ kind: "scopeMissing" });
   });
 
-  test("engine states pass through", () => {
-    const outdated = inputs({ fetch: scheduleFetch({ state: "engineOutdated" }, NOW) });
-    expect(adBreakView(outdated)).toEqual({ kind: "engineOutdated" });
-    const unregistered = inputs({ fetch: scheduleFetch({ state: "unregistered" }, NOW) });
-    expect(adBreakView(unregistered)).toEqual({ kind: "unregistered" });
+  test("fetch errors and loading pass through", () => {
     expect(adBreakView(inputs({ fetch: { status: "error", message: "boom" } }))).toEqual({
       kind: "error",
       message: "boom",
@@ -166,52 +161,9 @@ describe("runningAdFromBegin", () => {
   });
 });
 
-describe("parseAdSchedule", () => {
-  test("accepts the engine's shape", () => {
-    expect(parseAdSchedule(schedule())).toEqual(schedule());
-  });
-
-  test("refuses a malformed answer whole", () => {
-    expect(parseAdSchedule({ ...schedule(), nextAdAt: "soon" })).toBeNull();
-    expect(parseAdSchedule({ ...schedule(), snoozeCount: -1 })).toBeNull();
-    expect(parseAdSchedule({ ...schedule(), durationSeconds: undefined })).toBeNull();
-    expect(parseAdSchedule("nope")).toBeNull();
-  });
-
-  test("tolerates empty strings and epoch seconds", () => {
-    const parsed = parseAdSchedule({
-      ...schedule(),
-      nextAdAt: 1790625900,
-      lastAdAt: "",
-      snoozeRefreshAt: "1790627400",
-    });
-    expect(parsed).toMatchObject({
-      nextAdAt: "2026-09-28T20:05:00.000Z",
-      lastAdAt: null,
-      snoozeRefreshAt: "2026-09-28T20:30:00.000Z",
-    });
-  });
-
-  test("reads an absent serverNow as null", () => {
-    const { serverNow: _dropped, ...withoutServerNow } = schedule();
-    expect(parseAdSchedule(withoutServerNow)?.serverNow).toBeNull();
-  });
-});
-
-describe("normalizeTimestamp", () => {
-  test("Helix's zero means none", () => {
-    expect(normalizeTimestamp(0)).toBeNull();
-    expect(normalizeTimestamp("0")).toBeNull();
-  });
-
-  test("normalizes ISO strings", () => {
-    expect(normalizeTimestamp("2026-09-28T20:00:00Z")).toBe("2026-09-28T20:00:00.000Z");
-  });
-});
-
 describe("clock skew", () => {
-  test("countdowns follow the engine's clock, anchored at receipt", () => {
-    // The engine's clock runs ten minutes ahead of the browser's.
+  test("countdowns follow the backend's clock, anchored at receipt", () => {
+    // The Convex backend's clock runs ten minutes ahead of the browser's.
     const skewed = schedule({
       serverNow: "2026-09-28T20:10:00.000Z",
       nextAdAt: "2026-09-28T20:15:00.000Z",
@@ -241,12 +193,6 @@ describe("clock skew", () => {
       secondsUntilNext: 600,
       snoozeCount: 1,
       secondsUntilSnoozeRefresh: null,
-    });
-    expect(parseAdSnoozeResult({ snoozeCount: 1, nextAdAt: "", snoozeRefreshAt: 0 })).toEqual({
-      snoozeCount: 1,
-      nextAdAt: null,
-      snoozeRefreshAt: null,
-      serverNow: null,
     });
   });
 });

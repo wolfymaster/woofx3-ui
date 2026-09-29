@@ -1,10 +1,10 @@
-import { type AdSchedule, type AdScheduleResult, type AdSnoozeResult, toLocalTime } from "@convex/lib/adBreaks";
+import { type AdSchedule, type AdSnoozeResult, toLocalTime } from "@convex/lib/adBreaks";
 
 /**
  * What the Ad breaks widget shows, decided from everything it knows. Pure, so
  * the order the states win in is tested without rendering: a channel that is
  * offline shows nothing about ads whatever else is true, a missing scope wins
- * over anything the engine said, and a running ad wins over the schedule.
+ * over anything Twitch said, and a running ad wins over the schedule.
  */
 
 /** An AdSchedule with every time moved onto the local clock, in epoch ms. */
@@ -20,8 +20,6 @@ export interface LocalAdSchedule {
 export type AdScheduleFetch =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "engineOutdated" }
-  | { status: "unregistered" }
   | { status: "ok"; schedule: LocalAdSchedule; fetchedAt: number };
 
 export function localizeSchedule(schedule: AdSchedule, receivedAt: number): LocalAdSchedule {
@@ -36,15 +34,8 @@ export function localizeSchedule(schedule: AdSchedule, receivedAt: number): Loca
 }
 
 /** The widget's fetch state for an answer from `adBreaks.getSchedule`, received at `receivedAt`. */
-export function scheduleFetch(result: AdScheduleResult, receivedAt: number): AdScheduleFetch {
-  switch (result.state) {
-    case "engineOutdated":
-      return { status: "engineOutdated" };
-    case "unregistered":
-      return { status: "unregistered" };
-    case "ok":
-      return { status: "ok", schedule: localizeSchedule(result.schedule, receivedAt), fetchedAt: receivedAt };
-  }
+export function scheduleFetch(schedule: AdSchedule, receivedAt: number): AdScheduleFetch {
+  return { status: "ok", schedule: localizeSchedule(schedule, receivedAt), fetchedAt: receivedAt };
 }
 
 /** A snooze's answer folded into the schedule it changed. */
@@ -82,8 +73,6 @@ export type AdBreakView =
   | { kind: "loading" }
   | { kind: "offline" }
   | { kind: "scopeMissing" }
-  | { kind: "engineOutdated" }
-  | { kind: "unregistered" }
   | { kind: "error"; message: string }
   | { kind: "running"; secondsLeft: number }
   | {
@@ -132,12 +121,6 @@ export function adBreakView(inputs: AdBreakInputs): AdBreakView {
   }
   if (fetch.status === "error") {
     return { kind: "error", message: fetch.message };
-  }
-  if (fetch.status === "engineOutdated") {
-    return { kind: "engineOutdated" };
-  }
-  if (fetch.status === "unregistered") {
-    return { kind: "unregistered" };
   }
   const schedule = fetch.schedule;
   // Without begin events the last ad's start is the only sign one is running.

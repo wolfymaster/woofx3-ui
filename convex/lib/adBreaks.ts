@@ -1,11 +1,11 @@
 /**
- * The engine's ad-break RPCs and events, as the UI reads them.
+ * The ad schedule as the dashboard reads it from Helix, and the ad-break
+ * events the engine forwards over the stream-event session.
  *
- * Declared here rather than taken from @woofx3/api because the shared contract
- * does not carry them yet. Must match the engine's getAdSchedule and
- * snoozeNextAd return shapes and the channel.ad_break.* CloudEvent payloads.
- * Times are ISO-8601 strings; null means Twitch reported none. The parsers
- * below also normalize the looser forms described at normalizeTimestamp.
+ * Times are ISO-8601 strings; null means Twitch reported none. Helix
+ * documents its ad times as RFC3339 but answers with Unix epoch seconds (a
+ * number or a numeric string), 0 or "" for none, so the parsers below accept
+ * every one of those forms (see normalizeTimestamp).
  */
 export interface AdSchedule {
   /** When the next scheduled mid-roll starts; null when none is scheduled. */
@@ -14,30 +14,30 @@ export interface AdSchedule {
   lastAdAt: string | null;
   /** Length of the next scheduled ad break. */
   durationSeconds: number;
-  /** Preroll-free time left at the moment the engine answered. */
+  /** Preroll-free time left at the moment Twitch answered. */
   prerollFreeSeconds: number;
   /** Snoozes left to spend. */
   snoozeCount: number;
   /** When the next snooze is added back; null when the count is full. */
   snoozeRefreshAt: string | null;
-  /** The engine's clock when it answered; null from an engine that does not send it. */
-  serverNow: string | null;
+  /** The Convex action's clock when Twitch answered, the reference the other times are read against. */
+  serverNow: string;
 }
 
 export interface AdSnoozeResult {
   snoozeCount: number;
   snoozeRefreshAt: string | null;
   nextAdAt: string | null;
-  serverNow: string | null;
+  serverNow: string;
 }
 
 /**
  * `begin` ({durationSeconds, isAutomatic, startedAt}) comes from Twitch
- * EventSub. Twitch sends nothing before or after an ad, so the engine
- * synthesizes the other two from the schedule it polls: `upcoming`
- * ({nextAdAt, secondsUntil, durationSeconds}) shortly before a scheduled ad,
- * and `end` ({durationSeconds, startedAt, endedAt}) once a begun ad's length
- * has run out.
+ * EventSub. Twitch sends nothing before or after an ad, so the engine's
+ * Twitch service synthesizes the other two from the schedule it polls:
+ * `upcoming` ({nextAdAt, secondsUntil, durationSeconds}) shortly before a
+ * scheduled ad, and `end` ({durationSeconds, startedAt, endedAt}) once a
+ * begun ad's length has run out.
  */
 export const AD_BREAK_EVENTS = {
   upcoming: "channel.ad_break.upcoming",
@@ -48,17 +48,49 @@ export const AD_BREAK_EVENTS = {
 /** The Twitch capability label the ad scopes belong to; must match TWITCH_CAPABILITIES. */
 export const AD_BREAKS_CAPABILITY = "Ad breaks";
 
-export const ENGINE_TOO_OLD_FOR_ADS = "Your engine does not support ad breaks yet. Update your engine to use this.";
+export const AD_READ_SCOPE = "channel:read:ads";
+export const AD_MANAGE_SCOPE = "channel:manage:ads";
+
+export const AD_SCOPE_MISSING_MESSAGE = "Reconnect Twitch to allow ad controls.";
+
+export type AdHelixOperation = "read" | "snooze";
 
 /**
- * What `adBreaks.getSchedule` answers. Anything the widget has to render as a
- * state rather than an error (an engine without the method, an instance not
- * registered with one) is a variant, so the browser never parses messages.
+ * The sentence for a failed Helix ads call. Helix reports a token without the
+ * ads scope as a 401 whose message names the scope, or as a 403; both mean
+ * the link needs regranting, not that it is broken. A 400 on a snooze is Twitch
+ * refusing it for a reason the streamer can act on ("no snoozes left",
+ * "channel is not live"), so Twitch's own message is the one to show.
  */
-export type AdScheduleResult =
-  | { state: "ok"; schedule: AdSchedule }
-  | { state: "engineOutdated" }
-  | { state: "unregistered" };
+export function adHelixErrorMessage(operation: AdHelixOperation, status: number, twitchMessage: string): string {
+  const what = operation === "read" ? "Could not read the ad schedule" : "Could not snooze the next ad";
+  if (status === 403 || (status === 401 && /scope/i.test(twitchMessage))) {
+    return AD_SCOPE_MISSING_MESSAGE;
+  }
+  if (status === 401) {
+    return `${what}: Twitch rejected the connection. Reconnect Twitch in Settings → Integrations.`;
+  }
+  if (status === 429) {
+    return `${what}: Twitch is rate-limiting this. Try again in a moment.`;
+  }
+  if (status === 400 && operation === "snooze" && twitchMessage !== "") {
+    return twitchMessage;
+  }
+  return `${what}: ${twitchMessage || `Twitch answered ${status}`}`;
+}
+
+/** The `message` of a Helix error body (`{ error, status, message }`), or the raw text. */
+export function helixErrorText(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { message?: unknown };
+    if (typeof parsed.message === "string" && parsed.message !== "") {
+      return parsed.message;
+    }
+  } catch {
+    // Not JSON: the raw text is the best reason available.
+  }
+  return body.trim();
+}
 
 function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
@@ -66,12 +98,7 @@ function isCount(value: unknown): value is number {
 
 const INVALID = Symbol("invalid");
 
-/**
- * A timestamp as ISO-8601, null for none, or INVALID. The contract says ISO or
- * null; an empty string and Unix epoch seconds (a number or a numeric string)
- * are also taken, since Helix itself answers with both and an engine passing
- * a field through unconverted should not blank the widget.
- */
+/** A timestamp as ISO-8601, null for none, or INVALID. */
 export function normalizeTimestamp(value: unknown): string | null | typeof INVALID {
   if (value === null || value === undefined || value === "") {
     return null;
@@ -80,7 +107,6 @@ export function normalizeTimestamp(value: unknown): string | null | typeof INVAL
     if (!Number.isFinite(value) || value < 0) {
       return INVALID;
     }
-    // Helix reports "no last ad" as 0.
     return value === 0 ? null : new Date(value * 1000).toISOString();
   }
   if (typeof value !== "string") {
@@ -107,61 +133,72 @@ function timestamps<K extends string>(r: Record<string, unknown>, keys: readonly
   return out;
 }
 
-/**
- * The engine's answer checked against AdSchedule, or null. A malformed answer
- * is refused whole rather than patched: a countdown built from a guessed field
- * would tell the streamer the wrong time.
- */
-export function parseAdSchedule(raw: unknown): AdSchedule | null {
-  if (typeof raw !== "object" || raw === null) {
+/** The single entry of a Helix ads answer (`{ data: [ {...} ] }`), or null. */
+function helixEntry(body: unknown): Record<string, unknown> | null {
+  if (typeof body !== "object" || body === null) {
     return null;
   }
-  const r = raw as Record<string, unknown>;
-  const times = timestamps(r, ["nextAdAt", "lastAdAt", "snoozeRefreshAt", "serverNow"] as const);
-  if (!times || !isCount(r.durationSeconds) || !isCount(r.prerollFreeSeconds) || !isCount(r.snoozeCount)) {
+  const data = (body as { data?: unknown }).data;
+  if (!Array.isArray(data) || data.length === 0) {
     return null;
   }
-  return {
-    nextAdAt: times.nextAdAt,
-    lastAdAt: times.lastAdAt,
-    durationSeconds: r.durationSeconds,
-    prerollFreeSeconds: r.prerollFreeSeconds,
-    snoozeCount: r.snoozeCount,
-    snoozeRefreshAt: times.snoozeRefreshAt,
-    serverNow: times.serverNow,
-  };
-}
-
-export function parseAdSnoozeResult(raw: unknown): AdSnoozeResult | null {
-  if (typeof raw !== "object" || raw === null) {
-    return null;
-  }
-  const r = raw as Record<string, unknown>;
-  const times = timestamps(r, ["nextAdAt", "snoozeRefreshAt", "serverNow"] as const);
-  if (!times || !isCount(r.snoozeCount)) {
-    return null;
-  }
-  return {
-    snoozeCount: r.snoozeCount,
-    snoozeRefreshAt: times.snoozeRefreshAt,
-    nextAdAt: times.nextAdAt,
-    serverNow: times.serverNow,
-  };
+  const entry = data[0];
+  return typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
 }
 
 /**
- * Moves an engine timestamp onto the local clock. The engine's clock and the
- * browser's can disagree by more than a countdown can hide, so a time is kept
- * as its distance from the engine's `serverNow`, anchored at the moment the
- * answer arrived. Without `serverNow` the time is taken as it is.
+ * Get Ad Schedule's answer as an AdSchedule, or null. A malformed answer is
+ * refused whole rather than patched: a countdown built from a guessed field
+ * would tell the streamer the wrong time. `serverNow` is the caller's clock
+ * at receipt, since Helix sends none of its own.
  */
-export function toLocalTime(iso: string | null, serverNow: string | null, receivedAt: number): number | null {
+export function parseHelixAdSchedule(body: unknown, serverNow: string): AdSchedule | null {
+  const r = helixEntry(body);
+  if (!r) {
+    return null;
+  }
+  const times = timestamps(r, ["next_ad_at", "last_ad_at", "snooze_refresh_at"] as const);
+  if (!times || !isCount(r.duration) || !isCount(r.preroll_free_time) || !isCount(r.snooze_count)) {
+    return null;
+  }
+  return {
+    nextAdAt: times.next_ad_at,
+    lastAdAt: times.last_ad_at,
+    durationSeconds: r.duration,
+    prerollFreeSeconds: r.preroll_free_time,
+    snoozeCount: r.snooze_count,
+    snoozeRefreshAt: times.snooze_refresh_at,
+    serverNow,
+  };
+}
+
+/** Snooze Next Ad's answer as an AdSnoozeResult, or null. */
+export function parseHelixSnoozeResult(body: unknown, serverNow: string): AdSnoozeResult | null {
+  const r = helixEntry(body);
+  if (!r) {
+    return null;
+  }
+  const times = timestamps(r, ["next_ad_at", "snooze_refresh_at"] as const);
+  if (!times || !isCount(r.snooze_count)) {
+    return null;
+  }
+  return {
+    snoozeCount: r.snooze_count,
+    snoozeRefreshAt: times.snooze_refresh_at,
+    nextAdAt: times.next_ad_at,
+    serverNow,
+  };
+}
+
+/**
+ * Moves a schedule timestamp onto the browser's clock. The Convex backend's
+ * clock and the browser's can disagree by more than a countdown can hide, so
+ * a time is kept as its distance from the answer's `serverNow`, anchored at
+ * the moment the answer arrived.
+ */
+export function toLocalTime(iso: string | null, serverNow: string, receivedAt: number): number | null {
   if (iso === null) {
     return null;
   }
-  const at = Date.parse(iso);
-  if (serverNow === null) {
-    return at;
-  }
-  return receivedAt + (at - Date.parse(serverNow));
+  return receivedAt + (Date.parse(iso) - Date.parse(serverNow));
 }

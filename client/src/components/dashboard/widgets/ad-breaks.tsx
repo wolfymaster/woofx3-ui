@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { AD_BREAK_EVENTS, ENGINE_TOO_OLD_FOR_ADS } from "@convex/lib/adBreaks";
+import { AD_BREAK_EVENTS, AD_MANAGE_SCOPE, AD_READ_SCOPE } from "@convex/lib/adBreaks";
 import { useStore } from "@nanostores/react";
 import { useAction } from "convex/react";
 import { AlarmClockOff, Loader2, Megaphone } from "lucide-react";
@@ -34,7 +34,7 @@ import { transport } from "@/lib/transport";
  */
 const SCHEDULE_REFRESH_MS = 60_000;
 
-const AD_SCOPES = ["channel:read:ads", "channel:manage:ads"];
+const AD_SCOPES = [AD_READ_SCOPE, AD_MANAGE_SCOPE];
 
 export function AdBreaksWidget() {
   const { instance } = useInstance();
@@ -183,10 +183,6 @@ function AdBreakBody({ view, snoozing, onSnooze }: { view: AdBreakView; snoozing
           </Link>
         </Notice>
       );
-    case "engineOutdated":
-      return <Notice>{ENGINE_TOO_OLD_FOR_ADS}</Notice>;
-    case "unregistered":
-      return <Notice>This instance is not registered with an engine.</Notice>;
     case "error":
       return <Notice>{view.message}</Notice>;
     case "running":
