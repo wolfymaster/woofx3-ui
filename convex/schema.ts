@@ -765,13 +765,28 @@ export default defineSchema({
     // See instanceTriggers.by_trigger.
     .index("by_widget", ["widgetId"]),
 
-  // workflowTemplates: predefined workflow templates for common Twitch events
-  workflowTemplates: defineTable({
-    name: v.string(),
-    description: v.string(),
-    trigger: v.string(), // "follow" | "subscribe" | "bits" | "raid" | "gift"
-    workflowJson: v.any(),
-  }),
+  // starterPackItems: which starter pack items (convex/lib/starterPacks.ts) an
+  // instance has installed, and the engine workflow or command each became.
+  // A row is written as "installing" before the engine call, so a second
+  // install racing the first finds it and skips the item instead of creating
+  // a duplicate. An installed row whose engine object has since been deleted
+  // counts as not installed.
+  starterPackItems: defineTable({
+    instanceId: v.id("instances"),
+    packId: v.string(),
+    itemId: v.string(),
+    kind: v.union(v.literal("workflow"), v.literal("command")),
+    status: v.union(v.literal("installing"), v.literal("installed")),
+    // engineWorkflowId or engineCommandId; absent while installing.
+    engineId: v.optional(v.string()),
+    // The workflow create's correlation key, so an echo that arrives after
+    // the install stopped waiting still marks the row installed.
+    correlationKey: v.optional(v.string()),
+    claimedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_item", ["instanceId", "packId", "itemId"])
+    .index("by_correlation", ["correlationKey"]),
 
   // workflows: Convex-side mirror of canonical engine WorkflowDefinition, plus
   // an optional ReactFlow projection cache (nodes/edges) derived in the browser.

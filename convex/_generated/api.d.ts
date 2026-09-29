@@ -84,6 +84,8 @@ import type * as lib_sceneSerialization from "../lib/sceneSerialization.js";
 import type * as lib_sessionSummary from "../lib/sessionSummary.js";
 import type * as lib_shoutoutSchedule from "../lib/shoutoutSchedule.js";
 import type * as lib_spotifyIntegrationScopes from "../lib/spotifyIntegrationScopes.js";
+import type * as lib_starterPackLedger from "../lib/starterPackLedger.js";
+import type * as lib_starterPacks from "../lib/starterPacks.js";
 import type * as lib_streamInfo from "../lib/streamInfo.js";
 import type * as lib_streamRecap from "../lib/streamRecap.js";
 import type * as lib_supporters from "../lib/supporters.js";
@@ -134,6 +136,7 @@ import type * as seeds_triggerActions from "../seeds/triggerActions.js";
 import type * as shoutouts from "../shoutouts.js";
 import type * as spotifyConnect from "../spotifyConnect.js";
 import type * as spotifyIntegration from "../spotifyIntegration.js";
+import type * as starterPacks from "../starterPacks.js";
 import type * as storage from "../storage.js";
 import type * as streamInfo from "../streamInfo.js";
 import type * as streamRecap from "../streamRecap.js";
@@ -154,7 +157,6 @@ import type * as workflowCatalogContext from "../workflowCatalogContext.js";
 import type * as workflowHealth from "../workflowHealth.js";
 import type * as workflowInternal from "../workflowInternal.js";
 import type * as workflowRuns from "../workflowRuns.js";
-import type * as workflowTemplates from "../workflowTemplates.js";
 import type * as workflows from "../workflows.js";
 
 import type {
@@ -240,6 +242,8 @@ declare const fullApi: ApiFromModules<{
   "lib/sessionSummary": typeof lib_sessionSummary;
   "lib/shoutoutSchedule": typeof lib_shoutoutSchedule;
   "lib/spotifyIntegrationScopes": typeof lib_spotifyIntegrationScopes;
+  "lib/starterPackLedger": typeof lib_starterPackLedger;
+  "lib/starterPacks": typeof lib_starterPacks;
   "lib/streamInfo": typeof lib_streamInfo;
   "lib/streamRecap": typeof lib_streamRecap;
   "lib/supporters": typeof lib_supporters;
@@ -290,6 +294,7 @@ declare const fullApi: ApiFromModules<{
   shoutouts: typeof shoutouts;
   spotifyConnect: typeof spotifyConnect;
   spotifyIntegration: typeof spotifyIntegration;
+  starterPacks: typeof starterPacks;
   storage: typeof storage;
   streamInfo: typeof streamInfo;
   streamRecap: typeof streamRecap;
@@ -310,7 +315,6 @@ declare const fullApi: ApiFromModules<{
   workflowHealth: typeof workflowHealth;
   workflowInternal: typeof workflowInternal;
   workflowRuns: typeof workflowRuns;
-  workflowTemplates: typeof workflowTemplates;
   workflows: typeof workflows;
 }>;
 
