@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import { requireInstanceRole } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
 import { dashboardPanelWidgetValidator } from "./schema";
 
@@ -37,10 +38,7 @@ export const addPanel = mutation({
     name: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<string> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireInstanceRole(ctx, args.instanceId);
 
     const existing = await ctx.db
       .query("dashboardLayouts")
@@ -72,10 +70,7 @@ export const removePanel = mutation({
     panelId: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireInstanceRole(ctx, args.instanceId);
 
     const existing = await ctx.db
       .query("dashboardLayouts")
@@ -97,10 +92,7 @@ export const renamePanel = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireInstanceRole(ctx, args.instanceId);
 
     const trimmedName = args.name.trim();
     if (!trimmedName) {
@@ -140,10 +132,7 @@ export const setPanelWidgets = mutation({
     widgets: v.array(dashboardPanelWidgetValidator),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireInstanceRole(ctx, args.instanceId);
 
     const existing = await ctx.db
       .query("dashboardLayouts")

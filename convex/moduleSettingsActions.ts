@@ -1,11 +1,12 @@
 "use node";
 
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { declaredSettingsOnly } from "./lib/moduleSettingsVisibility";
 
 export interface ModuleSettingValue {
   id: string;
@@ -38,17 +39,18 @@ export const getModuleSettings = action({
     moduleId: v.string(),
   },
   handler: async (ctx, { instanceId, moduleId }): Promise<ModuleSettingValue[]> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    await requireInstanceRoleInAction(ctx, instanceId);
     const instance = await requireEngineInstance(ctx, instanceId);
-    const result = await createEngineRpcSession<EngineApi>(
-      instance.url,
-      instance.clientId,
-      instance.clientSecret
-    ).getModuleSettings(moduleId);
-    return result.settings;
+    // Separate sessions: a capnweb HTTP batch session is single-use.
+    const [result, manifest] = await Promise.all([
+      createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret).getModuleSettings(
+        moduleId
+      ),
+      createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret).getModuleManifest(
+        moduleId
+      ),
+    ]);
+    return declaredSettingsOnly(result.settings, manifest);
   },
 });
 
@@ -60,11 +62,18 @@ export const updateModuleSetting = action({
     value: v.string(),
   },
   handler: async (ctx, { instanceId, moduleId, key, value }): Promise<ModuleSettingValue> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    await requireInstanceRoleInAction(ctx, instanceId);
     const instance = await requireEngineInstance(ctx, instanceId);
+    // Only a declared setting is the user's to change; the rest is the
+    // module's own state or an integration's tokens (see declaredSettingsOnly).
+    const manifest = await createEngineRpcSession<EngineApi>(
+      instance.url,
+      instance.clientId,
+      instance.clientSecret
+    ).getModuleManifest(moduleId);
+    if (declaredSettingsOnly([{ key }], manifest).length === 0) {
+      throw new Error(`"${key}" is not a setting this module declares`);
+    }
     return createEngineRpcSession<EngineApi>(
       instance.url,
       instance.clientId,
