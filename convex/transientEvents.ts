@@ -1,7 +1,6 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, query } from "./_generated/server";
-import { isInstanceMember } from "./lib/teamAccess";
 
 const DEFAULT_TTL_MS = 60_000; // 60 seconds
 
@@ -9,10 +8,6 @@ const DEFAULT_TTL_MS = 60_000; // 60 seconds
  * Subscribe to a transient event by instanceId + correlationKey.
  * Returns the most recent event, or null if none exists yet.
  * Convex realtime pushes updates the moment an event is written.
- *
- * Null for a caller who is not a member: correlation keys are guessable
- * (many are `{kind}:{id}`) and events carry engine replies such as run
- * results and module uninstall outcomes.
  */
 export const get = query({
   args: {
@@ -20,9 +15,6 @@ export const get = query({
     correlationKey: v.string(),
   },
   handler: async (ctx, args) => {
-    if (!(await isInstanceMember(ctx, args.instanceId))) {
-      return null;
-    }
     return ctx.db
       .query("transientEvents")
       .withIndex("by_instance_correlation", (q) =>

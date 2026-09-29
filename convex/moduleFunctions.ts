@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { internalMutation, type MutationCtx, query } from "./_generated/server";
 
 const functionValidator = v.object({
   id: v.string(),
@@ -40,7 +40,14 @@ function canonicalFunctionId(moduleKey: string, manifestId: string): string {
   return manifestId;
 }
 
-export const listByModule = internalQuery({
+export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    return ctx.db.query("moduleFunctions").collect();
+  },
+});
+
+export const listByModule = query({
   args: { moduleId: v.id("moduleRepository") },
   handler: async (ctx, { moduleId }) => {
     return ctx.db

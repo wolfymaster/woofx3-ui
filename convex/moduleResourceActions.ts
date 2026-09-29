@@ -1,12 +1,12 @@
 "use node";
 
+import { getAuthUserId } from "@convex-dev/auth/server";
 import type { ActionStep, ModuleResourceUsage } from "@woofx3/api";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 
 interface CreatedInstance {
   canonicalId: string;
@@ -28,7 +28,10 @@ export const createResourceInstance = action({
     ctx,
     { instanceId, moduleName, kind, resourceInstanceId, displayName, settings }
   ): Promise<CreatedInstance> => {
-    await requireInstanceRoleInAction(ctx, instanceId);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance) {
       throw new Error("Instance not found");
@@ -57,7 +60,10 @@ export const updateResourceInstance = action({
     settings: v.record(v.string(), v.any()),
   },
   handler: async (ctx, { instanceId, canonicalId, displayName, settings }): Promise<void> => {
-    await requireInstanceRoleInAction(ctx, instanceId);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance?.clientId || !instance.clientSecret) {
       throw new Error("Instance is not registered with the engine");
@@ -76,7 +82,10 @@ export const deleteResourceInstance = action({
     canonicalId: v.string(),
   },
   handler: async (ctx, { instanceId, canonicalId }): Promise<void> => {
-    await requireInstanceRoleInAction(ctx, instanceId);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance) {
       throw new Error("Instance not found");
@@ -103,7 +112,10 @@ export const checkModuleResourceUsage = action({
     moduleDbId: v.id("moduleRepository"),
   },
   handler: async (ctx, { instanceId, moduleDbId }): Promise<ModuleResourceUsage[]> => {
-    await requireInstanceRoleInAction(ctx, instanceId);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance) {
       throw new Error("Instance not found");
@@ -139,7 +151,10 @@ export const syncResourceInstancesForModule = action({
     moduleDbId: v.id("moduleRepository"),
   },
   handler: async (ctx, { instanceId, moduleDbId }): Promise<{ itemsProcessed: number }> => {
-    await requireInstanceRoleInAction(ctx, instanceId);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance) {
       throw new Error("Instance not found");
@@ -185,7 +200,10 @@ export const syncResourceInstancesForModule = action({
 export const refreshResourceValues = action({
   args: { instanceId: v.id("instances"), kind: v.string() },
   handler: async (ctx, { instanceId, kind }): Promise<void> => {
-    await requireInstanceRoleInAction(ctx, instanceId);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance?.clientId || !instance.clientSecret) {
       throw new Error("Instance is not registered with the engine");
@@ -219,7 +237,10 @@ export const runActions = action({
     actions: v.array(v.any()),
   },
   handler: async (ctx, { instanceId, label, actions }): Promise<void> => {
-    await requireInstanceRoleInAction(ctx, instanceId);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
     if (actions.length === 0) {
       throw new Error("runActions: no actions to run");
     }

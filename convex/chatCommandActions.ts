@@ -174,6 +174,35 @@ export const deleteCommand = action({
   },
 });
 
+/**
+ * Run a command as the broadcaster, as though they had typed
+ * `!<command> <text>` in chat. The engine applies the command's permissions
+ * to the broadcaster's login, so a restricted command the broadcaster is not
+ * granted is refused here too.
+ */
+export const executeCommand = action({
+  args: {
+    instanceId: v.id("instances"),
+    command: v.string(),
+    /** Everything after the command word, parsed by the engine like chat input. */
+    text: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; message: string }> => {
+    const command = args.command.trim().replace(/^!/, "");
+    if (!command) {
+      throw new Error("Choose a command to run");
+    }
+    const bundle = await requireInstanceContext(ctx, args.instanceId);
+    const broadcaster = await ctx.runQuery(internal.lib.twitchAuth.twitchLoginFor, { instanceId: args.instanceId });
+    if (!broadcaster) {
+      throw new Error("Connect Twitch in Settings → Integrations to run chat commands");
+    }
+
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return await rpc.executeCommand(command, broadcaster, args.text ?? "");
+  },
+});
+
 export const createGroup = action({
   args: {
     instanceId: v.id("instances"),

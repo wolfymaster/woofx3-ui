@@ -1,9 +1,9 @@
 "use node";
 
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type ManifestResourceKind, parseManifestResourceKinds } from "./lib/resourceKinds";
 import { marketplaceFetch } from "./marketplace";
 
@@ -56,7 +56,10 @@ export const getModuleDetail = action({
     moduleId: v.string(),
   },
   handler: async (ctx, { instanceId, moduleId }): Promise<ModuleDetailResult> => {
-    await requireInstanceRoleInAction(ctx, instanceId);
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
 
     const installedModule = await ctx.runQuery(internal.moduleRepository.resolveModuleForDetail, {
       instanceId,
@@ -72,10 +75,10 @@ export const getModuleDetail = action({
       // the detail.
       const marketplaceId = installedModule.moduleKey?.split(":")[0];
       const [triggers, actions, functions, widgets, marketplaceMeta] = await Promise.all([
-        ctx.runQuery(internal.triggerDefinitions.listByModule, { moduleId: installedModule._id }),
-        ctx.runQuery(internal.actionDefinitions.listByModule, { moduleId: installedModule._id }),
-        ctx.runQuery(internal.moduleFunctions.listByModule, { moduleId: installedModule._id }),
-        ctx.runQuery(internal.moduleWidgets.listByModule, { moduleId: installedModule._id }),
+        ctx.runQuery(api.triggerDefinitions.listByModule, { moduleId: installedModule._id }),
+        ctx.runQuery(api.actionDefinitions.listByModule, { moduleId: installedModule._id }),
+        ctx.runQuery(api.moduleFunctions.listByModule, { moduleId: installedModule._id }),
+        ctx.runQuery(api.moduleWidgets.listByModule, { moduleId: installedModule._id }),
         marketplaceId ? fetchMarketplaceMetadata(marketplaceId) : Promise.resolve(null),
       ]);
 

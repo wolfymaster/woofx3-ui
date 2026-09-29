@@ -5,8 +5,8 @@ const STORAGE_KEYS = {
   engineUrl: "streamdeck-engine-url",
   currentInstanceId: "woofx3-current-instance-id",
   commandBarHidden: "woofx3-command-bar-hidden",
-  hideUnusedAlerts: "woofx3-hide-unused-alerts",
   dashboardLayoutHint: "woofx3-dashboard-layout-hint",
+  hideUnusedAlerts: "woofx3-hide-unused-alerts",
 };
 
 export function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -39,18 +39,17 @@ const initialCommandBarHidden = getStoredValue(STORAGE_KEYS.commandBarHidden, fa
 export const $commandBarHidden = atom<boolean>(initialCommandBarHidden);
 $commandBarHidden.subscribe((value) => persistValue(STORAGE_KEYS.commandBarHidden, value));
 
-// Whether the Alerts rail lists only entries with a configured alert. Off by default,
-// so a new user sees everything they could alert on; per-browser, like the command bar.
-const initialHideUnusedAlerts = getStoredValue(STORAGE_KEYS.hideUnusedAlerts, false);
-export const $hideUnusedAlerts = atom<boolean>(initialHideUnusedAlerts);
-$hideUnusedAlerts.subscribe((value) => persistValue(STORAGE_KEYS.hideUnusedAlerts, value));
-
 // Layout of the dashboard's first panel as last seen, so the dashboard can draw
 // zone outlines on load before its panels arrive. A hint only: the loaded
 // panels always win.
 const initialDashboardLayoutHint = getStoredValue<string | null>(STORAGE_KEYS.dashboardLayoutHint, null);
 export const $dashboardLayoutHint = atom<string | null>(initialDashboardLayoutHint);
 $dashboardLayoutHint.subscribe((value) => persistValue(STORAGE_KEYS.dashboardLayoutHint, value));
+// Whether the Alerts rail lists only entries with a configured alert. Off by default,
+// so a new user sees everything they could alert on; per-browser, like the command bar.
+const initialHideUnusedAlerts = getStoredValue(STORAGE_KEYS.hideUnusedAlerts, false);
+export const $hideUnusedAlerts = atom<boolean>(initialHideUnusedAlerts);
+$hideUnusedAlerts.subscribe((value) => persistValue(STORAGE_KEYS.hideUnusedAlerts, value));
 
 const initialSidebarCollapsed = getStoredValue(STORAGE_KEYS.sidebarCollapsed, false);
 export const $sidebarCollapsed = atom<boolean>(initialSidebarCollapsed);
