@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   applyMacroVariables,
+  chatCommandParts,
   extractMacroVariables,
   hasMacroVariables,
   isHexColor,
@@ -147,5 +148,37 @@ describe("applyMacroVariables", () => {
     const result = applyMacroVariables({ workflowId: "wf-1", method: "POST" }, { anything: "x" });
     expect(result.workflowId).toBe("wf-1");
     expect(result.method).toBe("POST");
+  });
+});
+
+describe("chatCommandParts", () => {
+  test("reads the command word and its text from separate fields", () => {
+    expect(chatCommandParts({ command: "so", commandText: " wolfymaster " })).toEqual({
+      command: "so",
+      text: "wolfymaster",
+    });
+  });
+
+  test("splits a typed line at the first whitespace", () => {
+    expect(chatCommandParts({ command: "!sr life is a highway" })).toEqual({
+      command: "sr",
+      text: "life is a highway",
+    });
+  });
+
+  test("treats a lone typed word as a command with no text", () => {
+    expect(chatCommandParts({ command: "!lurk" })).toEqual({ command: "lurk", text: "" });
+  });
+});
+
+describe("send-message and command text variables", () => {
+  test("finds variables in a chat message and in command text", () => {
+    expect(extractMacroVariables({ message: "hi {{who}}", commandText: "{{channel}}" })).toEqual(["who", "channel"]);
+  });
+
+  test("fills them in", () => {
+    const resolved = applyMacroVariables({ message: "hi {{who}}", commandText: "{{who}}" }, { who: "chat" });
+    expect(resolved.message).toBe("hi chat");
+    expect(resolved.commandText).toBe("chat");
   });
 });
