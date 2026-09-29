@@ -1,0 +1,13 @@
+**/node_modules
+dist
+.git
+.github
+.env*
+docs
+src-tauri
+.agents
+.claude
+.local
+.worktrees
+.sisyphus
+*.tar.gz
