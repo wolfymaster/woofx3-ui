@@ -1,14 +1,15 @@
+import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import {
   GO_LIVE_CHECK_IDS,
   type GoLiveCheckId,
   type LastGoLive,
-  type ObsFacts,
   type OverlayFacts,
   type StreamInfoFacts,
   type TwitchLinkFacts,
   type WorkflowFacts,
 } from "@convex/lib/goLiveFacts";
 import type { StreamInfo } from "@convex/lib/streamInfo";
+import { parseFieldOptionsReply } from "@/lib/field-options";
 import { comparePreset } from "@/lib/stream-info-edit";
 import { formatTimeAgo } from "@/lib/time-ago";
 
@@ -181,19 +182,107 @@ export function overlaysCheck(facts: OverlayFacts, browserSourceUrl: string | nu
   });
 }
 
+/**
+ * The field whose options the OBS check asks for: the scene picker of the
+ * bundled module's "Switch OBS scene" action. The check asks exactly as that
+ * picker does, so it needs no OBS-specific engine call, and its answer is what
+ * the streamer's workflows will meet: the scene list, or the scene manager's
+ * reason for having none.
+ */
+export const OBS_SCENES_FIELD: FieldOptionsReference = {
+  moduleId: "woofx3",
+  declaration: "action",
+  declarationId: "obs.switch_scene",
+  fieldId: "sceneName",
+};
+
+/**
+ * How long the check waits for the scene list. Longer than the field's own
+ * 5s request timeout plus the engine's retries while the scene manager boots,
+ * so an answer the engine relays late still lands.
+ */
+export const OBS_CHECK_TIMEOUT_MS = 15_000;
+
+export type ObsFacts =
+  | { kind: "connected"; sceneCount: number }
+  /** The scene manager answered with a reason instead of scenes, e.g. OBS is not connected. */
+  | { kind: "disconnected"; reason: string }
+  /** The engine has no OBS scene field to ask: it predates the bundled OBS actions or field references. */
+  | { kind: "unsupported" }
+  /** Nothing answered in time. */
+  | { kind: "no-answer" }
+  | { kind: "engine-unreachable"; message: string };
+
+/** A transient event relaying the engine's reply to a field-options request. */
+export interface FieldOptionsReplyEvent {
+  status: "progress" | "success" | "error";
+  message?: string;
+  data?: unknown;
+}
+
+/**
+ * Phrases in the engine's refusal to send the request that mean it has nothing
+ * to send, rather than that it failed to: the bundled module or its OBS field
+ * is missing, or the engine still takes a request descriptor instead of a
+ * field reference. Must match the errors of `dispatchFieldOptionsRequest` in
+ * the engine's api/src/routes/field-options.ts and field-options-reference.ts.
+ */
+const UNSUPPORTED_DISPATCH_PATTERNS: readonly RegExp[] = [
+  /is not installed/,
+  /declares no /,
+  /: no (top-level )?field /,
+  /Unsupported descriptor kind/,
+  /is not a function/,
+];
+
+/** NATS's answers when nobody replied: a timeout, or no subscriber on the subject at all. */
+const NO_ANSWER_PATTERN = /time(d)?\s?out|no responders/i;
+
+/** What a refused field-options dispatch says about OBS. */
+export function obsFactsFromDispatchError(message: string): ObsFacts {
+  if (UNSUPPORTED_DISPATCH_PATTERNS.some((pattern) => pattern.test(message))) {
+    return { kind: "unsupported" };
+  }
+  return { kind: "engine-unreachable", message };
+}
+
+/** What the engine's reply says about OBS, or null while it is only progress. */
+export function obsFactsFromReply(event: FieldOptionsReplyEvent): ObsFacts | null {
+  if (event.status === "progress") {
+    return null;
+  }
+  if (event.status === "error") {
+    const reason = event.message?.trim() || "The engine gave no reason";
+    if (NO_ANSWER_PATTERN.test(reason)) {
+      return { kind: "no-answer" };
+    }
+    return { kind: "disconnected", reason };
+  }
+  if (!Array.isArray(event.data)) {
+    const { error } = parseFieldOptionsReply(event.data);
+    if (error !== null) {
+      return { kind: "disconnected", reason: error };
+    }
+    return { kind: "engine-unreachable", message: "The engine answered with something other than a scene list" };
+  }
+  return { kind: "connected", sceneCount: parseFieldOptionsReply(event.data).options.length };
+}
+
 export function obsCheck(facts: ObsFacts): CheckResult {
   switch (facts.kind) {
     case "connected": {
-      return result("obs", "pass", `OBS is connected (${plural(facts.sceneCount, "scene", "scenes")})`);
+      return result("obs", "pass", `OBS connected — ${plural(facts.sceneCount, "scene", "scenes")}`);
     }
     case "disconnected": {
-      return result("obs", "warn", "OBS isn't connected. The scene manager keeps retrying in the background.", {
-        details: [facts.reason],
+      return result("obs", "warn", facts.reason, { fixes: [RETRY] });
+    }
+    case "unsupported": {
+      return result("obs", "warn", "Your engine doesn't report OBS status, so it can't be checked from here.");
+    }
+    case "no-answer": {
+      return result("obs", "warn", "OBS didn't answer. Check that the scene manager is running.", {
         fixes: [RETRY],
       });
-    }
-    case "unknown": {
-      return result("obs", "warn", "Your engine doesn't report OBS status, so it can't be checked from here.");
     }
     case "engine-unreachable": {
       return result("obs", "warn", "Couldn't ask the engine about OBS", { details: [facts.message], fixes: [RETRY] });
