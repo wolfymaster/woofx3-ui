@@ -9,6 +9,9 @@
 import type { StreamEventFrame, Woofx3EngineApi } from "@woofx3/api";
 import { createEngineBrowserSession, type EngineBrowserSession, type RpcTarget } from "@woofx3/api/client";
 import { createReconnectBackoff } from "@/lib/reconnect-backoff";
+import { $documentVisible } from "@/lib/stores";
+import { startVisibleInterval } from "@/lib/visible-interval";
+import { $engineConnected } from "./engine-connection";
 import type { ChatMessage, EngineModule, StreamStatus, WoofxTransport, Workflow, WorkflowRun } from "./interface";
 
 /**
@@ -30,7 +33,6 @@ interface Credentials {
 
 export class BrowserTransport implements WoofxTransport {
   private session: EngineBrowserSession<BrowserEngineApi> | null = null;
-  private connected = false;
   /** url|clientId|clientSecret of the live session, so connect() can no-op. */
   private target: string | null = null;
   /** Held so a reconnect can re-authenticate without another connect() call. */
@@ -83,7 +85,7 @@ export class BrowserTransport implements WoofxTransport {
   }
 
   isConnected(): boolean {
-    return this.connected && !!this.session;
+    return $engineConnected.get() && !!this.session;
   }
 
   /** Drop the live session and any pending retry, without touching credentials. */
@@ -96,7 +98,7 @@ export class BrowserTransport implements WoofxTransport {
       this.session.dispose();
       this.session = null;
     }
-    this.connected = false;
+    $engineConnected.set(false);
     this.streamRegistered = false;
   }
 
@@ -115,7 +117,6 @@ export class BrowserTransport implements WoofxTransport {
         fallback
       );
       this.session = session;
-      this.connected = true;
 
       session.onBroken(() => {
         if (generation !== this.generation || this.session !== session) {
@@ -123,21 +124,24 @@ export class BrowserTransport implements WoofxTransport {
         }
         console.warn("[Transport] Engine session broken; reconnecting");
         this.session = null;
-        this.connected = false;
+        $engineConnected.set(false);
         this.streamRegistered = false;
         this.scheduleReconnect(generation);
       });
 
-      // The backoff resets on a proven round trip, not on construction:
-      // createEngineBrowserSession does not await authenticate, so a socket
-      // that is about to fail still builds cleanly. Resetting there would turn
-      // a dead engine into a one-second retry loop. ping costs nothing and
-      // works whether or not anything is subscribed.
+      // Connected and the backoff reset both wait for a proven round trip, not
+      // construction: createEngineBrowserSession does not await authenticate,
+      // so a socket that is about to fail, or credentials the engine rejects,
+      // still build cleanly. ping is pipelined through the authenticated stub,
+      // so its success proves both the socket and the credentials. Resetting
+      // the backoff earlier would turn a dead engine into a one-second retry
+      // loop; reporting connected earlier would show a green status for it.
       void session.api
         .ping()
         .then(() => {
           if (generation === this.generation && this.session === session) {
             this.backoff.reset();
+            $engineConnected.set(true);
           }
         })
         .catch(() => {
@@ -147,7 +151,7 @@ export class BrowserTransport implements WoofxTransport {
 
       this.ensureStreamSubscription();
     } catch (err) {
-      this.connected = false;
+      $engineConnected.set(false);
       this.session = null;
       console.warn("[Transport] Failed to connect:", err);
       this.scheduleReconnect(generation);
@@ -227,8 +231,9 @@ export class BrowserTransport implements WoofxTransport {
       });
   }
 
+  /** Polled only while the tab is visible; returning to the tab polls at once. */
   subscribeWorkflowRuns(_instanceId: string, callback: (run: WorkflowRun) => void): () => void {
-    const interval = setInterval(async () => {
+    const poll = async () => {
       // Read through the live session each tick rather than capturing `api`:
       // a reconnect replaces the session, and a captured stub would keep
       // polling a dead one.
@@ -244,9 +249,15 @@ export class BrowserTransport implements WoofxTransport {
       } catch {
         // Silently ignore
       }
-    }, POLL_INTERVAL_RUNS);
+    };
 
-    return () => clearInterval(interval);
+    return startVisibleInterval(
+      () => {
+        void poll();
+      },
+      POLL_INTERVAL_RUNS,
+      $documentVisible
+    );
   }
 
   async getWorkflows(_instanceId: string): Promise<Workflow[]> {
