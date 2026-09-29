@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   currentInstanceId: "woofx3-current-instance-id",
   commandBarHidden: "woofx3-command-bar-hidden",
   dashboardLayoutHint: "woofx3-dashboard-layout-hint",
+  hideUnusedAlerts: "woofx3-hide-unused-alerts",
 };
 
 export function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -44,6 +45,11 @@ $commandBarHidden.subscribe((value) => persistValue(STORAGE_KEYS.commandBarHidde
 const initialDashboardLayoutHint = getStoredValue<string | null>(STORAGE_KEYS.dashboardLayoutHint, null);
 export const $dashboardLayoutHint = atom<string | null>(initialDashboardLayoutHint);
 $dashboardLayoutHint.subscribe((value) => persistValue(STORAGE_KEYS.dashboardLayoutHint, value));
+// Whether the Alerts rail lists only entries with a configured alert. Off by default,
+// so a new user sees everything they could alert on; per-browser, like the command bar.
+const initialHideUnusedAlerts = getStoredValue(STORAGE_KEYS.hideUnusedAlerts, false);
+export const $hideUnusedAlerts = atom<boolean>(initialHideUnusedAlerts);
+$hideUnusedAlerts.subscribe((value) => persistValue(STORAGE_KEYS.hideUnusedAlerts, value));
 
 const initialSidebarCollapsed = getStoredValue(STORAGE_KEYS.sidebarCollapsed, false);
 export const $sidebarCollapsed = atom<boolean>(initialSidebarCollapsed);
