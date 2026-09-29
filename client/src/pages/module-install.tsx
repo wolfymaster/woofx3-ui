@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { parseManifestPermissions } from "@convex/lib/modulePermissions";
 import Editor from "@monaco-editor/react";
 import { useMutation, useQuery } from "convex/react";
 import {
@@ -17,6 +18,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
+import { ApproveModulePermissionsDialog, ModulePermissionsSection } from "@/components/modules/module-permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,6 +26,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
 import { buildModuleArchive, computeModuleKey, readModuleArchive } from "@/lib/module-archive";
+import { bareModuleKey } from "@/lib/module-key";
+import { permissionsToApprove } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
 
 interface FileNode {
@@ -272,9 +276,23 @@ async function runChecks(files: Record<string, string>): Promise<CheckResult[]> 
 }
 
 /**
- * If every path shares a single top-level directory (e.g. "my-module/"),
- * return that prefix so it can be stripped when re-zipping.
+ * The archive's manifest as currently edited: `undefined` when there is no
+ * manifest.json, `null` when it does not parse to an object.
  */
+function parseEditedManifest(files: Record<string, string>): Record<string, unknown> | null | undefined {
+  const manifestContent =
+    files["manifest.json"] ?? files[Object.keys(files).find((f) => f.endsWith("manifest.json")) ?? ""];
+  if (manifestContent === undefined) {
+    return undefined;
+  }
+  try {
+    const parsed: unknown = JSON.parse(manifestContent);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 function toSnakeCase(str: string): string {
   return str
     .replace(/([a-z])([A-Z])/g, "$1_$2")
@@ -294,6 +312,7 @@ export default function ModuleInstall() {
   const [installError, setInstallError] = useState<string | null>(null);
   const [pendingModuleKey, setPendingModuleKey] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
 
   const generateUploadUrl = useMutation(api.moduleRepository.generateUploadUrl);
   const uploadAndDeliver = useMutation(api.moduleRepository.uploadAndDeliver);
@@ -305,6 +324,30 @@ export default function ModuleInstall() {
   );
 
   const fileTree = useMemo(() => buildFileTree(files), [files]);
+
+  const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
+  const editedManifest = useMemo(() => parseEditedManifest(files), [files]);
+  const declaredPermissions = useMemo(
+    () => (editedManifest === null ? null : parseManifestPermissions(editedManifest)),
+    [editedManifest]
+  );
+  // Uploading a module that is already installed upgrades it, so only the
+  // permissions the installed version lacked need approval. An installed row
+  // without a stored manifest is treated as holding nothing.
+  const installedRow = useMemo(() => {
+    const manifestId = typeof editedManifest?.id === "string" ? editedManifest.id : undefined;
+    if (!manifestId) {
+      return undefined;
+    }
+    return (repoModules ?? []).find((m) => m.status === "installed" && bareModuleKey(m.moduleKey) === manifestId);
+  }, [editedManifest, repoModules]);
+  const permissionsNeedingApproval = useMemo(() => {
+    if (!declaredPermissions) {
+      return [];
+    }
+    const installedPermissions = installedRow?.manifest ? parseManifestPermissions(installedRow.manifest) : null;
+    return permissionsToApprove(declaredPermissions, installedPermissions);
+  }, [declaredPermissions, installedRow]);
 
   // Find manifest file on load
   useEffect(() => {
@@ -471,16 +514,7 @@ export default function ModuleInstall() {
       }
       const { storageId } = (await uploadResult.json()) as { storageId: Id<"_storage"> };
 
-      // Parse manifest from extracted files
-      const manifestContent =
-        files["manifest.json"] || files[Object.keys(files).find((f) => f.endsWith("manifest.json")) ?? ""];
-
-      let manifest: Record<string, unknown> = {};
-      if (manifestContent) {
-        try {
-          manifest = JSON.parse(manifestContent);
-        } catch {}
-      }
+      const manifest: Record<string, unknown> = editedManifest ?? {};
 
       const name = (manifest.name as string) || Object.keys(files)[0]?.split("/")[0] || "Unknown Module";
       const description = (manifest.description as string) || "";
@@ -521,7 +555,15 @@ export default function ModuleInstall() {
       setInstallError(error instanceof Error ? error.message : "Failed to install module. Please try again.");
       setIsInstalling(false);
     }
-  }, [files, instance, generateUploadUrl, uploadAndDeliver]);
+  }, [files, editedManifest, instance, generateUploadUrl, uploadAndDeliver]);
+
+  const handleInstallClick = useCallback(() => {
+    if (permissionsNeedingApproval.length > 0) {
+      setApprovalOpen(true);
+      return;
+    }
+    void handleInstall();
+  }, [permissionsNeedingApproval, handleInstall]);
 
   const allChecksPassed = checkResults.length > 0 && checkResults.every((r) => r.status === "pass");
   const selectedContent = selectedPath ? files[selectedPath] : null;
@@ -655,7 +697,8 @@ export default function ModuleInstall() {
             )}
           </div>
 
-          <div className="p-4 border-t shrink-0">
+          <div className="p-4 border-t shrink-0 space-y-3">
+            {editedManifest !== undefined && <ModulePermissionsSection permissions={declaredPermissions} />}
             {installEvent?.status === "success" ? (
               <div className="p-3 rounded-md border bg-green-500/10 border-green-500/20">
                 <div className="flex items-center gap-2 text-sm text-green-500">
@@ -665,7 +708,7 @@ export default function ModuleInstall() {
               </div>
             ) : (
               <>
-                <Button className="w-full" onClick={handleInstall} disabled={!allChecksPassed || isInstalling}>
+                <Button className="w-full" onClick={handleInstallClick} disabled={!allChecksPassed || isInstalling}>
                   {isInstalling ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -704,6 +747,18 @@ export default function ModuleInstall() {
           </div>
         </div>
       </div>
+
+      <ApproveModulePermissionsDialog
+        open={approvalOpen}
+        mode={installedRow ? "update" : "install"}
+        moduleName={typeof editedManifest?.name === "string" ? editedManifest.name : "This module"}
+        permissions={permissionsNeedingApproval}
+        onApprove={() => {
+          setApprovalOpen(false);
+          void handleInstall();
+        }}
+        onCancel={() => setApprovalOpen(false)}
+      />
 
       <Dialog open={showErrorDetails} onOpenChange={setShowErrorDetails}>
         <DialogContent>
