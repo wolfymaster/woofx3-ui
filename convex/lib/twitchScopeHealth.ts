@@ -42,6 +42,7 @@ export const TWITCH_CAPABILITIES: readonly TwitchCapability[] = [
   },
   { label: "Stream title and category", scopes: ["channel:manage:broadcast"] },
   { label: "Clips", scopes: ["clips:edit"] },
+  { label: "Ad breaks", scopes: ["channel:read:ads", "channel:manage:ads"], optional: true },
   { label: "Polls and predictions", scopes: ["channel:read:polls", "channel:read:predictions"] },
   {
     label: "Moderation",

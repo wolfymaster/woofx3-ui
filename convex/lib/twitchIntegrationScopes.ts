@@ -8,6 +8,10 @@ export const TWITCH_INTEGRATION_SCOPES = [
   "chat:edit",
   "bits:read",
   "channel:manage:broadcast",
+  // The ad schedule and snoozing the next ad. Optional: a link granted before
+  // these were added keeps working and only the Ad breaks widget goes quiet.
+  "channel:manage:ads",
+  "channel:read:ads",
   "channel:moderate",
   "channel:read:hype_train",
   "channel:read:polls",

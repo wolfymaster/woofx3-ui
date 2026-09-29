@@ -40,6 +40,7 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `stream-preview` | stream | Thumbnail, click to enlarge |
 | `announcement` | stream | Send a coloured announcement to chat |
 | `pinned` | stream | Twitch pinned message, plus re-pinnable history — see below |
+| `ad-breaks` | stream | Next ad countdown, preroll-free time, snooze — see below |
 | `shoutout` | stream | Autocomplete from chat, confirm, queue — see below |
 | `moderation` | stream | Blocked terms, timeout/ban/unban, chat modes — see below |
 | `queue` | stream | One queue's line, with manual add and remove — see below |
@@ -512,6 +513,46 @@ on its own — an entry leaves the queue when it sends or when you remove it. Ev
 *attempt* is paced by the cooldown, successful or not: a refused shoutout is
 still a call to a rate-limited endpoint. The timing rules are pure and tested in
 `convex/lib/shoutoutSchedule.ts`.
+
+## Ad breaks
+
+A heads-up for mid-roll ads, so the streamer is not cut off mid-sentence: a
+countdown to the next scheduled ad, when the last one ran, the preroll-free
+time left, and a snooze button with the snoozes left and when the next one
+refills. While an ad plays the widget shows "Ad running, back in m:ss".
+
+The schedule and the snooze go straight to Helix from `convex/adBreaks.ts`
+(Get Ad Schedule under `channel:read:ads`, Snooze Next Ad under
+`channel:manage:ads`), the same pattern as pins and stream info: Convex holds
+a refreshable broadcaster token, and the generic engine surface carries
+nothing Twitch-specific. `authorizeTwitch` checks membership and the scope.
+Any member may snooze: a snooze only pushes the next ad back, and it is a call
+a moderator running the stream makes on the spot. Helix documents its ad
+times as RFC3339 but also answers with epoch seconds (a number or a numeric
+string), 0 or `""` for none; `convex/lib/adBreaks.ts` normalizes all of them
+to ISO or null and refuses a malformed answer whole. A 401 asks for a Twitch
+reconnect, a 403 or a missing scope says to reconnect Twitch to allow ad
+controls, a 400 on a snooze (no snoozes left, channel not live) shows Twitch's
+own message, and a 429 reads as rate limited.
+
+Twitch pushes nothing to the browser about the schedule, and a snooze from
+Twitch's own dashboard changes it, so the widget polls every 60 seconds while
+visible and live, and again whenever a countdown reaches zero. The ad events
+still come from the engine over the stream-event session (`begin` from
+Twitch EventSub; `upcoming` and `end` synthesized by the engine's Twitch
+service, since Twitch sends neither): the running state starts at once and
+the schedule refreshes after each ad; without them a last ad still inside its
+length is read as running. Helix sends no clock of its own, so each answer
+carries the Convex action's clock at receipt as `serverNow`, and times are
+placed on the browser's clock relative to it, so a skewed browser clock does
+not move the countdowns. Every countdown ticks off the shared
+`$nowPerSecond` ticker. Which state shows is decided in
+`client/src/lib/ad-break-view.ts`, pure and tested: offline, then a missing
+scope, then a running ad, then what Twitch answered.
+
+The scopes (`channel:read:ads`, `channel:manage:ads`) are the optional "Ad
+breaks" capability: a link made before them raises no banner, the integrations
+page lists them as not granted, and the widget offers a reconnect.
 
 ## Data sources
 
