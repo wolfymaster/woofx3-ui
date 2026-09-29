@@ -3,12 +3,11 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
+import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { getInstanceMembership } from "./lib/teamAccess";
 import {
-  GET_WORKFLOW_HEALTH_METHOD,
   isStillLoadingError,
-  isUnknownMethodError,
   type ParsedWorkflowHealth,
   parseWorkflowHealthChanged,
   parseWorkflowHealthList,
@@ -329,6 +328,22 @@ export const resync = action({
       return "skipped";
     }
 
+    let supported: boolean;
+    try {
+      supported = hasEngineCapability(await fetchEngineCapabilities(engine), "workflow.health");
+    } catch (err) {
+      logger.warn("workflow health: capability check failed", {
+        instanceId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await ctx.runMutation(internal.workflowHealth.finishResync, { instanceId, outcome: "failed" });
+      return "failed";
+    }
+    if (!supported) {
+      await ctx.runMutation(internal.workflowHealth.finishResync, { instanceId, outcome: "unsupported" });
+      return "unsupported";
+    }
+
     const fetchStartedAt = Date.now();
     let result: unknown;
     try {
@@ -345,15 +360,12 @@ export const resync = action({
         await ctx.runMutation(internal.workflowHealth.releaseResync, { instanceId });
         return "loading";
       }
-      const outcome = isUnknownMethodError(err, GET_WORKFLOW_HEALTH_METHOD) ? "unsupported" : "failed";
-      if (outcome === "failed") {
-        logger.warn("workflow health: resync failed", {
-          instanceId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-      await ctx.runMutation(internal.workflowHealth.finishResync, { instanceId, outcome });
-      return outcome;
+      logger.warn("workflow health: resync failed", {
+        instanceId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await ctx.runMutation(internal.workflowHealth.finishResync, { instanceId, outcome: "failed" });
+      return "failed";
     }
 
     const applied = await ctx.runMutation(internal.workflowHealth.applyResync, {

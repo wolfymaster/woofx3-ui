@@ -14,14 +14,18 @@ export type StreamRecapEngineState =
  * rather than a subscription: a finished session's samples and leaderboards
  * do not change while the page is open, and the engine may not be reachable.
  */
-export function useStreamRecapEngineDetail(instanceId: Id<"instances"> | undefined, sessionId: string) {
+export function useStreamRecapEngineDetail(
+  instanceId: Id<"instances"> | undefined,
+  sessionId: string,
+  enabled: boolean
+) {
   const loadEngineDetail = useAction(api.streamRecap.loadEngineDetail);
   const [state, setState] = useState<StreamRecapEngineState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt is a deliberate re-run trigger for retry
   useEffect(() => {
-    if (!instanceId) {
+    if (!instanceId || !enabled) {
       return;
     }
     let cancelled = false;
@@ -40,7 +44,7 @@ export function useStreamRecapEngineDetail(instanceId: Id<"instances"> | undefin
     return () => {
       cancelled = true;
     };
-  }, [instanceId, sessionId, loadEngineDetail, attempt]);
+  }, [instanceId, sessionId, enabled, loadEngineDetail, attempt]);
 
   const retry = useCallback(() => setAttempt((count) => count + 1), []);
   return { state, retry };

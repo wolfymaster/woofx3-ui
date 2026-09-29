@@ -9,11 +9,11 @@ import {
   missingRequirements,
   requirementsMessage,
   STARTER_ACTION_REFS,
-  STARTER_FEATURES,
   STARTER_PACKS,
   type StarterCatalog,
   type StarterPack,
   type StarterWorkflowDefinition,
+  starterFeaturesFrom,
   starterFieldWarning,
   starterItemFieldIds,
   starterPackDefaults,
@@ -390,7 +390,12 @@ describe("validateStarterValues", () => {
     });
     const withDelay = validateStarterValues(raid, { shoutoutDelaySeconds: 5 }, { delayWait: true });
     expect(withDelay.ok && withDelay.values.shoutoutDelaySeconds).toBe(5);
-    expect(STARTER_FEATURES.delayWait).toBe(false);
+  });
+
+  test("delays follow the engine's workflow.delayWait capability", () => {
+    expect(starterFeaturesFrom([])).toEqual({ delayWait: false });
+    expect(starterFeaturesFrom(["workflow.dryRun"])).toEqual({ delayWait: false });
+    expect(starterFeaturesFrom(["obs.control", "workflow.delayWait"])).toEqual({ delayWait: true });
   });
 
   test("counts each placeholder at a display name's length against a field's limit", () => {

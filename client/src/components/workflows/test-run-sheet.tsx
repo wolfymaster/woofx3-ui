@@ -32,7 +32,7 @@ import { useInstance } from "@/hooks/use-instance";
 import {
   rememberOptionsUnsupported,
   type TestRunOptionsState,
-  useTestRunOptions,
+  useTestRunSupport,
 } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import type { TestEventOutcome } from "@/lib/test-event-outcome";
@@ -88,7 +88,8 @@ export function TestRunSheet({
   otherWorkflows,
 }: TestRunSheetProps) {
   const { instance } = useInstance();
-  const optionsState = useTestRunOptions(instance?._id);
+  const testRunSupport = useTestRunSupport(instance?._id);
+  const optionsState = testRunSupport.options;
   const takesOptions = optionsState === "supported";
   // Null until someone picks a tab, so the default follows what loads in:
   // this workflow alone once the engine can hand it the sample, otherwise the
@@ -147,7 +148,12 @@ export function TestRunSheet({
                 otherWorkflows={otherWorkflows}
               />
             ) : (
-              <DirectTest engineWorkflowId={engineWorkflowId} preset={preset} optionsState={optionsState} />
+              <DirectTest
+                engineWorkflowId={engineWorkflowId}
+                preset={preset}
+                optionsState={optionsState}
+                dryRunState={testRunSupport.dryRun}
+              />
             )}
           </>
         )}
@@ -286,22 +292,25 @@ function DirectTest({
   engineWorkflowId,
   preset,
   optionsState,
+  dryRunState,
 }: {
   engineWorkflowId: string;
   preset: TriggerPreset | null;
   optionsState: TestRunOptionsState;
+  dryRunState: TestRunOptionsState;
 }) {
   const { instance } = useInstance();
   const { toast } = useToast();
   const trigger = useAction(api.workflowActions.trigger);
   const takesOptions = optionsState === "supported";
+  const takesDryRun = takesOptions && dryRunState === "supported";
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState<DirectAttempt | null>(null);
   // The person's choice. The switch shows it only while the engine can honour
   // it: showing it on for an engine that cannot would promise a run that does
   // nothing while every step happens for real.
   const [wantsDryRun, setWantsDryRun] = useState(true);
-  const dryRun = takesOptions && wantsDryRun;
+  const dryRun = takesDryRun && wantsDryRun;
   const withSample = takesOptions && preset !== null;
 
   const run = async (
@@ -395,12 +404,12 @@ function DirectTest({
                 id="test-run-dry-run"
                 checked={dryRun}
                 onCheckedChange={setWantsDryRun}
-                disabled={!takesOptions}
+                disabled={!takesDryRun}
                 data-testid="switch-test-run-dry-run"
               />
             </span>
           </TooltipTrigger>
-          {!takesOptions && <TooltipContent>{DRY_RUN_UNAVAILABLE[optionsState]}</TooltipContent>}
+          {dryRunState !== "supported" && <TooltipContent>{DRY_RUN_UNAVAILABLE[dryRunState]}</TooltipContent>}
         </Tooltip>
       </div>
     </div>

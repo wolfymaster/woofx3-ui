@@ -3,7 +3,6 @@ import {
   compareSince,
   HEALTH_STILL_LOADING_MESSAGE,
   isStillLoadingError,
-  isUnknownMethodError,
   MAX_REASON_LENGTH,
   type ParsedWorkflowHealth,
   parseWorkflowHealthChanged,
@@ -309,19 +308,5 @@ describe("isStillLoadingError", () => {
     expect(isStillLoadingError(new Error(HEALTH_STILL_LOADING_MESSAGE))).toBe(true);
     expect(isStillLoadingError(new Error("fetch failed"))).toBe(false);
     expect(isStillLoadingError(new TypeError("'getWorkflowHealth' is not a function."))).toBe(false);
-  });
-});
-
-describe("isUnknownMethodError", () => {
-  it("recognises capnweb's missing-method error", () => {
-    expect(isUnknownMethodError(new TypeError("'getWorkflowHealth' is not a function."), "getWorkflowHealth")).toBe(
-      true
-    );
-  });
-
-  it("does not treat other failures as a missing method", () => {
-    expect(isUnknownMethodError(new TypeError("fetch failed"), "getWorkflowHealth")).toBe(false);
-    expect(isUnknownMethodError(new TypeError("'listModules' is not a function."), "getWorkflowHealth")).toBe(false);
-    expect(isUnknownMethodError(undefined, "getWorkflowHealth")).toBe(false);
   });
 });

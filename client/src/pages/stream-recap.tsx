@@ -4,16 +4,19 @@ import { useAction, useQuery } from "convex/react";
 import { ArrowLeft, Copy, Gift, Loader2, MessageSquare, RefreshCw, Sparkles, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
+import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
 import { PageHeader } from "@/components/layout/page-header";
 import { ClipsCard, TopClipTile } from "@/components/stream-recap/clips-card";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { ViewerChart } from "@/components/stream-recap/viewer-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { useRecapClips } from "@/hooks/use-recap-clips";
 import { type StreamRecapEngineState, useStreamRecapEngineDetail } from "@/hooks/use-stream-recap-engine-detail";
 import { useToast } from "@/hooks/use-toast";
+import { RECAP_ENGINE_CAPABILITIES } from "@/lib/engine-capabilities";
 import { formatLiveDuration, formatViewerFigure, liveDurationMs, type SessionSummaryRow } from "@/lib/session-summary";
 import { buildThankYouMessage, buildViewerSeries, segmentTimeline, type TimelineSegment } from "@/lib/stream-recap";
 import { STREAM_RECAPS_PATH, sessionIdFromParam } from "@/lib/stream-recap-route";
@@ -345,7 +348,9 @@ function SupportersCard({
 
 function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: string }) {
   const platformLinks = useQuery(api.instances.getPlatformLinks, { instanceId: row.instanceId });
-  const { state, retry } = useStreamRecapEngineDetail(row.instanceId, sessionId);
+  const capabilities = useEngineCapabilities(row.instanceId);
+  const engineSupport = capabilities.support(...RECAP_ENGINE_CAPABILITIES);
+  const { state, retry } = useStreamRecapEngineDetail(row.instanceId, sessionId, engineSupport === "supported");
   const clips = useRecapClips(row.instanceId, sessionId);
   const body: SessionBody | null = row.session && row.totals ? { session: row.session, totals: row.totals } : null;
   const segments = row.session?.segments ?? NO_SEGMENTS;
@@ -394,13 +399,21 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
           <CardDescription>Per minute while live. Gaps are minutes that weren't sampled.</CardDescription>
         </CardHeader>
         <CardContent>
-          {detail ? <ViewerChart series={series} /> : <EngineNotice state={state} onRetry={retry} />}
+          <EngineFeatureGate
+            support={engineSupport}
+            state={capabilities.state}
+            feature="Viewer history and top supporters"
+            onRetry={capabilities.refresh}
+          >
+            {detail ? <ViewerChart series={series} /> : <EngineNotice state={state} onRetry={retry} />}
+          </EngineFeatureGate>
         </CardContent>
       </Card>
 
       {detail ? (
         <SupportersCard instanceId={row.instanceId} detail={detail} canAnnounce={canAnnounce} />
       ) : (
+        engineSupport === "supported" &&
         state.kind === "loading" && (
           <Card>
             <CardHeader>

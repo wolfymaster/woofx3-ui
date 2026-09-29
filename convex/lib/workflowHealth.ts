@@ -28,9 +28,6 @@
 export const WORKFLOW_HEALTH_CHANGED_EVENT_TYPE = "workflow.health.changed";
 export const WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE = "workflow.health.snapshot";
 
-/** The engine RPC method; an engine that predates it answers "is not a function". */
-export const GET_WORKFLOW_HEALTH_METHOD = "getWorkflowHealth";
-
 /**
  * Longest reason kept. A reason is a list of validation messages meant for a
  * person to read; anything past this is noise and would only bloat the row.
@@ -360,14 +357,4 @@ export const HEALTH_STILL_LOADING_MESSAGE = "the workflow engine is still loadin
 export function isStillLoadingError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
   return message.includes(HEALTH_STILL_LOADING_MESSAGE);
-}
-
-/**
- * True when the engine does not have `method` at all, which is how an engine
- * older than the health RPC answers. capnweb reports a call to a missing
- * method as a TypeError "'<method>' is not a function.".
- */
-export function isUnknownMethodError(err: unknown, method: string): boolean {
-  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
-  return message.includes(`'${method}' is not a function`);
 }

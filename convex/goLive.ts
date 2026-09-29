@@ -12,7 +12,6 @@ import {
   query,
 } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
-import { isMissingEngineMethodError } from "./lib/engineMethodSupport";
 import {
   type GoLiveCompletion,
   type GoLiveStepOutcome,
@@ -35,7 +34,7 @@ import {
 } from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
-import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
+import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
 
 // The Go live checklist: a pre-flight run just before a stream starts, so a
 // broken setup is found by the streamer rather than by their viewers.
@@ -290,8 +289,6 @@ export const checkTwitch = action({
       return { linked: false };
     }
 
-    const missingFrom = (granted: string[]) => TWITCH_INTEGRATION_SCOPES.filter((scope) => !granted.includes(scope));
-
     let accessToken: string;
     try {
       const token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, {
@@ -307,7 +304,7 @@ export const checkTwitch = action({
         login: link.login,
         tokenValid: false,
         tokenProblem: "Twitch refused to renew the connection",
-        missingScopes: missingFrom(link.scopes),
+        missingScopes: missingRequiredTwitchScopes(link.scopes),
       };
     }
 
@@ -318,7 +315,7 @@ export const checkTwitch = action({
         login: link.login,
         tokenValid: false,
         tokenProblem: "Twitch no longer accepts the connection",
-        missingScopes: missingFrom(link.scopes),
+        missingScopes: missingRequiredTwitchScopes(link.scopes),
       };
     }
     return {
@@ -326,7 +323,7 @@ export const checkTwitch = action({
       login: link.login,
       tokenValid: true,
       tokenProblem: null,
-      missingScopes: missingFrom(granted),
+      missingScopes: missingRequiredTwitchScopes(granted),
     };
   },
 });
@@ -350,8 +347,10 @@ export const checkObs = action({
       return { kind: "disconnected", reason: listing.reason };
     } catch (error) {
       const message = messageOf(error);
-      if (isMissingEngineMethodError(message, "listObsScenes")) {
-        return { kind: "engine-update-needed" };
+      // capnweb's refusal of a method the engine does not expose. Engines
+      // read OBS through a module rather than an engine RPC, so most do not.
+      if (message.includes("'listObsScenes' is not a function")) {
+        return { kind: "unknown" };
       }
       return { kind: "engine-unreachable", message };
     }

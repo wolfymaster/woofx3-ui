@@ -3,43 +3,44 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { OptionsSupport } from "@convex/lib/engineTestRun";
 import { useAction } from "convex/react";
 import { useEffect, useState } from "react";
+import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { type TestRunSupport, testRunSupport } from "@/lib/engine-capabilities";
 
-/** `checking` while the probe is out; otherwise what the engine answered. */
+/** `checking` while the engine is being asked; otherwise what it answered. */
 export type TestRunOptionsState = OptionsSupport | "checking";
 
 /**
- * Answers already known this session, by instance. An engine's version does
- * not change under a running dashboard often enough to probe on every sheet
- * open; a reload probes again. `unknown` is never kept, so an engine that was
- * unreachable is asked again next time.
+ * Probe answers for engines that predate capabilities, by instance. Updating
+ * such an engine brings capabilities, which then answer instead, so a probe
+ * answer holds for the page session. `unknown` is never kept, so an engine
+ * that was unreachable is asked again next time.
  */
-const known = new Map<string, Exclude<OptionsSupport, "unknown">>();
+const probed = new Map<string, Exclude<OptionsSupport, "unknown">>();
+
+/** Instances whose engine ignored test-run options it was sent, whatever it claimed. */
+const ignoredOptions = new Set<string>();
 
 /**
  * Record that an instance's engine ignored test-run options it was sent, for
- * when a real call reveals what the probe did not.
+ * when a real call reveals what neither capabilities nor the probe did.
  */
 export function rememberOptionsUnsupported(instanceId: Id<"instances">): void {
-  known.set(instanceId, "unsupported");
+  ignoredOptions.add(instanceId);
+  probed.set(instanceId, "unsupported");
 }
 
-/**
- * Whether the instance's engine takes test-run options: sample trigger data
- * for one workflow, skipping conditions, and dry runs. See
- * `workflowActions.testRunCapabilities` for how it is asked without starting
- * a run.
- */
-export function useTestRunOptions(instanceId: Id<"instances"> | undefined): TestRunOptionsState {
+/** Probes only when `enabled`; see `workflowActions.testRunCapabilities`. */
+function useLegacyOptionsProbe(instanceId: Id<"instances"> | undefined, enabled: boolean): TestRunOptionsState {
   const probe = useAction(api.workflowActions.testRunCapabilities);
   const [state, setState] = useState<TestRunOptionsState>(() =>
-    instanceId ? (known.get(instanceId) ?? "checking") : "checking"
+    instanceId ? (probed.get(instanceId) ?? "checking") : "checking"
   );
 
   useEffect(() => {
-    if (!instanceId) {
+    if (!instanceId || !enabled) {
       return;
     }
-    const cached = known.get(instanceId);
+    const cached = probed.get(instanceId);
     if (cached) {
       setState(cached);
       return;
@@ -49,7 +50,7 @@ export function useTestRunOptions(instanceId: Id<"instances"> | undefined): Test
     probe({ instanceId })
       .then(({ options }) => {
         if (options !== "unknown") {
-          known.set(instanceId, options);
+          probed.set(instanceId, options);
         }
         if (!cancelled) {
           setState(options);
@@ -63,7 +64,22 @@ export function useTestRunOptions(instanceId: Id<"instances"> | undefined): Test
     return () => {
       cancelled = true;
     };
-  }, [instanceId, probe]);
+  }, [instanceId, enabled, probe]);
 
   return state;
+}
+
+/**
+ * What the instance's engine supports for test runs: sample trigger data and
+ * skipping conditions for one workflow, dry runs, and a Stop that halts a run.
+ */
+export function useTestRunSupport(instanceId: Id<"instances"> | undefined): TestRunSupport {
+  const { state } = useEngineCapabilities(instanceId);
+  const legacy = state.status === "ready" && state.report.legacy;
+  const legacyProbe = useLegacyOptionsProbe(instanceId, legacy);
+  const support = testRunSupport(state, legacyProbe);
+  if (instanceId && ignoredOptions.has(instanceId)) {
+    return { ...support, options: "unsupported", dryRun: "unsupported" };
+  }
+  return support;
 }
