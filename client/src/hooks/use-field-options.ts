@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { InternalConfigFieldSource } from "@woofx3/api/ui-schema";
 import { useAction, useQuery } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
+import { fieldOptionsReferenceOf, MISSING_FIELD_OPTIONS_REFERENCE } from "@/lib/field-options-reference";
 
 export type FieldOption = { value: string; label: string };
 
@@ -34,13 +35,14 @@ export function useFieldOptions(
   const [correlationKey, setCorrelationKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!instanceId || !source) {
+    const reference = fieldOptionsReferenceOf(source);
+    if (!instanceId || !reference) {
       setCorrelationKey(null);
       return;
     }
     const key = crypto.randomUUID();
     setCorrelationKey(key);
-    dispatch({ instanceId, descriptor: source, correlationKey: key }).catch(() => {
+    dispatch({ instanceId, reference, correlationKey: key }).catch(() => {
       /* errors surface via transientEvents */
     });
   }, [instanceId, source, dispatch]);
@@ -53,6 +55,9 @@ export function useFieldOptions(
   return useMemo(() => {
     if (!instanceId || !source) {
       return { options: [], loading: false, error: null, empty: true };
+    }
+    if (!fieldOptionsReferenceOf(source)) {
+      return { options: [], loading: false, error: MISSING_FIELD_OPTIONS_REFERENCE, empty: true };
     }
     if (event === undefined || event === null) {
       return { options: [], loading: true, error: null, empty: false };

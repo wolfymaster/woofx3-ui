@@ -1,17 +1,16 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import { useAction, useQuery } from "convex/react";
 import { useCallback, useMemo, useState } from "react";
 
-export interface InternalSettingActionRequest {
-  event: string;
-  payload?: Record<string, unknown>;
-}
-
+/**
+ * Press a module settings button whose `action` is `internal`. The engine
+ * sends the request the installed manifest declares for `reference`.
+ */
 export function useInternalSettingAction(
   instanceId: Id<"instances"> | undefined,
-  request: InternalSettingActionRequest | undefined,
-  timeoutMs?: number
+  reference: FieldOptionsReference | undefined
 ): {
   trigger: () => void;
   status: "idle" | "pending" | "success" | "error";
@@ -22,15 +21,15 @@ export function useInternalSettingAction(
   const [correlationKey, setCorrelationKey] = useState<string | null>(null);
 
   const trigger = useCallback(() => {
-    if (!instanceId || !request) {
+    if (!instanceId || !reference) {
       return;
     }
     const key = crypto.randomUUID();
     setCorrelationKey(key);
-    dispatch({ instanceId, descriptor: { kind: "internal", request, timeoutMs }, correlationKey: key }).catch(() => {
+    dispatch({ instanceId, reference, correlationKey: key }).catch(() => {
       /* errors surface via transientEvents */
     });
-  }, [instanceId, request, timeoutMs, dispatch]);
+  }, [instanceId, reference, dispatch]);
 
   const event = useQuery(
     api.transientEvents.get,

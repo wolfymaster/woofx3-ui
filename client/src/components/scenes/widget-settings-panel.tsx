@@ -6,6 +6,7 @@ import {
   type FieldDescriptor,
 } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
+import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
@@ -56,7 +57,12 @@ export function WidgetSettingsPanel({
             // parallel one that supported a narrower set of types. That is
             // what gives a widget `resource_ref` pickers, `required`,
             // `description` and hints for free.
-            fields={withWidgetCanonicalId(fields, widget.widgetCanonicalId) as unknown as FieldDescriptor[]}
+            fields={
+              withFieldOptionsOwner(
+                withWidgetCanonicalId(fields, widget.widgetCanonicalId),
+                fieldOptionsOwnerFromCanonicalId(widget.widgetCanonicalId)
+              ) as unknown as FieldDescriptor[]
+            }
             values={widget.settings}
             onChange={(next) => {
               for (const field of fields) {
