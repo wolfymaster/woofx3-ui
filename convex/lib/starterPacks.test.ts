@@ -33,14 +33,39 @@ const TWITCH_EVENTS = [
   "channel.cheer",
 ];
 
+/** The inputs each action declares in its manifest schema, as the catalog's configFields carry them. */
+const ACTION_INPUTS: Record<string, string[]> = {
+  [STARTER_ACTION_REFS.chatReply]: ["message"],
+  [STARTER_ACTION_REFS.switchScene]: ["sceneName"],
+  [STARTER_ACTION_REFS.shoutout]: ["user", "skipIfRateLimited"],
+  [STARTER_ACTION_REFS.clip]: [],
+  [STARTER_ACTION_REFS.marker]: ["description"],
+};
+
+function configFields(ids: string[]): { id: string; label: string; type: string }[] {
+  return ids.map((id) => ({ id, label: id, type: "text" }));
+}
+
 /** How the catalog lists an action: engine actions by handler, module actions by the function behind them. */
 function catalogEntry(ref: string): StarterCatalog["actions"][number] {
   const [moduleId, , manifestId] = ref.split(":");
+  const fields = configFields(ACTION_INPUTS[ref] ?? []);
   if (moduleId === "woofx3") {
-    return { canonicalRef: ref, handlerType: manifestId };
+    return { canonicalRef: ref, handlerType: manifestId, configFields: fields };
   }
-  return { canonicalRef: ref, handlerType: "function", functionCall: manifestId.replace("twitch.", "") };
+  return {
+    canonicalRef: ref,
+    handlerType: "function",
+    functionCall: manifestId.replace("twitch.", ""),
+    configFields: fields,
+  };
 }
+
+/** Twitch module 0.7.0's shoutout: a channel input and no skipIfRateLimited. */
+const SHOUTOUT_0_7_0: StarterCatalog["actions"][number] = {
+  ...catalogEntry(STARTER_ACTION_REFS.shoutout),
+  configFields: configFields(["user"]),
+};
 
 /** A catalog as an up-to-date instance with the Twitch module installed has it. */
 const FULL_CATALOG: StarterCatalog = {
@@ -469,6 +494,62 @@ describe("missingRequirements", () => {
     expect(requirementsMessage(missing)).toBe("Requires the Twitch module");
     const raidItem = pack("raid-welcome").items[0];
     expect(requirementsMessage(missingRequirements(raidItem, engineOnly))).toBe("Requires the Twitch module");
+  });
+
+  test("raid welcome needs twitch.marker, so Twitch module 0.7.0 (shoutout, no marker) never runs it", () => {
+    const raidItem = pack("raid-welcome").items[0];
+    const twitch070: StarterCatalog = {
+      triggers: FULL_CATALOG.triggers,
+      actions: [catalogEntry(STARTER_ACTION_REFS.chatReply), SHOUTOUT_0_7_0],
+    };
+    const missing = missingRequirements(raidItem, twitch070);
+    expect(missing.actions).toContain(STARTER_ACTION_REFS.marker);
+    expect(requirementsMessage(missing)).toBe("Requires the Twitch module (update it)");
+  });
+
+  test("a shoutout without the skipIfRateLimited input holds back raid welcome even with a marker", () => {
+    const raidItem = pack("raid-welcome").items[0];
+    const catalog: StarterCatalog = {
+      triggers: FULL_CATALOG.triggers,
+      actions: FULL_CATALOG.actions.map((action) =>
+        action.canonicalRef === STARTER_ACTION_REFS.shoutout ? SHOUTOUT_0_7_0 : action
+      ),
+    };
+    const missing = missingRequirements(raidItem, catalog);
+    expect(missing.actions).toEqual([STARTER_ACTION_REFS.shoutout]);
+    expect(requirementsMessage(missing)).toBe("Requires the Twitch module (update it)");
+  });
+
+  test("every step that sets skipIfRateLimited is gated on the action declaring it", () => {
+    const withoutSkip: StarterCatalog = {
+      triggers: FULL_CATALOG.triggers,
+      actions: FULL_CATALOG.actions.map((action) => ({
+        ...action,
+        configFields: configFields(
+          (ACTION_INPUTS[action.canonicalRef ?? ""] ?? []).filter((id) => id !== "skipIfRateLimited")
+        ),
+      })),
+    };
+    const gated: string[] = [];
+    for (const p of STARTER_PACKS) {
+      for (const item of p.items) {
+        const setsSkip = item.steps.some((step) => step.kind === "action" && "skipIfRateLimited" in step.parameters);
+        if (setsSkip) {
+          expect(hasRequirements(missingRequirements(item, withoutSkip))).toBe(false);
+          gated.push(`${p.id}/${item.id}`);
+        }
+      }
+    }
+    expect(gated).toEqual(["raid-welcome/raid-welcome"]);
+  });
+
+  test("an action whose catalog entry lists no fields is not judged on its inputs", () => {
+    const followItem = pack("follower-thanks").items[0];
+    const catalog: StarterCatalog = {
+      triggers: FULL_CATALOG.triggers,
+      actions: [{ canonicalRef: STARTER_ACTION_REFS.chatReply, handlerType: "chat.reply" }],
+    };
+    expect(hasRequirements(missingRequirements(followItem, catalog))).toBe(true);
   });
 
   test("an engine action missing alongside an older Twitch module asks for the engine first", () => {

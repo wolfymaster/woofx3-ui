@@ -233,6 +233,7 @@ function starterCatalog(bundle: CatalogBundle): StarterCatalog {
       canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "action"),
       handlerType: def.handlerType,
       functionCall: def.functionCall,
+      configFields: def.configFields,
     }));
   return { triggers, actions };
 }
