@@ -1,4 +1,6 @@
+import type { MarketplaceImages } from "@convex/lib/marketplaceImages";
 import { getCategoryBannerStyle, getCategoryIcon } from "@/components/modules/module-category";
+import { ModuleBannerImage, ModuleIconImage } from "@/components/modules/module-image";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -10,7 +12,7 @@ export interface ModuleStoreCardData {
   description: string;
   version: string;
   category: string;
-  iconUrl?: string;
+  images: MarketplaceImages;
   isInstalled: boolean;
   updateAvailable: boolean;
 }
@@ -45,6 +47,12 @@ export function ModuleStoreCard({ module, size = "default", onClick }: ModuleSto
         className={cn("relative shrink-0", isFeatured ? "h-28" : "h-24")}
         style={getCategoryBannerStyle(module.category)}
       >
+        {module.images.banner && (
+          <ModuleBannerImage
+            banner={module.images.banner}
+            sizes={isFeatured ? "256px" : "(min-width: 1024px) 320px, 50vw"}
+          />
+        )}
         {module.isInstalled && (
           <Badge
             variant="secondary"
@@ -61,8 +69,8 @@ export function ModuleStoreCard({ module, size = "default", onClick }: ModuleSto
       <CardContent className="p-3 flex flex-col gap-2 flex-1">
         <div className="flex items-center gap-2 min-w-0">
           <div className="h-8 w-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0 text-primary overflow-hidden">
-            {module.iconUrl ? (
-              <img src={module.iconUrl} alt="" className="h-full w-full object-cover" />
+            {module.images.icon ? (
+              <ModuleIconImage icon={module.images.icon} displaySize={32} />
             ) : (
               getCategoryIcon(module.category)
             )}

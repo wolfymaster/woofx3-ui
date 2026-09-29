@@ -387,12 +387,6 @@ export default defineSchema({
     .index("by_instance_name_version", ["instanceId", "name", "version"])
     .index("by_instance_module_key", ["instanceId", "moduleKey"]),
 
-  // moduleCatalogFeatured: admin-curated set of marketplace modules to surface in the storefront's featured strip
-  moduleCatalogFeatured: defineTable({
-    moduleKey: v.string(), // marketplace MarketplaceModuleSummary.id
-    sortOrder: v.number(),
-  }).index("by_module_key", ["moduleKey"]),
-
   // dashboardLayouts: the dashboard canvas panels for a user/instance. Each panel
   // picks a predefined layout (client/src/lib/dashboard-layouts.ts) and places
   // widgets (client/src/components/dashboard/widget-catalog.ts) into its zones.
