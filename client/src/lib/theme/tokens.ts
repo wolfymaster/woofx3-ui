@@ -65,3 +65,15 @@ export function resolveThemeTokens(colors: ThemeColors): Record<string, string> 
   }
   return tokens;
 }
+
+/**
+ * The entries of `next` whose value differs from `previous`. Every write to an
+ * inline style on `<html>` invalidates style for the whole document, so the
+ * theme sync writes only these rather than every token on each change.
+ */
+export function changedThemeTokens(
+  previous: Record<string, string>,
+  next: Record<string, string>
+): Array<[string, string]> {
+  return Object.entries(next).filter(([name, value]) => previous[name] !== value);
+}

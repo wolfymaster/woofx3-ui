@@ -1,9 +1,9 @@
 import { Check, ChevronsUpDown } from "lucide-react";
-import { type CSSProperties, useMemo, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { listLucideIconNames, resolveLucideIcon } from "@/lib/resolve-lucide-icon";
+import { BUNDLED_ICON_NAMES, loadLucideIconNames, resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import { cn } from "@/lib/utils";
 
 // Shown before the user types anything — the long tail is reachable by search,
@@ -67,6 +67,32 @@ interface MacroIconPickerProps {
 export function MacroIconPicker({ value, onChange, id }: MacroIconPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // Search covers the bundled icons at once and all of Lucide once its catalog
+  // has loaded, which starts when the picker first opens. If the catalog fails
+  // to load, search stays on the bundled icons.
+  const [allNames, setAllNames] = useState<readonly string[] | null>(null);
+
+  useEffect(() => {
+    if (!open || allNames) {
+      return;
+    }
+    let cancelled = false;
+    loadLucideIconNames().then(
+      (names) => {
+        if (!cancelled) {
+          setAllNames(names);
+        }
+      },
+      () => {
+        if (!cancelled) {
+          setAllNames(BUNDLED_ICON_NAMES);
+        }
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [open, allNames]);
 
   const results = useMemo(() => {
     const trimmed = query.trim().toLowerCase();
@@ -74,7 +100,7 @@ export function MacroIconPicker({ value, onChange, id }: MacroIconPickerProps) {
       return SUGGESTED_ICONS;
     }
     const matches: string[] = [];
-    for (const name of listLucideIconNames()) {
+    for (const name of allNames ?? BUNDLED_ICON_NAMES) {
       if (name.toLowerCase().includes(trimmed)) {
         matches.push(name);
         if (matches.length === MAX_RESULTS) {
@@ -83,7 +109,7 @@ export function MacroIconPicker({ value, onChange, id }: MacroIconPickerProps) {
       }
     }
     return matches;
-  }, [query]);
+  }, [query, allNames]);
 
   const SelectedIcon = value ? resolveLucideIcon(value) : null;
 
@@ -116,7 +142,7 @@ export function MacroIconPicker({ value, onChange, id }: MacroIconPickerProps) {
         <Command shouldFilter={false}>
           <CommandInput placeholder="Search icons…" value={query} onValueChange={setQuery} />
           <CommandList>
-            <CommandEmpty>No icon matches that.</CommandEmpty>
+            <CommandEmpty>{allNames ? "No icon matches that." : "Loading icons…"}</CommandEmpty>
             <CommandGroup>
               <CommandItem value="__none__" onSelect={() => select(undefined)}>
                 <span className="text-muted-foreground">No icon</span>

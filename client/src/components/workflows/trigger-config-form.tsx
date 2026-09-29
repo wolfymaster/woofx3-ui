@@ -1,8 +1,8 @@
 import { api } from "@convex/_generated/api";
-import { DEFAULT_ALERT_WIDGET_NAME } from "@convex/lib/alertWidgets";
 import { useAction, useQuery } from "convex/react";
 import { FileAudio, FileImage, FileVideo, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
+import { Link } from "wouter";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
@@ -12,10 +12,10 @@ import { CreateResourceDialog } from "@/components/modules/create-resource-dialo
 import { AlertLayoutField } from "@/components/scenes/alert-layout-field";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useInstance } from "@/hooks/use-instance";
+import { alertTargetChoices } from "@/lib/alert-target";
 import type { ConfigField, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
 import { AssetLibraryModal, type SelectedAsset } from "./asset-library-modal";
@@ -204,15 +204,16 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = ({ field, value, onChange 
 };
 
 // ---------------------------------------------------------------------------
-// Alert widget name — free text, suggesting the names of the alert widgets
-// already placed on the instance's scenes. Free text so a step can target a
-// name before any scene has an alert widget answering to it.
+// Alert widget name — picked from the names the alert widgets on the
+// instance's scenes answer to, so a typo cannot reach stream time. A target is
+// named in the scene editor first and picked here second; a stored name no
+// scene has stays selected and flagged rather than replaced.
 // ---------------------------------------------------------------------------
 
 function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
   const { instance } = useInstance();
-  const names = useQuery(api.sceneWidgets.alertWidgetNames, instance ? { instanceId: instance._id } : "skip") ?? [];
-  const listId = `alert-widget-names-${field.id}`;
+  const names = useQuery(api.sceneWidgets.alertWidgetNames, instance ? { instanceId: instance._id } : "skip");
+  const { selected, options, stale } = alertTargetChoices(names, value);
 
   return (
     <div className="space-y-2">
@@ -220,20 +221,27 @@ function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomField
         {field.label}
         {field.required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
-      <Input
-        id={field.id}
-        list={listId}
-        value={typeof value === "string" ? value : ""}
-        placeholder={DEFAULT_ALERT_WIDGET_NAME}
-        onChange={(e) => onChange(e.target.value)}
-        data-testid={`input-${field.id}`}
-      />
-      <datalist id={listId}>
-        {names.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
+      <Select value={selected} onValueChange={onChange} disabled={names === undefined}>
+        <SelectTrigger id={field.id} data-testid={`select-${field.id}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((name) => (
+            <SelectItem key={name} value={name}>
+              {name === stale ? `${name} — not on any scene` : name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {stale !== null && (
+        <p className="text-xs text-destructive" data-testid={`warning-${field.id}`}>
+          No scene has an alert widget named "{stale}". Alerts on this step won't show until one does.
+        </p>
+      )}
       {typeof field.description === "string" && <p className="text-xs text-muted-foreground">{field.description}</p>}
+      <Link href="/stream/scenes" className="text-xs text-primary underline-offset-4 hover:underline">
+        Name alert widgets in the scene editor
+      </Link>
     </div>
   );
 }
