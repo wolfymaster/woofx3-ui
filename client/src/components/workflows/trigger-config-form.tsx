@@ -186,6 +186,7 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = ({ field, value, onChange 
       {createOpen && instanceId && resourceKind && moduleName && (
         <CreateResourceDialog
           key={kindDefinition ? "with-schema" : "without-schema"}
+          moduleId={moduleName}
           kind={{ kind: resourceKind, name: field.label, schema: kindDefinition?.schema }}
           onClose={() => setCreateOpen(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {

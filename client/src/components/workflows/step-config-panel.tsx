@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields, withModuleName } from "@/lib/parse-config-fields";
 import type { WaitConfig } from "@/lib/wait-config";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
@@ -112,7 +113,15 @@ function TriggerConfigPanel({
   const catalogRow = resolveCatalogTrigger(node, catalog);
   const configFields = catalogRow?.configFields;
   const moduleName = catalogRow?.moduleName;
-  const fields = useMemo(() => withModuleName(parseConfigFields(configFields), moduleName), [configFields, moduleName]);
+  const canonicalRef = catalogRow?.canonicalRef;
+  const fields = useMemo(
+    () =>
+      withFieldOptionsOwner(
+        withModuleName(parseConfigFields(configFields), moduleName),
+        fieldOptionsOwnerFromCanonicalId(canonicalRef)
+      ),
+    [configFields, moduleName, canonicalRef]
+  );
   if (fields.length === 0) {
     return <p className="text-sm text-muted-foreground">This trigger has no configurable settings.</p>;
   }
@@ -152,7 +161,15 @@ function ActionConfigPanel({
   const catalogRow = resolveCatalogAction(node, catalog);
   const configFields = catalogRow?.configFields;
   const moduleName = catalogRow?.moduleName;
-  const fields = useMemo(() => withModuleName(parseConfigFields(configFields), moduleName), [configFields, moduleName]);
+  const canonicalRef = catalogRow?.canonicalRef;
+  const fields = useMemo(
+    () =>
+      withFieldOptionsOwner(
+        withModuleName(parseConfigFields(configFields), moduleName),
+        fieldOptionsOwnerFromCanonicalId(canonicalRef)
+      ),
+    [configFields, moduleName, canonicalRef]
+  );
   return (
     <div className="space-y-6">
       <StepIdField id={node.id} existingStepIds={existingStepIds} onUpdateActionId={onUpdateActionId} />

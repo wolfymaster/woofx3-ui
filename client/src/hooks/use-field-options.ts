@@ -1,9 +1,11 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import type { InternalConfigFieldSource } from "@woofx3/api/ui-schema";
 import { useAction, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { type FieldOption, parseFieldOptionsReply } from "@/lib/field-options";
+import { fieldOptionsReferenceOf, MISSING_FIELD_OPTIONS_REFERENCE } from "@/lib/field-options-reference";
 import { dispatchErrorMessage, fieldOptionsRequestKey } from "@/lib/field-options-request";
 
 export interface FieldOptionsState {
@@ -30,7 +32,8 @@ export function useFieldOptions(
   const [failure, setFailure] = useState<DispatchFailure | null>(null);
   const [requestCount, setRequestCount] = useState(0);
   const refresh = useCallback(() => setRequestCount((count) => count + 1), []);
-  const requestKey = source ? fieldOptionsRequestKey(source) : null;
+  const reference = fieldOptionsReferenceOf(source);
+  const requestKey = reference ? fieldOptionsRequestKey(reference) : null;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: requestCount is the refresh signal, not read here
   useEffect(() => {
@@ -38,10 +41,10 @@ export function useFieldOptions(
       setCorrelationKey(null);
       return;
     }
-    const descriptor = JSON.parse(requestKey) as InternalConfigFieldSource;
+    const requested = JSON.parse(requestKey) as FieldOptionsReference;
     const key = crypto.randomUUID();
     setCorrelationKey(key);
-    dispatch({ instanceId, descriptor, correlationKey: key }).catch((error: unknown) => {
+    dispatch({ instanceId, reference: requested, correlationKey: key }).catch((error: unknown) => {
       setFailure({ correlationKey: key, message: dispatchErrorMessage(error) });
     });
   }, [instanceId, requestKey, dispatch, requestCount]);
@@ -51,9 +54,13 @@ export function useFieldOptions(
     instanceId && correlationKey ? { instanceId, correlationKey } : "skip"
   );
 
+  const hasSource = source !== undefined;
   return useMemo(() => {
-    if (!instanceId || requestKey === null) {
+    if (!instanceId || !hasSource) {
       return { options: [], loading: false, error: null, empty: true, refresh };
+    }
+    if (requestKey === null) {
+      return { options: [], loading: false, error: MISSING_FIELD_OPTIONS_REFERENCE, empty: true, refresh };
     }
     if (failure !== null && failure.correlationKey === correlationKey) {
       return { options: [], loading: false, error: failure.message, empty: true, refresh };
@@ -66,5 +73,5 @@ export function useFieldOptions(
     }
     const { options, error } = parseFieldOptionsReply(event.data);
     return { options, loading: false, error, empty: options.length === 0, refresh };
-  }, [instanceId, requestKey, correlationKey, failure, event, refresh]);
+  }, [instanceId, hasSource, requestKey, correlationKey, failure, event, refresh]);
 }
