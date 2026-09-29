@@ -36,6 +36,7 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `go-live` | stream | Pre-flight checklist before a stream; also a page at `/stream/go-live` — see below |
 | `live-events` | stream | Follows/subs/cheers/raids, pushed from the engine |
 | `activity` | stream | Tabbed events and highlights |
+| `stream-info` | stream | Title, category, tags, saved presets and stream markers — see below |
 | `stream-preview` | stream | Thumbnail, click to enlarge |
 | `announcement` | stream | Send a coloured announcement to chat |
 | `pinned` | stream | Twitch pinned message, plus re-pinnable history — see below |
@@ -324,6 +325,56 @@ engine with provenance `macro-trigger`, so these runs appear in the run history
 accepted runs bump `lastUsedAt` / `useCount`, refused or failed ones set
 `lastFailedAt` / `lastFailure`. The decision logic is pure and tested in
 `convex/lib/macroTrigger.test.ts`.
+
+## Stream info
+
+Edits the channel's title, category and tags, and drops stream markers, without
+leaving for Twitch's own dashboard. Everything goes straight to Helix from
+`convex/streamInfo.ts`, like the other Helix actions here, so it keeps working
+while no engine is running. Every call needs one scope,
+`channel:manage:broadcast` — reads included, although Get Channel Information
+needs none, so a link missing the scope shows a single "reconnect Twitch" state
+instead of a card that shows data and refuses every button.
+
+- **Current info** comes from Get Channel Information, plus Get Games for the
+  category's box art (the channel endpoint returns only its id and name); a poll
+  passes the art it already has and skips Get Games while the category is
+  unchanged. Twitch pushes nothing when the title changes elsewhere, so the card
+  polls every minute while the tab is visible. A poll merges per field
+  (`client/src/lib/stream-info-edit.ts`): a field being edited keeps the edit,
+  every other field follows Twitch.
+- **Saving** sends only the fields that differ from what the card last read
+  (`diffStreamInfo`). The title may have been changed since by Twitch's
+  dashboard, a moderator or a chat command, and a save that only touched tags
+  must not put the old title back. The save is optimistic, and rolls back if
+  Twitch refuses. Afterwards `updateChannelInfo` reads the channel again and
+  returns what Twitch actually holds: Modify Channel Information answers 204
+  even when it ignores a value such as an unknown category, so the card reports
+  any field Twitch kept.
+- **Category** is a debounced typeahead over Search Categories; clearing it sends
+  an empty `game_id`.
+- **Tags**: at most 10, each at most 25 characters, no spaces, no duplicates
+  ignoring case — checked in both the editor and the action by
+  `convex/lib/streamInfo.ts`. A refused tag stays in the input with the reason
+  under it. Twitch's rule on characters ("no special characters") is only
+  warned about, for anything outside letters, combining marks and digits of any
+  script; Twitch's own 400 message is the authority. Changes are detected
+  case-sensitively, so "fps" to "FPS" can be saved. Titles are at most 140
+  characters, counted in code points so an emoji is one.
+- **Saved presets** (`streamInfoPresets`) are named title/category/tags sets,
+  instance-scoped because they describe the channel, not the viewer. Saving
+  under an existing name replaces it. Rows are bounded (name, title, tags and
+  category lengths), and box art must be a `https://static-cdn.jtvnw.net/` URL
+  since it renders for everyone on the account. Applying a preset sends all
+  three fields through the same optimistic save; a preset that matches the
+  channel already is marked and disabled, and the others say what applying
+  them would change.
+- **Markers** use Create Stream Marker with an optional description (at most
+  140). Twitch answers 404 both when the channel is offline and when past
+  broadcasts are off, without saying which; that becomes one inline message
+  covering both (reruns and premieres cannot be marked either). Any other
+  failure, such as a 403 for a token that is not the channel's owner or an
+  editor, shows Twitch's own message.
 
 ## Pinned
 
