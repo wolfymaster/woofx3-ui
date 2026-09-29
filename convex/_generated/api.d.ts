@@ -76,6 +76,7 @@ import type * as lib_oauthErrors from "../lib/oauthErrors.js";
 import type * as lib_oauthHandoff from "../lib/oauthHandoff.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
+import type * as lib_recapClips from "../lib/recapClips.js";
 import type * as lib_resourceKinds from "../lib/resourceKinds.js";
 import type * as lib_sceneCascade from "../lib/sceneCascade.js";
 import type * as lib_sceneOverlayUrl from "../lib/sceneOverlayUrl.js";
@@ -232,6 +233,7 @@ declare const fullApi: ApiFromModules<{
   "lib/oauthHandoff": typeof lib_oauthHandoff;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
+  "lib/recapClips": typeof lib_recapClips;
   "lib/resourceKinds": typeof lib_resourceKinds;
   "lib/sceneCascade": typeof lib_sceneCascade;
   "lib/sceneOverlayUrl": typeof lib_sceneOverlayUrl;
