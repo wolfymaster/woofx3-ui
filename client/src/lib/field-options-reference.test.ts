@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { ConfigField, InternalConfigFieldSource } from "@woofx3/api/ui-schema";
 import {
   fieldOptionsOwnerFromCanonicalId,
   fieldOptionsReferenceOf,
@@ -7,6 +7,7 @@ import {
   settingFieldOptionsReference,
   withFieldOptionsOwner,
 } from "./field-options-reference";
+import { fieldOptionsRequestKey } from "./field-options-request";
 
 const REWARDS = {
   kind: "internal" as const,
@@ -88,5 +89,22 @@ describe("withFieldOptionsOwner", () => {
   test("leaves sources without a reference when there is no owner", () => {
     const [reward] = withFieldOptionsOwner(fields, undefined);
     expect(reward).toBe(fields[0]);
+  });
+});
+
+describe("request key of a stamped source", () => {
+  test("is the same each time the same fields are stamped, and differs by field", () => {
+    const fields: ConfigField[] = [
+      { id: "rewardId", label: "Reward", type: "select", source: REWARDS },
+      { id: "otherId", label: "Other", type: "select", source: REWARDS },
+    ];
+    const owner = fieldOptionsOwnerFromCanonicalId("woofx3_twitch:trigger:channelpoints_redeem");
+    const first = withFieldOptionsOwner(fields, owner);
+    const second = withFieldOptionsOwner(fields, owner);
+    expect(first[0].source).not.toBe(second[0].source);
+    const keyOf = (field: ConfigField) =>
+      fieldOptionsRequestKey(fieldOptionsReferenceOf(field.source as InternalConfigFieldSource));
+    expect(keyOf(first[0])).toBe(keyOf(second[0]));
+    expect(keyOf(first[0])).not.toBe(keyOf(first[1]));
   });
 });
