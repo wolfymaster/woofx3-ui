@@ -152,7 +152,7 @@ refused before any moderation call. Every failure leaves `convex/moderation.ts`
 as a `ConvexError`, including those from the shared `authorizeTwitch` and
 `fetchTwitchUser`, so the message survives production, where a plain `Error`
 becomes "Server Error". Anything that still arrives that way is shown as
-"Something went wrong (request <id>)" by `lib/action-error.ts`.
+"Something went wrong (request `<id>`)" by `lib/action-error.ts`.
 
 Deleting a single chat message is not here: it needs the message id, and nothing
 in the dashboard receives chat messages.
