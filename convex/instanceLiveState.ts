@@ -1,9 +1,16 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
+import { isInstanceMember } from "./lib/teamAccess";
 
 export const getForInstance = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
+    // The shell subscribes with the instance id cached from the last session
+    // before membership is confirmed, so an id the caller has lost access to
+    // must read as nothing.
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return null;
+    }
     return ctx.db
       .query("instanceLiveState")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))

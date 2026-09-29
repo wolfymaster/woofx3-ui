@@ -1,7 +1,8 @@
 import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import { useEffect } from "react";
 import { useInstance } from "@/hooks/use-instance";
+import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
 import { createPollThrottle } from "@/lib/poll-throttle";
 
 // Single entry point for the current instance's live state. Every consumer
@@ -33,7 +34,7 @@ export function resetLiveStatePollThrottle(): void {
 
 export function useLiveState() {
   const { instance } = useInstance();
-  const liveState = useQuery(api.instanceLiveState.getForInstance, instance ? { instanceId: instance._id } : "skip");
+  const liveState = useOptimisticInstanceQuery(api.instanceLiveState.getForInstance);
   const pollLiveState = useAction(api.streamStatus.pollLiveState);
 
   const instanceId = instance?._id;

@@ -25,7 +25,6 @@ Modelled on the Chat Commands page: `PageHeader`, an All / Enabled / Disabled ta
 - A header bar (back, click-to-rename title, enabled badge, **Save**, and a kebab with *View JSON* and *Delete*) above **`StepListEditor`**, which reads the workflow id from the route itself.
 - The screen is keyed by workflow id, so switching workflows resets the in-progress definition rather than carrying the previous one's draft into the next save.
 - Saves go through `workflowActions.updateFromDefinition` with `escapeDollarKeys` applied (the engine's `$`-prefixed keys are not legal Convex field names).
-- `client/src/pages/workflow-builder.tsx` holds an older **React Flow** canvas for the same job. It is not routed — treat it as reference until it is either wired up or removed.
 
 ## Summary
 
