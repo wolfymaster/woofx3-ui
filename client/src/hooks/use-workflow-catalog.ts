@@ -3,7 +3,6 @@ import { useQuery } from "convex/react";
 import { useMemo } from "react";
 import { useInstance } from "@/hooks/use-instance";
 import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
-import { withObsNameSources } from "@/lib/obs-name-fields";
 import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { ActionPreset, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
@@ -78,9 +77,9 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
 
 function toActionPreset(row: CatalogActionRow): ActionPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
-  const handlerType = row.handlerType?.trim() || (row.functionCall?.trim() ? "function" : undefined);
-  const fields = withObsNameSources(withModuleName(parseConfigFields(row.configFields), row.moduleName), handlerType);
+  const fields = withModuleName(parseConfigFields(row.configFields), row.moduleName);
   const outputs = parseDataShapeFields(row.returns);
+  const handlerType = row.handlerType?.trim() || (row.functionCall?.trim() ? "function" : undefined);
   return {
     id: row.id,
     canonicalRef: row.canonicalRef,
