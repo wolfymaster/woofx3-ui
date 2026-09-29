@@ -21,9 +21,11 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useEngineHealth } from "@/hooks/use-engine-health";
+import { useEngineVersion } from "@/hooks/use-engine-version";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
+import { formatEngineVersion } from "@/lib/engine-version";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn, formatUptime } from "@/lib/utils";
 import { CommandPalette } from "./command-palette";
@@ -120,6 +122,7 @@ function InstanceBar() {
 
 function StatusBar() {
   const { connected } = useEngineHealth();
+  const engineVersion = useEngineVersion(connected);
   const liveState = useLiveState();
   const [now, setNow] = useState(() => Date.now());
 
@@ -147,8 +150,9 @@ function StatusBar() {
         >
           {connected ? "Connected" : "Disconnected"}
         </span>
-        {/* Engine exposes no version RPC yet — placeholder until getEngineInfo returns one. */}
-        <span className="text-muted-foreground">v—</span>
+        <span className="text-muted-foreground font-mono truncate" data-testid="status-engine-version">
+          {formatEngineVersion(engineVersion)}
+        </span>
       </div>
 
       <StatusBarCenterMount className="flex items-center justify-center shrink-0" />
