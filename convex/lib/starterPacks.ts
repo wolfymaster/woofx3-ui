@@ -224,6 +224,10 @@ export const STARTER_PACKS: readonly StarterPack[] = [
             parameters: { message: { field: "raidMessage" } },
           },
           { kind: "delay", id: "let-raiders-arrive", label: "Pause", seconds: { field: "shoutoutDelaySeconds" } },
+          // skipIfRateLimited keeps a raid inside Twitch's shoutout window from
+          // failing the run before the marker. Twitch module 0.7.0's shoutout
+          // has no such input and ships no twitch.marker; missingRequirements
+          // holds this item back on either, so it never runs on that module.
           {
             kind: "action",
             id: "shout-out-raider",
@@ -741,13 +745,13 @@ export function validateStarterValues(
 /** The parts of an instance's workflow catalog a pack is resolved against. */
 export interface StarterCatalog {
   triggers: { event?: string; canonicalRef?: string }[];
-  actions: { canonicalRef?: string; handlerType?: string; functionCall?: string }[];
+  actions: { canonicalRef?: string; handlerType?: string; functionCall?: string; configFields?: unknown }[];
 }
 
 export interface StarterRequirements {
   /** Trigger events the catalog has no trigger for. */
   triggers: string[];
-  /** Action refs the catalog lacks. */
+  /** Action refs the catalog lacks, or has without an input a step sets. */
   actions: StarterActionRef[];
   /** Whether the catalog has anything from the Twitch module, which tells a missing module from an outdated one. */
   twitchModuleInstalled: boolean;
@@ -757,6 +761,42 @@ function refModule(ref: string): string {
   return ref.slice(0, ref.indexOf(":"));
 }
 
+/**
+ * The input ids an action declares, from its catalog `configFields`, or null
+ * when the entry carries no field list to judge by.
+ */
+function declaredInputs(entry: StarterCatalog["actions"][number]): Set<string> | null {
+  if (!Array.isArray(entry.configFields)) {
+    return null;
+  }
+  const ids = new Set<string>();
+  for (const field of entry.configFields) {
+    if (typeof field === "object" && field !== null && typeof (field as { id?: unknown }).id === "string") {
+      ids.add((field as { id: string }).id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Whether the catalog's version of an action takes every parameter the step
+ * sets. An action ignores an input it does not declare, so a step relying on
+ * one (the raid shoutout's skipIfRateLimited) would run without the behaviour
+ * it was written for; the input's presence is the version check, since the
+ * catalog carries no module version to compare.
+ */
+function supportsStep(step: StarterActionStep, catalog: StarterCatalog): boolean {
+  const entry = catalog.actions.find((action) => action.canonicalRef === step.action);
+  if (!entry) {
+    return false;
+  }
+  const inputs = declaredInputs(entry);
+  if (inputs === null) {
+    return true;
+  }
+  return Object.keys(step.parameters).every((key) => inputs.has(key));
+}
+
 export function missingRequirements(item: StarterItem, catalog: StarterCatalog): StarterRequirements {
   const triggers: string[] = [];
   if (item.kind === "workflow" && !catalog.triggers.some((trigger) => trigger.event === item.trigger.event)) {
@@ -764,7 +804,7 @@ export function missingRequirements(item: StarterItem, catalog: StarterCatalog):
   }
   const actions = new Set<StarterActionRef>();
   for (const step of item.steps) {
-    if (step.kind === "action" && !catalog.actions.some((action) => action.canonicalRef === step.action)) {
+    if (step.kind === "action" && !supportsStep(step, catalog)) {
       actions.add(step.action);
     }
   }
