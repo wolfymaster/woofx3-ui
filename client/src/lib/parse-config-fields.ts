@@ -7,6 +7,7 @@ import {
   type DataShapeField,
   LIST_ITEM_FIELD_TYPES,
 } from "@woofx3/api/ui-schema";
+import { isThemeField } from "@/lib/widget-theme-picker";
 
 // Taken from the SDK rather than restated, so a new field type cannot be
 // accepted by the engine and silently dropped here.
@@ -154,6 +155,15 @@ export function withModuleName(fields: ConfigField[], moduleName: string | undef
     return fields;
   }
   return fields.map((field) => (field.type === "resource_ref" ? { ...field, moduleName } : field));
+}
+
+/**
+ * A `theme` field lists the themes made for one widget, and ConfigField carries
+ * no widget link, so the widget's canonical id rides along the same way
+ * `withModuleName` attaches a module name.
+ */
+export function withWidgetCanonicalId(fields: ConfigField[], widgetCanonicalId: string): ConfigField[] {
+  return fields.map((field) => (isThemeField(field) ? { ...field, widgetCanonicalId } : field));
 }
 
 export function isCommandsSource(field: ConfigField): boolean {
