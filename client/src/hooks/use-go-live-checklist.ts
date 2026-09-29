@@ -1,25 +1,26 @@
 import { api } from "@convex/_generated/api";
-import type {
-  GoLiveCheckId,
-  GoLiveCompletion,
-  ObsFacts,
-  StreamInfoFacts,
-  TwitchLinkFacts,
-} from "@convex/lib/goLiveFacts";
+import type { Id } from "@convex/_generated/dataModel";
+import type { GoLiveCheckId, GoLiveCompletion, StreamInfoFacts, TwitchLinkFacts } from "@convex/lib/goLiveFacts";
 import type { StreamInfoField } from "@convex/lib/streamInfo";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { type ConvexReactClient, useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngineHealth } from "@/hooks/use-engine-health";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
+import { dispatchErrorMessage } from "@/lib/field-options-request";
 import {
   type ChecklistSummary,
   type CheckResult,
   engineCheck,
   erroredCheck,
+  OBS_CHECK_TIMEOUT_MS,
+  OBS_SCENES_FIELD,
+  type ObsFacts,
   obsCheck,
+  obsFactsFromDispatchError,
+  obsFactsFromReply,
   overlaysCheck,
   runningCheck,
   streamInfoCheck,
@@ -28,7 +29,7 @@ import {
   workflowsCheck,
 } from "@/lib/go-live-checks";
 
-/** The checks that ask Twitch or the engine, each its own Convex action so they run side by side. */
+/** The checks that ask Twitch or the engine, each started on its own so they run side by side. */
 type RemoteCheckId = Extract<GoLiveCheckId, "twitch" | "obs" | "stream-info">;
 const REMOTE_CHECK_IDS: RemoteCheckId[] = ["twitch", "obs", "stream-info"];
 
@@ -47,6 +48,50 @@ export function errorMessage(error: unknown): string {
     return error.data;
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Waits for the engine's reply to one field-options request, relayed as a
+ * transient event under its correlation key, and reads it as OBS facts.
+ */
+function awaitObsReply(
+  convex: ConvexReactClient,
+  instanceId: Id<"instances">,
+  correlationKey: string
+): Promise<ObsFacts> {
+  return new Promise((resolve) => {
+    const watch = convex.watchQuery(api.transientEvents.get, { instanceId, correlationKey });
+    let settled = false;
+    let unsubscribe: (() => void) | null = null;
+    const finish = (facts: ObsFacts) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      unsubscribe?.();
+      resolve(facts);
+    };
+    const timer = setTimeout(() => finish({ kind: "no-answer" }), OBS_CHECK_TIMEOUT_MS);
+    const read = () => {
+      let event: ReturnType<typeof watch.localQueryResult>;
+      try {
+        event = watch.localQueryResult();
+      } catch (error) {
+        finish({ kind: "engine-unreachable", message: errorMessage(error) });
+        return;
+      }
+      if (!event) {
+        return;
+      }
+      const facts = obsFactsFromReply(event);
+      if (facts !== null) {
+        finish(facts);
+      }
+    };
+    unsubscribe = watch.onUpdate(read);
+    read();
+  });
 }
 
 export interface GoLiveChecklist {
@@ -73,7 +118,8 @@ export function useGoLiveChecklist(): GoLiveChecklist {
   const presets = useQuery(api.streamInfo.listPresets, instanceId ? { instanceId } : "skip");
 
   const checkTwitch = useAction(api.goLive.checkTwitch);
-  const checkObs = useAction(api.goLive.checkObs);
+  const convex = useConvex();
+  const dispatchFieldOptions = useAction(api.fieldOptions.dispatch);
   const checkStreamInfo = useAction(api.goLive.checkStreamInfo);
   const setCheckDismissed = useMutation(api.goLive.setCheckDismissed);
   const completeAction = useAction(api.goLive.complete);
@@ -107,13 +153,19 @@ export function useGoLiveChecklist(): GoLiveChecklist {
       if (id === "twitch") {
         pending = checkTwitch({ instanceId }).then((facts) => ({ kind: "twitch", facts }));
       } else if (id === "obs") {
-        pending = checkObs({ instanceId }).then((facts) => ({ kind: "obs", facts }));
+        const correlationKey = crypto.randomUUID();
+        pending = dispatchFieldOptions({ instanceId, reference: OBS_SCENES_FIELD, correlationKey })
+          .then(
+            () => awaitObsReply(convex, instanceId, correlationKey),
+            (error: unknown) => obsFactsFromDispatchError(dispatchErrorMessage(error))
+          )
+          .then((facts) => ({ kind: "obs", facts }));
       } else {
         pending = checkStreamInfo({ instanceId }).then((facts) => ({ kind: "stream-info", facts }));
       }
       pending.then(settle, (error: unknown) => settle({ kind: "error", message: errorMessage(error) }));
     },
-    [instanceId, checkTwitch, checkObs, checkStreamInfo]
+    [instanceId, checkTwitch, convex, dispatchFieldOptions, checkStreamInfo]
   );
 
   const runAll = useCallback(() => {

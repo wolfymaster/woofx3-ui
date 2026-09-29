@@ -5,7 +5,10 @@ import {
   type CheckResult,
   engineCheck,
   erroredCheck,
+  OBS_SCENES_FIELD,
   obsCheck,
+  obsFactsFromDispatchError,
+  obsFactsFromReply,
   overlaysCheck,
   runningCheck,
   SAME_STREAM_WINDOW_MS,
@@ -130,25 +133,102 @@ describe("overlaysCheck", () => {
   });
 });
 
-describe("obsCheck", () => {
-  test("passes when the engine lists OBS scenes", () => {
-    expect(obsCheck({ kind: "connected", sceneCount: 3 })).toMatchObject({
-      status: "pass",
-      summary: "OBS is connected (3 scenes)",
+describe("OBS_SCENES_FIELD", () => {
+  test("names the bundled module's scene picker, as the workflow builder asks for it", () => {
+    expect(OBS_SCENES_FIELD).toEqual({
+      moduleId: "woofx3",
+      declaration: "action",
+      declarationId: "obs.switch_scene",
+      fieldId: "sceneName",
+    });
+  });
+});
+
+describe("obsFactsFromReply", () => {
+  test("counts the scenes OBS listed", () => {
+    const data = [
+      { value: "Starting", label: "Starting" },
+      { value: "Live", label: "Live" },
+      { value: "BRB", label: "BRB" },
+    ];
+    expect(obsFactsFromReply({ status: "success", data })).toEqual({ kind: "connected", sceneCount: 3 });
+  });
+
+  test("relays the scene manager's reason for listing nothing", () => {
+    expect(obsFactsFromReply({ status: "error", message: "OBS is not connected (retrying)" })).toEqual({
+      kind: "disconnected",
+      reason: "OBS is not connected (retrying)",
     });
   });
 
-  test("warns while the scene manager has no OBS connection", () => {
-    const check = obsCheck({ kind: "disconnected", reason: "OBS websocket refused the connection" });
+  test("reads an { error } reply relayed as a success as the reason", () => {
+    expect(obsFactsFromReply({ status: "success", data: { error: "OBS is not connected (retrying)" } })).toEqual({
+      kind: "disconnected",
+      reason: "OBS is not connected (retrying)",
+    });
+  });
+
+  test("reads a NATS timeout or missing responder as no answer", () => {
+    expect(obsFactsFromReply({ status: "error", message: "TIMEOUT" })).toEqual({ kind: "no-answer" });
+    expect(obsFactsFromReply({ status: "error", message: "503: no responders" })).toEqual({ kind: "no-answer" });
+  });
+
+  test("keeps waiting on progress", () => {
+    expect(obsFactsFromReply({ status: "progress" })).toBeNull();
+  });
+
+  test("does not read a reply that is neither a list nor a reason as connected", () => {
+    expect(obsFactsFromReply({ status: "success", data: "ok" })).toMatchObject({ kind: "engine-unreachable" });
+  });
+});
+
+describe("obsFactsFromDispatchError", () => {
+  test("reads an engine without the bundled OBS field as unsupported", () => {
+    for (const message of [
+      'dispatchFieldOptionsRequest: module "woofx3" is not installed',
+      'dispatchFieldOptionsRequest: module "woofx3" declares no action "obs.switch_scene"',
+      'dispatchFieldOptionsRequest: no field "sceneName" of woofx3:action:obs.switch_scene',
+      "Unsupported descriptor kind: undefined",
+    ]) {
+      expect(obsFactsFromDispatchError(message)).toEqual({ kind: "unsupported" });
+    }
+  });
+
+  test("reports any other refusal as the engine being unreachable", () => {
+    expect(obsFactsFromDispatchError("Instance is not registered with the engine")).toEqual({
+      kind: "engine-unreachable",
+      message: "Instance is not registered with the engine",
+    });
+  });
+});
+
+describe("obsCheck", () => {
+  test("passes with the scene count when OBS lists its scenes", () => {
+    expect(obsCheck({ kind: "connected", sceneCount: 3 })).toMatchObject({
+      status: "pass",
+      summary: "OBS connected — 3 scenes",
+    });
+    expect(obsCheck({ kind: "connected", sceneCount: 1 }).summary).toBe("OBS connected — 1 scene");
+  });
+
+  test("warns with the engine's reason while OBS is not connected", () => {
+    const check = obsCheck({ kind: "disconnected", reason: "OBS is not connected (retrying)" });
     expect(check.status).toBe("warn");
-    expect(check.details).toEqual(["OBS websocket refused the connection"]);
+    expect(check.summary).toBe("OBS is not connected (retrying)");
     expect(check.fixes).toEqual([{ kind: "retry", label: "Check again" }]);
   });
 
   test("warns rather than failing when the engine cannot report OBS status", () => {
-    const check = obsCheck({ kind: "unknown" });
+    const check = obsCheck({ kind: "unsupported" });
     expect(check.status).toBe("warn");
-    expect(check.summary).toContain("can't be checked");
+    expect(check.summary).toContain("Your engine doesn't report OBS status");
+  });
+
+  test("warns when nothing answers in time", () => {
+    const check = obsCheck({ kind: "no-answer" });
+    expect(check.status).toBe("warn");
+    expect(check.summary).toContain("OBS didn't answer");
+    expect(check.fixes).toEqual([{ kind: "retry", label: "Check again" }]);
   });
 });
 
