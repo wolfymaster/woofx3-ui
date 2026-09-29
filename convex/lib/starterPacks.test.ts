@@ -31,6 +31,9 @@ const TWITCH_EVENTS = [
   "channel.resub",
   "channel.subscriptionGift",
   "channel.cheer",
+  "channel.ad_break.upcoming",
+  "channel.ad_break.begin",
+  "channel.ad_break.end",
 ];
 
 /** The inputs each action declares in its manifest schema, as the catalog's configFields carry them. */
@@ -283,6 +286,15 @@ describe("buildStarterWorkflow", () => {
     expect(def.tasks[3].parameters).toEqual({ description: "Raid from ${trigger.data.fromBroadcasterUserName}" });
   });
 
+  test("the ad warning fills in the seconds until the break", () => {
+    const heads = pack("ad-break-heads-up");
+    const def = buildStarterWorkflow(heads.items[0], starterPackDefaults(heads), FULL_CATALOG);
+    expect(def.trigger.event).toBe("channel.ad_break.upcoming");
+    expect(def.tasks[0].parameters).toEqual({
+      message: "Ad break in ${trigger.data.secondsUntil}s, grab a drink, we'll be right back!",
+    });
+  });
+
   test("a pause of zero leaves the delay out and keeps the chain unbroken", () => {
     const values = { ...starterPackDefaults(raid), shoutoutDelaySeconds: 0 };
     const def = buildStarterWorkflow(raidItem, values, FULL_CATALOG);
@@ -471,7 +483,12 @@ describe("missingRequirements", () => {
   });
 
   test("without the OBS module, only the scene commands are held back, and they ask for the module", () => {
-    expect(blockedItems(NO_OBS_CATALOG)).toEqual(["brb-scene/brb", "brb-scene/back"]);
+    expect(blockedItems(NO_OBS_CATALOG)).toEqual([
+      "brb-scene/brb",
+      "brb-scene/back",
+      "ad-break-scene/ad-scene-on",
+      "ad-break-scene/ad-scene-off",
+    ]);
     const brb = pack("brb-scene").items[0];
     const missing = missingRequirements(brb, NO_OBS_CATALOG);
     expect(missing.obsModuleInstalled).toBe(false);
@@ -495,6 +512,8 @@ describe("missingRequirements", () => {
       "sub-hype/gift-bomb-clip",
       "brb-scene/brb",
       "brb-scene/back",
+      "ad-break-scene/ad-scene-on",
+      "ad-break-scene/ad-scene-off",
     ]);
     const raidItem = pack("raid-welcome").items[0];
     const missing = missingRequirements(raidItem, OLD_TWITCH_MODULE_CATALOG);
@@ -511,6 +530,7 @@ describe("missingRequirements", () => {
     const missing = missingRequirements(followItem, noTwitch);
     expect(missing).toEqual({
       triggers: ["channel.follow"],
+      triggersNeedEngineUpdate: false,
       actions: [],
       twitchModuleInstalled: false,
       obsModuleInstalled: true,
@@ -518,6 +538,23 @@ describe("missingRequirements", () => {
     expect(requirementsMessage(missing)).toBe("Requires the Twitch module");
     const raidItem = pack("raid-welcome").items[0];
     expect(requirementsMessage(missingRequirements(raidItem, noTwitch))).toBe("Requires the Twitch module");
+  });
+
+  test("a missing ad-break trigger asks for an engine update, not the Twitch module", () => {
+    const warning = pack("ad-break-heads-up").items[0];
+    const catalog = {
+      triggers: FULL_CATALOG.triggers.filter((trigger) => !trigger.event?.startsWith("channel.ad_break.")),
+      actions: FULL_CATALOG.actions,
+    };
+    const missing = missingRequirements(warning, catalog);
+    expect(missing).toEqual({
+      triggers: ["channel.ad_break.upcoming"],
+      triggersNeedEngineUpdate: true,
+      actions: [],
+      twitchModuleInstalled: true,
+      obsModuleInstalled: true,
+    });
+    expect(requirementsMessage(missing)).toBe("Requires engine update");
   });
 
   test("raid welcome needs twitch.marker, so Twitch module 0.7.0 (shoutout, no marker) never runs it", () => {

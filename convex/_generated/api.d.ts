@@ -12,6 +12,7 @@ import type * as accountMembers from "../accountMembers.js";
 import type * as accounts from "../accounts.js";
 import type * as actionDefinitions from "../actionDefinitions.js";
 import type * as activityPanel from "../activityPanel.js";
+import type * as adBreaks from "../adBreaks.js";
 import type * as alertActions from "../alertActions.js";
 import type * as alertLog from "../alertLog.js";
 import type * as auth from "../auth.js";
@@ -171,6 +172,7 @@ declare const fullApi: ApiFromModules<{
   accounts: typeof accounts;
   actionDefinitions: typeof actionDefinitions;
   activityPanel: typeof activityPanel;
+  adBreaks: typeof adBreaks;
   alertActions: typeof alertActions;
   alertLog: typeof alertLog;
   auth: typeof auth;
