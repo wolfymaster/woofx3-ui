@@ -2,10 +2,8 @@
 
 The SPA is built with **React 18**, **Vite**, and **Wouter** for client-side routes. Global providers wrap the tree in this order (see `client/src/App.tsx`):
 
-1. **Convex** — `ConvexProvider` + `ConvexReactClient` (`VITE_CONVEX_URL`)
-2. **Auth** — `ConvexAuthProvider` (`@convex-dev/auth`)
-3. **TanStack Query** — shared `queryClient` for non-Convex or legacy-style fetches
-4. **UI** — tooltips, theme (`useTheme`), toasts
+1. **Convex + auth** — `ConvexAuthProvider` (`@convex-dev/auth`) around the shared `ConvexReactClient` (`VITE_CONVEX_URL`); it provides the Convex client itself
+2. **UI** — tooltips, theme (`useTheme`), toasts
 
 ## Route layout
 
@@ -13,9 +11,9 @@ The SPA is built with **React 18**, **Vite**, and **Wouter** for client-side rou
 |------|--------|---------|
 | `/auth/login`, `/auth/register` | None | Sign in / sign up |
 | `/auth/onboarding` | `AuthGuard` | Create account + first instance (managed engine, or connect an existing one) |
-| Everything under the main shell | `AuthGuard` → `OnboardingGuard` | Product UI inside `BroadcastShell` |
+| Everything under the main shell | `AuthGuard` → `BroadcastShell` → `OnboardingGuard` | Product UI inside `BroadcastShell` |
 
-**AuthGuard** redirects unauthenticated users to `/auth/login`. **OnboardingGuard** loads `accounts.getMyAccount` and `instances.listForCurrentUser`; if there is no account or no instances, it sends the user to `/auth/onboarding`.
+**AuthGuard** redirects unauthenticated users to `/auth/login`. **OnboardingGuard** sits inside `BroadcastShell` and gates only the content area, so the shell paints as soon as auth resolves. It loads `accounts.getMyAccount` and `instances.listForCurrentUser`, showing a content placeholder (dashboard zone outlines on `/`) while they load; if there is no account or no registered instance, it sends the user to `/auth/onboarding`. Queries that must start before the instance list arrives (the dashboard's panels, the status bar's live state) read `useInstance().optimisticInstanceId` through `useOptimisticInstanceQuery`: the id cached from the last session, which those queries answer with nothing when the caller is not a member.
 
 Protected routes render inside **`BroadcastShell`** (`client/src/components/layout/broadcast-shell.tsx`): primary nav, utility links (Team, Admin), instance switcher, command palette hook, and stream status UI (currently a placeholder that does not yet call the real transport).
 
@@ -26,7 +24,7 @@ The menu is declared in one place — `client/src/components/layout/nav-config.t
 | Section | Route prefix | Sub-items |
 |---------|--------------|-----------|
 | Dashboard | `/` | — |
-| Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Assets, Workflows |
+| Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Supporters, Assets, Workflows |
 | Modules | `/modules` | — (the page renders its own category sidebar) |
 | Help | `/help` | Learning, Logs, Submit Feedback |
 | Admin | `/admin` | Engine, Integrations, Storage, Appearance |
@@ -45,7 +43,9 @@ Below that, each page offers the triggers the kind's events declare — Counter 
 
 Edits that span more than one of those routes are held in a draft store outside the component tree — `lib/event-drafts.ts` for an event's triggers, `lib/command-drafts.ts` for one command — so leaving the page for a nested editor does not lose them, and the owning screen's Save covers everything done under it. A draft belongs to the event, not to the screen editing it: where two sections of a resource page touch the same event, either one's Save writes both their edits and either one's Discard drops both. That is what keeps them from overwriting each other.
 
-**Alerts** (`/stream/alerts`) opens on a dashboard rather than an empty state: four counters (alerts, played, failed, success rate over the last 24 hours), an hour-by-hour activity chart, the recent dispatch feed, and a card that fires a test event — `components/alerts/dashboard/`. Counters and chart come from `engineAlerts.overview`; the feed from `engineAlerts.listForInstance`. Both read the engine's **alert** log, not its workflow runs: a run can succeed while the alert it published never reaches an overlay, and this screen is about the second. Each row replays through `alertActions.replay` (the engine re-publishes the stored envelope, marks the original `replayed`, and both changes arrive back as webhooks) and drills into the run that fired it at `/stream/alert-run/:engineRunId` (`lib/alert-run-route.ts`), which shows that one run as a trace — the trigger event, the run, each step and the overlay alerts it published on one time axis, with the selected span's fields and payloads (inputs, outputs, event data, alert parameters) pulled out below, and a replay — `components/alert-run/`, laid out by `lib/run-trace.ts` — and its back arrow returns to the dashboard. Choosing a kind of event on the left rail replaces the dashboard with that event's triggers.
+**Alerts** (`/stream/alerts`) opens on a dashboard rather than an empty state: four counters (alerts, played, failed, success rate over the last 24 hours), an hour-by-hour activity chart, the recent dispatch feed, and a card that fires a test event — `components/alerts/dashboard/`. Counters and chart come from `engineAlerts.overview`; the feed from `engineAlerts.listForInstance`. Both read the engine's **alert** log, not its workflow runs: a run can succeed while the alert it published never reaches an overlay, and this screen is about the second. Each row replays through `alertActions.replay` (the engine re-publishes the stored envelope, marks the original `replayed`, and both changes arrive back as webhooks) and drills into the run that fired it at `/stream/alert-run/:engineRunId` (`lib/alert-run-route.ts`), which shows that one run as a trace — the trigger event, the run, each step and the overlay alerts it published on one time axis, with the selected span's fields and payloads (inputs, outputs, event data, alert parameters) pulled out below, and a replay — `components/alert-run/`, laid out by `lib/run-trace.ts` — and its back arrow returns to the dashboard. The feed's header carries the queue controls (`components/alerts/alert-queue-controls.tsx`, also on the Alert Log dashboard widget): **Skip** stops the alert playing now (`alertActions.skipCurrent`) and **Clear queue** drops every alert still waiting (`alertActions.clearQueue`) after an inline confirm; the one playing keeps playing. Neither is gated on the log, which cannot tell a waiting alert from a playing one (every alert is recorded `sent` and `playing` has no webhook). Choosing a kind of event on the left rail replaces the dashboard with that event's triggers.
+
+**Supporters** (`/stream/supporters`) ranks the viewers who cheer and gift subs — lifetime or for one picked stream, top 25, with a "gave at least N" filter — and looks one viewer up (by a name on the board, or any Twitch login resolved through Helix) to show their lifetime totals and their totals for the last five live streams, with a copyable thank-you line and a Shout out button that joins the existing shoutout queue. Everything comes from `convex/supporters.ts` actions that read the engine's analytics RPCs and hand the result straight back: per-viewer figures are never written to a Convex table, because the engine's analytics design keeps per-viewer detail on the streamer's own machine and the multi-tenant store holds summaries only. Anonymous cheers and gifts rank nobody. Page logic (ranking, ranges, the thank-you text) is in `lib/supporters.ts`.
 
 There is no separate Debug page any more: `/debug` and `/help/debug` redirect to Alerts. Test events are fired from the dashboard's card or from the lightning icon beside each event, which opens a side sheet; both render the same `components/test-events/test-event-picker.tsx`. Its trigger picker (`trigger-picker.tsx`) is a searchable combobox over every alert trigger, grouped the way the rail is (platform, then each `alert.*` segment), with the clicked one preselected — a query matches the trigger's name, its menu path or its event type. Its settings sit below, above a Trigger button.
 
@@ -64,9 +64,7 @@ The codebase is intentionally **hybrid**:
 - **Convex** (`useQuery` / `useMutation` / `useAction`) — multi-tenant control-plane data: accounts, instances, workflows metadata, assets, module catalog, dashboard layout, engine health checks, etc. Engine-proxied reads (e.g. `moduleEngine.listEngineModules`, `workflowCatalog.fetchMerged`) are Convex **actions** that talk to the engine over capnweb on the server side.
 - **`WoofxTransport`** (`client/src/lib/transport/`) — direct **browser ↔ engine** WebSocket (or future Tauri IPC) for **realtime** channels only (chat, stream status, workflow runs). Documented in-repo as *not* for Convex-proxied calls. Browsing / installing / uninstalling modules does **not** use the transport — those flows go browser → Convex mutation/action → engine.
 - **`transientEvents`** (Convex realtime subscription) — the bridge the UI uses to observe async engine operations correlated via an operation-specific key. Any flow that RPCs the engine and later receives a webhook callback (module install, uninstall, future async operations) emits progress/success/error events to this table; components subscribe by `correlationKey` and get realtime pushes the moment the webhook handler writes.
-- **TanStack Query** — used where code still follows older “API client” patterns: some dashboard modules, **Team**, **Scenes** list, **Scene editor**, and parts of **workflow creation** (`BasicWorkflowEditor` + `apiRequest`). Some of these `queryFn`s are **stubs** (empty arrays) until wired to Convex or the transport.
-
-When you touch a screen, check imports: `from "convex/react"` vs `@/lib/transport` vs `@/lib/queryClient` tells you which path it uses.
+When you touch a screen, check imports: `from "convex/react"` vs `@/lib/transport` tells you which path it uses.
 
 ## Related docs
 

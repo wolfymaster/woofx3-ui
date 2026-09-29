@@ -8,7 +8,9 @@ import {
   queueAddRefusal,
   queueCapacity,
   queueEntries,
+  timerProgressPercent,
   timerState,
+  timerStatus,
 } from "@/lib/resource-values";
 
 describe("counterGoals", () => {
@@ -106,6 +108,33 @@ describe("timerState", () => {
   test("a timer with no value is stopped at its full duration", () => {
     expect(timerState(null, { duration: 90 }, now)).toEqual({ running: false, remainingMs: 90_000 });
     expect(timerState(null, {}, now).remainingMs).toBe(300_000);
+  });
+});
+
+describe("timerStatus", () => {
+  test("counting down is Running, stopped with time left is Paused", () => {
+    expect(timerStatus({ running: true, remainingMs: 1_000 })).toBe("Running");
+    expect(timerStatus({ running: false, remainingMs: 1_000 })).toBe("Paused");
+  });
+
+  test("no time left is Finished, even before the engine has stopped it", () => {
+    expect(timerStatus({ running: true, remainingMs: 0 })).toBe("Finished");
+    expect(timerStatus({ running: false, remainingMs: 0 })).toBe("Finished");
+  });
+});
+
+describe("timerProgressPercent", () => {
+  test("time left against the full duration", () => {
+    expect(timerProgressPercent(45_000, { duration: 90 })).toBe(50);
+    expect(timerProgressPercent(0, { duration: 90 })).toBe(0);
+  });
+
+  test("time added past the duration fills the bar and no further", () => {
+    expect(timerProgressPercent(200_000, { duration: 90 })).toBe(100);
+  });
+
+  test("a zero duration reads as empty rather than dividing by zero", () => {
+    expect(timerProgressPercent(5_000, { duration: 0 })).toBe(0);
   });
 });
 

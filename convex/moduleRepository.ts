@@ -3,6 +3,9 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { requireInstanceRole } from "./lib/instanceAccess";
+import { isInstanceMember } from "./lib/teamAccess";
+import { installedModulesRevision } from "./lib/widgetThemes";
 
 /**
  * Convex storage upload URL for staging a module bundle before
@@ -27,16 +30,18 @@ export const generateUploadUrl = mutation({
 
 export const list = query({
   args: {
-    instanceId: v.optional(v.id("instances")),
+    instanceId: v.id("instances"),
     search: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
   },
   handler: async (ctx, args) => {
-    let results = await ctx.db.query("moduleRepository").collect();
-
-    if (args.instanceId) {
-      results = results.filter((m) => m.instanceId === args.instanceId);
+    if (!(await isInstanceMember(ctx, args.instanceId))) {
+      return [];
     }
+    let results = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .collect();
 
     if (args.tags && args.tags.length > 0) {
       results = results.filter((m) => args.tags!.some((tag) => m.tags.includes(tag)));
@@ -53,10 +58,33 @@ export const list = query({
   },
 });
 
+/**
+ * Changes whenever a module on the instance is installed, upgraded or removed,
+ * for a view that holds engine data derived from the installed set (a widget's
+ * theme list) and must refetch it. Empty for a caller who is not a member.
+ */
+export const installedRevision = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<string> => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return "";
+    }
+    const rows = await ctx.db
+      .query("moduleRepository")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    return installedModulesRevision(rows);
+  },
+});
+
 export const get = query({
   args: { moduleId: v.id("moduleRepository") },
   handler: async (ctx, args) => {
-    return ctx.db.get(args.moduleId);
+    const module = await ctx.db.get(args.moduleId);
+    if (!module?.instanceId || !(await isInstanceMember(ctx, module.instanceId))) {
+      return null;
+    }
+    return module;
   },
 });
 
@@ -165,10 +193,7 @@ export const uploadAndDeliver = mutation({
     archiveKey: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    await requireInstanceRole(ctx, args.instanceId);
 
     // Scoped to the instance: an unscoped match would patch another tenant's
     // row — including its instanceId — and hand this module's identity over to
@@ -224,12 +249,9 @@ export const enqueueEngineInstall = mutation({
     moduleId: v.id("moduleRepository"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    await requireInstanceRole(ctx, args.instanceId);
     const module = await ctx.db.get(args.moduleId);
-    if (!module) {
+    if (!module || module.instanceId !== args.instanceId) {
       throw new Error("Module not found");
     }
     if (!module.archiveKey) {
@@ -334,13 +356,14 @@ export const getDeliveryData = internalQuery({
 export const resolveModuleForDetail = internalQuery({
   args: { instanceId: v.id("instances"), moduleId: v.string() },
   handler: async (ctx, { instanceId, moduleId }) => {
-    try {
-      const byId = await ctx.db.get(moduleId as Id<"moduleRepository">);
+    // `moduleId` is either a repository row id or a marketplace id; only the
+    // first normalizes.
+    const rowId = ctx.db.normalizeId("moduleRepository", moduleId);
+    if (rowId) {
+      const byId = await ctx.db.get(rowId);
       if (byId && byId.instanceId === instanceId) {
         return byId;
       }
-    } catch {
-      // not a valid _id format — fall through to prefix match
     }
 
     const all = await ctx.db

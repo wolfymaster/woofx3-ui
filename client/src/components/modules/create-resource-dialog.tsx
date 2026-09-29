@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { getDefaultConfigValues } from "@/lib/workflow-presets";
 
@@ -17,6 +18,8 @@ export interface CreateResourceDialogKind {
 }
 
 interface CreateResourceDialogProps {
+  /** Manifest-local id of the module that declares the kind. */
+  moduleId: string;
   kind: CreateResourceDialogKind;
   onClose: () => void;
   onCreate: (resourceInstanceId: string, displayName: string, settings: Record<string, unknown>) => Promise<void>;
@@ -42,8 +45,11 @@ export function suggestInstanceId(displayName: string): string {
  * counter and do not care what it is called internally — but it is shown,
  * since workflows reference it and it can never change.
  */
-export function CreateResourceDialog({ kind, onClose, onCreate }: CreateResourceDialogProps) {
-  const fields = useMemo(() => parseConfigFields(kind.schema), [kind.schema]);
+export function CreateResourceDialog({ moduleId, kind, onClose, onCreate }: CreateResourceDialogProps) {
+  const fields = useMemo(
+    () => withFieldOptionsOwner(parseConfigFields(kind.schema), resourceKindFieldOptionsOwner(moduleId, kind.kind)),
+    [kind.schema, moduleId, kind.kind]
+  );
   const [displayName, setDisplayName] = useState("");
   const [editedId, setEditedId] = useState<string | null>(null);
   const [settings, setSettings] = useState<FieldValues>(() => getDefaultConfigValues(fields));

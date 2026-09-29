@@ -39,6 +39,15 @@ There is no dedicated upgrade RPC — **an update is an install of the newer ver
 - Both sides upgrade **in place**. The engine replaces the previous version's registrations under a unique constraint on module name, and `moduleWebhook.processModuleInstalled` patches the existing `moduleRepository` row (`findSupersededModule` matches on the version-free leading segment of the `moduleKey`) instead of inserting a second one. Keeping the `_id` stable is what keeps trigger/action definitions, functions, widgets, assets and resource instances pointed at the module across an upgrade.
 - `getModuleDetail` is an action, not a reactive query, so the panel refetches once the install's transient event reports success — otherwise it would keep rendering the superseded version and its "Update available" notice.
 
+## Module permissions (install review)
+
+A manifest may declare a top-level `permissions` array (`twitch.moderation`, `twitch.channel`, ...). The **engine enforces** it: a module can only call a privileged capability it declares, and install refuses an id the engine does not know. What the UI adds is **consent**: the streamer sees what a module asks for and approves it before the engine is told to install it. The UI never grants or withholds a capability, and approving a permission here does not change what the engine allows.
+
+- **Where they come from.** For an installed module, the `permissions` field of the manifest stored on its `moduleRepository` row (the manifest parsed at upload, or the engine's manifest fetched after a marketplace install). The marketplace API does not expose permissions, so for a marketplace listing Convex downloads the archive the engine would install, checks it against the listing's `sha256`, and reads the shallowest `manifest.json` (`convex/lib/modulePermissions.ts`, `fetchMarketplaceArchivePermissions` in `convex/marketplace.ts`). No schema change: the stored manifest is `v.any()` and already carries the field.
+- **What is shown.** `moduleDetail.getModuleDetail` returns `permissions` (the shown version) and, for an installed module whose marketplace version differs, `latestPermissions`. The detail panel's Details tab and the upload page render a **This module can:** section from `client/src/lib/module-permissions.ts`, which maps each id to plain language; an id missing from that table renders as `Unknown permission: <id>` with a warning, so a permission the engine learns before the UI does is never hidden. Permissions that could not be read render as a warning, not as "nothing".
+- **Confirmation.** Installing a module that declares any permission, or updating to a version that declares one the installed version lacked, opens `ApproveModulePermissionsDialog` (**Install and allow** / **Update and allow**). An update that keeps or drops permissions installs without the extra step.
+- **Server-side check.** `api.marketplace.installModule` takes `approvedPermissions` and re-reads the archive it installs; it refuses when the archive declares a permission outside that list. This catches a listing republished with new permissions after the streamer reviewed it, and an unreadable listing (approved as "none new") can never install a permission the streamer did not see. ZIP uploads are not re-checked on the server: the browser supplies both the manifest and the archive there.
+
 ## Uninstall (`UninstallModuleDialog`)
 
 Same correlated-async pattern as install:
@@ -47,6 +56,8 @@ Same correlated-async pattern as install:
 2. `requestModuleUninstall` emits an immediate `progress` transient event, then RPCs `rpc.uninstallModule(module.name, { moduleKey })` on the engine.
 3. The engine uninstalls in the background and POSTs `module.deleted` or `module.delete_failed`. The webhook processor cascade-deletes the repository row, storage blob, and trigger/action definitions (on success), or emits an `error` transient carrying the engine's conflict list (on failure).
 4. The dialog watches the transient event and closes on success / displays the conflict list on failure. A 60 s engine-response timeout guards against the engine never responding.
+
+A conflict entry with `resourceType: "module"` means other installed modules declare this one in their `requires` (theme packs, for example). Its `usedBy` entries name each dependent with the range it requires, and the dialog lists them under **Required by** rather than **Used by** (`client/src/lib/uninstall-conflicts.ts`).
 
 If the engine returns a delete webhook without a `moduleKey` (older engine build), `emitDeleteErrorForMissingKey` locates the record by name and emits the error under its stored `moduleKey` so the dialog unsticks.
 

@@ -4,6 +4,7 @@ import { useMutation } from "convex/react";
 import { Activity, Bell, Check, ChevronDown, Command, MonitorPlay, Pencil, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { Uptime } from "@/components/common/uptime";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -25,23 +26,27 @@ import { useEngineVersion } from "@/hooks/use-engine-version";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
+import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
-import { cn, formatUptime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { CommandPalette } from "./command-palette";
 import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
 import { ThemeMenuSub } from "./theme-menu";
+import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
 
 function InstanceBar() {
-  const { instance, instances, setInstance } = useInstance();
+  const { instance, instances, setInstance, isLoading } = useInstance();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editName, setEditName] = useState("");
 
   const updateInstance = useMutation(api.instances.update);
 
-  const instanceDisplayName = instance?.name || "No Instance";
+  // Blank while the list loads: the shell paints before it arrives, and "No
+  // Instance" would flash for everyone who has one.
+  const instanceDisplayName = instance?.name || (isLoading ? "" : "No Instance");
 
   const handleEditInstance = () => {
     setEditName(instance?.name || "");
@@ -124,19 +129,9 @@ function StatusBar() {
   const { connected } = useEngineHealth();
   const engineVersion = useEngineVersion(connected);
   const liveState = useLiveState();
-  const [now, setNow] = useState(() => Date.now());
 
   const isLive = liveState?.isLive ?? false;
-
-  useEffect(() => {
-    if (!isLive) {
-      return;
-    }
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, [isLive]);
-
-  const streamUptime = isLive && liveState?.startedAt ? formatUptime(liveState.startedAt, now) : "00:00:00";
+  const startedAt = isLive ? liveState?.startedAt : undefined;
 
   return (
     <div className="h-7 bg-card border-t border-border flex items-center px-4 text-xs shrink-0">
@@ -166,9 +161,9 @@ function StatusBar() {
             {isLive ? "Live" : "Offline"}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-muted-foreground font-mono">
+        <div className="flex items-center gap-1.5 text-muted-foreground font-system-mono">
           <Activity className="h-3 w-3" />
-          <span>{streamUptime}</span>
+          {startedAt ? <Uptime startedAt={startedAt} /> : <span>00:00:00</span>}
         </div>
       </div>
     </div>
@@ -251,7 +246,7 @@ function AppHeader() {
         >
           <Search className="h-4 w-4" />
           <span className="flex-1 text-left text-xs">Quick actions...</span>
-          <kbd className="pointer-events-none flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+          <kbd className="pointer-events-none flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-system-mono text-[10px] font-medium text-muted-foreground">
             <Command className="h-3 w-3" />K
           </kbd>
         </Button>
@@ -313,6 +308,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const [location] = useLocation();
   const activeSection = findActiveSection(location);
   useSyncEngineTransport();
+  useWorkflowHealthResyncOnReconnect();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -331,6 +327,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
         <InstanceBar />
         <AppHeader />
+        <TwitchReconnectBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {activeSection?.children && (

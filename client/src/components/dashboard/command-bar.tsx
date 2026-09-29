@@ -3,6 +3,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { Check, Clapperboard, Loader2, Maximize2, Plus, Radio, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
+import { LiveThumbnail } from "@/components/dashboard/live-thumbnail";
 import { StreamPlayerDialog } from "@/components/dashboard/stream-player-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,10 +16,6 @@ import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/
 import { counterGoals, counterValue, goalProgress } from "@/lib/resource-values";
 import { cn } from "@/lib/utils";
 
-// Same public preview CDN and refresh cadence the stream-preview widget uses —
-// Twitch only regenerates the underlying image every few minutes.
-const THUMBNAIL_REFRESH_MS = 60_000;
-
 /** The resource kind the bar's cards are drawn from; must match the woofx3 module's counter kind. */
 const COUNTER_KIND = "counter";
 
@@ -26,15 +23,6 @@ const COUNTERS_PATH = "/stream/counters";
 
 function StreamPreviewThumbnail({ isLive, login, title }: { isLive: boolean; login: string | null; title?: string }) {
   const [enlarged, setEnlarged] = useState(false);
-  const [thumbnailTick, setThumbnailTick] = useState(0);
-
-  useEffect(() => {
-    if (!isLive) {
-      return;
-    }
-    const interval = setInterval(() => setThumbnailTick((tick) => tick + 1), THUMBNAIL_REFRESH_MS);
-    return () => clearInterval(interval);
-  }, [isLive]);
 
   return (
     <>
@@ -49,11 +37,7 @@ function StreamPreviewThumbnail({ isLive, login, title }: { isLive: boolean; log
       >
         {isLive && login ? (
           <>
-            <img
-              src={`https://static-cdn.jtvnw.net/previews-ttv/live_user_${login}-440x248.jpg?ts=${thumbnailTick}`}
-              alt={title ?? "Stream preview"}
-              className="w-full h-full object-cover"
-            />
+            <LiveThumbnail login={login} alt={title ?? "Stream preview"} className="w-full h-full object-cover" />
             <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
               <Maximize2 className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>

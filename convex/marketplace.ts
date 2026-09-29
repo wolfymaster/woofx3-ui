@@ -1,13 +1,21 @@
 "use node";
 
+import { createHash } from "node:crypto";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
+import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
 
 const MARKETPLACE_TIMEOUT_MS = 10_000;
+const ARCHIVE_TIMEOUT_MS = 30_000;
+// Module archives carry code, manifests and a few assets. The cap keeps a
+// malformed or hostile listing from making a Convex action buffer an unbounded
+// download just to read one small JSON file.
+const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 
 export interface MarketplaceTriggerSummary {
   slug: string;
@@ -50,7 +58,9 @@ export interface MarketplaceModuleSummary {
   author: string;
   category: string;
   tags: string[];
-  iconUrl?: string;
+  images: MarketplaceImages;
+  /** Position in the storefront's featured set, lowest first. Absent when not featured. */
+  featuredRank?: number;
   counts: MarketplaceModuleCounts;
   updatedAt?: string;
 }
@@ -95,6 +105,65 @@ export async function marketplaceFetch(path: string): Promise<unknown> {
   }
 }
 
+export interface MarketplaceDownload {
+  url: string;
+  sha256: string;
+}
+
+export async function fetchMarketplaceDownload(marketplaceModuleId: string): Promise<MarketplaceDownload> {
+  const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`);
+  const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const url = asString(obj.url);
+  if (!url) {
+    throw new Error("Marketplace did not return a download URL");
+  }
+  const sha256 = asString(obj.sha256).toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(sha256)) {
+    throw new Error("Marketplace did not return a valid sha256 hash");
+  }
+  return { url, sha256 };
+}
+
+/**
+ * The permissions declared by the manifest inside a marketplace archive.
+ *
+ * The marketplace API does not expose a module's permissions, so they are read
+ * from the archive the engine would install. The bytes are checked against the
+ * listing's sha256 so the permissions shown for approval belong to exactly the
+ * build whose hash goes into the install's moduleKey.
+ */
+export async function fetchMarketplaceArchivePermissions(download: MarketplaceDownload): Promise<string[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ARCHIVE_TIMEOUT_MS);
+  let bytes: Uint8Array;
+  try {
+    const res = await fetch(download.url, { method: "GET", signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`Module archive download failed: ${res.status} ${res.statusText}`);
+    }
+    const declaredLength = Number(res.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_ARCHIVE_BYTES) {
+      throw new Error(`Module archive is ${declaredLength} bytes, over the ${MAX_ARCHIVE_BYTES} byte limit`);
+    }
+    bytes = new Uint8Array(await res.arrayBuffer());
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Module archive download timed out after ${ARCHIVE_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (bytes.byteLength > MAX_ARCHIVE_BYTES) {
+    throw new Error(`Module archive is ${bytes.byteLength} bytes, over the ${MAX_ARCHIVE_BYTES} byte limit`);
+  }
+  const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+  if (actualSha256 !== download.sha256) {
+    throw new Error("Module archive does not match the marketplace's sha256 hash");
+  }
+  return parseManifestPermissions(readArchiveManifest(bytes));
+}
+
 function asString(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
@@ -137,10 +206,12 @@ function parseSummary(raw: unknown): MarketplaceModuleSummary | null {
     author: asString(obj.author),
     category: asString(obj.category, "Utilities"),
     tags: asStringArray(obj.tags),
+    images: parseMarketplaceImages(obj.images),
     counts: parseCounts(obj.counts),
   };
-  if (typeof obj.iconUrl === "string") {
-    summary.iconUrl = obj.iconUrl;
+  const featuredRank = parseFeaturedRank(obj.featuredRank);
+  if (featuredRank !== undefined) {
+    summary.featuredRank = featuredRank;
   }
   if (typeof obj.updatedAt === "string") {
     summary.updatedAt = obj.updatedAt;
@@ -315,8 +386,16 @@ export const getModule = action({
 });
 
 export const installModule = action({
-  args: { instanceId: v.id("instances"), marketplaceModuleId: v.string() },
-  handler: async (ctx, { instanceId, marketplaceModuleId }): Promise<{ moduleKey: string }> => {
+  args: {
+    instanceId: v.id("instances"),
+    marketplaceModuleId: v.string(),
+    // Every permission the streamer has approved for this module, including
+    // those an installed version already held. The install is refused when the
+    // archive declares one outside this list, which also catches a listing
+    // republished with new permissions after the streamer reviewed it.
+    approvedPermissions: v.array(v.string()),
+  },
+  handler: async (ctx, { instanceId, marketplaceModuleId, approvedPermissions }): Promise<{ moduleKey: string }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
@@ -343,18 +422,16 @@ export const installModule = action({
       throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
     }
 
-    const downloadPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`);
-    const downloadObj =
-      downloadPayload && typeof downloadPayload === "object" ? (downloadPayload as Record<string, unknown>) : {};
-    const downloadUrl = asString(downloadObj.url);
-    if (!downloadUrl) {
-      throw new Error("Marketplace did not return a download URL");
+    const download = await fetchMarketplaceDownload(marketplaceModuleId);
+    const declaredPermissions = await fetchMarketplaceArchivePermissions(download);
+    const unapproved = unapprovedPermissions(declaredPermissions, approvedPermissions);
+    if (unapproved.length > 0) {
+      throw new Error(
+        `${detail.name}@${detail.version} asks for permissions that were not approved (${unapproved.join(", ")}). ` +
+          "Review the module and install again."
+      );
     }
-    const sha256 = asString(downloadObj.sha256);
-    if (sha256.length < 7) {
-      throw new Error("Marketplace did not return a valid sha256 hash");
-    }
-    const moduleKey = `${marketplaceModuleId}:${detail.version}:${sha256.slice(0, 7)}`;
+    const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
 
     await ctx.runMutation(internal.transientEvents.emit, {
       instanceId,
@@ -367,7 +444,7 @@ export const installModule = action({
 
     try {
       const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-      await rpc.installModuleFromUrl(downloadUrl, moduleKey, {
+      await rpc.installModuleFromUrl(download.url, moduleKey, {
         name: detail.name,
         version: detail.version,
         source: "marketplace",

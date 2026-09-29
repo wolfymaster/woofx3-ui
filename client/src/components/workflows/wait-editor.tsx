@@ -1,12 +1,30 @@
-import type { AggregationConfig, WaitConfig } from "@woofx3/api";
+import type { AggregationConfig } from "@woofx3/api";
+import { useEffect, useState } from "react";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  DEFAULT_AGGREGATION,
+  DEFAULT_ON_TIMEOUT,
+  DELAY_BOUNDS,
+  type DurationBounds,
+  type DurationUnit,
+  describeWaitTimeout,
+  durationAmount,
+  type EventWaitConfig,
+  formatGoDuration,
+  parseDurationInput,
+  parseGoDuration,
+  pickDurationUnit,
+  setWaitTimeoutEnabled,
+  switchWaitType,
+  TIMEOUT_BOUNDS,
+  type WaitConfig,
+  type WaitType,
+} from "@/lib/wait-config";
 import type { VariableOption } from "@/lib/workflow-variables";
 import { ConditionEditor } from "./condition-editor";
-
-const DEFAULT_AGGREGATION: AggregationConfig = { strategy: "count", threshold: 1 };
 
 interface WaitEditorProps {
   wait: WaitConfig;
@@ -16,32 +34,145 @@ interface WaitEditorProps {
 }
 
 export function WaitEditor({ wait, onChange, availableVariables = [] }: WaitEditorProps) {
-  const isAggregation = wait.type === "aggregation";
-
   return (
     <div className="space-y-4">
       <div className="space-y-2">
         <Label>Wait type</Label>
-        <Select
-          value={wait.type}
-          onValueChange={(value) =>
-            onChange({
-              ...wait,
-              type: value as WaitConfig["type"],
-              aggregation: value === "aggregation" ? (wait.aggregation ?? DEFAULT_AGGREGATION) : wait.aggregation,
-            })
-          }
-        >
+        <Select value={wait.type} onValueChange={(value) => onChange(switchWaitType(wait, value as WaitType))}>
           <SelectTrigger data-testid="select-wait-type">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="event">Until an event fires</SelectItem>
             <SelectItem value="aggregation">Until an aggregation threshold is met</SelectItem>
+            <SelectItem value="delay">For a set time</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
+      {wait.type === "delay" ? (
+        <div className="space-y-2">
+          <Label htmlFor="wait-delay">Wait for</Label>
+          <DurationInput
+            id="wait-delay"
+            valueMs={wait.durationMs}
+            units={DELAY_UNITS}
+            bounds={DELAY_BOUNDS}
+            onChange={(durationMs) => onChange({ type: "delay", durationMs })}
+            hint="Then the workflow continues. Events don't end the wait early."
+          />
+        </div>
+      ) : (
+        <EventWaitFields wait={wait} onChange={onChange} availableVariables={availableVariables} />
+      )}
+    </div>
+  );
+}
+
+const DELAY_UNITS: readonly DurationUnit[] = ["seconds", "minutes"];
+const TIMEOUT_UNITS: readonly DurationUnit[] = ["seconds", "minutes", "hours"];
+const UNIT_LABELS: Record<DurationUnit, string> = { seconds: "Seconds", minutes: "Minutes", hours: "Hours" };
+
+/**
+ * An amount plus a unit picker. Keeps the typed text as a draft so an out-of-range or
+ * half-typed entry can show its error without being saved; only a valid duration reaches
+ * `onChange`. `valueMs` is null when the stored value is not a duration the editor can read.
+ */
+function DurationInput({
+  id,
+  valueMs,
+  units,
+  bounds,
+  onChange,
+  hint,
+}: {
+  id: string;
+  valueMs: number | null;
+  units: readonly DurationUnit[];
+  bounds: DurationBounds;
+  onChange: (durationMs: number) => void;
+  hint?: string;
+}) {
+  const [unit, setUnit] = useState<DurationUnit>(() =>
+    valueMs === null ? units[0] : pickDurationUnit(valueMs, units)
+  );
+  const [text, setText] = useState(() => (valueMs === null ? "" : String(durationAmount(valueMs, unit))));
+  const parsed = parseDurationInput(text, unit, bounds);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only an outside change of the stored duration resets the draft; typing must not
+  useEffect(() => {
+    if (valueMs === null) {
+      return;
+    }
+    const current = parseDurationInput(text, unit, bounds);
+    if (!current.ok || current.durationMs !== valueMs) {
+      const nextUnit = pickDurationUnit(valueMs, units);
+      setUnit(nextUnit);
+      setText(String(durationAmount(valueMs, nextUnit)));
+    }
+  }, [valueMs]);
+
+  const commit = (nextText: string, nextUnit: DurationUnit) => {
+    setText(nextText);
+    setUnit(nextUnit);
+    const result = parseDurationInput(nextText, nextUnit, bounds);
+    if (result.ok && result.durationMs !== valueMs) {
+      onChange(result.durationMs);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-2">
+        <Input
+          id={id}
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="any"
+          value={text}
+          onChange={(e) => commit(e.target.value, unit)}
+          aria-invalid={!parsed.ok}
+          className="flex-1"
+          data-testid={`input-${id}`}
+        />
+        <Select value={unit} onValueChange={(value) => commit(text, value as DurationUnit)}>
+          <SelectTrigger className="w-32" data-testid={`select-${id}-unit`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {units.map((u) => (
+              <SelectItem key={u} value={u}>
+                {UNIT_LABELS[u]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      {parsed.ok ? (
+        hint && <p className="text-xs text-muted-foreground">{hint}</p>
+      ) : (
+        <p className="text-xs text-destructive" data-testid={`text-${id}-error`}>
+          {parsed.message}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function EventWaitFields({
+  wait,
+  onChange,
+  availableVariables,
+}: {
+  wait: EventWaitConfig;
+  onChange: (wait: WaitConfig) => void;
+  availableVariables: VariableOption[];
+}) {
+  const isAggregation = wait.type === "aggregation";
+
+  return (
+    <>
       <div className="space-y-2">
         <Label htmlFor="wait-event">Event</Label>
         <VariableAwareInput
@@ -139,33 +270,7 @@ export function WaitEditor({ wait, onChange, availableVariables = [] }: WaitEdit
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="wait-timeout">Timeout</Label>
-          <Input
-            id="wait-timeout"
-            value={String(wait.timeout ?? "")}
-            onChange={(e) => onChange({ ...wait, timeout: e.target.value || undefined })}
-            placeholder="30s"
-            data-testid="input-wait-timeout"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>On timeout</Label>
-          <Select
-            value={wait.onTimeout ?? "fail"}
-            onValueChange={(value) => onChange({ ...wait, onTimeout: value as WaitConfig["onTimeout"] })}
-          >
-            <SelectTrigger data-testid="select-wait-on-timeout">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="fail">Fail workflow</SelectItem>
-              <SelectItem value="continue">Continue anyway</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+      <TimeoutFields wait={wait} onChange={onChange} />
 
       <div className="space-y-2">
         <Label>Match conditions (optional)</Label>
@@ -177,6 +282,54 @@ export function WaitEditor({ wait, onChange, availableVariables = [] }: WaitEdit
           availableVariables={availableVariables}
         />
       </div>
+    </>
+  );
+}
+
+function TimeoutFields({ wait, onChange }: { wait: EventWaitConfig; onChange: (wait: WaitConfig) => void }) {
+  const hasTimeout = Boolean(wait.timeout);
+
+  return (
+    <div className="space-y-2">
+      <Label>Timeout</Label>
+      <Select
+        value={hasTimeout ? "after" : "none"}
+        onValueChange={(value) => onChange(setWaitTimeoutEnabled(wait, value === "after"))}
+      >
+        <SelectTrigger data-testid="select-wait-timeout-mode">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">No timeout</SelectItem>
+          <SelectItem value="after">Give up after a set time</SelectItem>
+        </SelectContent>
+      </Select>
+      {hasTimeout && (
+        <div className="grid grid-cols-2 gap-3">
+          <DurationInput
+            id="wait-timeout"
+            valueMs={parseGoDuration(String(wait.timeout))}
+            units={TIMEOUT_UNITS}
+            bounds={TIMEOUT_BOUNDS}
+            onChange={(durationMs) => onChange({ ...wait, timeout: formatGoDuration(durationMs) })}
+          />
+          <Select
+            value={wait.onTimeout ?? DEFAULT_ON_TIMEOUT}
+            onValueChange={(value) => onChange({ ...wait, onTimeout: value as EventWaitConfig["onTimeout"] })}
+          >
+            <SelectTrigger aria-label="On timeout" data-testid="select-wait-on-timeout">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fail">Then fail the workflow</SelectItem>
+              <SelectItem value="continue">Then continue anyway</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground" data-testid="text-wait-timeout-summary">
+        {describeWaitTimeout(wait)}.
+      </p>
     </div>
   );
 }

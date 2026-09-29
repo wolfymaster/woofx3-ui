@@ -12,13 +12,13 @@ import { examplePayloadFromShape } from "@/lib/test-event-payload";
  * A trigger that declares an `emits` shape gets labelled fields instead — see
  * ShapeTestEventForm.
  */
-export function JsonTestEventForm({ preset }: TestEventProps) {
+export function JsonTestEventForm({ preset, runner }: TestEventProps) {
   const emits = preset.emits ?? [];
   const [text, setText] = useState(() => JSON.stringify(examplePayloadFromShape(emits), null, 2));
   const parsed = useMemo(() => parseEventData(text), [text]);
 
   return (
-    <TestEventForm preset={preset} payload={parsed.ok ? parsed.payload : null}>
+    <TestEventForm preset={preset} runner={runner} payload={parsed.ok ? parsed.payload : null}>
       <div className="space-y-2">
         <Label htmlFor="test-event-payload">Event data</Label>
         <Textarea

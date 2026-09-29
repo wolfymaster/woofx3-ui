@@ -1,11 +1,13 @@
 import { api } from "@convex/_generated/api";
-import type { Doc } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
-import { useMutation, useQuery } from "convex/react";
-import { Check, LayoutGrid, Loader2, PanelTop, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useMutation } from "convex/react";
+import { Check, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CommandBar } from "@/components/dashboard/command-bar";
 import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { PanelTabs } from "@/components/dashboard/panel-tabs";
+import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { WidgetRail } from "@/components/dashboard/widget-rail";
 import { StatusBarCenterPortal } from "@/components/layout/status-bar-slot";
 import {
@@ -20,28 +22,28 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Carousel, type CarouselApi, CarouselContent, CarouselItem } from "@/components/ui/carousel";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NotRunningNotice } from "@/components/workflows/not-running-notice";
 import { useInstance } from "@/hooks/use-instance";
-import { widgetSlotId } from "@/lib/dashboard-widgets/types";
-import { $commandBarHidden } from "@/lib/stores";
-import { cn } from "@/lib/utils";
-
-type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
-type DashboardPanelWidget = DashboardPanel["widgets"][number];
+import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
+import {
+  assignWidget,
+  configureWidget,
+  type DashboardPanelWidget,
+  isPanelMounted,
+  removeWidget,
+  resizeZone,
+} from "@/lib/dashboard-panels";
+import { $commandBarHidden, $dashboardLayoutHint } from "@/lib/stores";
 
 export default function Dashboard() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const commandBarHidden = useStore($commandBarHidden);
 
-  const panels = useQuery(api.dashboardLayouts.getPanels, instance ? { instanceId: instance._id } : "skip");
+  const layoutHint = useStore($dashboardLayoutHint);
+  // Starts with the cached instance id, alongside the membership list; the
+  // result is only rendered once `instance` confirms that id.
+  const panels = useOptimisticInstanceQuery(api.dashboardLayouts.getPanels);
   const addPanel = useMutation(api.dashboardLayouts.addPanel);
   const removePanel = useMutation(api.dashboardLayouts.removePanel);
   const renamePanel = useMutation(api.dashboardLayouts.renamePanel);
@@ -53,10 +55,13 @@ export default function Dashboard() {
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
   const [addPanelOpen, setAddPanelOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<{ id: string; name: string } | null>(null);
-  const [renamingPanelId, setRenamingPanelId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const renameInputRef = useRef<HTMLInputElement>(null);
   const wheelCooldownRef = useRef(false);
+
+  const instanceId = instance?._id;
+  // Read by the stable handlers below. Convex hands back a new panels array on
+  // every change, and depending on it would give every canvas new handlers too.
+  const panelsRef = useRef(panels);
+  panelsRef.current = panels;
 
   useEffect(() => {
     if (!carouselApi) {
@@ -135,14 +140,111 @@ export default function Dashboard() {
     }
   }, [panels, activeIndex]);
 
+  const handleSelectTab = useCallback(
+    (index: number) => {
+      setActiveIndex(index);
+      carouselApi?.scrollTo(index);
+    },
+    [carouselApi]
+  );
+
+  const handleRenamePanel = useCallback(
+    (panelId: string, name: string) => {
+      if (!instanceId) {
+        return;
+      }
+      void renamePanel({ instanceId, panelId, name });
+    },
+    [instanceId, renamePanel]
+  );
+
+  const openAddPanel = useCallback(() => {
+    setAddPanelOpen(true);
+  }, []);
+
+  const enterEditMode = useCallback(() => {
+    const snapshot: Record<string, DashboardPanelWidget[]> = {};
+    for (const panel of panelsRef.current ?? []) {
+      snapshot[panel.id] = panel.widgets;
+    }
+    setDraftWidgets(snapshot);
+    setIsEditing(true);
+  }, []);
+
+  /** Applies `edit` to a panel's draft, starting from its saved widgets if it has none yet. */
+  const editDraft = useCallback(
+    (panelId: string, edit: (widgets: DashboardPanelWidget[]) => DashboardPanelWidget[]) => {
+      setDraftWidgets((prev) => {
+        const current = prev?.[panelId] ?? panelsRef.current?.find((panel) => panel.id === panelId)?.widgets;
+        if (!current) {
+          return prev;
+        }
+        const next = edit(current);
+        if (next === current) {
+          return prev;
+        }
+        return { ...prev, [panelId]: next };
+      });
+    },
+    []
+  );
+
+  const handleAssignWidget = useCallback(
+    (panelId: string, zoneId: string, type: string) => {
+      // Minted outside the updater, which React may call twice.
+      const slotId = crypto.randomUUID();
+      editDraft(panelId, (widgets) => assignWidget(widgets, zoneId, type, slotId));
+    },
+    [editDraft]
+  );
+
+  const handleRemoveWidget = useCallback(
+    (panelId: string, zoneId: string, slotId: string) => {
+      editDraft(panelId, (widgets) => removeWidget(widgets, zoneId, slotId));
+    },
+    [editDraft]
+  );
+
+  const handleResizeWidgets = useCallback(
+    (panelId: string, zoneId: string, sizes: number[]) => {
+      editDraft(panelId, (widgets) => resizeZone(widgets, zoneId, sizes));
+    },
+    [editDraft]
+  );
+
+  const handleWidgetConfigChange = useCallback(
+    (panelId: string, zoneId: string, slotId: string, type: string, config: Record<string, unknown>) => {
+      if (isEditing) {
+        editDraft(panelId, (widgets) => configureWidget(widgets, zoneId, slotId, type, config));
+        return;
+      }
+      // Outside edit mode there is no draft anyone will later Save, so a widget's
+      // own settings (a macro added to the pad, a reordered button) have to reach
+      // Convex now or they are lost on the next load.
+      const panel = panelsRef.current?.find((candidate) => candidate.id === panelId);
+      if (!instanceId || !panel) {
+        return;
+      }
+      void setPanelWidgets({
+        instanceId,
+        panelId,
+        widgets: configureWidget(panel.widgets, zoneId, slotId, type, config),
+      });
+    },
+    [isEditing, editDraft, instanceId, setPanelWidgets]
+  );
+
+  const firstLayoutId = instance && panels && panels.length > 0 ? panels[0].layoutId : null;
+  useEffect(() => {
+    if (firstLayoutId) {
+      $dashboardLayoutHint.set(firstLayoutId);
+    }
+  }, [firstLayoutId]);
+
   const isLoading = instanceLoading || (!!instance && panels === undefined);
 
   if (isLoading) {
-    return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <DashboardSkeleton layoutId={layoutHint} />;
   }
 
   if (!instance || !panels || panels.length === 0) {
@@ -157,12 +259,6 @@ export default function Dashboard() {
     );
   }
 
-  const handleSelectTab = (value: string) => {
-    const index = Number(value);
-    setActiveIndex(index);
-    carouselApi?.scrollTo(index);
-  };
-
   const handleAddPanel = async (layoutId: string) => {
     const panelCountBeforeAdd = panels.length;
     await addPanel({ instanceId: instance._id, layoutId });
@@ -176,34 +272,6 @@ export default function Dashboard() {
     }
     await removePanel({ instanceId: instance._id, panelId: removeTarget.id });
     setRemoveTarget(null);
-  };
-
-  const startRenamingPanel = (panelId: string, currentName: string) => {
-    setRenamingPanelId(panelId);
-    setRenameValue(currentName);
-    setTimeout(() => {
-      renameInputRef.current?.focus();
-      renameInputRef.current?.select();
-    }, 0);
-  };
-
-  const commitRenamePanel = async (panelId: string) => {
-    setRenamingPanelId(null);
-    const trimmed = renameValue.trim();
-    const panel = panels.find((p) => p.id === panelId);
-    if (!trimmed || !panel || trimmed === panel.name) {
-      return;
-    }
-    await renamePanel({ instanceId: instance._id, panelId, name: trimmed });
-  };
-
-  const enterEditMode = () => {
-    const snapshot: Record<string, DashboardPanelWidget[]> = {};
-    for (const panel of panels) {
-      snapshot[panel.id] = panel.widgets;
-    }
-    setDraftWidgets(snapshot);
-    setIsEditing(true);
   };
 
   const handleCancelEdits = () => {
@@ -224,172 +292,20 @@ export default function Dashboard() {
     setIsEditing(false);
   };
 
-  const setDraftWidgetsForPanel = (panelId: string, widgets: DashboardPanelWidget[]) => {
-    setDraftWidgets((prev) => ({ ...prev, [panelId]: widgets }));
-  };
-
-  // Zones can hold more than one widget now (stacked, resizable), so
-  // add/remove keep the rest of that zone's widgets evenly re-split — only
-  // an explicit drag (handleResizeWidgets) sets custom sizes after that.
-  const handleAssignWidget = (
-    panelId: string,
-    currentWidgets: DashboardPanelWidget[],
-    zoneId: string,
-    type: string
-  ) => {
-    const otherWidgets = currentWidgets.filter((widget) => widget.zoneId !== zoneId);
-    const zoneWidgets = currentWidgets.filter((widget) => widget.zoneId === zoneId);
-    const evenSize = 100 / (zoneWidgets.length + 1);
-    const resizedZoneWidgets = zoneWidgets.map((widget) => ({ ...widget, size: evenSize }));
-    const newWidget: DashboardPanelWidget = { zoneId, slotId: crypto.randomUUID(), type, size: evenSize };
-    setDraftWidgetsForPanel(panelId, [...otherWidgets, ...resizedZoneWidgets, newWidget]);
-  };
-
-  const handleRemoveWidget = (
-    panelId: string,
-    currentWidgets: DashboardPanelWidget[],
-    zoneId: string,
-    slotId: string
-  ) => {
-    const otherWidgets = currentWidgets.filter((widget) => widget.zoneId !== zoneId);
-    const remainingZoneWidgets = currentWidgets.filter(
-      (widget) => widget.zoneId === zoneId && widgetSlotId(widget) !== slotId
-    );
-    const evenSize = remainingZoneWidgets.length > 0 ? 100 / remainingZoneWidgets.length : undefined;
-    const resizedZoneWidgets = remainingZoneWidgets.map((widget) => ({ ...widget, size: evenSize }));
-    setDraftWidgetsForPanel(panelId, [...otherWidgets, ...resizedZoneWidgets]);
-  };
-
-  const handleWidgetConfigChange = (
-    panelId: string,
-    currentWidgets: DashboardPanelWidget[],
-    zoneId: string,
-    slotId: string,
-    type: string,
-    config: Record<string, unknown>
-  ) => {
-    const widgets = currentWidgets.map((widget) =>
-      widget.zoneId === zoneId && widgetSlotId(widget) === slotId ? { ...widget, type, config } : widget
-    );
-    if (isEditing) {
-      setDraftWidgetsForPanel(panelId, widgets);
-      return;
-    }
-    // Outside edit mode there is no draft anyone will later Save, so a widget's
-    // own settings (a macro added to the pad, a reordered button) have to reach
-    // Convex now or they are lost on the next load.
-    void setPanelWidgets({ instanceId: instance._id, panelId, widgets });
-  };
-
-  const handleResizeWidgets = (
-    panelId: string,
-    currentWidgets: DashboardPanelWidget[],
-    zoneId: string,
-    sizes: number[]
-  ) => {
-    let index = 0;
-    const widgets = currentWidgets.map((widget) => {
-      if (widget.zoneId !== zoneId) {
-        return widget;
-      }
-      const size = sizes[index];
-      index += 1;
-      return size == null ? widget : { ...widget, size };
-    });
-    setDraftWidgetsForPanel(panelId, widgets);
-  };
-
   return (
     <div className="h-full flex">
       <div className="flex-1 min-w-0 flex flex-col">
         <StatusBarCenterPortal>
-          <Tabs value={String(activeIndex)} onValueChange={handleSelectTab}>
-            <TabsList className="h-6 p-0.5 bg-transparent">
-              {panels.map((panel, index) =>
-                renamingPanelId === panel.id ? (
-                  <input
-                    key={panel.id}
-                    ref={renameInputRef}
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    onBlur={() => void commitRenamePanel(panel.id)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void commitRenamePanel(panel.id);
-                      } else if (e.key === "Escape") {
-                        setRenamingPanelId(null);
-                      }
-                    }}
-                    className="h-5 w-20 px-2 rounded-sm bg-background border border-primary text-[11px] outline-none"
-                    data-testid={`input-rename-panel-${panel.id}`}
-                  />
-                ) : (
-                  <ContextMenu key={panel.id}>
-                    <ContextMenuTrigger asChild>
-                      <TabsTrigger
-                        value={String(index)}
-                        className={cn(
-                          "h-5 px-2 text-[11px]",
-                          // ContextMenuTrigger's asChild also writes `data-state` (open/closed) onto
-                          // this same element, clobbering the Tabs primitive's own active/inactive
-                          // data-state — so drive the active style from React state instead.
-                          index === activeIndex && "bg-muted text-foreground shadow-sm"
-                        )}
-                        data-testid={`tab-panel-${panel.id}`}
-                      >
-                        {panel.name}
-                      </TabsTrigger>
-                    </ContextMenuTrigger>
-                    <ContextMenuContent>
-                      {!isEditing && (
-                        <>
-                          <ContextMenuItem onClick={enterEditMode} data-testid="button-toggle-edit">
-                            <LayoutGrid className="h-3.5 w-3.5 mr-2" />
-                            Edit
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                        </>
-                      )}
-                      {commandBarHidden && (
-                        <>
-                          <ContextMenuItem
-                            onClick={() => $commandBarHidden.set(false)}
-                            data-testid="button-show-command-bar"
-                          >
-                            <PanelTop className="h-3.5 w-3.5 mr-2" />
-                            Show Command Bar
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                        </>
-                      )}
-                      <ContextMenuItem
-                        onClick={() => startRenamingPanel(panel.id, panel.name)}
-                        data-testid={`button-rename-panel-${panel.id}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5 mr-2" />
-                        Rename
-                      </ContextMenuItem>
-                      <ContextMenuItem onClick={() => setAddPanelOpen(true)} data-testid="button-add-panel">
-                        <Plus className="h-3.5 w-3.5 mr-2" />
-                        Add Panel
-                      </ContextMenuItem>
-                      <ContextMenuSeparator />
-                      <ContextMenuItem
-                        onClick={() => setRemoveTarget({ id: panel.id, name: panel.name })}
-                        disabled={panels.length <= 1}
-                        className="text-destructive focus:text-destructive"
-                        data-testid={`button-remove-panel-${panel.id}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5 mr-2" />
-                        Delete
-                      </ContextMenuItem>
-                    </ContextMenuContent>
-                  </ContextMenu>
-                )
-              )}
-            </TabsList>
-          </Tabs>
+          <PanelTabs
+            panels={panels}
+            activeIndex={activeIndex}
+            isEditing={isEditing}
+            onSelect={handleSelectTab}
+            onEnterEdit={enterEditMode}
+            onRename={handleRenamePanel}
+            onAddPanel={openAddPanel}
+            onRemovePanel={setRemoveTarget}
+          />
         </StatusBarCenterPortal>
 
         {isEditing && (
@@ -405,29 +321,31 @@ export default function Dashboard() {
           </div>
         )}
 
+        <NotRunningNotice />
+
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
+        <StarterPacksNudge instanceId={instance._id} />
 
         <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
           <CarouselContent>
-            {panels.map((panel) => {
-              const currentWidgets = (isEditing && draftWidgets?.[panel.id]) || panel.widgets;
-              const effectivePanel = isEditing ? { ...panel, widgets: currentWidgets } : panel;
-
-              return (
-                <CarouselItem key={panel.id} className="h-full pl-0">
+            {panels.map((panel, index) => (
+              // Every slide keeps its item so Embla's geometry is unchanged; only
+              // panels near the selected one render widgets (see isPanelMounted).
+              <CarouselItem key={panel.id} className="h-full pl-0">
+                {isPanelMounted(index, activeIndex) && (
                   <DashboardCanvas
-                    panel={effectivePanel}
+                    panelId={panel.id}
+                    layoutId={panel.layoutId}
+                    widgets={(isEditing && draftWidgets?.[panel.id]) || panel.widgets}
                     isEditing={isEditing}
-                    onAssignWidget={(zoneId, type) => handleAssignWidget(panel.id, currentWidgets, zoneId, type)}
-                    onRemoveWidget={(zoneId, slotId) => handleRemoveWidget(panel.id, currentWidgets, zoneId, slotId)}
-                    onWidgetConfigChange={(zoneId, slotId, type, config) =>
-                      handleWidgetConfigChange(panel.id, currentWidgets, zoneId, slotId, type, config)
-                    }
-                    onResizeWidgets={(zoneId, sizes) => handleResizeWidgets(panel.id, currentWidgets, zoneId, sizes)}
+                    onAssignWidget={handleAssignWidget}
+                    onRemoveWidget={handleRemoveWidget}
+                    onWidgetConfigChange={handleWidgetConfigChange}
+                    onResizeWidgets={handleResizeWidgets}
                   />
-                </CarouselItem>
-              );
-            })}
+                )}
+              </CarouselItem>
+            ))}
           </CarouselContent>
         </Carousel>
 

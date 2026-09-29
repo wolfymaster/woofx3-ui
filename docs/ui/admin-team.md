@@ -1,6 +1,6 @@
 # Admin and team
 
-**Routes:** `/admin/engine`, `/admin/integrations`, `/admin/storage`, `/admin/appearance`, `/team`
+**Routes:** `/admin/engine`, `/admin/integrations`, `/admin/storage`, `/admin/backup`, `/admin/appearance`, `/team`
 **Primary files:** `client/src/pages/admin/*.tsx`, `client/src/pages/team.tsx`
 
 ## Admin (`/admin`)
@@ -8,15 +8,21 @@
 Reached from the gear icon in the header's utility cluster. It is a section like Stream and Help: the shell renders the sidebar from `ADMIN_ITEMS` in `nav-config.ts`, and `/admin` redirects to `/admin/engine`.
 
 - **Engine** (`admin/engine.tsx`) — engine URL for the selected instance (persisted on the instance record and mirrored into the `$engineUrl` Nanostore), a connection test via the Convex action `engineHealth.testConnection` (server-side, so no CORS), registration status, `EngineSyncCard`, and the Danger Zone that deletes the instance.
-- **Integrations** (`admin/integrations.tsx`) — `TwitchIntegrationCard` plus placeholder YouTube/Discord cards and an API-keys card. The Twitch OAuth flow returns to `/admin/integrations`.
+- **Integrations** (`admin/integrations.tsx`) — `TwitchIntegrationCard` plus placeholder YouTube/Discord cards and an API-keys card. The Twitch OAuth flow returns to `/admin/integrations`. Under the Twitch card, `TwitchScopeStatus` compares the link's granted scopes with `TWITCH_INTEGRATION_SCOPES` through `twitchScopeHealth` (`convex/lib/twitchScopeHealth.ts`) and names the missing capabilities, or says Twitch refused the token (`platformLinks.authFailedAt`, set when Twitch answers a refresh with "Invalid refresh token" and cleared by a relink or a successful refresh; a refresh outcome is only written while the link still holds the refresh token that was exchanged, so a late answer cannot overwrite a newer relink). The same health drives `TwitchReconnectBanner` under the shell header on every page, dismissible for the browser session per instance and gap. Both offer "Reconnect as @account" through the existing connect flow, which replaces the link, and only to owners and admins (`viewerCanRelink` on `instances.getPlatformLinks`); members are told to ask an admin.
 - **Storage** (`admin/storage.tsx`) — per-instance storage provider config, via `storage.getConfig` / `storage.setConfig` actions.
+- **Backup** (`admin/backup.tsx`) — export the instance's configuration (workflows, chat commands, command groups, module resources) as a config bundle file, and import one with a preview first. Backed by the engine's `exportConfig` / `previewImport` / `importConfig` (woofx3 `docs/services/config-bundles.md`) through `convex/configBackup.ts`.
+  - Access (`configBackupAccess` in `convex/lib/configBundle.ts`): any instance member may export, since a bundle holds no secrets, tokens, module settings or live values, only configuration every member can already read. Exporting group members and per-user grants (usernames, personal data) and importing are owner/admin only.
+  - The bundle never becomes a Convex value: workflow definitions can carry `$`-prefixed keys Convex rejects. It crosses the boundary as the file's raw text, split by `chunkText` into strings below Convex's 1 MB per-string limit. The actions stay in the default runtime, whose 16 MiB argument limit covers the engine's 5 MiB bundle limit; a `"use node"` action allows only 5 MiB in total.
+  - The browser refuses a file over 5 MiB before reading it; the action checks again. Import re-plans on the engine, so the preview is advisory, and it is best-effort per item: the results table reports each item's outcome.
+  - Group members and per-user command grants in a file are applied only when "Also apply group members…" is checked (`applyMembers`, off by default), so a shared file cannot quietly grant access. With it on, the preview's `grants_access` reasons are gathered into a warning above the plan; `privileged_action` reasons (moderation or stream-editing workflows) are highlighted the same way. Unknown reason codes fall back to the code and the engine's message.
 - **Appearance** (`admin/appearance.tsx`) — theme mode and color preset through `useTheme`.
 
 The old `/settings` page also had Profile, Notifications, and Security tabs. Those were unwired mockups and were removed; `/settings` and `/settings/:tab` now redirect into `/admin`.
 
 ## Team (`/team`)
 
-- UI for **members** and **accounts** with invites and role badges (owner, admin, member, viewer).
-- Data is loaded via **TanStack Query** with **`queryFn`s that currently resolve to empty arrays** and a hard-coded `teamId` placeholder — the screen is **presentational / in progress** relative to Convex account sharing (`accounts`, membership APIs).
-
-For production behavior, Team should eventually use the same **account membership model** documented in `CLAUDE.md` (Convex-only; no engine changes for sharing).
+- Members and pending invitations for the selected instance's account, from `convex/accountMembers.ts` and `convex/invitations.ts`. Sharing is Convex-only; the engine is never involved.
+- **Invite** (`/team/invite`, `client/src/pages/team-invite.tsx`) invites one person by **Twitch username** (the default) or by **email**, and returns a link for the inviter to share.
+  - Twitch: `invitations.lookupTwitchUser` (team managers only) looks the login up on Helix and returns a confirmation card, with partner/affiliate badges, plus moderator/VIP when the account's Twitch link already has a scope that can read them. `invitations.create` takes only the Twitch user id and looks the profile up again on the server, so the stored name and avatar never come from the client. The lookup uses the account's Twitch link token when there is one, and an app token (client credentials) otherwise.
+  - An invitation targets exactly one of an email or a platform account (`convex/lib/invitationTarget.ts`). A Twitch invite is accepted only by a user whose `twitch` auth account has the same Twitch user id. Logins can change, so they are only used for display.
+- **Accept** (`/auth/accept-invite?token=…`): for a Twitch invite, the page shows whose Twitch account the link is for (`invitations.previewByToken`) and offers Twitch sign-in directly.

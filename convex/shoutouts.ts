@@ -23,13 +23,13 @@ import {
 } from "./lib/shoutoutSchedule";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { authorizeTwitch, authorizeTwitchUnattended } from "./lib/twitchAuth";
+import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
 
 const TWITCH_CHATTERS_URL = "https://api.twitch.tv/helix/chat/chatters";
-const TWITCH_USERS_URL = "https://api.twitch.tv/helix/users";
 const TWITCH_SHOUTOUTS_URL = "https://api.twitch.tv/helix/chat/shoutouts";
 
 const CHATTERS_SCOPE = "moderator:read:chatters";
-const SHOUTOUT_SCOPE = "moderator:manage:shoutouts";
+export const SHOUTOUT_SCOPE = "moderator:manage:shoutouts";
 
 // Helix caps a chatters page at 1000. A channel with more concurrent chatters
 // than that does not need an autocomplete built on a full roster, so this reads
@@ -130,17 +130,8 @@ export const listChatters = action({
  */
 export const lookupUser = action({
   args: { instanceId: v.id("instances"), login: v.string() },
-  handler: async (
-    ctx,
-    args
-  ): Promise<{
-    twitchUserId: string;
-    login: string;
-    displayName: string;
-    profileImageUrl?: string;
-    broadcasterType?: string;
-  } | null> => {
-    const login = args.login.trim().toLowerCase().replace(/^@/, "");
+  handler: async (ctx, args): Promise<TwitchUser | null> => {
+    const login = normalizeTwitchLogin(args.login);
     if (!login) {
       return null;
     }
@@ -149,34 +140,7 @@ export const lookupUser = action({
     // here means a missing permission surfaces at confirmation time rather than
     // two minutes later inside the queue processor.
     const { accessToken, clientId } = await authorizeTwitch(ctx, args.instanceId, SHOUTOUT_SCOPE);
-
-    const response = await fetch(`${TWITCH_USERS_URL}?login=${encodeURIComponent(login)}`, {
-      headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
-    });
-    if (!response.ok) {
-      throw new Error(`Twitch user lookup failed: ${response.status} ${await response.text()}`);
-    }
-
-    const body = (await response.json()) as {
-      data: Array<{
-        id: string;
-        login: string;
-        display_name: string;
-        profile_image_url?: string;
-        broadcaster_type?: string;
-      }>;
-    };
-    const user = body.data[0];
-    if (!user) {
-      return null;
-    }
-    return {
-      twitchUserId: user.id,
-      login: user.login,
-      displayName: user.display_name,
-      profileImageUrl: user.profile_image_url,
-      broadcasterType: user.broadcaster_type,
-    };
+    return fetchTwitchUser({ accessToken, clientId }, { login });
   },
 });
 

@@ -1,5 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import type { ActionStep } from "@woofx3/api";
+import type { ActionStep, CreateCommandInput } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -52,6 +52,39 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
 const actionsValidator = v.array(v.any());
 const visibilityValidator = v.union(v.literal("public"), v.literal("restricted"));
 
+export type NewCommand = Omit<CreateCommandInput, "correlationKey">;
+
+/**
+ * Create a chat command in the engine and mirror the engine's copy into the
+ * read cache, returning its engine id. The caller has already authorized the
+ * instance. Every path that creates a command goes through here.
+ */
+export async function createCommandInEngine(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  instance: InstanceContext,
+  command: NewCommand
+): Promise<string> {
+  const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+  const result = await rpc.createCommand({ ...command, correlationKey: crypto.randomUUID() });
+
+  await ctx.runMutation(internal.chatCommands.upsertFromWebhook, {
+    instanceId,
+    engineCommandId: result.id,
+    command: result.command,
+    actions: escapeDollarKeys(result.actions ?? []) as unknown[],
+    cooldown: result.cooldown,
+    priority: result.priority,
+    enabled: result.enabled,
+    visibility: result.visibility,
+    groupIds: result.groupIds ?? [],
+    usernames: result.usernames ?? [],
+    argumentPattern: result.argumentPattern,
+  });
+
+  return result.id;
+}
+
 export const createCommand = action({
   args: {
     instanceId: v.id("instances"),
@@ -67,10 +100,7 @@ export const createCommand = action({
   },
   handler: async (ctx, args): Promise<{ engineCommandId: string }> => {
     const bundle = await requireInstanceContext(ctx, args.instanceId);
-    const correlationKey = crypto.randomUUID();
-
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    const result = await rpc.createCommand({
+    const engineCommandId = await createCommandInEngine(ctx, args.instanceId, bundle, {
       command: args.command,
       actions: unescapeDollarKeys(args.actions) as ActionStep[],
       cooldown: args.cooldown,
@@ -80,24 +110,8 @@ export const createCommand = action({
       groupIds: args.groupIds,
       usernames: args.usernames,
       argumentPattern: args.argumentPattern,
-      correlationKey,
     });
-
-    await ctx.runMutation(internal.chatCommands.upsertFromWebhook, {
-      instanceId: args.instanceId,
-      engineCommandId: result.id,
-      command: result.command,
-      actions: escapeDollarKeys(result.actions ?? []) as unknown[],
-      cooldown: result.cooldown,
-      priority: result.priority,
-      enabled: result.enabled,
-      visibility: result.visibility,
-      groupIds: result.groupIds ?? [],
-      usernames: result.usernames ?? [],
-      argumentPattern: result.argumentPattern,
-    });
-
-    return { engineCommandId: result.id };
+    return { engineCommandId };
   },
 });
 
@@ -171,6 +185,35 @@ export const deleteCommand = action({
     }
 
     return { deleted: result.deleted };
+  },
+});
+
+/**
+ * Run a command as the broadcaster, as though they had typed
+ * `!<command> <text>` in chat. The engine applies the command's permissions
+ * to the broadcaster's login, so a restricted command the broadcaster is not
+ * granted is refused here too.
+ */
+export const executeCommand = action({
+  args: {
+    instanceId: v.id("instances"),
+    command: v.string(),
+    /** Everything after the command word, parsed by the engine like chat input. */
+    text: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ success: boolean; message: string }> => {
+    const command = args.command.trim().replace(/^!/, "");
+    if (!command) {
+      throw new Error("Choose a command to run");
+    }
+    const bundle = await requireInstanceContext(ctx, args.instanceId);
+    const broadcaster = await ctx.runQuery(internal.lib.twitchAuth.twitchLoginFor, { instanceId: args.instanceId });
+    if (!broadcaster) {
+      throw new Error("Connect Twitch in Settings → Integrations to run chat commands");
+    }
+
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return await rpc.executeCommand(command, broadcaster, args.text ?? "");
   },
 });
 

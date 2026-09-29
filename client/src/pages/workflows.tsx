@@ -8,6 +8,7 @@ import {
   Loader2,
   MoreVertical,
   Pencil,
+  Play,
   Plus,
   Save,
   Search,
@@ -18,8 +19,9 @@ import {
   Zap,
 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
+import { STARTER_PACKS_PATH } from "@/components/layout/nav-config";
 import { PageHeader } from "@/components/layout/page-header";
 import {
   AlertDialog,
@@ -47,10 +49,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
+import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import StepListEditor from "@/components/workflows/step-list-editor";
+import { TestRunSheet } from "@/components/workflows/test-run-sheet";
+import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { useNotRunningWorkflows, useWorkflowHealthResyncOnMount } from "@/hooks/use-workflow-health";
 import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import { cn } from "@/lib/utils";
 import {
@@ -60,6 +66,8 @@ import {
   workflowStepCount,
   workflowTriggerLabel,
 } from "@/lib/workflow-display";
+import { type WorkflowEditorTab, workflowEditorTab } from "@/lib/workflow-run-route";
+import { otherWorkflowsOnEvent, testRunPreset, workflowEventTrigger } from "@/lib/workflow-test-run";
 
 type WorkflowRow = Doc<"workflows">;
 type EnabledFilter = "all" | "enabled" | "disabled";
@@ -132,6 +140,8 @@ function WorkflowListScreen() {
   const { catalogTriggers } = useWorkflowCatalog();
 
   const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
+  const { byId: notRunning } = useNotRunningWorkflows();
+  useWorkflowHealthResyncOnMount();
   const setEnabled = useAction(api.workflowActions.setEnabled);
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
 
@@ -256,10 +266,15 @@ function WorkflowListScreen() {
             title={allWorkflows.length === 0 ? "No workflows yet" : "No workflows found"}
             description={
               allWorkflows.length === 0
-                ? "Create your first workflow to start automating your stream."
+                ? "Start from a starter pack that thanks followers, welcomes raiders and hypes subs, or build your own."
                 : "Try adjusting your search or filter."
             }
             action={
+              allWorkflows.length === 0
+                ? { label: "Browse Starter Packs", onClick: () => navigate(STARTER_PACKS_PATH) }
+                : undefined
+            }
+            secondaryAction={
               allWorkflows.length === 0 ? { label: "Create Workflow", onClick: () => navigate(CREATE_PATH) } : undefined
             }
           />
@@ -279,6 +294,7 @@ function WorkflowListScreen() {
                 {visibleWorkflows.map((workflow) => {
                   const description = workflowDescription(workflow);
                   const triggerLabel = workflowTriggerLabel(workflow, catalogTriggers);
+                  const health = notRunning.get(workflow.engineWorkflowId);
 
                   return (
                     <TableRow
@@ -303,23 +319,26 @@ function WorkflowListScreen() {
                       </TableCell>
                       <TableCell className="text-muted-foreground">{workflowStepCount(workflow)}</TableCell>
                       <TableCell>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            void handleToggleEnabled(workflow);
-                          }}
-                          className="text-muted-foreground hover:text-foreground transition-colors"
-                          title={workflow.isEnabled ? "Click to disable" : "Click to enable"}
-                        >
-                          {togglingId === workflow.engineWorkflowId ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : workflow.isEnabled ? (
-                            <ToggleRight className="h-5 w-5 text-primary" />
-                          ) : (
-                            <ToggleLeft className="h-5 w-5" />
-                          )}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void handleToggleEnabled(workflow);
+                            }}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title={workflow.isEnabled ? "Click to disable" : "Click to enable"}
+                          >
+                            {togglingId === workflow.engineWorkflowId ? (
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                            ) : workflow.isEnabled ? (
+                              <ToggleRight className="h-5 w-5 text-primary" />
+                            ) : (
+                              <ToggleLeft className="h-5 w-5" />
+                            )}
+                          </button>
+                          {health && <NotRunningBadge health={health} />}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -406,7 +425,12 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
   const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
+  const notRunningHealth = useNotRunningWorkflows().byId.get(engineWorkflowId);
+  const { catalogTriggers, triggerPresets } = useWorkflowCatalog();
+  const search = useSearch();
 
+  const [tab, setTab] = useState<WorkflowEditorTab>(() => workflowEditorTab(search));
+  const [testRunOpen, setTestRunOpen] = useState(false);
   const [currentDefinition, setCurrentDefinition] = useState<WorkflowDefinition | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [showJson, setShowJson] = useState(false);
@@ -439,6 +463,21 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       </div>
     );
   }
+
+  const eventTrigger = workflowEventTrigger(workflow.definition);
+  const testPreset = eventTrigger ? testRunPreset(eventTrigger, catalogTriggers, triggerPresets) : null;
+  const otherWorkflows = eventTrigger
+    ? otherWorkflowsOnEvent(
+        workflows.map((row) => ({
+          engineWorkflowId: row.engineWorkflowId,
+          isEnabled: row.isEnabled,
+          name: workflowName(row),
+          definition: row.definition,
+        })),
+        engineWorkflowId,
+        eventTrigger.event
+      )
+    : [];
 
   const startEditingTitle = () => {
     setEditedTitle(name);
@@ -562,9 +601,30 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
           >
             {workflow.isEnabled ? "Enabled" : "Disabled"}
           </Badge>
+          {notRunningHealth && <NotRunningBadge health={notRunningHealth} />}
         </div>
 
         <div className="flex items-center gap-2">
+          <Tabs value={tab} onValueChange={(value) => setTab(value as WorkflowEditorTab)}>
+            <TabsList>
+              <TabsTrigger value="steps" data-testid="tab-workflow-steps">
+                Steps
+              </TabsTrigger>
+              <TabsTrigger value="runs" data-testid="tab-workflow-runs">
+                Runs
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setTestRunOpen(true)}
+            disabled={!instance}
+            data-testid="button-workflow-test-run"
+          >
+            <Play className="h-4 w-4 mr-2" />
+            Test run
+          </Button>
           <Button size="sm" onClick={handleSave} disabled={!currentDefinition || isSaving}>
             <Save className="h-4 w-4 mr-2" />
             {isSaving ? "Saving…" : "Save"}
@@ -593,9 +653,25 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
+      <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
         <StepListEditor onDefinitionChange={setCurrentDefinition} />
       </div>
+      {tab === "runs" && instance && (
+        <div className="flex-1 overflow-hidden">
+          <WorkflowRunsPanel instanceId={instance._id as Id<"instances">} engineWorkflowId={engineWorkflowId} />
+        </div>
+      )}
+
+      <TestRunSheet
+        open={testRunOpen}
+        onOpenChange={setTestRunOpen}
+        engineWorkflowId={engineWorkflowId}
+        workflowName={name}
+        isEnabled={workflow.isEnabled}
+        preset={testPreset}
+        otherWorkflows={otherWorkflows}
+      />
 
       <Sheet open={showJson} onOpenChange={setShowJson}>
         <SheetContent className="w-[500px] sm:max-w-none">

@@ -49,6 +49,7 @@ import {
 } from "@/lib/command-editor-route";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { groupLabel, sortGroups } from "@/lib/group-display";
+import { isRowActionClick } from "@/lib/row-click";
 import { cn } from "@/lib/utils";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import { actionStepLabel } from "@/lib/workflow-presets-json";
@@ -313,9 +314,26 @@ function CommandsTab({
             </TableHeader>
             <TableBody>
               {sortedCommands.map((cmd) => (
-                <TableRow key={cmd._id}>
+                <TableRow
+                  key={cmd._id}
+                  className="cursor-pointer"
+                  onClick={(event) => {
+                    const selectedText = window.getSelection()?.toString() ?? "";
+                    if (!isRowActionClick(event.target as Element, selectedText)) {
+                      return;
+                    }
+                    navigate(commandEditorPath(cmd.engineCommandId));
+                  }}
+                  data-testid={`command-row-${cmd.engineCommandId}`}
+                >
                   <TableCell className="font-mono font-medium">
-                    !{cmd.command}
+                    <Link
+                      href={commandEditorPath(cmd.engineCommandId)}
+                      className="hover:underline"
+                      data-testid={`open-command-${cmd.engineCommandId}`}
+                    >
+                      !{cmd.command}
+                    </Link>
                     {cmd.argumentPattern ? (
                       <span className="text-muted-foreground font-normal"> {cmd.argumentPattern}</span>
                     ) : null}
@@ -379,6 +397,7 @@ function CommandsTab({
                         size="icon"
                         className="h-8 w-8 text-destructive hover:text-destructive"
                         onClick={() => setDeleteTarget(cmd)}
+                        aria-label={`Delete !${cmd.command}`}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

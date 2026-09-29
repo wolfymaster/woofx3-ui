@@ -62,6 +62,8 @@ interface VariableAwareInputProps {
   className?: string;
   /** Variables offered when the user types "{" — see computeAvailableVariables. */
   availableVariables: VariableOption[];
+  /** Id of the element holding notes about the value, such as a warning. */
+  "aria-describedby"?: string;
   "data-testid"?: string;
 }
 
@@ -81,6 +83,7 @@ export function VariableAwareInput({
   rows,
   className,
   availableVariables,
+  "aria-describedby": describedBy,
   "data-testid": testId,
 }: VariableAwareInputProps) {
   const [menu, setMenu] = useState<VariableMenu | null>(null);
@@ -227,6 +230,7 @@ export function VariableAwareInput({
     "aria-expanded": typedMenuOpen,
     "aria-controls": typedMenuOpen ? listId : undefined,
     "aria-activedescendant": typedMenuOpen && active ? optionId(activePosition) : undefined,
+    "aria-describedby": describedBy,
     "data-testid": testId,
   };
 

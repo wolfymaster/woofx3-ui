@@ -1,9 +1,17 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
+import { claimPendingStreamStartMarker } from "./lib/goLiveMarker";
+import { isInstanceMember } from "./lib/teamAccess";
 
 export const getForInstance = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
+    // The shell subscribes with the instance id cached from the last session
+    // before membership is confirmed, so an id the caller has lost access to
+    // must read as nothing.
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return null;
+    }
     return ctx.db
       .query("instanceLiveState")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -42,6 +50,9 @@ export const onStreamOnline = internalMutation({
       await ctx.db.patch(existing._id, patch);
     } else {
       await ctx.db.insert("instanceLiveState", patch);
+    }
+    if (!existing?.isLive) {
+      await claimPendingStreamStartMarker(ctx, instanceId, patch.lastUpdatedAt);
     }
   },
 });
@@ -82,6 +93,9 @@ export const recordPoll = internalMutation({
       await ctx.db.patch(existing._id, patch);
     } else {
       await ctx.db.insert("instanceLiveState", patch);
+    }
+    if (isLive && !existing?.isLive) {
+      await claimPendingStreamStartMarker(ctx, instanceId, patch.lastUpdatedAt);
     }
   },
 });

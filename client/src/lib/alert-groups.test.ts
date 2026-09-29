@@ -9,6 +9,7 @@ import {
   findAlertNode,
   flattenAlertTree,
   OTHER_PLATFORM_KEY,
+  pruneUnusedAlerts,
   subtreePresets,
   taxonomyLabel,
 } from "@/lib/alert-groups";
@@ -245,5 +246,68 @@ describe("anchoredPresets", () => {
     const subscriptions = twitch.children[0];
     expect(anchoredPresets(subscriptions)).toEqual([]);
     expect(anchoredPresets(subscriptions.children[0])).toEqual([]);
+  });
+});
+
+describe("pruneUnusedAlerts", () => {
+  const follow = preset("follow", "Follow", ["platform.twitch", "alert.follow"], "channel.follow");
+  const tier1 = preset("tier1", "Tier 1", ["platform.twitch", "alert.subscription.new"], "sub.tier1");
+  const tier2 = preset("tier2", "Tier 2", ["platform.twitch", "alert.subscription.new"], "sub.tier2");
+  const gift = preset("gift", "Gift", ["platform.twitch", "alert.subscription.gift"], "sub.gift");
+  const donation = preset("donation", "Donation", ["platform.streamlabs", "alert.donation"], "donation");
+  const tree = buildAlertTree([follow, tier1, tier2, gift, donation]);
+
+  function prune(configured: [path: string[], event: string][], selectedId: string | null = null) {
+    return pruneUnusedAlerts(tree, {
+      counts: countAlertsByNode(configured.map(([path]) => [path, 1])),
+      configuredEvents: new Set(configured.map(([, event]) => event)),
+      selectedId,
+    });
+  }
+
+  test("drops leaves, groups and platforms with nothing configured beneath them", () => {
+    expect(outline(prune([[["twitch", "subscription", "gift"], "sub.gift"]]))).toEqual([
+      { Twitch: [{ Subscriptions: ["Gift"] }] },
+    ]);
+  });
+
+  test("keeps every entry with a configured alert, and the path above it", () => {
+    const pruned = prune([
+      [["twitch", "follow"], "channel.follow"],
+      [["streamlabs", "donation"], "donation"],
+    ]);
+    expect(outline(pruned)).toEqual([{ Streamlabs: ["Donation"] }, { Twitch: ["Follow"] }]);
+  });
+
+  test("is empty when nothing is configured and nothing is selected", () => {
+    expect(prune([])).toEqual([]);
+  });
+
+  test("lists only the configured presets of a kept entry", () => {
+    const pruned = prune([[["twitch", "subscription", "new"], "sub.tier2"]]);
+    const entry = findAlertNode(pruned, ["twitch", "subscription", "new"]);
+    expect(entry?.presets.map((p) => p.id)).toEqual(["tier2"]);
+  });
+
+  test("keeps the selected entry and the path to it even when unused", () => {
+    const pruned = prune([[["twitch", "follow"], "channel.follow"]], "twitch/subscription/gift");
+    expect(outline(pruned)).toEqual([{ Twitch: ["Follow", { Subscriptions: ["Gift"] }] }]);
+  });
+
+  test("keeps every preset of the selected entry, since its page shows them all", () => {
+    const pruned = prune([[["twitch", "subscription", "new"], "sub.tier1"]], "twitch/subscription/new");
+    const entry = findAlertNode(pruned, ["twitch", "subscription", "new"]);
+    expect(entry?.presets.map((p) => p.id)).toEqual(["tier1", "tier2"]);
+  });
+
+  test("keeps a selected group without its unused children", () => {
+    const pruned = prune([], "twitch/subscription");
+    expect(pruned).toHaveLength(1);
+    expect(findAlertNode(pruned, ["twitch", "subscription"])?.children).toEqual([]);
+  });
+
+  test("leaves the tree it was given unchanged", () => {
+    prune([]);
+    expect(findAlertNode(tree, ["twitch", "subscription", "new"])?.presets).toHaveLength(2);
   });
 });

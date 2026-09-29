@@ -29,6 +29,19 @@ export const twitchScopesFor = internalQuery({
   },
 });
 
+/** The broadcaster's Twitch login on this instance, or null when Twitch is not
+ * connected. Internal for the same reason as twitchScopesFor. */
+export const twitchLoginFor = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<string | null> => {
+    const links = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .take(10);
+    return links.find((link) => link.platform === "twitch")?.platformUsername ?? null;
+  },
+});
+
 /**
  * Authenticates the caller, confirms the instance's Twitch link carries the
  * scope this call needs, and returns a fresh token. The scope check is what
@@ -41,16 +54,27 @@ export async function authorizeTwitch(
   instanceId: Id<"instances">,
   requiredScope: string
 ): Promise<AuthorizedTwitchCall> {
-  const userId = await getAuthUserId(ctx);
-  if (!userId) {
-    throw new Error("Not authenticated");
-  }
-  const isMember = await ctx.runQuery(internal.platformRealtime.checkMembership, { instanceId, userId });
-  if (!isMember) {
-    throw new Error("Not a member of this instance");
-  }
+  await assertCallerIsMember(ctx, instanceId);
 
   return authorizeTwitchUnattended(ctx, instanceId, requiredScope);
+}
+
+/**
+ * `authorizeTwitch` for a Helix read that needs no scope at all, such as the
+ * channel's title and category. Still member-only: the token is the
+ * broadcaster's, whatever the endpoint asks of it.
+ */
+export async function authorizeTwitchUnscoped(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<AuthorizedTwitchCall> {
+  await assertCallerIsMember(ctx, instanceId);
+
+  return freshTwitchCredentials(ctx, instanceId);
+}
+
+export function missingTwitchScopeMessage(scope: string): string {
+  return `Your Twitch connection is missing the "${scope}" permission. Reconnect Twitch in Settings → Integrations to grant it.`;
 }
 
 /**
@@ -65,11 +89,31 @@ export async function authorizeTwitchUnattended(
 ): Promise<AuthorizedTwitchCall> {
   const scopes: string[] = await ctx.runQuery(internal.lib.twitchAuth.twitchScopesFor, { instanceId });
   if (!scopes.includes(requiredScope)) {
-    throw new Error(
-      `Your Twitch connection is missing the "${requiredScope}" permission. Reconnect Twitch in Settings → Integrations to grant it.`
-    );
+    throw new Error(missingTwitchScopeMessage(requiredScope));
   }
 
+  return freshTwitchCredentials(ctx, instanceId);
+}
+
+async function assertCallerIsMember(ctx: ActionCtx, instanceId: Id<"instances">): Promise<void> {
+  const userId = await getAuthUserId(ctx);
+  if (!userId) {
+    throw new Error("Not authenticated");
+  }
+  const isMember = await ctx.runQuery(internal.platformRealtime.checkMembership, { instanceId, userId });
+  if (!isMember) {
+    throw new Error("Not a member of this instance");
+  }
+}
+
+/**
+ * A fresh token with no caller or scope check. Only for an action that has
+ * already checked both itself, so several Helix calls can share one token.
+ */
+export async function freshTwitchCredentials(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<AuthorizedTwitchCall> {
   const token = await ctx.runAction(internal.platformRealtime.ensureFreshTwitchToken, { instanceId });
   if (!token) {
     throw new Error("Twitch is not connected for this instance");

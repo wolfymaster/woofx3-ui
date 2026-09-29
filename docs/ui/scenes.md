@@ -3,7 +3,7 @@
 **Routes:** `/stream/scenes` (table listing), `/stream/scenes/:id` (editor)
 **Primary files:** `client/src/pages/scenes.tsx` (listing + route split), `client/src/components/scenes/scene-canvas-editor.tsx` (editor), `client/src/components/scenes/widget-catalog-sidebar.tsx` (widget rail)
 **Convex:** `convex/scenes.ts`, `convex/sceneActions.ts`, `convex/moduleWidgets.ts`, `convex/browserSource.ts`  
-**HTTP:** `convex/http.ts` — `/browser-source/{key}` (HTML renderer), `/api/browser-source/{key}/claim` (JSON)
+**HTTP:** `convex/http.ts` — `/browser-source/{key}` (redirect to the engine overlay)
 
 ## Architecture
 
@@ -69,6 +69,8 @@ Widgets are **engine-registered module widgets only** — no arbitrary/custom wi
 - **Alert widgets:** the bundled `woofx3:widget:alert` (its catalog row has `hostsSurface: "alert"`) is a named area where alerts play. The scene manager draws it, so it has no frame of its own and the editor shows only its placeholder. The editor names a scene's first alert widget `default` and later ones `alert-2`, `alert-3`…; an Alert action plays on every alert widget with its target name. `convex/lib/alertWidgets.ts` holds the naming rules, which must match the scene manager's.
 - **Bundled widgets** (Alert, Text, Image, Video, Audio, Lottie) arrive through the bundled `woofx3` module's install, as a `MODULE_WIDGET_REGISTERED` webhook like any module widget, and are grouped as "Built-in".
 
+- **Themes:** a widget that declares a theme contract gets a `theme` settings field from the engine (manifests cannot declare it). The settings panel renders it as a picker (`components/scenes/theme-field.tsx`) offering **Default** plus the installed themes that fit the widget's contract, fetched with `sceneActions.listWidgetThemes` → engine `listWidgetThemes(widgetCanonicalId)`. The stored value is the theme's canonical id (`{moduleId}:theme:{id}`) in `settings.theme`; Default leaves it unset. A stored theme that is no longer installed or no longer compatible gets a notice, because the overlay renders the widget's defaults for it. Themes come and go only with module installs, so the picker refetches when `moduleRepository.installedRevision` changes (the `module.installed` and `module.deleted` webhooks move it).
+
 The canvas itself — palette, drag/resize handles, placeholders and the settings panel — is `WidgetLayoutCanvas`, shared by the scene editor and the Alert action's layout editor (`alert-layout-field.tsx`). It edits whatever widgets it is handed and saves nothing.
 
 ## Browser source
@@ -92,12 +94,6 @@ Engine-authoritative: the **engine renders the overlay**, so this route only res
 **Why a redirect, not an iframe.** Scene Manager's shell (`GET /scene/{id}?token=…`) is the only engine route that accepts the token. It trades it for an `sm_session` cookie marked `SameSite=Strict`, and the widget frames, the `/events` SSE stream, and delivery acks authenticate with that cookie alone. Framed under `convex.site`, all of those are cross-site to the top-level document, so the browser withholds the cookie and they 401 — the shell loads, but no widget or event ever arrives. After the redirect the overlay is the top-level document and the cookie flows. See `buildBrowserSourceRedirect` in `convex/lib/browserSourceHtml.ts` (unit-tested in `browserSourceHtml.test.ts`); placeholder values are HTML-escaped there too.
 
 The engine URL, token included, is visible once the redirect lands — as it already was in the old wrapper page's iframe `src`. A leaked engine URL stays valid until its token is revoked.
-
-> Note: the old `/api/widgets/{...}/index.html` stub in `convex/http.ts` is **no longer used** by the scene overlay (it predates this work and is still referenced only by the unrouted legacy alert renderer `client/src/pages/browser-source.tsx`).
-
-### JSON endpoint (`POST /api/browser-source/{key}/claim`)
-
-Returns `{ scene, slots, alertDescriptors, sourceKeyId }` — used by the legacy alert browser-source runtime (separate from scene overlays).
 
 ## Convex actions (`convex/sceneActions.ts`)
 

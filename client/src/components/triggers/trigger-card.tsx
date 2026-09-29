@@ -5,9 +5,11 @@ import { ConditionSentence, type LoadedFieldOptions } from "@/components/trigger
 import { StepTiles } from "@/components/triggers/step-tiles";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { type SentencePart, sentenceText } from "@/lib/condition-sentence";
 import { type ProjectedAction, type ProjectedTrigger, UNCONDITIONAL_TRIGGER_ID } from "@/lib/trigger-projection";
 import { cn } from "@/lib/utils";
+import type { NotRunningWorkflow } from "@/lib/workflow-health";
 import type { ActionPreset, TriggerConfigValues, TriggerPreset } from "@/lib/workflow-presets";
 import { projectedActionVariables } from "@/lib/workflow-variables";
 
@@ -38,6 +40,8 @@ interface TriggerCardProps {
   /** Absent until the workflow has been saved once, since there is nothing to open. */
   onOpenInWorkflowEditor?: () => void;
   resolveActionPreset: (action: ProjectedAction) => ActionPreset | undefined;
+  /** Set when the engine refused the workflow this trigger belongs to. */
+  notRunning?: NotRunningWorkflow;
 }
 
 /**
@@ -70,6 +74,7 @@ export function TriggerCard({
   onRemove,
   onOpenInWorkflowEditor,
   resolveActionPreset,
+  notRunning,
 }: TriggerCardProps) {
   const isUnconditional = trigger.id === UNCONDITIONAL_TRIGGER_ID;
   const summary =
@@ -122,6 +127,11 @@ export function TriggerCard({
           <span className="flex min-w-0 items-center gap-2 text-[13px] text-muted-foreground">
             {!trigger.enabled && (
               <span className="shrink-0 rounded-full bg-muted px-2 py-px text-xs text-foreground/80">Paused</span>
+            )}
+            {trigger.enabled && notRunning && (
+              <span className="relative z-10 shrink-0">
+                <NotRunningBadge health={notRunning} />
+              </span>
             )}
             <span className="truncate">{summary}</span>
           </span>

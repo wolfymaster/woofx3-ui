@@ -1,12 +1,11 @@
-import { api } from "@convex/_generated/api";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { ConvexProvider, useConvexAuth, useQuery } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
+import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ALERT_EDITOR_ROUTE } from "@/lib/alert-editor-route";
@@ -19,41 +18,48 @@ import {
   COMMAND_NEW_ROUTE,
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
-import AdminAppearance from "@/pages/admin/appearance";
-import AdminEngine from "@/pages/admin/engine";
-import AdminIntegrations from "@/pages/admin/integrations";
-import AdminStorage from "@/pages/admin/storage";
-import AlertEditor from "@/pages/alert-editor";
-import AlertRun from "@/pages/alert-run";
-import Alerts from "@/pages/alerts";
-import Assets from "@/pages/assets";
-import AcceptInvite from "@/pages/auth/accept-invite";
-import Login from "@/pages/auth/login";
-import Onboarding from "@/pages/auth/onboarding";
-import Register from "@/pages/auth/register";
-import TwitchCallback from "@/pages/auth/twitch-callback";
-import CommandEditor from "@/pages/command-editor";
-import CommandGroupEditor from "@/pages/command-group-editor";
-import CommandStepAlertEditor from "@/pages/command-step-alert-editor";
-import Commands from "@/pages/commands";
-import Counters from "@/pages/counters";
-import Dashboard from "@/pages/dashboard";
-import Feedback from "@/pages/feedback";
-import Learning from "@/pages/learning";
-import Logs from "@/pages/logs";
-import ModuleInstall from "@/pages/module-install";
-import Modules from "@/pages/modules";
-import NotFound from "@/pages/not-found";
-import Queues from "@/pages/queues";
-import Scenes from "@/pages/scenes";
-
-import Team from "@/pages/team";
-import Timers from "@/pages/timers";
-import Workflows from "@/pages/workflows";
+import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
+import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
 import { convexClient as convex } from "./lib/convexClient";
-import { queryClient } from "./lib/queryClient";
 
-console.log("url", import.meta.env.VITE_CONVEX_URL);
+const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
+const AdminBackup = lazy(() => import("@/pages/admin/backup"));
+const AdminEngine = lazy(() => import("@/pages/admin/engine"));
+const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
+const AdminStorage = lazy(() => import("@/pages/admin/storage"));
+const AlertEditor = lazy(() => import("@/pages/alert-editor"));
+const AlertRun = lazy(() => import("@/pages/alert-run"));
+const Alerts = lazy(() => import("@/pages/alerts"));
+const Assets = lazy(() => import("@/pages/assets"));
+const AcceptInvite = lazy(() => import("@/pages/auth/accept-invite"));
+const Login = lazy(() => import("@/pages/auth/login"));
+const Onboarding = lazy(() => import("@/pages/auth/onboarding"));
+const Register = lazy(() => import("@/pages/auth/register"));
+const TwitchCallback = lazy(() => import("@/pages/auth/twitch-callback"));
+const CommandEditor = lazy(() => import("@/pages/command-editor"));
+const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
+const CommandStepAlertEditor = lazy(() => import("@/pages/command-step-alert-editor"));
+const Commands = lazy(() => import("@/pages/commands"));
+const Counters = lazy(() => import("@/pages/counters"));
+const Dashboard = lazy(() => import("@/pages/dashboard"));
+const Feedback = lazy(() => import("@/pages/feedback"));
+const GoLive = lazy(() => import("@/pages/go-live"));
+const Learning = lazy(() => import("@/pages/learning"));
+const Logs = lazy(() => import("@/pages/logs"));
+const ModuleInstall = lazy(() => import("@/pages/module-install"));
+const Modules = lazy(() => import("@/pages/modules"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+const Queues = lazy(() => import("@/pages/queues"));
+const Scenes = lazy(() => import("@/pages/scenes"));
+const StarterPacks = lazy(() => import("@/pages/starter-packs"));
+const StreamRecap = lazy(() => import("@/pages/stream-recap"));
+const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
+const Supporters = lazy(() => import("@/pages/supporters"));
+const Team = lazy(() => import("@/pages/team"));
+const TeamInvite = lazy(() => import("@/pages/team-invite"));
+const Timers = lazy(() => import("@/pages/timers"));
+const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
+const Workflows = lazy(() => import("@/pages/workflows"));
 
 function SplashScreen() {
   return (
@@ -63,6 +69,25 @@ function SplashScreen() {
         <p className="text-sm text-muted-foreground">Loading...</p>
       </div>
     </div>
+  );
+}
+
+// Fills only the content area, so the shell stays mounted while a page chunk loads.
+function PageLoading() {
+  return (
+    <div className="h-full w-full flex items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
+// The error boundary sits outside the Suspense so a page chunk that fails to
+// load (a stale deploy whose hashed chunk is gone) is caught here, not above the shell.
+function PageBoundary({ resetKey, children }: { resetKey: string; children: React.ReactNode }) {
+  return (
+    <ErrorBoundary resetKey={resetKey}>
+      <Suspense fallback={<PageLoading />}>{children}</Suspense>
+    </ErrorBoundary>
   );
 }
 
@@ -81,34 +106,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (isLoading) return <SplashScreen />;
   if (!isAuthenticated) return null;
-  return <>{children}</>;
-}
-
-// Redirects users who haven't completed onboarding.
-//
-// An instance row alone is not onboarding done: a managed engine has one from
-// the moment provisioning starts, and a failed bring-your-own registration
-// leaves one behind too. Only `clientId` says the handshake happened, which is
-// what every screen past this point depends on, so anything short of that goes
-// back to onboarding — where the provisioning progress screen takes over.
-function OnboardingGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useConvexAuth();
-  const account = useQuery(api.accounts.getMyAccount);
-  const instances = useQuery(api.instances.listForCurrentUser);
-  const [, navigate] = useLocation();
-  const hasRegisteredInstance = (instances ?? []).some((instance) => Boolean(instance?.clientId));
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    if (account === undefined || instances === undefined) return; // still loading
-
-    if (!account || !hasRegisteredInstance) {
-      navigate("/auth/onboarding");
-    }
-  }, [isAuthenticated, account, instances, hasRegisteredInstance, navigate]);
-
-  if (account === undefined || instances === undefined) return <SplashScreen />;
-  if (!account || !hasRegisteredInstance) return null;
   return <>{children}</>;
 }
 
@@ -145,9 +142,9 @@ function AppRoutes() {
       {/* Protected app routes */}
       <Route>
         <AuthGuard>
-          <OnboardingGuard>
-            <BroadcastShell>
-              <ErrorBoundary resetKey={location}>
+          <BroadcastShell>
+            <OnboardingGuard>
+              <PageBoundary resetKey={location}>
                 <Switch>
                   <Route path="/" component={Dashboard} />
 
@@ -155,6 +152,7 @@ function AppRoutes() {
                   <Route path="/stream">
                     <Redirect to="/stream/alerts" />
                   </Route>
+                  <Route path="/stream/go-live" component={GoLive} />
                   <Route path="/stream/alerts" component={Alerts} />
                   <Route path="/stream/alerts/*" component={Alerts} />
                   <Route path={ALERT_EDITOR_ROUTE} component={AlertEditor} />
@@ -173,13 +171,18 @@ function AppRoutes() {
                   <Route path="/stream/timers/*" component={Timers} />
                   <Route path="/stream/queues" component={Queues} />
                   <Route path="/stream/queues/*" component={Queues} />
+                  <Route path={STREAM_RECAPS_PATH} component={StreamRecaps} />
+                  <Route path={STREAM_RECAP_ROUTE} component={StreamRecap} />
                   <Route path="/stream/scenes" component={Scenes} />
                   <Route path="/stream/scenes/:id" component={Scenes} />
+                  <Route path="/stream/supporters" component={Supporters} />
                   <Route path="/stream/assets" component={Assets} />
+                  <Route path="/stream/starter-packs" component={StarterPacks} />
                   <Route path="/stream/workflows" component={Workflows} />
                   <Route path="/stream/workflows/new" component={Workflows} />
                   <Route path="/stream/workflows/:id" component={Workflows} />
                   <Route path="/stream/workflows/:id/edit" component={Workflows} />
+                  <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
                   {/* Modules section */}
                   <Route path="/modules/install" component={ModuleInstall} />
@@ -202,9 +205,11 @@ function AppRoutes() {
                   <Route path="/admin/engine" component={AdminEngine} />
                   <Route path="/admin/integrations" component={AdminIntegrations} />
                   <Route path="/admin/storage" component={AdminStorage} />
+                  <Route path="/admin/backup" component={AdminBackup} />
                   <Route path="/admin/appearance" component={AdminAppearance} />
 
                   <Route path="/team" component={Team} />
+                  <Route path="/team/invite" component={TeamInvite} />
 
                   {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}
                   <Route path="/alerts">
@@ -246,9 +251,9 @@ function AppRoutes() {
 
                   <Route component={NotFound} />
                 </Switch>
-              </ErrorBoundary>
-            </BroadcastShell>
-          </OnboardingGuard>
+              </PageBoundary>
+            </OnboardingGuard>
+          </BroadcastShell>
         </AuthGuard>
       </Route>
     </Switch>
@@ -258,16 +263,14 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <ConvexProvider client={convex}>
-        <ConvexAuthProvider client={convex}>
-          <QueryClientProvider client={queryClient}>
-            <TooltipProvider>
-              <AppRoutes />
-              <Toaster />
-            </TooltipProvider>
-          </QueryClientProvider>
-        </ConvexAuthProvider>
-      </ConvexProvider>
+      <ConvexAuthProvider client={convex}>
+        <TooltipProvider>
+          <Suspense fallback={<SplashScreen />}>
+            <AppRoutes />
+          </Suspense>
+          <Toaster />
+        </TooltipProvider>
+      </ConvexAuthProvider>
     </ErrorBoundary>
   );
 }
