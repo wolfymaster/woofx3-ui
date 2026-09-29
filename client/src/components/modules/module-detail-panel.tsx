@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
+import { settingFieldOptionsReference } from "@/lib/field-options-reference";
 import { cn, isNewerVersion } from "@/lib/utils";
 
 export interface ModuleDetailMeta {
@@ -910,7 +911,7 @@ interface SettingButtonRowProps {
 
 function SettingButtonRow({ instanceId, moduleId, field }: SettingButtonRowProps) {
   if (field.action?.kind === "internal") {
-    return <InternalSettingButton instanceId={instanceId} field={field} action={field.action} />;
+    return <InternalSettingButton instanceId={instanceId} moduleId={moduleId} field={field} />;
   }
   if (field.action?.kind === "integration") {
     return <IntegrationSettingButton instanceId={instanceId} moduleId={moduleId} field={field} action={field.action} />;
@@ -920,17 +921,18 @@ function SettingButtonRow({ instanceId, moduleId, field }: SettingButtonRowProps
 
 function InternalSettingButton({
   instanceId,
+  moduleId,
   field,
-  action,
 }: {
   instanceId?: Id<"instances">;
+  moduleId: string;
   field: ManifestSettingField;
-  action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "internal" }>;
 }) {
-  const { trigger, status, message } = useInternalSettingAction(instanceId, action.request, action.timeoutMs);
+  const reference = useMemo(() => settingFieldOptionsReference(moduleId, field.id), [moduleId, field.id]);
+  const { trigger, status, message } = useInternalSettingAction(instanceId, reference);
   return (
     <div className="space-y-2">
-      <Button size="sm" variant="outline" disabled={status === "pending"} onClick={trigger}>
+      <Button size="sm" variant="outline" disabled={!reference || status === "pending"} onClick={trigger}>
         {status === "pending" && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
         {field.name}
       </Button>
@@ -1220,6 +1222,7 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
 
       {createDialogKind && instanceId && (
         <CreateResourceDialog
+          moduleId={moduleName}
           kind={createDialogKind}
           onClose={() => setCreateDialogKind(null)}
           onCreate={async (resourceInstanceId, displayName, settings) => {

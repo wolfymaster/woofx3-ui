@@ -27,6 +27,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
 import { subPathSegments } from "@/lib/route-subpath";
@@ -235,6 +236,7 @@ export function ResourceKindPage({
 
               <SettingsCard
                 instance={selected}
+                moduleId={kindDefinition.moduleName}
                 schema={kindDefinition.schema}
                 settings={resourceSettings(selected)}
                 onSave={async (displayName, settings) => {
@@ -261,6 +263,7 @@ export function ResourceKindPage({
 
       {creating && (
         <CreateResourceDialog
+          moduleId={kindDefinition.moduleName}
           kind={{ kind, name: kindDefinition.name, schema: kindDefinition.schema }}
           onClose={() => setCreating(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
@@ -326,16 +329,22 @@ export function ResourceKindPage({
  */
 function SettingsCard({
   instance,
+  moduleId,
   schema,
   settings,
   onSave,
 }: {
   instance: ResourceInstanceDoc;
+  /** Manifest-local id of the module that declares the instance's kind. */
+  moduleId: string;
   schema: unknown[];
   settings: Record<string, unknown>;
   onSave: (displayName: string, settings: Record<string, unknown>) => Promise<void>;
 }) {
-  const fields = useMemo(() => parseConfigFields(schema), [schema]);
+  const fields = useMemo(
+    () => withFieldOptionsOwner(parseConfigFields(schema), resourceKindFieldOptionsOwner(moduleId, instance.kind)),
+    [schema, moduleId, instance.kind]
+  );
   const [draft, setDraft] = useState<{ displayName: string; settings: FieldValues } | null>(null);
   const [saving, setSaving] = useState(false);
 
