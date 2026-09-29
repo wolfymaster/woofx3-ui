@@ -107,6 +107,9 @@ one row per `(instanceId, sessionId)` and replaces it only with a snapshot whose
 snapshot with a `schemaVersion` this deployment does not know is kept as raw
 JSON and shown as unreadable rather than guessed at.
 
+Each row links to that stream's recap (`/stream/recaps/:sessionId`), described
+under [Stream recaps](./stream-recaps).
+
 ## Command bar
 
 The strip above the panels (`client/src/components/dashboard/command-bar.tsx`):
