@@ -1,6 +1,7 @@
 import { ArrowRight, Clock, GitBranch, Zap } from "lucide-react";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { cn } from "@/lib/utils";
+import { describeWaitTimeout, waitNodeLabel } from "@/lib/wait-config";
 import { actionNodeLabel, triggerNodeLabel } from "@/lib/workflow-node-label";
 import { actionNodeSummary, triggerNodeSummary } from "@/lib/workflow-node-summary";
 import type { StepNode, TriggerNode } from "@/lib/workflow-tree";
@@ -57,10 +58,7 @@ function getNodeLabel(
     return "Condition";
   }
   if (node.type === "wait") {
-    if (node.wait.type === "event") {
-      return `Until ${node.wait.event}`;
-    }
-    return "Wait";
+    return waitNodeLabel(node.wait);
   }
   return "Unknown";
 }
@@ -86,10 +84,10 @@ function getNodeSummary(
     return node.conditions.slice(1).map((c) => `${c.field} ${c.operator} ${formatConditionValue(c.value)}`);
   }
   if (node.type === "wait") {
-    const parts: string[] = [];
-    if (node.wait.timeout) {
-      parts.push(`Timeout: ${node.wait.timeout}`);
+    if (node.wait.type === "delay") {
+      return [];
     }
+    const parts = [describeWaitTimeout(node.wait)];
     for (const c of node.wait.conditions ?? []) {
       parts.push(`${c.field} ${c.operator} ${formatConditionValue(c.value)}`);
     }
