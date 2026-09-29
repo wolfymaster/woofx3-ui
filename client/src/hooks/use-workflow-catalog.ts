@@ -3,6 +3,7 @@ import { useQuery } from "convex/react";
 import { useMemo } from "react";
 import { useInstance } from "@/hooks/use-instance";
 import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
+import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import type { ActionPreset, TriggerConfig, TriggerPreset } from "@/lib/workflow-presets";
@@ -51,7 +52,10 @@ export type CatalogActionRow = {
 
 function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
-  const fields = withModuleName(parseConfigFields(row.configFields), row.moduleName);
+  const fields = withFieldOptionsOwner(
+    withModuleName(parseConfigFields(row.configFields), row.moduleName),
+    fieldOptionsOwnerFromCanonicalId(row.canonicalRef)
+  );
   let config: TriggerConfig | undefined;
   if (fields.length > 0 || row.allowVariants) {
     config = {
@@ -77,7 +81,10 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
 
 function toActionPreset(row: CatalogActionRow): ActionPreset {
   const icon = resolveLucideIcon(row.icon || "CircleHelp");
-  const fields = withModuleName(parseConfigFields(row.configFields), row.moduleName);
+  const fields = withFieldOptionsOwner(
+    withModuleName(parseConfigFields(row.configFields), row.moduleName),
+    fieldOptionsOwnerFromCanonicalId(row.canonicalRef)
+  );
   const outputs = parseDataShapeFields(row.returns);
   const handlerType = row.handlerType?.trim() || (row.functionCall?.trim() ? "function" : undefined);
   return {
