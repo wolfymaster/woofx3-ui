@@ -4,8 +4,10 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { parseManifestPermissions } from "./lib/modulePermissions";
 import { type ManifestResourceKind, parseManifestResourceKinds } from "./lib/resourceKinds";
-import { marketplaceFetch } from "./marketplace";
+import { logger } from "./logger";
+import { fetchMarketplaceArchivePermissions, fetchMarketplaceDownload, marketplaceFetch } from "./marketplace";
 
 export type ManifestSettingAction =
   | { kind: "internal"; request: { event: string; payload?: Record<string, unknown> }; timeoutMs?: number }
@@ -48,6 +50,18 @@ export interface ModuleDetailResult {
   manifestSettings: ManifestSettingField[];
   /** Runtime instance types declared in the manifest. */
   manifestResourceKinds: ManifestResourceKind[];
+  /**
+   * Permission ids the manifest of `version` declares. Null when they could not
+   * be read (an installed row with no stored manifest, or an unreachable
+   * marketplace archive).
+   */
+  permissions: string[] | null;
+  /**
+   * Permission ids `latestVersion` declares, read from its marketplace archive.
+   * Present only for an installed module whose marketplace version differs from
+   * the installed one; null when that archive could not be read.
+   */
+  latestPermissions?: string[] | null;
 }
 
 export const getModuleDetail = action({
@@ -90,13 +104,36 @@ export const getModuleDetail = action({
       if (marketplaceMeta) {
         applyMarketplaceMetadata(detail, marketplaceMeta);
       }
+      if (marketplaceId && detail.latestVersion !== undefined && detail.latestVersion !== detail.version) {
+        detail.latestPermissions = await readMarketplacePermissions(marketplaceId);
+      }
       return detail;
     }
 
-    const payload = await marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`);
-    return formatMarketplaceDetail(moduleId, payload);
+    const [payload, permissions] = await Promise.all([
+      marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`),
+      readMarketplacePermissions(moduleId),
+    ]);
+    return { ...formatMarketplaceDetail(moduleId, payload), permissions };
   },
 });
+
+/**
+ * A detail view still renders when the archive cannot be read; the permissions
+ * show as unknown instead. Install does not depend on this read: it re-reads
+ * the archive and refuses anything the streamer did not approve.
+ */
+async function readMarketplacePermissions(marketplaceId: string): Promise<string[] | null> {
+  try {
+    return await fetchMarketplaceArchivePermissions(await fetchMarketplaceDownload(marketplaceId));
+  } catch (err) {
+    logger.warn("could not read marketplace module permissions", {
+      marketplaceId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
 
 function parseManifestSettingAction(value: unknown): ManifestSettingAction | undefined {
   if (!value || typeof value !== "object") {
@@ -173,6 +210,7 @@ function formatInstalledDetail(
     moduleDbId: module._id,
     manifestSettings: parseManifestSettings(manifest),
     manifestResourceKinds: parseManifestResourceKinds(manifest),
+    permissions: manifest === undefined || manifest === null ? null : parseManifestPermissions(manifest),
     triggers: triggers.map((t) => ({ key: t.slug, name: t.name, description: t.description, color: t.color })),
     actions: actions.map((a) => ({ key: a.slug, name: a.name, description: a.description, color: a.color })),
     functions: functions.map((f) => ({ qualifiedName: f.qualifiedName, runtime: f.runtime })),
@@ -262,6 +300,7 @@ function formatMarketplaceDetail(moduleId: string, payload: unknown): ModuleDeta
     isInstalled: false,
     manifestSettings: [],
     manifestResourceKinds: [],
+    permissions: null,
     triggers: asArr(module.triggers).map((t) => {
       const o = t && typeof t === "object" ? (t as Record<string, unknown>) : {};
       return {
