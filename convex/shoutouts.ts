@@ -29,7 +29,7 @@ const TWITCH_CHATTERS_URL = "https://api.twitch.tv/helix/chat/chatters";
 const TWITCH_SHOUTOUTS_URL = "https://api.twitch.tv/helix/chat/shoutouts";
 
 const CHATTERS_SCOPE = "moderator:read:chatters";
-const SHOUTOUT_SCOPE = "moderator:manage:shoutouts";
+export const SHOUTOUT_SCOPE = "moderator:manage:shoutouts";
 
 // Helix caps a chatters page at 1000. A channel with more concurrent chatters
 // than that does not need an autocomplete built on a full roster, so this reads
