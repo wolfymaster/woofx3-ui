@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { type ManualRunOrigin, UNRECORDED_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { useAction } from "convex/react";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -8,7 +9,8 @@ const TWITCH_PLATFORM_AXIS = "platform.twitch";
 
 /**
  * Returns a callback that fires a test event for a trigger at the currently
- * selected woofx3 instance. Used by the test-event sheet on the Alerts screen.
+ * selected woofx3 instance. Used by the test-event sheet on the Alerts screen
+ * and by a workflow's Test run sheet.
  *
  * Resolves to the correlation key it minted, or null when nothing was
  * published. The key is generated here, before the call, so the caller can
@@ -18,6 +20,9 @@ const TWITCH_PLATFORM_AXIS = "platform.twitch";
  * Only failures of the call itself are toasted. What the event went on to
  * cause is decided afterwards in another process and reaches the caller
  * through that key, so a toast cannot report it and deliberately does not try.
+ *
+ * `origin` decides whether the engine records the runs the event starts; see
+ * convex/lib/manualRunOrigin.ts.
  *
  * Twitch triggers go through `simulateTwitchEvent`, which stamps
  * `platform: "twitch"` so the event is identical to a real one and passes
@@ -30,7 +35,11 @@ export function useFireTestEvent() {
   const publishEvent = useAction(api.debug.fireTrigger);
   const { toast } = useToast();
 
-  return async function fireTestEvent(preset: TriggerPreset, eventData: object): Promise<string | null> {
+  return async function fireTestEvent(
+    preset: TriggerPreset,
+    eventData: object,
+    origin: ManualRunOrigin = UNRECORDED_ORIGIN
+  ): Promise<string | null> {
     if (!instance) {
       toast({
         variant: "destructive",
@@ -51,7 +60,7 @@ export function useFireTestEvent() {
     const fire = preset.taxonomy?.includes(TWITCH_PLATFORM_AXIS) ? simulateTwitchEvent : publishEvent;
     const triggerId = crypto.randomUUID();
     try {
-      await fire({ instanceId: instance._id, eventType, eventData, triggerId, triggeredBy: "dashboard" });
+      await fire({ instanceId: instance._id, eventType, eventData, triggerId, triggeredBy: origin });
       return triggerId;
     } catch (err) {
       toast({
