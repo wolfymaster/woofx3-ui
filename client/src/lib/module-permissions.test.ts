@@ -9,6 +9,7 @@ describe("describePermission", () => {
       known: true,
     });
     expect(describePermission("twitch.channel").known).toBe(true);
+    expect(describePermission("obs.control").known).toBe(true);
   });
 
   test("an unknown id is shown, flagged as unknown", () => {

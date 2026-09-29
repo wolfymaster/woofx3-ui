@@ -4,8 +4,8 @@ import { dispatchErrorMessage, fieldOptionsRequestKey } from "./field-options-re
 
 describe("fieldOptionsRequestKey", () => {
   test("is equal for equal requests built as separate objects", () => {
-    const first = { kind: "internal", request: { event: "engine.obs.options", payload: { list: "scenes" } } };
-    const second = { kind: "internal", request: { event: "engine.obs.options", payload: { list: "scenes" } } };
+    const first = { kind: "internal", request: { event: "engine.example.options", payload: { list: "items" } } };
+    const second = { kind: "internal", request: { event: "engine.example.options", payload: { list: "items" } } };
     expect(first).not.toBe(second);
     expect(fieldOptionsRequestKey(first)).toBe(fieldOptionsRequestKey(second));
   });
