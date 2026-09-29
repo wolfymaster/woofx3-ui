@@ -1,10 +1,11 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Doc } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+import type { InstanceRole } from "./lib/twitchLinkPolicy";
 
 /**
  * An instance row as members may see it. `webhookSecret` authenticates the
@@ -254,38 +255,6 @@ export const getPlatformLinks = query({
   },
 });
 
-export const savePlatformLink = mutation({
-  args: {
-    instanceId: v.id("instances"),
-    platform: v.string(),
-    platformUserId: v.string(),
-    platformUsername: v.string(),
-    channelId: v.string(),
-    accessToken: v.string(),
-    refreshToken: v.string(),
-    expiresAt: v.number(),
-    scopes: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    // Upsert: replace existing link for this platform on this instance
-    const existing = await ctx.db
-      .query("platformLinks")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .filter((q) => q.eq(q.field("platform"), args.platform))
-      .first();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, args);
-      return existing._id;
-    }
-
-    return ctx.db.insert("platformLinks", args);
-  },
-});
-
 /**
  * Internal mutation used by the registration action to persist handshake results.
  * Not exposed to clients.
@@ -318,5 +287,38 @@ export const getByWebhookSecret = internalQuery({
       .query("instances")
       .withIndex("by_webhook_secret", (q) => q.eq("webhookSecret", webhookSecret))
       .first();
+  },
+});
+
+/** The user's role on the instance, or null when they are not a member. */
+export async function readMemberRole(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  userId: Id<"users">
+): Promise<InstanceRole | null> {
+  const membership = await ctx.db
+    .query("instanceMembers")
+    .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
+    .first();
+  return membership?.role ?? null;
+}
+
+/** `readMemberRole` for actions, which cannot read the db. */
+export const memberRole = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }): Promise<InstanceRole | null> => {
+    return await readMemberRole(ctx, instanceId, userId);
+  },
+});
+
+/** The signed-in caller's role on the instance, or null when signed out or not a member. */
+export const viewerRole = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<InstanceRole | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    return await readMemberRole(ctx, instanceId, userId);
   },
 });

@@ -1,7 +1,8 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { oauthErrorMessage } from "@convex/lib/oauthErrors";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { Check, Loader2, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -29,6 +30,11 @@ interface ModuleListItem {
   status?: "pending" | "delivering" | "installed" | "failed";
 }
 
+type OAuthResult =
+  | { status: "finishing"; connectCode: string }
+  | { status: "connected" }
+  | { status: "error"; message: string };
+
 type SelectedModule =
   | { source: "installed"; module: ModuleListItem }
   | { source: "marketplace"; marketplaceId: string };
@@ -52,19 +58,48 @@ export default function Modules() {
   );
   const catalog = useMarketplaceCatalog();
 
-  const [oauthResult, setOauthResult] = useState<{
-    integration: string;
-    status: string;
-    message: string | null;
-  } | null>(() => {
+  // Set from the query string the Spotify callback redirects with. Only a
+  // known integration and an error code are read from it; the text shown is
+  // fixed (lib/oauthErrors.ts). A `connect_code` is redeemed by
+  // spotifyConnect.finish, which only the member who started the connect can do.
+  const [oauthResult, setOauthResult] = useState<OAuthResult | null>(() => {
     const params = new URLSearchParams(window.location.search);
-    const integration = params.get("integration");
-    const status = params.get("status");
-    if (!integration || !status) {
+    if (params.get("integration") !== "spotify") {
       return null;
     }
-    return { integration, status, message: params.get("message") };
+    const connectCode = params.get("connect_code");
+    if (connectCode) {
+      return { status: "finishing", connectCode };
+    }
+    if (params.get("status") === "error") {
+      return { status: "error", message: oauthErrorMessage(params.get("error"), "Spotify") };
+    }
+    return null;
   });
+
+  const finishSpotify = useAction(api.spotifyConnect.finish);
+  const { isAuthenticated } = useConvexAuth();
+  const finishingCodeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      oauthResult?.status !== "finishing" ||
+      finishingCodeRef.current === oauthResult.connectCode
+    ) {
+      return;
+    }
+    finishingCodeRef.current = oauthResult.connectCode;
+    finishSpotify({ code: oauthResult.connectCode })
+      .then((result) => {
+        setOauthResult(
+          result.ok ? { status: "connected" } : { status: "error", message: oauthErrorMessage(result.error, "Spotify") }
+        );
+      })
+      .catch((err: unknown) => {
+        console.error("[modules] spotifyConnect.finish failed:", String(err));
+        setOauthResult({ status: "error", message: oauthErrorMessage(null, "Spotify") });
+      });
+  }, [finishSpotify, isAuthenticated, oauthResult]);
 
   const oauthUrlStrippedRef = useRef(false);
   useEffect(() => {
@@ -392,20 +427,24 @@ export default function Modules() {
                 {oauthResult && (
                   <div
                     className={`mx-6 mt-4 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs ${
-                      oauthResult.status === "connected"
+                      oauthResult.status !== "error"
                         ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600"
                         : "border-destructive/30 bg-destructive/5 text-destructive"
                     }`}
                   >
                     <span className="flex items-center gap-1.5">
-                      {oauthResult.status === "connected" ? (
+                      {oauthResult.status === "finishing" ? (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                      ) : oauthResult.status === "connected" ? (
                         <Check className="h-3.5 w-3.5 shrink-0" />
                       ) : (
                         <XCircle className="h-3.5 w-3.5 shrink-0" />
                       )}
-                      {oauthResult.status === "connected"
-                        ? `${oauthResult.integration} connected successfully.`
-                        : (oauthResult.message ?? `Failed to connect ${oauthResult.integration}.`)}
+                      {oauthResult.status === "finishing"
+                        ? "Finishing the Spotify connection..."
+                        : oauthResult.status === "connected"
+                          ? "Spotify connected successfully."
+                          : oauthResult.message}
                     </span>
                     <button type="button" onClick={() => setOauthResult(null)} className="shrink-0">
                       <X className="h-3.5 w-3.5" />

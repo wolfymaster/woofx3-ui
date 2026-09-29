@@ -2,6 +2,7 @@ import { ConvexCredentials } from "@convex-dev/auth/providers/ConvexCredentials"
 import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth, createAccount } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
+import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 
 export const { auth, signIn, signOut, store } = convexAuth({
   providers: [
@@ -9,21 +10,19 @@ export const { auth, signIn, signOut, store } = convexAuth({
     ConvexCredentials({
       id: "twitch",
       authorize: async (credentials, ctx) => {
-        const token = credentials.token as string | undefined;
-
-        console.log("the token is:", token);
-
-        if (!token) {
-          console.log("token not found");
+        const token = credentials.token;
+        const nonce = credentials.nonce;
+        if (typeof token !== "string" || token.length === 0 || !isOpaqueToken(nonce)) {
+          console.log("twitch sign-in refused: missing token or nonce");
           return null;
         }
 
-        const profile = await ctx.runMutation(internal.twitchAuth.lookupPendingAuth, { token });
-
-        console.log("profile", profile);
-
+        const profile = await ctx.runMutation(internal.twitchAuth.lookupPendingAuth, {
+          token,
+          nonceHash: await hashOpaqueToken(nonce),
+        });
         if (!profile) {
-          console.log("no profile found");
+          console.log("twitch sign-in refused: pending sign-in not found, expired, or started elsewhere");
           return null;
         }
 
@@ -44,8 +43,6 @@ export const { auth, signIn, signOut, store } = convexAuth({
           console.error("createAccount threw:", String(err));
           return null;
         }
-
-        console.log("result", result);
 
         if (!result.user) {
           // Orphaned authAccounts record from a previous failed run — the linked
@@ -75,10 +72,6 @@ export const { auth, signIn, signOut, store } = convexAuth({
             return null;
           }
         }
-
-        // Do NOT delete the token here — if the WebSocket drops before the JWT
-        // is delivered to the client, the frontend retries signIn with the same
-        // token. The token expires naturally after 5 minutes via lookupPendingAuth.
 
         console.log("account created, userId:", result.user._id);
 
