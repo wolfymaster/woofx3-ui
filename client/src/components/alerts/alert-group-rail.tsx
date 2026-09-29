@@ -131,7 +131,20 @@ function RailNode({ node, depth, ...nodeProps }: NodeProps & { node: AlertNode; 
         ) : (
           <span className="w-6 shrink-0" />
         )}
-        <Link href={href} className="block flex-1 min-w-0">
+        {/* On its own page, an entry with subcategories has nowhere new to go, so its
+            label toggles it like a platform heading instead of re-following the link.
+            Modified clicks never reach onClick, so they still open the page in a new tab. */}
+        <Link
+          href={href}
+          onClick={(event) => {
+            if (hasChildren && isActive) {
+              event.preventDefault();
+              setOpen(!open);
+            }
+          }}
+          className="block flex-1 min-w-0"
+          aria-expanded={hasChildren ? open : undefined}
+        >
           <span
             className="flex items-center justify-between gap-2 py-2 pr-2.5 text-[15px] cursor-pointer"
             aria-current={isActive ? "page" : undefined}
