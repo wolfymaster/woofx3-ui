@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
+import { ModulePermissionList, ModulePermissionsSection } from "@/components/modules/module-permissions";
 import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
+import { permissionsToApprove } from "@/lib/module-permissions";
 import { cn, isNewerVersion } from "@/lib/utils";
 
 export interface ModuleDetailMeta {
@@ -98,6 +100,10 @@ interface ModuleDetailPanelProps {
   moduleDbId?: Id<"moduleRepository">;
   manifestSettings?: ManifestSettingField[];
   manifestResourceKinds?: ManifestResourceKind[];
+  /** Permissions the shown version declares; null when they could not be read. */
+  permissions?: string[] | null;
+  /** Permissions the marketplace's latest version declares, for an installed module. */
+  latestPermissions?: string[] | null;
 }
 
 type TopTab = "details" | "definitions" | "settings" | "resources";
@@ -138,6 +144,8 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     moduleDbId,
     manifestSettings,
     manifestResourceKinds,
+    permissions,
+    latestPermissions,
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
@@ -217,7 +225,13 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
         <div className="flex-1 min-h-0 flex gap-6 px-6 py-4 overflow-hidden">
           <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
             {topTab === "details" ? (
-              <DetailsTab module={module} />
+              <DetailsTab
+                module={module}
+                permissions={permissions}
+                updatePermissions={
+                  updateAvailable && latestPermissions ? permissionsToApprove(latestPermissions, permissions ?? []) : []
+                }
+              />
             ) : topTab === "definitions" ? (
               <ResourcesTab
                 activeType={resourceTab}
@@ -390,10 +404,31 @@ function InstallErrorBanner({ error, onDismissError }: { error: string; onDismis
   );
 }
 
-function DetailsTab({ module }: { module: ModuleDetailMeta }) {
+function DetailsTab({
+  module,
+  permissions,
+  updatePermissions,
+}: {
+  module: ModuleDetailMeta;
+  permissions: string[] | null | undefined;
+  updatePermissions: string[];
+}) {
   return (
     <ScrollArea className="flex-1 h-full pr-4">
       {module.identifier && <h3 className="text-xl font-bold font-mono mb-4">{module.identifier}</h3>}
+      {permissions !== undefined && (
+        <div className="mb-4 space-y-2">
+          <ModulePermissionsSection permissions={permissions} />
+          {updatePermissions.length > 0 && (
+            <section className="rounded-md border border-amber-500/40 p-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                Updating to v{module.latestVersion} also lets it:
+              </h4>
+              <ModulePermissionList permissions={updatePermissions} />
+            </section>
+          )}
+        </div>
+      )}
       <div className="prose prose-sm dark:prose-invert max-w-none">
         {module.readme ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{module.readme}</ReactMarkdown>
