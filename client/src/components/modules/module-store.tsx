@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { featuredInOrder } from "@convex/lib/marketplaceImages";
 import { useQuery } from "convex/react";
 import { AlertCircle, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -9,6 +10,7 @@ import {
   getCategoryCounts,
   getCategoryIcon,
 } from "@/components/modules/module-category";
+import { ModuleBannerImage } from "@/components/modules/module-image";
 import { ModuleStoreCard, type ModuleStoreCardData } from "@/components/modules/module-store-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +33,6 @@ export function ModuleStore({ catalog, selectedCategory, onSelectCategory }: Mod
   const { list: marketplaceList, loading: marketplaceLoading, error: marketplaceError, refetch } = catalog;
 
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
-  const featured = useQuery(api.moduleFeatured.list, {});
 
   const installedVersionsByMarketplaceId = useMemo(() => {
     const map = new Map<string, string>();
@@ -56,7 +57,7 @@ export function ModuleStore({ catalog, selectedCategory, onSelectCategory }: Mod
         description: m.description,
         version: m.version,
         category: m.category,
-        iconUrl: m.iconUrl,
+        images: m.images,
         isInstalled: installedVersion !== undefined,
         updateAvailable: installedVersion ? isNewerVersion(m.version, installedVersion) : false,
       };
@@ -96,13 +97,7 @@ export function ModuleStore({ catalog, selectedCategory, onSelectCategory }: Mod
     return sorted;
   }, [marketplaceList, selectedCategory, query, sortBy]);
 
-  const featuredModules = useMemo(() => {
-    if (!marketplaceList || !featured || featured.length === 0) {
-      return [];
-    }
-    const byId = new Map(marketplaceList.map((m) => [m.id, m] as const));
-    return featured.map((f) => byId.get(f.moduleKey)).filter((m): m is MarketplaceListItem => m !== undefined);
-  }, [marketplaceList, featured]);
+  const featuredModules = useMemo(() => featuredInOrder(marketplaceList ?? []), [marketplaceList]);
 
   const recentlyUpdated = useMemo(() => {
     if (!marketplaceList) return [];
@@ -179,6 +174,9 @@ export function ModuleStore({ catalog, selectedCategory, onSelectCategory }: Mod
               className="relative rounded-2xl overflow-hidden border h-64"
               style={getCategoryBannerStyle(hero.category)}
             >
+              {hero.images.banner && (
+                <ModuleBannerImage banner={hero.images.banner} sizes="(min-width: 1600px) 1536px, 100vw" />
+              )}
               <div className="absolute inset-0 bg-gradient-to-r from-background via-background/60 to-transparent" />
               <div className="absolute inset-y-0 left-0 flex flex-col justify-center max-w-lg px-8 gap-3">
                 <span className="w-fit text-[11px] font-semibold tracking-wide px-2.5 py-1 rounded-full bg-primary/15 text-primary border border-primary/30">

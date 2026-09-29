@@ -6,6 +6,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
 
@@ -57,7 +58,9 @@ export interface MarketplaceModuleSummary {
   author: string;
   category: string;
   tags: string[];
-  iconUrl?: string;
+  images: MarketplaceImages;
+  /** Position in the storefront's featured set, lowest first. Absent when not featured. */
+  featuredRank?: number;
   counts: MarketplaceModuleCounts;
   updatedAt?: string;
 }
@@ -203,10 +206,12 @@ function parseSummary(raw: unknown): MarketplaceModuleSummary | null {
     author: asString(obj.author),
     category: asString(obj.category, "Utilities"),
     tags: asStringArray(obj.tags),
+    images: parseMarketplaceImages(obj.images),
     counts: parseCounts(obj.counts),
   };
-  if (typeof obj.iconUrl === "string") {
-    summary.iconUrl = obj.iconUrl;
+  const featuredRank = parseFeaturedRank(obj.featuredRank);
+  if (featuredRank !== undefined) {
+    summary.featuredRank = featuredRank;
   }
   if (typeof obj.updatedAt === "string") {
     summary.updatedAt = obj.updatedAt;
