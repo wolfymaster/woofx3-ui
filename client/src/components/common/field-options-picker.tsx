@@ -17,7 +17,13 @@ import {
 } from "@/components/ui/select";
 import { type FieldOptionsState, useFieldOptions } from "@/hooks/use-field-options";
 import { useInstance } from "@/hooks/use-instance";
-import { fieldOptionMismatch, groupFieldOptions } from "@/lib/field-options";
+import {
+  fieldOptionMismatch,
+  groupFieldOptions,
+  optionValueOfItem,
+  selectedItemValue,
+  selectItemValue,
+} from "@/lib/field-options";
 import { cn } from "@/lib/utils";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -79,6 +85,7 @@ export function InternalSelectField({ field, value, onChange, source }: PickerPr
   const { instance } = useInstance();
   const state = useFieldOptions(instance?._id, source);
   const reason = emptyReason(state);
+  const groups = groupFieldOptions(state.options);
 
   let placeholder: string;
   if (state.loading) {
@@ -99,19 +106,24 @@ export function InternalSelectField({ field, value, onChange, source }: PickerPr
       />
       <div className="flex items-center gap-2">
         <Select
-          value={typeof value === "string" ? value : ""}
-          onValueChange={onChange}
+          value={selectedItemValue(value, groups)}
+          onValueChange={(itemValue) => {
+            const picked = optionValueOfItem(itemValue, groups);
+            if (picked !== undefined) {
+              onChange(picked);
+            }
+          }}
           disabled={state.loading || state.empty}
         >
           <SelectTrigger data-testid={`select-${field.id}`}>
             <SelectValue placeholder={placeholder} />
           </SelectTrigger>
           <SelectContent>
-            {groupFieldOptions(state.options).map((group) => (
+            {groups.map((group) => (
               <SelectGroup key={group.heading ?? ""}>
                 {group.heading !== null && <SelectLabel>{group.heading}</SelectLabel>}
                 {group.options.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>
+                  <SelectItem key={opt.value} value={selectItemValue(group.heading, opt.value)}>
                     {opt.label}
                   </SelectItem>
                 ))}
@@ -217,7 +229,7 @@ export function InternalSuggestField({
                     {group.options.map((option) => (
                       <CommandItem
                         key={option.value}
-                        value={`${group.heading ?? ""}\u0000${option.value}`}
+                        value={selectItemValue(group.heading, option.value)}
                         keywords={[option.label, option.value]}
                         onSelect={() => {
                           onChange(option.value);

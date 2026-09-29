@@ -63,6 +63,49 @@ export function groupFieldOptions(options: readonly FieldOption[]): FieldOptionG
   return groups;
 }
 
+/**
+ * The value of a strict select's item for an option listed under `heading`.
+ * Radix Select reserves "" for "nothing selected" and throws on an item with
+ * that value, yet a worker may list "" (e.g. "Current Device"); and the same
+ * value may be listed under several headings, where equal item values would
+ * collide. Joining the heading and value with a NUL gives every item a unique,
+ * never-empty value.
+ */
+export function selectItemValue(heading: string | null, value: string): string {
+  return `${heading ?? ""}\u0000${value}`;
+}
+
+/**
+ * The item a strict select shows for a saved field value: the first listed
+ * option with that value, or "" (the placeholder) when none is. The field saves
+ * only the value, so a value listed under several headings shows as the first.
+ */
+export function selectedItemValue(value: unknown, groups: readonly FieldOptionGroup[]): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  for (const group of groups) {
+    for (const option of group.options) {
+      if (option.value === value) {
+        return selectItemValue(group.heading, option.value);
+      }
+    }
+  }
+  return "";
+}
+
+/** The field value an item picked in a strict select stands for, or undefined for an unknown item. */
+export function optionValueOfItem(itemValue: string, groups: readonly FieldOptionGroup[]): string | undefined {
+  for (const group of groups) {
+    for (const option of group.options) {
+      if (selectItemValue(group.heading, option.value) === itemValue) {
+        return option.value;
+      }
+    }
+  }
+  return undefined;
+}
+
 /** A value built from a workflow variable is only known when the step runs. */
 function isExpression(value: string): boolean {
   return value.includes("${");
