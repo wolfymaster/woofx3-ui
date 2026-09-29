@@ -1,4 +1,4 @@
-import { Clock, Gamepad2, Gift, Heart, Radio, UserPlus, Users, Zap } from "lucide-react";
+import { Clock, Gamepad2, Gift, HandHeart, Heart, Radio, UserPlus, Users, Zap } from "lucide-react";
 import { type ReactNode, useCallback, useState } from "react";
 import { Uptime } from "@/components/common/uptime";
 import { useLiveState } from "@/hooks/use-live-state";
@@ -13,16 +13,17 @@ import { usePlatformEvents } from "@/lib/platforms/use-platform-events";
 // metrics table was added — the engine reports no running follower/sub/bits
 // totals to read instead.
 
-const EVENT_TYPES: PlatformEventType[] = ["follow", "subscribe", "cheer", "raid"];
+const EVENT_TYPES: PlatformEventType[] = ["follow", "subscribe", "subscriptionGift", "cheer", "raid"];
 
 interface SessionTallies {
   follows: number;
   subscribes: number;
+  giftedSubs: number;
   bits: number;
   raids: number;
 }
 
-const EMPTY_TALLIES: SessionTallies = { follows: 0, subscribes: 0, bits: 0, raids: 0 };
+const EMPTY_TALLIES: SessionTallies = { follows: 0, subscribes: 0, giftedSubs: 0, bits: 0, raids: 0 };
 
 function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: ReactNode }) {
   return (
@@ -62,6 +63,12 @@ export function StreamStatsWidget() {
           return { ...prev, follows: prev.follows + 1 };
         case "subscribe":
           return { ...prev, subscribes: prev.subscribes + 1 };
+        case "subscriptionGift":
+          // One gift event can carry many subs, so this sums `amount` rather
+          // than counting events. It stays apart from Subs because Twitch also
+          // sends a channel.subscribe (isGift) per recipient, which Subs
+          // already counts.
+          return { ...prev, giftedSubs: prev.giftedSubs + (event.amount ?? 0) };
         case "cheer":
           return { ...prev, bits: prev.bits + (event.amount ?? 0) };
         case "raid":
@@ -104,6 +111,7 @@ export function StreamStatsWidget() {
       <div className="divide-y divide-border">
         <StatRow icon={UserPlus} label="Follows" value={tallies.follows.toLocaleString()} />
         <StatRow icon={Heart} label="Subs" value={tallies.subscribes.toLocaleString()} />
+        <StatRow icon={HandHeart} label="Gifted subs" value={tallies.giftedSubs.toLocaleString()} />
         <StatRow icon={Gift} label="Bits" value={tallies.bits.toLocaleString()} />
         <StatRow icon={Zap} label="Raids" value={tallies.raids.toLocaleString()} />
       </div>
