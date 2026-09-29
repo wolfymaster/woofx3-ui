@@ -1,5 +1,5 @@
 import type { ConditionConfig } from "@woofx3/api";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
@@ -110,7 +110,9 @@ function TriggerConfigPanel({
   // until finished; saving them would quietly turn the empty field into Any.
   const [unfinished, setUnfinished] = useState<TriggerConfigValues | null>(null);
   const catalogRow = resolveCatalogTrigger(node, catalog);
-  const fields = withModuleName(parseConfigFields(catalogRow?.configFields), catalogRow?.moduleName);
+  const configFields = catalogRow?.configFields;
+  const moduleName = catalogRow?.moduleName;
+  const fields = useMemo(() => withModuleName(parseConfigFields(configFields), moduleName), [configFields, moduleName]);
   if (fields.length === 0) {
     return <p className="text-sm text-muted-foreground">This trigger has no configurable settings.</p>;
   }
@@ -148,7 +150,9 @@ function ActionConfigPanel({
   onUpdateActionId: (oldId: string, newId: string) => void;
 }) {
   const catalogRow = resolveCatalogAction(node, catalog);
-  const fields = withModuleName(parseConfigFields(catalogRow?.configFields), catalogRow?.moduleName);
+  const configFields = catalogRow?.configFields;
+  const moduleName = catalogRow?.moduleName;
+  const fields = useMemo(() => withModuleName(parseConfigFields(configFields), moduleName), [configFields, moduleName]);
   return (
     <div className="space-y-6">
       <StepIdField id={node.id} existingStepIds={existingStepIds} onUpdateActionId={onUpdateActionId} />
