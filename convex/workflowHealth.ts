@@ -31,10 +31,14 @@ import { logger } from "./logger";
  */
 const MAX_ERROR_ROWS = 500;
 
-/** getWorkflowHealth ships with the engine's health reporting and is not yet in @woofx3/api here. */
-interface WorkflowHealthEngineApi extends EngineApi {
+/**
+ * getWorkflowHealth ships with the engine's health reporting, and the engine
+ * checkout this builds against may not declare it yet. The reply is validated
+ * here rather than trusted, so it is typed as unknown either way.
+ */
+type WorkflowHealthEngineApi = Omit<EngineApi, "getWorkflowHealth"> & {
   getWorkflowHealth(): Promise<unknown>;
-}
+};
 
 type HealthRow = Doc<"workflowHealth">;
 
