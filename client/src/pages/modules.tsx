@@ -7,6 +7,7 @@ import { Check, Loader2, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
+import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
 import { ModuleSidebar } from "@/components/modules/module-sidebar";
 import { ModuleStore } from "@/components/modules/module-store";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
@@ -16,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
 import { bareModuleKey } from "@/lib/module-key";
+import { permissionsToApprove } from "@/lib/module-permissions";
 
 interface ModuleListItem {
   _id: Id<"moduleRepository">;
@@ -34,6 +36,14 @@ type OAuthResult =
   | { status: "finishing"; connectCode: string }
   | { status: "connected" }
   | { status: "error"; message: string };
+
+interface PendingPermissionApproval {
+  mode: PermissionApprovalMode;
+  /** Shown to the streamer: what this install or update newly allows. */
+  toApprove: string[];
+  /** Sent with the install: everything the module may hold once it succeeds. */
+  approved: string[];
+}
 
 type SelectedModule =
   | { source: "installed"; module: ModuleListItem }
@@ -298,23 +308,54 @@ export default function Modules() {
     return bareModuleKey(selectedModule.module.moduleKey) ?? null;
   }, [selectedModule]);
 
-  const handleMarketplaceInstall = useCallback(async () => {
-    if (!instance || !selectedMarketplaceId) {
-      return;
-    }
-    setIsInstalling(true);
-    setInstallError(null);
-    try {
-      const { moduleKey } = await installMarketplaceModule({
-        instanceId: instance._id,
-        marketplaceModuleId: selectedMarketplaceId,
-      });
-      setPendingModuleKey(moduleKey);
-    } catch (err) {
-      setInstallError(err instanceof Error ? err.message : "Failed to install marketplace module.");
-      setIsInstalling(false);
-    }
-  }, [instance, selectedMarketplaceId, installMarketplaceModule]);
+  const runMarketplaceInstall = useCallback(
+    async (approvedPermissions: string[]) => {
+      if (!instance || !selectedMarketplaceId) {
+        return;
+      }
+      setIsInstalling(true);
+      setInstallError(null);
+      try {
+        const { moduleKey } = await installMarketplaceModule({
+          instanceId: instance._id,
+          marketplaceModuleId: selectedMarketplaceId,
+          approvedPermissions,
+        });
+        setPendingModuleKey(moduleKey);
+      } catch (err) {
+        setInstallError(err instanceof Error ? err.message : "Failed to install marketplace module.");
+        setIsInstalling(false);
+      }
+    },
+    [instance, selectedMarketplaceId, installMarketplaceModule]
+  );
+
+  const [pendingApproval, setPendingApproval] = useState<PendingPermissionApproval | null>(null);
+
+  // Permissions that could not be read are approved as "none new": the install
+  // action reads the archive itself and refuses one that declares anything
+  // outside the approved list, so an unreadable listing can never install a
+  // permission the streamer did not see.
+  const requestMarketplaceInstall = useCallback(
+    (mode: PermissionApprovalMode) => {
+      if (!moduleDetail) {
+        return;
+      }
+      const installed = mode === "update" ? moduleDetail.permissions : null;
+      const next = mode === "update" ? moduleDetail.latestPermissions : moduleDetail.permissions;
+      if (next === null || next === undefined) {
+        void runMarketplaceInstall(installed ?? []);
+        return;
+      }
+      const toApprove = permissionsToApprove(next, installed);
+      if (toApprove.length === 0) {
+        void runMarketplaceInstall(next);
+        return;
+      }
+      setPendingApproval({ mode, toApprove, approved: next });
+    },
+    [moduleDetail, runMarketplaceInstall]
+  );
 
   const installedModuleForMarketplace = useMemo(() => {
     if (selectedModule?.source !== "marketplace" || !repoModules) {
@@ -369,6 +410,8 @@ export default function Modules() {
       moduleDbId: moduleDetail.moduleDbId as Id<"moduleRepository"> | undefined,
       manifestSettings: moduleDetail.manifestSettings,
       manifestResourceKinds: moduleDetail.manifestResourceKinds,
+      permissions: moduleDetail.permissions,
+      latestPermissions: moduleDetail.latestPermissions,
     };
   }, [moduleDetail]);
 
@@ -465,6 +508,8 @@ export default function Modules() {
                     moduleDbId={detailProps?.moduleDbId}
                     manifestSettings={detailProps?.manifestSettings}
                     manifestResourceKinds={detailProps?.manifestResourceKinds}
+                    permissions={detailProps?.permissions}
+                    latestPermissions={detailProps?.latestPermissions}
                     onRemove={
                       selectedModule.source === "installed"
                         ? () => handleDelete(selectedModule.module._id)
@@ -472,8 +517,8 @@ export default function Modules() {
                           ? () => handleDelete(installedModuleForMarketplace._id)
                           : undefined
                     }
-                    onInstall={selectedMarketplaceId ? handleMarketplaceInstall : undefined}
-                    onUpdate={selectedMarketplaceId ? handleMarketplaceInstall : undefined}
+                    onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
+                    onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}
                     isInstalling={isInstalling}
                     installDisabled={meta.isInstalled}
                     installDisabledReason={meta.isInstalled ? "Already installed" : undefined}
@@ -503,6 +548,20 @@ export default function Modules() {
           <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{installError}</pre>
         </DialogContent>
       </Dialog>
+
+      <ApproveModulePermissionsDialog
+        open={pendingApproval !== null}
+        mode={pendingApproval?.mode ?? "install"}
+        moduleName={meta?.name ?? "This module"}
+        permissions={pendingApproval?.toApprove ?? []}
+        onApprove={() => {
+          if (pendingApproval) {
+            void runMarketplaceInstall(pendingApproval.approved);
+          }
+          setPendingApproval(null);
+        }}
+        onCancel={() => setPendingApproval(null)}
+      />
 
       {instance && (
         <UninstallModuleDialog
