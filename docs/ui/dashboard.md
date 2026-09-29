@@ -57,15 +57,16 @@ A pre-flight run just before going live, so a broken setup is found by the
 streamer and not by the viewers. The same component
 (`components/go-live/go-live-checklist.tsx`) is the `go-live` widget and the
 `/stream/go-live` page. Every check starts at once on mount and each row fills
-in as its answer lands; the checks that ask Twitch or the engine are separate
-Convex actions in `convex/goLive.ts` for exactly that reason.
+in as its answer lands; the checks that ask Twitch are separate Convex actions
+in `convex/goLive.ts` for exactly that reason, and the OBS check sends its own
+field-options request.
 
 | Check | Source | Notes |
 |-------|--------|-------|
 | Engine | `$engineConnected` from the transport | No request of its own |
 | Twitch connection | `goLive.checkTwitch` | Validates the token with Twitch and diffs its scopes against `TWITCH_INTEGRATION_SCOPES` |
 | Overlays | `goLive.overlays` | Scenes and OBS browser-source keys. Nothing reports whether an overlay is open in OBS right now, so the best case is a warning with the URL to copy and when a browser source last loaded one |
-| OBS | `goLive.checkObs` | Engine `listObsScenes`; an engine without the method reads as "update the engine" |
+| OBS | `fieldOptions.dispatch` | Asks for the options of the bundled module's `obs.switch_scene` scene field by reference, exactly as the workflow builder's scene picker does, and reads the reply from `transientEvents`. Scenes listed pass with their count; the scene manager's `{ error }` reason (e.g. OBS not connected) warns with that reason; an engine without the bundled field (the module or field is not installed, or it predates field references) warns that it doesn't report OBS status; no reply within 15 seconds warns that OBS didn't answer. There is no OBS-specific engine call |
 | Stream info | `goLive.checkStreamInfo` | Helix `GET /channels`; warns about no title or category, a title identical to the last completed checklist, or a category unchanged for over a week |
 | Workflows | `goLive.checklist` | Warns when none is enabled; counts enabled workflows only up to 20 through `workflows.by_instance_enabled` |
 
