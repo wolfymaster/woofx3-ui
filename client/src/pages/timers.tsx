@@ -1,17 +1,21 @@
 import { Pause, Play, RotateCcw, Timer } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useResourceAction } from "@/hooks/use-resource-action";
-import { formatDuration, parseDuration, timerDurationMs, timerState } from "@/lib/resource-values";
+import { useTimerState } from "@/hooks/use-timer-state";
+import {
+  formatDuration,
+  parseDuration,
+  TIMER_QUICK_ADJUSTMENTS,
+  timerProgressPercent,
+  timerStatus,
+} from "@/lib/resource-values";
 
 const BASE_PATH = "/stream/timers";
-
-/** Seconds each quick-adjust button adds; negative takes time away. */
-const QUICK_ADJUSTMENTS = [-30, 30, 60, 300];
 
 export default function Timers() {
   return (
@@ -27,46 +31,22 @@ export default function Timers() {
   );
 }
 
-/**
- * The current time, refreshed several times a second while `ticking`. A
- * running timer is stored as the moment it ends, so showing it counting down
- * is the page's job; a stopped one needs no refresh.
- */
-function useNow(ticking: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    setNow(Date.now());
-    if (!ticking) {
-      return;
-    }
-    const interval = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(interval);
-  }, [ticking]);
-  return now;
-}
-
-function useTimer({ value, settings }: ResourceDetailProps) {
-  // Whether a timer runs does not depend on the time, only how long it has left.
-  const now = useNow(timerState(value, settings, 0).running);
-  return timerState(value, settings, now);
-}
-
-function TimerClock(props: ResourceDetailProps) {
-  return <>{formatDuration(useTimer(props).remainingMs)}</>;
+function TimerClock({ value, settings }: ResourceDetailProps) {
+  return <>{formatDuration(useTimerState(value, settings).remainingMs)}</>;
 }
 
 /** The timer's time left and what can be done to it, through the timer's own actions. */
 function TimerPanel(props: ResourceDetailProps) {
-  const { instance, settings } = props;
+  const { instance, value, settings } = props;
   const { run, pending } = useResourceAction(props);
-  const { running, remainingMs } = useTimer(props);
+  const state = useTimerState(value, settings);
+  const { remainingMs } = state;
   const [setTo, setSetTo] = useState("");
 
-  const durationMs = timerDurationMs(settings);
-  const progress = durationMs > 0 ? Math.min(100, (remainingMs / durationMs) * 100) : 0;
+  const progress = timerProgressPercent(remainingMs, settings);
   const setSeconds = parseDuration(setTo);
-  const counting = running && remainingMs > 0;
-  const status = counting ? "Running" : remainingMs > 0 ? "Paused" : "Finished";
+  const status = timerStatus(state);
+  const counting = status === "Running";
 
   return (
     <Card className="p-6 space-y-6">
@@ -115,7 +95,7 @@ function TimerPanel(props: ResourceDetailProps) {
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-2">
-        {QUICK_ADJUSTMENTS.map((seconds) => (
+        {TIMER_QUICK_ADJUSTMENTS.map((seconds) => (
           <Button
             key={seconds}
             variant="outline"

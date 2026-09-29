@@ -1,11 +1,13 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { oauthErrorMessage } from "@convex/lib/oauthErrors";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { Check, Loader2, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
+import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
 import { ModuleSidebar } from "@/components/modules/module-sidebar";
 import { ModuleStore } from "@/components/modules/module-store";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
@@ -15,6 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
 import { bareModuleKey } from "@/lib/module-key";
+import { permissionsToApprove } from "@/lib/module-permissions";
 
 interface ModuleListItem {
   _id: Id<"moduleRepository">;
@@ -27,6 +30,19 @@ interface ModuleListItem {
   moduleKey?: string;
   isInstalled: boolean;
   status?: "pending" | "delivering" | "installed" | "failed";
+}
+
+type OAuthResult =
+  | { status: "finishing"; connectCode: string }
+  | { status: "connected" }
+  | { status: "error"; message: string };
+
+interface PendingPermissionApproval {
+  mode: PermissionApprovalMode;
+  /** Shown to the streamer: what this install or update newly allows. */
+  toApprove: string[];
+  /** Sent with the install: everything the module may hold once it succeeds. */
+  approved: string[];
 }
 
 type SelectedModule =
@@ -52,19 +68,48 @@ export default function Modules() {
   );
   const catalog = useMarketplaceCatalog();
 
-  const [oauthResult, setOauthResult] = useState<{
-    integration: string;
-    status: string;
-    message: string | null;
-  } | null>(() => {
+  // Set from the query string the Spotify callback redirects with. Only a
+  // known integration and an error code are read from it; the text shown is
+  // fixed (lib/oauthErrors.ts). A `connect_code` is redeemed by
+  // spotifyConnect.finish, which only the member who started the connect can do.
+  const [oauthResult, setOauthResult] = useState<OAuthResult | null>(() => {
     const params = new URLSearchParams(window.location.search);
-    const integration = params.get("integration");
-    const status = params.get("status");
-    if (!integration || !status) {
+    if (params.get("integration") !== "spotify") {
       return null;
     }
-    return { integration, status, message: params.get("message") };
+    const connectCode = params.get("connect_code");
+    if (connectCode) {
+      return { status: "finishing", connectCode };
+    }
+    if (params.get("status") === "error") {
+      return { status: "error", message: oauthErrorMessage(params.get("error"), "Spotify") };
+    }
+    return null;
   });
+
+  const finishSpotify = useAction(api.spotifyConnect.finish);
+  const { isAuthenticated } = useConvexAuth();
+  const finishingCodeRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !isAuthenticated ||
+      oauthResult?.status !== "finishing" ||
+      finishingCodeRef.current === oauthResult.connectCode
+    ) {
+      return;
+    }
+    finishingCodeRef.current = oauthResult.connectCode;
+    finishSpotify({ code: oauthResult.connectCode })
+      .then((result) => {
+        setOauthResult(
+          result.ok ? { status: "connected" } : { status: "error", message: oauthErrorMessage(result.error, "Spotify") }
+        );
+      })
+      .catch((err: unknown) => {
+        console.error("[modules] spotifyConnect.finish failed:", String(err));
+        setOauthResult({ status: "error", message: oauthErrorMessage(null, "Spotify") });
+      });
+  }, [finishSpotify, isAuthenticated, oauthResult]);
 
   const oauthUrlStrippedRef = useRef(false);
   useEffect(() => {
@@ -263,23 +308,54 @@ export default function Modules() {
     return bareModuleKey(selectedModule.module.moduleKey) ?? null;
   }, [selectedModule]);
 
-  const handleMarketplaceInstall = useCallback(async () => {
-    if (!instance || !selectedMarketplaceId) {
-      return;
-    }
-    setIsInstalling(true);
-    setInstallError(null);
-    try {
-      const { moduleKey } = await installMarketplaceModule({
-        instanceId: instance._id,
-        marketplaceModuleId: selectedMarketplaceId,
-      });
-      setPendingModuleKey(moduleKey);
-    } catch (err) {
-      setInstallError(err instanceof Error ? err.message : "Failed to install marketplace module.");
-      setIsInstalling(false);
-    }
-  }, [instance, selectedMarketplaceId, installMarketplaceModule]);
+  const runMarketplaceInstall = useCallback(
+    async (approvedPermissions: string[]) => {
+      if (!instance || !selectedMarketplaceId) {
+        return;
+      }
+      setIsInstalling(true);
+      setInstallError(null);
+      try {
+        const { moduleKey } = await installMarketplaceModule({
+          instanceId: instance._id,
+          marketplaceModuleId: selectedMarketplaceId,
+          approvedPermissions,
+        });
+        setPendingModuleKey(moduleKey);
+      } catch (err) {
+        setInstallError(err instanceof Error ? err.message : "Failed to install marketplace module.");
+        setIsInstalling(false);
+      }
+    },
+    [instance, selectedMarketplaceId, installMarketplaceModule]
+  );
+
+  const [pendingApproval, setPendingApproval] = useState<PendingPermissionApproval | null>(null);
+
+  // Permissions that could not be read are approved as "none new": the install
+  // action reads the archive itself and refuses one that declares anything
+  // outside the approved list, so an unreadable listing can never install a
+  // permission the streamer did not see.
+  const requestMarketplaceInstall = useCallback(
+    (mode: PermissionApprovalMode) => {
+      if (!moduleDetail) {
+        return;
+      }
+      const installed = mode === "update" ? moduleDetail.permissions : null;
+      const next = mode === "update" ? moduleDetail.latestPermissions : moduleDetail.permissions;
+      if (next === null || next === undefined) {
+        void runMarketplaceInstall(installed ?? []);
+        return;
+      }
+      const toApprove = permissionsToApprove(next, installed);
+      if (toApprove.length === 0) {
+        void runMarketplaceInstall(next);
+        return;
+      }
+      setPendingApproval({ mode, toApprove, approved: next });
+    },
+    [moduleDetail, runMarketplaceInstall]
+  );
 
   const installedModuleForMarketplace = useMemo(() => {
     if (selectedModule?.source !== "marketplace" || !repoModules) {
@@ -334,6 +410,8 @@ export default function Modules() {
       moduleDbId: moduleDetail.moduleDbId as Id<"moduleRepository"> | undefined,
       manifestSettings: moduleDetail.manifestSettings,
       manifestResourceKinds: moduleDetail.manifestResourceKinds,
+      permissions: moduleDetail.permissions,
+      latestPermissions: moduleDetail.latestPermissions,
     };
   }, [moduleDetail]);
 
@@ -392,20 +470,24 @@ export default function Modules() {
                 {oauthResult && (
                   <div
                     className={`mx-6 mt-4 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs ${
-                      oauthResult.status === "connected"
+                      oauthResult.status !== "error"
                         ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600"
                         : "border-destructive/30 bg-destructive/5 text-destructive"
                     }`}
                   >
                     <span className="flex items-center gap-1.5">
-                      {oauthResult.status === "connected" ? (
+                      {oauthResult.status === "finishing" ? (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+                      ) : oauthResult.status === "connected" ? (
                         <Check className="h-3.5 w-3.5 shrink-0" />
                       ) : (
                         <XCircle className="h-3.5 w-3.5 shrink-0" />
                       )}
-                      {oauthResult.status === "connected"
-                        ? `${oauthResult.integration} connected successfully.`
-                        : (oauthResult.message ?? `Failed to connect ${oauthResult.integration}.`)}
+                      {oauthResult.status === "finishing"
+                        ? "Finishing the Spotify connection..."
+                        : oauthResult.status === "connected"
+                          ? "Spotify connected successfully."
+                          : oauthResult.message}
                     </span>
                     <button type="button" onClick={() => setOauthResult(null)} className="shrink-0">
                       <X className="h-3.5 w-3.5" />
@@ -426,6 +508,8 @@ export default function Modules() {
                     moduleDbId={detailProps?.moduleDbId}
                     manifestSettings={detailProps?.manifestSettings}
                     manifestResourceKinds={detailProps?.manifestResourceKinds}
+                    permissions={detailProps?.permissions}
+                    latestPermissions={detailProps?.latestPermissions}
                     onRemove={
                       selectedModule.source === "installed"
                         ? () => handleDelete(selectedModule.module._id)
@@ -433,8 +517,8 @@ export default function Modules() {
                           ? () => handleDelete(installedModuleForMarketplace._id)
                           : undefined
                     }
-                    onInstall={selectedMarketplaceId ? handleMarketplaceInstall : undefined}
-                    onUpdate={selectedMarketplaceId ? handleMarketplaceInstall : undefined}
+                    onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
+                    onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}
                     isInstalling={isInstalling}
                     installDisabled={meta.isInstalled}
                     installDisabledReason={meta.isInstalled ? "Already installed" : undefined}
@@ -464,6 +548,20 @@ export default function Modules() {
           <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{installError}</pre>
         </DialogContent>
       </Dialog>
+
+      <ApproveModulePermissionsDialog
+        open={pendingApproval !== null}
+        mode={pendingApproval?.mode ?? "install"}
+        moduleName={meta?.name ?? "This module"}
+        permissions={pendingApproval?.toApprove ?? []}
+        onApprove={() => {
+          if (pendingApproval) {
+            void runMarketplaceInstall(pendingApproval.approved);
+          }
+          setPendingApproval(null);
+        }}
+        onCancel={() => setPendingApproval(null)}
+      />
 
       {instance && (
         <UninstallModuleDialog

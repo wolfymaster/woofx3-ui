@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import type { MarketplaceImages } from "@convex/lib/marketplaceImages";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -10,7 +11,8 @@ export interface MarketplaceListItem {
   author: string;
   category: string;
   tags: string[];
-  iconUrl?: string;
+  images: MarketplaceImages;
+  featuredRank?: number;
   counts: { triggers: number; actions: number; functions: number; widgets: number };
   updatedAt?: string;
 }

@@ -1,6 +1,8 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { escapeDollarKeys } from "./lib/dollarKeys";
+import { completeStarterItemByCorrelation } from "./lib/starterPackLedger";
+import { deleteWorkflowHealth } from "./workflowHealth";
 
 /**
  * Record a pending engine round-trip so the webhook handler can correlate
@@ -58,6 +60,9 @@ export const resolveCorrelation = internalMutation({
       op,
       completedAt: Date.now(),
     });
+    if (op === "create") {
+      await completeStarterItemByCorrelation(ctx, correlationKey, engineWorkflowId);
+    }
   },
 });
 
@@ -131,6 +136,7 @@ export const deleteFromWebhook = internalMutation({
     if (row) {
       await ctx.db.delete(row._id);
     }
+    await deleteWorkflowHealth(ctx, instanceId, engineWorkflowId);
   },
 });
 

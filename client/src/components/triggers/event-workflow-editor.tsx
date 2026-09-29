@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
 import { alertEditorPath } from "@/lib/alert-editor-route";
 import { alertSectionAnchor } from "@/lib/alert-groups";
 import { type OptionLabels, sentenceParts } from "@/lib/condition-sentence";
@@ -104,6 +105,7 @@ export function EventWorkflowEditor({
   const dynamicFields = useMemo(() => conditionFields.filter(isInternalSource), [conditionFields]);
 
   const { draft, others, unprojectable } = useEventWorkflowDraft(triggerPreset, conditionFields, workflows);
+  const { byId: notRunning } = useNotRunningWorkflows();
 
   const state = draft?.value ?? null;
   const isDirty = isDraftDirty(draft);
@@ -438,6 +440,7 @@ export function EventWorkflowEditor({
                     state.engineWorkflowId ? () => navigate(`/stream/workflows/${state.engineWorkflowId}`) : undefined
                   }
                   resolveActionPreset={resolveActionPreset}
+                  notRunning={state.engineWorkflowId ? notRunning.get(state.engineWorkflowId) : undefined}
                 />
               );
             })

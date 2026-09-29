@@ -1,10 +1,11 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { CHAT_COMMAND_RUN_RESTRICTION } from "@convex/lib/macroTrigger";
 import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Check, GripVertical, Loader2, Pencil, Plus, SlidersHorizontal, Trash2, Zap } from "lucide-react";
+import { Check, GripVertical, Loader2, Pencil, Plus, Radio, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
@@ -13,13 +14,12 @@ import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import {
   applyMacroVariables,
-  chatCommandParts,
   extractMacroVariables,
   isHexColor,
   type MacroButton,
-  type MacroConfig,
   type MacroInput,
 } from "@/lib/macro-pad";
+import { macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
 import { cn } from "@/lib/utils";
 import { MacroIconPreview } from "./macro-icon-picker";
 import { MacroConfigModal } from "./macro-pad-config-modal";
@@ -32,12 +32,29 @@ interface MacroTileProps {
   isEditMode: boolean;
   isExecuting: boolean;
   variableCount: number;
+  /** Status line of the macro's remote trigger, or undefined when it has none. */
+  remoteTriggerStatus: string | undefined;
+  /** Why this viewer may not press the button, or undefined when they may. */
+  runBlockedReason: string | undefined;
+  /** Why this viewer may not delete the button, or undefined when they may. */
+  deleteBlockedReason: string | undefined;
   onRun: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-function MacroTile({ macro, isEditMode, isExecuting, variableCount, onRun, onEdit, onDelete }: MacroTileProps) {
+function MacroTile({
+  macro,
+  isEditMode,
+  isExecuting,
+  variableCount,
+  remoteTriggerStatus,
+  runBlockedReason,
+  deleteBlockedReason,
+  onRun,
+  onEdit,
+  onDelete,
+}: MacroTileProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: macro.id,
     disabled: !isEditMode,
@@ -58,11 +75,12 @@ function MacroTile({ macro, isEditMode, isExecuting, variableCount, onRun, onEdi
       ref={setNodeRef}
       style={style}
       className={cn("relative aspect-square", isDragging && "z-10 opacity-80")}
+      title={!isEditMode ? runBlockedReason : undefined}
       data-testid={`macro-tile-${macro.id}`}
     >
       <button
         type="button"
-        disabled={isEditMode || isExecuting}
+        disabled={isEditMode || isExecuting || (!isEditMode && runBlockedReason !== undefined)}
         onClick={onRun}
         style={tint}
         className={cn(
@@ -94,6 +112,17 @@ function MacroTile({ macro, isEditMode, isExecuting, variableCount, onRun, onEdi
         )}
       </button>
 
+      {remoteTriggerStatus && !isEditMode && (
+        <span
+          className="absolute top-1 left-1 text-muted-foreground/70"
+          title={`Remote trigger: ${remoteTriggerStatus}`}
+          data-testid={`macro-remote-indicator-${macro.id}`}
+        >
+          <Radio className="h-3 w-3" />
+          <span className="sr-only">Remote trigger: {remoteTriggerStatus}</span>
+        </span>
+      )}
+
       {isEditMode && (
         <>
           <GripVertical className="absolute bottom-1 left-1 h-3.5 w-3.5 text-muted-foreground/60 pointer-events-none" />
@@ -112,6 +141,8 @@ function MacroTile({ macro, isEditMode, isExecuting, variableCount, onRun, onEdi
               size="icon"
               className="h-5 w-5 bg-background/80 text-destructive hover:text-destructive"
               onClick={onDelete}
+              disabled={deleteBlockedReason !== undefined}
+              title={deleteBlockedReason}
               data-testid={`button-delete-macro-${macro.id}`}
             >
               <Trash2 className="h-3 w-3" />
@@ -134,9 +165,8 @@ export function MacroPadModule() {
   const [pendingMacro, setPendingMacro] = useState<MacroButton | null>(null);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const listEngineWorkflows = useAction(api.moduleEngine.listWorkflows);
-  const triggerWorkflow = useAction(api.workflowActions.trigger);
+  const runMacroOnServer = useAction(api.macros.run);
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
-  const executeCommand = useAction(api.chatCommandActions.executeCommand);
   const { toast } = useToast();
 
   const instanceId = instance?._id;
@@ -144,6 +174,7 @@ export function MacroPadModule() {
 
   const macros = useQuery(api.macros.list, listArgs);
   const commands = useQuery(api.chatCommands.list, listArgs);
+  const remoteTriggers = useQuery(api.macroTriggers.listForInstance, listArgs);
   const addMacro = useMutation(api.macros.addMacro);
   const updateMacro = useMutation(api.macros.updateMacro);
   const deleteMacro = useMutation(api.macros.deleteMacro);
@@ -178,6 +209,18 @@ export function MacroPadModule() {
     }
     return counts;
   }, [macros]);
+
+  // Until the role is known, members and managers alike see buttons enabled;
+  // the server refuses what the role does not allow either way.
+  const canManage = remoteTriggers?.canManage ?? true;
+
+  const remoteTriggerStatuses = useMemo(() => {
+    const statuses: Record<string, string> = {};
+    for (const trigger of remoteTriggers?.triggers ?? []) {
+      statuses[trigger.macroId] = macroTriggerStatusLabel(trigger);
+    }
+    return statuses;
+  }, [remoteTriggers]);
 
   const handleAddMacro = useCallback(() => {
     setEditingMacro(null);
@@ -231,42 +274,36 @@ export function MacroPadModule() {
   // click from being swallowed as the start of a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  // `resolved` arrives with every {{variable}} already filled in.
+  // Chat-command and workflow macros run in Convex through the same path as a
+  // remote trigger URL. HTTP-request macros are fetched from here, in the
+  // browser, so a target on the streamer's local network stays reachable.
+  // Send-message macros post through the signed-in user's Twitch link.
   const runMacro = useCallback(
-    async (macro: MacroButton, resolved: MacroConfig) => {
+    async (macro: MacroButton, values: Record<string, string>) => {
       if (!instanceId) {
         return;
       }
       setIsExecuting(macro.id);
       try {
-        switch (macro.type) {
-          case "send-message":
-            await sendChatMessage({ instanceId, message: resolved.message ?? "" });
-            break;
-          case "chat-command": {
-            const { command, text } = chatCommandParts(resolved);
-            await executeCommand({ instanceId, command, text });
-            break;
+        if (macro.type === "http-request") {
+          const resolved = applyMacroVariables(macro.config, values);
+          if (resolved.url) {
+            const response = await fetch(resolved.url, {
+              method: resolved.method || "GET",
+              headers: resolved.headers || {},
+              body: resolved.body ? JSON.stringify(JSON.parse(resolved.body)) : undefined,
+            });
+            console.log("HTTP request result:", response.status);
           }
-          case "trigger-workflow":
-            if (!resolved.workflowId) {
-              throw new Error("This button has no workflow selected");
-            }
-            // Resolves once the request reaches the bus. The run happens in
-            // the engine and reports its own lifecycle, so there is nothing
-            // further to await here.
-            await triggerWorkflow({ instanceId, workflowNameOrId: resolved.workflowId });
-            break;
-          case "http-request":
-            if (resolved.url) {
-              const response = await fetch(resolved.url, {
-                method: resolved.method || "GET",
-                headers: resolved.headers || {},
-                body: resolved.body ? JSON.stringify(JSON.parse(resolved.body)) : undefined,
-              });
-              console.log("HTTP request result:", response.status);
-            }
-            break;
+        } else if (macro.type === "send-message") {
+          const resolved = applyMacroVariables(macro.config, values);
+          await sendChatMessage({ instanceId, message: resolved.message ?? "" });
+        } else {
+          await runMacroOnServer({
+            instanceId,
+            macroId: macro.id as Id<"macros">,
+            values: Object.entries(values).map(([name, value]) => ({ name, value })),
+          });
         }
       } catch (error) {
         toast({
@@ -278,7 +315,7 @@ export function MacroPadModule() {
         setIsExecuting(null);
       }
     },
-    [instanceId, triggerWorkflow, sendChatMessage, executeCommand, toast]
+    [instanceId, runMacroOnServer, sendChatMessage, toast]
   );
 
   const handlePress = useCallback(
@@ -290,7 +327,7 @@ export function MacroPadModule() {
         setPendingMacro(macro);
         return;
       }
-      void runMacro(macro, macro.config);
+      void runMacro(macro, {});
     },
     [isEditMode, runMacro]
   );
@@ -302,7 +339,7 @@ export function MacroPadModule() {
       }
       const macro = pendingMacro;
       setPendingMacro(null);
-      void runMacro(macro, applyMacroVariables(macro.config, values));
+      void runMacro(macro, values);
     },
     [pendingMacro, runMacro]
   );
@@ -372,6 +409,15 @@ export function MacroPadModule() {
                       isEditMode={isEditMode}
                       isExecuting={isExecuting === macro.id}
                       variableCount={variableCounts[macro.id] ?? 0}
+                      remoteTriggerStatus={remoteTriggerStatuses[macro.id]}
+                      runBlockedReason={
+                        macro.type === "chat-command" && !canManage ? CHAT_COMMAND_RUN_RESTRICTION : undefined
+                      }
+                      deleteBlockedReason={
+                        macro.id in remoteTriggerStatuses && !canManage
+                          ? "This macro has a remote trigger URL, so only an owner or admin can delete it"
+                          : undefined
+                      }
                       onRun={() => handlePress(macro)}
                       onEdit={() => {
                         setEditingMacro(macro);
@@ -388,6 +434,7 @@ export function MacroPadModule() {
       </div>
 
       <MacroConfigModal
+        instanceId={instanceId}
         open={configModalOpen}
         onOpenChange={setConfigModalOpen}
         macro={editingMacro}

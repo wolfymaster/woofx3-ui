@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { query } from "./_generated/server";
 import { manifestModuleName, parseManifestResourceKinds } from "./lib/resourceKinds";
+import { isInstanceMember } from "./lib/teamAccess";
 
 /**
  * The installed module that provides a resource kind on this instance, and the
@@ -14,6 +15,9 @@ import { manifestModuleName, parseManifestResourceKinds } from "./lib/resourceKi
 export const getForInstance = query({
   args: { instanceId: v.id("instances"), kind: v.string() },
   handler: async (ctx, { instanceId, kind }) => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return null;
+    }
     const modules = await ctx.db
       .query("moduleRepository")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))

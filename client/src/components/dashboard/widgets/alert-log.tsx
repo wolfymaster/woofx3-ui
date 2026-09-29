@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { BellRing, Loader2 } from "lucide-react";
+import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
@@ -68,15 +69,18 @@ export function AlertLogWidget() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0">
-        <Badge variant="secondary" className="text-xs">
-          {alerts?.length ?? 0} recent
-        </Badge>
-        {failures > 0 && (
-          <Badge variant="secondary" className="text-xs text-red-500">
-            {failures} failed
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-border shrink-0">
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs">
+            {alerts?.length ?? 0} recent
           </Badge>
-        )}
+          {failures > 0 && (
+            <Badge variant="secondary" className="text-xs text-red-500">
+              {failures} failed
+            </Badge>
+          )}
+        </div>
+        {instanceId && <AlertQueueControls instanceId={instanceId} />}
       </div>
 
       <ScrollArea className="flex-1 min-h-0">

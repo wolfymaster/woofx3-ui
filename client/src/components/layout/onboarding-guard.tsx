@@ -4,7 +4,7 @@ import { useConvexAuth, useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useEffect } from "react";
 import { useLocation, useRoute } from "wouter";
-import { DashboardSkeleton } from "@/components/dashboard/dashboard-canvas";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
 import { $dashboardLayoutHint } from "@/lib/stores";
 

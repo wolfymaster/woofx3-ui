@@ -25,6 +25,7 @@ import { useEngineHealth } from "@/hooks/use-engine-health";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
+import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { CommandPalette } from "./command-palette";
@@ -32,6 +33,7 @@ import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, UTILITY_SECTIONS
 import { SectionSidebar } from "./section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
 import { ThemeMenuSub } from "./theme-menu";
+import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
 
 function InstanceBar() {
   const { instance, instances, setInstance, isLoading } = useInstance();
@@ -155,7 +157,7 @@ function StatusBar() {
             {isLive ? "Live" : "Offline"}
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-muted-foreground font-mono">
+        <div className="flex items-center gap-1.5 text-muted-foreground font-system-mono">
           <Activity className="h-3 w-3" />
           {startedAt ? <Uptime startedAt={startedAt} /> : <span>00:00:00</span>}
         </div>
@@ -240,7 +242,7 @@ function AppHeader() {
         >
           <Search className="h-4 w-4" />
           <span className="flex-1 text-left text-xs">Quick actions...</span>
-          <kbd className="pointer-events-none flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+          <kbd className="pointer-events-none flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-system-mono text-[10px] font-medium text-muted-foreground">
             <Command className="h-3 w-3" />K
           </kbd>
         </Button>
@@ -302,6 +304,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const [location] = useLocation();
   const activeSection = findActiveSection(location);
   useSyncEngineTransport();
+  useWorkflowHealthResyncOnReconnect();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -320,6 +323,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
       <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
         <InstanceBar />
         <AppHeader />
+        <TwitchReconnectBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {activeSection?.children && (

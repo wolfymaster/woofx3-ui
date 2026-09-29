@@ -4,6 +4,7 @@ import { ReplayControls } from "@/components/alert-run/replay-controls";
 import { RunTrace } from "@/components/alert-run/run-trace";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { useInstance } from "@/hooks/use-instance";
+import { decodeRouteParam } from "@/lib/route-param";
 
 const ALERTS_PATH = "/stream/alerts";
 
@@ -12,12 +13,10 @@ const ALERTS_PATH = "/stream/alerts";
  * the overlay alert it published, on one time axis, with each one's payloads.
  *
  * Reached from a row in the alert feed, which knows the run that published the alert.
- * Runs fired by hand are not here — the engine does not record them, because whoever
- * fired one was already watching it happen.
  */
 export default function AlertRun() {
   const params = useParams<{ engineRunId: string }>();
-  const engineRunId = decodeParam(params.engineRunId);
+  const engineRunId = decodeRouteParam(params.engineRunId);
   const [, navigate] = useLocation();
   const { instance } = useInstance();
 
@@ -52,16 +51,4 @@ export default function AlertRun() {
       </div>
     </div>
   );
-}
-
-/** A route segment decoded; one that is not valid percent-encoding is kept as written, and matches nothing. */
-function decodeParam(segment: string | undefined): string {
-  if (!segment) {
-    return "";
-  }
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    return segment;
-  }
 }

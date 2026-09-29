@@ -4,8 +4,10 @@ import { useMutation } from "convex/react";
 import { Check, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CommandBar } from "@/components/dashboard/command-bar";
-import { DashboardCanvas, DashboardLayoutPicker, DashboardSkeleton } from "@/components/dashboard/dashboard-canvas";
+import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { PanelTabs } from "@/components/dashboard/panel-tabs";
+import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { WidgetRail } from "@/components/dashboard/widget-rail";
 import { StatusBarCenterPortal } from "@/components/layout/status-bar-slot";
 import {
@@ -21,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Carousel, type CarouselApi, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { NotRunningNotice } from "@/components/workflows/not-running-notice";
 import { useInstance } from "@/hooks/use-instance";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
 import {
@@ -318,7 +321,10 @@ export default function Dashboard() {
           </div>
         )}
 
+        <NotRunningNotice />
+
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
+        <StarterPacksNudge instanceId={instance._id} />
 
         <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
           <CarouselContent>

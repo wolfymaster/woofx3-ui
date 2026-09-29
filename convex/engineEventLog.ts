@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -83,35 +84,90 @@ export const getForRetrigger = internalQuery({
   },
 });
 
+const eventLogSummaryValidator = v.object({
+  _id: v.id("engineEventLog"),
+  eventType: v.string(),
+  source: v.union(v.literal("webhook"), v.literal("retrigger")),
+  receivedAt: v.number(),
+  payloadLength: v.number(),
+});
+
+const EMPTY_PAGE = { page: [], isDone: true, continueCursor: "" };
+
+/**
+ * Pages through an instance's event log, newest first, without payloads.
+ * The query is reactive, so any payload in the result would be re-sent to
+ * every open Logs page whenever a new event arrives; the dialog fetches the
+ * one it shows through getPayload instead.
+ */
 export const list = query({
   args: {
     instanceId: v.id("instances"),
     eventType: v.optional(v.string()),
+    paginationOpts: paginationOptsValidator,
   },
-  handler: async (ctx, { instanceId, eventType }) => {
+  returns: paginationResultValidator(eventLogSummaryValidator),
+  handler: async (ctx, { instanceId, eventType, paginationOpts }) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
-      return [];
+      return EMPTY_PAGE;
     }
 
     const membership = await membershipFor(ctx, instanceId, userId);
     if (!membership) {
-      return [];
+      return EMPTY_PAGE;
     }
 
-    if (eventType) {
-      return ctx.db
-        .query("engineEventLog")
-        .withIndex("by_instance_type_received_at", (q) => q.eq("instanceId", instanceId).eq("eventType", eventType))
-        .order("desc")
-        .take(200);
-    }
+    const ordered = eventType
+      ? ctx.db
+          .query("engineEventLog")
+          .withIndex("by_instance_type_received_at", (q) => q.eq("instanceId", instanceId).eq("eventType", eventType))
+          .order("desc")
+      : ctx.db
+          .query("engineEventLog")
+          .withIndex("by_instance_received_at", (q) => q.eq("instanceId", instanceId))
+          .order("desc");
 
-    return ctx.db
-      .query("engineEventLog")
-      .withIndex("by_instance_received_at", (q) => q.eq("instanceId", instanceId))
-      .order("desc")
-      .take(200);
+    const result = await ordered.paginate(paginationOpts);
+    return {
+      page: result.page.map((row) => ({
+        _id: row._id,
+        eventType: row.eventType,
+        source: row.source,
+        receivedAt: row.receivedAt,
+        payloadLength: row.payload.length,
+      })),
+      isDone: result.isDone,
+      continueCursor: result.continueCursor,
+      splitCursor: result.splitCursor,
+      pageStatus: result.pageStatus,
+    };
+  },
+});
+
+/**
+ * The raw payload JSON string of one logged event, or null when the row does
+ * not exist or belongs to an instance the caller is not a member of.
+ */
+export const getPayload = query({
+  args: {
+    logId: v.id("engineEventLog"),
+  },
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx, { logId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    const row = await ctx.db.get(logId);
+    if (!row) {
+      return null;
+    }
+    const membership = await membershipFor(ctx, row.instanceId, userId);
+    if (!membership) {
+      return null;
+    }
+    return row.payload;
   },
 });
 

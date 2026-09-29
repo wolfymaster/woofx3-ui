@@ -1,6 +1,8 @@
 import {
   Activity,
+  AlarmClock,
   BellRing,
+  Clapperboard,
   Grid3x3,
   History,
   ListOrdered,
@@ -9,24 +11,32 @@ import {
   NotebookPen,
   Pin,
   Radio,
+  Rocket,
+  Shield,
+  Timer,
   Tv,
   Volume2,
   Workflow,
   Zap,
 } from "lucide-react";
 import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-panel";
+import { AdBreaksWidget } from "@/components/dashboard/widgets/ad-breaks";
 import { AlertLogWidget } from "@/components/dashboard/widgets/alert-log";
 import { AnnouncementWidget } from "@/components/dashboard/widgets/announcement";
+import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
 import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
+import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
 import { PinnedWidget } from "@/components/dashboard/widgets/pinned";
 import { QueueWidget } from "@/components/dashboard/widgets/queue";
 import { RecentStreamsWidget } from "@/components/dashboard/widgets/recent-streams";
 import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
+import { StreamInfoWidget } from "@/components/dashboard/widgets/stream-info";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
 import { StreamStatusWidget } from "@/components/dashboard/widgets/stream-status";
+import { TimerWidget } from "@/components/dashboard/widgets/timer";
 import { WorkflowRunsModule } from "@/components/dashboard/widgets/workflow-runs";
 import type { DashboardWidgetCategory, DashboardWidgetDefinition } from "./types";
 
@@ -45,6 +55,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     component: StreamStatusWidget,
   },
   {
+    type: "go-live",
+    label: "Go Live Checklist",
+    description: "Pre-flight checks before you go live: engine, Twitch, overlays, OBS, stream info and workflows.",
+    icon: Rocket,
+    category: "stream",
+    component: GoLiveWidget,
+  },
+  {
     type: "live-events",
     label: "Live Events",
     description: "Realtime follows, subs, cheers, and raids — straight from Twitch, no engine round-trip.",
@@ -59,6 +77,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: MessagesSquare,
     category: "stream",
     component: ActivityPanelWidget,
+  },
+  {
+    type: "stream-info",
+    label: "Stream Info",
+    description: "Edit your title, category and tags, switch between saved presets, and drop stream markers.",
+    icon: Clapperboard,
+    category: "stream",
+    component: StreamInfoWidget,
   },
   {
     type: "stream-preview",
@@ -85,6 +111,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     component: PinnedWidget,
   },
   {
+    type: "ad-breaks",
+    label: "Ad Breaks",
+    description: "Countdown to the next ad, preroll-free time, and a snooze button while you are live.",
+    icon: AlarmClock,
+    category: "stream",
+    component: AdBreaksWidget,
+  },
+  {
     type: "shoutout",
     label: "Shoutout",
     description: "Queue shoutouts for people in chat — sent one at a time, two minutes apart.",
@@ -93,12 +127,28 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     component: ShoutoutWidget,
   },
   {
+    type: "moderation",
+    label: "Moderation",
+    description: "Block a phrase, time out or ban someone, and lock chat down without leaving the dashboard.",
+    icon: Shield,
+    category: "stream",
+    component: ModerationWidget,
+  },
+  {
     type: "queue",
     label: "Queue",
     description: "A queue's line, with add and remove — the same actions chat and workflows use.",
     icon: ListOrdered,
     category: "stream",
     component: QueueWidget,
+  },
+  {
+    type: "timer",
+    label: "Timer",
+    description: "A timer's countdown, with start, pause and add time: the same actions chat and workflows use.",
+    icon: Timer,
+    category: "stream",
+    component: TimerWidget,
   },
   {
     type: "workflow-runs",

@@ -222,3 +222,40 @@ export function countAlertsByNode(counts: readonly [path: readonly string[], cou
   }
   return byNode;
 }
+
+export interface PruneUnusedAlertsOptions {
+  /** Configured-alert counts per node id, as `countAlertsByNode` builds them. */
+  counts: ReadonlyMap<string, number>;
+  /** Events with at least one configured alert, which decide the presets a kept node lists. */
+  configuredEvents: ReadonlySet<string>;
+  /** The selected node's id, kept with every node above it however unused they are. */
+  selectedId: string | null;
+}
+
+/**
+ * The tree pruned to the nodes with a configured alert somewhere in their subtree, each
+ * listing only its configured presets, so the jumps under an entry match what it keeps.
+ *
+ * The selected node and the nodes above it always stay, so a deep link to an unused
+ * event keeps its place in the menu. The selected node keeps all its presets too: its
+ * page shows a section for each of them, and its jumps lead to those sections.
+ */
+export function pruneUnusedAlerts(tree: readonly AlertNode[], options: PruneUnusedAlertsOptions): AlertNode[] {
+  const { counts, configuredEvents, selectedId } = options;
+  const keep = (node: AlertNode): AlertNode | undefined => {
+    const id = alertNodeId(node.path);
+    const isSelected = selectedId === id;
+    const holdsSelected = isSelected || (selectedId?.startsWith(`${id}/`) ?? false);
+    if (!holdsSelected && (counts.get(id) ?? 0) === 0) {
+      return undefined;
+    }
+    return {
+      ...node,
+      presets: isSelected
+        ? node.presets
+        : node.presets.filter((preset) => preset.event !== undefined && configuredEvents.has(preset.event)),
+      children: node.children.flatMap((child) => keep(child) ?? []),
+    };
+  };
+  return tree.flatMap((node) => keep(node) ?? []);
+}

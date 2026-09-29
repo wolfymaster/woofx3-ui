@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { Braces } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ConfigFieldDescription, ConfigFieldLabel } from "@/components/common/config-field-label";
+import { InternalSelectField, InternalSuggestField } from "@/components/common/field-options-picker";
 import { ListField } from "@/components/common/list-field";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useFieldOptions } from "@/hooks/use-field-options";
 import { useInstance } from "@/hooks/use-instance";
 import { commandNameToSubjectSegment } from "@/lib/command-slug";
 import { cn } from "@/lib/utils";
@@ -259,50 +259,6 @@ function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererPr
         </SelectContent>
       </Select>
       {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
-    </div>
-  );
-}
-
-function InternalSelectFieldRenderer({
-  field,
-  value,
-  onChange,
-  source,
-}: FieldRendererProps & { source: InternalConfigFieldSource }) {
-  const { instance } = useInstance();
-  const { options, loading, empty } = useFieldOptions(instance?._id, source);
-
-  const disabled = loading || empty;
-  let placeholder: string;
-  if (loading) {
-    placeholder = "Loading options...";
-  } else if (empty) {
-    placeholder = "No options available";
-  } else {
-    placeholder = field.placeholder ?? `Select ${field.label.toLowerCase()}...`;
-  }
-
-  return (
-    <div className="space-y-2">
-      <ConfigFieldLabel
-        label={field.label}
-        required={field.required}
-        hint={field.hint as string | undefined}
-        examplePayload={field.examplePayload as string | undefined}
-      />
-      <Select value={(value as string) ?? ""} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger data-testid={`select-${field.id}`}>
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <ConfigFieldDescription description={field.description as string | undefined} />
     </div>
   );
 }
@@ -602,6 +558,23 @@ export function ConfigurationForm({
       );
     }
 
+    const source = (field as { source?: { kind?: unknown } }).source;
+
+    // A text field with listed options offers them as suggestions and still
+    // takes any text, variable references included, so it needs no toggle.
+    if (field.type === "text" && source && source.kind === "internal") {
+      return (
+        <InternalSuggestField
+          key={field.id}
+          field={field}
+          value={fieldValue}
+          onChange={changeHandler}
+          source={source as InternalConfigFieldSource}
+          availableVariables={availableVariables}
+        />
+      );
+    }
+
     // text/textarea mix literal text and variable references freely in one string, so they
     // never need the toggle below — VariableAwareInput handles both at once.
     if (field.type === "text" || field.type === "textarea") {
@@ -627,7 +600,6 @@ export function ConfigurationForm({
 
     // Dynamic-source fields (e.g. chat commands) short-circuit the type
     // lookup: the source dictates the renderer regardless of `type`.
-    const source = (field as { source?: { kind?: unknown } }).source;
     if (source && source.kind === "commands") {
       return (
         <VariableToggleWrapper
@@ -650,7 +622,7 @@ export function ConfigurationForm({
           onChange={changeHandler}
           availableVariables={availableVariables}
         >
-          <InternalSelectFieldRenderer
+          <InternalSelectField
             field={field}
             value={fieldValue}
             onChange={changeHandler}

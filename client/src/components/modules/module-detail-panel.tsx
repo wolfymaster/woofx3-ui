@@ -21,6 +21,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
+import { ModulePermissionList, ModulePermissionsSection } from "@/components/modules/module-permissions";
 import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endpoints";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { settingFieldOptionsReference } from "@/lib/field-options-reference";
+import { permissionsToApprove } from "@/lib/module-permissions";
 import { cn, isNewerVersion } from "@/lib/utils";
 
 export interface ModuleDetailMeta {
@@ -98,6 +100,10 @@ interface ModuleDetailPanelProps {
   moduleDbId?: Id<"moduleRepository">;
   manifestSettings?: ManifestSettingField[];
   manifestResourceKinds?: ManifestResourceKind[];
+  /** Permissions the shown version declares; null when they could not be read. */
+  permissions?: string[] | null;
+  /** Permissions the marketplace's latest version declares, for an installed module. */
+  latestPermissions?: string[] | null;
 }
 
 type TopTab = "details" | "definitions" | "settings" | "resources";
@@ -138,6 +144,8 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     moduleDbId,
     manifestSettings,
     manifestResourceKinds,
+    permissions,
+    latestPermissions,
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
@@ -217,7 +225,13 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
         <div className="flex-1 min-h-0 flex gap-6 px-6 py-4 overflow-hidden">
           <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
             {topTab === "details" ? (
-              <DetailsTab module={module} />
+              <DetailsTab
+                module={module}
+                permissions={permissions}
+                updatePermissions={
+                  updateAvailable && latestPermissions ? permissionsToApprove(latestPermissions, permissions ?? []) : []
+                }
+              />
             ) : topTab === "definitions" ? (
               <ResourcesTab
                 activeType={resourceTab}
@@ -390,10 +404,31 @@ function InstallErrorBanner({ error, onDismissError }: { error: string; onDismis
   );
 }
 
-function DetailsTab({ module }: { module: ModuleDetailMeta }) {
+function DetailsTab({
+  module,
+  permissions,
+  updatePermissions,
+}: {
+  module: ModuleDetailMeta;
+  permissions: string[] | null | undefined;
+  updatePermissions: string[];
+}) {
   return (
     <ScrollArea className="flex-1 h-full pr-4">
       {module.identifier && <h3 className="text-xl font-bold font-mono mb-4">{module.identifier}</h3>}
+      {permissions !== undefined && (
+        <div className="mb-4 space-y-2">
+          <ModulePermissionsSection permissions={permissions} />
+          {updatePermissions.length > 0 && (
+            <section className="rounded-md border border-amber-500/40 p-3 space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                Updating to v{module.latestVersion} also lets it:
+              </h4>
+              <ModulePermissionList permissions={updatePermissions} />
+            </section>
+          )}
+        </div>
+      )}
       <div className="prose prose-sm dark:prose-invert max-w-none">
         {module.readme ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{module.readme}</ReactMarkdown>
@@ -911,7 +946,7 @@ interface SettingButtonRowProps {
 
 function SettingButtonRow({ instanceId, moduleId, field }: SettingButtonRowProps) {
   if (field.action?.kind === "internal") {
-    return <InternalSettingButton instanceId={instanceId} field={field} action={field.action} />;
+    return <InternalSettingButton instanceId={instanceId} moduleId={moduleId} field={field} />;
   }
   if (field.action?.kind === "integration") {
     return <IntegrationSettingButton instanceId={instanceId} moduleId={moduleId} field={field} action={field.action} />;
@@ -921,17 +956,18 @@ function SettingButtonRow({ instanceId, moduleId, field }: SettingButtonRowProps
 
 function InternalSettingButton({
   instanceId,
+  moduleId,
   field,
-  action,
 }: {
   instanceId?: Id<"instances">;
+  moduleId: string;
   field: ManifestSettingField;
-  action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "internal" }>;
 }) {
-  const { trigger, status, message } = useInternalSettingAction(instanceId, action.request, action.timeoutMs);
+  const reference = useMemo(() => settingFieldOptionsReference(moduleId, field.id), [moduleId, field.id]);
+  const { trigger, status, message } = useInternalSettingAction(instanceId, reference);
   return (
     <div className="space-y-2">
-      <Button size="sm" variant="outline" disabled={status === "pending"} onClick={trigger}>
+      <Button size="sm" variant="outline" disabled={!reference || status === "pending"} onClick={trigger}>
         {status === "pending" && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
         {field.name}
       </Button>
@@ -961,25 +997,43 @@ function IntegrationSettingButton({
   field: ManifestSettingField;
   action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "integration" }>;
 }) {
-  const handleClick = () => {
-    if (!instanceId) {
+  const startSpotify = useAction(api.spotifyConnect.start);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Spotify is the only OAuth integration Convex implements; a manifest
+  // naming another gets a disabled button rather than a dead link.
+  const supported = action.integration === "spotify";
+
+  const handleClick = async () => {
+    if (!instanceId || !supported) {
       return;
     }
-    // The current path already deep-links back to this module (modules.tsx
-    // resolves /modules/:id via routeModuleId), so redirecting to it as-is
-    // — plus whatever result params the callback appends — is enough.
-    const url = new URL(`${CONVEX_SITE_URL}/api/integrations/${action.integration}/start`);
-    url.searchParams.set("instanceId", instanceId);
-    url.searchParams.set("moduleId", moduleId);
-    url.searchParams.set("redirect_to", window.location.pathname);
-    window.location.href = url.toString();
+    setStarting(true);
+    setError(null);
+    try {
+      // The current path already deep-links back to this module (modules.tsx
+      // resolves /modules/:id via routeModuleId), so returning to it as-is
+      // — plus whatever result params the callback appends — is enough.
+      const { authorizeUrl } = await startSpotify({ instanceId, moduleId, redirectTo: window.location.pathname });
+      window.location.assign(authorizeUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setStarting(false);
+    }
   };
   return (
     <div className="space-y-2">
-      <Button size="sm" variant="outline" disabled={!instanceId} onClick={handleClick}>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!instanceId || !supported || starting}
+        onClick={() => void handleClick()}
+        title={supported ? undefined : `The "${action.integration}" integration is not available`}
+      >
         {field.name}
       </Button>
       {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
@@ -1203,6 +1257,7 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
 
       {createDialogKind && instanceId && (
         <CreateResourceDialog
+          moduleId={moduleName}
           kind={createDialogKind}
           onClose={() => setCreateDialogKind(null)}
           onCreate={async (resourceInstanceId, displayName, settings) => {

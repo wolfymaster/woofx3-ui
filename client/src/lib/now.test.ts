@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from "bun:test";
-import { STORE_UNMOUNT_DELAY } from "nanostores";
+import { atom, STORE_UNMOUNT_DELAY } from "nanostores";
 import { createTicker } from "./now";
 
 describe("createTicker", () => {
@@ -69,6 +69,25 @@ describe("createTicker", () => {
     const readsAfterUnmount = reads;
     jest.advanceTimersByTime(10_000);
     expect(reads).toBe(readsAfterUnmount);
+  });
+
+  it("pauses while hidden and refreshes on becoming visible", () => {
+    const $visible = atom(true);
+    const $now = createTicker(1000, readClock, $visible);
+    const seen: number[] = [];
+    const unsubscribe = $now.listen((value) => seen.push(value));
+
+    $visible.set(false);
+    clock = 5_000;
+    jest.advanceTimersByTime(3000);
+    expect(seen).toEqual([]);
+
+    $visible.set(true);
+    expect(seen).toEqual([5_000]);
+    clock = 6_000;
+    jest.advanceTimersByTime(1000);
+    expect(seen).toEqual([5_000, 6_000]);
+    unsubscribe();
   });
 
   it("rejects a non-positive interval", () => {

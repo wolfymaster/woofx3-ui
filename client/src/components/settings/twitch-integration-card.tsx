@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
+import { canManageTwitchLink } from "@convex/lib/twitchLinkPolicy";
+import { useAction, useQuery } from "convex/react";
 import { Loader2, Unlink } from "lucide-react";
 import { useState } from "react";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 
 interface TwitchIntegrationCardProps {
   instanceId: Id<"instances"> | undefined;
@@ -32,11 +33,18 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const disconnect = useAction(api.twitchIntegration.disconnect);
+  const { connect, starting, error: connectError } = useTwitchConnect();
+  // The server refuses a member's connect or disconnect; this only keeps the
+  // buttons from offering what will be refused. Undefined while loading, which
+  // leaves them disabled rather than flashing enabled.
+  const viewerRole = useQuery(api.instances.viewerRole, instanceId ? { instanceId } : "skip");
+  const canManage = canManageTwitchLink(viewerRole);
 
   const handleConnect = () => {
-    if (!instanceId) return;
-    const redirectTo = encodeURIComponent("/admin/integrations");
-    window.location.href = `${CONVEX_SITE_URL}/api/integrations/twitch/start?instanceId=${instanceId}&redirect_to=${redirectTo}`;
+    if (!instanceId) {
+      return;
+    }
+    void connect(instanceId, "/admin/integrations");
   };
 
   const handleDisconnect = async () => {
@@ -85,15 +93,23 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
               <p className="text-sm text-muted-foreground">Connected as {twitchLink.platformUsername}</p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => setConfirmOpen(true)}
-            disabled={isDisconnecting}
-            data-testid="button-disconnect-twitch"
-          >
-            {isDisconnecting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Unlink className="h-4 w-4 mr-2" />}
-            Disconnect
-          </Button>
+          {canManage ? (
+            <Button
+              variant="outline"
+              onClick={() => setConfirmOpen(true)}
+              disabled={isDisconnecting}
+              data-testid="button-disconnect-twitch"
+            >
+              {isDisconnecting ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Unlink className="h-4 w-4 mr-2" />
+              )}
+              Disconnect
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">Only an owner or admin can disconnect Twitch.</p>
+          )}
         </div>
 
         <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -133,9 +149,19 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
         <div>
           <p className="font-medium">Twitch</p>
           <p className="text-sm text-muted-foreground">Not connected</p>
+          {connectError && <p className="text-sm text-destructive">{connectError}</p>}
+          {viewerRole !== undefined && !canManage && (
+            <p className="text-xs text-muted-foreground">Only an owner or admin can connect Twitch.</p>
+          )}
         </div>
       </div>
-      <Button variant="outline" onClick={handleConnect} disabled={!instanceId} data-testid="button-connect-twitch">
+      <Button
+        variant="outline"
+        onClick={handleConnect}
+        disabled={!instanceId || !canManage || starting}
+        data-testid="button-connect-twitch"
+      >
+        {starting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
         Connect
       </Button>
     </div>

@@ -1,9 +1,22 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import type { InstanceRole } from "./lib/instanceRoles";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
+
+/**
+ * An instance row as members may see it. `webhookSecret` authenticates the
+ * engine's callbacks to Convex and no browser has a use for it. `clientSecret`
+ * stays: the browser's live WebSocket to the engine authenticates with it
+ * (hooks/use-sync-engine-transport.ts).
+ */
+function withoutWebhookSecret(instance: Doc<"instances">): Omit<Doc<"instances">, "webhookSecret"> {
+  const { webhookSecret: _webhookSecret, ...rest } = instance;
+  return rest;
+}
 
 export const listForCurrentUser = query({
   args: {},
@@ -17,7 +30,7 @@ export const listForCurrentUser = query({
       .collect();
 
     const instances = await Promise.all(memberships.map((m) => ctx.db.get(m.instanceId)));
-    return instances.filter(Boolean);
+    return instances.filter((instance) => instance !== null).map(withoutWebhookSecret);
   },
 });
 
@@ -34,7 +47,8 @@ export const get = query({
       .first();
 
     if (!membership) return null;
-    return ctx.db.get(args.instanceId);
+    const instance = await ctx.db.get(args.instanceId);
+    return instance ? withoutWebhookSecret(instance) : null;
   },
 });
 
@@ -235,41 +249,18 @@ export const getPlatformLinks = query({
       .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
       .collect();
 
+    // Relinking replaces the channel every member's automation runs against,
+    // so only an owner or admin is offered it. Carried on each link rather
+    // than as a separate query so the shell's reconnect banner stays on this
+    // one subscription.
+    const viewerCanRelink = membership.role === "owner" || membership.role === "admin";
+
     // Tokens never leave the backend — every caller that needs one goes
     // through platformRealtime.ensureFreshTwitchToken instead.
-    return links.map(({ accessToken: _accessToken, refreshToken: _refreshToken, ...rest }) => rest);
-  },
-});
-
-export const savePlatformLink = mutation({
-  args: {
-    instanceId: v.id("instances"),
-    platform: v.string(),
-    platformUserId: v.string(),
-    platformUsername: v.string(),
-    channelId: v.string(),
-    accessToken: v.string(),
-    refreshToken: v.string(),
-    expiresAt: v.number(),
-    scopes: v.array(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
-
-    // Upsert: replace existing link for this platform on this instance
-    const existing = await ctx.db
-      .query("platformLinks")
-      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
-      .filter((q) => q.eq(q.field("platform"), args.platform))
-      .first();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, args);
-      return existing._id;
-    }
-
-    return ctx.db.insert("platformLinks", args);
+    return links.map(({ accessToken: _accessToken, refreshToken: _refreshToken, ...rest }) => ({
+      ...rest,
+      viewerCanRelink,
+    }));
   },
 });
 
@@ -305,5 +296,38 @@ export const getByWebhookSecret = internalQuery({
       .query("instances")
       .withIndex("by_webhook_secret", (q) => q.eq("webhookSecret", webhookSecret))
       .first();
+  },
+});
+
+/** The user's role on the instance, or null when they are not a member. */
+export async function readMemberRole(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">,
+  userId: Id<"users">
+): Promise<InstanceRole | null> {
+  const membership = await ctx.db
+    .query("instanceMembers")
+    .withIndex("by_instance_user", (q) => q.eq("instanceId", instanceId).eq("userId", userId))
+    .first();
+  return membership?.role ?? null;
+}
+
+/** `readMemberRole` for actions, which cannot read the db. */
+export const memberRole = internalQuery({
+  args: { instanceId: v.id("instances"), userId: v.id("users") },
+  handler: async (ctx, { instanceId, userId }): Promise<InstanceRole | null> => {
+    return await readMemberRole(ctx, instanceId, userId);
+  },
+});
+
+/** The signed-in caller's role on the instance, or null when signed out or not a member. */
+export const viewerRole = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<InstanceRole | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    return await readMemberRole(ctx, instanceId, userId);
   },
 });

@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { hasRecordedTriggerEvent } from "./lib/runTriggerEvent";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 /**
@@ -37,6 +38,7 @@ const runSnapshot = v.object({
   status: v.string(),
   triggeredBy: v.optional(v.string()),
   triggerEvent: v.optional(v.string()),
+  dryRun: v.optional(v.boolean()),
   error: v.optional(v.string()),
   startedAt: v.optional(v.string()),
   completedAt: v.optional(v.string()),
@@ -147,6 +149,71 @@ export const runWithSteps = query({
   },
 });
 
+const WORKFLOW_RUNS_DEFAULT_LIMIT = 25;
+const WORKFLOW_RUNS_MAX_LIMIT = 100;
+
+/**
+ * One workflow's recorded runs, newest first, as list rows. The trigger event
+ * itself is left to `runWithSteps`: it can be large, and a list only needs to
+ * know whether there is one to replay.
+ */
+export const listForWorkflow = query({
+  args: {
+    instanceId: v.id("instances"),
+    workflowId: v.string(),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, { instanceId, workflowId, limit }) => {
+    if (!(await canRead(ctx, instanceId))) {
+      return [];
+    }
+    const take = Math.min(Math.max(1, Math.floor(limit ?? WORKFLOW_RUNS_DEFAULT_LIMIT)), WORKFLOW_RUNS_MAX_LIMIT);
+    const runs = await ctx.db
+      .query("workflowRuns")
+      .withIndex("by_instance_workflow", (q) => q.eq("instanceId", instanceId).eq("workflowId", workflowId))
+      .order("desc")
+      .take(take);
+    return runs.map((run) => ({
+      _id: run._id,
+      engineRunId: run.engineRunId,
+      status: run.status,
+      triggeredBy: run.triggeredBy,
+      error: run.error,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+      hasTriggerEvent: hasRecordedTriggerEvent(run.triggerEvent),
+      dryRun: run.dryRun === true,
+    }));
+  },
+});
+
+/**
+ * Statuses a run cannot leave. A cancel that races the run's own completion
+ * must not overwrite how it actually ended.
+ */
+const SETTLED_RUN_STATUSES = new Set(["completed", "success", "failed", "cancelled"]);
+
+/** Mirror a cancel the engine has accepted; see workflowActions.cancelRun. */
+export const markCancelled = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    engineRunId: v.string(),
+    at: v.string(),
+  },
+  handler: async (ctx, { instanceId, engineRunId, at }) => {
+    const run = await ctx.db
+      .query("workflowRuns")
+      .withIndex("by_engine_id", (q) => q.eq("engineRunId", engineRunId))
+      .first();
+    if (!run || run.instanceId !== instanceId || SETTLED_RUN_STATUSES.has(run.status)) {
+      return;
+    }
+    // engineUpdatedAt is left alone: `at` is Convex's clock, not the engine's,
+    // and any later snapshot from the engine should win over this mirror.
+    await ctx.db.patch(run._id, { status: "cancelled", completedAt: at });
+  },
+});
+
 export const recordFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
@@ -160,6 +227,7 @@ export const recordFromWebhook = internalMutation({
       status: run.status,
       triggeredBy: run.triggeredBy,
       triggerEvent: run.triggerEvent,
+      dryRun: run.dryRun,
       error: run.error,
       startedAt: run.startedAt,
       completedAt: run.completedAt,
@@ -200,6 +268,7 @@ export const updateFromWebhook = internalMutation({
       completedAt: run.completedAt,
       triggeredBy: run.triggeredBy,
       triggerEvent: run.triggerEvent,
+      dryRun: run.dryRun,
       engineUpdatedAt: run.updatedAt,
     };
 

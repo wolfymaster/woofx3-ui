@@ -2,6 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Fonts are self-hosted from client/public/fonts (Fontsource builds, SIL OFL):
+ * latin subset, weight axis only. There are no italic faces; the few italic
+ * uses get a synthesised oblique. JetBrains Mono is not preloaded and nothing
+ * rendered on every page uses it, so it downloads only where technical text
+ * appears.
+ */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-latin-wght.woff2") format("woff2");
+}
+
+/*
+ * Arial scaled to Inter's width and vertical metrics, so text keeps its layout
+ * when Inter swaps in. Liberation Sans is metric-compatible with Arial and
+ * stands in on Linux.
+ */
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial"), local("Liberation Sans");
+  size-adjust: 107.06%;
+  ascent-override: 90.49%;
+  descent-override: 22.56%;
+  line-gap-override: 0%;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin-wght.woff2") format("woff2");
+}
+
 /* LIGHT MODE */
 :root {
   --button-outline: rgba(0, 0, 0, 0.1);
@@ -43,9 +80,10 @@
   --chart-3: 340 75% 38%;
   --chart-4: 30 80% 40%;
   --chart-5: 160 70% 35%;
-  --font-sans: Inter, system-ui, sans-serif;
+  --font-sans: Inter, "Inter Fallback", system-ui, sans-serif;
   --font-serif: Georgia, serif;
-  --font-mono: JetBrains Mono, monospace;
+  --font-system-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --font-mono: "JetBrains Mono", var(--font-system-mono);
   --radius: 0.5rem;
   --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);
   --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0);

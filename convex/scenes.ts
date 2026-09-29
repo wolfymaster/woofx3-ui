@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, mutation, type QueryCtx, query } from "./_generated/server";
+import { internalMutation, type QueryCtx, query } from "./_generated/server";
 import { deleteSceneAndChildren, purgeSceneChildren } from "./lib/sceneCascade";
 import { parseSceneLayout, parseSceneWidgets } from "./lib/sceneSerialization";
 
@@ -101,31 +101,6 @@ export const getByEngineSceneId = query({
   },
 });
 
-export const getBrowserSourceKeys = query({
-  args: { sceneId: v.id("scenes") },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      return [];
-    }
-
-    const scene = await ctx.db.get(args.sceneId);
-    if (!scene) {
-      return [];
-    }
-
-    const membership = await membershipFor(ctx, scene.instanceId, userId);
-    if (!membership) {
-      return [];
-    }
-
-    return await ctx.db
-      .query("browserSourceKeys")
-      .withIndex("by_scene", (q) => q.eq("sceneId", args.sceneId))
-      .collect();
-  },
-});
-
 // Populated by the engine SCENE_CREATED / SCENE_UPDATED webhook. Keyed on
 // engineSceneId (the engine's stable identity) via the by_engine_scene_id index,
 // so redelivery is idempotent and renames never create duplicates.
@@ -203,40 +178,5 @@ export const cascadeSceneChildren = internalMutation({
     if (!done) {
       await ctx.scheduler.runAfter(0, internal.scenes.cascadeSceneChildren, { sceneId: args.sceneId });
     }
-  },
-});
-
-export const generateBrowserSourceKey = mutation({
-  args: {
-    sceneId: v.id("scenes"),
-    name: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-
-    const scene = await ctx.db.get(args.sceneId);
-    if (!scene) {
-      throw new Error("Scene not found");
-    }
-
-    const membership = await membershipFor(ctx, scene.instanceId, userId);
-    if (!membership) {
-      throw new Error("Not authorized");
-    }
-
-    const key = `bs_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-
-    const keyId = await ctx.db.insert("browserSourceKeys", {
-      instanceId: scene.instanceId,
-      sceneId: args.sceneId,
-      key,
-      name: args.name,
-      createdAt: Date.now(),
-    });
-
-    return { keyId, key };
   },
 });

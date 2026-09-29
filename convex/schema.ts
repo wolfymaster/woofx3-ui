@@ -52,8 +52,8 @@ export const macroActionTypeValidator = v.union(
   v.literal("http-request")
 );
 
-// Mirrors MacroConfig in client/src/lib/macro-pad.ts. Free-text fields may carry
-// `{{name}}` variables, which the browser resolves at click time.
+// Mirrors MacroConfig in convex/lib/macroVariables.ts. Free-text fields may
+// carry `{{name}}` variables, resolved each time the macro runs.
 export const macroConfigValidator = v.object({
   message: v.optional(v.string()),
   command: v.optional(v.string()),
@@ -288,6 +288,10 @@ export default defineSchema({
     expiresAt: v.number(),
     scopes: v.array(v.string()),
     connectedByUserId: v.optional(v.string()),
+    // When Twitch last refused this link's refresh token: the creator revoked
+    // the app or changed their password. Cleared by a relink or a successful
+    // refresh. Drives the "Reconnect Twitch" banner (lib/twitchScopeHealth.ts).
+    authFailedAt: v.optional(v.number()),
   }).index("by_instance", ["instanceId"]),
 
   // chatCommands: engine-authoritative read cache of chat commands. The engine
@@ -383,12 +387,6 @@ export default defineSchema({
     .index("by_instance_name_version", ["instanceId", "name", "version"])
     .index("by_instance_module_key", ["instanceId", "moduleKey"]),
 
-  // moduleCatalogFeatured: admin-curated set of marketplace modules to surface in the storefront's featured strip
-  moduleCatalogFeatured: defineTable({
-    moduleKey: v.string(), // marketplace MarketplaceModuleSummary.id
-    sortOrder: v.number(),
-  }).index("by_module_key", ["moduleKey"]),
-
   // dashboardLayouts: the dashboard canvas panels for a user/instance. Each panel
   // picks a predefined layout (client/src/lib/dashboard-layouts.ts) and places
   // widgets (client/src/components/dashboard/widget-catalog.ts) into its zones.
@@ -434,6 +432,44 @@ export default defineSchema({
     sortOrder: v.number(),
     updatedAt: v.number(),
   }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
+
+  // macroTriggers: a macro's remote trigger URL, at most one per macro. The URL
+  // carries a random token; only its SHA-256 hash is stored, so the row cannot
+  // be turned back into a working URL (see convex/lib/macroTrigger.ts).
+  //
+  // A table of its own rather than fields on `macros`: every press writes the
+  // rate-limit bucket and usage counters, and keeping that churn off the macro
+  // row keeps it off every dashboard subscribed to the pad.
+  macroTriggers: defineTable({
+    instanceId: v.id("instances"),
+    macroId: v.id("macros"),
+    tokenHash: v.string(),
+    // GET is opt-in: some devices can only send GET, but a GET URL also fires
+    // when a chat app or browser prefetches a pasted link.
+    allowGet: v.boolean(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    /** When the current token was minted, if it replaced an earlier one. */
+    rotatedAt: v.optional(v.number()),
+    // What the URL is allowed to do: macroBehaviorFingerprint of the macro as
+    // an owner or admin last approved it (by minting, rotating or
+    // re-confirming), and who approved it. A macro edited since, or an
+    // approver who has since lost the role, stops the URL until re-confirmed.
+    confirmedFingerprint: v.string(),
+    confirmedBy: v.id("users"),
+    confirmedAt: v.number(),
+    /** Last press the engine accepted, and how many it has accepted. */
+    lastUsedAt: v.optional(v.number()),
+    useCount: v.number(),
+    /** Last press that got as far as the engine and was not accepted, and why. */
+    lastFailedAt: v.optional(v.number()),
+    lastFailure: v.optional(v.string()),
+    rateTokens: v.number(),
+    rateRefilledAt: v.number(),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_macro", ["macroId"])
+    .index("by_instance", ["instanceId"]),
 
   // shoutoutQueue: Twitch shoutouts waiting to be sent for an instance. Shared
   // per instance like dashboardCounters below -- a shoutout is the channel's, not one
@@ -509,6 +545,45 @@ export default defineSchema({
     content: v.string(),
     updatedAt: v.number(),
   }).index("by_instance_user", ["instanceId", "userId"]),
+
+  // goLiveChecklists: one row per instance for the Go live checklist. Shared by
+  // everyone on the instance, like the channel it describes: a check dismissed
+  // because this setup has no OBS stays dismissed for the moderator too.
+  //
+  // The last* fields are the channel's title and category as they stood when
+  // the checklist was last completed. Twitch keeps no history of either, so
+  // this is what "same title as last time" is measured against.
+  goLiveChecklists: defineTable({
+    instanceId: v.id("instances"),
+    dismissedCheckIds: v.array(v.string()),
+    lastCompletedAt: v.optional(v.number()),
+    lastTitle: v.optional(v.string()),
+    lastCategoryId: v.optional(v.string()),
+    lastCategoryName: v.optional(v.string()),
+    // Set when "Stream start" was asked for before going live; the marker is
+    // dropped by whichever writer first flips instanceLiveState to live, and
+    // a request older than lib/goLiveMarker.ts's window is ignored.
+    pendingMarkerRequestedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
+  // streamInfoPresets: named title/category/tags combinations the Stream info
+  // widget applies to the channel in one click ("Just Chatting intro").
+  // Instance-scoped rather than per user: they describe the channel, so a
+  // moderator sharing the account applies the same presets the owner saved.
+  // The category's name and box art are copied in so the list renders without
+  // a Helix round trip; only `categoryId` is sent to Twitch.
+  streamInfoPresets: defineTable({
+    instanceId: v.id("instances"),
+    name: v.string(),
+    title: v.string(),
+    categoryId: v.optional(v.string()),
+    categoryName: v.optional(v.string()),
+    categoryBoxArtUrl: v.optional(v.string()),
+    tags: v.array(v.string()),
+    createdByUserId: v.id("users"),
+    updatedAt: v.number(),
+  }).index("by_instance_name", ["instanceId", "name"]),
 
   // pinnedMessages: history of things worth pinning in the channel's chat, kept
   // so the same message can be re-pinned across streams without retyping it.
@@ -684,13 +759,28 @@ export default defineSchema({
     // See instanceTriggers.by_trigger.
     .index("by_widget", ["widgetId"]),
 
-  // workflowTemplates: predefined workflow templates for common Twitch events
-  workflowTemplates: defineTable({
-    name: v.string(),
-    description: v.string(),
-    trigger: v.string(), // "follow" | "subscribe" | "bits" | "raid" | "gift"
-    workflowJson: v.any(),
-  }),
+  // starterPackItems: which starter pack items (convex/lib/starterPacks.ts) an
+  // instance has installed, and the engine workflow or command each became.
+  // A row is written as "installing" before the engine call, so a second
+  // install racing the first finds it and skips the item instead of creating
+  // a duplicate. An installed row whose engine object has since been deleted
+  // counts as not installed.
+  starterPackItems: defineTable({
+    instanceId: v.id("instances"),
+    packId: v.string(),
+    itemId: v.string(),
+    kind: v.union(v.literal("workflow"), v.literal("command")),
+    status: v.union(v.literal("installing"), v.literal("installed")),
+    // engineWorkflowId or engineCommandId; absent while installing.
+    engineId: v.optional(v.string()),
+    // The workflow create's correlation key, so an echo that arrives after
+    // the install stopped waiting still marks the row installed.
+    correlationKey: v.optional(v.string()),
+    claimedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_item", ["instanceId", "packId", "itemId"])
+    .index("by_correlation", ["correlationKey"]),
 
   // workflows: Convex-side mirror of canonical engine WorkflowDefinition, plus
   // an optional ReactFlow projection cache (nodes/edges) derived in the browser.
@@ -707,7 +797,35 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_instance", ["instanceId"])
+    .index("by_instance_enabled", ["instanceId", "isEnabled"])
     .index("by_engine_id", ["instanceId", "engineWorkflowId"]),
+
+  // workflowHealth: whether the engine runs each stored workflow on its own,
+  // from the workflow.health.* webhooks and the getWorkflowHealth() resync
+  // (convex/lib/workflowHealth.ts). Its own table rather than fields on
+  // `workflows` because a report can arrive before that row is mirrored, and
+  // because a health change should not rewrite a row carrying the definition.
+  // Ok rows are kept: their `sinceMs` is what makes a late error redelivery stale.
+  workflowHealth: defineTable({
+    instanceId: v.id("instances"),
+    engineWorkflowId: v.string(),
+    status: v.union(v.literal("ok"), v.literal("error")),
+    reason: v.optional(v.string()),
+    since: v.string(), // ISO, as the engine sent it
+    sinceMs: v.number(), // since parsed, for ordering reports
+    receivedAt: v.number(),
+  })
+    .index("by_engine_id", ["instanceId", "engineWorkflowId"])
+    .index("by_instance_status", ["instanceId", "status"]),
+
+  // workflowHealthSyncs: one row per instance holding the last
+  // getWorkflowHealth() resync attempt, so page mounts and reconnects across
+  // tabs share one throttle. "unsupported" means the engine predates the RPC.
+  workflowHealthSyncs: defineTable({
+    instanceId: v.id("instances"),
+    attemptedAt: v.number(),
+    outcome: v.optional(v.union(v.literal("ok"), v.literal("unsupported"), v.literal("failed"))),
+  }).index("by_instance", ["instanceId"]),
 
   // pendingWorkflowOperations: correlation records awaiting a webhook echo
   pendingWorkflowOperations: defineTable({
@@ -736,6 +854,12 @@ export default defineSchema({
     state: v.string(),
     redirectTo: v.string(),
     instanceId: v.optional(v.id("instances")),
+    // The signed-in owner or admin who started an integration connect. Absent
+    // for the sign-in flow, which has no user yet.
+    userId: v.optional(v.id("users")),
+    // SHA-256 of the nonce the sign-in's browser tab keeps (lib/oauthHandoff.ts).
+    // Present only for the sign-in flow; carried to twitchPendingAuth.
+    nonceHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
@@ -752,8 +876,44 @@ export default defineSchema({
     expiresIn: v.optional(v.number()),
     obtainmentTimestamp: v.optional(v.number()),
     scopes: v.optional(v.array(v.string())),
+    // The sign-in completes only in the browser tab holding the nonce behind
+    // this hash. Rows without one are refused.
+    nonceHash: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_token", ["token"]),
+
+  // oauthConnectHandoffs: the result of an integration OAuth callback, held
+  // until the signed-in user who started the flow claims it with the one-time
+  // code the callback put in the browser's URL (lib/oauthHandoff.ts). Only the
+  // code's hash is stored. Rows are single use and deleted after five minutes
+  // whether or not they are claimed.
+  oauthConnectHandoffs: defineTable({
+    codeHash: v.string(),
+    provider: v.union(v.literal("twitch"), v.literal("spotify")),
+    userId: v.id("users"),
+    instanceId: v.id("instances"),
+    moduleId: v.optional(v.string()),
+    redirectTo: v.string(),
+    twitch: v.optional(
+      v.object({
+        platformUserId: v.string(),
+        platformUsername: v.string(),
+        profileImageUrl: v.optional(v.string()),
+        accessToken: v.string(),
+        refreshToken: v.string(),
+        expiresAt: v.number(),
+        scopes: v.array(v.string()),
+      })
+    ),
+    spotify: v.optional(
+      v.object({
+        clientId: v.string(),
+        authToken: v.string(),
+        refreshToken: v.string(),
+      })
+    ),
+    createdAt: v.number(),
+  }).index("by_code_hash", ["codeHash"]),
 
   // moduleIntegrationState: short-lived, one-time-use state for a module
   // setting's "integration" button (see moduleDetail.ts's ManifestSettingAction).
@@ -768,6 +928,9 @@ export default defineSchema({
     moduleId: v.string(),
     integration: v.string(),
     redirectTo: v.string(),
+    // The signed-in member who started the flow (spotifyConnect.start). Rows
+    // without one predate that check and are refused at the callback.
+    userId: v.optional(v.id("users")),
     data: v.any(),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
@@ -1045,8 +1208,9 @@ export default defineSchema({
   // progress of a run someone is waiting on and expires in a minute: these are
   // the runs nobody was watching, which is exactly why they are kept.
   //
-  // Runs fired by hand from the dashboard never reach here -- the engine does
-  // not record them.
+  // Runs fired by hand with the unrecorded `dashboard` origin never reach here;
+  // the engine does not record them. Test runs and Runs-panel replays carry an
+  // origin of their own so they do -- see lib/manualRunOrigin.ts.
   workflowRuns: defineTable({
     instanceId: v.id("instances"),
     engineRunId: v.string(), // WorkflowRunSnapshot.id (the engine's execution id)
@@ -1058,6 +1222,9 @@ export default defineSchema({
     triggeredBy: v.optional(v.string()),
     // The originating CloudEvent, verbatim. What a replay re-feeds.
     triggerEvent: v.optional(v.string()),
+    // A dry run: its side-effecting steps recorded what they would have done
+    // instead of doing it. Absent for a real run.
+    dryRun: v.optional(v.boolean()),
     error: v.optional(v.string()),
     startedAt: v.optional(v.string()),
     completedAt: v.optional(v.string()),

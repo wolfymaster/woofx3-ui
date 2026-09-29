@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 
 // Single call per settings page visit — not a hot path, so no caching.
 export const getEngineInfo = action({
@@ -52,10 +53,9 @@ export const setOverlayPublicUrl = action({
     value: v.string(),
   },
   handler: async (ctx, args): Promise<{ success: boolean }> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    // Moving the public overlay URL revokes every browser-source token, taking
+    // every overlay offline until re-added, so it is an owner's or admin's change.
+    const userId = await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
 
     const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null = await ctx.runQuery(
       internal.workflowCatalogContext.catalogContextForUser,

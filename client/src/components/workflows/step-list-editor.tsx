@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
-import type { ConditionConfig, WaitConfig, WorkflowDefinition } from "@woofx3/api";
+import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import { useAction, useQuery } from "convex/react";
 import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 import { type CatalogActionRow, type CatalogTriggerRow, useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import { $currentInstanceId } from "@/lib/stores";
+import { DEFAULT_DELAY_MS, type WaitConfig } from "@/lib/wait-config";
 import { actionNodeLabel, triggerNodeLabel } from "@/lib/workflow-node-label";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import { presetToActionNode } from "@/lib/workflow-presets-json";
@@ -54,8 +55,10 @@ import { ActionPickerDialog } from "./action-picker-dialog";
 import { StepConfigPanel } from "./step-config-panel";
 import { StepNodeCard } from "./step-node";
 
+type InsertStepKind = "action" | "condition" | "wait" | "delay";
+
 interface InsertButtonProps {
-  onInsert: (type: "action" | "condition" | "wait") => void;
+  onInsert: (type: InsertStepKind) => void;
   label?: string;
 }
 
@@ -73,6 +76,7 @@ function InsertButton({ onInsert, label }: InsertButtonProps) {
           <DropdownMenuItem onClick={() => onInsert("action")}>Action</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onInsert("condition")}>Condition</DropdownMenuItem>
           <DropdownMenuItem onClick={() => onInsert("wait")}>Wait</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => onInsert("delay")}>Delay</DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -85,7 +89,7 @@ interface StepListProps {
   path: BranchPath;
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onInsertAtPath: (path: BranchPath, index: number, type: "action" | "condition" | "wait") => void;
+  onInsertAtPath: (path: BranchPath, index: number, type: InsertStepKind) => void;
   depth?: number;
   catalogTriggers: CatalogTriggerRow[];
   catalogActions: CatalogActionRow[];
@@ -324,15 +328,19 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
   /** Condition/wait steps have no catalog to pick from, so they're inserted immediately. Action steps
    * need the user to choose which action first — remember where to insert and open the picker. */
   const handleInsertRequest = useCallback(
-    (path: BranchPath, index: number, type: "action" | "condition" | "wait") => {
+    (path: BranchPath, index: number, type: InsertStepKind) => {
       if (type === "action") {
         setPendingActionInsert({ path, index });
         return;
       }
-      const newStep: StepNode =
-        type === "condition"
-          ? { type: "condition", id: `step-${Date.now()}`, conditions: [], thenBranch: [], elseBranch: [] }
-          : { type: "wait", id: `step-${Date.now()}`, wait: { type: "event", event: "" } };
+      const id = `step-${Date.now()}`;
+      if (type === "condition") {
+        insertStepAndSelect(path, index, { type: "condition", id, conditions: [], thenBranch: [], elseBranch: [] });
+        return;
+      }
+      const wait: WaitConfig =
+        type === "delay" ? { type: "delay", durationMs: DEFAULT_DELAY_MS } : { type: "event", event: "" };
+      const newStep: StepNode = { type: "wait", id, wait };
       insertStepAndSelect(path, index, newStep);
     },
     [insertStepAndSelect]

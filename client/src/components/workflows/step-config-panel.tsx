@@ -1,9 +1,11 @@
-import type { ConditionConfig, WaitConfig } from "@woofx3/api";
-import { useEffect, useState } from "react";
+import type { ConditionConfig } from "@woofx3/api";
+import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields, withModuleName } from "@/lib/parse-config-fields";
+import type { WaitConfig } from "@/lib/wait-config";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { TriggerConfigValues } from "@/lib/workflow-presets";
 import {
@@ -109,7 +111,17 @@ function TriggerConfigPanel({
   // until finished; saving them would quietly turn the empty field into Any.
   const [unfinished, setUnfinished] = useState<TriggerConfigValues | null>(null);
   const catalogRow = resolveCatalogTrigger(node, catalog);
-  const fields = withModuleName(parseConfigFields(catalogRow?.configFields), catalogRow?.moduleName);
+  const configFields = catalogRow?.configFields;
+  const moduleName = catalogRow?.moduleName;
+  const canonicalRef = catalogRow?.canonicalRef;
+  const fields = useMemo(
+    () =>
+      withFieldOptionsOwner(
+        withModuleName(parseConfigFields(configFields), moduleName),
+        fieldOptionsOwnerFromCanonicalId(canonicalRef)
+      ),
+    [configFields, moduleName, canonicalRef]
+  );
   if (fields.length === 0) {
     return <p className="text-sm text-muted-foreground">This trigger has no configurable settings.</p>;
   }
@@ -147,7 +159,17 @@ function ActionConfigPanel({
   onUpdateActionId: (oldId: string, newId: string) => void;
 }) {
   const catalogRow = resolveCatalogAction(node, catalog);
-  const fields = withModuleName(parseConfigFields(catalogRow?.configFields), catalogRow?.moduleName);
+  const configFields = catalogRow?.configFields;
+  const moduleName = catalogRow?.moduleName;
+  const canonicalRef = catalogRow?.canonicalRef;
+  const fields = useMemo(
+    () =>
+      withFieldOptionsOwner(
+        withModuleName(parseConfigFields(configFields), moduleName),
+        fieldOptionsOwnerFromCanonicalId(canonicalRef)
+      ),
+    [configFields, moduleName, canonicalRef]
+  );
   return (
     <div className="space-y-6">
       <StepIdField id={node.id} existingStepIds={existingStepIds} onUpdateActionId={onUpdateActionId} />
@@ -199,6 +221,7 @@ function WaitConfigPanel({
 }) {
   return (
     <WaitEditor
+      key={node.id}
       wait={node.wait}
       onChange={(wait) => onUpdateWaitConfig(node.id, wait)}
       availableVariables={availableVariables}

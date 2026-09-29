@@ -18,9 +18,12 @@ import {
   COMMAND_NEW_ROUTE,
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
+import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
+import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
 import { convexClient as convex } from "./lib/convexClient";
 
 const AdminAppearance = lazy(() => import("@/pages/admin/appearance"));
+const AdminBackup = lazy(() => import("@/pages/admin/backup"));
 const AdminEngine = lazy(() => import("@/pages/admin/engine"));
 const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
 const AdminStorage = lazy(() => import("@/pages/admin/storage"));
@@ -40,6 +43,7 @@ const Commands = lazy(() => import("@/pages/commands"));
 const Counters = lazy(() => import("@/pages/counters"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const Feedback = lazy(() => import("@/pages/feedback"));
+const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
 const ModuleInstall = lazy(() => import("@/pages/module-install"));
@@ -47,9 +51,14 @@ const Modules = lazy(() => import("@/pages/modules"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Queues = lazy(() => import("@/pages/queues"));
 const Scenes = lazy(() => import("@/pages/scenes"));
+const StarterPacks = lazy(() => import("@/pages/starter-packs"));
+const StreamRecap = lazy(() => import("@/pages/stream-recap"));
+const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
+const Supporters = lazy(() => import("@/pages/supporters"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
 const Timers = lazy(() => import("@/pages/timers"));
+const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
 function SplashScreen() {
@@ -143,6 +152,7 @@ function AppRoutes() {
                   <Route path="/stream">
                     <Redirect to="/stream/alerts" />
                   </Route>
+                  <Route path="/stream/go-live" component={GoLive} />
                   <Route path="/stream/alerts" component={Alerts} />
                   <Route path="/stream/alerts/*" component={Alerts} />
                   <Route path={ALERT_EDITOR_ROUTE} component={AlertEditor} />
@@ -161,13 +171,18 @@ function AppRoutes() {
                   <Route path="/stream/timers/*" component={Timers} />
                   <Route path="/stream/queues" component={Queues} />
                   <Route path="/stream/queues/*" component={Queues} />
+                  <Route path={STREAM_RECAPS_PATH} component={StreamRecaps} />
+                  <Route path={STREAM_RECAP_ROUTE} component={StreamRecap} />
                   <Route path="/stream/scenes" component={Scenes} />
                   <Route path="/stream/scenes/:id" component={Scenes} />
+                  <Route path="/stream/supporters" component={Supporters} />
                   <Route path="/stream/assets" component={Assets} />
+                  <Route path="/stream/starter-packs" component={StarterPacks} />
                   <Route path="/stream/workflows" component={Workflows} />
                   <Route path="/stream/workflows/new" component={Workflows} />
                   <Route path="/stream/workflows/:id" component={Workflows} />
                   <Route path="/stream/workflows/:id/edit" component={Workflows} />
+                  <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
                   {/* Modules section */}
                   <Route path="/modules/install" component={ModuleInstall} />
@@ -190,6 +205,7 @@ function AppRoutes() {
                   <Route path="/admin/engine" component={AdminEngine} />
                   <Route path="/admin/integrations" component={AdminIntegrations} />
                   <Route path="/admin/storage" component={AdminStorage} />
+                  <Route path="/admin/backup" component={AdminBackup} />
                   <Route path="/admin/appearance" component={AdminAppearance} />
 
                   <Route path="/team" component={Team} />
