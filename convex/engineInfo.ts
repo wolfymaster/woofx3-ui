@@ -6,7 +6,8 @@ import { action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 
-// Single call per settings page visit — not a hot path, so no caching.
+// Called by the storage settings page and by the status bar each time the
+// engine connection comes up. Neither is a hot path, so nothing is cached.
 export const getEngineInfo = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<EngineInfo | null> => {
