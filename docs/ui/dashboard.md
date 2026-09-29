@@ -40,6 +40,7 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `pinned` | stream | Twitch pinned message, plus re-pinnable history — see below |
 | `shoutout` | stream | Autocomplete from chat, confirm, queue — see below |
 | `queue` | stream | One queue's line, with manual add and remove — see below |
+| `timer` | stream | One timer's countdown, with start, pause and add time — see below |
 | `workflow-runs` | automation | Recent and in-progress executions |
 | `macro-pad` | automation | One-click buttons — see below |
 | `stream-stats` | utility | Viewers, uptime, category |
@@ -107,6 +108,21 @@ placements can watch different queues. An unset config, or one naming a queue
 since deleted, falls back to the first queue by name — the widget is useful the
 moment it is placed, and choosing from the header dropdown is what writes the
 config. With only one queue the dropdown is replaced by a link to its page.
+
+## Timer widget
+
+Shows one timer resource (`client/src/components/dashboard/widgets/timer.tsx`)
+with the same controls as the Timers page: start or pause, reset, quick-adjust
+(`timer.add`) and set to a time (`timer.set`). It follows the Queue widget's
+shape — the same config (`canonicalId`), fallback to the first timer by name,
+header link or dropdown, and every control through `useResourceAction`.
+
+A running timer is stored as `{ running: true, endsAt }` and is not rewritten
+while it counts down, so the time left is computed in the browser.
+`useTimerState` (`client/src/hooks/use-timer-state.ts`) does that for both the
+widget and the Timers page, ticking every 250 ms only while the timer runs, so
+the two cannot drift apart. A timer that has run out but not yet been stopped by
+the engine reads as Finished.
 
 ## Macro pad
 

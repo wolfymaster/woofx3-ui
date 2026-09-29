@@ -9,6 +9,7 @@ import {
   NotebookPen,
   Pin,
   Radio,
+  Timer,
   Tv,
   Volume2,
   Workflow,
@@ -27,6 +28,7 @@ import { ShoutoutWidget } from "@/components/dashboard/widgets/shoutout";
 import { StreamPreviewWidget } from "@/components/dashboard/widgets/stream-preview";
 import { StreamStatsWidget } from "@/components/dashboard/widgets/stream-stats";
 import { StreamStatusWidget } from "@/components/dashboard/widgets/stream-status";
+import { TimerWidget } from "@/components/dashboard/widgets/timer";
 import { WorkflowRunsModule } from "@/components/dashboard/widgets/workflow-runs";
 import type { DashboardWidgetCategory, DashboardWidgetDefinition } from "./types";
 
@@ -99,6 +101,14 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     icon: ListOrdered,
     category: "stream",
     component: QueueWidget,
+  },
+  {
+    type: "timer",
+    label: "Timer",
+    description: "A timer's countdown, with start, pause and add time: the same actions chat and workflows use.",
+    icon: Timer,
+    category: "stream",
+    component: TimerWidget,
   },
   {
     type: "workflow-runs",
