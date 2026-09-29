@@ -270,7 +270,7 @@ function InternalSelectFieldRenderer({
   source,
 }: FieldRendererProps & { source: InternalConfigFieldSource }) {
   const { instance } = useInstance();
-  const { options, loading, empty } = useFieldOptions(instance?._id, source);
+  const { options, loading, error, empty } = useFieldOptions(instance?._id, source);
 
   const disabled = loading || empty;
   let placeholder: string;
@@ -302,6 +302,11 @@ function InternalSelectFieldRenderer({
           ))}
         </SelectContent>
       </Select>
+      {error !== null && (
+        <p className="text-xs text-muted-foreground" data-testid={`status-${field.id}`}>
+          Could not load options: {error}
+        </p>
+      )}
       <ConfigFieldDescription description={field.description as string | undefined} />
     </div>
   );
