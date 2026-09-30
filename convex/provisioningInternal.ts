@@ -2,6 +2,13 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import {
+  decideRedeployEvent,
+  mergeRunSnapshot,
+  mergeStep,
+  type RedeployEvent,
+  redeployRunFailed,
+} from "./lib/maintenanceUpgrade";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
 import { logger } from "./logger";
 import { performRegistration } from "./registration";
@@ -31,6 +38,7 @@ const stepValidator = v.object({
     v.literal("skipped")
   ),
   error: v.optional(v.string()),
+  detail: v.optional(v.string()),
 });
 
 /**
@@ -40,6 +48,14 @@ const stepValidator = v.object({
  * attempts 2, 3 and 4, after which the row fails and the user retries.
  */
 const REGISTRATION_RETRY_DELAYS_MS = [10_000, 30_000, 120_000];
+
+/**
+ * How long an upgrade may go without a run before it is written off. Longer
+ * than an action can run, so by then the action that was to ask for the run is
+ * certainly over; had its request arrived, the run's first report would have
+ * given the row its id long before.
+ */
+const UPGRADE_REQUEST_DEADLINE_MS = 15 * 60 * 1000;
 
 /** Callback ids are kept only long enough to cover redelivery, which the sender stops after a day. */
 const EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -107,6 +123,7 @@ export const reserveManagedInstance = internalMutation({
         runId: undefined,
         publicUrl: undefined,
         error: undefined,
+        upgrade: undefined,
         updatedAt: now,
       });
       return { instanceId, provisioningId: existing._id };
@@ -195,21 +212,155 @@ export const recordProvisioningError = internalMutation({
   },
 });
 
-/** A retry accepted by the maintenance API: the same engine, a run resumed from its failed step. */
+/**
+ * A retry accepted by the maintenance API: the same engine, a run resumed from
+ * its failed step. A resumed redeploy puts the row back to upgrading, since its
+ * engine is already built and registered.
+ */
 export const recordRetryStarted = internalMutation({
+  args: {
+    provisioningId: v.id("engineProvisioning"),
+    runId: v.string(),
+    steps: v.array(stepValidator),
+    redeploy: v.boolean(),
+  },
+  handler: async (ctx, { provisioningId, runId, steps, redeploy }) => {
+    if (!redeploy) {
+      await ctx.db.patch(provisioningId, {
+        runId,
+        steps,
+        status: "provisioning",
+        error: undefined,
+        updatedAt: Date.now(),
+      });
+      return;
+    }
+    const row = await ctx.db.get(provisioningId);
+    if (!row?.upgrade) {
+      throw new Error("A redeploy was retried on a row with no upgrade");
+    }
+    const { outcome: _outcome, error: _error, ...inProgress } = row.upgrade;
+    await ctx.db.patch(provisioningId, {
+      runId,
+      steps,
+      status: "upgrading",
+      error: undefined,
+      upgrade: inProgress,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Marks a registered engine as upgrading, before the maintenance API is asked
+ * to upgrade it. Written first so that whatever the run reports, however soon,
+ * finds a row that expects it, and so a second request for the same engine
+ * sees the first instead of racing it.
+ */
+export const beginUpgrade = internalMutation({
+  args: {
+    provisioningId: v.id("engineProvisioning"),
+    requestedBy: v.id("users"),
+    fromVersion: v.string(),
+    toVersion: v.string(),
+  },
+  handler: async (
+    ctx,
+    { provisioningId, requestedBy, fromVersion, toVersion }
+  ): Promise<{ begun: true; attempt: number } | { begun: false; status: Doc<"engineProvisioning">["status"] }> => {
+    const row = await ctx.db.get(provisioningId);
+    if (!row) {
+      throw new Error("This workspace has no managed engine");
+    }
+    if (row.status !== "registered") {
+      return { begun: false, status: row.status };
+    }
+
+    const now = Date.now();
+    const attempt = (row.upgrade?.attempt ?? 0) + 1;
+    await ctx.db.patch(provisioningId, {
+      status: "upgrading",
+      runId: undefined,
+      steps: [],
+      error: undefined,
+      upgrade: { fromVersion, toVersion, requestedBy, startedAt: now, attempt, rollingBack: false },
+      updatedAt: now,
+    });
+    await ctx.scheduler.runAfter(UPGRADE_REQUEST_DEADLINE_MS, internal.provisioningInternal.recordUpgradeNotStarted, {
+      provisioningId,
+      attempt,
+      alreadyCurrent: false,
+      error: "The upgrade request was never answered.",
+    });
+    return { begun: true, attempt };
+  },
+});
+
+/** The run the maintenance API started for an upgrade, and its steps. */
+export const recordUpgradeRun = internalMutation({
   args: {
     provisioningId: v.id("engineProvisioning"),
     runId: v.string(),
     steps: v.array(stepValidator),
   },
   handler: async (ctx, { provisioningId, runId, steps }) => {
+    const row = await ctx.db.get(provisioningId);
+    // The run may already be over, or have handed the row to its rollback, by
+    // the time its listing gets here; either way the row has moved on.
+    if (!row || row.status !== "upgrading" || (row.runId !== undefined && row.runId !== runId)) {
+      return;
+    }
     await ctx.db.patch(provisioningId, {
       runId,
-      steps,
-      status: "provisioning",
-      error: undefined,
+      steps: mergeRunSnapshot(row.steps, steps),
       updatedAt: Date.now(),
     });
+  },
+});
+
+/**
+ * An upgrade that no run was started for: the engine was never touched, so the
+ * row goes back to registered. Does nothing once a run is known, which is what
+ * makes it safe to schedule as a deadline when the upgrade begins.
+ */
+export const recordUpgradeNotStarted = internalMutation({
+  args: {
+    provisioningId: v.id("engineProvisioning"),
+    attempt: v.number(),
+    // The engine already runs the offered release, which is not a failure.
+    alreadyCurrent: v.boolean(),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, { provisioningId, attempt, alreadyCurrent, error }) => {
+    const row = await ctx.db.get(provisioningId);
+    if (!row?.upgrade || row.status !== "upgrading" || row.upgrade.attempt !== attempt || row.runId !== undefined) {
+      return;
+    }
+    if (alreadyCurrent) {
+      await ctx.db.patch(provisioningId, {
+        status: "registered",
+        reportedVersion: row.upgrade.toVersion,
+        upgrade: { ...row.upgrade, acknowledged: true },
+        updatedAt: Date.now(),
+      });
+      return;
+    }
+    await ctx.db.patch(provisioningId, {
+      status: "registered",
+      upgrade: { ...row.upgrade, outcome: "failed", error: error ?? "The upgrade could not be started." },
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const recordUpgradeAcknowledged = internalMutation({
+  args: { provisioningId: v.id("engineProvisioning") },
+  handler: async (ctx, { provisioningId }) => {
+    const row = await ctx.db.get(provisioningId);
+    if (!row?.upgrade || row.upgrade.acknowledged) {
+      return;
+    }
+    await ctx.db.patch(provisioningId, { upgrade: { ...row.upgrade, acknowledged: true } });
   },
 });
 
@@ -251,6 +402,13 @@ export const applyCallbackEvent = internalMutation({
     version: v.optional(v.string()),
     runKind: v.optional(v.union(v.literal("provision"), v.literal("deprovision"), v.literal("redeploy"))),
     error: v.optional(v.string()),
+    runId: v.optional(v.string()),
+    // Why a running step is still waiting.
+    detail: v.optional(v.string()),
+    // On `engine.failed`: the engine's status after the failure, and the run
+    // restoring the previous release when one was queued.
+    engineStatus: v.optional(v.string()),
+    rollbackRunId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ handled: boolean; duplicate: boolean }> => {
     const seen = await ctx.db
@@ -284,16 +442,32 @@ export const applyCallbackEvent = internalMutation({
         if (!args.step || !args.stepStatus) {
           return { handled: false, duplicate: false };
         }
-        await applyRunStep(ctx, row, {
+        const step = {
           key: args.step,
           label: args.label ?? args.step,
           status: args.stepStatus,
           error: args.error,
-        });
+          detail: args.detail,
+        };
+        if (args.runKind === "redeploy") {
+          await applyRedeployEvent(ctx, row, { type: "engine.run.step", runId: args.runId, step });
+        } else {
+          await applyRunStep(ctx, row, step);
+        }
         return { handled: true, duplicate: false };
       }
 
       case "engine.ready": {
+        // An engine that is already registered comes back from an upgrade with
+        // its database and its registration intact, so it is not registered
+        // again: only the release it reports can have changed.
+        if (row.status === "upgrading" || row.status === "registered" || redeployRunFailed(row)) {
+          if (!args.version) {
+            return { handled: false, duplicate: false };
+          }
+          await applyRedeployEvent(ctx, row, { type: "engine.ready", version: args.version });
+          return { handled: true, duplicate: false };
+        }
         if (!args.url) {
           return { handled: false, duplicate: false };
         }
@@ -303,6 +477,17 @@ export const applyCallbackEvent = internalMutation({
 
       case "engine.failed": {
         const step = args.step ?? "unknown";
+        if (args.runKind === "redeploy") {
+          await applyRedeployEvent(ctx, row, {
+            type: "engine.failed",
+            runId: args.runId,
+            step,
+            error: args.error,
+            engineStatus: args.engineStatus,
+            rollbackRunId: args.rollbackRunId,
+          });
+          return { handled: true, duplicate: false };
+        }
         // A failed teardown leaves the engine deprovisioning until a retry
         // finishes, so the row says so too: presenting it as an engine that
         // failed to be built would offer the user the opposite repair.
@@ -354,15 +539,9 @@ export const cleanupOldEvents = internalMutation({
 async function applyRunStep(
   ctx: MutationCtx,
   row: Doc<"engineProvisioning">,
-  step: { key: string; label: string; status: ProvisioningStepStatus; error?: string }
+  step: { key: string; label: string; status: ProvisioningStepStatus; error?: string; detail?: string }
 ): Promise<void> {
-  const steps = [...row.steps];
-  const index = steps.findIndex((existing) => existing.key === step.key);
-  if (index === -1) {
-    steps.push(step);
-  } else {
-    steps[index] = step;
-  }
+  const steps = mergeStep(row.steps, step);
 
   // The first step report is what turns a requested engine into one that is
   // visibly being built. Every other status stands: a late report must not
@@ -372,10 +551,18 @@ async function applyRunStep(
   await ctx.db.patch(row._id, { steps, status, updatedAt: Date.now() });
 }
 
+/** A report from a redeploy run: an upgrade, or the rollback of one. */
+async function applyRedeployEvent(ctx: MutationCtx, row: Doc<"engineProvisioning">, event: RedeployEvent) {
+  const patch = decideRedeployEvent(row, event);
+  if (patch) {
+    await ctx.db.patch(row._id, { ...patch, updatedAt: Date.now() });
+  }
+}
+
 /**
- * The engine is serving on its public URL. This is where a managed instance
- * gets its URL, and where registration starts: the engine requires the
- * registration token this row generated, so nobody else can claim it.
+ * A newly built engine is serving on its public URL. This is where a managed
+ * instance gets its URL, and where registration starts: the engine requires
+ * the registration token this row generated, so nobody else can claim it.
  */
 async function applyEngineReady(
   ctx: MutationCtx,
@@ -383,9 +570,6 @@ async function applyEngineReady(
   url: string,
   version: string | undefined
 ): Promise<void> {
-  if (row.status === "registered") {
-    return;
-  }
   await ctx.db.patch(row.instanceId, { url });
   await ctx.db.patch(row._id, {
     publicUrl: url,

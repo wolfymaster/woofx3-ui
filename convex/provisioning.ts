@@ -6,14 +6,18 @@ import { type ActionCtx, action, query } from "./_generated/server";
 import {
   checkSlugAvailability,
   createEngine,
+  currentRelease,
   deleteEngine,
   getEngine,
   isMaintenanceConfigured,
   MAINTENANCE_OWNER_TYPE,
   MaintenanceApiError,
   type MaintenanceRun,
+  redeployEngine,
+  redeployRefusal,
   retryRun,
 } from "./lib/maintenanceClient";
+import { redeployRunFailed } from "./lib/maintenanceUpgrade";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 /**
@@ -53,6 +57,29 @@ function userFacingError(error: unknown): string {
   }
   return error instanceof Error ? error.message : String(error);
 }
+
+/**
+ * Whether engine owners are offered upgrades. Off until the engine releases on
+ * offer are known to survive a rollback, since a failed upgrade restores the
+ * previous release onto a database the new one has already migrated.
+ */
+function upgradesEnabled(): boolean {
+  return process.env.ENGINE_UPGRADES_ENABLED === "true" && isMaintenanceConfigured();
+}
+
+function releaseNotesUrl(version: string): string {
+  return `https://github.com/wolfymaster/woofx3/releases/tag/${encodeURIComponent(version)}`;
+}
+
+export interface UpgradeInfo {
+  /** Whether the engine can be upgraded now: it is running, and on a release other than the offered one. */
+  available: boolean;
+  offered: string | null;
+  current: string | null;
+  releaseNotesUrl: string | null;
+}
+
+export type UpgradeRequestOutcome = "started" | "already_running" | "already_current" | "not_started";
 
 /** Whether this deployment can create managed engines at all. */
 export const isAvailable = query({
@@ -99,12 +126,116 @@ export const forInstance = query({
 export const engineFlag = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ at: string; reason: string } | null> => {
-    const row = await requireManagedRow(ctx, instanceId);
+    const { row } = await requireManagedRow(ctx, instanceId);
     if (!row.maintenanceEngineId) {
       return null;
     }
     const { engine } = await getEngine(row.maintenanceEngineId);
     return engine.flag;
+  },
+});
+
+/**
+ * Whether the engine is behind the release the maintenance API offers. Nothing
+ * pushes the offered release, so this is asked when the engine page opens.
+ */
+export const upgradeInfo = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<UpgradeInfo> => {
+    const { row } = await requireManagedRow(ctx, instanceId);
+    if (!upgradesEnabled() || !row.maintenanceEngineId) {
+      return { available: false, offered: null, current: null, releaseNotesUrl: null };
+    }
+    const { version: offered } = await currentRelease();
+    const current = row.reportedVersion ?? null;
+    return {
+      available: row.status === "registered" && current !== offered,
+      offered,
+      current,
+      releaseNotesUrl: releaseNotesUrl(offered),
+    };
+  },
+});
+
+/**
+ * Move the engine to the release the maintenance API offers. The caller picks
+ * when, never which release.
+ *
+ * The engine is offline while the new release starts, and the run's callbacks
+ * carry the row from here: through the upgrade, a rollback if the release does
+ * not come up, and back to registered.
+ *
+ * A request the maintenance API declines is an outcome, not an error: the
+ * reason is on the row for the engine page to show, and the engine was never
+ * touched.
+ */
+export const upgradeManagedEngine = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<{ outcome: UpgradeRequestOutcome }> => {
+    const { row, userId } = await requireManagedRow(ctx, instanceId);
+    if (!upgradesEnabled()) {
+      throw new Error("Engine upgrades are not available");
+    }
+    if (row.status === "upgrading") {
+      return { outcome: "already_running" };
+    }
+    if (row.status !== "registered" || !row.maintenanceEngineId) {
+      throw new Error("Only a running engine can be upgraded");
+    }
+
+    const engineId = row.maintenanceEngineId;
+    const { version: toVersion } = await currentRelease();
+    const fromVersion = row.reportedVersion ?? (await getEngine(engineId)).engine.image?.version;
+    if (!fromVersion) {
+      throw new Error("The engine's current release is unknown");
+    }
+
+    const begun = await ctx.runMutation(internal.provisioningInternal.beginUpgrade, {
+      provisioningId: row._id,
+      requestedBy: userId,
+      fromVersion,
+      toVersion,
+    });
+    if (!begun.begun) {
+      if (begun.status === "upgrading") {
+        return { outcome: "already_running" };
+      }
+      throw new Error("Only a running engine can be upgraded");
+    }
+
+    let run: MaintenanceRun;
+    try {
+      ({ run } = await redeployEngine(engineId, `${row._id}:upgrade:${toVersion}:${begun.attempt}`));
+    } catch (error) {
+      const refusal = redeployRefusal(error);
+      const alreadyCurrent = refusal === "already_current";
+      await ctx.runMutation(internal.provisioningInternal.recordUpgradeNotStarted, {
+        provisioningId: row._id,
+        attempt: begun.attempt,
+        alreadyCurrent,
+        error:
+          refusal === "run_in_progress"
+            ? "Another operation is already running on this engine."
+            : userFacingError(error),
+      });
+      return { outcome: alreadyCurrent ? "already_current" : "not_started" };
+    }
+    await ctx.runMutation(internal.provisioningInternal.recordUpgradeRun, {
+      provisioningId: row._id,
+      runId: run.id,
+      steps: stepsOf(run),
+    });
+    return { outcome: "started" };
+  },
+});
+
+/** Dismiss the outcome of the last upgrade, so the engine page stops showing it. */
+export const acknowledgeUpgrade = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<null> => {
+    const { row } = await requireManagedRow(ctx, instanceId);
+    await ctx.runMutation(internal.provisioningInternal.recordUpgradeAcknowledged, { provisioningId: row._id });
+    return null;
   },
 });
 
@@ -189,19 +320,21 @@ export const startManagedEngine = action({
 });
 
 /**
- * Resume a failed provision, or re-run a registration that failed after the
- * engine came up. Which one it is depends on how far the row got: an engine
- * that already published a URL does not need provisioning again.
+ * Resume a failed run, or re-run a registration that failed after the engine
+ * came up. Which one it is depends on how far the row got: an engine that
+ * already published a URL does not need provisioning again, unless what failed
+ * was a later redeploy, which is resumed like any other run.
  */
 export const retry = action({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }): Promise<{ retried: "provisioning" | "registration" }> => {
-    const row = await requireManagedRow(ctx, instanceId);
+  handler: async (ctx, { instanceId }): Promise<{ retried: "provisioning" | "registration" | "upgrade" }> => {
+    const { row } = await requireManagedRow(ctx, instanceId);
     if (row.status === "deprovisioning") {
       throw new Error("This engine is being deleted");
     }
 
-    if (row.publicUrl) {
+    const redeploy = redeployRunFailed(row);
+    if (row.publicUrl && !redeploy) {
       await ctx.runMutation(internal.provisioningInternal.restartRegistration, { provisioningId: row._id });
       return { retried: "registration" };
     }
@@ -220,8 +353,9 @@ export const retry = action({
         provisioningId: row._id,
         runId: run.id,
         steps: stepsOf(run),
+        redeploy,
       });
-      return { retried: "provisioning" };
+      return { retried: redeploy ? "upgrade" : "provisioning" };
     } catch (error) {
       await ctx.runMutation(internal.provisioningInternal.recordProvisioningError, {
         provisioningId: row._id,
@@ -241,7 +375,7 @@ export const retry = action({
 export const deleteManagedEngine = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ deprovisioning: boolean }> => {
-    const row = await requireManagedRow(ctx, instanceId);
+    const { row } = await requireManagedRow(ctx, instanceId);
     if (!row.maintenanceEngineId) {
       throw new Error("This workspace has no managed engine to delete");
     }
@@ -253,7 +387,10 @@ export const deleteManagedEngine = action({
 });
 
 /** Owner or admin of the instance, and a provisioning row to act on. */
-async function requireManagedRow(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Doc<"engineProvisioning">> {
+async function requireManagedRow(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<{ row: Doc<"engineProvisioning">; userId: Id<"users"> }> {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new Error("Not authenticated");
@@ -266,5 +403,5 @@ async function requireManagedRow(ctx: ActionCtx, instanceId: Id<"instances">): P
   if (!row) {
     throw new Error("This workspace has no managed engine");
   }
-  return row;
+  return { row, userId };
 }
