@@ -34,6 +34,7 @@ import type * as engineInfo from "../engineInfo.js";
 import type * as engineSync from "../engineSync.js";
 import type * as engineSyncInternal from "../engineSyncInternal.js";
 import type * as fieldOptions from "../fieldOptions.js";
+import type * as gettingStarted from "../gettingStarted.js";
 import type * as goLive from "../goLive.js";
 import type * as http from "../http.js";
 import type * as inboundWebhooks from "../inboundWebhooks.js";
@@ -62,6 +63,7 @@ import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/tri
 import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widgets.js";
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_engineTestRun from "../lib/engineTestRun.js";
+import type * as lib_gettingStarted from "../lib/gettingStarted.js";
 import type * as lib_goLiveFacts from "../lib/goLiveFacts.js";
 import type * as lib_goLiveMarker from "../lib/goLiveMarker.js";
 import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.js";
@@ -215,6 +217,7 @@ declare const fullApi: ApiFromModules<{
   engineSync: typeof engineSync;
   engineSyncInternal: typeof engineSyncInternal;
   fieldOptions: typeof fieldOptions;
+  gettingStarted: typeof gettingStarted;
   goLive: typeof goLive;
   http: typeof http;
   inboundWebhooks: typeof inboundWebhooks;
@@ -243,6 +246,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/widgets": typeof lib_engineSync_steps_widgets;
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/engineTestRun": typeof lib_engineTestRun;
+  "lib/gettingStarted": typeof lib_gettingStarted;
   "lib/goLiveFacts": typeof lib_goLiveFacts;
   "lib/goLiveMarker": typeof lib_goLiveMarker;
   "lib/inboundWebhookDelivery": typeof lib_inboundWebhookDelivery;

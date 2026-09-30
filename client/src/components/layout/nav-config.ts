@@ -10,6 +10,7 @@ import {
   Key,
   Layers,
   LayoutDashboard,
+  ListChecks,
   ListOrdered,
   MessageSquare,
   MessageSquarePlus,
@@ -83,6 +84,7 @@ export const STREAM_ITEMS: NavItem[] = [
 
 export const HELP_ITEMS: NavItem[] = [
   { id: "learning", label: "Learning", icon: GraduationCap, href: "/help/learning" },
+  { id: "setup", label: "Setup", icon: ListChecks, href: "/setup" },
   { id: "logs", label: "Logs", icon: ScrollText, href: "/help/logs" },
   { id: "feedback", label: "Submit Feedback", icon: MessageSquarePlus, href: "/help/feedback" },
 ];
