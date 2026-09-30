@@ -40,6 +40,7 @@ import type * as inboundWebhooks from "../inboundWebhooks.js";
 import type * as instanceLiveState from "../instanceLiveState.js";
 import type * as instances from "../instances.js";
 import type * as invitations from "../invitations.js";
+import type * as lib_adBreaks from "../lib/adBreaks.js";
 import type * as lib_alertQueueResults from "../lib/alertQueueResults.js";
 import type * as lib_alertWidgets from "../lib/alertWidgets.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
@@ -62,6 +63,7 @@ import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/tri
 import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widgets.js";
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_engineTestRun from "../lib/engineTestRun.js";
+import type * as lib_fieldOptions from "../lib/fieldOptions.js";
 import type * as lib_goLiveFacts from "../lib/goLiveFacts.js";
 import type * as lib_goLiveMarker from "../lib/goLiveMarker.js";
 import type * as lib_inboundWebhookDelivery from "../lib/inboundWebhookDelivery.js";
@@ -136,7 +138,6 @@ import type * as moduleSettingsActions from "../moduleSettingsActions.js";
 import type * as moduleWebhook from "../moduleWebhook.js";
 import type * as moduleWidgets from "../moduleWidgets.js";
 import type * as oauthConnectHandoff from "../oauthConnectHandoff.js";
-import type * as obsCommands from "../obsCommands.js";
 import type * as pageIntros from "../pageIntros.js";
 import type * as pins from "../pins.js";
 import type * as platformRealtime from "../platformRealtime.js";
@@ -217,6 +218,7 @@ declare const fullApi: ApiFromModules<{
   instanceLiveState: typeof instanceLiveState;
   instances: typeof instances;
   invitations: typeof invitations;
+  "lib/adBreaks": typeof lib_adBreaks;
   "lib/alertQueueResults": typeof lib_alertQueueResults;
   "lib/alertWidgets": typeof lib_alertWidgets;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
@@ -239,6 +241,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/widgets": typeof lib_engineSync_steps_widgets;
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/engineTestRun": typeof lib_engineTestRun;
+  "lib/fieldOptions": typeof lib_fieldOptions;
   "lib/goLiveFacts": typeof lib_goLiveFacts;
   "lib/goLiveMarker": typeof lib_goLiveMarker;
   "lib/inboundWebhookDelivery": typeof lib_inboundWebhookDelivery;
@@ -313,7 +316,6 @@ declare const fullApi: ApiFromModules<{
   moduleWebhook: typeof moduleWebhook;
   moduleWidgets: typeof moduleWidgets;
   oauthConnectHandoff: typeof oauthConnectHandoff;
-  obsCommands: typeof obsCommands;
   pageIntros: typeof pageIntros;
   pins: typeof pins;
   platformRealtime: typeof platformRealtime;
