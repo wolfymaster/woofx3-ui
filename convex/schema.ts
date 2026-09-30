@@ -621,6 +621,17 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_instance_user", ["instanceId", "userId"]),
 
+  // gettingStartedChecklists: one row per instance for the dashboard's getting
+  // started card. Shared by the instance's members, like the setup it tracks.
+  // Most items are read from the setup and overlays; `doneItemIds` holds the
+  // ones nothing else records (see convex/lib/gettingStarted.ts).
+  gettingStartedChecklists: defineTable({
+    instanceId: v.id("instances"),
+    doneItemIds: v.array(v.string()),
+    dismissedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
   // goLiveChecklists: one row per instance for the Go live checklist. Shared by
   // everyone on the instance, like the channel it describes: a check dismissed
   // because this setup has no OBS stays dismissed for the moderator too.

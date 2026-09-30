@@ -92,6 +92,25 @@ every requested step failed, it also records the channel's title and
 category, which is what the next run's "same title as last time" is measured
 against: Twitch keeps no history of either.
 
+## Getting started card
+
+`GettingStartedCard` (`client/src/components/dashboard/getting-started-card.tsx`) is a collapsible strip above the panels, with a short first-session list. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
+
+| Item | Done when | Offers |
+|---|---|---|
+| Finish setting up | `instanceSetup.completedAt` is set | Continue setup (`/setup`) |
+| Platforms installed | every chosen platform's `moduleInstalls` entry is `installed` | Retry (`setup.retryApply`) on a failure; the module page on a needs-approval |
+| Twitch connected | the instance has a Twitch link | Connect Twitch |
+| Overlay added to OBS | a browser source has loaded a browser-source key (`goLive.overlays.lastLoadedAt`) | Copy browser-source URL, Open scenes |
+| Fire a test follow | the card fired one | **Send a test follow**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
+| Run your first chat command | the streamer says so | See your commands, **I've tried it** |
+
+- **Items the card records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
+- **When it hides.** The card hides once every item is done, or when someone dismisses it (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
+- **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
+
+Help → **Setup** reopens the setup wizard (`/setup`). Once setup is finished, it opens on the All set page.
+
 ## Recent streams
 
 `recent-streams` lists the instance's last ten finished sessions from

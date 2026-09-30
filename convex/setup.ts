@@ -58,6 +58,17 @@ async function readTwitchLink(ctx: QueryCtx, instanceId: Id<"instances">): Promi
   return links.find((link) => link.platform === "twitch") ?? null;
 }
 
+/**
+ * Applies the setup's choices now if the engine is registered. Otherwise
+ * registration applies them (instances.applyRegistration).
+ */
+async function scheduleApplyIfRegistered(ctx: MutationCtx, instanceId: Id<"instances">) {
+  const instance = await ctx.db.get(instanceId);
+  if (instance?.clientId) {
+    await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });
+  }
+}
+
 /** Where the instance's setup stands, for the wizard and the onboarding guard. Null for a non-member. */
 export const status = query({
   args: { instanceId: v.id("instances") },
@@ -117,6 +128,9 @@ export const choosePlatforms = mutation({
     const row = await readSetupRow(ctx, instanceId);
     if (row) {
       await ctx.db.patch(row._id, { platforms, platformsChosenAt: now, updatedAt: now });
+      if (row.completedAt) {
+        await scheduleApplyIfRegistered(ctx, instanceId);
+      }
       return;
     }
     await ctx.db.insert("instanceSetup", { instanceId, platforms, platformsChosenAt: now, updatedAt: now });
@@ -144,6 +158,9 @@ export const chooseInterests = mutation({
     }
     const now = Date.now();
     await ctx.db.patch(row._id, { interests: [...new Set(interestIds)], interestsChosenAt: now, updatedAt: now });
+    if (row.completedAt) {
+      await scheduleApplyIfRegistered(ctx, instanceId);
+    }
   },
 });
 
@@ -196,11 +213,7 @@ export const complete = mutation({
     const now = Date.now();
     await ctx.db.patch(row._id, { completedAt: now, completedByUserId: userId, updatedAt: now });
     await seedDashboard(ctx, instanceId, userId, row.interests ?? []);
-
-    const instance = await ctx.db.get(instanceId);
-    if (instance?.clientId) {
-      await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });
-    }
+    await scheduleApplyIfRegistered(ctx, instanceId);
   },
 });
 

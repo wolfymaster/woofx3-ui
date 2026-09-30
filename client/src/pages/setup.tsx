@@ -2,13 +2,14 @@ import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Loader2, MonitorPlay } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { useLocation, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { DashboardStep } from "@/components/setup/dashboard-step";
 import { FinishStep } from "@/components/setup/finish-step";
 import { InterestsStep } from "@/components/setup/interests-step";
 import { PlatformsStep } from "@/components/setup/platforms-step";
 import { ProvisioningBar } from "@/components/setup/provisioning-bar";
 import { AskAdminToConnectTwitch, TwitchStep } from "@/components/setup/twitch-step";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -119,7 +120,16 @@ export default function Setup() {
   if (!status.canManageSetup) {
     return (
       <SetupShell activeStep={null}>
-        <AskAdminToConnectTwitch />
+        {status.twitchUsername === null ? (
+          <AskAdminToConnectTwitch />
+        ) : (
+          <div className="rounded-md border p-4 space-y-3 text-sm" data-testid="text-setup-admin-only">
+            <p>Only an owner or admin can change this account&apos;s setup.</p>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/">Back to the dashboard</Link>
+            </Button>
+          </div>
+        )}
       </SetupShell>
     );
   }

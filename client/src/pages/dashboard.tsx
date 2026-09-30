@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CommandBar } from "@/components/dashboard/command-bar";
 import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { GettingStartedCard } from "@/components/dashboard/getting-started-card";
 import { PanelTabs } from "@/components/dashboard/panel-tabs";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { WidgetRail } from "@/components/dashboard/widget-rail";
@@ -324,6 +325,7 @@ export default function Dashboard() {
         <NotRunningNotice />
 
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
+        <GettingStartedCard instanceId={instance._id} />
         <StarterPacksNudge instanceId={instance._id} />
 
         <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
