@@ -47,6 +47,15 @@ A manifest may declare a top-level `permissions` array (`twitch.moderation`, `tw
 - **What is shown.** `moduleDetail.getModuleDetail` returns `permissions` (the shown version) and, for an installed module whose marketplace version differs, `latestPermissions`. The detail panel's Details tab and the upload page render a **This module can:** section from `client/src/lib/module-permissions.ts`, which maps each id to plain language; an id missing from that table renders as `Unknown permission: <id>` with a warning, so a permission the engine learns before the UI does is never hidden. Permissions that could not be read render as a warning, not as "nothing".
 - **Confirmation.** Installing a module that declares any permission, or updating to a version that declares one the installed version lacked, opens `ApproveModulePermissionsDialog` (**Install and allow** / **Update and allow**). An update that keeps or drops permissions installs without the extra step.
 - **Server-side check.** `api.marketplace.installModule` takes `approvedPermissions` and re-reads the archive it installs; it refuses when the archive declares a permission outside that list. This catches a listing republished with new permissions after the streamer reviewed it, and an unreadable listing (approved as "none new") can never install a permission the streamer did not see. ZIP uploads are not re-checked on the server: the browser supplies both the manifest and the archive there.
+- **Installing later, without a session.** `internal.marketplace.installApprovedModule` runs the same install for an instance rather than a signed-in user, using permissions approved earlier (for example, the platforms chosen at setup, installed once the engine is ready). A build that declares more than was approved comes back as `{ status: "needs_approval", unapproved }` without reaching the engine, so the caller can ask again instead of installing silently.
+
+## Setup platforms
+
+The platform modules offered while an account is set up (Twitch, OBS, Spotify, Throne) are curated in the `setupPlatforms` table: `marketplaceModuleId`, `required`, `defaultSelected`, `sortOrder` and a one-line `summary`. Name, version and permissions are not stored; `setupPlatformsActions.listForSetup` reads them from the marketplace listing and each module's archive at request time (`convex/lib/setupPlatforms.ts`).
+
+- An entry the marketplace does not list, or whose archive permissions cannot be read, is left out. A **required** entry that is left out is returned in `unavailableRequired`, because setup cannot finish without it.
+- A required platform is always selected. Only Twitch is required, and nothing else is preselected.
+- The list is internal data, changed with `bunx convex run`: `setupPlatforms:seedDefaults` inserts the default four (idempotent; existing rows are left alone), and `setupPlatforms:upsert` / `setupPlatforms:remove` edit one entry. Offering another platform needs no release.
 
 ## Uninstall (`UninstallModuleDialog`)
 

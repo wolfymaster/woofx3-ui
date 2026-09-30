@@ -4,7 +4,8 @@ import { createHash } from "node:crypto";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
@@ -350,6 +351,16 @@ function parseDetail(raw: unknown): MarketplaceModuleDetail | null {
   return detail;
 }
 
+/** Every module the marketplace lists. Entries it cannot parse are dropped. */
+export async function fetchMarketplaceListing(): Promise<MarketplaceModuleSummary[]> {
+  const payload = await marketplaceFetch("/modules");
+  const rawList =
+    payload && typeof payload === "object" && Array.isArray((payload as Record<string, unknown>).modules)
+      ? ((payload as Record<string, unknown>).modules as unknown[])
+      : [];
+  return rawList.map(parseSummary).filter((m): m is MarketplaceModuleSummary => m !== null);
+}
+
 export const listModules = action({
   args: {},
   handler: async (ctx): Promise<MarketplaceModuleSummary[]> => {
@@ -357,13 +368,7 @@ export const listModules = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-
-    const payload = await marketplaceFetch("/modules");
-    const rawList =
-      payload && typeof payload === "object" && Array.isArray((payload as Record<string, unknown>).modules)
-        ? ((payload as Record<string, unknown>).modules as unknown[])
-        : [];
-    return rawList.map(parseSummary).filter((m): m is MarketplaceModuleSummary => m !== null);
+    return await fetchMarketplaceListing();
   },
 });
 
@@ -384,6 +389,94 @@ export const getModule = action({
     return detail;
   },
 });
+
+export type MarketplaceInstallResult =
+  | { status: "installed"; moduleKey: string }
+  | {
+      /**
+       * The archive declares permissions nobody approved, e.g. because the
+       * listing was republished after the streamer reviewed it. Nothing was
+       * sent to the engine.
+       */
+      status: "needs_approval";
+      name: string;
+      version: string;
+      unapproved: string[];
+    };
+
+interface EngineCredentials {
+  url: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+/**
+ * Installs the marketplace's current build of a module on an engine, provided
+ * every permission its archive declares is in `approvedPermissions`. Callers
+ * decide who may install; this only checks consent. Engine and marketplace
+ * failures throw.
+ */
+async function installFromMarketplace(
+  ctx: ActionCtx,
+  {
+    instanceId,
+    engine,
+    marketplaceModuleId,
+    approvedPermissions,
+  }: {
+    instanceId: Id<"instances">;
+    engine: EngineCredentials;
+    marketplaceModuleId: string;
+    approvedPermissions: readonly string[];
+  }
+): Promise<MarketplaceInstallResult> {
+  const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`);
+  const rawModule =
+    detailPayload && typeof detailPayload === "object" ? (detailPayload as Record<string, unknown>).module : undefined;
+  const detail = parseDetail(rawModule);
+  if (!detail) {
+    throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
+  }
+
+  const download = await fetchMarketplaceDownload(marketplaceModuleId);
+  const declaredPermissions = await fetchMarketplaceArchivePermissions(download);
+  const unapproved = unapprovedPermissions(declaredPermissions, approvedPermissions);
+  if (unapproved.length > 0) {
+    return { status: "needs_approval", name: detail.name, version: detail.version, unapproved };
+  }
+  const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
+
+  await ctx.runMutation(internal.transientEvents.emit, {
+    instanceId,
+    correlationKey: moduleKey,
+    type: "module.install",
+    status: "progress",
+    message: `Installing ${detail.name}@${detail.version} from marketplace...`,
+    data: { moduleName: detail.name, moduleVersion: detail.version, source: "marketplace" },
+  });
+
+  try {
+    const rpc = createEngineRpcSession<LocalEngineApi>(engine.url, engine.clientId, engine.clientSecret);
+    await rpc.installModuleFromUrl(download.url, moduleKey, {
+      name: detail.name,
+      version: detail.version,
+      source: "marketplace",
+      marketplaceModuleId,
+    });
+    return { status: "installed", moduleKey };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await ctx.runMutation(internal.transientEvents.emit, {
+      instanceId,
+      correlationKey: moduleKey,
+      type: "module.install",
+      status: "error",
+      message: `Marketplace install failed: ${message}`,
+      data: { moduleName: detail.name, moduleVersion: detail.version, source: "marketplace" },
+    });
+    throw err;
+  }
+}
 
 export const installModule = action({
   args: {
@@ -412,57 +505,48 @@ export const installModule = action({
       throw new Error("Instance is not registered with the engine");
     }
 
-    const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`);
-    const rawModule =
-      detailPayload && typeof detailPayload === "object"
-        ? (detailPayload as Record<string, unknown>).module
-        : undefined;
-    const detail = parseDetail(rawModule);
-    if (!detail) {
-      throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
-    }
-
-    const download = await fetchMarketplaceDownload(marketplaceModuleId);
-    const declaredPermissions = await fetchMarketplaceArchivePermissions(download);
-    const unapproved = unapprovedPermissions(declaredPermissions, approvedPermissions);
-    if (unapproved.length > 0) {
+    const result = await installFromMarketplace(ctx, {
+      instanceId,
+      engine: { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret },
+      marketplaceModuleId,
+      approvedPermissions,
+    });
+    if (result.status === "needs_approval") {
       throw new Error(
-        `${detail.name}@${detail.version} asks for permissions that were not approved (${unapproved.join(", ")}). ` +
+        `${result.name}@${result.version} asks for permissions that were not approved (${result.unapproved.join(", ")}). ` +
           "Review the module and install again."
       );
     }
-    const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
+    return { moduleKey: result.moduleKey };
+  },
+});
 
-    await ctx.runMutation(internal.transientEvents.emit, {
-      instanceId,
-      correlationKey: moduleKey,
-      type: "module.install",
-      status: "progress",
-      message: `Installing ${detail.name}@${detail.version} from marketplace...`,
-      data: { moduleName: detail.name, moduleVersion: detail.version, source: "marketplace" },
-    });
-
-    try {
-      const rpc = createEngineRpcSession<LocalEngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-      await rpc.installModuleFromUrl(download.url, moduleKey, {
-        name: detail.name,
-        version: detail.version,
-        source: "marketplace",
-        marketplaceModuleId,
-      });
-
-      return { moduleKey };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      await ctx.runMutation(internal.transientEvents.emit, {
-        instanceId,
-        correlationKey: moduleKey,
-        type: "module.install",
-        status: "error",
-        message: `Marketplace install failed: ${message}`,
-        data: { moduleName: detail.name, moduleVersion: detail.version, source: "marketplace" },
-      });
-      throw err;
+/**
+ * `installModule` without a signed-in user, for installs the streamer approved
+ * earlier and that run later on the instance's behalf, such as the platforms
+ * chosen at setup once the engine is ready. The approval that authorizes it is
+ * `approvedPermissions`, recorded when the streamer chose the module; a build
+ * asking for more comes back as `needs_approval` instead of installing.
+ */
+export const installApprovedModule = internalAction({
+  args: {
+    instanceId: v.id("instances"),
+    marketplaceModuleId: v.string(),
+    approvedPermissions: v.array(v.string()),
+  },
+  handler: async (ctx, { instanceId, marketplaceModuleId, approvedPermissions }): Promise<MarketplaceInstallResult> => {
+    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+    if (!instance) {
+      throw new Error(`Instance ${instanceId} not found`);
     }
+    if (!instance.clientId || !instance.clientSecret) {
+      throw new Error("Instance is not registered with the engine");
+    }
+    return await installFromMarketplace(ctx, {
+      instanceId,
+      engine: { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret },
+      marketplaceModuleId,
+      approvedPermissions,
+    });
   },
 });
