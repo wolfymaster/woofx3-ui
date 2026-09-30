@@ -29,7 +29,11 @@ export async function loadCatalogBundle(
   if (!membership) {
     return null;
   }
+  return loadInstanceCatalogBundle(ctx, instanceId);
+}
 
+/** `loadCatalogBundle` without a member check, for work done on an instance's behalf rather than a user's. */
+async function loadInstanceCatalogBundle(ctx: QueryCtx, instanceId: Id<"instances">): Promise<CatalogBundle | null> {
   const instance = await ctx.db.get(instanceId);
   if (!instance) {
     return null;
@@ -88,5 +92,12 @@ export const catalogContextForUser = internalQuery({
   },
   handler: async (ctx, { instanceId, userId }) => {
     return loadCatalogBundle(ctx, userId, instanceId);
+  },
+});
+
+export const catalogContextForInstance = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    return loadInstanceCatalogBundle(ctx, instanceId);
   },
 });

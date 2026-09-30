@@ -33,8 +33,9 @@ import { formatEngineVersion } from "@/lib/engine-version";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
-import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "./nav-config";
+import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, navItemsFor, UTILITY_SECTIONS } from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
+import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
 import { ThemeMenuSub } from "./theme-menu";
 import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
@@ -324,6 +325,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const commandPaletteOpen = useStore($commandPaletteOpen);
   const [location] = useLocation();
   const activeSection = findActiveSection(location);
+  const { instance } = useInstance();
   useSyncEngineTransport();
   useReconnectAfterUpgrade();
   useWorkflowHealthResyncOnReconnect();
@@ -347,10 +349,15 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
         <AppHeader />
         <TwitchReconnectBanner />
         <EngineUpgradingBanner />
+        <SetupInstallBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {activeSection?.children && (
-            <SectionSidebar title={activeSection.label} items={activeSection.children} location={location} />
+            <SectionSidebar
+              title={activeSection.label}
+              items={navItemsFor(activeSection.children, instance?.hosting)}
+              location={location}
+            />
           )}
           <main className="flex-1 overflow-auto">{children}</main>
         </div>

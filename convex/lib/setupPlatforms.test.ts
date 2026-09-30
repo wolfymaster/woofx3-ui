@@ -5,6 +5,7 @@ import {
   DEFAULT_SETUP_PLATFORMS,
   resolveSetupPlatforms,
   type SetupPlatformListing,
+  setupChoiceError,
 } from "./setupPlatforms";
 
 function curated(overrides: Partial<CuratedSetupPlatform> & { marketplaceModuleId: string }): CuratedSetupPlatform {
@@ -104,5 +105,22 @@ describe("DEFAULT_SETUP_PLATFORMS", () => {
     const preselected = DEFAULT_SETUP_PLATFORMS.filter((p) => p.defaultSelected).map((p) => p.marketplaceModuleId);
     expect(required).toEqual(["woofx3_twitch"]);
     expect(preselected).toEqual(["woofx3_twitch"]);
+  });
+});
+
+describe("setupChoiceError", () => {
+  const twitch = { marketplaceModuleId: "woofx3_twitch", approvedPermissions: ["twitch.channel"] };
+  const obs = { marketplaceModuleId: "woofx3_obs", approvedPermissions: ["obs.control"] };
+
+  test("accepts a choice with every required platform", () => {
+    expect(setupChoiceError([twitch, obs], ["woofx3_twitch"])).toBeNull();
+  });
+
+  test("rejects a choice missing a required platform", () => {
+    expect(setupChoiceError([obs], ["woofx3_twitch"])).toBe("Required platforms must be chosen: woofx3_twitch");
+  });
+
+  test("rejects a platform chosen twice", () => {
+    expect(setupChoiceError([twitch, twitch], ["woofx3_twitch"])).toBe("woofx3_twitch is chosen more than once");
   });
 });

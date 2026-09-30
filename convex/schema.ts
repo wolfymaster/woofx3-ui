@@ -395,6 +395,66 @@ export default defineSchema({
   // curated by us rather than per instance. Name, version and permissions come
   // from the marketplace at read time (convex/lib/setupPlatforms.ts), so
   // offering another platform is a row here, not a release.
+  // instanceSetup: what was chosen in an instance's setup wizard. One row per
+  // instance, shared by its members like the engine it configures.
+  // `approvedPermissions` is what the streamer consented to for each platform;
+  // installing a build that declares more asks again instead of installing.
+  instanceSetup: defineTable({
+    instanceId: v.id("instances"),
+    platforms: v.array(
+      v.object({
+        marketplaceModuleId: v.string(),
+        // The marketplace name when chosen, for messages about this module.
+        name: v.optional(v.string()),
+        approvedPermissions: v.array(v.string()),
+      })
+    ),
+    platformsChosenAt: v.optional(v.number()),
+    // SETUP_INTERESTS ids (convex/lib/setupInterests.ts). Skipping saves none.
+    interests: v.optional(v.array(v.string())),
+    interestsChosenAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    completedByUserId: v.optional(v.id("users")),
+    // What applying the choices has done so far (convex/setupApply.ts): one
+    // entry per chosen module and per starter pack. Applying runs once the
+    // setup is complete and the engine is registered, and again on retry.
+    moduleInstalls: v.optional(
+      v.array(
+        v.object({
+          marketplaceModuleId: v.string(),
+          status: v.union(v.literal("installed"), v.literal("needs_approval"), v.literal("failed")),
+          moduleKey: v.optional(v.string()),
+          // Set with needs_approval: what the current build asks for beyond the approval.
+          unapproved: v.optional(v.array(v.string())),
+          error: v.optional(v.string()),
+        })
+      )
+    ),
+    packInstalls: v.optional(
+      v.array(
+        v.object({
+          packId: v.string(),
+          // pending: some items wait on something that may still arrive, such
+          // as a module's triggers syncing from the engine; retried on a backoff.
+          status: v.union(v.literal("installed"), v.literal("pending"), v.literal("failed")),
+          error: v.optional(v.string()),
+        })
+      )
+    ),
+    applyAttempts: v.optional(v.number()),
+    // Held while an apply runs, so two scheduled at once do not both install.
+    applyClaimedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
+  // userSetupSeen: users the setup wizard has opened for. Per user, so the
+  // wizard opens by itself once per person rather than on every visit, and a
+  // member joining an account that finished setup never gets it.
+  userSetupSeen: defineTable({
+    userId: v.id("users"),
+    seenAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   setupPlatforms: defineTable({
     marketplaceModuleId: v.string(),
     required: v.boolean(),
@@ -599,6 +659,17 @@ export default defineSchema({
     content: v.string(),
     updatedAt: v.number(),
   }).index("by_instance_user", ["instanceId", "userId"]),
+
+  // gettingStartedChecklists: one row per instance for the dashboard's getting
+  // started card. Shared by the instance's members, like the setup it tracks.
+  // Most items are read from the setup and overlays; `doneItemIds` holds the
+  // ones nothing else records (see convex/lib/gettingStarted.ts).
+  gettingStartedChecklists: defineTable({
+    instanceId: v.id("instances"),
+    doneItemIds: v.array(v.string()),
+    dismissedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
 
   // goLiveChecklists: one row per instance for the Go live checklist. Shared by
   // everyone on the instance, like the channel it describes: a check dismissed

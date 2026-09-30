@@ -51,6 +51,7 @@ const Modules = lazy(() => import("@/pages/modules"));
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Queues = lazy(() => import("@/pages/queues"));
 const Scenes = lazy(() => import("@/pages/scenes"));
+const Setup = lazy(() => import("@/pages/setup"));
 const StarterPacks = lazy(() => import("@/pages/starter-packs"));
 const StreamRecap = lazy(() => import("@/pages/stream-recap"));
 const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
@@ -136,6 +137,11 @@ function AppRoutes() {
       <Route path="/auth/onboarding">
         <AuthGuard>
           <Onboarding />
+        </AuthGuard>
+      </Route>
+      <Route path="/setup/:step?">
+        <AuthGuard>
+          <Setup />
         </AuthGuard>
       </Route>
 

@@ -3,7 +3,7 @@ import type { WorkflowDefinition } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
+import { type ActionCtx, action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
 import { createCommandInEngine } from "./chatCommandActions";
 import { canonicalRefFromProjectionKey } from "./lib/canonicalRef";
 import { fetchEngineCapabilities } from "./lib/engineCapabilities";
@@ -269,102 +269,131 @@ export const install = action({
     if (!bundle) {
       throw new Error("Not authorized or instance not found");
     }
-    if (!bundle.clientId || !bundle.clientSecret) {
-      throw new Error("Instance is not registered with the engine");
-    }
-    const instance = { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret };
-
-    const pack = findStarterPack(packId);
-    if (!pack) {
-      throw new Error(`Unknown starter pack "${packId}"`);
-    }
-    const capabilities = await fetchEngineCapabilities(instance);
-    const checked = validateStarterValues(pack, values, starterFeaturesFrom(capabilities.capabilities));
-    if (!checked.ok) {
-      throw new Error(Object.values(checked.errors).join(" "));
-    }
-    const catalog = starterCatalog(bundle);
-
-    const installCommand = async (item: StarterCommandItem): Promise<string> => {
-      const built = buildStarterCommand(item, checked.values, catalog);
-      let groupIds: string[] = [];
-      if (built.restrictTo.length > 0) {
-        const ids: Record<string, string> = await ctx.runQuery(internal.starterPacks.builtInGroupIds, {
-          instanceId,
-          names: built.restrictTo,
-        });
-        const unsynced = built.restrictTo.filter((name) => ids[name] === undefined);
-        if (unsynced.length > 0) {
-          throw new Error(`The ${unsynced.join(" and ")} command groups have not synced from the engine yet.`);
-        }
-        groupIds = built.restrictTo.map((name) => ids[name]);
-      }
-      return createCommandInEngine(ctx, instanceId, instance, {
-        command: built.command,
-        actions: built.actions,
-        cooldown: built.cooldown,
-        enabled: true,
-        visibility: groupIds.length > 0 ? "restricted" : "public",
-        groupIds,
-      });
-    };
-
-    const installItem = async (item: StarterItem): Promise<StarterInstallOutcome> => {
-      const missing = missingRequirements(item, catalog);
-      if (!hasRequirements(missing)) {
-        return { itemId: item.id, outcome: "unavailable", message: requirementsMessage(missing) ?? undefined };
-      }
-      const correlationKey = item.kind === "workflow" ? crypto.randomUUID() : undefined;
-      const claim = await ctx.runMutation(internal.starterPacks.claimItem, {
-        instanceId,
-        packId: pack.id,
-        itemId: item.id,
-        kind: item.kind,
-        commandName: item.kind === "command" ? item.command : undefined,
-        correlationKey,
-      });
-      if (claim.state === "installed") {
-        return { itemId: item.id, outcome: "already-installed" };
-      }
-      if (claim.state === "busy") {
-        return { itemId: item.id, outcome: "busy", message: "Another install of this item is in progress." };
-      }
-      if (claim.state === "conflict") {
-        return { itemId: item.id, outcome: "conflict", message: "A command with this name already exists." };
-      }
-
-      try {
-        const engineId =
-          item.kind === "workflow"
-            ? await createWorkflowInEngine(
-                ctx,
-                instanceId,
-                instance,
-                // Carries a delay wait, which the shared WorkflowDefinition type does not model yet.
-                buildStarterWorkflow(item, checked.values, catalog) as unknown as Omit<WorkflowDefinition, "id">,
-                correlationKey
-              )
-            : await installCommand(item);
-        await ctx.runMutation(internal.starterPacks.completeItem, { rowId: claim.rowId, engineId });
-        return { itemId: item.id, outcome: "installed" };
-      } catch (err) {
-        if (err instanceof EngineConfirmationTimeout) {
-          // The row keeps its correlation key; the echo marks it installed when it lands.
-          return {
-            itemId: item.id,
-            outcome: "pending",
-            message: "The engine has not confirmed it yet. It will show as installed once it does.",
-          };
-        }
-        await ctx.runMutation(internal.starterPacks.releaseItem, { rowId: claim.rowId });
-        return { itemId: item.id, outcome: "failed", message: errorMessage(err) };
-      }
-    };
-
-    const results: StarterInstallOutcome[] = [];
-    for (const item of pack.items) {
-      results.push(await installItem(item));
-    }
-    return { results };
+    return { results: await installStarterPack(ctx, instanceId, bundle, packId, values) };
   },
 });
+
+/**
+ * `install` for an instance rather than a signed-in user, with each field at
+ * its default. Applies the packs chosen at setup once the engine is ready; the
+ * same ledger keeps it safe to run again.
+ */
+export async function installStarterPackWithDefaults(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  packId: string
+): Promise<StarterInstallOutcome[]> {
+  const bundle: CatalogBundle | null = await ctx.runQuery(internal.workflowCatalogContext.catalogContextForInstance, {
+    instanceId,
+  });
+  if (!bundle) {
+    throw new Error("Instance not found");
+  }
+  return installStarterPack(ctx, instanceId, bundle, packId, {});
+}
+
+async function installStarterPack(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  bundle: CatalogBundle,
+  packId: string,
+  values: Record<string, string | number>
+): Promise<StarterInstallOutcome[]> {
+  if (!bundle.clientId || !bundle.clientSecret) {
+    throw new Error("Instance is not registered with the engine");
+  }
+  const instance = { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret };
+
+  const pack = findStarterPack(packId);
+  if (!pack) {
+    throw new Error(`Unknown starter pack "${packId}"`);
+  }
+  const capabilities = await fetchEngineCapabilities(instance);
+  const checked = validateStarterValues(pack, values, starterFeaturesFrom(capabilities.capabilities));
+  if (!checked.ok) {
+    throw new Error(Object.values(checked.errors).join(" "));
+  }
+  const catalog = starterCatalog(bundle);
+
+  const installCommand = async (item: StarterCommandItem): Promise<string> => {
+    const built = buildStarterCommand(item, checked.values, catalog);
+    let groupIds: string[] = [];
+    if (built.restrictTo.length > 0) {
+      const ids: Record<string, string> = await ctx.runQuery(internal.starterPacks.builtInGroupIds, {
+        instanceId,
+        names: built.restrictTo,
+      });
+      const unsynced = built.restrictTo.filter((name) => ids[name] === undefined);
+      if (unsynced.length > 0) {
+        throw new Error(`The ${unsynced.join(" and ")} command groups have not synced from the engine yet.`);
+      }
+      groupIds = built.restrictTo.map((name) => ids[name]);
+    }
+    return createCommandInEngine(ctx, instanceId, instance, {
+      command: built.command,
+      actions: built.actions,
+      cooldown: built.cooldown,
+      enabled: true,
+      visibility: groupIds.length > 0 ? "restricted" : "public",
+      groupIds,
+    });
+  };
+
+  const installItem = async (item: StarterItem): Promise<StarterInstallOutcome> => {
+    const missing = missingRequirements(item, catalog);
+    if (!hasRequirements(missing)) {
+      return { itemId: item.id, outcome: "unavailable", message: requirementsMessage(missing) ?? undefined };
+    }
+    const correlationKey = item.kind === "workflow" ? crypto.randomUUID() : undefined;
+    const claim = await ctx.runMutation(internal.starterPacks.claimItem, {
+      instanceId,
+      packId: pack.id,
+      itemId: item.id,
+      kind: item.kind,
+      commandName: item.kind === "command" ? item.command : undefined,
+      correlationKey,
+    });
+    if (claim.state === "installed") {
+      return { itemId: item.id, outcome: "already-installed" };
+    }
+    if (claim.state === "busy") {
+      return { itemId: item.id, outcome: "busy", message: "Another install of this item is in progress." };
+    }
+    if (claim.state === "conflict") {
+      return { itemId: item.id, outcome: "conflict", message: "A command with this name already exists." };
+    }
+
+    try {
+      const engineId =
+        item.kind === "workflow"
+          ? await createWorkflowInEngine(
+              ctx,
+              instanceId,
+              instance,
+              // Carries a delay wait, which the shared WorkflowDefinition type does not model yet.
+              buildStarterWorkflow(item, checked.values, catalog) as unknown as Omit<WorkflowDefinition, "id">,
+              correlationKey
+            )
+          : await installCommand(item);
+      await ctx.runMutation(internal.starterPacks.completeItem, { rowId: claim.rowId, engineId });
+      return { itemId: item.id, outcome: "installed" };
+    } catch (err) {
+      if (err instanceof EngineConfirmationTimeout) {
+        // The row keeps its correlation key; the echo marks it installed when it lands.
+        return {
+          itemId: item.id,
+          outcome: "pending",
+          message: "The engine has not confirmed it yet. It will show as installed once it does.",
+        };
+      }
+      await ctx.runMutation(internal.starterPacks.releaseItem, { rowId: claim.rowId });
+      return { itemId: item.id, outcome: "failed", message: errorMessage(err) };
+    }
+  };
+
+  const results: StarterInstallOutcome[] = [];
+  for (const item of pack.items) {
+    results.push(await installItem(item));
+  }
+  return results;
+}

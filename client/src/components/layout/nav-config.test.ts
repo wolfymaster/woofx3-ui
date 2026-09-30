@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isNavItemActive, STREAM_ITEMS } from "@/components/layout/nav-config";
+import { ADMIN_ITEMS, isNavItemActive, navItemsFor, STREAM_ITEMS } from "@/components/layout/nav-config";
 import { alertEditorPath } from "@/lib/alert-editor-route";
 import { alertRunPath } from "@/lib/alert-run-route";
 
@@ -33,5 +33,24 @@ describe("isNavItemActive", () => {
 
   test("a path its own only prefixes does not mark it", () => {
     expect(isNavItemActive(alerts, "/stream/alerts-elsewhere")).toBe(false);
+  });
+});
+
+describe("navItemsFor", () => {
+  function ids(hosting: Parameters<typeof navItemsFor>[1]): string[] {
+    return navItemsFor(ADMIN_ITEMS, hosting).map((item) => item.id);
+  }
+
+  test("a managed instance loses the self-hosted entries", () => {
+    expect(ids("managed")).not.toContain("storage");
+    expect(ids("managed")).toContain("engine");
+  });
+
+  test("a self-hosted instance keeps every entry", () => {
+    expect(ids("external")).toEqual(ADMIN_ITEMS.map((item) => item.id));
+  });
+
+  test("an instance with no recorded hosting keeps every entry", () => {
+    expect(ids(undefined)).toEqual(ADMIN_ITEMS.map((item) => item.id));
   });
 });

@@ -1,5 +1,12 @@
 import { FilePlus2, FolderTree, MessageSquarePlus, PackageOpen, Plus, UserPlus } from "lucide-react";
-import { MAIN_NAV_SECTIONS, type NavItem, STREAM_ITEMS, UTILITY_SECTIONS } from "@/components/layout/nav-config";
+import {
+  type InstanceHosting,
+  MAIN_NAV_SECTIONS,
+  type NavItem,
+  navItemsFor,
+  STREAM_ITEMS,
+  UTILITY_SECTIONS,
+} from "@/components/layout/nav-config";
 import { COMMAND_GROUP_NEW_ROUTE, COMMAND_GROUPS_PATH, COMMAND_NEW_ROUTE } from "@/lib/command-editor-route";
 import type { PaletteCommand } from "./types";
 
@@ -49,8 +56,11 @@ function pageCommand(item: NavItem, section?: string): PaletteCommand {
   };
 }
 
-/** Every destination in the menu, in menu order, plus the pages it only reaches by a link. */
-export function navigationCommands(): PaletteCommand[] {
+/**
+ * Every destination in the menu for an instance hosted this way, in menu order, plus the
+ * pages it only reaches by a link.
+ */
+export function navigationCommands(hosting: InstanceHosting): PaletteCommand[] {
   const sections = [...MAIN_NAV_SECTIONS, ...UTILITY_SECTIONS];
   const pages: PaletteCommand[] = [];
   for (const section of sections) {
@@ -58,7 +68,7 @@ export function navigationCommands(): PaletteCommand[] {
       pages.push(pageCommand(section));
       continue;
     }
-    for (const child of section.children) {
+    for (const child of navItemsFor(section.children, hosting)) {
       pages.push(pageCommand(child, section.label));
     }
   }

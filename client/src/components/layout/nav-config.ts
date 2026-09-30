@@ -10,6 +10,7 @@ import {
   Key,
   Layers,
   LayoutDashboard,
+  ListChecks,
   ListOrdered,
   MessageSquare,
   MessageSquarePlus,
@@ -43,6 +44,22 @@ export interface NavItem {
    * read as a menu path. Listed so the entry stays marked while one of them is open.
    */
   owns?: string[];
+  /**
+   * Configures something woofx3 decides for a managed engine, so the entry is left out
+   * of the menu while the selected instance is managed.
+   */
+  selfHostedOnly?: boolean;
+}
+
+/** How the selected instance's engine is run; absent until an instance is known. */
+export type InstanceHosting = "managed" | "external" | undefined;
+
+/** The entries of a menu that apply to an instance hosted this way. */
+export function navItemsFor(items: NavItem[], hosting: InstanceHosting): NavItem[] {
+  if (hosting !== "managed") {
+    return items;
+  }
+  return items.filter((item) => !item.selfHostedOnly);
 }
 
 export interface NavSection extends NavItem {
@@ -67,6 +84,7 @@ export const STREAM_ITEMS: NavItem[] = [
 
 export const HELP_ITEMS: NavItem[] = [
   { id: "learning", label: "Learning", icon: GraduationCap, href: "/help/learning" },
+  { id: "setup", label: "Setup", icon: ListChecks, href: "/setup" },
   { id: "logs", label: "Logs", icon: ScrollText, href: "/help/logs" },
   { id: "feedback", label: "Submit Feedback", icon: MessageSquarePlus, href: "/help/feedback" },
 ];
@@ -74,7 +92,7 @@ export const HELP_ITEMS: NavItem[] = [
 export const ADMIN_ITEMS: NavItem[] = [
   { id: "engine", label: "Engine", icon: Server, href: "/admin/engine" },
   { id: "integrations", label: "Integrations", icon: Key, href: "/admin/integrations" },
-  { id: "storage", label: "Storage", icon: HardDrive, href: "/admin/storage" },
+  { id: "storage", label: "Storage", icon: HardDrive, href: "/admin/storage", selfHostedOnly: true },
   { id: "backup", label: "Backup", icon: ArchiveRestore, href: "/admin/backup" },
   { id: "appearance", label: "Appearance", icon: Palette, href: "/admin/appearance" },
 ];
