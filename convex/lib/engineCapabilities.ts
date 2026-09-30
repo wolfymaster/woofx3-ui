@@ -21,6 +21,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "analytics.sessions",
   "config.bundles",
   "obs.control",
+  "obs.status",
   "widgets.themes",
   "workflow.delayWait",
   "workflow.dryRun",

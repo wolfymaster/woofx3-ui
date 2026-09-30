@@ -18,6 +18,7 @@ function facts(overrides: Partial<GettingStartedFacts> = {}, setup: Partial<Gett
     overlays: { hasScene: true, browserSourceKeyCount: 1, featuredKey: "k", lastLoadedAt: 3 },
     browserSourceUrl: "https://example.test/browser-source/k",
     doneItemIds: ["test-follow", "chat-command"],
+    obsStatus: null,
   };
   return { ...base, ...overrides, setup: { ...base.setup, ...setup } };
 }
@@ -113,5 +114,27 @@ describe("gettingStartedItems", () => {
       facts({ doneItemIds: ["test-follow", "chat-command", "platform-settings:woofx3_spotify"] }, setup)
     )["platform-settings:woofx3_spotify"];
     expect(done.status).toBe("done");
+  });
+
+  test("completes setting up OBS once the engine reports it connected", () => {
+    const setup = { platforms: [twitch, obs], platformsNeedingSettings: ["woofx3_obs"] };
+    const connected = byId(facts({ obsStatus: { state: "connected", failure: null, address: "obs.lan:4455" } }, setup))[
+      "platform-settings:woofx3_obs"
+    ];
+    expect(connected.status).toBe("done");
+    expect(connected.summary).toBe("Connected to OBS at obs.lan:4455");
+
+    const refused = byId(
+      facts({ obsStatus: { state: "retrying", failure: "authentication", address: "obs.lan:4455" } }, setup)
+    )["platform-settings:woofx3_obs"];
+    expect(refused.status).toBe("problem");
+    expect(refused.actions).toEqual([]);
+    expect(refused.fixes).toEqual([{ kind: "route", label: "Open OBS", href: "/modules/woofx3_obs" }]);
+  });
+
+  test("keeps the Done button for OBS when the engine cannot report its connection", () => {
+    const setup = { platforms: [twitch, obs], platformsNeedingSettings: ["woofx3_obs"] };
+    const item = byId(facts({ doneItemIds: [] }, setup))["platform-settings:woofx3_obs"];
+    expect(item.actions.map((action) => action.kind)).toEqual(["mark-platform-settings-done"]);
   });
 });

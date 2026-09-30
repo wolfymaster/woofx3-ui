@@ -49,6 +49,15 @@ A manifest may declare a top-level `permissions` array (`twitch.moderation`, `tw
 - **Server-side check.** `api.marketplace.installModule` takes `approvedPermissions` and re-reads the archive it installs; it refuses when the archive declares a permission outside that list. This catches a listing republished with new permissions after the streamer reviewed it, and an unreadable listing (approved as "none new") can never install a permission the streamer did not see. ZIP uploads are not re-checked on the server: the browser supplies both the manifest and the archive there.
 - **Installing later, without a session.** `internal.marketplace.installApprovedModule` runs the same install for an instance rather than a signed-in user, using permissions approved earlier (for example, the platforms chosen at setup, installed once the engine is ready). A build that declares more than was approved comes back as `{ status: "needs_approval", unapproved }` without reaching the engine, so the caller can ask again instead of installing silently.
 
+## OBS connection status
+
+On the OBS module's Settings tab (`woofx3_obs`), `ObsConnectionStatus` shows whether the engine is connected to OBS, above the address, port and password.
+
+- **Where it comes from:** `obsStatus.get` calls the engine's `getObsStatus()` (capability `obs.status`). The engine answers from its connection's own state, so it's cheap to poll. `useObsStatus` asks every 5 s while the tab is visible.
+- **What it says:** "Connected to OBS at host:port", "OBS refused the password", or "Can't reach OBS at host:port". An engine whose scene manager did not answer shows "Can't check OBS right now", which is not a verdict on OBS.
+- **Older engines:** those without the capability show nothing.
+- **Local types:** the response shape is declared in `convex/lib/engineObsStatus.ts` and must match `ObsStatus` in the engine's shared API types.
+
 ## Setup platforms
 
 The platform modules offered while an account is set up (Twitch, OBS, Spotify, Throne) are curated in the `setupPlatforms` table: `marketplaceModuleId`, `required`, `defaultSelected`, `sortOrder` and a one-line `summary`. Name, version and permissions are not stored; `setupPlatformsActions.listForSetup` reads them from the marketplace listing and each module's archive at request time (`convex/lib/setupPlatforms.ts`).

@@ -62,6 +62,7 @@ import type * as lib_engineSync_steps_scenes from "../lib/engineSync/steps/scene
 import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/triggers.js";
 import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widgets.js";
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
+import type * as lib_engineObsStatus from "../lib/engineObsStatus.js";
 import type * as lib_engineTestRun from "../lib/engineTestRun.js";
 import type * as lib_gettingStarted from "../lib/gettingStarted.js";
 import type * as lib_goLiveFacts from "../lib/goLiveFacts.js";
@@ -141,6 +142,7 @@ import type * as moduleWebhook from "../moduleWebhook.js";
 import type * as moduleWidgets from "../moduleWidgets.js";
 import type * as oauthConnectHandoff from "../oauthConnectHandoff.js";
 import type * as obsCommands from "../obsCommands.js";
+import type * as obsStatus from "../obsStatus.js";
 import type * as pageIntros from "../pageIntros.js";
 import type * as pins from "../pins.js";
 import type * as platformRealtime from "../platformRealtime.js";
@@ -245,6 +247,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/triggers": typeof lib_engineSync_steps_triggers;
   "lib/engineSync/steps/widgets": typeof lib_engineSync_steps_widgets;
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
+  "lib/engineObsStatus": typeof lib_engineObsStatus;
   "lib/engineTestRun": typeof lib_engineTestRun;
   "lib/gettingStarted": typeof lib_gettingStarted;
   "lib/goLiveFacts": typeof lib_goLiveFacts;
@@ -324,6 +327,7 @@ declare const fullApi: ApiFromModules<{
   moduleWidgets: typeof moduleWidgets;
   oauthConnectHandoff: typeof oauthConnectHandoff;
   obsCommands: typeof obsCommands;
+  obsStatus: typeof obsStatus;
   pageIntros: typeof pageIntros;
   pins: typeof pins;
   platformRealtime: typeof platformRealtime;
