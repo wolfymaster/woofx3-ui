@@ -15,7 +15,7 @@ The SPA is built with **React 18**, **Vite**, and **Wouter** for client-side rou
 
 **AuthGuard** redirects unauthenticated users to `/auth/login`. **OnboardingGuard** sits inside `BroadcastShell` and gates only the content area, so the shell paints as soon as auth resolves. It loads `accounts.getMyAccount` and `instances.listForCurrentUser`, showing a content placeholder (dashboard zone outlines on `/`) while they load; if there is no account or no registered instance, it sends the user to `/auth/onboarding`. Queries that must start before the instance list arrives (the dashboard's panels, the status bar's live state) read `useInstance().optimisticInstanceId` through `useOptimisticInstanceQuery`: the id cached from the last session, which those queries answer with nothing when the caller is not a member.
 
-Protected routes render inside **`BroadcastShell`** (`client/src/components/layout/broadcast-shell.tsx`): primary nav, utility links (Team, Admin), instance switcher, command palette hook, and stream status UI (currently a placeholder that does not yet call the real transport).
+Protected routes render inside **`BroadcastShell`** (`client/src/components/layout/broadcast-shell.tsx`): primary nav, utility links (Team, Admin), instance switcher, the [quick actions](./quick-actions.md) palette (⌘K), and stream status UI (currently a placeholder that does not yet call the real transport).
 
 ## Navigation structure
 

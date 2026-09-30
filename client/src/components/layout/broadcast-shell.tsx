@@ -4,6 +4,7 @@ import { useMutation } from "convex/react";
 import { Activity, Bell, Check, ChevronDown, Command, MonitorPlay, Pencil, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { CommandPalette } from "@/components/command-palette/command-palette";
 import { Uptime } from "@/components/common/uptime";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,6 @@ import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health"
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import { CommandPalette } from "./command-palette";
 import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";

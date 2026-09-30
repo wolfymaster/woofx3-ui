@@ -7,6 +7,7 @@ const STORAGE_KEYS = {
   commandBarHidden: "woofx3-command-bar-hidden",
   dashboardLayoutHint: "woofx3-dashboard-layout-hint",
   hideUnusedAlerts: "woofx3-hide-unused-alerts",
+  paletteRecents: "woofx3-palette-recents",
 };
 
 export function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -91,6 +92,12 @@ if (typeof document !== "undefined") {
 }
 
 export const $commandPaletteOpen = atom<boolean>(false);
+
+// Ids of the quick actions last chosen, most recent first. Per browser: ids of items that
+// belong to another instance simply fail to resolve and are skipped.
+const initialPaletteRecents = getStoredValue<string[]>(STORAGE_KEYS.paletteRecents, []);
+export const $paletteRecents = atom<string[]>(Array.isArray(initialPaletteRecents) ? initialPaletteRecents : []);
+$paletteRecents.subscribe((value) => persistValue(STORAGE_KEYS.paletteRecents, value));
 
 export const $activeWorkflowId = atom<string | null>(null);
 export const $activeSceneId = atom<string | null>(null);
