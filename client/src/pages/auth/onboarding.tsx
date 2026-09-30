@@ -46,10 +46,12 @@ export default function Onboarding() {
   const registerInstance = useAction(api.registration.registerInstance);
   const existingAccount = useQuery(api.accounts.getMyAccount);
   const managedEngines = useQuery(api.provisioning.isAvailable);
+  const previewEngine = useQuery(api.previewEngine.get);
   const instances = useQuery(api.instances.listForCurrentUser);
   const [workspaceAccountId, setWorkspaceAccountId] = useState<Id<"accounts"> | null>(null);
   const [registrationStatus, setRegistrationStatus] = useState<string | null>(null);
   const didPrefill = useRef(false);
+  const didPrefillPreviewEngine = useRef(false);
 
   // An engine that is being built, or was built but never finished
   // registering. The state lives in Convex, so reloading mid-provision comes
@@ -86,6 +88,17 @@ export default function Onboarding() {
     $currentInstanceId.set(provisioningInstanceId);
     navigate("/setup", { replace: true });
   }, [provisioningInstanceId, navigate]);
+
+  // A pull request preview comes paired with an engine; connecting it is the
+  // whole point, so it is filled in rather than offered alongside a new one.
+  useEffect(() => {
+    if (!previewEngine || didPrefillPreviewEngine.current) {
+      return;
+    }
+    setInstanceUrl(previewEngine.url);
+    setConnectExisting(true);
+    didPrefillPreviewEngine.current = true;
+  }, [previewEngine]);
 
   useEffect(() => {
     if (!user?.name || didPrefill.current) {
@@ -279,7 +292,9 @@ export default function Onboarding() {
                     required
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    The URL where your woofx3 instance is running. Include port if needed.
+                    {previewEngine
+                      ? `This preview is paired with engine ${previewEngine.version ?? previewEngine.url}.`
+                      : "The URL where your woofx3 instance is running. Include port if needed."}
                   </p>
                 </div>
 
