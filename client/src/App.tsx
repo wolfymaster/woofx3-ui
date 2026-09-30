@@ -269,7 +269,14 @@ function AppRoutes() {
 function App() {
   return (
     <ErrorBoundary>
-      <ConvexAuthProvider client={convex}>
+      {/*
+        Convex Auth claims any `?code=` in the address bar as its own OAuth
+        code: it strips the parameter, tries to sign in with it, and signs the
+        user out when that fails. No provider here uses that redirect, and the
+        Twitch connect callback carries its own one-time `code`
+        (pages/auth/twitch-callback.tsx), so the handling is off.
+      */}
+      <ConvexAuthProvider client={convex} shouldHandleCode={false}>
         <TooltipProvider>
           <Suspense fallback={<SplashScreen />}>
             <AppRoutes />
