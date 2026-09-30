@@ -49,7 +49,7 @@ The form takes an instance name and the engine's API URL. It creates the instanc
 
 ## Setup
 
-`/setup/:step` (`client/src/pages/setup.tsx`) is a wizard with one route per page, so a reload, the back button and the Twitch OAuth round trip all return to the page the user was on. It runs while a managed engine is being built. Its state is the instance's `instanceSetup` row, read through `setup.status`.
+`/setup/:step` (`client/src/pages/setup.tsx`) is a wizard with one route per page, so a reload, the back button and the Twitch OAuth round trip all return to the page the user was on. It runs while a managed engine is being built. Its state is the instance's `instanceSetup` row, read through `setup.status`. The heading above the steps is the workspace (account) name from `setup.status`; the product name stands in while it loads.
 
 1. **Choose your platforms** (`PlatformsStep`): the curated list from `setupPlatformsActions.listForSetup` (see [Modules → Setup platforms](/ui/modules#setup-platforms)), with each platform's permissions in plain language. Twitch is required, so it is checked and locked. Continue saves the chosen platforms and the permissions shown for each with `setup.choosePlatforms`. That is the consent a later install is checked against. If a required platform cannot be resolved, the page shows an error with "Try again" and cannot continue.
 2. **Connect Twitch** (`TwitchStep`): `useTwitchConnect` with `/setup/twitch` as the return path. The link needs only the instance row, so it works before the engine exists. `instances.applyRegistration` sends an existing link to the engine when it registers. OAuth errors show on the callback page with the fixed text from `convex/lib/oauthErrors.ts`, and its Back link returns here.

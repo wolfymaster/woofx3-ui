@@ -136,6 +136,13 @@ export const DEFAULT_SETUP_PLATFORMS: readonly CuratedSetupPlatform[] = [
   },
 ];
 
+/**
+ * An empty curated list means the deployment was never seeded
+ * (`setupPlatforms:seedDefaults`). With no required platform to enforce, a
+ * choice saved against it would let setup finish without Twitch.
+ */
+export const NO_SETUP_PLATFORMS_MESSAGE = "No platforms are set up to choose from yet. This is a problem on our side.";
+
 export interface ChosenSetupPlatform {
   marketplaceModuleId: string;
   name?: string;

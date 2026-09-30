@@ -24,7 +24,14 @@ import {
 } from "@/lib/setup-steps";
 import { cn } from "@/lib/utils";
 
-function SetupShell({ activeStep, children }: { activeStep: SetupStepId | null; children: React.ReactNode }) {
+interface SetupShellProps {
+  activeStep: SetupStepId | null;
+  /** Null while the setup status is loading; the product name stands in until then. */
+  workspaceName: string | null;
+  children: React.ReactNode;
+}
+
+function SetupShell({ activeStep, workspaceName, children }: SetupShellProps) {
   const activeIndex = activeStep === null ? -1 : setupStepIndex(activeStep);
   return (
     <div className="min-h-screen bg-background flex justify-center p-4 sm:pt-12">
@@ -33,7 +40,9 @@ function SetupShell({ activeStep, children }: { activeStep: SetupStepId | null; 
           <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary text-primary-foreground">
             <MonitorPlay className="h-5 w-5" />
           </div>
-          <span className="font-bold text-2xl tracking-tight">woofx3</span>
+          <span className="font-bold text-2xl tracking-tight min-w-0 truncate" data-testid="text-setup-workspace-name">
+            {workspaceName ?? "woofx3"}
+          </span>
         </div>
         {activeStep !== null && (
           <ol className="flex items-center justify-center gap-2" aria-label="Setup progress">
@@ -107,7 +116,7 @@ export default function Setup() {
 
   if (!instance || !status || !step) {
     return (
-      <SetupShell activeStep={null}>
+      <SetupShell activeStep={null} workspaceName={status?.workspaceName ?? null}>
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
@@ -120,7 +129,7 @@ export default function Setup() {
 
   if (!status.canManageSetup) {
     return (
-      <SetupShell activeStep={null}>
+      <SetupShell activeStep={null} workspaceName={status.workspaceName}>
         {status.twitchUsername === null ? (
           <AskAdminToConnectTwitch />
         ) : (
@@ -138,7 +147,7 @@ export default function Setup() {
   const title = SETUP_STEPS[setupStepIndex(step)].title;
 
   return (
-    <SetupShell activeStep={step}>
+    <SetupShell activeStep={step} workspaceName={status.workspaceName}>
       <ProvisioningBar instanceId={instanceId} />
       <Card>
         <CardHeader>

@@ -6,7 +6,7 @@ import { type MutationCtx, mutation, type QueryCtx, query } from "./_generated/s
 import { readMemberRole } from "./instances";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { availableInterests, buildDashboardPreset, PRESET_LAYOUT_ID } from "./lib/setupInterests";
-import { type ChosenSetupPlatform, setupChoiceError } from "./lib/setupPlatforms";
+import { type ChosenSetupPlatform, NO_SETUP_PLATFORMS_MESSAGE, setupChoiceError } from "./lib/setupPlatforms";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 
 // Bounds for reads of tables that hold a handful of rows per key.
@@ -23,6 +23,8 @@ export type SetupModuleInstall = NonNullable<Doc<"instanceSetup">["moduleInstall
 export type SetupPackInstall = NonNullable<Doc<"instanceSetup">["packInstalls"]>[number];
 
 export interface SetupStatus {
+  /** The name of the account the instance belongs to, shown as the wizard's heading. */
+  workspaceName: string | null;
   platforms: ChosenSetupPlatform[];
   platformsChosenAt: number | null;
   /** Marketplace ids of the platforms setup cannot finish without. */
@@ -104,6 +106,7 @@ export const status = query({
       ctx.db.get(instanceId),
       ctx.db.query("setupPlatforms").withIndex("by_sort_order").take(MAX_SETUP_PLATFORMS),
     ]);
+    const account = instance ? await ctx.db.get(instance.accountId) : null;
     const platformsNeedingSettings: string[] = [];
     for (const install of row?.moduleInstalls ?? []) {
       if (install.status !== "installed" || !install.moduleKey) {
@@ -119,6 +122,7 @@ export const status = query({
       }
     }
     return {
+      workspaceName: account?.name ?? null,
       platforms: row?.platforms ?? [],
       platformsNeedingSettings,
       platformsChosenAt: row?.platformsChosenAt ?? null,
@@ -146,6 +150,9 @@ export const choosePlatforms = mutation({
     await requireInstanceRole(ctx, instanceId, "admin");
 
     const curated = await ctx.db.query("setupPlatforms").withIndex("by_sort_order").take(MAX_SETUP_PLATFORMS);
+    if (curated.length === 0) {
+      throw new Error(NO_SETUP_PLATFORMS_MESSAGE);
+    }
     const requiredIds = curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId);
     const error = setupChoiceError(platforms, requiredIds);
     if (error) {
