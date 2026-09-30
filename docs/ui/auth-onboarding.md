@@ -29,24 +29,42 @@ Which path step 2 opens on depends on `provisioning.isAvailable`. It is true onl
    - writes the instance (`hosting: "managed"`) and its `engineProvisioning` row first (`reserveManagedInstance`), so the row id can serve as the maintenance API's idempotency key;
    - generates a **registration token**, hands it to the maintenance API once, and never returns it from any query;
    - asks the maintenance API to create the engine, passing the instance id as `externalRef`, the account as owner, the user's Twitch channel when known, and `<CONVEX_SITE_URL>/api/webhooks/maintenance` as the callback URL.
-3. **Progress.** `ProvisioningProgress` renders the `engineProvisioning` row: a headline per status plus the run's steps. It polls nothing. The maintenance API posts every step transition to `/api/webhooks/maintenance`, which is signed with `MAINTENANCE_WEBHOOK_SECRET`, deduplicated by event id, and applied by `provisioningInternal.applyCallbackEvent`.
+3. **Progress.** Once the engine is requested, onboarding hands over to [setup](#setup), which shows the `engineProvisioning` row in `ProvisioningBar` above its pages: a headline per status, a progress bar, and the run's steps under **Details**. It polls nothing. The maintenance API posts every step transition to `/api/webhooks/maintenance`, which is signed with `MAINTENANCE_WEBHOOK_SECRET`, deduplicated by event id, and applied by `provisioningInternal.applyCallbackEvent`.
 4. **Registration.** On `engine.ready`, Convex stores the engine's public URL on the instance, sets the row to `registering`, and schedules `runRegistration`. That runs the same handshake as the external path (see `CLAUDE.md`), plus the registration token. A managed engine refuses to register anyone who cannot present it. Failed handshakes are retried after 10 s, 30 s and 2 min before the row is marked `failed`.
-5. **Done.** When the row reaches `registered`, the page sets **`$currentInstanceId`** and navigates home.
+5. **Done.** When the row reaches `registered` and setup is finished, setup's last page sets **`$currentInstanceId`** and navigates home.
 
 Row statuses: `requested` → `provisioning` → `registering` → `registered`, with `failed`, `deprovisioning` and `deleted` off the main line. `engine.ready` moves a row straight to `registering`. `ready` is in the schema, but nothing currently writes it.
 
-**Reloading mid-provision** comes back to the progress screen, not an empty form. The page looks for a managed instance with no `clientId` yet and shows its progress. The exception is a row that is missing or `deleted`: that instance has nothing behind it, so the form is offered again.
+**Reloading mid-provision** comes back to setup, not an empty form. Onboarding looks for a managed instance with no `clientId` yet and sends the user to `/setup`. The exception is a row that is missing or `deleted`: that instance has nothing behind it, so the form is offered again.
 
-**Failure and retry.** A `failed` row shows the error and "Try again", which calls `provisioning.retry`. If the engine already published a URL, only registration is re-run. Otherwise the maintenance run is resumed.
+**Failure and retry.** A `failed` row shows the error and "Try again" in the provisioning bar, which calls `provisioning.retry`. If the engine already published a URL, only registration is re-run. Otherwise the maintenance run is resumed.
 
 "Already have an engine? Connect it" switches to the external form.
 
 ### External engine
 
-The form takes an instance name and the engine's API URL. It creates the instance with `instances.create`, then runs the handshake with `registration.registerInstance`. On success it sets **`$currentInstanceId`** and navigates home. When the managed path is available, "Don't have one? Let woofx3 run it for you" switches back to it.
+The form takes an instance name and the engine's API URL. It creates the instance with `instances.create`, then runs the handshake with `registration.registerInstance`. On success it sets **`$currentInstanceId`** and navigates to `/setup`. When the managed path is available, "Don't have one? Let woofx3 run it for you" switches back to it.
 
 > **Note:** The full **registration handshake** (engine stores the callback URL and token; Convex receives the client credentials) is described in `CLAUDE.md`.
 
+## Setup
+
+`/setup/:step` (`client/src/pages/setup.tsx`) is a wizard with one route per page, so a reload, the back button and the Twitch OAuth round trip all return to the page the user was on. It runs while a managed engine is being built. Its state is the instance's `instanceSetup` row, read through `setup.status`.
+
+1. **Choose your platforms** (`PlatformsStep`): the curated list from `setupPlatformsActions.listForSetup` (see [Modules → Setup platforms](/ui/modules#setup-platforms)), with each platform's permissions in plain language. Twitch is required, so it is checked and locked. Continue saves the chosen platforms and the permissions shown for each with `setup.choosePlatforms`. That is the consent a later install is checked against. If a required platform cannot be resolved, the page shows an error with "Try again" and cannot continue.
+2. **Connect Twitch** (`TwitchStep`): `useTwitchConnect` with `/setup/twitch` as the return path. The link needs only the instance row, so it works before the engine exists. `instances.applyRegistration` sends an existing link to the engine when it registers. OAuth errors show on the callback page with the fixed text from `convex/lib/oauthErrors.ts`, and its Back link returns here.
+3. **Finish** (`FinishStep`): `setup.complete` marks setup finished. It is refused until platforms are chosen and Twitch is linked. The page opens the dashboard as soon as the engine is registered.
+
+Neither of the first two pages can be skipped. Opening a later page's URL early lands on the first page still to do (`client/src/lib/setup-steps.ts`).
+
+Only an owner or admin can choose platforms or connect Twitch. Any other member sees "Ask an owner or admin to connect Twitch".
+
+The wizard records that it opened for the signed-in user (`setup.markSeen`, per user in `userSetupSeen`).
+
 ## After onboarding
 
-`OnboardingGuard` requires both an account and at least one registered instance before showing a page inside `BroadcastShell`. A managed engine's later lifecycle (its flag, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.
+`OnboardingGuard` requires an account, at least one registered instance and a Twitch link on the current instance before showing a page inside `BroadcastShell`.
+
+- **No Twitch link:** an owner or admin is sent to setup's first unfinished page. Anyone else sees "Ask an owner or admin to connect Twitch" in the content area, not a redirect.
+- **Link health:** the guard checks only that a link exists. A revoked or under-scoped link is left to the reconnect banner, so an established user is never sent back into setup.
+- **Unfinished setup:** while the instance's setup is unfinished, the guard also opens setup once for an owner or admin who has not seen it. A managed engine's later lifecycle (its flag, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.

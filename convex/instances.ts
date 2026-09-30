@@ -282,6 +282,16 @@ export const applyRegistration = internalMutation({
     }
 
     await ctx.db.patch(instanceId, { clientId, clientSecret, webhookSecret });
+
+    // Twitch can be connected while the engine is still being built, before
+    // there is an engine to hand the token to. Send it now that there is.
+    const links = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .take(20);
+    if (links.some((link) => link.platform === "twitch")) {
+      await ctx.scheduler.runAfter(0, internal.twitchIntegration.syncToEngine, { instanceId });
+    }
   },
 });
 

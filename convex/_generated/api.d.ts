@@ -149,6 +149,7 @@ import type * as sceneActions from "../sceneActions.js";
 import type * as sceneWidgets from "../sceneWidgets.js";
 import type * as scenes from "../scenes.js";
 import type * as seeds_triggerActions from "../seeds/triggerActions.js";
+import type * as setup from "../setup.js";
 import type * as setupPlatforms from "../setupPlatforms.js";
 import type * as setupPlatformsActions from "../setupPlatformsActions.js";
 import type * as shoutouts from "../shoutouts.js";
@@ -325,6 +326,7 @@ declare const fullApi: ApiFromModules<{
   sceneWidgets: typeof sceneWidgets;
   scenes: typeof scenes;
   "seeds/triggerActions": typeof seeds_triggerActions;
+  setup: typeof setup;
   setupPlatforms: typeof setupPlatforms;
   setupPlatformsActions: typeof setupPlatformsActions;
   shoutouts: typeof shoutouts;

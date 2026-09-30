@@ -5,7 +5,6 @@ import { Building2, Check, Loader2, MonitorPlay, Server } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ManagedEngineStep } from "@/components/onboarding/managed-engine-step";
-import { ProvisioningProgress } from "@/components/onboarding/provisioning-progress";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -77,6 +76,16 @@ export default function Onboarding() {
     setProvisioningInstanceId(unfinishedManagedInstance._id);
   }, [unfinishedManagedInstance, unfinishedProvisioning]);
 
+  // Setup continues on its own pages while the engine is built, with the
+  // build's progress shown above them.
+  useEffect(() => {
+    if (!provisioningInstanceId) {
+      return;
+    }
+    $currentInstanceId.set(provisioningInstanceId);
+    navigate("/setup", { replace: true });
+  }, [provisioningInstanceId, navigate]);
+
   useEffect(() => {
     if (!user?.name || didPrefill.current) {
       return;
@@ -132,7 +141,7 @@ export default function Onboarding() {
       }
 
       $currentInstanceId.set(instanceId);
-      navigate("/");
+      navigate("/setup");
     } catch (err: any) {
       setError(err.message || "Failed to create instance.");
     } finally {
@@ -196,7 +205,11 @@ export default function Onboarding() {
             </div>
           </CardHeader>
           <CardContent>
-            {provisioningInstanceId && <ProvisioningProgress instanceId={provisioningInstanceId} />}
+            {provisioningInstanceId && (
+              <div className="flex justify-center py-6">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
 
             {!provisioningInstanceId && step === 0 && (
               <form onSubmit={handleAccountStep} className="space-y-4">

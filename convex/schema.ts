@@ -365,6 +365,31 @@ export default defineSchema({
   // curated by us rather than per instance. Name, version and permissions come
   // from the marketplace at read time (convex/lib/setupPlatforms.ts), so
   // offering another platform is a row here, not a release.
+  // instanceSetup: what was chosen in an instance's setup wizard. One row per
+  // instance, shared by its members like the engine it configures.
+  // `approvedPermissions` is what the streamer consented to for each platform;
+  // installing a build that declares more asks again instead of installing.
+  instanceSetup: defineTable({
+    instanceId: v.id("instances"),
+    platforms: v.array(
+      v.object({
+        marketplaceModuleId: v.string(),
+        approvedPermissions: v.array(v.string()),
+      })
+    ),
+    platformsChosenAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_instance", ["instanceId"]),
+
+  // userSetupSeen: users the setup wizard has opened for. Per user, so the
+  // wizard opens by itself once per person rather than on every visit, and a
+  // member joining an account that finished setup never gets it.
+  userSetupSeen: defineTable({
+    userId: v.id("users"),
+    seenAt: v.number(),
+  }).index("by_user", ["userId"]),
+
   setupPlatforms: defineTable({
     marketplaceModuleId: v.string(),
     required: v.boolean(),
