@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
-import { AlertTriangle, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowUpCircle, CheckCircle2, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   AlertDialog,
@@ -17,7 +17,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useLiveState } from "@/hooks/use-live-state";
+import { upgradeHeading, upgradeResult } from "@/lib/engine-upgrade";
 import { ProvisioningSteps } from "./provisioning-steps";
+import { UpgradeDialog } from "./upgrade-dialog";
 
 interface ManagedEngineCardProps {
   instanceId: Id<"instances">;
@@ -29,9 +32,18 @@ type RowStatus =
   | "ready"
   | "registering"
   | "registered"
+  | "upgrading"
   | "failed"
   | "deprovisioning"
   | "deleted";
+
+/** What `provisioning.upgradeInfo` answers: the offered release, and whether this engine is behind it. */
+interface UpgradeInfo {
+  available: boolean;
+  offered: string | null;
+  current: string | null;
+  releaseNotesUrl: string | null;
+}
 
 const STATUS_LABELS: Record<RowStatus, string> = {
   requested: "Requested",
@@ -39,6 +51,7 @@ const STATUS_LABELS: Record<RowStatus, string> = {
   ready: "Ready",
   registering: "Connecting",
   registered: "Running",
+  upgrading: "Upgrading",
   failed: "Failed",
   deprovisioning: "Deleting",
   deleted: "Deleted",
@@ -74,19 +87,25 @@ function statusVariant(status: RowStatus): "default" | "secondary" | "destructiv
  *
  * There is no URL to edit here — the address is the slug the user chose, and
  * the maintenance API decides where it points — so this reports rather than
- * configures: what it is running, how the last run went, and the two actions
- * that make sense on a hosted engine.
+ * configures: what it is running, how the last run went, and the actions that
+ * make sense on a hosted engine.
  */
 export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
   const provisioning = useQuery(api.provisioning.forInstance, { instanceId });
   const retry = useAction(api.provisioning.retry);
   const deleteEngine = useAction(api.provisioning.deleteManagedEngine);
   const engineFlag = useAction(api.provisioning.engineFlag);
+  const fetchUpgradeInfo = useAction(api.provisioning.upgradeInfo);
+  const upgradeEngine = useAction(api.provisioning.upgradeManagedEngine);
+  const acknowledgeUpgrade = useAction(api.provisioning.acknowledgeUpgrade);
+  const isLive = useLiveState()?.isLive ?? false;
 
   const [flag, setFlag] = useState<{ at: string; reason: string } | null>(null);
-  const [busy, setBusy] = useState<"retry" | "delete" | null>(null);
+  const [upgradeInfo, setUpgradeInfo] = useState<UpgradeInfo | null>(null);
+  const [busy, setBusy] = useState<"retry" | "delete" | "upgrade" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   // Only the maintenance API knows about a flag, and nothing pushes it, so it
   // is read once when the page opens.
@@ -106,6 +125,33 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
       cancelled = true;
     };
   }, [engineFlag, instanceId]);
+
+  // The offered release is likewise only known to the maintenance API. It is
+  // asked again whenever the engine's own release changes, which is when the
+  // answer can.
+  const rowStatus = provisioning?.status;
+  const reportedVersion = provisioning?.reportedVersion;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reportedVersion is a trigger, not an input
+  useEffect(() => {
+    if (rowStatus !== "registered") {
+      setUpgradeInfo(null);
+      return;
+    }
+    let cancelled = false;
+    fetchUpgradeInfo({ instanceId })
+      .then((result) => {
+        if (!cancelled) {
+          setUpgradeInfo(result);
+        }
+      })
+      .catch(() => {
+        // Not knowing whether an update exists is not an error worth showing:
+        // the engine runs the same either way.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchUpgradeInfo, instanceId, rowStatus, reportedVersion]);
 
   if (provisioning === undefined) {
     return (
@@ -128,6 +174,23 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
   }
 
   const status = provisioning.status as RowStatus;
+  const upgrade = provisioning.upgrade;
+  const result = upgradeResult(status, upgrade);
+  const offered = status === "registered" && upgradeInfo?.available ? upgradeInfo.offered : null;
+
+  async function handleUpgrade() {
+    setError(null);
+    setBusy("upgrade");
+    try {
+      // Whatever the outcome, the row now says it: upgrading, or why not.
+      await upgradeEngine({ instanceId });
+      setUpgradeOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function handleRetry() {
     setError(null);
@@ -215,9 +278,82 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
             </div>
           )}
 
+          {offered && (
+            <div
+              className="flex flex-wrap items-center gap-3 rounded-md border border-blue-500/40 bg-blue-500/5 p-3 text-sm"
+              data-testid="engine-update-available"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="font-medium inline-flex items-center gap-1.5">
+                  <ArrowUpCircle className="h-4 w-4 text-blue-500" />
+                  Update available: <span className="font-mono">{offered}</span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {isLive ? "Finish your stream first. " : null}
+                  {upgradeInfo?.releaseNotesUrl && (
+                    <a
+                      href={upgradeInfo.releaseNotesUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-primary hover:underline"
+                      data-testid="link-engine-release-notes"
+                    >
+                      Release notes
+                      <ExternalLink className="h-3 w-3 shrink-0" />
+                    </a>
+                  )}
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={() => setUpgradeOpen(true)}
+                disabled={busy !== null || isLive}
+                data-testid="button-upgrade-engine"
+              >
+                Upgrade
+              </Button>
+            </div>
+          )}
+
+          {result && (
+            <div
+              className={
+                result.tone === "success"
+                  ? "flex items-start gap-3 rounded-md border border-green-500/40 bg-green-500/5 p-3 text-sm"
+                  : "flex items-start gap-3 rounded-md border border-yellow-500/40 bg-yellow-500/5 p-3 text-sm"
+              }
+              data-testid="engine-upgrade-result"
+            >
+              {result.tone === "success" ? (
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+              ) : (
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="font-medium">{result.message}</p>
+                {result.detail && <p className="mt-1 text-xs text-muted-foreground break-words">{result.detail}</p>}
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 shrink-0"
+                onClick={() => void acknowledgeUpgrade({ instanceId })}
+                data-testid="button-dismiss-upgrade-result"
+              >
+                Dismiss
+              </Button>
+            </div>
+          )}
+
           {provisioning.steps.length > 0 && status !== "registered" && (
             <>
               <Separator />
+              {status === "upgrading" && upgrade && (
+                <p className="text-sm font-medium" data-testid="text-upgrade-heading">
+                  {upgradeHeading(upgrade)}
+                </p>
+              )}
               <ProvisioningSteps steps={provisioning.steps} />
             </>
           )}
@@ -293,6 +429,17 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {offered && (
+        <UpgradeDialog
+          open={upgradeOpen}
+          onOpenChange={setUpgradeOpen}
+          offered={offered}
+          current={upgradeInfo?.current ?? null}
+          busy={busy === "upgrade"}
+          onConfirm={() => void handleUpgrade()}
+        />
+      )}
     </>
   );
 }

@@ -21,7 +21,7 @@ export class MaintenanceApiError extends Error {
   }
 }
 
-export type MaintenanceEngineStatus = "provisioning" | "ready" | "failed" | "deprovisioning" | "deleted";
+export type MaintenanceEngineStatus = "provisioning" | "ready" | "upgrading" | "failed" | "deprovisioning" | "deleted";
 export type MaintenanceStepStatus = "pending" | "running" | "succeeded" | "failed" | "skipped";
 export type MaintenanceRunStatus = "pending" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -32,6 +32,8 @@ export interface MaintenanceEngine {
   externalRef: string | null;
   status: MaintenanceEngineStatus;
   desiredVersion: string;
+  /** The release recorded as running. During an upgrade it still names the release being replaced. */
+  image: { version: string } | null;
   reportedVersion: string | null;
   publicUrl: string | null;
   /** Set when the engine needs an operator's attention; surfaced on the admin page. */
@@ -69,6 +71,12 @@ export interface CreatedEngine {
   run: MaintenanceRun;
   /** Only present when the maintenance API generated the token, which it does not when we supply one. */
   registrationToken?: string;
+}
+
+/** The release customer engines are offered; an engine reporting another version can be upgraded to it. */
+export interface CurrentRelease {
+  version: string;
+  publishedAt: string | null;
 }
 
 export interface SlugAvailability {
@@ -174,6 +182,43 @@ export function retryRun(
     method: "POST",
     idempotencyKey,
   });
+}
+
+/**
+ * Start an upgrade to the release the maintenance API offers. The body names
+ * no version because a customer engine is refused any other.
+ */
+export function redeployEngine(
+  engineId: string,
+  idempotencyKey: string
+): Promise<{ engine: MaintenanceEngine; run: MaintenanceRun }> {
+  return request(`/v1/engines/${encodeURIComponent(engineId)}/redeploy`, {
+    method: "POST",
+    idempotencyKey,
+    body: {},
+  });
+}
+
+export function currentRelease(): Promise<CurrentRelease> {
+  return request<CurrentRelease>("/v1/releases/current", { method: "GET" });
+}
+
+/** The maintenance API's reasons for declining an upgrade without having touched the engine. */
+export type RedeployRefusal = "run_in_progress" | "already_current" | "version_not_offered" | "engine_not_ready";
+
+const REDEPLOY_REFUSALS: readonly string[] = [
+  "run_in_progress",
+  "already_current",
+  "version_not_offered",
+  "engine_not_ready",
+] satisfies RedeployRefusal[];
+
+/** Which refusal an error from `redeployEngine` is, or null when it is some other failure. */
+export function redeployRefusal(error: unknown): RedeployRefusal | null {
+  if (error instanceof MaintenanceApiError && error.status === 409 && REDEPLOY_REFUSALS.includes(error.code)) {
+    return error.code as RedeployRefusal;
+  }
+  return null;
 }
 
 /** Start a deprovision run: the route, the container, the database and the role all go. */

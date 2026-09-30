@@ -7,7 +7,7 @@
 
 Reached from the gear icon in the header's utility cluster. It is a section like Stream and Help: the shell renders the sidebar from `ADMIN_ITEMS` in `nav-config.ts`, and `/admin` redirects to `/admin/engine`.
 
-- **Engine** (`admin/engine.tsx`) — engine URL for the selected instance (persisted on the instance record and mirrored into the `$engineUrl` Nanostore), a connection test via the Convex action `engineHealth.testConnection` (server-side, so no CORS), registration status, `EngineSyncCard`, and the Danger Zone that deletes the instance.
+- **Engine** (`admin/engine.tsx`) — engine URL for the selected instance (persisted on the instance record and mirrored into the `$engineUrl` Nanostore), a connection test via the Convex action `engineHealth.testConnection` (server-side, so no CORS), registration status, `EngineSyncCard`, and the Danger Zone that deletes the instance. A managed instance shows `ManagedEngineCard` instead of the URL form; see [Upgrading a managed engine](#upgrading-a-managed-engine).
 - **Integrations** (`admin/integrations.tsx`) — `TwitchIntegrationCard` plus placeholder YouTube/Discord cards and an API-keys card. The Twitch OAuth flow returns to `/admin/integrations`. Under the Twitch card, `TwitchScopeStatus` compares the link's granted scopes with `TWITCH_INTEGRATION_SCOPES` through `twitchScopeHealth` (`convex/lib/twitchScopeHealth.ts`) and names the missing capabilities, or says Twitch refused the token (`platformLinks.authFailedAt`, set when Twitch answers a refresh with "Invalid refresh token" and cleared by a relink or a successful refresh; a refresh outcome is only written while the link still holds the refresh token that was exchanged, so a late answer cannot overwrite a newer relink). The same health drives `TwitchReconnectBanner` under the shell header on every page, dismissible for the browser session per instance and gap. Both offer "Reconnect as @account" through the existing connect flow, which replaces the link, and only to owners and admins (`viewerCanRelink` on `instances.getPlatformLinks`); members are told to ask an admin.
 - **Storage** (`admin/storage.tsx`) — per-instance storage provider config, via `storage.getConfig` / `storage.setConfig` actions.
 - **Backup** (`admin/backup.tsx`) — export the instance's configuration (workflows, chat commands, command groups, module resources) as a config bundle file, and import one with a preview first. Backed by the engine's `exportConfig` / `previewImport` / `importConfig` (woofx3 `docs/services/config-bundles.md`) through `convex/configBackup.ts`.
@@ -18,6 +18,21 @@ Reached from the gear icon in the header's utility cluster. It is a section like
 - **Appearance** (`admin/appearance.tsx`) — theme mode and color preset through `useTheme`.
 
 The old `/settings` page also had Profile, Notifications, and Security tabs. Those were unwired mockups and were removed; `/settings` and `/settings/:tab` now redirect into `/admin`.
+
+### Upgrading a managed engine
+
+A managed engine runs the release it was built with until its owner or an admin upgrades it from `ManagedEngineCard`. The user picks when, never which release: the target is always the one release the maintenance API offers. The engine is offline for a few minutes, so the card refuses while the channel is live and asks for confirmation. Offered only when the Convex variable `ENGINE_UPGRADES_ENABLED` is `"true"`.
+
+- **Update available.** `provisioning.upgradeInfo` reads the offered release from the maintenance API when the card opens and again whenever the engine's reported release changes. Nothing pushes it.
+- **Starting.** `provisioning.upgradeManagedEngine` marks the row `upgrading` and records `upgrade` on it (`beginUpgrade`) before asking the maintenance API for the run, so a report from the run that arrives before the run's id is stored still finds a row expecting it. The `Idempotency-Key` is `<rowId>:upgrade:<toVersion>:<attempt>`. If the maintenance API declines, the row returns to `registered` with the reason in `upgrade.error`; declining is an outcome of the action, not a thrown error. A row still without a run after 15 minutes is returned the same way.
+- **Following.** The run's callbacks arrive on `/api/webhooks/maintenance` like provisioning's. Every event of a `redeploy` run goes through `decideRedeployEvent` (`convex/lib/maintenanceUpgrade.ts`), a pure function from row and event to patch:
+  - a step report is applied only when it belongs to the row's run; a running step carries the reason it is still waiting, shown under it;
+  - `engine.failed` with a `rollbackRunId` switches the row to the rollback run, and the card reads "Restoring" instead of "Upgrading";
+  - `engine.failed` that left the engine `ready` returns the row to `registered`: the run failed before it stopped anything;
+  - any other `engine.failed` leaves the row `failed`, and **Retry** resumes that run;
+  - `engine.ready` returns the row to `registered` with the reported release. The engine is not registered again: its database and credentials survive an upgrade.
+- **Result.** The card shows how the last upgrade ended (upgraded, rolled back, or never started) until it is dismissed with `provisioning.acknowledgeUpgrade`.
+- **Rest of the app.** While the row is `upgrading`, `EngineUpgradingBanner` shows under the shell header and the status bar reads "Upgrading" rather than "Disconnected" (`useEngineUpgrading`). When the row leaves `upgrading`, the transport reconnects at once instead of waiting out its backoff (`useReconnectAfterUpgrade`).
 
 ## Team (`/team`)
 

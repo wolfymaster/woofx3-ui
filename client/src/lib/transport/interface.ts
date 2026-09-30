@@ -74,6 +74,8 @@ export interface WoofxTransport {
   connect(url: string, clientId?: string, clientSecret?: string): void;
   disconnect(): void;
   isConnected(): boolean;
+  /** Retry a dropped connection at once instead of waiting out the backoff; a no-op while a session is open. */
+  reconnectNow(): void;
 
   // Stream status (one-off polling)
   getStreamStatus(instanceId: string): Promise<StreamStatus>;

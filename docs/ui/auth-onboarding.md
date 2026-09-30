@@ -33,7 +33,7 @@ Which path step 2 opens on depends on `provisioning.isAvailable`. It is true onl
 4. **Registration.** On `engine.ready`, Convex stores the engine's public URL on the instance, sets the row to `registering`, and schedules `runRegistration`. That runs the same handshake as the external path (see `CLAUDE.md`), plus the registration token. A managed engine refuses to register anyone who cannot present it. Failed handshakes are retried after 10 s, 30 s and 2 min before the row is marked `failed`.
 5. **Done.** When the row reaches `registered`, the page sets **`$currentInstanceId`** and navigates home.
 
-Row statuses: `requested` → `provisioning` → `registering` → `registered`, with `failed`, `deprovisioning` and `deleted` off the main line. `engine.ready` moves a row straight to `registering`. `ready` is in the schema, but nothing currently writes it.
+Row statuses: `requested` → `provisioning` → `registering` → `registered`, with `upgrading`, `failed`, `deprovisioning` and `deleted` off the main line. A registered row goes to `upgrading` and back when its engine changes release (see [Admin and team](admin-team.md)). `engine.ready` moves a row straight to `registering`. `ready` is in the schema, but nothing currently writes it.
 
 **Reloading mid-provision** comes back to the progress screen, not an empty form. The page looks for a managed instance with no `clientId` yet and shows its progress. The exception is a row that is missing or `deleted`: that instance has nothing behind it, so the form is offered again.
 
@@ -49,4 +49,4 @@ The form takes an instance name and the engine's API URL. It creates the instanc
 
 ## After onboarding
 
-`OnboardingGuard` requires both an account and at least one registered instance before showing a page inside `BroadcastShell`. A managed engine's later lifecycle (its flag, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.
+`OnboardingGuard` requires both an account and at least one registered instance before showing a page inside `BroadcastShell`. A managed engine's later lifecycle (its flag, upgrades, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `upgradeInfo`, `upgradeManagedEngine`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.

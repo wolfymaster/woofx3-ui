@@ -1059,8 +1059,8 @@ http.route({
 });
 
 /**
- * Progress callbacks from the woofx3 maintenance API while it provisions or
- * tears down a managed engine.
+ * Progress callbacks from the woofx3 maintenance API while it provisions,
+ * upgrades or tears down a managed engine.
  *
  * Unlike the engine's own webhook above, this caller is one trusted service
  * rather than one engine per tenant, so it authenticates with an HMAC over the
@@ -1131,6 +1131,10 @@ http.route({
       version: typeof event.version === "string" ? event.version : undefined,
       runKind: maintenanceRunKind(event.runKind) ?? undefined,
       error: maintenanceErrorText(event.error),
+      runId: typeof event.runId === "string" ? event.runId : undefined,
+      detail: maintenanceDetailText(event.detail),
+      engineStatus: typeof event.engineStatus === "string" ? event.engineStatus : undefined,
+      rollbackRunId: typeof event.rollbackRunId === "string" ? event.rollbackRunId : undefined,
     });
     return corsJson({ success: true, type: eventType, ...result });
   }),
@@ -1172,6 +1176,15 @@ function maintenanceErrorText(value: unknown): string | undefined {
     return undefined;
   }
   return typeof error.code === "string" ? `${error.code}: ${error.message}` : error.message;
+}
+
+/** Why a step is waiting: only the message, since a reason is shown and never branched on. */
+function maintenanceDetailText(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const detail = value as { message?: unknown };
+  return typeof detail.message === "string" ? detail.message : undefined;
 }
 
 http.route({
