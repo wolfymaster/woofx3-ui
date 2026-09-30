@@ -135,3 +135,30 @@ export const DEFAULT_SETUP_PLATFORMS: readonly CuratedSetupPlatform[] = [
     summary: "Wishlist gift alerts",
   },
 ];
+
+export interface ChosenSetupPlatform {
+  marketplaceModuleId: string;
+  approvedPermissions: string[];
+}
+
+/**
+ * Why a platform choice cannot be saved, or null when it can. Every required
+ * platform must be in it, and each platform may appear once.
+ */
+export function setupChoiceError(
+  chosen: readonly ChosenSetupPlatform[],
+  requiredIds: readonly string[]
+): string | null {
+  const seen = new Set<string>();
+  for (const platform of chosen) {
+    if (seen.has(platform.marketplaceModuleId)) {
+      return `${platform.marketplaceModuleId} is chosen more than once`;
+    }
+    seen.add(platform.marketplaceModuleId);
+  }
+  const missing = requiredIds.filter((id) => !seen.has(id));
+  if (missing.length > 0) {
+    return `Required platforms must be chosen: ${missing.join(", ")}`;
+  }
+  return null;
+}
