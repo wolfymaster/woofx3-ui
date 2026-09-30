@@ -98,7 +98,8 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const navigation = useMemo(navigationCommands, []);
+  const hosting = instance?.hosting;
+  const navigation = useMemo(() => navigationCommands(hosting), [hosting]);
   const items = useItemCommands(instance);
   const actions = useActionCommands(instance, instances, setInstance);
 
