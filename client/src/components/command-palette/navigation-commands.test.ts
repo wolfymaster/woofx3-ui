@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "@/components/layout/nav-config";
+import { type InstanceHosting, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "@/components/layout/nav-config";
 import { navigationCommands } from "./navigation-commands";
 
-function hrefs(): string[] {
-  return navigationCommands().flatMap((command) => (command.action.type === "navigate" ? [command.action.href] : []));
+function hrefs(hosting: InstanceHosting): string[] {
+  return navigationCommands(hosting).flatMap((command) =>
+    command.action.type === "navigate" ? [command.action.href] : []
+  );
 }
 
 describe("navigationCommands", () => {
@@ -13,11 +15,16 @@ describe("navigationCommands", () => {
     const destinations = [...MAIN_NAV_SECTIONS, ...UTILITY_SECTIONS].flatMap((section) =>
       section.children ? section.children.map((child) => child.href) : [section.href]
     );
-    expect(hrefs()).toEqual(expect.arrayContaining(destinations));
+    expect(hrefs("external")).toEqual(expect.arrayContaining(destinations));
+  });
+
+  test("leaves out Storage for a managed engine", () => {
+    expect(hrefs("external")).toContain("/admin/storage");
+    expect(hrefs("managed")).not.toContain("/admin/storage");
   });
 
   test("gives every entry a unique id", () => {
-    const ids = navigationCommands().map((command) => command.id);
+    const ids = navigationCommands("external").map((command) => command.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
