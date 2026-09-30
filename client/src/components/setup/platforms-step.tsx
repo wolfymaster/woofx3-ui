@@ -5,11 +5,8 @@ import type { SetupStatus } from "@convex/setup";
 import { useAction, useMutation } from "convex/react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { SetupPlatformCard } from "@/components/setup/setup-platform-card";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { describePermissions } from "@/lib/module-permissions";
-import { cn } from "@/lib/utils";
 
 interface PlatformsStepProps {
   instanceId: Id<"instances">;
@@ -46,7 +43,7 @@ export function PlatformsStep({ instanceId, status, onContinue }: PlatformsStepP
   const listForSetup = useAction(api.setupPlatformsActions.listForSetup);
   const choosePlatforms = useMutation(api.setup.choosePlatforms);
   const [load, setLoad] = useState<Load>({ state: "loading" });
-  // Null until the user changes a box; until then the selection follows the saved choice or the defaults.
+  // Null until the user toggles a card; until then the selection follows the saved choice or the defaults.
   const [edited, setEdited] = useState<Set<string> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -141,48 +138,18 @@ export function PlatformsStep({ instanceId, status, onContinue }: PlatformsStepP
         Pick the services woofx3 should work with. You can add more from the marketplace later.
       </p>
 
-      <ul className="divide-y rounded-lg border" data-testid="list-setup-platforms">
-        {platforms.map((platform) => {
-          const checked = selected.has(platform.marketplaceModuleId);
-          const checkboxId = `setup-platform-${platform.marketplaceModuleId}`;
-          const permissions = describePermissions(platform.permissions);
-          return (
-            <li key={platform.marketplaceModuleId} className="flex gap-3 p-4">
-              <Checkbox
-                id={checkboxId}
-                checked={checked}
-                disabled={platform.required}
-                onCheckedChange={(value) => toggle(platform, value === true)}
-                className="mt-0.5"
-                data-testid={`checkbox-${checkboxId}`}
-              />
-              <div className="flex-1 min-w-0 space-y-1">
-                <label htmlFor={checkboxId} className="flex items-center gap-2 font-medium cursor-pointer">
-                  {platform.name}
-                  <Badge variant={platform.required ? "default" : "secondary"} className="text-[10px]">
-                    {platform.required ? "Required" : "Optional"}
-                  </Badge>
-                </label>
-                <p className="text-sm text-muted-foreground">{platform.summary}</p>
-                {permissions.length > 0 && (
-                  <div className={cn("text-xs", checked ? "text-foreground" : "text-muted-foreground")}>
-                    <p className="font-medium">{checked ? "You allow it to:" : "If chosen, it can:"}</p>
-                    <ul className="list-disc pl-4">
-                      {permissions.map((permission) => (
-                        <li key={permission.id} className={cn(!permission.known && "text-amber-500")}>
-                          {permission.description}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="list-setup-platforms">
+        {platforms.map((platform) => (
+          <SetupPlatformCard
+            key={platform.marketplaceModuleId}
+            platform={platform}
+            selected={selected.has(platform.marketplaceModuleId)}
+            onToggle={(checked) => toggle(platform, checked)}
+          />
+        ))}
+      </div>
 
-      <p className="text-xs text-muted-foreground">Checking a platform approves what it lists.</p>
+      <p className="text-xs text-muted-foreground">Choosing a platform approves what it lists.</p>
 
       {saveError && <p className="text-sm text-destructive">{saveError}</p>}
 

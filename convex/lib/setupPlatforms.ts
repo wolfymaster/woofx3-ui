@@ -4,6 +4,8 @@
  * can be tested without a Convex runtime or a marketplace.
  */
 
+import type { MarketplaceImages } from "./marketplaceImages";
+
 export interface CuratedSetupPlatform {
   marketplaceModuleId: string;
   required: boolean;
@@ -18,6 +20,8 @@ export interface SetupPlatformListing {
   name: string;
   description: string;
   version: string;
+  category: string;
+  images: MarketplaceImages;
 }
 
 export interface SetupPlatform {
@@ -26,6 +30,8 @@ export interface SetupPlatform {
   description: string;
   summary: string;
   version: string;
+  category: string;
+  images: MarketplaceImages;
   required: boolean;
   defaultSelected: boolean;
   /** What the module's archive declares; selecting the platform approves these. */
@@ -74,6 +80,8 @@ export function resolveSetupPlatforms(
       description: listed.description,
       summary: entry.summary,
       version: listed.version,
+      category: listed.category,
+      images: listed.images,
       required: entry.required,
       // A required platform is always selected, whatever the row says.
       defaultSelected: entry.required || entry.defaultSelected,
@@ -135,6 +143,13 @@ export const DEFAULT_SETUP_PLATFORMS: readonly CuratedSetupPlatform[] = [
     summary: "Wishlist gift alerts",
   },
 ];
+
+/**
+ * An empty curated list means the deployment was never seeded
+ * (`setupPlatforms:seedDefaults`). With no required platform to enforce, a
+ * choice saved against it would let setup finish without Twitch.
+ */
+export const NO_SETUP_PLATFORMS_MESSAGE = "No platforms are set up to choose from yet. This is a problem on our side.";
 
 export interface ChosenSetupPlatform {
   marketplaceModuleId: string;

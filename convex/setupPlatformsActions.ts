@@ -4,7 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { type ResolvedSetupPlatforms, resolveSetupPlatforms } from "./lib/setupPlatforms";
+import { NO_SETUP_PLATFORMS_MESSAGE, type ResolvedSetupPlatforms, resolveSetupPlatforms } from "./lib/setupPlatforms";
 import { logger } from "./logger";
 import { fetchMarketplaceArchivePermissions, fetchMarketplaceDownload, fetchMarketplaceListing } from "./marketplace";
 
@@ -14,8 +14,9 @@ import { fetchMarketplaceArchivePermissions, fetchMarketplaceDownload, fetchMark
  * exactly those permissions, and the later install refuses a build that asks
  * for more.
  *
- * Throws when the marketplace listing itself cannot be read: setup cannot
- * offer anything without it, and an empty list would look like a finished one.
+ * Throws when the curated list is empty or the marketplace listing cannot be
+ * read: setup cannot offer anything without them, and an empty list would look
+ * like a finished one.
  */
 export const listForSetup = action({
   args: { instanceId: v.id("instances") },
@@ -26,6 +27,10 @@ export const listForSetup = action({
       ctx.runQuery(internal.setupPlatforms.listCurated, {}),
       fetchMarketplaceListing(),
     ]);
+    if (curated.length === 0) {
+      logger.error("setupPlatforms is empty; run setupPlatforms:seedDefaults");
+      throw new Error(NO_SETUP_PLATFORMS_MESSAGE);
+    }
     const listedIds = new Set(listing.map((entry) => entry.id));
 
     const permissionsById = new Map<string, string[] | null>(

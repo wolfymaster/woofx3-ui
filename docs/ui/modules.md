@@ -65,6 +65,7 @@ The platform modules offered while an account is set up (Twitch, OBS, Spotify, T
 - An entry the marketplace does not list, or whose archive permissions cannot be read, is left out. A **required** entry that is left out is returned in `unavailableRequired`, because setup cannot finish without it.
 - A required platform is always selected. Only Twitch is required, and nothing else is preselected.
 - The list is internal data, changed with `bunx convex run`: `setupPlatforms:seedDefaults` inserts the default four (idempotent; existing rows are left alone), and `setupPlatforms:upsert` / `setupPlatforms:remove` edit one entry. Offering another platform needs no release.
+- A deployment starts with the table empty, so `seedDefaults` must be run once on each. Until then `listForSetup` and `setup.choosePlatforms` throw rather than offer an empty list: with no required platform to enforce, setup could otherwise finish without Twitch.
 
 ## Uninstall (`UninstallModuleDialog`)
 
