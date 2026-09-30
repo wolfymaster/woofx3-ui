@@ -365,6 +365,21 @@ export default defineSchema({
     .index("by_group", ["instanceId", "engineGroupId"])
     .index("by_group_username", ["instanceId", "engineGroupId", "username"]),
 
+  // setupPlatforms: the platform modules offered when an account is set up,
+  // curated by us rather than per instance. Name, version and permissions come
+  // from the marketplace at read time (convex/lib/setupPlatforms.ts), so
+  // offering another platform is a row here, not a release.
+  setupPlatforms: defineTable({
+    marketplaceModuleId: v.string(),
+    required: v.boolean(),
+    defaultSelected: v.boolean(),
+    sortOrder: v.number(),
+    // One line under the platform's name: what it adds to a stream.
+    summary: v.string(),
+  })
+    .index("by_marketplace_module", ["marketplaceModuleId"])
+    .index("by_sort_order", ["sortOrder"]),
+
   // moduleRepository: directory of all available modules (seeded by admins or uploaded).
   // Rows are per-tenant, and neither `name`+`version` nor `moduleKey` is unique
   // across tenants — moduleKey is `{marketplaceId}:{version}:{sha7}`, built from
