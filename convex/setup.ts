@@ -38,6 +38,11 @@ export interface SetupStatus {
   setupSeen: boolean;
   /** Whether the engine has answered the registration handshake. */
   engineRegistered: boolean;
+  /**
+   * Chosen platforms whose installed module declares settings, such as an
+   * account to authorize. Installing is not enough for these to work.
+   */
+  platformsNeedingSettings: string[];
   /** What applying the choices has done so far; empty until it first runs. */
   moduleInstalls: SetupModuleInstall[];
   packInstalls: SetupPackInstall[];
@@ -69,6 +74,14 @@ async function scheduleApplyIfRegistered(ctx: MutationCtx, instanceId: Id<"insta
   }
 }
 
+function manifestDeclaresSettings(manifest: unknown): boolean {
+  if (!manifest || typeof manifest !== "object") {
+    return false;
+  }
+  const settings = (manifest as { settings?: unknown }).settings;
+  return Array.isArray(settings) && settings.length > 0;
+}
+
 /** Where the instance's setup stands, for the wizard and the onboarding guard. Null for a non-member. */
 export const status = query({
   args: { instanceId: v.id("instances") },
@@ -91,8 +104,23 @@ export const status = query({
       ctx.db.get(instanceId),
       ctx.db.query("setupPlatforms").withIndex("by_sort_order").take(MAX_SETUP_PLATFORMS),
     ]);
+    const platformsNeedingSettings: string[] = [];
+    for (const install of row?.moduleInstalls ?? []) {
+      if (install.status !== "installed" || !install.moduleKey) {
+        continue;
+      }
+      const moduleKey = install.moduleKey;
+      const module = await ctx.db
+        .query("moduleRepository")
+        .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", moduleKey))
+        .first();
+      if (manifestDeclaresSettings(module?.manifest)) {
+        platformsNeedingSettings.push(install.marketplaceModuleId);
+      }
+    }
     return {
       platforms: row?.platforms ?? [],
+      platformsNeedingSettings,
       platformsChosenAt: row?.platformsChosenAt ?? null,
       requiredModuleIds: curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId),
       interests: row?.interests ?? [],

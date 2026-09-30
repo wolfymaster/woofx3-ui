@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, query } from "./_generated/server";
-import { isManualGettingStartedItemId } from "./lib/gettingStarted";
+import { isFixedManualItemId, platformOfSettingsItemId } from "./lib/gettingStarted";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
 
@@ -37,7 +37,16 @@ export const markDone = mutation({
   args: { instanceId: v.id("instances"), itemId: v.string() },
   handler: async (ctx, { instanceId, itemId }) => {
     await requireInstanceRole(ctx, instanceId);
-    if (!isManualGettingStartedItemId(itemId)) {
+    const platform = platformOfSettingsItemId(itemId);
+    if (platform !== null) {
+      const setup = await ctx.db
+        .query("instanceSetup")
+        .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+        .first();
+      if (!setup?.platforms.some((chosen) => chosen.marketplaceModuleId === platform)) {
+        throw new Error(`${platform} was not chosen at setup`);
+      }
+    } else if (!isFixedManualItemId(itemId)) {
       throw new Error(`"${itemId}" is not an item the checklist records`);
     }
     const now = Date.now();

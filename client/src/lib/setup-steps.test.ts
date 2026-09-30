@@ -31,12 +31,14 @@ describe("allowedSetupStep", () => {
     expect(allowedSetupStep("platforms", completed)).toBe("platforms");
     expect(allowedSetupStep("twitch", platformsChosen)).toBe("twitch");
     expect(allowedSetupStep("interests", completed)).toBe("interests");
+    expect(allowedSetupStep("overlay", completed)).toBe("overlay");
   });
 
   test("moves a step past the first incomplete one back to it", () => {
     expect(allowedSetupStep("finish", platformsChosen)).toBe("twitch");
     expect(allowedSetupStep("twitch", nothingDone)).toBe("platforms");
     expect(allowedSetupStep("finish", interestsChosen)).toBe("dashboard");
+    expect(allowedSetupStep("overlay", interestsChosen)).toBe("dashboard");
   });
 });
 

@@ -6,6 +6,7 @@ import { Link, useLocation, useParams } from "wouter";
 import { DashboardStep } from "@/components/setup/dashboard-step";
 import { FinishStep } from "@/components/setup/finish-step";
 import { InterestsStep } from "@/components/setup/interests-step";
+import { OverlayStep } from "@/components/setup/overlay-step";
 import { PlatformsStep } from "@/components/setup/platforms-step";
 import { ProvisioningBar } from "@/components/setup/provisioning-bar";
 import { AskAdminToConnectTwitch, TwitchStep } from "@/components/setup/twitch-step";
@@ -154,7 +155,10 @@ export default function Setup() {
             <InterestsStep instanceId={instanceId} status={status} onContinue={() => goTo("dashboard")} />
           )}
           {step === "dashboard" && (
-            <DashboardStep instanceId={instanceId} status={status} onContinue={() => goTo("finish")} />
+            <DashboardStep instanceId={instanceId} status={status} onContinue={() => goTo("overlay")} />
+          )}
+          {step === "overlay" && (
+            <OverlayStep instanceId={instanceId} status={status} onContinue={() => goTo("finish")} />
           )}
           {step === "finish" && <FinishStep instanceId={instanceId} status={status} />}
         </CardContent>
