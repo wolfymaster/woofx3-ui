@@ -1,7 +1,9 @@
+import type { ObsStatus } from "@convex/lib/engineObsStatus";
 import { platformSettingsItemId } from "@convex/lib/gettingStarted";
 import type { OverlayFacts } from "@convex/lib/goLiveFacts";
 import type { SetupStatus } from "@convex/setup";
 import type { CheckFix } from "@/lib/go-live-checks";
+import { describeObsStatus, OBS_MODULE_ID } from "@/lib/obs-status";
 
 // The dashboard's getting started card: a short first-session list, from
 // finishing setup to seeing woofx3 react to a follow. Pure, so which items are
@@ -50,6 +52,11 @@ export interface GettingStartedFacts {
   browserSourceUrl: string | null;
   /** Items the card recorded itself; see MANUAL_GETTING_STARTED_ITEM_IDS. */
   doneItemIds: readonly string[];
+  /**
+   * The engine's OBS connection, when it can report one. With it, setting up
+   * OBS is done once OBS is connected rather than when the streamer says so.
+   */
+  obsStatus: ObsStatus | null;
 }
 
 const SCENES_PATH = "/stream/scenes";
@@ -133,11 +140,18 @@ function platformsItem(setup: GettingStartedFacts["setup"]): GettingStartedItem 
  * an account to authorize. Its settings live on the engine, so the item is
  * done when the streamer says so.
  */
-function platformSettingsItems(setup: GettingStartedFacts["setup"], done: ReadonlySet<string>): GettingStartedItem[] {
+function platformSettingsItems(
+  setup: GettingStartedFacts["setup"],
+  done: ReadonlySet<string>,
+  obsStatus: ObsStatus | null
+): GettingStartedItem[] {
   return setup.platformsNeedingSettings.map((marketplaceModuleId) => {
     const name =
       setup.platforms.find((p) => p.marketplaceModuleId === marketplaceModuleId)?.name ?? marketplaceModuleId;
     const id = platformSettingsItemId(marketplaceModuleId) as GettingStartedItemId;
+    if (marketplaceModuleId === OBS_MODULE_ID && obsStatus !== null) {
+      return obsSettingsItem(id, name, obsStatus);
+    }
     if (done.has(id)) {
       return item(id, `Set up ${name}`, "done", `${name} is set up`);
     }
@@ -145,6 +159,17 @@ function platformSettingsItems(setup: GettingStartedFacts["setup"], done: Readon
       fixes: [{ kind: "route", label: `Open ${name}`, href: `/modules/${marketplaceModuleId}` }],
       actions: [{ kind: "mark-platform-settings-done", label: "Done", marketplaceModuleId }],
     });
+  });
+}
+
+/** OBS's settings item when the engine reports its connection: done once connected. */
+function obsSettingsItem(id: GettingStartedItemId, name: string, status: ObsStatus): GettingStartedItem {
+  const description = describeObsStatus(status);
+  if (description.tone === "ok") {
+    return item(id, `Set up ${name}`, "done", description.text);
+  }
+  return item(id, `Set up ${name}`, description.tone === "problem" ? "problem" : "todo", description.text, {
+    fixes: [{ kind: "route", label: `Open ${name}`, href: `/modules/${OBS_MODULE_ID}` }],
   });
 }
 
@@ -202,7 +227,7 @@ export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedI
   return [
     setupItem(facts.setup),
     platformsItem(facts.setup),
-    ...platformSettingsItems(facts.setup, done),
+    ...platformSettingsItems(facts.setup, done, facts.obsStatus),
     twitchItem(facts.setup),
     overlayItem(facts.overlays, facts.browserSourceUrl),
     testFollowItem(done.has("test-follow")),

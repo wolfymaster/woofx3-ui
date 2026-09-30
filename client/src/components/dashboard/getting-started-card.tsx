@@ -10,6 +10,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
+import { useObsStatus } from "@/hooks/use-obs-status";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
@@ -21,6 +22,7 @@ import {
   gettingStartedProgress,
 } from "@/lib/getting-started";
 import type { CheckFix } from "@/lib/go-live-checks";
+import { OBS_MODULE_ID } from "@/lib/obs-status";
 import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
 import { cn } from "@/lib/utils";
 
@@ -86,6 +88,9 @@ export function GettingStartedCard({ instanceId }: { instanceId: Id<"instances">
   const [busyAction, setBusyAction] = useState<GettingStartedAction["kind"] | null>(null);
   const [open, setOpen] = useState(true);
 
+  const watchesObs = Boolean(state && !state.dismissed && setup?.platformsNeedingSettings.includes(OBS_MODULE_ID));
+  const { status: obsStatus } = useObsStatus(instanceId, watchesObs);
+
   const followPreset = useMemo(() => triggerPresets.find((preset) => preset.event === FOLLOW_EVENT), [triggerPresets]);
 
   if (!setup || !overlays || !state || state.dismissed) {
@@ -97,6 +102,7 @@ export function GettingStartedCard({ instanceId }: { instanceId: Id<"instances">
     overlays,
     browserSourceUrl: overlays.featuredKey ? browserSourceUrlForKey(overlays.featuredKey) : null,
     doneItemIds: state.doneItemIds,
+    obsStatus,
   });
   const progress = gettingStartedProgress(items);
   if (progress.done === progress.total) {

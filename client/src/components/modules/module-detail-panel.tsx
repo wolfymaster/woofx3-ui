@@ -23,6 +23,7 @@ import remarkGfm from "remark-gfm";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { ModulePermissionList, ModulePermissionsSection } from "@/components/modules/module-permissions";
 import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endpoints";
+import { ObsConnectionStatus } from "@/components/modules/obs-connection-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -32,6 +33,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
 import { permissionsToApprove } from "@/lib/module-permissions";
+import { OBS_MODULE_ID } from "@/lib/obs-status";
 import { cn, isNewerVersion } from "@/lib/utils";
 
 export interface ModuleDetailMeta {
@@ -248,6 +250,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
                 {instanceId && module.identifier && (
                   <ModuleWebhookEndpoints instanceId={instanceId} modulePrefix={module.identifier} />
                 )}
+                {instanceId && module.identifier === OBS_MODULE_ID && <ObsConnectionStatus instanceId={instanceId} />}
                 <SettingsTab
                   instanceId={instanceId}
                   moduleId={module.identifier ?? ""}

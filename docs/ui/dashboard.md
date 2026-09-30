@@ -108,6 +108,7 @@ against: Twitch keeps no history of either.
 
 - **Items the card records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
 - **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the card (`platform-settings:<id>`).
+- **OBS connection.** On an engine with the `obs.status` capability, "Set up OBS" follows the engine's actual OBS connection instead of the Done button. `useObsStatus` polls `obsStatus.get` every 5 s while the tab is visible. The item is done once OBS is connected; otherwise it shows why not, for example "OBS refused the password" or "Can't reach OBS at host:port".
 - **When it hides.** The card hides once every item is done, or when someone dismisses it (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
 - **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
 
