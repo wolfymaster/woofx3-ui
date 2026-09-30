@@ -23,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useEngineHealth } from "@/hooks/use-engine-health";
+import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
 import { useEngineVersion } from "@/hooks/use-engine-version";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
@@ -31,6 +32,7 @@ import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health"
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn } from "@/lib/utils";
+import { EngineUpgradingBanner } from "./engine-upgrading-banner";
 import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, navItemsFor, UTILITY_SECTIONS } from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
 import { SetupInstallBanner } from "./setup-install-banner";
@@ -126,10 +128,27 @@ function InstanceBar() {
   );
 }
 
+type EngineConnection = "connected" | "upgrading" | "disconnected";
+
+const ENGINE_CONNECTION: Record<EngineConnection, { label: string; dot: string; text: string }> = {
+  connected: { label: "Connected", dot: "bg-green-500", text: "text-green-600 dark:text-green-400" },
+  upgrading: { label: "Upgrading", dot: "bg-blue-500", text: "text-blue-600 dark:text-blue-400" },
+  disconnected: { label: "Disconnected", dot: "bg-muted-foreground", text: "text-muted-foreground" },
+};
+
+/** An engine that is down for an upgrade is not a lost connection, so it is named for what it is. */
+function engineConnection(connected: boolean, upgrading: boolean): EngineConnection {
+  if (connected) {
+    return "connected";
+  }
+  return upgrading ? "upgrading" : "disconnected";
+}
+
 function StatusBar() {
   const { connected } = useEngineHealth();
   const engineVersion = useEngineVersion(connected);
   const liveState = useLiveState();
+  const connection = ENGINE_CONNECTION[engineConnection(connected, useEngineUpgrading())];
 
   const isLive = liveState?.isLive ?? false;
   const startedAt = isLive ? liveState?.startedAt : undefined;
@@ -137,14 +156,12 @@ function StatusBar() {
   return (
     <div className="h-7 bg-card border-t border-border flex items-center px-4 text-xs shrink-0">
       <div className="flex-1 flex items-center gap-2 min-w-0">
-        <span className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-green-500" : "bg-muted-foreground")} />
+        <span className={cn("h-1.5 w-1.5 rounded-full", connection.dot)} />
         <span
-          className={cn(
-            "font-semibold uppercase tracking-wider",
-            connected ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
-          )}
+          className={cn("font-semibold uppercase tracking-wider", connection.text)}
+          data-testid="status-engine-connection"
         >
-          {connected ? "Connected" : "Disconnected"}
+          {connection.label}
         </span>
         <span className="text-muted-foreground font-mono truncate" data-testid="status-engine-version">
           {formatEngineVersion(engineVersion)}
@@ -310,6 +327,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const activeSection = findActiveSection(location);
   const { instance } = useInstance();
   useSyncEngineTransport();
+  useReconnectAfterUpgrade();
   useWorkflowHealthResyncOnReconnect();
 
   useEffect(() => {
@@ -330,6 +348,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
         <InstanceBar />
         <AppHeader />
         <TwitchReconnectBanner />
+        <EngineUpgradingBanner />
         <SetupInstallBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">

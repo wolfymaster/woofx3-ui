@@ -8,6 +8,8 @@ export interface ProvisioningStep {
   label: string;
   status: ProvisioningStepStatus;
   error?: string;
+  /** Why a running step is still waiting. */
+  detail?: string;
 }
 
 export function ProvisioningStepIcon({ status }: { status: ProvisioningStepStatus }) {
@@ -45,6 +47,9 @@ export function ProvisioningSteps({ steps }: { steps: readonly ProvisioningStep[
           <span className="min-w-0">
             <span className={step.status === "failed" ? "text-destructive" : undefined}>{step.label}</span>
             {step.error && <span className="block text-xs text-destructive break-words">{step.error}</span>}
+            {step.status === "running" && step.detail && (
+              <span className="block text-xs text-muted-foreground break-words">{step.detail}</span>
+            )}
           </span>
         </li>
       ))}

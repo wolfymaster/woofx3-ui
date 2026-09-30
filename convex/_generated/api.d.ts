@@ -77,6 +77,7 @@ import type * as lib_macroTrigger from "../lib/macroTrigger.js";
 import type * as lib_macroVariables from "../lib/macroVariables.js";
 import type * as lib_maintenanceClient from "../lib/maintenanceClient.js";
 import type * as lib_maintenanceSignature from "../lib/maintenanceSignature.js";
+import type * as lib_maintenanceUpgrade from "../lib/maintenanceUpgrade.js";
 import type * as lib_manualRunOrigin from "../lib/manualRunOrigin.js";
 import type * as lib_marketplaceImages from "../lib/marketplaceImages.js";
 import type * as lib_moderation from "../lib/moderation.js";
@@ -260,6 +261,7 @@ declare const fullApi: ApiFromModules<{
   "lib/macroVariables": typeof lib_macroVariables;
   "lib/maintenanceClient": typeof lib_maintenanceClient;
   "lib/maintenanceSignature": typeof lib_maintenanceSignature;
+  "lib/maintenanceUpgrade": typeof lib_maintenanceUpgrade;
   "lib/manualRunOrigin": typeof lib_manualRunOrigin;
   "lib/marketplaceImages": typeof lib_marketplaceImages;
   "lib/moderation": typeof lib_moderation;

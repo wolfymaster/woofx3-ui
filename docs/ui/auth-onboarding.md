@@ -33,7 +33,7 @@ Which path step 2 opens on depends on `provisioning.isAvailable`. It is true onl
 4. **Registration.** On `engine.ready`, Convex stores the engine's public URL on the instance, sets the row to `registering`, and schedules `runRegistration`. That runs the same handshake as the external path (see `CLAUDE.md`), plus the registration token. A managed engine refuses to register anyone who cannot present it. Failed handshakes are retried after 10 s, 30 s and 2 min before the row is marked `failed`.
 5. **Done.** When the row reaches `registered` and setup is finished, setup's last page sets **`$currentInstanceId`** and navigates home.
 
-Row statuses: `requested` → `provisioning` → `registering` → `registered`, with `failed`, `deprovisioning` and `deleted` off the main line. `engine.ready` moves a row straight to `registering`. `ready` is in the schema, but nothing currently writes it.
+Row statuses: `requested` → `provisioning` → `registering` → `registered`, with `upgrading`, `failed`, `deprovisioning` and `deleted` off the main line. A registered row goes to `upgrading` and back when its engine changes release (see [Admin and team](admin-team.md)). `engine.ready` moves a row straight to `registering`. `ready` is in the schema, but nothing currently writes it.
 
 **Reloading mid-provision** comes back to setup, not an empty form. Onboarding looks for a managed instance with no `clientId` yet and sends the user to `/setup`. The exception is a row that is missing or `deleted`: that instance has nothing behind it, so the form is offered again.
 
@@ -84,4 +84,4 @@ The wizard records that it opened for the signed-in user (`setup.markSeen`, per 
 - **Link health:** the guard checks only that a link exists. A revoked or under-scoped link is left to the reconnect banner, so an established user is never sent back into setup.
 - **Unfinished setup:** while the instance's setup is unfinished, the guard also opens setup once for an owner or admin who has not seen it.
 
-A managed engine's later lifecycle (its flag, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.
+A managed engine's later lifecycle (its flag, upgrades, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `upgradeInfo`, `upgradeManagedEngine`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.

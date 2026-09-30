@@ -219,6 +219,9 @@ export default defineSchema({
       v.literal("ready"),
       v.literal("registering"),
       v.literal("registered"),
+      // The engine is stopped while it moves to another release, or back to
+      // the one it had; `upgrade` says which.
+      v.literal("upgrading"),
       v.literal("failed"),
       v.literal("deprovisioning"),
       v.literal("deleted")
@@ -238,6 +241,8 @@ export default defineSchema({
           v.literal("skipped")
         ),
         error: v.optional(v.string()),
+        // Why a running step is still waiting, in the maintenance API's words.
+        detail: v.optional(v.string()),
       })
     ),
     publicUrl: v.optional(v.string()),
@@ -250,6 +255,27 @@ export default defineSchema({
     // Registration is retried on a backoff after the engine reports ready;
     // this counts the attempts made so far so the schedule can advance.
     registrationAttempts: v.optional(v.number()),
+    // The latest upgrade of this engine, kept after it ends so the engine page
+    // can say how it went.
+    upgrade: v.optional(
+      v.object({
+        fromVersion: v.string(),
+        toVersion: v.string(),
+        requestedBy: v.id("users"),
+        startedAt: v.number(),
+        // Counts upgrades asked of this row and is part of each one's
+        // Idempotency-Key. The maintenance API keeps keys for 7 days, so a
+        // second try at the same release under the first try's key would be
+        // answered with the first try's run.
+        attempt: v.number(),
+        // The release did not come up and the previous one is being restored.
+        rollingBack: v.boolean(),
+        outcome: v.optional(v.union(v.literal("succeeded"), v.literal("rolled_back"), v.literal("failed"))),
+        error: v.optional(v.string()),
+        // Set once the requester has dismissed the outcome.
+        acknowledged: v.optional(v.boolean()),
+      })
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

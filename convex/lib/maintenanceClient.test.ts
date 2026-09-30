@@ -2,9 +2,12 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
   checkSlugAvailability,
   createEngine,
+  currentRelease,
   deleteEngine,
   isMaintenanceConfigured,
   MaintenanceApiError,
+  redeployEngine,
+  redeployRefusal,
   retryRun,
 } from "./maintenanceClient";
 
@@ -145,6 +148,34 @@ describe("other routes", () => {
     await deleteEngine("eng_1", "prov_1:delete");
     expect(calls[0].url).toBe("https://maintenance.woofx3.tv/v1/engines/eng_1");
     expect(calls[0].method).toBe("DELETE");
+  });
+});
+
+describe("upgrades", () => {
+  it("asks for a redeploy without naming a version", async () => {
+    stubFetch({ status: 202, body: { engine, run } });
+    await redeployEngine("eng_1", "prov_1:upgrade:v0.2.0:1");
+    expect(calls[0].url).toBe("https://maintenance.woofx3.tv/v1/engines/eng_1/redeploy");
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].headers["idempotency-key"]).toBe("prov_1:upgrade:v0.2.0:1");
+    expect(calls[0].body).toEqual({});
+  });
+
+  it("reads the offered release", async () => {
+    stubFetch({ status: 200, body: { version: "v0.2.0", publishedAt: null } });
+    expect(await currentRelease()).toEqual({ version: "v0.2.0", publishedAt: null });
+    expect(calls[0].url).toBe("https://maintenance.woofx3.tv/v1/releases/current");
+  });
+
+  it("names the refusals an upgrade can meet, and nothing else", async () => {
+    stubFetch({ status: 409, body: { error: { code: "already_current", message: "already runs v0.2.0" } } });
+    const refused = await redeployEngine("eng_1", "key").catch((err: unknown) => err);
+    expect(redeployRefusal(refused)).toBe("already_current");
+
+    stubFetch({ status: 409, body: { error: { code: "engine_deleted", message: "engine is deleted" } } });
+    const other = await redeployEngine("eng_1", "key").catch((err: unknown) => err);
+    expect(redeployRefusal(other)).toBeNull();
+    expect(redeployRefusal(new Error("network"))).toBeNull();
   });
 });
 

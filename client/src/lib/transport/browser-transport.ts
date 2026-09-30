@@ -88,6 +88,20 @@ export class BrowserTransport implements WoofxTransport {
     return $engineConnected.get() && !!this.session;
   }
 
+  reconnectNow(): void {
+    // A session that exists is either working or about to report itself
+    // broken; replacing it would drop its stream subscription for nothing.
+    if (!this.credentials || this.session) {
+      return;
+    }
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.backoff.reset();
+    this.openSession(this.generation);
+  }
+
   /** Drop the live session and any pending retry, without touching credentials. */
   private teardown(): void {
     if (this.reconnectTimer) {

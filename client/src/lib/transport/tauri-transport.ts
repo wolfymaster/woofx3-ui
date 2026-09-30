@@ -24,6 +24,10 @@ export class TauriTransport implements WoofxTransport {
     return false;
   }
 
+  reconnectNow(): void {
+    // TODO: invoke('reconnect_woofx3')
+  }
+
   async getStreamStatus(instanceId: string): Promise<StreamStatus> {
     // TODO: invoke('get_stream_status', { instanceId })
     throw new Error("TauriTransport not yet implemented");
