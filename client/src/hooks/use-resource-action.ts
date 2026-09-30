@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { resourceActionStep } from "@/lib/resource-actions";
+import type { ResourceInstanceDoc } from "@/lib/resource-instance";
 
 /**
  * Runs one of a resource kind's own actions against the instance on show — the
@@ -19,28 +20,14 @@ import { resourceActionStep } from "@/lib/resource-actions";
  * one is being sent. `run` reports a failure as a toast and resolves false.
  */
 export function useResourceAction({ instance, moduleName }: Pick<ResourceDetailProps, "instance" | "moduleName">) {
-  const { instance: engineInstance } = useInstance();
-  const { actionPresets } = useWorkflowCatalog();
-  const runActions = useAction(api.moduleResourceActions.runActions);
+  const runResourceAction = useResourceActionRunner();
   const { toast } = useToast();
   const [pending, setPending] = useState<string | null>(null);
 
   async function run(actionId: string, parameters: Record<string, unknown> = {}): Promise<boolean> {
-    if (!engineInstance) {
-      return false;
-    }
     setPending(actionId);
     try {
-      const action = resourceActionStep(actionPresets, moduleName, actionId, {
-        target: instance.canonicalId,
-        ...parameters,
-      });
-      await runActions({
-        instanceId: engineInstance._id,
-        label: `dashboard:${instance.canonicalId}`,
-        actions: escapeDollarKeys([action]) as unknown[],
-      });
-      return true;
+      return await runResourceAction(instance, moduleName, actionId, parameters);
     } catch (err) {
       toast({
         title: "That didn't work",
@@ -54,4 +41,36 @@ export function useResourceAction({ instance, moduleName }: Pick<ResourceDetailP
   }
 
   return { run, pending };
+}
+
+/**
+ * The request behind `useResourceAction`, for callers that act on many instances rather
+ * than one — the quick actions palette. Resolves false when no engine instance is
+ * selected, and throws what the engine or the catalog refused.
+ */
+export function useResourceActionRunner() {
+  const { instance: engineInstance } = useInstance();
+  const { actionPresets } = useWorkflowCatalog();
+  const runActions = useAction(api.moduleResourceActions.runActions);
+
+  return async function runResourceAction(
+    instance: ResourceInstanceDoc,
+    moduleName: string,
+    actionId: string,
+    parameters: Record<string, unknown> = {}
+  ): Promise<boolean> {
+    if (!engineInstance) {
+      return false;
+    }
+    const action = resourceActionStep(actionPresets, moduleName, actionId, {
+      target: instance.canonicalId,
+      ...parameters,
+    });
+    await runActions({
+      instanceId: engineInstance._id,
+      label: `dashboard:${instance.canonicalId}`,
+      actions: escapeDollarKeys([action]) as unknown[],
+    });
+    return true;
+  };
 }
