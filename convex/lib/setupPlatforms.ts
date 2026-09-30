@@ -4,6 +4,8 @@
  * can be tested without a Convex runtime or a marketplace.
  */
 
+import type { MarketplaceImages } from "./marketplaceImages";
+
 export interface CuratedSetupPlatform {
   marketplaceModuleId: string;
   required: boolean;
@@ -18,6 +20,8 @@ export interface SetupPlatformListing {
   name: string;
   description: string;
   version: string;
+  category: string;
+  images: MarketplaceImages;
 }
 
 export interface SetupPlatform {
@@ -26,6 +30,8 @@ export interface SetupPlatform {
   description: string;
   summary: string;
   version: string;
+  category: string;
+  images: MarketplaceImages;
   required: boolean;
   defaultSelected: boolean;
   /** What the module's archive declares; selecting the platform approves these. */
@@ -74,6 +80,8 @@ export function resolveSetupPlatforms(
       description: listed.description,
       summary: entry.summary,
       version: listed.version,
+      category: listed.category,
+      images: listed.images,
       required: entry.required,
       // A required platform is always selected, whatever the row says.
       defaultSelected: entry.required || entry.defaultSelected,

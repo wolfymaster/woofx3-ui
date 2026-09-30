@@ -13,7 +13,14 @@ function curated(overrides: Partial<CuratedSetupPlatform> & { marketplaceModuleI
 }
 
 function listed(id: string): SetupPlatformListing {
-  return { id, name: `${id} name`, description: `${id} description`, version: "1.0.0" };
+  return {
+    id,
+    name: `${id} name`,
+    description: `${id} description`,
+    version: "1.0.0",
+    category: "platform",
+    images: {},
+  };
 }
 
 describe("resolveSetupPlatforms", () => {
@@ -38,6 +45,8 @@ describe("resolveSetupPlatforms", () => {
       description: "a description",
       summary: "summary",
       version: "1.0.0",
+      category: "platform",
+      images: {},
       required: true,
       defaultSelected: true,
       permissions: ["twitch.channel"],
