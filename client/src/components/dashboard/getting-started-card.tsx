@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { platformSettingsItemId } from "@convex/lib/gettingStarted";
 import { useMutation, useQuery } from "convex/react";
 import { ChevronDown, Circle, CircleCheck, CircleX, Copy, ListChecks, Loader2, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -109,6 +110,8 @@ export function GettingStartedCard({ instanceId }: { instanceId: Id<"instances">
         await retryApply({ instanceId });
       } else if (action.kind === "mark-command-done") {
         await markDone({ instanceId, itemId: "chat-command" });
+      } else if (action.kind === "mark-platform-settings-done") {
+        await markDone({ instanceId, itemId: platformSettingsItemId(action.marketplaceModuleId) });
       } else {
         if (!followPreset) {
           return;

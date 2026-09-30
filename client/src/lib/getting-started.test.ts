@@ -13,6 +13,7 @@ function facts(overrides: Partial<GettingStartedFacts> = {}, setup: Partial<Gett
       moduleInstalls: [{ marketplaceModuleId: "woofx3_twitch", status: "installed" }],
       twitchUsername: "streamer",
       engineRegistered: true,
+      platformsNeedingSettings: [],
     },
     overlays: { hasScene: true, browserSourceKeyCount: 1, featuredKey: "k", lastLoadedAt: 3 },
     browserSourceUrl: "https://example.test/browser-source/k",
@@ -96,5 +97,21 @@ describe("gettingStartedItems", () => {
     const items = byId(facts({ doneItemIds: [] }));
     expect(items["test-follow"].actions).toEqual([{ kind: "fire-test-follow", label: "Send a test follow" }]);
     expect(items["chat-command"].actions).toEqual([{ kind: "mark-command-done", label: "I've tried it" }]);
+  });
+
+  test("asks for the settings of a platform that declares them until marked done", () => {
+    const spotify = { marketplaceModuleId: "woofx3_spotify", name: "Spotify", approvedPermissions: [] };
+    const setup = { platforms: [twitch, spotify], platformsNeedingSettings: ["woofx3_spotify"] };
+    const todo = byId(facts({}, setup))["platform-settings:woofx3_spotify"];
+    expect(todo.status).toBe("todo");
+    expect(todo.fixes).toEqual([{ kind: "route", label: "Open Spotify", href: "/modules/woofx3_spotify" }]);
+    expect(todo.actions).toEqual([
+      { kind: "mark-platform-settings-done", label: "Done", marketplaceModuleId: "woofx3_spotify" },
+    ]);
+
+    const done = byId(
+      facts({ doneItemIds: ["test-follow", "chat-command", "platform-settings:woofx3_spotify"] }, setup)
+    )["platform-settings:woofx3_spotify"];
+    expect(done.status).toBe("done");
   });
 });

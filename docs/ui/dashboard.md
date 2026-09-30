@@ -100,12 +100,14 @@ against: Twitch keeps no history of either.
 |---|---|---|
 | Finish setting up | `instanceSetup.completedAt` is set | Continue setup (`/setup`) |
 | Platforms installed | every chosen platform's `moduleInstalls` entry is `installed` | Retry (`setup.retryApply`) on a failure; the module page on a needs-approval |
+| Set up *platform* (one per platform) | the streamer says so | Open the module page, **Done** |
 | Twitch connected | the instance has a Twitch link | Connect Twitch |
 | Overlay added to OBS | a browser source has loaded a browser-source key (`goLive.overlays.lastLoadedAt`) | Copy browser-source URL, Open scenes |
 | Fire a test follow | the card fired one | **Send a test follow**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
 | Run your first chat command | the streamer says so | See your commands, **I've tried it** |
 
 - **Items the card records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
+- **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the card (`platform-settings:<id>`).
 - **When it hides.** The card hides once every item is done, or when someone dismisses it (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
 - **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
 

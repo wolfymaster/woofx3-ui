@@ -1,3 +1,4 @@
+import { platformSettingsItemId } from "@convex/lib/gettingStarted";
 import type { OverlayFacts } from "@convex/lib/goLiveFacts";
 import type { SetupStatus } from "@convex/setup";
 import type { CheckFix } from "@/lib/go-live-checks";
@@ -6,7 +7,14 @@ import type { CheckFix } from "@/lib/go-live-checks";
 // finishing setup to seeing woofx3 react to a follow. Pure, so which items are
 // done and what each offers is testable without Convex or an engine.
 
-export type GettingStartedItemId = "setup" | "platforms" | "twitch" | "overlay" | "test-follow" | "chat-command";
+export type GettingStartedItemId =
+  | "setup"
+  | "platforms"
+  | "twitch"
+  | "overlay"
+  | "test-follow"
+  | "chat-command"
+  | `platform-settings:${string}`;
 
 export type GettingStartedStatus = "done" | "todo" | "problem";
 
@@ -14,7 +22,8 @@ export type GettingStartedStatus = "done" | "todo" | "problem";
 export type GettingStartedAction =
   | { kind: "retry-installs"; label: string }
   | { kind: "fire-test-follow"; label: string }
-  | { kind: "mark-command-done"; label: string };
+  | { kind: "mark-command-done"; label: string }
+  | { kind: "mark-platform-settings-done"; label: string; marketplaceModuleId: string };
 
 export interface GettingStartedItem {
   id: GettingStartedItemId;
@@ -28,7 +37,13 @@ export interface GettingStartedItem {
 export interface GettingStartedFacts {
   setup: Pick<
     SetupStatus,
-    "platformsChosenAt" | "completedAt" | "platforms" | "moduleInstalls" | "twitchUsername" | "engineRegistered"
+    | "platformsChosenAt"
+    | "completedAt"
+    | "platforms"
+    | "moduleInstalls"
+    | "twitchUsername"
+    | "engineRegistered"
+    | "platformsNeedingSettings"
   >;
   overlays: OverlayFacts;
   /** The browser-source URL to offer for OBS, when there is one. */
@@ -113,6 +128,26 @@ function platformsItem(setup: GettingStartedFacts["setup"]): GettingStartedItem 
   );
 }
 
+/**
+ * One item per installed platform that needs its settings filled in, such as
+ * an account to authorize. Its settings live on the engine, so the item is
+ * done when the streamer says so.
+ */
+function platformSettingsItems(setup: GettingStartedFacts["setup"], done: ReadonlySet<string>): GettingStartedItem[] {
+  return setup.platformsNeedingSettings.map((marketplaceModuleId) => {
+    const name =
+      setup.platforms.find((p) => p.marketplaceModuleId === marketplaceModuleId)?.name ?? marketplaceModuleId;
+    const id = platformSettingsItemId(marketplaceModuleId) as GettingStartedItemId;
+    if (done.has(id)) {
+      return item(id, `Set up ${name}`, "done", `${name} is set up`);
+    }
+    return item(id, `Set up ${name}`, "todo", `${name} needs a few settings before it works, such as your account`, {
+      fixes: [{ kind: "route", label: `Open ${name}`, href: `/modules/${marketplaceModuleId}` }],
+      actions: [{ kind: "mark-platform-settings-done", label: "Done", marketplaceModuleId }],
+    });
+  });
+}
+
 function twitchItem(setup: GettingStartedFacts["setup"]): GettingStartedItem {
   if (setup.twitchUsername !== null) {
     return item("twitch", "Twitch connected", "done", `Connected as @${setup.twitchUsername}`);
@@ -167,6 +202,7 @@ export function gettingStartedItems(facts: GettingStartedFacts): GettingStartedI
   return [
     setupItem(facts.setup),
     platformsItem(facts.setup),
+    ...platformSettingsItems(facts.setup, done),
     twitchItem(facts.setup),
     overlayItem(facts.overlays, facts.browserSourceUrl),
     testFollowItem(done.has("test-follow")),

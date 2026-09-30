@@ -7,6 +7,7 @@ export const SETUP_STEPS = [
   { id: "twitch", title: "Connect Twitch" },
   { id: "interests", title: "What do you want woofx3 to do?" },
   { id: "dashboard", title: "Your dashboard" },
+  { id: "overlay", title: "Your overlay" },
   { id: "finish", title: "All set" },
 ] as const;
 
@@ -51,6 +52,8 @@ export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
   if (progress.completedAt === null) {
     return "dashboard";
   }
+  // The overlay page is optional and leaves no record, so a finished setup
+  // resumes on the summary.
   return "finish";
 }
 

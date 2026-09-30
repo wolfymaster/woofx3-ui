@@ -55,7 +55,10 @@ The form takes an instance name and the engine's API URL. It creates the instanc
 2. **Connect Twitch** (`TwitchStep`): `useTwitchConnect` with `/setup/twitch` as the return path. The link needs only the instance row, so it works before the engine exists. `instances.applyRegistration` sends an existing link to the engine when it registers. OAuth errors show on the callback page with the fixed text from `convex/lib/oauthErrors.ts`, and its Back link returns here.
 3. **What do you want woofx3 to do?** (`InterestsStep`): the interests the chosen platforms can deliver (`SETUP_INTERESTS` in `convex/lib/setupInterests.ts`). Each installs starter packs with their default wording, and shapes the dashboard. Saved with `setup.chooseInterests`; **Skip** saves none.
 4. **Your dashboard** (`DashboardStep`): a preview of the first panel `buildDashboardPreset` makes from the interests. Every zone gets a widget even with no interests, so a skipped question still gives a usable dashboard. "Use this dashboard" calls `setup.complete`. That marks setup finished and gives the caller that panel, unless they already have panels, which are never replaced. It is refused until platforms are chosen and Twitch is linked.
-5. **All set** (`FinishStep`): what will be installed and set up, with each item's progress. The dashboard opens when the engine registers, or from "Open your dashboard" when it already has.
+5. **Your overlay** (`OverlayStep`, skippable): the browser-source URL for OBS, with a copy button and the steps to add it.
+   - It uses the instance's oldest scene. With no scene, **Create my overlay** makes "Main overlay" (1920×1080) with the catalog's alert widget over the whole canvas, named `default`, so alerts play in OBS right away (`client/src/lib/setup-overlay.ts`).
+   - Scenes live on the engine, so before the engine is ready the page only says the URL will appear in the Getting started list.
+6. **All set** (`FinishStep`): what will be installed and set up, with each item's progress. The dashboard opens when the engine registers, or from "Open your dashboard" when it already has.
 
 The first two pages cannot be skipped. Opening a later page's URL early lands on the first page still to do (`client/src/lib/setup-steps.ts`).
 
