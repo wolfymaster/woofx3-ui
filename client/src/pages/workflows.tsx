@@ -21,6 +21,7 @@ import {
 import { useMemo, useRef, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
+import { PageIntro } from "@/components/common/page-intro";
 import { STARTER_PACKS_PATH } from "@/components/layout/nav-config";
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -48,6 +49,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import StepListEditor from "@/components/workflows/step-list-editor";
@@ -225,6 +227,7 @@ function WorkflowListScreen() {
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
       <PageHeader title="Workflows" description="Automations that run when something happens on your stream." />
+      <PageIntro introId="workflows" onTry={() => navigate(CREATE_PATH)} />
 
       <div className="space-y-6">
         <Tabs value={enabledFilter} onValueChange={(v) => setEnabledFilter(v as EnabledFilter)}>
@@ -320,52 +323,69 @@ function WorkflowListScreen() {
                       <TableCell className="text-muted-foreground">{workflowStepCount(workflow)}</TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void handleToggleEnabled(workflow);
-                            }}
-                            className="text-muted-foreground hover:text-foreground transition-colors"
-                            title={workflow.isEnabled ? "Click to disable" : "Click to enable"}
-                          >
-                            {togglingId === workflow.engineWorkflowId ? (
-                              <Loader2 className="h-5 w-5 animate-spin" />
-                            ) : workflow.isEnabled ? (
-                              <ToggleRight className="h-5 w-5 text-primary" />
-                            ) : (
-                              <ToggleLeft className="h-5 w-5" />
-                            )}
-                          </button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void handleToggleEnabled(workflow);
+                                }}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                aria-label={workflow.isEnabled ? "Disable workflow" : "Enable workflow"}
+                              >
+                                {togglingId === workflow.engineWorkflowId ? (
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                ) : workflow.isEnabled ? (
+                                  <ToggleRight className="h-5 w-5 text-primary" />
+                                ) : (
+                                  <ToggleLeft className="h-5 w-5" />
+                                )}
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {workflow.isEnabled ? "Disable workflow" : "Enable workflow"}
+                            </TooltipContent>
+                          </Tooltip>
                           {health && <NotRunningBadge health={health} />}
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`${LIST_PATH}/${workflow.engineWorkflowId}`);
-                            }}
-                            title="Edit workflow"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteTarget(workflow);
-                            }}
-                            title="Delete workflow"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`${LIST_PATH}/${workflow.engineWorkflowId}`);
+                                }}
+                                aria-label="Edit workflow"
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Edit workflow</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:text-destructive"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteTarget(workflow);
+                                }}
+                                aria-label="Delete workflow"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Delete workflow</TooltipContent>
+                          </Tooltip>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -572,9 +592,14 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     <div className="h-full flex flex-col overflow-hidden">
       <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <Button variant="ghost" size="icon" onClick={() => navigate(LIST_PATH)} title="Back to workflows">
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={() => navigate(LIST_PATH)} aria-label="Back to workflows">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Back to workflows</TooltipContent>
+          </Tooltip>
           {isEditingTitle ? (
             <input
               ref={titleInputRef}
@@ -586,14 +611,18 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
               className="text-xl font-semibold bg-transparent border-b-2 border-primary outline-none px-0 py-0 w-full max-w-md"
             />
           ) : (
-            <button
-              type="button"
-              className="text-xl font-semibold truncate cursor-pointer hover:text-primary transition-colors"
-              onClick={startEditingTitle}
-              title="Click to edit"
-            >
-              {name}
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className="text-xl font-semibold truncate cursor-pointer hover:text-primary transition-colors"
+                  onClick={startEditingTitle}
+                >
+                  {name}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Rename workflow</TooltipContent>
+            </Tooltip>
           )}
           <Badge
             variant={workflow.isEnabled ? "secondary" : "outline"}

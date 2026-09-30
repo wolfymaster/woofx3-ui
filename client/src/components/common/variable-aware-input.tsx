@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { toDisplayText, toStoredText, variableNames } from "@/lib/variable-display";
 import { flattenVariableMenu, insertVariableReference, variableMenuGroups } from "@/lib/variable-menu";
@@ -247,22 +248,26 @@ export function VariableAwareInput({
         <div className="relative">
           {multiline ? <Textarea {...fieldProps} rows={rows ?? 3} /> : <Input {...fieldProps} type="text" />}
           {hasVariables && (
-            <button
-              type="button"
-              className={cn(
-                "absolute right-1 flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground",
-                multiline ? "top-1" : "top-1/2 -translate-y-1/2",
-                menu?.source === "browse" && "bg-accent text-foreground"
-              )}
-              // Keeps focus, and so the selection, in the field: that is where the variable goes.
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => (menu?.source === "browse" ? closeMenu() : openBrowse())}
-              title="Insert a variable"
-              aria-label="Insert a variable"
-              data-testid={testId ? `${testId}-insert-variable` : undefined}
-            >
-              <Braces className="h-3.5 w-3.5" />
-            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "absolute right-1 flex h-7 w-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground",
+                    multiline ? "top-1" : "top-1/2 -translate-y-1/2",
+                    menu?.source === "browse" && "bg-accent text-foreground"
+                  )}
+                  // Keeps focus, and so the selection, in the field: that is where the variable goes.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => (menu?.source === "browse" ? closeMenu() : openBrowse())}
+                  aria-label="Insert a variable"
+                  data-testid={testId ? `${testId}-insert-variable` : undefined}
+                >
+                  <Braces className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Insert a variable</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </PopoverAnchor>

@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import { Check, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { HelpTip } from "@/components/common/help-tip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -97,7 +98,12 @@ export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConne
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <Label htmlFor="engine-slug">Choose your address</Label>
+        <div className="flex items-center gap-1.5">
+          <Label htmlFor="engine-slug">Choose your address</Label>
+          <HelpTip term="engine">
+            <p>We run your engine for you at this address.</p>
+          </HelpTip>
+        </div>
         <div className="mt-1 flex items-center gap-2">
           <Input
             id="engine-slug"

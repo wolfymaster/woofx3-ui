@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { type FieldOptionsState, useFieldOptions } from "@/hooks/use-field-options";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -61,19 +62,23 @@ function emptyReason(state: FieldOptionsState): string | null {
 
 function RefreshButton({ field, state }: { field: PickerField; state: FieldOptionsState }) {
   return (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      aria-label={`Reload ${field.label.toLowerCase()} options`}
-      title="Reload options"
-      disabled={state.loading}
-      onClick={state.refresh}
-      className="shrink-0"
-      data-testid={`button-refresh-${field.id}`}
-    >
-      <RefreshCw className={cn("h-4 w-4", state.loading && "animate-spin")} />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Reload ${field.label.toLowerCase()} options`}
+          disabled={state.loading}
+          onClick={state.refresh}
+          className="shrink-0"
+          data-testid={`button-refresh-${field.id}`}
+        >
+          <RefreshCw className={cn("h-4 w-4", state.loading && "animate-spin")} />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Reload options</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -199,24 +204,28 @@ export function InternalSuggestField({
           />
         </div>
         <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              role="combobox"
-              aria-expanded={open}
-              aria-haspopup="listbox"
-              aria-controls={listId}
-              aria-label={`Pick ${field.label.toLowerCase()}`}
-              title="Pick from the list"
-              disabled={!instance}
-              className="shrink-0"
-              data-testid={`button-pick-${field.id}`}
-            >
-              <ChevronsUpDown className="h-4 w-4 opacity-50" />
-            </Button>
-          </PopoverTrigger>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  role="combobox"
+                  aria-expanded={open}
+                  aria-haspopup="listbox"
+                  aria-controls={listId}
+                  aria-label={`Pick ${field.label.toLowerCase()}`}
+                  disabled={!instance}
+                  className="shrink-0"
+                  data-testid={`button-pick-${field.id}`}
+                >
+                  <ChevronsUpDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Pick from the list</TooltipContent>
+          </Tooltip>
           <PopoverContent align="end" className="w-72 p-0">
             <Command filter={filterByKeywords}>
               <CommandInput placeholder="Search..." />

@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getDashboardWidget } from "@/lib/dashboard-widgets/registry";
 import { cn } from "@/lib/utils";
 
@@ -52,21 +53,24 @@ export function WidgetRail() {
           const Icon = widget.icon;
           const isOpen = openType === type;
           return (
-            <button
-              key={type}
-              type="button"
-              title={widget.label}
-              aria-label={widget.label}
-              aria-pressed={isOpen}
-              className={cn(
-                "h-9 w-9 rounded-lg flex items-center justify-center transition-colors",
-                isOpen ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              )}
-              onClick={() => setOpenType((prev) => (prev === type ? null : type))}
-              data-testid={`button-rail-${type}`}
-            >
-              <Icon className="h-4 w-4" />
-            </button>
+            <Tooltip key={type}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={widget.label}
+                  aria-pressed={isOpen}
+                  className={cn(
+                    "h-9 w-9 rounded-lg flex items-center justify-center transition-colors",
+                    isOpen ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  )}
+                  onClick={() => setOpenType((prev) => (prev === type ? null : type))}
+                  data-testid={`button-rail-${type}`}
+                >
+                  <Icon className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="left">{widget.label}</TooltipContent>
+            </Tooltip>
           );
         })}
       </div>

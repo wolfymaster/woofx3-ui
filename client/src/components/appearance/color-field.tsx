@@ -48,7 +48,18 @@ export function ColorField({ label, description, value, modified, warning, onCha
       <div className="min-w-0 space-y-0.5">
         <label htmlFor={id} className="flex items-center gap-2 text-sm font-medium">
           {label}
-          {modified && <span className="h-1.5 w-1.5 rounded-full bg-primary" title="Changed from base palette" />}
+          {modified && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="h-1.5 w-1.5 rounded-full bg-primary"
+                  role="img"
+                  aria-label="Changed from base palette"
+                />
+              </TooltipTrigger>
+              <TooltipContent>Changed from base palette</TooltipContent>
+            </Tooltip>
+          )}
         </label>
         <p className="text-xs text-muted-foreground">{description}</p>
         {warning && <p className="text-xs text-destructive">{warning}</p>}

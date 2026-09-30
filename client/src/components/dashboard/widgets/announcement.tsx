@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -90,20 +91,23 @@ export function AnnouncementWidget() {
       />
       <div className="flex items-center gap-1.5">
         {ANNOUNCEMENT_COLORS.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            title={option.label}
-            aria-label={option.label}
-            aria-pressed={color === option.value}
-            className={cn(
-              "h-5 w-5 rounded-full border-2 transition-colors",
-              option.swatch,
-              color === option.value ? "border-foreground" : "border-transparent"
-            )}
-            onClick={() => setColor(option.value)}
-            data-testid={`swatch-announcement-${option.value}`}
-          />
+          <Tooltip key={option.value}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={option.label}
+                aria-pressed={color === option.value}
+                className={cn(
+                  "h-5 w-5 rounded-full border-2 transition-colors",
+                  option.swatch,
+                  color === option.value ? "border-foreground" : "border-transparent"
+                )}
+                onClick={() => setColor(option.value)}
+                data-testid={`swatch-announcement-${option.value}`}
+              />
+            </TooltipTrigger>
+            <TooltipContent>{option.label}</TooltipContent>
+          </Tooltip>
         ))}
         <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
           {message.length}/{MAX_ANNOUNCEMENT_LENGTH}

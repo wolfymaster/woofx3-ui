@@ -6,6 +6,7 @@ import { useAction, useConvexAuth, useQuery } from "convex/react";
 import { Check, Loader2, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
+import { PageIntro } from "@/components/common/page-intro";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
 import { ModuleSidebar } from "@/components/modules/module-sidebar";
@@ -48,6 +49,9 @@ interface PendingPermissionApproval {
 type SelectedModule =
   | { source: "installed"; module: ModuleListItem }
   | { source: "marketplace"; marketplaceId: string };
+
+// Marketplace category of platform modules, such as Twitch and OBS.
+const PLATFORM_CATEGORY = "platform";
 
 export default function Modules() {
   const { instance } = useInstance();
@@ -536,7 +540,12 @@ export default function Modules() {
             )}
           </>
         ) : (
-          <ModuleStore catalog={catalog} selectedCategory={selectedCategory} onSelectCategory={handleSelectCategory} />
+          <ModuleStore
+            catalog={catalog}
+            selectedCategory={selectedCategory}
+            onSelectCategory={handleSelectCategory}
+            header={<PageIntro introId="modules" onTry={() => handleSelectCategory(PLATFORM_CATEGORY)} />}
+          />
         )}
       </div>
 

@@ -1,5 +1,6 @@
 import { Search } from "lucide-react";
 import { type KeyboardEvent, useEffect, useMemo, useState } from "react";
+import { HelpTip } from "@/components/common/help-tip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -81,7 +82,10 @@ export function ActionPickerDialog({ open, onOpenChange, actionPresets, onSelect
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex h-[70vh] max-w-3xl flex-col gap-0 p-0" onKeyDown={handleKeyDown}>
         <DialogHeader className="px-6 pb-4 pt-6">
-          <DialogTitle>Choose an action</DialogTitle>
+          <DialogTitle className="flex items-center gap-1.5">
+            Choose an action
+            <HelpTip term="action" />
+          </DialogTitle>
           <DialogDescription>Pick what this step should do.</DialogDescription>
         </DialogHeader>
 

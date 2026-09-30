@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTestRunSupport } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import { useVisibleInterval } from "@/hooks/use-visible-interval";
@@ -186,39 +187,49 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
                       <TableCell>
                         <div className="flex items-center gap-1">
                           {active && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCancelTarget(run);
-                              }}
-                              title="Stop run"
-                              data-testid={`button-cancel-run-${run.engineRunId}`}
-                            >
-                              <Square className="h-3.5 w-3.5" />
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-destructive hover:text-destructive"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCancelTarget(run);
+                                  }}
+                                  aria-label="Stop run"
+                                  data-testid={`button-cancel-run-${run.engineRunId}`}
+                                >
+                                  <Square className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Stop run</TooltipContent>
+                            </Tooltip>
                           )}
                           {canReplayRun(run) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8"
-                              disabled={replayingId !== null}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setReplayTarget(run);
-                              }}
-                              title="Replay run"
-                              data-testid={`button-replay-run-${run.engineRunId}`}
-                            >
-                              {replayingId === run.engineRunId ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <RotateCcw className="h-3.5 w-3.5" />
-                              )}
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8"
+                                  disabled={replayingId !== null}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setReplayTarget(run);
+                                  }}
+                                  aria-label="Replay run"
+                                  data-testid={`button-replay-run-${run.engineRunId}`}
+                                >
+                                  {replayingId === run.engineRunId ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="h-3.5 w-3.5" />
+                                  )}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Replay run</TooltipContent>
+                            </Tooltip>
                           )}
                         </div>
                       </TableCell>

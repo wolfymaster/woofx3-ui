@@ -113,14 +113,18 @@ function MacroTile({
       </button>
 
       {remoteTriggerStatus && !isEditMode && (
-        <span
-          className="absolute top-1 left-1 text-muted-foreground/70"
-          title={`Remote trigger: ${remoteTriggerStatus}`}
-          data-testid={`macro-remote-indicator-${macro.id}`}
-        >
-          <Radio className="h-3 w-3" />
-          <span className="sr-only">Remote trigger: {remoteTriggerStatus}</span>
-        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className="absolute top-1 left-1 text-muted-foreground/70"
+              data-testid={`macro-remote-indicator-${macro.id}`}
+            >
+              <Radio className="h-3 w-3" />
+              <span className="sr-only">Remote trigger: {remoteTriggerStatus}</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Remote trigger: {remoteTriggerStatus}</TooltipContent>
+        </Tooltip>
       )}
 
       {isEditMode && (
@@ -136,17 +140,24 @@ function MacroTile({
             >
               <Pencil className="h-3 w-3" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-5 w-5 bg-background/80 text-destructive hover:text-destructive"
-              onClick={onDelete}
-              disabled={deleteBlockedReason !== undefined}
-              title={deleteBlockedReason}
-              data-testid={`button-delete-macro-${macro.id}`}
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={deleteBlockedReason === undefined ? undefined : 0} className="inline-flex">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 bg-background/80 text-destructive hover:text-destructive"
+                    onClick={onDelete}
+                    disabled={deleteBlockedReason !== undefined}
+                    aria-label="Delete macro"
+                    data-testid={`button-delete-macro-${macro.id}`}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{deleteBlockedReason ?? "Delete macro"}</TooltipContent>
+            </Tooltip>
           </div>
         </>
       )}

@@ -4,6 +4,7 @@ import { useAction } from "convex/react";
 import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { HelpTip } from "@/components/common/help-tip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
+import type { GlossaryKey } from "@/lib/glossary";
 import { cn } from "@/lib/utils";
 import { suggestVariantDisplayName } from "@/lib/variant-display-name";
 import {
@@ -32,6 +34,14 @@ import { PresetCard } from "./preset-card";
 import { TriggerConfigForm } from "./trigger-config-form";
 
 type EditorStep = "trigger" | "trigger-config" | "action" | "action-config";
+
+// Trigger settings narrow which events run the workflow, which is what a condition is.
+const STEP_TERMS: Record<EditorStep, GlossaryKey> = {
+  trigger: "trigger",
+  "trigger-config": "condition",
+  action: "action",
+  "action-config": "action",
+};
 
 interface StepIndicatorProps {
   currentStep: EditorStep;
@@ -586,7 +596,10 @@ export function BasicWorkflowEditor() {
   return (
     <div className="max-w-4xl mx-auto">
       <StepIndicator currentStep={step} hasTriggerConfig={hasTriggerConfig} hasActionConfig={hasActionConfig} />
-      <p className="text-center text-sm text-muted-foreground mb-6">{stepDescriptions[step]}</p>
+      <p className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground mb-6">
+        {stepDescriptions[step]}
+        <HelpTip term={STEP_TERMS[step]} align="center" />
+      </p>
 
       {/* Step 1: Trigger Selection */}
       {step === "trigger" && (
