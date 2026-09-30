@@ -53,9 +53,21 @@ The form takes an instance name and the engine's API URL. It creates the instanc
 
 1. **Choose your platforms** (`PlatformsStep`): the curated list from `setupPlatformsActions.listForSetup` (see [Modules → Setup platforms](/ui/modules#setup-platforms)), with each platform's permissions in plain language. Twitch is required, so it is checked and locked. Continue saves the chosen platforms and the permissions shown for each with `setup.choosePlatforms`. That is the consent a later install is checked against. If a required platform cannot be resolved, the page shows an error with "Try again" and cannot continue.
 2. **Connect Twitch** (`TwitchStep`): `useTwitchConnect` with `/setup/twitch` as the return path. The link needs only the instance row, so it works before the engine exists. `instances.applyRegistration` sends an existing link to the engine when it registers. OAuth errors show on the callback page with the fixed text from `convex/lib/oauthErrors.ts`, and its Back link returns here.
-3. **Finish** (`FinishStep`): `setup.complete` marks setup finished. It is refused until platforms are chosen and Twitch is linked. The page opens the dashboard as soon as the engine is registered.
+3. **What do you want woofx3 to do?** (`InterestsStep`): the interests the chosen platforms can deliver (`SETUP_INTERESTS` in `convex/lib/setupInterests.ts`). Each installs starter packs with their default wording, and shapes the dashboard. Saved with `setup.chooseInterests`; **Skip** saves none.
+4. **Your dashboard** (`DashboardStep`): a preview of the first panel `buildDashboardPreset` makes from the interests. Every zone gets a widget even with no interests, so a skipped question still gives a usable dashboard. "Use this dashboard" calls `setup.complete`. That marks setup finished and gives the caller that panel, unless they already have panels, which are never replaced. It is refused until platforms are chosen and Twitch is linked.
+5. **All set** (`FinishStep`): what will be installed and set up, with each item's progress. The dashboard opens when the engine registers, or from "Open your dashboard" when it already has.
 
-Neither of the first two pages can be skipped. Opening a later page's URL early lands on the first page still to do (`client/src/lib/setup-steps.ts`).
+The first two pages cannot be skipped. Opening a later page's URL early lands on the first page still to do (`client/src/lib/setup-steps.ts`).
+
+### Applying the choices
+
+`setupApply.run` installs what setup chose once there is an engine. It is scheduled when setup finishes on a registered engine, and by `instances.applyRegistration` when the engine registers after setup finished.
+
+- **Modules first.** Each chosen platform is installed with `marketplace.installApprovedModule` and the permissions approved on the platforms page. A build asking for more is recorded as `needs_approval` and is not installed.
+- **Then starter packs.** The packs for the chosen interests whose modules installed, with default wording, through the same `starterPackItems` ledger as the Starter packs page. A module's triggers reach Convex by webhook shortly after it installs, so an item can be unavailable at first. Such a pack is retried after 15 s, 30 s, 1 min, 2 min and 5 min, then marked failed with the reason.
+- **Results** are stored on `instanceSetup` (`moduleInstalls`, `packInstalls`) and shown on the All set page.
+- **Required platform problems.** A required platform that failed or needs approval shows `SetupInstallBanner` under the shell header, with **Retry** (`setup.retryApply`) or **Allow and install** (`setup.approveModulePermissions`). Nothing else is blocked.
+- **Safe to run again.** Installed modules and packs are skipped, and a claim on the row keeps two runs from overlapping.
 
 Only an owner or admin can choose platforms or connect Twitch. Any other member sees "Ask an owner or admin to connect Twitch".
 
@@ -67,4 +79,6 @@ The wizard records that it opened for the signed-in user (`setup.markSeen`, per 
 
 - **No Twitch link:** an owner or admin is sent to setup's first unfinished page. Anyone else sees "Ask an owner or admin to connect Twitch" in the content area, not a redirect.
 - **Link health:** the guard checks only that a link exists. A revoked or under-scoped link is left to the reconnect banner, so an established user is never sent back into setup.
-- **Unfinished setup:** while the instance's setup is unfinished, the guard also opens setup once for an owner or admin who has not seen it. A managed engine's later lifecycle (its flag, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.
+- **Unfinished setup:** while the instance's setup is unfinished, the guard also opens setup once for an owner or admin who has not seen it.
+
+A managed engine's later lifecycle (its flag, retry and deletion) lives on the admin engine page, backed by `provisioning.engineFlag`, `retry` and `deleteManagedEngine`. Deleting the engine keeps the Convex instance row, since that row still owns the account's scenes, workflows and members.

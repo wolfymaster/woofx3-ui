@@ -123,6 +123,7 @@ export function PlatformsStep({ instanceId, status, onContinue }: PlatformsStepP
           .filter((platform) => selected.has(platform.marketplaceModuleId))
           .map((platform) => ({
             marketplaceModuleId: platform.marketplaceModuleId,
+            name: platform.name,
             approvedPermissions: platform.permissions,
           })),
       });

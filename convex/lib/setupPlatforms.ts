@@ -138,6 +138,7 @@ export const DEFAULT_SETUP_PLATFORMS: readonly CuratedSetupPlatform[] = [
 
 export interface ChosenSetupPlatform {
   marketplaceModuleId: string;
+  name?: string;
   approvedPermissions: string[];
 }
 

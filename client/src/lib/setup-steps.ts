@@ -5,7 +5,9 @@
 export const SETUP_STEPS = [
   { id: "platforms", title: "Choose your platforms" },
   { id: "twitch", title: "Connect Twitch" },
-  { id: "finish", title: "Finish" },
+  { id: "interests", title: "What do you want woofx3 to do?" },
+  { id: "dashboard", title: "Your dashboard" },
+  { id: "finish", title: "All set" },
 ] as const;
 
 export type SetupStepId = (typeof SETUP_STEPS)[number]["id"];
@@ -26,12 +28,15 @@ export function setupStepIndex(step: SetupStepId): number {
 export interface SetupProgress {
   platformsChosenAt: number | null;
   twitchUsername: string | null;
+  interestsChosenAt: number | null;
+  completedAt: number | null;
 }
 
 /**
- * The first step not done yet. Choosing platforms and connecting Twitch cannot
- * be skipped, so a user sent to a later step before they are done lands here
- * instead.
+ * The first step not done yet. Steps are done in order, so a user sent to a
+ * later step before they got there lands here instead. Skipping the interests
+ * question saves an empty answer, and the dashboard step is done by finishing
+ * setup, so every step has a record of being passed.
  */
 export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
   if (progress.platformsChosenAt === null) {
@@ -39,6 +44,12 @@ export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
   }
   if (progress.twitchUsername === null) {
     return "twitch";
+  }
+  if (progress.interestsChosenAt === null) {
+    return "interests";
+  }
+  if (progress.completedAt === null) {
+    return "dashboard";
   }
   return "finish";
 }
