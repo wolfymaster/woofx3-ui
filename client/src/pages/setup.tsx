@@ -3,7 +3,9 @@ import { useMutation, useQuery } from "convex/react";
 import { Check, Loader2, MonitorPlay } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useLocation, useParams } from "wouter";
+import { DashboardStep } from "@/components/setup/dashboard-step";
 import { FinishStep } from "@/components/setup/finish-step";
+import { InterestsStep } from "@/components/setup/interests-step";
 import { PlatformsStep } from "@/components/setup/platforms-step";
 import { ProvisioningBar } from "@/components/setup/provisioning-bar";
 import { AskAdminToConnectTwitch, TwitchStep } from "@/components/setup/twitch-step";
@@ -136,7 +138,13 @@ export default function Setup() {
             <PlatformsStep instanceId={instanceId} status={status} onContinue={() => goTo("twitch")} />
           )}
           {step === "twitch" && (
-            <TwitchStep instanceId={instanceId} status={status} onContinue={() => goTo("finish")} />
+            <TwitchStep instanceId={instanceId} status={status} onContinue={() => goTo("interests")} />
+          )}
+          {step === "interests" && (
+            <InterestsStep instanceId={instanceId} status={status} onContinue={() => goTo("dashboard")} />
+          )}
+          {step === "dashboard" && (
+            <DashboardStep instanceId={instanceId} status={status} onContinue={() => goTo("finish")} />
           )}
           {step === "finish" && <FinishStep instanceId={instanceId} status={status} />}
         </CardContent>

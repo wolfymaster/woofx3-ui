@@ -378,11 +378,46 @@ export default defineSchema({
     platforms: v.array(
       v.object({
         marketplaceModuleId: v.string(),
+        // The marketplace name when chosen, for messages about this module.
+        name: v.optional(v.string()),
         approvedPermissions: v.array(v.string()),
       })
     ),
     platformsChosenAt: v.optional(v.number()),
+    // SETUP_INTERESTS ids (convex/lib/setupInterests.ts). Skipping saves none.
+    interests: v.optional(v.array(v.string())),
+    interestsChosenAt: v.optional(v.number()),
     completedAt: v.optional(v.number()),
+    completedByUserId: v.optional(v.id("users")),
+    // What applying the choices has done so far (convex/setupApply.ts): one
+    // entry per chosen module and per starter pack. Applying runs once the
+    // setup is complete and the engine is registered, and again on retry.
+    moduleInstalls: v.optional(
+      v.array(
+        v.object({
+          marketplaceModuleId: v.string(),
+          status: v.union(v.literal("installed"), v.literal("needs_approval"), v.literal("failed")),
+          moduleKey: v.optional(v.string()),
+          // Set with needs_approval: what the current build asks for beyond the approval.
+          unapproved: v.optional(v.array(v.string())),
+          error: v.optional(v.string()),
+        })
+      )
+    ),
+    packInstalls: v.optional(
+      v.array(
+        v.object({
+          packId: v.string(),
+          // pending: some items wait on something that may still arrive, such
+          // as a module's triggers syncing from the engine; retried on a backoff.
+          status: v.union(v.literal("installed"), v.literal("pending"), v.literal("failed")),
+          error: v.optional(v.string()),
+        })
+      )
+    ),
+    applyAttempts: v.optional(v.number()),
+    // Held while an apply runs, so two scheduled at once do not both install.
+    applyClaimedAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_instance", ["instanceId"]),
 

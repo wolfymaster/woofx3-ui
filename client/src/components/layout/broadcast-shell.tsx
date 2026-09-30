@@ -33,6 +33,7 @@ import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, navItemsFor, UTILITY_SECTIONS } from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
+import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
 import { ThemeMenuSub } from "./theme-menu";
 import { TwitchReconnectBanner } from "./twitch-reconnect-banner";
@@ -329,6 +330,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
         <InstanceBar />
         <AppHeader />
         <TwitchReconnectBanner />
+        <SetupInstallBanner />
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {activeSection?.children && (

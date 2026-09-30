@@ -292,6 +292,15 @@ export const applyRegistration = internalMutation({
     if (links.some((link) => link.platform === "twitch")) {
       await ctx.scheduler.runAfter(0, internal.twitchIntegration.syncToEngine, { instanceId });
     }
+
+    // Setup can finish before the engine exists; its choices are applied now.
+    const setup = await ctx.db
+      .query("instanceSetup")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (setup?.completedAt) {
+      await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });
+    }
   },
 });
 

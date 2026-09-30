@@ -1,37 +1,42 @@
 import { describe, expect, test } from "bun:test";
-import { allowedSetupStep, firstIncompleteStep, isSetupStepId } from "./setup-steps";
+import { allowedSetupStep, firstIncompleteStep, isSetupStepId, type SetupProgress } from "./setup-steps";
 
-const nothingDone = { platformsChosenAt: null, twitchUsername: null };
-const platformsChosen = { platformsChosenAt: 1, twitchUsername: null };
-const allDone = { platformsChosenAt: 1, twitchUsername: "streamer" };
+const nothingDone: SetupProgress = {
+  platformsChosenAt: null,
+  twitchUsername: null,
+  interestsChosenAt: null,
+  completedAt: null,
+};
+const platformsChosen: SetupProgress = { ...nothingDone, platformsChosenAt: 1 };
+const twitchConnected: SetupProgress = { ...platformsChosen, twitchUsername: "streamer" };
+const interestsChosen: SetupProgress = { ...twitchConnected, interestsChosenAt: 2 };
+const completed: SetupProgress = { ...interestsChosen, completedAt: 3 };
 
 describe("firstIncompleteStep", () => {
-  test("starts with platforms", () => {
+  test("walks the steps in order", () => {
     expect(firstIncompleteStep(nothingDone)).toBe("platforms");
-  });
-
-  test("asks for Twitch once platforms are chosen", () => {
     expect(firstIncompleteStep(platformsChosen)).toBe("twitch");
-  });
-
-  test("finishes when both required steps are done", () => {
-    expect(firstIncompleteStep(allDone)).toBe("finish");
+    expect(firstIncompleteStep(twitchConnected)).toBe("interests");
+    expect(firstIncompleteStep(interestsChosen)).toBe("dashboard");
+    expect(firstIncompleteStep(completed)).toBe("finish");
   });
 
   test("asks for platforms before Twitch even when Twitch is already connected", () => {
-    expect(firstIncompleteStep({ platformsChosenAt: null, twitchUsername: "streamer" })).toBe("platforms");
+    expect(firstIncompleteStep({ ...nothingDone, twitchUsername: "streamer" })).toBe("platforms");
   });
 });
 
 describe("allowedSetupStep", () => {
   test("keeps a step at or before the first incomplete one", () => {
-    expect(allowedSetupStep("platforms", allDone)).toBe("platforms");
+    expect(allowedSetupStep("platforms", completed)).toBe("platforms");
     expect(allowedSetupStep("twitch", platformsChosen)).toBe("twitch");
+    expect(allowedSetupStep("interests", completed)).toBe("interests");
   });
 
   test("moves a step past the first incomplete one back to it", () => {
     expect(allowedSetupStep("finish", platformsChosen)).toBe("twitch");
     expect(allowedSetupStep("twitch", nothingDone)).toBe("platforms");
+    expect(allowedSetupStep("finish", interestsChosen)).toBe("dashboard");
   });
 });
 
