@@ -1,0 +1,29 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+# Railway sets PORT; 8080 is for running the image locally.
+:{$PORT:8080} {
+	root * /srv
+	encode zstd gzip
+
+	# Vite content-hashes every file under /assets/, so one never changes. A
+	# missing asset stays a 404 instead of falling back to index.html: a tab
+	# still running a previous deploy that asks for an old chunk must get an
+	# error it can recover from, not HTML cached as JavaScript for a year.
+	handle /assets/* {
+		@exists file
+		header @exists Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Wouter routes on the client, so any other path that is not a file gets
+	# index.html. no-cache makes browsers revalidate it and pick up a new deploy.
+	handle {
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

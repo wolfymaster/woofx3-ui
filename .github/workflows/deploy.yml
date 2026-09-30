@@ -1,0 +1,160 @@
+name: Deploy (production)
+
+# Deploys a master commit once CI has passed on it: Convex first, then the UI
+# image to Railway. A manual dispatch deploys the head of master without
+# waiting for CI; use it to re-run a deploy, not to ship untested code.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+# Deploys queue behind each other and are never cancelled halfway through.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  BUN_VERSION: "1.3.14"
+  # Must match ci.yml: `@woofx3/api` resolves to a sibling engine checkout.
+  ENGINE_REPOSITORY: wolfymaster/woofx3
+  ENGINE_REF: master
+  ENGINE_API_DIR: woofx3/shared/clients/typescript/api
+  # workflow_run runs in the context of the default branch's latest commit, so
+  # the commit CI tested has to be named explicitly.
+  DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  deploy-convex:
+    name: Deploy Convex
+    # `branches: [master]` matches a head branch by name only, so a pull request
+    # from a fork's master would pass it. Require a push to this repository.
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout woofx3-ui
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          path: woofx3-ui
+
+      - name: Checkout woofx3 engine (shared types only)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.ENGINE_REPOSITORY }}
+          ref: ${{ env.ENGINE_REF }}
+          path: woofx3
+          sparse-checkout: shared/clients/typescript/api
+          sparse-checkout-cone-mode: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-${{ hashFiles('woofx3-ui/bun.lockb', '**/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
+
+      - name: Install engine shared-types dependencies
+        working-directory: ${{ env.ENGINE_API_DIR }}
+        run: bun install --frozen-lockfile
+
+      - name: Install dependencies
+        working-directory: woofx3-ui
+        run: bun install --frozen-lockfile
+
+      # A production deploy key selects the production deployment by itself.
+      # Schema changes that existing documents fail to validate against make
+      # this step fail, which also stops the UI deploy below.
+      - name: Deploy Convex functions and schema
+        working-directory: woofx3-ui
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: bunx convex deploy
+
+  # Runs only after Convex deployed, so the new client never calls functions
+  # that do not exist yet.
+  deploy-ui:
+    name: Build image and deploy UI
+    needs: deploy-convex
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check build variables
+        env:
+          VITE_CONVEX_URL: ${{ vars.VITE_CONVEX_URL }}
+          VITE_CONVEX_SITE_URL: ${{ vars.VITE_CONVEX_SITE_URL }}
+        run: |
+          missing=0
+          for name in VITE_CONVEX_URL VITE_CONVEX_SITE_URL; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Environment variable ${name} is not set on the production environment"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Checkout woofx3-ui
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          path: woofx3-ui
+
+      - name: Checkout woofx3 engine (shared types only)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.ENGINE_REPOSITORY }}
+          ref: ${{ env.ENGINE_REF }}
+          path: woofx3
+          sparse-checkout: shared/clients/typescript/api
+          sparse-checkout-cone-mode: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: woofx3-ui
+          build-contexts: engine-api=${{ github.workspace }}/${{ env.ENGINE_API_DIR }}
+          build-args: |
+            BUN_VERSION=${{ env.BUN_VERSION }}
+            VITE_CONVEX_URL=${{ vars.VITE_CONVEX_URL }}
+            VITE_CONVEX_SITE_URL=${{ vars.VITE_CONVEX_SITE_URL }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ env.DEPLOY_SHA }}
+            ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Deploys the immutable SHA tag, so rolling back is a Railway redeploy of
+      # an earlier deployment.
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
+          RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
+          IMAGE: ghcr.io/${{ github.repository }}:${{ env.DEPLOY_SHA }}
+        run: woofx3-ui/scripts/railway-deploy.sh

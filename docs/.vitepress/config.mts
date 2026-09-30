@@ -9,6 +9,7 @@ export default defineConfig({
       { text: "Home", link: "/" },
       { text: "UI areas", link: "/ui/overview" },
       { text: "Patterns", link: "/patterns/" },
+      { text: "Operations", link: "/ops/deploy" },
     ],
     sidebar: {
       "/ui/": [
@@ -38,6 +39,13 @@ export default defineConfig({
             { text: "Overview", link: "/patterns/" },
             { text: "configSchema contract", link: "/patterns/config-schema" },
           ],
+        },
+      ],
+      "/ops/": [
+        {
+          text: "Operations",
+          collapsed: false,
+          items: [{ text: "Deploying to production", link: "/ops/deploy" }],
         },
       ],
     },

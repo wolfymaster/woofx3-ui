@@ -8,6 +8,7 @@ The live product code lives in this repository; the engine itself is separate ([
 
 - **[UI areas](/ui/overview)** — routes, shell, and how each major screen works today
 - **[Patterns](/patterns/)** — conventions and where to record design decisions
+- **[Deploying](/ops/deploy)** — how `master` reaches production, where the secrets live, and how to roll back
 
 ## Local preview
 
