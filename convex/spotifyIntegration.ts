@@ -6,18 +6,17 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import { requireEngineInstance } from "./moduleSettingsActions";
 
 /**
- * The `client_id` to use for a Spotify OAuth attempt: the module's own if
- * it has one set, else Convex's default app. Called identically at both
- * /start (to build the authorize redirect) and /callback (to exchange the
- * code) — re-deriving the same decision at both points instead of trusting
- * a value carried through OAuth state, since nothing here is confidential.
+ * The `client_id` to use for a Spotify OAuth attempt: the module's own if it
+ * has one set, else this deployment's default app (`SPOTIFY_CLIENT_ID`), or
+ * null when there is neither. `spotifyConnect.start` records the one it used in
+ * the OAuth state, and the callback exchanges the code with that.
  */
 export const resolveClientId = internalAction({
   args: {
     instanceId: v.id("instances"),
     moduleId: v.string(),
   },
-  handler: async (ctx, { instanceId, moduleId }): Promise<string> => {
+  handler: async (ctx, { instanceId, moduleId }): Promise<string | null> => {
     const instance = await requireEngineInstance(ctx, instanceId);
     const settings = await createEngineRpcSession<EngineApi>(
       instance.url,
@@ -28,11 +27,7 @@ export const resolveClientId = internalAction({
     if (ownClientId) {
       return ownClientId;
     }
-    const defaultClientId = process.env.SPOTIFY_CLIENT_ID;
-    if (!defaultClientId) {
-      throw new Error("SPOTIFY_CLIENT_ID env var is not set");
-    }
-    return defaultClientId;
+    return process.env.SPOTIFY_CLIENT_ID || null;
   },
 });
 

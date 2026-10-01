@@ -31,6 +31,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
+import { actionErrorMessage } from "@/lib/action-error";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
 import { permissionsToApprove } from "@/lib/module-permissions";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
@@ -1020,7 +1021,7 @@ function IntegrationSettingButton({
       const { authorizeUrl } = await startSpotify({ instanceId, moduleId, redirectTo: window.location.pathname });
       window.location.assign(authorizeUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(actionErrorMessage(err));
       setStarting(false);
     }
   };
