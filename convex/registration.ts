@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineGatewaySession } from "./lib/engineInstanceUrl";
+import { previewEngineRegistrationToken } from "./lib/previewEngine";
 import { logger } from "./logger";
 
 /**
@@ -29,6 +30,8 @@ type RegisterResult = { ok: true; clientId: string } | { ok: false; error: strin
  * in an action — an action calling an action only adds a hop.
  * `registrationToken` is the secret a managed engine demands from whoever
  * claims it; it is chosen by the caller, never read from a browser request.
+ * Without one, a pull request preview registering the engine it is paired
+ * with presents that engine's token, which only this deployment holds.
  */
 export async function performRegistration(
   ctx: ActionCtx,
@@ -63,10 +66,11 @@ export async function performRegistration(
 
     // `registrationToken` is only understood by an engine provisioned with
     // one; a bring-your-own engine ignores the extra option.
+    const token = registrationToken ?? previewEngineRegistrationToken(instance.url);
     const options: RegisterClientOptions = {
       callbackUrl,
       callbackToken,
-      ...(registrationToken ? { registrationToken } : {}),
+      ...(token ? { registrationToken: token } : {}),
     };
     const registerGateway = createEngineGatewaySession(instance.url);
     const result = await registerGateway.registerClient("woofx3-dashboard", options);

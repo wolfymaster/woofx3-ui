@@ -29,6 +29,7 @@ import {
   triggerRefusalResponse,
 } from "./lib/macroTrigger";
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
+import { OAUTH_CALLBACK_PATHS, oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { withQuery } from "./lib/safeRedirect";
@@ -116,7 +117,6 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     assert(process.env.SITE_URL, "SITE_URL env var is not set");
     assert(process.env.AUTH_TWITCH_ID, "AUTH_TWITCH_ID env var is not set");
-    assert(process.env.AUTH_TWITCH_REDIRECT_URI, "AUTH_TWITCH_REDIRECT_URI env var is not set");
 
     const url = new URL(request.url);
     const redirectTo = url.searchParams.get("redirect_to") ?? "/";
@@ -137,7 +137,7 @@ http.route({
 
     const params = new URLSearchParams({
       client_id: process.env.AUTH_TWITCH_ID,
-      redirect_uri: process.env.AUTH_TWITCH_REDIRECT_URI,
+      redirect_uri: oauthCallbackUrl("twitch"),
       response_type: "code",
       scope: "user:read:email",
       state,
@@ -149,13 +149,12 @@ http.route({
 });
 
 http.route({
-  path: "/api/auth/twitch/callback",
+  path: OAUTH_CALLBACK_PATHS.twitch,
   method: "GET",
   handler: httpAction(async (ctx, request) => {
     assert(process.env.SITE_URL, "SITE_URL env var is not set");
     assert(process.env.AUTH_TWITCH_ID, "AUTH_TWITCH_ID env var is not set");
     assert(process.env.AUTH_TWITCH_SECRET, "AUTH_TWITCH_SECRET env var is not set");
-    assert(process.env.AUTH_TWITCH_REDIRECT_URI, "AUTH_TWITCH_REDIRECT_URI env var is not set");
 
     const siteUrl = process.env.SITE_URL;
     const url = new URL(request.url);
@@ -208,7 +207,7 @@ http.route({
         client_secret: process.env.AUTH_TWITCH_SECRET,
         code,
         grant_type: "authorization_code",
-        redirect_uri: process.env.AUTH_TWITCH_REDIRECT_URI,
+        redirect_uri: oauthCallbackUrl("twitch"),
       }),
     });
 
@@ -301,10 +300,9 @@ function moduleIntegrationErrorRedirect(
 }
 
 http.route({
-  path: "/api/integrations/spotify/callback",
+  path: OAUTH_CALLBACK_PATHS.spotify,
   method: "GET",
   handler: httpAction(async (ctx, request) => {
-    assert(process.env.SPOTIFY_REDIRECT_URI, "SPOTIFY_REDIRECT_URI env var is not set");
     const siteUrl = process.env.SITE_URL ?? "";
 
     const url = new URL(request.url);
@@ -353,7 +351,7 @@ http.route({
       body: new URLSearchParams({
         grant_type: "authorization_code",
         code,
-        redirect_uri: process.env.SPOTIFY_REDIRECT_URI,
+        redirect_uri: oauthCallbackUrl("spotify"),
         client_id: clientId,
         code_verifier: codeVerifier,
       }),
