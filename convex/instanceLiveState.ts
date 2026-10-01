@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internalMutation, query } from "./_generated/server";
 import { claimPendingStreamStartMarker } from "./lib/goLiveMarker";
 import { isInstanceMember } from "./lib/teamAccess";
@@ -57,6 +58,22 @@ export const onStreamOnline = internalMutation({
   },
 });
 
+type PolledFields = Pick<
+  Doc<"instanceLiveState">,
+  "twitchUserId" | "isLive" | "startedAt" | "streamTitle" | "gameName" | "viewerCount"
+>;
+
+function pollMatches(existing: PolledFields, polled: PolledFields): boolean {
+  return (
+    existing.isLive === polled.isLive &&
+    existing.twitchUserId === polled.twitchUserId &&
+    existing.startedAt === polled.startedAt &&
+    existing.streamTitle === polled.streamTitle &&
+    existing.gameName === polled.gameName &&
+    existing.viewerCount === polled.viewerCount
+  );
+}
+
 // Reconciles instanceLiveState from a live engine poll (see streamStatus.ts).
 // Exists because the STREAM_ONLINE/OFFLINE webhook path can silently stop
 // delivering (EventSub subscription lapses, the engine's twitch listener
@@ -88,6 +105,13 @@ export const recordPoll = internalMutation({
       lastUpdateSource: "poll" as const,
       lastUpdatedAt: Date.now(),
     };
+
+    // A poll that confirms what the row already says writes nothing. Every
+    // write re-runs each dashboard's subscription to this row, and a
+    // confirmation changes nothing anyone sees.
+    if (existing && pollMatches(existing, patch)) {
+      return;
+    }
 
     if (existing) {
       await ctx.db.patch(existing._id, patch);

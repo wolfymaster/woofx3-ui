@@ -2,8 +2,8 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
+import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useInstance } from "@/hooks/use-instance";
-import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import type { ChatterOption } from "@/lib/chatter-match";
 
 // Who is currently in chat, for the shoutout autocomplete.
@@ -107,7 +107,7 @@ export function useChatters(): UseChatters {
   useEffect(() => {
     load(false);
   }, [load]);
-  useVisibleInterval(() => load(false), ROSTER_TTL_MS);
+  useAttendedInterval(() => load(false), ROSTER_TTL_MS);
 
   const refresh = useCallback(() => load(true), [load]);
 

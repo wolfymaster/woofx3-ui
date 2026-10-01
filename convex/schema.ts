@@ -169,7 +169,9 @@ export default defineSchema({
     viewerCount: v.optional(v.number()),
     lastUpdateSource: v.union(v.literal("webhook"), v.literal("poll")),
     lastUpdatedAt: v.number(),
-  }).index("by_instance", ["instanceId"]),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_is_live", ["isLive"]),
 
   // streamSessionSummaries: one row per ended engine session, written by the
   // SESSION_SUMMARY webhook (convex/lib/sessionSummary.ts). Channel totals only,
@@ -604,7 +606,9 @@ export default defineSchema({
     nextEligibleAt: v.number(),
     lastError: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_instance_and_sort_order", ["instanceId", "sortOrder"]),
+  })
+    .index("by_instance_and_sort_order", ["instanceId", "sortOrder"])
+    .index("by_next_eligible", ["nextEligibleAt"]),
 
   // shoutoutState: one row per instance, holding what the queue processor needs
   // that is not per-entry. Separate from shoutoutQueue because it outlives every

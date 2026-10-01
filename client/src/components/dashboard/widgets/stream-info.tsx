@@ -16,9 +16,9 @@ import { Bookmark, Check, Flag, Loader2, Radio, RotateCcw, Save, Trash2 } from "
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { comparePreset, draftProblem, formatStreamPosition, isDirty, rebaseDraft } from "@/lib/stream-info-edit";
 import { cn } from "@/lib/utils";
 import { CategoryBoxArt, CategoryPicker } from "./stream-info-category-picker";
@@ -133,7 +133,7 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
-  useVisibleInterval(refresh, REFRESH_MS, !saving);
+  useAttendedInterval(refresh, REFRESH_MS, !saving);
 
   /**
    * Sends only `changes`, shows them straight away, and puts the previous

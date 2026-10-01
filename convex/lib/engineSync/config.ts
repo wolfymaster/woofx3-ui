@@ -4,8 +4,11 @@
  * with a different unit.
  */
 export const ENGINE_SYNC_CONFIG = {
-  /** Cron tick frequency. */
-  sweepIntervalMinutes: 5,
+  /**
+   * Cron tick frequency. Coarse because syncs are hours apart: a tick only
+   * decides how late past nextEligibleAt a sync starts.
+   */
+  sweepIntervalMinutes: 15,
   /** Default time between scheduled syncs for a new instance. */
   defaultSyncIntervalMs: 8 * 60 * 60 * 1000,
   /** Skip sync if the account has had no activity in this window. */

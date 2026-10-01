@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
+import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
@@ -60,20 +61,6 @@ export const getInternal = internalQuery({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
     return ctx.db.get(instanceId);
-  },
-});
-
-/**
- * Instance ids registered with an engine (clientId/clientSecret present).
- * Used by scheduled sweeps that need to visit every reachable instance.
- * Bounded take(), not collect() — this repo's tables are small today but the
- * convention avoids an unbounded read as the fleet grows.
- */
-export const listRegisteredIds = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const instances = await ctx.db.query("instances").take(1000);
-    return instances.filter((i) => i.clientId && i.clientSecret).map((i) => i._id);
   },
 });
 
@@ -279,6 +266,7 @@ export const applyRegistration = internalMutation({
     }
 
     await ctx.db.patch(instanceId, { clientId, clientSecret, webhookSecret });
+    await ensureSyncRow(ctx, instanceId);
 
     // Twitch can be connected while the engine is still being built, before
     // there is an engine to hand the token to. Send it now that there is.

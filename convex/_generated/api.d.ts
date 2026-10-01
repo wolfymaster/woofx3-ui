@@ -64,6 +64,7 @@ import type * as lib_engineSync_steps_scenes from "../lib/engineSync/steps/scene
 import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/triggers.js";
 import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widgets.js";
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
+import type * as lib_engineSync_syncRow from "../lib/engineSync/syncRow.js";
 import type * as lib_engineTestRun from "../lib/engineTestRun.js";
 import type * as lib_fieldOptions from "../lib/fieldOptions.js";
 import type * as lib_gettingStarted from "../lib/gettingStarted.js";
@@ -252,6 +253,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/triggers": typeof lib_engineSync_steps_triggers;
   "lib/engineSync/steps/widgets": typeof lib_engineSync_steps_widgets;
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
+  "lib/engineSync/syncRow": typeof lib_engineSync_syncRow;
   "lib/engineTestRun": typeof lib_engineTestRun;
   "lib/fieldOptions": typeof lib_fieldOptions;
   "lib/gettingStarted": typeof lib_gettingStarted;

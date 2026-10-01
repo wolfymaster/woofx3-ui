@@ -6,9 +6,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
+import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { cn } from "@/lib/utils";
 
 // Twitch keeps exactly one pinned message per channel, and pinning a new one
@@ -71,7 +71,7 @@ export function PinnedWidget() {
   useEffect(() => {
     refreshCurrent();
   }, [refreshCurrent]);
-  useVisibleInterval(refreshCurrent, PIN_REFRESH_MS);
+  useAttendedInterval(refreshCurrent, PIN_REFRESH_MS);
 
   const report = (error: unknown, title: string) => {
     toast({

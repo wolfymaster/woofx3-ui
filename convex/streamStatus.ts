@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalAction } from "./_generated/server";
+import { action, internalAction, internalMutation } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 
 // Polls one instance's engine for its live, Helix-backed getStreamStatus and
@@ -10,8 +10,8 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 // polling), but that path can silently stop delivering (EventSub subscription
 // lapses, the engine's twitch listener restarts) and leave it stuck on a
 // stale event indefinitely. This is the self-heal for that — called directly
-// by the UI (see pollLiveState below) and on a schedule by sweepLiveState so
-// it self-heals even with no browser tab open.
+// by the UI (see pollLiveState below) and on a schedule by sweepLiveState for
+// instances that believe they are live.
 export const syncInstanceLiveState = internalAction({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<boolean> => {
@@ -39,15 +39,26 @@ export const syncInstanceLiveState = internalAction({
   },
 });
 
-// Cron entry point (see crons.ts) — sweeps every engine-registered instance
-// so a stale instanceLiveState row self-heals without anyone having the
-// dashboard open. Best-effort per instance; one failure doesn't block others.
-export const sweepLiveState = internalAction({
+// Bounds one sweep's fan-out, well inside a mutation's scheduling limit. The
+// read is always the same first rows of the index, so a fleet with more
+// instances live at once than this needs a cursor here.
+const LIVE_SWEEP_BATCH = 500;
+
+// Cron entry point (see crons.ts). Re-polls only instances recorded as live, so
+// an idle fleet costs this one mutation per tick however many instances exist.
+// The failure it catches is a missed STREAM_OFFLINE, which would otherwise
+// leave an instance showing live forever. A missed STREAM_ONLINE is left to
+// pollLiveState, which runs when someone opens the dashboard: an instance
+// nobody is looking at gains nothing from knowing it is live.
+export const sweepLiveState = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const instanceIds = await ctx.runQuery(internal.instances.listRegisteredIds, {});
-    for (const instanceId of instanceIds) {
-      await ctx.runAction(internal.streamStatus.syncInstanceLiveState, { instanceId });
+    const live = await ctx.db
+      .query("instanceLiveState")
+      .withIndex("by_is_live", (q) => q.eq("isLive", true))
+      .take(LIVE_SWEEP_BATCH);
+    for (const row of live) {
+      await ctx.scheduler.runAfter(0, internal.streamStatus.syncInstanceLiveState, { instanceId: row.instanceId });
     }
   },
 });

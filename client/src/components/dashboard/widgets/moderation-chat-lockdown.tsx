@@ -14,8 +14,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ToastAction } from "@/components/ui/toast";
+import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useToast } from "@/hooks/use-toast";
-import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { actionErrorMessage } from "@/lib/action-error";
 import { createWriteFence } from "@/lib/write-fence";
 import { CapabilityNote, SectionHeading } from "./moderation-shared";
@@ -78,7 +78,7 @@ export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"in
   useEffect(() => {
     refresh();
   }, [refresh]);
-  useVisibleInterval(refresh, SETTINGS_REFRESH_MS);
+  useAttendedInterval(refresh, SETTINGS_REFRESH_MS);
 
   const apply = async (patch: ChatSettingsPatch): Promise<boolean> => {
     fence.write();

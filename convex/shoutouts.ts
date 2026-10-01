@@ -379,45 +379,38 @@ export const processQueue = internalAction({
  * reads an existing earlier time as proof a run is already on its way, so a
  * stale one would make it decline to schedule anything, forever.
  */
-export const rearmIfStalled = internalMutation({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<boolean> => {
-    // Existence only -- the sweep runs for every instance on a timer and has no
-    // reason to read a queue it is not going to touch.
-    const firstEntry = await ctx.db
-      .query("shoutoutQueue")
-      .withIndex("by_instance_and_sort_order", (q) => q.eq("instanceId", args.instanceId))
-      .first();
-
-    const state = await stateRow(ctx, args.instanceId);
-    const now = Date.now();
-
-    if (!isQueueStalled(state?.runScheduledFor, firstEntry !== null, now)) {
-      return false;
-    }
-
-    if (state && state.runScheduledFor !== undefined) {
-      await ctx.db.patch(state._id, { runScheduledFor: undefined });
-    }
-    await ensureProcessorScheduled(ctx, args.instanceId, now);
-    return true;
-  },
-});
+async function rearmIfStalled(ctx: MutationCtx, instanceId: Id<"instances">, now: number): Promise<void> {
+  const state = await stateRow(ctx, instanceId);
+  // Only called for an instance with a due entry, so the queue is non-empty.
+  if (!isQueueStalled(state?.runScheduledFor, true, now)) {
+    return;
+  }
+  if (state && state.runScheduledFor !== undefined) {
+    await ctx.db.patch(state._id, { runScheduledFor: undefined });
+  }
+  await ensureProcessorScheduled(ctx, instanceId, now);
+}
 
 /**
  * Cron entry point: nothing else re-arms a queue whose run went missing, since a
  * run is only ever scheduled by an enqueue or by the previous run.
  *
- * One transaction per instance rather than one covering all of them, matching
- * streamStatus.sweepLiveState -- a sweep that grows with the instance count does
- * not belong in a single transaction.
+ * Reads due entries rather than visiting every instance, so an idle fleet costs
+ * this one mutation per tick however many instances exist. A stalled queue
+ * always surfaces here: an entry still in backoff becomes due once its backoff
+ * ends, and the sweep after that finds it.
  */
-export const sweepStalledQueues = internalAction({
+export const sweepStalledQueues = internalMutation({
   args: {},
   handler: async (ctx): Promise<void> => {
-    const instanceIds: Id<"instances">[] = await ctx.runQuery(internal.instances.listRegisteredIds, {});
+    const now = Date.now();
+    const due = await ctx.db
+      .query("shoutoutQueue")
+      .withIndex("by_next_eligible", (q) => q.lte("nextEligibleAt", now))
+      .take(MAX_QUEUE_READ);
+    const instanceIds = new Set(due.map((entry) => entry.instanceId));
     for (const instanceId of instanceIds) {
-      await ctx.runMutation(internal.shoutouts.rearmIfStalled, { instanceId });
+      await rearmIfStalled(ctx, instanceId, now);
     }
   },
 });
