@@ -1,7 +1,11 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
+
+const MAX_INSTANCES_PER_ACCOUNT = 20;
 
 export const getMyAccount = query({
   args: {},
@@ -97,26 +101,60 @@ export const createAccount = mutation({
   },
 });
 
-export const deleteMyAccount = mutation({
+/**
+ * Deletes the caller's own account and every instance in it. Instances go one
+ * at a time, each with its managed engine torn down first, so a failure part
+ * way leaves an account that can be deleted again.
+ */
+export const deleteMyAccount = action({
   args: {},
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
 
+    const owned = await ctx.runQuery(internal.accounts.ownedAccountWithInstances, { userId });
+    if (!owned) {
+      throw new Error("No account found");
+    }
+
+    for (const instance of owned.instances) {
+      await deleteInstanceAndEngine(ctx, instance);
+    }
+    await ctx.runMutation(internal.accounts.deleteAccountData, { accountId: owned.account._id });
+  },
+});
+
+/** The account a user owns, and its instances; an account has one instance, so the bound is generous. */
+export const ownedAccountWithInstances = internalQuery({
+  args: { userId: v.id("users") },
+  handler: async (ctx, { userId }) => {
     const account = await ctx.db
       .query("accounts")
       .withIndex("by_owner", (q) => q.eq("ownerId", userId))
       .first();
-    if (!account) throw new Error("No account found");
-
-    const accountId = account._id;
-
+    if (!account) {
+      return null;
+    }
     const instances = await ctx.db
       .query("instances")
+      .withIndex("by_account", (q) => q.eq("accountId", account._id))
+      .take(MAX_INSTANCES_PER_ACCOUNT);
+    return { account, instances };
+  },
+});
+
+/** Removes the account itself once its instances are gone. */
+export const deleteAccountData = internalMutation({
+  args: { accountId: v.id("accounts") },
+  handler: async (ctx, { accountId }) => {
+    const remaining = await ctx.db
+      .query("instances")
       .withIndex("by_account", (q) => q.eq("accountId", accountId))
-      .collect();
-    for (const instance of instances) {
-      await ctx.db.delete(instance._id);
+      .first();
+    if (remaining) {
+      throw new Error("The account still has an instance; delete it first");
     }
 
     const licenses = await ctx.db
