@@ -5,8 +5,10 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { readMemberRole } from "./instances";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
+import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
@@ -37,12 +39,12 @@ export const startConnect = action({
     const userId = await requireTwitchLinkManager(ctx, instanceId);
 
     const clientId = process.env.AUTH_TWITCH_ID;
-    const redirectUri = process.env.AUTH_TWITCH_REDIRECT_URI;
-    if (!clientId || !redirectUri) {
-      throw new Error("AUTH_TWITCH_ID and AUTH_TWITCH_REDIRECT_URI must be set");
+    if (!clientId) {
+      throw new Error("AUTH_TWITCH_ID must be set");
     }
+    const redirectUri = oauthCallbackUrl("twitch");
 
-    const state = crypto.randomUUID();
+    const state = await mintOAuthState(oauthStateConfigFromEnv());
     await ctx.runMutation(internal.twitchAuth.storeState, {
       state,
       redirectTo: safeRelativePath(redirectTo, "/admin/integrations"),

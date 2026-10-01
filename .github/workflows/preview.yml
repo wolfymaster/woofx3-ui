@@ -1,0 +1,239 @@
+name: Preview
+
+# A preview of the UI per pull request, at https://pr-<n>-woofx3-ui.<PREVIEW_BASE_DOMAIN>.
+#
+# On every push this deploys the branch's Convex functions to a Convex preview
+# deployment named pr-<n>, builds the UI against it, pushes
+# ghcr.io/<repo>:pr-<n>-<sha7>, and asks the woofx3 maintenance API to create
+# (or redeploy) the pull request's UI preview in the woofx3 project's staging
+# environment, where it gets its own Railway custom domain and Cloudflare DNS
+# records.
+#
+# A preview may be paired with an engine release. A line
+# `engine-version: <release>` in the pull request description names it;
+# without one the `ENGINE_VERSION` variable of the preview environment does;
+# without either the preview has no engine. The maintenance API reuses the
+# preview engine already running that release (at https://<release>.<domain>,
+# dots made dashes) or creates it, and this workflow gives the engine's URL and
+# registration token to the preview's Convex deployment, so onboarding in the
+# preview connects to it.
+#
+# Closing the pull request, merged or not, removes the preview. Its engine goes
+# too unless another preview still uses it, or the pull request carries the
+# `keep-preview-engine` label.
+#
+# Pull requests from forks are skipped: they get no secrets.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited, closed]
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+# Runs for one pull request queue behind each other: a push must not race the
+# previous push's redeploy, and a teardown must not race either.
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: "1.3.14"
+  # Must match ci.yml: `@woofx3/api` resolves to a sibling engine checkout.
+  ENGINE_REPOSITORY: wolfymaster/woofx3
+  ENGINE_REF: master
+  ENGINE_API_DIR: woofx3/shared/clients/typescript/api
+  PR_NUMBER: ${{ github.event.pull_request.number }}
+  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+jobs:
+  deploy:
+    name: Deploy the preview
+    # An edit that leaves the description alone (a new title, say) changes
+    # nothing a preview depends on.
+    if: >-
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.action != 'edited' || github.event.changes.body != null)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: preview
+    steps:
+      - name: Check configuration
+        env:
+          MAINTENANCE_API_URL: ${{ vars.MAINTENANCE_API_URL }}
+          PREVIEW_BASE_DOMAIN: ${{ vars.PREVIEW_BASE_DOMAIN }}
+          MAINTENANCE_API_KEY: ${{ secrets.MAINTENANCE_API_KEY }}
+          CONVEX_PREVIEW_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+        run: |
+          missing=0
+          for name in MAINTENANCE_API_URL PREVIEW_BASE_DOMAIN MAINTENANCE_API_KEY CONVEX_PREVIEW_DEPLOY_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::${name} is not set on the preview environment"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      # The description is untrusted text, so it reaches the shell only as an
+      # environment variable and the version is checked against the image tag
+      # grammar before anything uses it.
+      - name: Settle the names
+        id: preview
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          DEFAULT_ENGINE_VERSION: ${{ vars.ENGINE_VERSION }}
+          PREVIEW_BASE_DOMAIN: ${{ vars.PREVIEW_BASE_DOMAIN }}
+        run: |
+          set -euo pipefail
+          from_body="$(printf '%s\n' "${PR_BODY:-}" | tr -d '\r' |
+            sed -n -E 's/^[[:space:]]*engine[-_]version:[[:space:]]*`?([^`[:space:]]+)`?[[:space:]]*$/\1/Ip' | head -n 1)"
+          engine_version="${from_body:-${DEFAULT_ENGINE_VERSION:-}}"
+          if [[ -n "$engine_version" && ! "$engine_version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+            echo "::error::engine version '${engine_version}' is not an image tag"
+            exit 1
+          fi
+          {
+            echo "engine_version=${engine_version}"
+            echo "image_tag=pr-${PR_NUMBER}-${HEAD_SHA::7}"
+            echo "convex_name=pr-${PR_NUMBER}"
+            echo "ui_url=https://pr-${PR_NUMBER}-woofx3-ui.${PREVIEW_BASE_DOMAIN}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Checkout woofx3-ui
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          path: woofx3-ui
+
+      - name: Checkout woofx3 engine (shared types only)
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ env.ENGINE_REPOSITORY }}
+          ref: ${{ env.ENGINE_REF }}
+          path: woofx3
+          sparse-checkout: shared/clients/typescript/api
+          sparse-checkout-cone-mode: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-${{ hashFiles('woofx3-ui/bun.lockb', '**/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
+
+      - name: Install engine shared-types dependencies
+        working-directory: ${{ env.ENGINE_API_DIR }}
+        run: bun install --frozen-lockfile
+
+      - name: Install dependencies
+        working-directory: woofx3-ui
+        run: bun install --frozen-lockfile
+
+      # A preview deploy key creates the named preview deployment on first use
+      # and reuses it on every later push. `--cmd` runs with the deployment's
+      # URLs set, which is the only place the CLI hands them out.
+      - name: Deploy Convex to the preview deployment
+        id: convex
+        working-directory: woofx3-ui
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
+        run: |
+          bunx convex deploy --preview-create "$CONVEX_NAME" \
+            --cmd-url-env-var-name VITE_CONVEX_URL \
+            --cmd 'printf "convex_url=%s\nconvex_site_url=%s\n" "$VITE_CONVEX_URL" "$VITE_CONVEX_SITE_URL" >> "$GITHUB_OUTPUT"'
+
+      # Sign-in redirects back to SITE_URL, which on a preview is the
+      # preview's own address.
+      - name: Point the preview deployment at its UI
+        working-directory: woofx3-ui
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
+          UI_URL: ${{ steps.preview.outputs.ui_url }}
+        run: bunx convex env set --preview-name "$CONVEX_NAME" SITE_URL "$UI_URL"
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tagged pr-<n>-<sha7>, never the bare SHA the production deploy uses:
+      # this image is built against the preview's Convex deployment.
+      - name: Build and push the preview image
+        uses: docker/build-push-action@v7
+        with:
+          context: woofx3-ui
+          build-contexts: engine-api=${{ github.workspace }}/${{ env.ENGINE_API_DIR }}
+          build-args: |
+            BUN_VERSION=${{ env.BUN_VERSION }}
+            VITE_CONVEX_URL=${{ steps.convex.outputs.convex_url }}
+            VITE_CONVEX_SITE_URL=${{ steps.convex.outputs.convex_site_url }}
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ steps.preview.outputs.image_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create or redeploy the preview
+        id: up
+        env:
+          MAINTENANCE_API_URL: ${{ vars.MAINTENANCE_API_URL }}
+          MAINTENANCE_API_KEY: ${{ secrets.MAINTENANCE_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_TAG: ${{ steps.preview.outputs.image_tag }}
+          ENGINE_VERSION: ${{ steps.preview.outputs.engine_version }}
+        run: woofx3-ui/scripts/preview-ui.sh up "$PR_NUMBER" "$IMAGE_TAG" "$ENGINE_VERSION"
+
+      # The token stays on the Convex deployment, which presents it when
+      # onboarding registers the paired engine; the browser only sees the URL.
+      - name: Hand the paired engine to the preview deployment
+        working-directory: woofx3-ui
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
+          ENGINE_URL: ${{ steps.up.outputs.engine_url }}
+          ENGINE_RELEASE: ${{ steps.up.outputs.engine_version }}
+          REGISTRATION_TOKEN: ${{ steps.up.outputs.registration_token }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ENGINE_URL" ]]; then
+            for name in PREVIEW_ENGINE_URL PREVIEW_ENGINE_VERSION PREVIEW_ENGINE_REGISTRATION_TOKEN; do
+              bunx convex env remove --preview-name "$CONVEX_NAME" "$name"
+            done
+            exit 0
+          fi
+          bunx convex env set --preview-name "$CONVEX_NAME" PREVIEW_ENGINE_URL "$ENGINE_URL"
+          bunx convex env set --preview-name "$CONVEX_NAME" PREVIEW_ENGINE_VERSION "$ENGINE_RELEASE"
+          bunx convex env set --preview-name "$CONVEX_NAME" PREVIEW_ENGINE_REGISTRATION_TOKEN "$REGISTRATION_TOKEN"
+
+  teardown:
+    name: Remove the preview
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: preview
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The Convex preview deployment is left to Convex, which deletes preview
+      # deployments on its own after they go unused.
+      - name: Remove the preview
+        env:
+          MAINTENANCE_API_URL: ${{ vars.MAINTENANCE_API_URL }}
+          MAINTENANCE_API_KEY: ${{ secrets.MAINTENANCE_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_ENGINE: ${{ contains(github.event.pull_request.labels.*.name, 'keep-preview-engine') }}
+        run: scripts/preview-ui.sh down "$PR_NUMBER" "$KEEP_ENGINE"

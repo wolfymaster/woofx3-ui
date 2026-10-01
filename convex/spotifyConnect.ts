@@ -1,10 +1,12 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalMutation } from "./_generated/server";
 import { readMemberRole } from "./instances";
+import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
+import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
@@ -37,17 +39,20 @@ export const start = action({
     if (role === null) {
       throw new Error("Not a member of this instance");
     }
-    const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
-    if (!redirectUri) {
-      throw new Error("SPOTIFY_REDIRECT_URI env var is not set");
-    }
+    const redirectUri = oauthCallbackUrl("spotify");
 
-    const clientId: string = await ctx.runAction(internal.spotifyIntegration.resolveClientId, {
+    const clientId: string | null = await ctx.runAction(internal.spotifyIntegration.resolveClientId, {
       instanceId,
       moduleId,
     });
+    // A ConvexError, because production hides a plain Error's message from the browser.
+    if (!clientId) {
+      throw new ConvexError(
+        "Spotify is not set up here yet: enter your Spotify app's Client ID in this module's settings, or ask the administrator to set SPOTIFY_CLIENT_ID."
+      );
+    }
 
-    const state = crypto.randomUUID();
+    const state = await mintOAuthState(oauthStateConfigFromEnv());
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await computeCodeChallenge(codeVerifier);
 

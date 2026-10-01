@@ -15,11 +15,11 @@ export type ManifestSettingAction =
 
 export interface ManifestSettingField {
   id: string;
-  name: string;
+  label: string;
   description: string;
   type: string;
   required: boolean;
-  default?: string;
+  defaultValue?: string;
   /** Present only when `type === "button"`. */
   action?: ManifestSettingAction;
 }
@@ -168,11 +168,11 @@ function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
       const action = parseManifestSettingAction(o.action);
       return {
         id: asStr(o.id),
-        name: asStr(o.name),
+        label: asStr(o.label),
         description: asStr(o.description),
         type: asStr(o.type, "string"),
         required: typeof o.required === "boolean" ? o.required : false,
-        ...(o.default !== undefined ? { default: String(o.default) } : {}),
+        ...(o.defaultValue !== undefined ? { defaultValue: String(o.defaultValue) } : {}),
         ...(action ? { action } : {}),
       };
     })

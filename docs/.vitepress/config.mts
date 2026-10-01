@@ -47,7 +47,10 @@ export default defineConfig({
         {
           text: "Operations",
           collapsed: false,
-          items: [{ text: "Deploying to production", link: "/ops/deploy" }],
+          items: [
+            { text: "Deploying to production", link: "/ops/deploy" },
+            { text: "Pull request previews", link: "/ops/previews" },
+          ],
         },
       ],
     },
