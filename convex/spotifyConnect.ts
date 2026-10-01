@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action, internalMutation } from "./_generated/server";
 import { readMemberRole } from "./instances";
+import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
@@ -37,10 +38,7 @@ export const start = action({
     if (role === null) {
       throw new Error("Not a member of this instance");
     }
-    const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
-    if (!redirectUri) {
-      throw new Error("SPOTIFY_REDIRECT_URI env var is not set");
-    }
+    const redirectUri = oauthCallbackUrl("spotify");
 
     const clientId: string = await ctx.runAction(internal.spotifyIntegration.resolveClientId, {
       instanceId,

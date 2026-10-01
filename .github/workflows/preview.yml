@@ -151,25 +151,14 @@ jobs:
             --cmd 'printf "convex_url=%s\nconvex_site_url=%s\n" "$VITE_CONVEX_URL" "$VITE_CONVEX_SITE_URL" >> "$GITHUB_OUTPUT"'
 
       # Sign-in redirects back to SITE_URL, which on a preview is the
-      # preview's own address. Twitch calls back to the Convex HTTP route, so
-      # its redirect URI is on the deployment's own site URL, which differs per
-      # preview and cannot be a project default.
+      # preview's own address.
       - name: Point the preview deployment at its UI
         working-directory: woofx3-ui
         env:
           CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
           CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
           UI_URL: ${{ steps.preview.outputs.ui_url }}
-          CONVEX_SITE_URL: ${{ steps.convex.outputs.convex_site_url }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$CONVEX_SITE_URL" ]]; then
-            echo "::error::the Convex deploy reported no site URL"
-            exit 1
-          fi
-          bunx convex env set --preview-name "$CONVEX_NAME" SITE_URL "$UI_URL"
-          bunx convex env set --preview-name "$CONVEX_NAME" AUTH_TWITCH_REDIRECT_URI \
-            "${CONVEX_SITE_URL%/}/api/auth/twitch/callback"
+        run: bunx convex env set --preview-name "$CONVEX_NAME" SITE_URL "$UI_URL"
 
       - uses: docker/setup-buildx-action@v4
 
