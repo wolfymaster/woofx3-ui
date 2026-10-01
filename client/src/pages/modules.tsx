@@ -33,10 +33,20 @@ interface ModuleListItem {
   status?: "pending" | "delivering" | "installed" | "failed";
 }
 
+/**
+ * A connect the OAuth callback sent the browser back with. `builtin` is
+ * Spotify's own flow (spotifyConnect.ts); `module` is a module's `oauth[]`
+ * integration (moduleOAuth.ts). `label` names the provider to the streamer.
+ */
 type OAuthResult =
-  | { status: "finishing"; connectCode: string }
-  | { status: "connected" }
+  | { status: "finishing"; flow: "builtin" | "module"; connectCode: string; label: string }
+  | { status: "connected"; label: string }
   | { status: "error"; message: string };
+
+/** The provider's name for messages: the integration id, capitalized. */
+function integrationLabel(integration: string): string {
+  return integration.charAt(0).toUpperCase() + integration.slice(1);
+}
 
 interface PendingPermissionApproval {
   mode: PermissionApprovalMode;
@@ -72,26 +82,34 @@ export default function Modules() {
   );
   const catalog = useMarketplaceCatalog();
 
-  // Set from the query string the Spotify callback redirects with. Only a
-  // known integration and an error code are read from it; the text shown is
-  // fixed (lib/oauthErrors.ts). A `connect_code` is redeemed by
+  // Set from the query string an integration's OAuth callback redirects with.
+  // Only the integration, a one-time code and an error code are read from it;
+  // the text shown is fixed (lib/oauthErrors.ts). An `oauth_code` is redeemed
+  // by moduleOAuth.finish and Spotify's `connect_code` by
   // spotifyConnect.finish, which only the member who started the connect can do.
   const [oauthResult, setOauthResult] = useState<OAuthResult | null>(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("integration") !== "spotify") {
+    const integration = params.get("integration");
+    if (!integration) {
       return null;
     }
+    const label = integrationLabel(integration);
+    const oauthCode = params.get("oauth_code");
+    if (oauthCode) {
+      return { status: "finishing", flow: "module", connectCode: oauthCode, label };
+    }
     const connectCode = params.get("connect_code");
-    if (connectCode) {
-      return { status: "finishing", connectCode };
+    if (connectCode && integration === "spotify") {
+      return { status: "finishing", flow: "builtin", connectCode, label };
     }
     if (params.get("status") === "error") {
-      return { status: "error", message: oauthErrorMessage(params.get("error"), "Spotify") };
+      return { status: "error", message: oauthErrorMessage(params.get("error"), label) };
     }
     return null;
   });
 
   const finishSpotify = useAction(api.spotifyConnect.finish);
+  const finishModuleOAuth = useAction(api.moduleOAuth.finish);
   const { isAuthenticated } = useConvexAuth();
   const finishingCodeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -103,17 +121,21 @@ export default function Modules() {
       return;
     }
     finishingCodeRef.current = oauthResult.connectCode;
-    finishSpotify({ code: oauthResult.connectCode })
+    const { label } = oauthResult;
+    const finish = oauthResult.flow === "module" ? finishModuleOAuth : finishSpotify;
+    finish({ code: oauthResult.connectCode })
       .then((result) => {
         setOauthResult(
-          result.ok ? { status: "connected" } : { status: "error", message: oauthErrorMessage(result.error, "Spotify") }
+          result.ok
+            ? { status: "connected", label }
+            : { status: "error", message: oauthErrorMessage(result.error, label) }
         );
       })
       .catch((err: unknown) => {
-        console.error("[modules] spotifyConnect.finish failed:", String(err));
-        setOauthResult({ status: "error", message: oauthErrorMessage(null, "Spotify") });
+        console.error("[modules] finishing the OAuth connect failed:", String(err));
+        setOauthResult({ status: "error", message: oauthErrorMessage(null, label) });
       });
-  }, [finishSpotify, isAuthenticated, oauthResult]);
+  }, [finishModuleOAuth, finishSpotify, isAuthenticated, oauthResult]);
 
   const oauthUrlStrippedRef = useRef(false);
   useEffect(() => {
@@ -488,9 +510,9 @@ export default function Modules() {
                         <XCircle className="h-3.5 w-3.5 shrink-0" />
                       )}
                       {oauthResult.status === "finishing"
-                        ? "Finishing the Spotify connection..."
+                        ? `Finishing the ${oauthResult.label} connection...`
                         : oauthResult.status === "connected"
-                          ? "Spotify connected successfully."
+                          ? `${oauthResult.label} connected successfully.`
                           : oauthResult.message}
                     </span>
                     <button type="button" onClick={() => setOauthResult(null)} className="shrink-0">

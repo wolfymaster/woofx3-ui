@@ -16,7 +16,7 @@ import { safeRelativePath } from "./lib/safeRedirect";
 export const store = internalMutation({
   args: {
     codeHash: v.string(),
-    provider: v.union(v.literal("twitch"), v.literal("spotify")),
+    provider: v.union(v.literal("twitch"), v.literal("spotify"), v.literal("module")),
     userId: v.id("users"),
     instanceId: v.id("instances"),
     moduleId: v.optional(v.string()),
@@ -39,6 +39,14 @@ export const store = internalMutation({
         refreshToken: v.string(),
       })
     ),
+    moduleOAuth: v.optional(
+      v.object({
+        integration: v.string(),
+        code: v.string(),
+        codeVerifier: v.string(),
+        redirectUri: v.string(),
+      })
+    ),
   },
   handler: async (ctx, args) => {
     if ((args.provider === "twitch") !== (args.twitch !== undefined)) {
@@ -46,6 +54,9 @@ export const store = internalMutation({
     }
     if ((args.provider === "spotify") !== (args.spotify !== undefined && args.moduleId !== undefined)) {
       throw new Error("A Spotify handoff carries the Spotify result and its module");
+    }
+    if ((args.provider === "module") !== (args.moduleOAuth !== undefined && args.moduleId !== undefined)) {
+      throw new Error("A module OAuth handoff carries its authorization and its module");
     }
     const id = await ctx.db.insert("oauthConnectHandoffs", {
       ...args,

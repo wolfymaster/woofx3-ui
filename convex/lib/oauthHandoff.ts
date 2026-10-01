@@ -53,7 +53,7 @@ export async function hashOpaqueToken(token: string): Promise<string> {
   return hex;
 }
 
-export type HandoffProvider = "twitch" | "spotify";
+export type HandoffProvider = "twitch" | "spotify" | "module";
 
 export type HandoffRefusal = "connect_code_invalid" | "connect_code_expired" | "wrong_user";
 

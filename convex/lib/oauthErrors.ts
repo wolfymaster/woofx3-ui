@@ -27,7 +27,8 @@ export const OAUTH_ERROR_CODES = [
 
 export type OAuthErrorCode = (typeof OAUTH_ERROR_CODES)[number];
 
-export type OAuthProviderLabel = "Twitch" | "Spotify";
+/** The provider's name as the person connecting knows it, e.g. "Twitch". */
+export type OAuthProviderLabel = string;
 
 export function isOAuthErrorCode(value: unknown): value is OAuthErrorCode {
   return typeof value === "string" && (OAUTH_ERROR_CODES as readonly string[]).includes(value);

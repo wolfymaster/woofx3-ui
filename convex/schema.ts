@@ -1030,7 +1030,7 @@ export default defineSchema({
 
   oauthConnectHandoffs: defineTable({
     codeHash: v.string(),
-    provider: v.union(v.literal("twitch"), v.literal("spotify")),
+    provider: v.union(v.literal("twitch"), v.literal("spotify"), v.literal("module")),
     userId: v.id("users"),
     instanceId: v.id("instances"),
     moduleId: v.optional(v.string()),
@@ -1051,6 +1051,16 @@ export default defineSchema({
         clientId: v.string(),
         authToken: v.string(),
         refreshToken: v.string(),
+      })
+    ),
+    // A module OAuth connect (`moduleOAuth.ts`) carries the authorization
+    // code, not tokens: the engine exchanges it and keeps the tokens.
+    moduleOAuth: v.optional(
+      v.object({
+        integration: v.string(),
+        code: v.string(),
+        codeVerifier: v.string(),
+        redirectUri: v.string(),
       })
     ),
     createdAt: v.number(),
