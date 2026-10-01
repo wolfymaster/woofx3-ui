@@ -32,6 +32,7 @@ import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
 import { OAUTH_CALLBACK_PATHS, oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
+import { forwardedCallbackUrl, mintOAuthState, oauthStateConfigFromEnv, routeOAuthState } from "./lib/oauthState";
 import { withQuery } from "./lib/safeRedirect";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
@@ -127,7 +128,7 @@ http.route({
     if (!isOpaqueToken(nonce)) {
       return signInErrorRedirect(process.env.SITE_URL, "sign_in_not_started_here");
     }
-    const state = crypto.randomUUID();
+    const state = await mintOAuthState(oauthStateConfigFromEnv());
 
     await ctx.runMutation(internal.twitchAuth.storeState, {
       state,
@@ -165,6 +166,13 @@ http.route({
 
     if (!state) {
       return signInErrorRedirect(siteUrl, "missing_params", { hasCode: !!code });
+    }
+    const route = await routeOAuthState(state, oauthStateConfigFromEnv());
+    if (route.kind === "forward") {
+      return redirect(forwardedCallbackUrl(route.origin, url));
+    }
+    if (route.kind === "invalid") {
+      return signInErrorRedirect(siteUrl, "invalid_state");
     }
     const stateResult = await ctx.runMutation(internal.twitchAuth.validateAndConsumeState, { state });
     if (!stateResult) {
@@ -313,6 +321,13 @@ http.route({
       // No redirectTo is known without a valid state row, so /modules is the
       // best available destination.
       return moduleIntegrationErrorRedirect(siteUrl, "/modules", "spotify", "missing_params");
+    }
+    const route = await routeOAuthState(state, oauthStateConfigFromEnv());
+    if (route.kind === "forward") {
+      return redirect(forwardedCallbackUrl(route.origin, url));
+    }
+    if (route.kind === "invalid") {
+      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "spotify", "invalid_state");
     }
 
     const stateResult = await ctx.runMutation(internal.moduleIntegrationState.validateAndConsumeState, { state });
