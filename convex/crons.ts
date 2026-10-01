@@ -4,12 +4,17 @@ import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 
 const crons = cronJobs();
 
+// Every job here must cost the same on an idle deployment however many
+// instances it holds: one function call per tick that reads an index for work
+// that is actually due. Per-instance work is scheduled from that call only for
+// instances that need it, never by visiting each instance in turn.
+
 // Remove any pendingWorkflowOperations whose expiry has passed. These
 // represent engine round-trips that never produced a webhook echo (engine
 // crashed, network lost, etc.) and would otherwise leak indefinitely.
 crons.interval(
   "sweep expired workflow pending operations",
-  { minutes: 1 },
+  { hours: 24 },
   internal.workflowInternal.sweepExpiredPending
 );
 
@@ -23,15 +28,14 @@ crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLo
 // applied; once the sender has stopped retrying they are dead weight.
 crons.interval("maintenance callback id cleanup", { hours: 24 }, internal.provisioningInternal.cleanupOldEvents);
 
-// Self-heals instanceLiveState if the engine's STREAM_ONLINE/OFFLINE webhook
-// stops delivering (EventSub lapses, engine restarts) — runs regardless of
-// whether anyone has the dashboard open.
-crons.interval("stream live state sweep", { minutes: 2 }, internal.streamStatus.sweepLiveState);
+// Catches a live instance whose STREAM_OFFLINE webhook never arrived (EventSub
+// lapses, engine restarts), which would otherwise show live indefinitely.
+crons.interval("stream live state sweep", { minutes: 10 }, internal.streamStatus.sweepLiveState);
 
-// Re-arms a shoutout queue whose processor run went missing — a deployment
-// restart, or a run that died before it could reschedule itself. A run is
-// otherwise only ever scheduled by an enqueue or by the run before it, so
-// without this a queue with work in it sits idle and nothing reports it.
-crons.interval("shoutout queue sweep", { minutes: 2 }, internal.shoutouts.sweepStalledQueues);
+// Re-arms a shoutout queue whose processor run went missing — a run that died
+// before it could reschedule itself. A run is otherwise only ever scheduled by
+// an enqueue or by the run before it, so without this a queue with work in it
+// sits idle and nothing reports it.
+crons.interval("shoutout queue sweep", { minutes: 10 }, internal.shoutouts.sweepStalledQueues);
 
 export default crons;

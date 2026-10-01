@@ -6,10 +6,10 @@ import { AlarmClockOff, Loader2, Megaphone } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
-import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { actionErrorMessage } from "@/lib/action-error";
 import {
   type AdBreakView,
@@ -91,7 +91,7 @@ export function AdBreaksWidget() {
     }
     refresh();
   }, [active, refresh]);
-  useVisibleInterval(refresh, SCHEDULE_REFRESH_MS, active);
+  useAttendedInterval(refresh, SCHEDULE_REFRESH_MS, active);
 
   useEffect(() => {
     if (!active || !instanceId) {

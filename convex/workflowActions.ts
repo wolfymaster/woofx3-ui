@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
+import { CORRELATION_TIMEOUT_MS, nextPollDelayMs } from "./lib/completionPolling";
 import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import {
@@ -17,9 +18,6 @@ import {
   type UnmetTriggerCondition,
 } from "./lib/engineTestRun";
 import { manualRunOrigin, UNRECORDED_ORIGIN } from "./lib/manualRunOrigin";
-
-const CORRELATION_TIMEOUT_MS = 10_000;
-const CORRELATION_POLL_MS = 250;
 
 /**
  * The engine accepted a change but its webhook echo did not arrive in time.
@@ -38,15 +36,20 @@ export class EngineConfirmationTimeout extends Error {
  * engine reported, or throws if the engine fails to confirm within 10s.
  */
 async function waitForCompletion(ctx: ActionCtx, correlationKey: string): Promise<string> {
-  const start = Date.now();
-  while (Date.now() - start < CORRELATION_TIMEOUT_MS) {
+  const deadline = Date.now() + CORRELATION_TIMEOUT_MS;
+  for (let polls = 1; ; polls++) {
     const row = await ctx.runQuery(internal.workflowInternal.findCompletion, { correlationKey });
     if (row) {
       return row.engineWorkflowId;
     }
-    await new Promise((r) => setTimeout(r, CORRELATION_POLL_MS));
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw new EngineConfirmationTimeout();
+    }
+    // The last wait is cut short so the final look lands on the deadline
+    // rather than past it.
+    await new Promise((r) => setTimeout(r, Math.min(nextPollDelayMs(polls), remaining)));
   }
-  throw new EngineConfirmationTimeout();
 }
 
 export type InstanceContext = {

@@ -1,4 +1,4 @@
-import { atom, map } from "nanostores";
+import { atom, computed, map } from "nanostores";
 
 const STORAGE_KEYS = {
   sidebarCollapsed: "streamdeck-sidebar-collapsed",
@@ -90,6 +90,50 @@ if (typeof document !== "undefined") {
     $documentVisible.set(!document.hidden);
   });
 }
+
+/** How long without input before the person at this tab counts as away. */
+const USER_IDLE_MS = 10 * 60 * 1000;
+/** Input resets the idle timer at most this often; pointer moves arrive many times a second. */
+const IDLE_RESET_THROTTLE_MS = 1000;
+
+/**
+ * Whether someone has used this tab recently. A visible tab is not proof of a
+ * viewer: a dashboard left on a second monitor or docked in OBS stays visible
+ * all day, and every poll it runs is a billed backend call.
+ */
+export const $userActive = atom<boolean>(true);
+if (typeof window !== "undefined") {
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastResetAt = 0;
+  const markActive = () => {
+    const now = Date.now();
+    if ($userActive.get() && now - lastResetAt < IDLE_RESET_THROTTLE_MS) {
+      return;
+    }
+    lastResetAt = now;
+    if (idleTimer !== null) {
+      clearTimeout(idleTimer);
+    }
+    idleTimer = setTimeout(() => $userActive.set(false), USER_IDLE_MS);
+    $userActive.set(true);
+  };
+  for (const event of ["pointerdown", "pointermove", "keydown", "wheel", "touchstart", "focus"]) {
+    window.addEventListener(event, markActive, { passive: true, capture: true });
+  }
+  $documentVisible.listen((visible) => {
+    if (visible) {
+      markActive();
+    }
+  });
+  markActive();
+}
+
+/**
+ * On screen and in use. Anything that polls the backend should run only while
+ * this is true; it flips back the moment someone returns, so a refresh tied to
+ * it is current by the time they look.
+ */
+export const $attended = computed([$documentVisible, $userActive], (visible, active) => visible && active);
 
 export const $commandPaletteOpen = atom<boolean>(false);
 

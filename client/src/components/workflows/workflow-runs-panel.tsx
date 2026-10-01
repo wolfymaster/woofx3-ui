@@ -24,9 +24,9 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useTestRunSupport } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
-import { useVisibleInterval } from "@/hooks/use-visible-interval";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -67,7 +67,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
   const [now, setNow] = useState(() => Date.now());
   const hasActiveRun = runs?.some(isActiveRun) ?? false;
   // Only ticks while a run is going: a settled run's duration never changes.
-  useVisibleInterval(() => setNow(Date.now()), CLOCK_TICK_MS, hasActiveRun);
+  useAttendedInterval(() => setNow(Date.now()), CLOCK_TICK_MS, hasActiveRun);
 
   const [replayingId, setReplayingId] = useState<string | null>(null);
   const [replayTarget, setReplayTarget] = useState<RunDoc | null>(null);

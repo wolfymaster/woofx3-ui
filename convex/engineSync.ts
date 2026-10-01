@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, internalAction, query } from "./_generated/server";
+import { action, internalAction, internalMutation, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { SYNC_STEPS } from "./lib/engineSync/steps";
@@ -87,52 +87,56 @@ export const runSync = internalAction({
   },
 });
 
-export const sweep = internalAction({
+/**
+ * Cron entry point. One mutation per tick, reading only rows whose
+ * nextEligibleAt has passed, so an idle fleet costs a single empty index read
+ * however many instances exist. Instances get their row at registration (see
+ * ensureSyncRow), so nothing here has to look for instances without one.
+ *
+ * An instance whose engine has reported nothing within the inactivity window
+ * is pushed out by that window instead of synced: nothing on it has changed
+ * for a sync to pick up.
+ */
+export const sweep = internalMutation({
   args: {},
-  handler: async (ctx): Promise<{ scheduled: number; deferred: number; seeded: number }> => {
+  handler: async (ctx): Promise<{ scheduled: number; deferred: number }> => {
     const now = Date.now();
-    const batchSize = ENGINE_SYNC_CONFIG.sweepBatchSize;
     const inactivityCutoff = now - ENGINE_SYNC_CONFIG.inactivityThresholdMs;
-
-    // 1) Seed instanceSync rows for any instances missing one.
-    const missing: Array<Id<"instances">> = await ctx.runQuery(
-      internal.engineSyncInternal.findInstancesMissingSyncRow,
-      {
-        limit: batchSize,
-      }
-    );
-    for (const instanceId of missing) {
-      await ctx.runMutation(internal.engineSyncInternal.ensureInstanceSyncRow, { instanceId });
-    }
-
-    // 2) Pull candidates and partition into schedule vs defer.
-    const candidates = await ctx.runQuery(internal.engineSyncInternal.findEligibleCandidates, {
-      now,
-      limit: batchSize,
-    });
+    const due = await ctx.db
+      .query("instanceSync")
+      .withIndex("by_next_eligible", (q) => q.lte("nextEligibleAt", now))
+      // Over-read: rows mid-run are skipped and do not count toward the batch.
+      .take(ENGINE_SYNC_CONFIG.sweepBatchSize * 4);
 
     let scheduled = 0;
     let deferred = 0;
-    for (const c of candidates) {
-      if (c.status === "running") {
+    for (const row of due) {
+      if (scheduled + deferred >= ENGINE_SYNC_CONFIG.sweepBatchSize) {
+        break;
+      }
+      if (row.status === "running") {
         continue;
       }
-      if (c.lastActive < inactivityCutoff) {
-        await ctx.runMutation(internal.engineSyncInternal.deferIdleInstance, {
-          syncRowId: c.syncRowId,
-          now,
-        });
+      const instance = await ctx.db.get(row.instanceId);
+      if (!instance) {
+        // Its instance is gone and its nextEligibleAt will never move again,
+        // so left in place it would sit at the front of every sweep.
+        await ctx.db.delete(row._id);
+        continue;
+      }
+      if ((instance.lastEngineActivityAt ?? 0) < inactivityCutoff) {
+        await ctx.db.patch(row._id, { nextEligibleAt: now + ENGINE_SYNC_CONFIG.inactivityThresholdMs });
         deferred++;
         continue;
       }
       await ctx.scheduler.runAfter(0, internal.engineSync.runSync, {
-        instanceId: c.instanceId,
+        instanceId: row.instanceId,
         trigger: "scheduled",
       });
       scheduled++;
     }
 
-    return { scheduled, deferred, seeded: missing.length };
+    return { scheduled, deferred };
   },
 });
 

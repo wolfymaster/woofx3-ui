@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import { type ActionCtx, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { isRevokedRefreshResponse, refreshOutcomeApplies } from "./lib/twitchRefresh";
 
@@ -78,51 +79,63 @@ export const ensureFreshTwitchToken = internalAction({
     if (!link) {
       return null;
     }
-
-    if (link.expiresAt - Date.now() > REFRESH_MARGIN_MS) {
-      return { accessToken: link.accessToken, broadcasterUserId: link.platformUserId };
-    }
-
-    const clientId = process.env.AUTH_TWITCH_ID;
-    const clientSecret = process.env.AUTH_TWITCH_SECRET;
-    if (!clientId || !clientSecret) {
-      throw new Error("AUTH_TWITCH_ID/AUTH_TWITCH_SECRET env vars are not set");
-    }
-
-    const response = await fetch(TWITCH_TOKEN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: link.refreshToken,
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-    });
-
-    if (!response.ok) {
-      const body = await response.text();
-      if (isRevokedRefreshResponse(response.status, body)) {
-        await ctx.runMutation(internal.platformRealtime.markTwitchAuthFailed, {
-          linkId: link._id,
-          usedRefreshToken: link.refreshToken,
-        });
-      }
-      throw new Error(`Twitch token refresh failed: ${response.status} ${body}`);
-    }
-
-    const data = (await response.json()) as { access_token: string; refresh_token: string; expires_in: number };
-
-    // Not written when a relink replaced the link meanwhile; the token is
-    // still valid for this one call, so it is returned either way.
-    await ctx.runMutation(internal.platformRealtime.patchTwitchToken, {
-      linkId: link._id,
-      usedRefreshToken: link.refreshToken,
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token,
-      expiresAt: Date.now() + data.expires_in * 1000,
-    });
-
-    return { accessToken: data.access_token, broadcasterUserId: link.platformUserId };
+    return freshTwitchToken(ctx, link);
   },
 });
+
+/**
+ * The link's access token, refreshed first when it is close to expiring. For an
+ * action that has already read the link: calling this directly rather than
+ * through ensureFreshTwitchToken saves a nested action and a query on every
+ * Twitch call, which is all of them while the token is still fresh.
+ */
+export async function freshTwitchToken(
+  ctx: ActionCtx,
+  link: Doc<"platformLinks">
+): Promise<{ accessToken: string; broadcasterUserId: string }> {
+  if (link.expiresAt - Date.now() > REFRESH_MARGIN_MS) {
+    return { accessToken: link.accessToken, broadcasterUserId: link.platformUserId };
+  }
+
+  const clientId = process.env.AUTH_TWITCH_ID;
+  const clientSecret = process.env.AUTH_TWITCH_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error("AUTH_TWITCH_ID/AUTH_TWITCH_SECRET env vars are not set");
+  }
+
+  const response = await fetch(TWITCH_TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: link.refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    if (isRevokedRefreshResponse(response.status, body)) {
+      await ctx.runMutation(internal.platformRealtime.markTwitchAuthFailed, {
+        linkId: link._id,
+        usedRefreshToken: link.refreshToken,
+      });
+    }
+    throw new Error(`Twitch token refresh failed: ${response.status} ${body}`);
+  }
+
+  const data = (await response.json()) as { access_token: string; refresh_token: string; expires_in: number };
+
+  // Not written when a relink replaced the link meanwhile; the token is
+  // still valid for this one call, so it is returned either way.
+  await ctx.runMutation(internal.platformRealtime.patchTwitchToken, {
+    linkId: link._id,
+    usedRefreshToken: link.refreshToken,
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt: Date.now() + data.expires_in * 1000,
+  });
+
+  return { accessToken: data.access_token, broadcasterUserId: link.platformUserId };
+}

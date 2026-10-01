@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { escapeDollarKeys } from "./lib/dollarKeys";
 import { completeStarterItemByCorrelation } from "./lib/starterPackLedger";
@@ -140,9 +141,14 @@ export const deleteFromWebhook = internalMutation({
   },
 });
 
+const EXPIRED_PENDING_BATCH = 100;
+
 /**
  * Remove expired pending operations. Scheduled via the crons module so
- * pending rows that never received a webhook echo don't accumulate.
+ * pending rows that never received a webhook echo don't accumulate. Nothing
+ * reads a pending row except by its correlation key, so an expired one is
+ * harmless until it goes and the sweep can run rarely; a full batch continues
+ * straight away rather than waiting for the next tick.
  */
 export const sweepExpiredPending = internalMutation({
   args: {},
@@ -151,9 +157,12 @@ export const sweepExpiredPending = internalMutation({
     const expired = await ctx.db
       .query("pendingWorkflowOperations")
       .withIndex("by_expiry", (q) => q.lte("expiresAt", now))
-      .take(100);
+      .take(EXPIRED_PENDING_BATCH);
     for (const row of expired) {
       await ctx.db.delete(row._id);
+    }
+    if (expired.length === EXPIRED_PENDING_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.workflowInternal.sweepExpiredPending, {});
     }
   },
 });
