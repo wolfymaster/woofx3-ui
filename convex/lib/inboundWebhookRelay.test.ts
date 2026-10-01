@@ -63,6 +63,26 @@ describe("toHttpResponse", () => {
     expect(toHttpResponse({ status: 204, headers: {}, body: "ignored" }).status).toBe(204);
   });
 
+  it("refuses a page: a module may not serve active content from this origin", () => {
+    for (const type of [
+      "text/html",
+      "Text/HTML; charset=utf-8",
+      "application/xhtml+xml",
+      "image/svg+xml",
+      "application/xml",
+      "application/rss+xml",
+    ]) {
+      expect(toHttpResponse({ status: 200, headers: { "content-type": type }, body: "<x/>" }).status).toBe(502);
+    }
+  });
+
+  it("sends every answer inert, whatever its type", () => {
+    const response = toHttpResponse({ status: 200, headers: { "content-type": "text/plain" }, body: "ok" });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
   it("answers 502 for a status, header, or body the engine should never have sent", () => {
     expect(toHttpResponse({ status: 700, headers: {}, body: "" }).status).toBe(502);
     expect(toHttpResponse({ status: 200, headers: { "set-cookie": "a=b" }, body: "" }).status).toBe(502);
