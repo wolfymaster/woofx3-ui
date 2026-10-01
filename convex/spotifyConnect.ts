@@ -6,6 +6,7 @@ import { readMemberRole } from "./instances";
 import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
+import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { computeCodeChallenge, generateCodeVerifier } from "./lib/pkce";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { SPOTIFY_INTEGRATION_SCOPES } from "./lib/spotifyIntegrationScopes";
@@ -45,7 +46,7 @@ export const start = action({
       moduleId,
     });
 
-    const state = crypto.randomUUID();
+    const state = await mintOAuthState(oauthStateConfigFromEnv());
     const codeVerifier = generateCodeVerifier();
     const codeChallenge = await computeCodeChallenge(codeVerifier);
 

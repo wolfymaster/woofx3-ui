@@ -8,6 +8,7 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
+import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
@@ -43,7 +44,7 @@ export const startConnect = action({
     }
     const redirectUri = oauthCallbackUrl("twitch");
 
-    const state = crypto.randomUUID();
+    const state = await mintOAuthState(oauthStateConfigFromEnv());
     await ctx.runMutation(internal.twitchAuth.storeState, {
       state,
       redirectTo: safeRelativePath(redirectTo, "/admin/integrations"),

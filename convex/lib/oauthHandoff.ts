@@ -19,7 +19,7 @@ export const HANDOFF_TTL_MS = 5 * 60 * 1000;
 const OPAQUE_TOKEN_BYTES = 32;
 const OPAQUE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 
-function base64UrlEncode(bytes: Uint8Array): string {
+export function base64UrlEncode(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 1) {
     binary += String.fromCharCode(bytes[i]);
