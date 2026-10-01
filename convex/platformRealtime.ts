@@ -74,7 +74,7 @@ export const markTwitchAuthFailed = internalMutation({
 // Convex's copy, which is what this realtime layer uses.
 export const ensureFreshTwitchToken = internalAction({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }): Promise<{ accessToken: string; broadcasterUserId: string } | null> => {
+  handler: async (ctx, { instanceId }): Promise<FreshTwitchToken | null> => {
     const link = await ctx.runQuery(internal.platformRealtime.getTwitchLink, { instanceId });
     if (!link) {
       return null;
@@ -83,18 +83,22 @@ export const ensureFreshTwitchToken = internalAction({
   },
 });
 
+export interface FreshTwitchToken {
+  accessToken: string;
+  broadcasterUserId: string;
+  /** Milliseconds since the epoch. */
+  expiresAt: number;
+}
+
 /**
  * The link's access token, refreshed first when it is close to expiring. For an
  * action that has already read the link: calling this directly rather than
  * through ensureFreshTwitchToken saves a nested action and a query on every
  * Twitch call, which is all of them while the token is still fresh.
  */
-export async function freshTwitchToken(
-  ctx: ActionCtx,
-  link: Doc<"platformLinks">
-): Promise<{ accessToken: string; broadcasterUserId: string }> {
+export async function freshTwitchToken(ctx: ActionCtx, link: Doc<"platformLinks">): Promise<FreshTwitchToken> {
   if (link.expiresAt - Date.now() > REFRESH_MARGIN_MS) {
-    return { accessToken: link.accessToken, broadcasterUserId: link.platformUserId };
+    return { accessToken: link.accessToken, broadcasterUserId: link.platformUserId, expiresAt: link.expiresAt };
   }
 
   const clientId = process.env.AUTH_TWITCH_ID;
@@ -129,13 +133,14 @@ export async function freshTwitchToken(
 
   // Not written when a relink replaced the link meanwhile; the token is
   // still valid for this one call, so it is returned either way.
+  const expiresAt = Date.now() + data.expires_in * 1000;
   await ctx.runMutation(internal.platformRealtime.patchTwitchToken, {
     linkId: link._id,
     usedRefreshToken: link.refreshToken,
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
+    expiresAt,
   });
 
-  return { accessToken: data.access_token, broadcasterUserId: link.platformUserId };
+  return { accessToken: data.access_token, broadcasterUserId: link.platformUserId, expiresAt };
 }

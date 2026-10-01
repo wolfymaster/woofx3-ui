@@ -37,6 +37,7 @@ import { withQuery } from "./lib/safeRedirect";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
+import { TWITCH_TOKEN_REQUESTED_EVENT_TYPE } from "./lib/twitchTokenGrant";
 import { widgetCanonicalKey } from "./lib/widgetKey";
 import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
 import { logger } from "./logger";
@@ -470,6 +471,18 @@ http.route({
         hasData: !!payload.data,
       });
       return corsJson({ success: true, type: eventType, handled: false });
+    }
+
+    // A request rather than a notification: the engine waits for the token in
+    // the response body. Ahead of the switch, like SESSION_SUMMARY below,
+    // because the engine types this repo builds against may predate it.
+    if (eventType === TWITCH_TOKEN_REQUESTED_EVENT_TYPE) {
+      const answer = await ctx.runAction(internal.twitchIntegration.grantTokenToEngine, { instanceId: instance._id });
+      // No CORS headers and no caching: the body is a live access token, for
+      // the engine only.
+      return new Response(JSON.stringify(answer), {
+        headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
     }
 
     // Handled ahead of the switch because the engine types this repo builds

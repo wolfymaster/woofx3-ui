@@ -47,6 +47,7 @@ import type * as lib_alertQueueResults from "../lib/alertQueueResults.js";
 import type * as lib_alertWidgets from "../lib/alertWidgets.js";
 import type * as lib_browserSourceHtml from "../lib/browserSourceHtml.js";
 import type * as lib_canonicalRef from "../lib/canonicalRef.js";
+import type * as lib_completionPolling from "../lib/completionPolling.js";
 import type * as lib_configBundle from "../lib/configBundle.js";
 import type * as lib_definitionCatalog from "../lib/definitionCatalog.js";
 import type * as lib_dollarKeys from "../lib/dollarKeys.js";
@@ -125,6 +126,7 @@ import type * as lib_twitchIntegrationScopes from "../lib/twitchIntegrationScope
 import type * as lib_twitchLinkPolicy from "../lib/twitchLinkPolicy.js";
 import type * as lib_twitchRefresh from "../lib/twitchRefresh.js";
 import type * as lib_twitchScopeHealth from "../lib/twitchScopeHealth.js";
+import type * as lib_twitchTokenGrant from "../lib/twitchTokenGrant.js";
 import type * as lib_twitchUsers from "../lib/twitchUsers.js";
 import type * as lib_webhookEndpointKey from "../lib/webhookEndpointKey.js";
 import type * as lib_widgetKey from "../lib/widgetKey.js";
@@ -242,6 +244,7 @@ declare const fullApi: ApiFromModules<{
   "lib/alertWidgets": typeof lib_alertWidgets;
   "lib/browserSourceHtml": typeof lib_browserSourceHtml;
   "lib/canonicalRef": typeof lib_canonicalRef;
+  "lib/completionPolling": typeof lib_completionPolling;
   "lib/configBundle": typeof lib_configBundle;
   "lib/definitionCatalog": typeof lib_definitionCatalog;
   "lib/dollarKeys": typeof lib_dollarKeys;
@@ -320,6 +323,7 @@ declare const fullApi: ApiFromModules<{
   "lib/twitchLinkPolicy": typeof lib_twitchLinkPolicy;
   "lib/twitchRefresh": typeof lib_twitchRefresh;
   "lib/twitchScopeHealth": typeof lib_twitchScopeHealth;
+  "lib/twitchTokenGrant": typeof lib_twitchTokenGrant;
   "lib/twitchUsers": typeof lib_twitchUsers;
   "lib/webhookEndpointKey": typeof lib_webhookEndpointKey;
   "lib/widgetKey": typeof lib_widgetKey;

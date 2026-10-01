@@ -12,7 +12,9 @@ import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
+import { type TwitchTokenRequestedResponse, twitchTokenGrant } from "./lib/twitchTokenGrant";
 import { claimHandoff } from "./oauthConnectHandoff";
+import { freshTwitchToken } from "./platformRealtime";
 
 /** The signed-in caller, when they may connect or disconnect this instance's Twitch link. */
 async function requireTwitchLinkManager(ctx: ActionCtx, instanceId: Id<"instances">): Promise<Id<"users">> {
@@ -198,8 +200,16 @@ export const syncToEngine = internalAction({
       throw new Error("Instance not registered with engine");
     }
 
+    const twitchClientId = process.env.AUTH_TWITCH_ID;
+    if (!twitchClientId) {
+      throw new Error("AUTH_TWITCH_ID env var is not set");
+    }
+
     const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
 
+    // `clientId` tells an engine the token is this dashboard's: it asks here
+    // for the next one (`grantTokenToEngine`) instead of refreshing it with an
+    // app secret of its own. An engine that predates that ignores the field.
     const token = {
       userId: link.platformUserId,
       accessToken: link.accessToken,
@@ -207,9 +217,47 @@ export const syncToEngine = internalAction({
       expiresIn: Math.max(0, Math.floor((link.expiresAt - Date.now()) / 1000)),
       obtainmentTimestamp: Date.now(),
       scope: link.scopes,
+      clientId: twitchClientId,
     };
 
     await engine.setTwitchToken(token, link.connectedByUserId ?? undefined);
+  },
+});
+
+/**
+ * The linked account's Twitch access token for an engine that asked for it
+ * (`twitch.token.requested`, convex/http.ts), refreshed first when it is close
+ * to expiring. The refresh token and the app's client secret never leave
+ * here: an engine may be self-hosted, and with them it could mint tokens for
+ * woofx3's Twitch app on its own.
+ */
+export const grantTokenToEngine = internalAction({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<TwitchTokenRequestedResponse> => {
+    const clientId = process.env.AUTH_TWITCH_ID;
+    if (!clientId) {
+      throw new Error("AUTH_TWITCH_ID env var is not set");
+    }
+    const link = await ctx.runQuery(internal.platformRealtime.getTwitchLink, { instanceId });
+    if (!link) {
+      return { token: null, reason: "not_linked" };
+    }
+    if (link.authFailedAt !== undefined) {
+      return { token: null, reason: "relink_required" };
+    }
+    let fresh: Awaited<ReturnType<typeof freshTwitchToken>>;
+    try {
+      fresh = await freshTwitchToken(ctx, link);
+    } catch (err) {
+      // A refresh Twitch refused for good marks the link; anything else is
+      // transient, and the engine asks again.
+      const after = await ctx.runQuery(internal.platformRealtime.getTwitchLink, { instanceId });
+      if (after?.authFailedAt !== undefined) {
+        return { token: null, reason: "relink_required" };
+      }
+      throw err;
+    }
+    return { token: twitchTokenGrant({ ...fresh, scopes: link.scopes, clientId, now: Date.now() }) };
   },
 });
 
