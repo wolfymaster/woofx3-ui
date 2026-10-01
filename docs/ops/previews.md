@@ -12,7 +12,7 @@ Every pull request from a branch in this repository gets its own running copy of
 
 On every push (and when the description changes):
 
-1. **Convex**: `bunx convex deploy --preview-create pr-<n>` pushes the branch's functions and schema to the pull request's preview deployment, creating it on the first push. `SITE_URL` on that deployment is set to the preview's address.
+1. **Convex**: `bunx convex deploy --preview-create pr-<n>` pushes the branch's functions and schema to the pull request's preview deployment, creating it on the first push. `SITE_URL` on that deployment is set to the preview's address, and `AUTH_TWITCH_REDIRECT_URI` to `<deployment site URL>/api/auth/twitch/callback`.
 2. **Image**: the `Dockerfile` is built against that deployment's URLs and pushed as `ghcr.io/wolfymaster/woofx3-ui:pr-<n>-<sha7>`. The production deploy uses the bare commit SHA, so the two never share a tag.
 3. **Maintenance API**: `scripts/preview-ui.sh up` asks the woofx3 maintenance API to create the preview, or to redeploy it to the new tag. The maintenance API places it as a service in the woofx3 project's **staging** environment on Railway, attaches `pr-<n>-woofx3-ui.woofx3.com` as a Railway custom domain, writes the CNAME and ownership TXT record Railway asks for into the `woofx3.com` zone on Cloudflare, and waits for Railway's certificate.
 4. **Engine**: if the preview names an engine release, the maintenance API pairs it with the preview engine running that release, creating the engine in the same staging environment when there is none. The workflow then sets `PREVIEW_ENGINE_URL`, `PREVIEW_ENGINE_VERSION` and `PREVIEW_ENGINE_REGISTRATION_TOKEN` on the Convex preview deployment.
@@ -58,5 +58,5 @@ Railway and the maintenance API pull the image anonymously from GHCR, so the `wo
 
 ## Limits
 
-- Twitch redirects only to callback URLs registered on the Twitch application, and each preview's Convex deployment has its own, so Twitch sign-in and linking do not work in a preview. Sign in with a password.
+- Twitch redirects only to callback URLs registered on the Twitch application, and each preview's Convex deployment has its own (`https://<deployment>.convex.site/api/auth/twitch/callback`). Twitch sign-in and linking work in a preview only once that URL is added to the application; until then, sign in with a password.
 - Pull requests from forks get no preview: GitHub gives their workflows no secrets.
