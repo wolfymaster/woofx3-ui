@@ -12,7 +12,8 @@ name: Preview
 # A preview may be paired with an engine release. A line
 # `engine-version: <release>` in the pull request description names it;
 # without one the `ENGINE_VERSION` variable of the preview environment does;
-# without either the preview has no engine. The maintenance API reuses the
+# without either it is `latest`, the release the maintenance API pins.
+# `engine-version: none` asks for a preview with no engine. The API reuses the
 # preview engine already running that release (at https://<release>.<domain>,
 # dots made dashes) or creates it, and this workflow gives the engine's URL and
 # registration token to the preview's Convex deployment, so onboarding in the
@@ -89,7 +90,10 @@ jobs:
           set -euo pipefail
           from_body="$(printf '%s\n' "${PR_BODY:-}" | tr -d '\r' |
             sed -n -E 's/^[[:space:]]*engine[-_]version:[[:space:]]*`?([^`[:space:]]+)`?[[:space:]]*$/\1/Ip' | head -n 1)"
-          engine_version="${from_body:-${DEFAULT_ENGINE_VERSION:-}}"
+          engine_version="${from_body:-${DEFAULT_ENGINE_VERSION:-latest}}"
+          if [[ "${engine_version,,}" == "none" ]]; then
+            engine_version=""
+          fi
           if [[ -n "$engine_version" && ! "$engine_version" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
             echo "::error::engine version '${engine_version}' is not an image tag"
             exit 1

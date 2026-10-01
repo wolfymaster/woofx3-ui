@@ -26,11 +26,13 @@ The engine release comes from, in order:
 
 1. A line in the pull request description: `engine-version: v0.3.1` (backticks around the value are fine).
 2. The `ENGINE_VERSION` variable of the `preview` GitHub environment.
-3. Neither: the preview has no engine, and onboarding in it asks for an engine URL as usual.
+3. Neither: `latest`.
+
+`engine-version: none` in the description gives the preview no engine, and onboarding in it asks for an engine URL as usual.
 
 `latest` means the release the maintenance API pins for customers. Any image tag the engine repository publishes works, including its own pull request builds (`pr-<n>-<sha7>`).
 
-Engines are **shared by release**: every preview naming `v0.3.1` uses the one engine at `v0-3-1.woofx3.com`, which registers each preview as its own client. Changing the release in the description moves the preview to the other engine on the next run, and removing the line unpairs it.
+Engines are **shared by release**: every preview naming `v0.3.1` uses the one engine at `v0-3-1.woofx3.com`, which registers each preview as its own client. Changing the release in the description moves the preview to the other engine on the next run, removing the line moves it to the default, and `none` unpairs it.
 
 An engine whose provisioning failed is retried the next time a preview asks for its release, so pushing again is how a failed engine is repaired.
 
@@ -48,7 +50,7 @@ These live in the `preview` GitHub Environment (**Settings → Environments → 
 | `MAINTENANCE_API_KEY` | secret | Maintenance API key with `engines:read,previews:write` for owner type `github` (`bun run keys:create` in woofx3-maintenance) |
 | `MAINTENANCE_API_URL` | variable | The production maintenance API |
 | `PREVIEW_BASE_DOMAIN` | variable | `woofx3.com`; must match the maintenance API's `PREVIEW_BASE_DOMAIN` |
-| `ENGINE_VERSION` | variable | Optional. The engine release previews get when their description names none |
+| `ENGINE_VERSION` | variable | Optional. The engine release previews get when their description names none (`latest` when unset) |
 
 Other Convex environment variables a preview needs (`AUTH_TWITCH_*`, JWT keys, storage configuration, and the two OAuth variables below) come from the Convex project's default environment variables for preview deployments, set in the Convex dashboard.
 

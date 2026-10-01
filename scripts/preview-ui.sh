@@ -223,7 +223,7 @@ up)
       engine_line="Engine $(describe_failure "$engine")"
     fi
   else
-    engine_line="No engine paired. Add \`engine-version: <release>\` to the pull request description to pair one."
+    engine_line="No engine paired (\`engine-version: none\`)."
   fi
   echo "ui_url=${ui_url}" >>"$GITHUB_OUTPUT"
 
