@@ -41,16 +41,16 @@ export const start = action({
     }
     const redirectUri = oauthCallbackUrl("spotify");
 
-    const clientId: string | null = await ctx.runAction(internal.spotifyIntegration.resolveClientId, {
-      instanceId,
-      moduleId,
-    });
-    // A ConvexError, because production hides a plain Error's message from the browser.
-    if (!clientId) {
+    const resolved = await ctx.runAction(internal.spotifyIntegration.resolveClientId, { instanceId, moduleId });
+    // ConvexErrors, because production hides a plain Error's message from the browser.
+    if ("missing" in resolved) {
       throw new ConvexError(
-        "Spotify is not set up here yet: enter your Spotify app's Client ID in this module's settings, or ask the administrator to set SPOTIFY_CLIENT_ID."
+        resolved.missing === "module_app"
+          ? "Enter your Spotify app's Client ID in this module's settings, then connect again."
+          : "Spotify connect is not available yet. Enter your own Spotify app's Client ID in this module's settings to use it now."
       );
     }
+    const { clientId } = resolved;
 
     const state = await mintOAuthState(oauthStateConfigFromEnv());
     const codeVerifier = generateCodeVerifier();
