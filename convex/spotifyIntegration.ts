@@ -1,33 +1,35 @@
 "use node";
 
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { chooseIntegrationClientId, type IntegrationClientId } from "./lib/integrationClientId";
 import { requireEngineInstance } from "./moduleSettingsActions";
 
 /**
- * The `client_id` to use for a Spotify OAuth attempt: the module's own if it
- * has one set, else this deployment's default app (`SPOTIFY_CLIENT_ID`), or
- * null when there is neither. `spotifyConnect.start` records the one it used in
- * the OAuth state, and the callback exchanges the code with that.
+ * The `client_id` to use for a Spotify OAuth attempt (lib/integrationClientId.ts
+ * says which). `spotifyConnect.start` records the one it used in the OAuth
+ * state, and the callback exchanges the code with that.
  */
 export const resolveClientId = internalAction({
   args: {
     instanceId: v.id("instances"),
     moduleId: v.string(),
   },
-  handler: async (ctx, { instanceId, moduleId }): Promise<string | null> => {
+  handler: async (ctx, { instanceId, moduleId }): Promise<IntegrationClientId> => {
     const instance = await requireEngineInstance(ctx, instanceId);
     const settings = await createEngineRpcSession<EngineApi>(
       instance.url,
       instance.clientId,
       instance.clientSecret
     ).getModuleSettings(moduleId);
-    const ownClientId = settings.settings.find((s) => s.key === "clientId")?.value;
-    if (ownClientId) {
-      return ownClientId;
-    }
-    return process.env.SPOTIFY_CLIENT_ID || null;
+    const platform = await ctx.runQuery(internal.integrationCredentials.get, { integration: "spotify" });
+    return chooseIntegrationClientId({
+      moduleClientId: settings.settings.find((s) => s.key === "clientId")?.value,
+      hosting: instance.hosting,
+      platformClientId: platform?.clientId,
+    });
   },
 });
 

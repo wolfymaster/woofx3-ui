@@ -2,7 +2,7 @@
 
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
@@ -22,7 +22,7 @@ export interface ModuleSettingValue {
 export async function requireEngineInstance(
   ctx: ActionCtx,
   instanceId: Id<"instances">
-): Promise<{ url: string; clientId: string; clientSecret: string }> {
+): Promise<{ url: string; clientId: string; clientSecret: string; hosting: Doc<"instances">["hosting"] }> {
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
   if (!instance) {
     throw new Error("Instance not found");
@@ -30,7 +30,12 @@ export async function requireEngineInstance(
   if (!instance.clientId || !instance.clientSecret) {
     throw new Error("Instance is not registered with the engine");
   }
-  return { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
+  return {
+    url: instance.url,
+    clientId: instance.clientId,
+    clientSecret: instance.clientSecret,
+    hosting: instance.hosting,
+  };
 }
 
 export const getModuleSettings = action({

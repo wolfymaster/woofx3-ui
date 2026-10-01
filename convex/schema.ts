@@ -1012,6 +1012,18 @@ export default defineSchema({
   // code the callback put in the browser's URL (lib/oauthHandoff.ts). Only the
   // code's hash is stored. Rows are single use and deleted after five minutes
   // whether or not they are claimed.
+  // integrationCredentials: the OAuth apps woofx3 provides for first-party
+  // integrations, one row per integration. Managed instances use them when a
+  // module has no app of its own (spotifyIntegration.resolveClientId); external
+  // instances bring their own. Written only through internal functions
+  // (integrationCredentials.ts), and never returned to a browser.
+  integrationCredentials: defineTable({
+    integration: v.literal("spotify"),
+    clientId: v.string(),
+    clientSecret: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_integration", ["integration"]),
+
   oauthConnectHandoffs: defineTable({
     codeHash: v.string(),
     provider: v.union(v.literal("twitch"), v.literal("spotify")),
