@@ -58,6 +58,8 @@ owner_ref="${GITHUB_REPOSITORY}#${pr_number}"
 slug="pr-${pr_number}-woofx3-ui"
 
 # api <method> <path> [body] [idempotency-key]
+# Prints the response body. On an HTTP error the body goes to stderr instead, so
+# the API's error code reaches the log even when the caller discards stdout.
 api() {
   local method="$1" path="$2" body="${3:-}" idempotency_key="${4:-}"
   local args=(--silent --show-error --fail-with-body
@@ -70,7 +72,13 @@ api() {
   if [ -n "$body" ]; then
     args+=(--data "$body")
   fi
-  curl "${args[@]}" "${MAINTENANCE_API_URL}${path}"
+  local response status=0
+  response="$(curl "${args[@]}" "${MAINTENANCE_API_URL}${path}")" || status=$?
+  if [ "$status" != 0 ]; then
+    echo "preview-ui: ${method} ${path} failed: ${response}" >&2
+    return "$status"
+  fi
+  printf '%s' "$response"
 }
 
 # The UI preview for this pull request, or "" when it has none. The owner's
@@ -145,9 +153,25 @@ up)
       "preview-ui:${owner_ref}:${image_tag}")"
     preview_id="$(jq --raw-output '.engine.id // ""' <<<"$created")"
   else
-    if ! wait_until_settled "$preview_id" >/dev/null; then
+    if ! existing="$(wait_until_settled "$preview_id")"; then
       echo "preview-ui: an earlier run on ${preview_id} is still going" >&2
       exit 1
+    fi
+    # The maintenance API redeploys only a preview that has been placed. One
+    # whose provision failed before placement is resumed instead; its retry
+    # keeps the original tag, so the redeploy below still follows it.
+    if [ -z "$(jq --raw-output '.placement.origin // ""' <<<"$existing")" ] &&
+      [ "$(jq --raw-output '.run.status // ""' <<<"$existing")" = "failed" ]; then
+      failed_run_id="$(jq --raw-output '.run.id' <<<"$existing")"
+      echo "Retrying the failed provision run ${failed_run_id} of UI preview ${preview_id}"
+      api POST "/v1/engines/${preview_id}/runs/${failed_run_id}/retry" "" \
+        "preview-ui:${owner_ref}:retry:${failed_run_id}" >/dev/null
+      retried="$(wait_until_settled "$preview_id")" || true
+      if [ "$(jq --raw-output '.engine.status' <<<"$retried")" != "ready" ]; then
+        comment "UI preview failed: $(describe_failure "$retried")"
+        echo "preview-ui: retrying the provision run did not make the preview ready" >&2
+        exit 1
+      fi
     fi
     echo "Redeploying UI preview ${preview_id} on ${image_tag}${engine_version:+ with engine ${engine_version}}"
     # engineVersion null unpairs: a preview whose pull request stopped naming
