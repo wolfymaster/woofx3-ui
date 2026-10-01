@@ -163,9 +163,12 @@ up)
     if [ -z "$(jq --raw-output '.placement.origin // ""' <<<"$existing")" ] &&
       [ "$(jq --raw-output '.run.status // ""' <<<"$existing")" = "failed" ]; then
       failed_run_id="$(jq --raw-output '.run.id' <<<"$existing")"
+      # Keyed on this failure, not just the run: a run that fails again after a
+      # retry must be retried again, not answered from the idempotency cache.
+      failed_at="$(jq --raw-output '.run.finishedAt' <<<"$existing")"
       echo "Retrying the failed provision run ${failed_run_id} of UI preview ${preview_id}"
       api POST "/v1/engines/${preview_id}/runs/${failed_run_id}/retry" "" \
-        "preview-ui:${owner_ref}:retry:${failed_run_id}" >/dev/null
+        "preview-ui:${owner_ref}:retry:${failed_run_id}:${failed_at}" >/dev/null
       retried="$(wait_until_settled "$preview_id")" || true
       if [ "$(jq --raw-output '.engine.status' <<<"$retried")" != "ready" ]; then
         comment "UI preview failed: $(describe_failure "$retried")"
