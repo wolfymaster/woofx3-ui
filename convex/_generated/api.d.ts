@@ -51,6 +51,7 @@ import type * as lib_definitionCatalog from "../lib/definitionCatalog.js";
 import type * as lib_dollarKeys from "../lib/dollarKeys.js";
 import type * as lib_engineCapabilities from "../lib/engineCapabilities.js";
 import type * as lib_engineInstanceUrl from "../lib/engineInstanceUrl.js";
+import type * as lib_engineObsStatus from "../lib/engineObsStatus.js";
 import type * as lib_engineSync_config from "../lib/engineSync/config.js";
 import type * as lib_engineSync_steps from "../lib/engineSync/steps.js";
 import type * as lib_engineSync_steps_actions from "../lib/engineSync/steps/actions.js";
@@ -63,7 +64,6 @@ import type * as lib_engineSync_steps_scenes from "../lib/engineSync/steps/scene
 import type * as lib_engineSync_steps_triggers from "../lib/engineSync/steps/triggers.js";
 import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widgets.js";
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
-import type * as lib_engineObsStatus from "../lib/engineObsStatus.js";
 import type * as lib_engineTestRun from "../lib/engineTestRun.js";
 import type * as lib_fieldOptions from "../lib/fieldOptions.js";
 import type * as lib_gettingStarted from "../lib/gettingStarted.js";
@@ -74,6 +74,7 @@ import type * as lib_inboundWebhookPath from "../lib/inboundWebhookPath.js";
 import type * as lib_inboundWebhookRelay from "../lib/inboundWebhookRelay.js";
 import type * as lib_instanceAccess from "../lib/instanceAccess.js";
 import type * as lib_instanceRoles from "../lib/instanceRoles.js";
+import type * as lib_instanceTeardown from "../lib/instanceTeardown.js";
 import type * as lib_invitationTarget from "../lib/invitationTarget.js";
 import type * as lib_macroExecution from "../lib/macroExecution.js";
 import type * as lib_macroTrigger from "../lib/macroTrigger.js";
@@ -238,6 +239,7 @@ declare const fullApi: ApiFromModules<{
   "lib/dollarKeys": typeof lib_dollarKeys;
   "lib/engineCapabilities": typeof lib_engineCapabilities;
   "lib/engineInstanceUrl": typeof lib_engineInstanceUrl;
+  "lib/engineObsStatus": typeof lib_engineObsStatus;
   "lib/engineSync/config": typeof lib_engineSync_config;
   "lib/engineSync/steps": typeof lib_engineSync_steps;
   "lib/engineSync/steps/actions": typeof lib_engineSync_steps_actions;
@@ -250,7 +252,6 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/triggers": typeof lib_engineSync_steps_triggers;
   "lib/engineSync/steps/widgets": typeof lib_engineSync_steps_widgets;
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
-  "lib/engineObsStatus": typeof lib_engineObsStatus;
   "lib/engineTestRun": typeof lib_engineTestRun;
   "lib/fieldOptions": typeof lib_fieldOptions;
   "lib/gettingStarted": typeof lib_gettingStarted;
@@ -261,6 +262,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inboundWebhookRelay": typeof lib_inboundWebhookRelay;
   "lib/instanceAccess": typeof lib_instanceAccess;
   "lib/instanceRoles": typeof lib_instanceRoles;
+  "lib/instanceTeardown": typeof lib_instanceTeardown;
   "lib/invitationTarget": typeof lib_invitationTarget;
   "lib/macroExecution": typeof lib_macroExecution;
   "lib/macroTrigger": typeof lib_macroTrigger;
