@@ -4,6 +4,7 @@ import {
   createEngine,
   currentRelease,
   deleteEngine,
+  isEngineNotFound,
   isMaintenanceConfigured,
   MaintenanceApiError,
   redeployEngine,
@@ -148,6 +149,15 @@ describe("other routes", () => {
     await deleteEngine("eng_1", "prov_1:delete");
     expect(calls[0].url).toBe("https://maintenance.woofx3.tv/v1/engines/eng_1");
     expect(calls[0].method).toBe("DELETE");
+  });
+
+  it("tells an engine the API no longer has apart from other failures", async () => {
+    stubFetch({ status: 404, body: { error: { code: "engine_not_found", message: "no such engine" } } });
+    expect(isEngineNotFound(await deleteEngine("eng_1", "key").catch((err: unknown) => err))).toBe(true);
+
+    stubFetch({ status: 502, body: "<html>bad gateway</html>" });
+    expect(isEngineNotFound(await deleteEngine("eng_1", "key").catch((err: unknown) => err))).toBe(false);
+    expect(isEngineNotFound(new Error("network"))).toBe(false);
   });
 });
 

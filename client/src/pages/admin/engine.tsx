@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useInstance } from "@/hooks/use-instance";
+import { useToast } from "@/hooks/use-toast";
 import { $engineUrl } from "@/lib/stores";
 
 type ConnectionStatus = "idle" | "testing" | "success" | "error";
@@ -158,7 +159,7 @@ function EngineSettings() {
       <div className="space-y-4">
         <ManagedEngineCard instanceId={instance._id} />
         {instance.clientId && <EngineSyncCard instanceId={instance._id} />}
-        <DangerZone instanceId={instance._id} />
+        <DangerZone instanceId={instance._id} managed />
       </div>
     );
   }
@@ -266,8 +267,9 @@ function EngineSettings() {
     </div>
   );
 }
-function DangerZone({ instanceId }: { instanceId: Id<"instances"> }) {
+function DangerZone({ instanceId, managed = false }: { instanceId: Id<"instances">; managed?: boolean }) {
   const deleteInstanceAction = useAction(api.instances.deleteInstance);
+  const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -277,7 +279,11 @@ function DangerZone({ instanceId }: { instanceId: Id<"instances"> }) {
       await deleteInstanceAction({ instanceId });
       window.location.href = "/";
     } catch (e) {
-      console.error("Failed to delete instance:", e);
+      toast({
+        title: "Couldn't delete instance",
+        description: e instanceof Error ? e.message : String(e),
+        variant: "destructive",
+      });
       setDeleting(false);
       setDialogOpen(false);
     }
@@ -304,6 +310,9 @@ function DangerZone({ instanceId }: { instanceId: Id<"instances"> }) {
             <AlertDialogDescription>
               Are you sure you want to delete this instance? This action is irreversible and will permanently remove all
               data associated with this instance, including workflows, scenes, and assets.
+              {managed
+                ? " Your managed engine is shut down and its address is released, so it can be claimed again."
+                : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

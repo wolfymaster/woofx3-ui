@@ -221,6 +221,11 @@ export function redeployRefusal(error: unknown): RedeployRefusal | null {
   return null;
 }
 
+/** Whether a maintenance call failed because the API has no such engine, so there is nothing left to tear down. */
+export function isEngineNotFound(error: unknown): boolean {
+  return error instanceof MaintenanceApiError && error.status === 404;
+}
+
 /** Start a deprovision run: the route, the container, the database and the role all go. */
 export function deleteEngine(
   engineId: string,

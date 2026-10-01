@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import type { InstanceRole } from "./lib/instanceRoles";
+import { deleteEngine, isEngineNotFound } from "./lib/maintenanceClient";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
 
 /**
@@ -188,6 +189,26 @@ export const deleteInstance = action({
       }
     }
 
+    // A managed engine is torn down before the instance is deleted, never
+    // after: the maintenance API holds its address, route, container and
+    // database until asked, and once the instance and its provisioning row
+    // are gone nothing in the UI could ask any more. A failure here stops the
+    // delete so the user can try again.
+    const provisioning = await ctx.runQuery(internal.provisioningInternal.forInstanceInternal, {
+      instanceId: args.instanceId,
+    });
+    if (provisioning?.maintenanceEngineId && provisioning.status !== "deleted") {
+      try {
+        await deleteEngine(provisioning.maintenanceEngineId, `${provisioning._id}:delete`);
+      } catch (err) {
+        if (!isEngineNotFound(err)) {
+          throw new Error(
+            `Couldn't remove the managed engine, so the instance was kept: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+    }
+
     await ctx.runMutation(internal.instances.deleteInstanceData, { instanceId: args.instanceId });
   },
 });
@@ -219,6 +240,16 @@ export const deleteInstanceData = internalMutation({
       .collect();
     for (const member of instanceMembers) {
       await ctx.db.delete(member._id);
+    }
+
+    // Callbacks still arriving for the engine's teardown find no row, which
+    // the maintenance webhook acknowledges.
+    const provisioning = await ctx.db
+      .query("engineProvisioning")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .first();
+    if (provisioning) {
+      await ctx.db.delete(provisioning._id);
     }
 
     await ctx.db.delete(instanceId);
