@@ -831,13 +831,13 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
               />
             );
           }
-          const currentValue = values[field.id] ?? loadedValues?.[field.id] ?? field.default ?? "";
-          const isDirty = currentValue !== (loadedValues?.[field.id] ?? field.default ?? "");
+          const currentValue = values[field.id] ?? loadedValues?.[field.id] ?? field.defaultValue ?? "";
+          const isDirty = currentValue !== (loadedValues?.[field.id] ?? field.defaultValue ?? "");
           return (
             <div key={field.id} className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor={`setting-${field.id}`} className="text-sm font-medium">
-                  {field.name}
+                  {field.label}
                   {field.required && <span className="text-destructive ml-1">*</span>}
                 </Label>
                 <Button
@@ -895,7 +895,7 @@ function SecretSettingRow({ field, isSet, value, busy, saved, onChange, onSave, 
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <Label htmlFor={`setting-${field.id}`} className="text-sm font-medium">
-          {field.name}
+          {field.label}
           {field.required && !isSet && <span className="text-destructive ml-1">*</span>}
         </Label>
         <div className="flex items-center gap-2">
@@ -972,7 +972,7 @@ function InternalSettingButton({
     <div className="space-y-2">
       <Button size="sm" variant="outline" disabled={!reference || status === "pending"} onClick={trigger}>
         {status === "pending" && <Loader2 className="h-3 w-3 mr-1.5 animate-spin" />}
-        {field.name}
+        {field.label}
       </Button>
       {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
       {status === "success" && message && (
@@ -1033,7 +1033,7 @@ function IntegrationSettingButton({
         onClick={() => void handleClick()}
         title={supported ? undefined : `The "${action.integration}" integration is not available`}
       >
-        {field.name}
+        {field.label}
       </Button>
       {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
       {error && <p className="text-xs text-destructive">{error}</p>}
