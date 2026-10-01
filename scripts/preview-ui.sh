@@ -157,10 +157,11 @@ up)
       echo "preview-ui: an earlier run on ${preview_id} is still going" >&2
       exit 1
     fi
-    # The maintenance API redeploys only a preview that has been placed. One
-    # whose provision failed before placement is resumed instead; its retry
-    # keeps the original tag, so the redeploy below still follows it.
-    if [ -z "$(jq --raw-output '.placement.origin // ""' <<<"$existing")" ] &&
+    # A preview whose provision failed is resumed rather than redeployed: a
+    # redeploy needs a placement, and skips steps a provision has, such as the
+    # one that publishes its address. The retry keeps the original tag, so the
+    # redeploy below still follows it.
+    if [ "$(jq --raw-output '.run.kind // ""' <<<"$existing")" = "provision" ] &&
       [ "$(jq --raw-output '.run.status // ""' <<<"$existing")" = "failed" ]; then
       failed_run_id="$(jq --raw-output '.run.id' <<<"$existing")"
       # Keyed on this failure, not just the run: a run that fails again after a
