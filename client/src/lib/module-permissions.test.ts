@@ -12,6 +12,15 @@ describe("describePermission", () => {
     expect(describePermission("obs.control").known).toBe(true);
   });
 
+  test("a host permission names the host the module may send data to", () => {
+    expect(describePermission("net:api.spotify.com")).toEqual({
+      id: "net:api.spotify.com",
+      description: "Send data to api.spotify.com",
+      known: true,
+    });
+    expect(describePermission("net:").known).toBe(false);
+  });
+
   test("an unknown id is shown, flagged as unknown", () => {
     expect(describePermission("obs.scenes")).toEqual({
       id: "obs.scenes",

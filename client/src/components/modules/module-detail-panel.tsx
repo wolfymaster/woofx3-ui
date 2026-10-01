@@ -863,7 +863,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
               {field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}
               <Input
                 id={`setting-${field.id}`}
-                type={field.type === "number" ? "number" : "text"}
+                type={settingInputType(field.type)}
                 value={currentValue}
                 onChange={(e) => setValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                 className="font-mono text-sm"
@@ -874,6 +874,20 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
       </div>
     </ScrollArea>
   );
+}
+
+/**
+ * The input for a module setting's manifest type. A `url` setting's origin is
+ * a destination the module's code may then reach, so it is entered as a URL.
+ */
+function settingInputType(type: string): "number" | "url" | "text" {
+  if (type === "number") {
+    return "number";
+  }
+  if (type === "url") {
+    return "url";
+  }
+  return "text";
 }
 
 interface SecretSettingRowProps {

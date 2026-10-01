@@ -16,6 +16,7 @@
 - Offers the same uninstall entry point as the listing page.
 - For an installed module with webhook triggers, the **Settings** tab lists each trigger's public URL with its last delivery (`api.inboundWebhooks.listForInstanceModule`, rendered by `client/src/components/modules/module-webhook-endpoints.tsx`).
 - Settings declared `type: "secret"` render as write-only password fields: the engine never returns a secret's value, only whether one is set.
+- Settings declared `type: "url"` render as URL inputs. The engine lets the module's code reach the origin of the URL entered there, and only the streamer can set it.
 
 ## Custom upload (`/modules/install`)
 
@@ -41,7 +42,7 @@ There is no dedicated upgrade RPC — **an update is an install of the newer ver
 
 ## Module permissions (install review)
 
-A manifest may declare a top-level `permissions` array (`twitch.moderation`, `twitch.channel`, ...). The **engine enforces** it: a module can only call a privileged capability it declares, and install refuses an id the engine does not know. What the UI adds is **consent**: the streamer sees what a module asks for and approves it before the engine is told to install it. The UI never grants or withholds a capability, and approving a permission here does not change what the engine allows.
+A manifest may declare a top-level `permissions` array (`twitch.moderation`, `twitch.channel`, ..., and `net:<host>` for each host its code sends requests to, shown as "Send data to <host>"). The **engine enforces** it: a module can only call a privileged capability it declares, and install refuses an id the engine does not know. What the UI adds is **consent**: the streamer sees what a module asks for and approves it before the engine is told to install it. The UI never grants or withholds a capability, and approving a permission here does not change what the engine allows.
 
 - **Where they come from.** For an installed module, the `permissions` field of the manifest stored on its `moduleRepository` row (the manifest parsed at upload, or the engine's manifest fetched after a marketplace install). The marketplace API does not expose permissions, so for a marketplace listing Convex downloads the archive the engine would install, checks it against the listing's `sha256`, and reads the shallowest `manifest.json` (`convex/lib/modulePermissions.ts`, `fetchMarketplaceArchivePermissions` in `convex/marketplace.ts`). No schema change: the stored manifest is `v.any()` and already carries the field.
 - **What is shown.** `moduleDetail.getModuleDetail` returns `permissions` (the shown version) and, for an installed module whose marketplace version differs, `latestPermissions`. The detail panel's Details tab and the upload page render a **This module can:** section from `client/src/lib/module-permissions.ts`, which maps each id to plain language; an id missing from that table renders as `Unknown permission: <id>` with a warning, so a permission the engine learns before the UI does is never hidden. Permissions that could not be read render as a warning, not as "nothing".
