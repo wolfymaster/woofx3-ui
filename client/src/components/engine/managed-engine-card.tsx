@@ -289,7 +289,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
                   Update available: <span className="font-mono">{offered}</span>
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {isLive ? "Finish your stream first. " : null}
+                  {isLive ? "You're live: alerts will be offline until the engine is back. " : null}
                   {upgradeInfo?.releaseNotesUrl && (
                     <a
                       href={upgradeInfo.releaseNotesUrl}
@@ -307,7 +307,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
               <Button
                 type="button"
                 onClick={() => setUpgradeOpen(true)}
-                disabled={busy !== null || isLive}
+                disabled={busy !== null}
                 data-testid="button-upgrade-engine"
               >
                 Upgrade
@@ -436,6 +436,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
           onOpenChange={setUpgradeOpen}
           offered={offered}
           current={upgradeInfo?.current ?? null}
+          isLive={isLive}
           busy={busy === "upgrade"}
           onConfirm={() => void handleUpgrade()}
         />
