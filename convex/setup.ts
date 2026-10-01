@@ -27,6 +27,8 @@ export interface SetupStatus {
   workspaceName: string | null;
   platforms: ChosenSetupPlatform[];
   platformsChosenAt: number | null;
+  /** When the "bring your setup" question was answered, by importing or skipping. */
+  importChosenAt: number | null;
   /** Marketplace ids of the platforms setup cannot finish without. */
   requiredModuleIds: string[];
   interests: string[];
@@ -126,6 +128,7 @@ export const status = query({
       platforms: row?.platforms ?? [],
       platformsNeedingSettings,
       platformsChosenAt: row?.platformsChosenAt ?? null,
+      importChosenAt: row?.importChosenAt ?? null,
       requiredModuleIds: curated.filter((entry) => entry.required).map((entry) => entry.marketplaceModuleId),
       interests: row?.interests ?? [],
       interestsChosenAt: row?.interestsChosenAt ?? null,
@@ -169,6 +172,23 @@ export const choosePlatforms = mutation({
       return;
     }
     await ctx.db.insert("instanceSetup", { instanceId, platforms, platformsChosenAt: now, updatedAt: now });
+  },
+});
+
+/**
+ * Records that the "bring your setup" question was answered. Whatever was
+ * imported is in setupImports; this only moves the wizard on.
+ */
+export const chooseImport = mutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    await requireInstanceRole(ctx, instanceId, "admin");
+    const row = await readSetupRow(ctx, instanceId);
+    if (!row?.platformsChosenAt) {
+      throw new Error("Choose your platforms first");
+    }
+    const now = Date.now();
+    await ctx.db.patch(row._id, { importChosenAt: now, updatedAt: now });
   },
 });
 
@@ -249,6 +269,8 @@ export const complete = mutation({
     await ctx.db.patch(row._id, { completedAt: now, completedByUserId: userId, updatedAt: now });
     await seedDashboard(ctx, instanceId, userId, row.interests ?? []);
     await scheduleApplyIfRegistered(ctx, instanceId);
+    // An import queued during setup waits for setup to finish before applying.
+    await ctx.scheduler.runAfter(0, internal.setupImports.resumeQueued, { instanceId });
   },
 });
 

@@ -1,5 +1,6 @@
 import { v } from "convex/values";
-import { query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { type QueryCtx, query } from "./_generated/server";
 import { manifestModuleName, parseManifestResourceKinds } from "./lib/resourceKinds";
 import { isInstanceMember } from "./lib/teamAccess";
 
@@ -18,16 +19,21 @@ export const getForInstance = query({
     if (!(await isInstanceMember(ctx, instanceId))) {
       return null;
     }
-    const modules = await ctx.db
-      .query("moduleRepository")
-      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .collect();
-    for (const module of modules) {
-      const declared = parseManifestResourceKinds(module.manifest).find((entry) => entry.kind === kind);
-      if (declared) {
-        return { moduleName: manifestModuleName(module.manifest, module.name), ...declared };
-      }
-    }
-    return null;
+    return findResourceKind(ctx, instanceId, kind);
   },
 });
+
+/** The installed module that declares a resource kind, and its declaration; null when none does. */
+export async function findResourceKind(ctx: QueryCtx, instanceId: Id<"instances">, kind: string) {
+  const modules = await ctx.db
+    .query("moduleRepository")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .collect();
+  for (const module of modules) {
+    const declared = parseManifestResourceKinds(module.manifest).find((entry) => entry.kind === kind);
+    if (declared) {
+      return { moduleName: manifestModuleName(module.manifest, module.name), ...declared };
+    }
+  }
+  return null;
+}

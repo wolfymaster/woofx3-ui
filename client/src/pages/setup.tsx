@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { DashboardStep } from "@/components/setup/dashboard-step";
 import { FinishStep } from "@/components/setup/finish-step";
+import { ImportStep } from "@/components/setup/import-step";
 import { InterestsStep } from "@/components/setup/interests-step";
 import { OverlayStep } from "@/components/setup/overlay-step";
 import { PlatformsStep } from "@/components/setup/platforms-step";
@@ -158,7 +159,10 @@ export default function Setup() {
             <PlatformsStep instanceId={instanceId} status={status} onContinue={() => goTo("twitch")} />
           )}
           {step === "twitch" && (
-            <TwitchStep instanceId={instanceId} status={status} onContinue={() => goTo("interests")} />
+            <TwitchStep instanceId={instanceId} status={status} onContinue={() => goTo("import")} />
+          )}
+          {step === "import" && (
+            <ImportStep instanceId={instanceId} status={status} onContinue={() => goTo("interests")} />
           )}
           {step === "interests" && (
             <InterestsStep instanceId={instanceId} status={status} onContinue={() => goTo("dashboard")} />

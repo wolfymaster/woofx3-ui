@@ -4,21 +4,28 @@ import { allowedSetupStep, firstIncompleteStep, isSetupStepId, type SetupProgres
 const nothingDone: SetupProgress = {
   platformsChosenAt: null,
   twitchUsername: null,
+  importChosenAt: null,
   interestsChosenAt: null,
   completedAt: null,
 };
 const platformsChosen: SetupProgress = { ...nothingDone, platformsChosenAt: 1 };
 const twitchConnected: SetupProgress = { ...platformsChosen, twitchUsername: "streamer" };
-const interestsChosen: SetupProgress = { ...twitchConnected, interestsChosenAt: 2 };
+const importChosen: SetupProgress = { ...twitchConnected, importChosenAt: 2 };
+const interestsChosen: SetupProgress = { ...importChosen, interestsChosenAt: 2 };
 const completed: SetupProgress = { ...interestsChosen, completedAt: 3 };
 
 describe("firstIncompleteStep", () => {
   test("walks the steps in order", () => {
     expect(firstIncompleteStep(nothingDone)).toBe("platforms");
     expect(firstIncompleteStep(platformsChosen)).toBe("twitch");
-    expect(firstIncompleteStep(twitchConnected)).toBe("interests");
+    expect(firstIncompleteStep(twitchConnected)).toBe("import");
+    expect(firstIncompleteStep(importChosen)).toBe("interests");
     expect(firstIncompleteStep(interestsChosen)).toBe("dashboard");
     expect(firstIncompleteStep(completed)).toBe("finish");
+  });
+
+  test("does not send a setup back to the import question once interests are answered", () => {
+    expect(firstIncompleteStep({ ...twitchConnected, interestsChosenAt: 2 })).toBe("dashboard");
   });
 
   test("asks for platforms before Twitch even when Twitch is already connected", () => {

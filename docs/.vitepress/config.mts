@@ -27,6 +27,7 @@ export default defineConfig({
             { text: "Assets", link: "/ui/assets" },
             { text: "Scenes & overlays", link: "/ui/scenes" },
             { text: "Admin & team", link: "/ui/admin-team" },
+            { text: "Importing from Firebot and Streamer.bot", link: "/ui/setup-imports" },
             { text: "Auth & onboarding", link: "/ui/auth-onboarding" },
             { text: "Convex & HTTP", link: "/ui/convex-surface" },
           ],

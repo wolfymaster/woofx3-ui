@@ -19,6 +19,7 @@ import { useRef, useState } from "react";
 import { Link } from "wouter";
 import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
 import { PageHeader } from "@/components/layout/page-header";
+import { SetupImportPanel } from "@/components/setup-import/setup-import-panel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -638,7 +639,7 @@ export default function AdminBackup() {
     <div className="container mx-auto p-6 space-y-6">
       <PageHeader
         title="Backup"
-        description="Save your workflows, commands, groups and resources to a file, or bring them in from one."
+        description="Save your workflows, commands, groups and resources to a file, bring them in from one, or bring your setup over from Firebot or Streamer.bot."
       />
 
       {isLoading || (instance && access === undefined) ? (
@@ -646,19 +647,33 @@ export default function AdminBackup() {
       ) : !instance || !access?.canExport ? (
         <p className="text-sm text-muted-foreground">Select an instance you are a member of to back it up.</p>
       ) : (
-        <EngineFeatureGate
-          support={capabilities.support("config.bundles")}
-          state={capabilities.state}
-          feature="Backups"
-          onRetry={capabilities.refresh}
-        >
-          <ExportCard
-            instanceId={instance._id}
-            instanceName={instance.name}
-            canExportMembers={access.canExportMembers}
-          />
-          <ImportCard instanceId={instance._id} canImport={access.canImport} />
-        </EngineFeatureGate>
+        <>
+          <EngineFeatureGate
+            support={capabilities.support("config.bundles")}
+            state={capabilities.state}
+            feature="Backups"
+            onRetry={capabilities.refresh}
+          >
+            <ExportCard
+              instanceId={instance._id}
+              instanceName={instance.name}
+              canExportMembers={access.canExportMembers}
+            />
+            <ImportCard instanceId={instance._id} canImport={access.canImport} />
+          </EngineFeatureGate>
+          <Card>
+            <CardHeader>
+              <CardTitle>Bring your setup from Firebot or Streamer.bot</CardTitle>
+              <CardDescription>
+                Your commands, alerts, timers, counters and roles are rebuilt as woofx3 workflows, commands, counters
+                and groups. You see what comes over, and what can&apos;t, before anything is created.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SetupImportPanel instanceId={instance._id} canImport={access.canImport} />
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   );

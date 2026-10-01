@@ -363,6 +363,31 @@ interface CancelRunResult {
  * Toggle a workflow's enabled state on the engine. Waits for the engine's
  * webhook echo before returning.
  */
+/**
+ * Turn a workflow on or off in the engine and wait for the webhook echo that
+ * mirrors the change. The caller has already authorized the instance.
+ */
+export async function setWorkflowEnabledInEngine(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  instance: InstanceContext,
+  engineWorkflowId: string,
+  isEnabled: boolean
+): Promise<void> {
+  const correlationKey = crypto.randomUUID();
+  await ctx.runMutation(internal.workflowInternal.insertPending, {
+    correlationKey,
+    instanceId,
+    op: "update",
+    expiresAt: Date.now() + CORRELATION_TIMEOUT_MS + 5_000,
+  });
+
+  const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+  await rpc.setWorkflowEnabled(engineWorkflowId, isEnabled, correlationKey);
+
+  await waitForCompletion(ctx, correlationKey);
+}
+
 export const setEnabled = action({
   args: {
     instanceId: v.id("instances"),
@@ -371,19 +396,7 @@ export const setEnabled = action({
   },
   handler: async (ctx, { instanceId, engineWorkflowId, isEnabled }): Promise<{ isEnabled: boolean }> => {
     const bundle = await requireInstanceContext(ctx, instanceId);
-    const correlationKey = crypto.randomUUID();
-
-    await ctx.runMutation(internal.workflowInternal.insertPending, {
-      correlationKey,
-      instanceId,
-      op: "update",
-      expiresAt: Date.now() + CORRELATION_TIMEOUT_MS + 5_000,
-    });
-
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    await rpc.setWorkflowEnabled(engineWorkflowId, isEnabled, correlationKey);
-
-    await waitForCompletion(ctx, correlationKey);
+    await setWorkflowEnabledInEngine(ctx, instanceId, bundle, engineWorkflowId, isEnabled);
     return { isEnabled };
   },
 });
