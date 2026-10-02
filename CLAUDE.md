@@ -86,6 +86,7 @@ Engine → POST <webhookUrl> (read from engine settings table at call time)
 - Auth: the engine includes the per-instance `callbackToken` (established during registration) in the `Authorization: Bearer <token>` header.
 - The Convex webhook handler looks up the instance by the Bearer token, validates the request, upserts the relevant data, and Convex's reactive subscriptions automatically push updates to connected browser clients with no additional polling.
 - The webhook endpoint must be **idempotent** — duplicate deliveries must not create duplicate records (use entity `id` as upsert key).
+- A callback can also be a **request** the engine waits on, answered in the response body. `twitch.token.requested` returns the linked Twitch account's current access token (`twitchIntegration.grantTokenToEngine`): Convex alone holds the refresh token and the Twitch app secret, and renews the token for the engine.
 
 ### Account Sharing
 
@@ -101,6 +102,7 @@ Multiple users can be members of the same Account. Account membership grants ful
 | Convex webhook resolves the instance from the Bearer token before processing | The endpoint is public-facing; the per-instance callback token is the trust boundary |
 | UI-only metadata (trigger/action display settings) never enters the engine DB | Engine DB is engine-concerns only; Convex persists UI fields on webhook callback arrival |
 | Account sharing changes only Convex membership — never the engine | Engine has no user/account concept |
+| App secrets and refresh tokens for apps woofx3 owns (Twitch) never leave Convex | An engine may be self-hosted; it asks Convex for access tokens instead |
 
 ## Commands
 
