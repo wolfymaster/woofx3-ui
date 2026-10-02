@@ -35,6 +35,8 @@ interface WidgetLayoutCanvasProps {
   header?: ReactNode;
   /** See OverlayEditorShell.className: how the editor claims its height. */
   className?: string;
+  /** Any CSS color. Transparent lets the stage's dot grid show through, as OBS shows the scene beneath. */
+  background?: string;
 }
 
 /**
@@ -54,6 +56,7 @@ export function WidgetLayoutCanvas({
   placeholder,
   header,
   className,
+  background = "transparent",
 }: WidgetLayoutCanvasProps) {
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   // StageArea re-observes whenever this identity changes, so it is not rebuilt per render.
@@ -188,8 +191,8 @@ export function WidgetLayoutCanvas({
       stage={(zoom) => (
         // biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets
         <div
-          className="relative shrink-0 overflow-hidden bg-[#050507] shadow-lg"
-          style={{ width: width * zoom, height: height * zoom }}
+          className="relative shrink-0 overflow-hidden shadow-lg ring-1 ring-border"
+          style={{ width: width * zoom, height: height * zoom, background }}
           onMouseDown={handleBackgroundMouseDown}
           data-testid="scene-canvas"
         >

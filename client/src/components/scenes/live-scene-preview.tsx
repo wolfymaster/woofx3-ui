@@ -116,7 +116,11 @@ export function LiveScenePreview({ sceneId, width, height, widgets }: LiveSceneP
       allow="local-network-access"
       scrolling="no"
       className="absolute inset-0 z-[1] border-none bg-transparent pointer-events-none"
-      style={{ width, height }}
+      // A browser paints an opaque backdrop (white) behind a frame whose document's
+      // color-scheme differs from the iframe element's. The overlay declares none, so
+      // it is light; under this app's dark theme the frame would otherwise hide the
+      // canvas. Matching it keeps the overlay's transparent pixels transparent.
+      style={{ width, height, colorScheme: "light" }}
       data-testid="live-scene-preview"
     />
   );
