@@ -217,6 +217,35 @@ export const executeCommand = action({
   },
 });
 
+/**
+ * Create a command group in the engine and mirror it into the read cache,
+ * returning its engine id. The caller has already authorized the instance.
+ */
+export async function createGroupInEngine(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  instance: InstanceContext,
+  group: { name: string; description?: string }
+): Promise<string> {
+  const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+  const result = await rpc.createGroup({
+    name: group.name,
+    description: group.description,
+    correlationKey: crypto.randomUUID(),
+  });
+
+  await ctx.runMutation(internal.chatCommandGroups.upsertFromWebhook, {
+    instanceId,
+    engineGroupId: result.id,
+    name: result.name,
+    description: result.description,
+    isBuiltIn: result.isBuiltIn,
+    engineCreatedAt: result.createdAt,
+  });
+
+  return result.id;
+}
+
 export const createGroup = action({
   args: {
     instanceId: v.id("instances"),
@@ -225,25 +254,11 @@ export const createGroup = action({
   },
   handler: async (ctx, args): Promise<{ engineGroupId: string }> => {
     const bundle = await requireInstanceContext(ctx, args.instanceId);
-    const correlationKey = crypto.randomUUID();
-
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    const result = await rpc.createGroup({
+    const engineGroupId = await createGroupInEngine(ctx, args.instanceId, bundle, {
       name: args.name,
       description: args.description,
-      correlationKey,
     });
-
-    await ctx.runMutation(internal.chatCommandGroups.upsertFromWebhook, {
-      instanceId: args.instanceId,
-      engineGroupId: result.id,
-      name: result.name,
-      description: result.description,
-      isBuiltIn: result.isBuiltIn,
-      engineCreatedAt: result.createdAt,
-    });
-
-    return { engineGroupId: result.id };
+    return { engineGroupId };
   },
 });
 
@@ -301,6 +316,30 @@ export const deleteGroup = action({
   },
 });
 
+/**
+ * Add a chatter to a command group in the engine and mirror the membership.
+ * The caller has already authorized the instance.
+ */
+export async function addGroupMemberInEngine(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  instance: InstanceContext,
+  engineGroupId: string,
+  username: string
+): Promise<{ ok: true }> {
+  const normalized = username.trim().toLowerCase();
+  const rpc = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
+  const result = await rpc.addUserToGroup(engineGroupId, normalized);
+
+  await ctx.runMutation(internal.chatCommandGroups.addMemberFromWebhook, {
+    instanceId,
+    engineGroupId,
+    username: normalized,
+  });
+
+  return result;
+}
+
 export const addUserToGroup = action({
   args: {
     instanceId: v.id("instances"),
@@ -309,18 +348,7 @@ export const addUserToGroup = action({
   },
   handler: async (ctx, args): Promise<{ ok: true }> => {
     const bundle = await requireInstanceContext(ctx, args.instanceId);
-    const username = args.username.trim().toLowerCase();
-
-    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
-    const result = await rpc.addUserToGroup(args.engineGroupId, username);
-
-    await ctx.runMutation(internal.chatCommandGroups.addMemberFromWebhook, {
-      instanceId: args.instanceId,
-      engineGroupId: args.engineGroupId,
-      username,
-    });
-
-    return result;
+    return addGroupMemberInEngine(ctx, args.instanceId, bundle, args.engineGroupId, args.username);
   },
 });
 

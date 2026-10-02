@@ -412,6 +412,8 @@ export default defineSchema({
       })
     ),
     platformsChosenAt: v.optional(v.number()),
+    // When the "bring your setup" question was answered: an import queued, or skipped.
+    importChosenAt: v.optional(v.number()),
     // SETUP_INTERESTS ids (convex/lib/setupInterests.ts). Skipping saves none.
     interests: v.optional(v.array(v.string())),
     interestsChosenAt: v.optional(v.number()),
@@ -909,6 +911,72 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_item", ["instanceId", "packId", "itemId"])
+    .index("by_correlation", ["correlationKey"]),
+
+  // setupImports: a streamer's setup brought over from Firebot or Streamer.bot
+  // (convex/lib/setupImport). Converted when the file is read, reviewed, then
+  // applied by convex/setupImports.ts through the same engine calls the UI
+  // makes. `leftovers` are parts of the setup woofx3 has no place for at all.
+  setupImports: defineTable({
+    instanceId: v.id("instances"),
+    source: v.union(v.literal("firebot"), v.literal("streamerbot")),
+    label: v.string(),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    status: v.union(v.literal("review"), v.literal("queued"), v.literal("applying"), v.literal("done")),
+    leftovers: v.array(
+      v.object({ origin: v.string(), name: v.string(), message: v.string(), detail: v.optional(v.string()) })
+    ),
+    queuedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+    // Held while an apply runs, so two scheduled at once do not both create items.
+    claimedAt: v.optional(v.number()),
+    // Why a queued import has not started: it waits for setup to install the modules it needs.
+    waitingFor: v.optional(v.string()),
+    // Set when it gave up waiting (on an engine that never registered); retrying starts it again.
+    stalled: v.optional(v.boolean()),
+  }).index("by_instance", ["instanceId", "createdAt"]),
+
+  // setupImportItems: one engine object an import creates, and how creating it
+  // went. `spec` is the converted item (lib/setupImport/types.ts), stored with
+  // `$` keys escaped. `engineId` is the engine id of the workflow, command or
+  // group, or the canonical id of a counter. Items with the same source and
+  // key are the same thing from the same file, so importing it again finds
+  // what the first import created instead of duplicating it.
+  setupImportItems: defineTable({
+    importId: v.id("setupImports"),
+    instanceId: v.id("instances"),
+    source: v.union(v.literal("firebot"), v.literal("streamerbot")),
+    order: v.number(),
+    key: v.string(),
+    kind: v.union(v.literal("group"), v.literal("counter"), v.literal("command"), v.literal("workflow")),
+    name: v.string(),
+    origin: v.string(),
+    readiness: v.union(v.literal("ready"), v.literal("partial"), v.literal("unsupported")),
+    notes: v.array(
+      v.object({ message: v.string(), detail: v.optional(v.string()), blocking: v.optional(v.boolean()) })
+    ),
+    // What it does, step by step, as the report lists it.
+    steps: v.array(v.string()),
+    spec: v.any(),
+    outcome: v.optional(
+      v.union(
+        v.literal("created"),
+        v.literal("exists"),
+        v.literal("needs_module"),
+        v.literal("skipped"),
+        v.literal("pending"),
+        v.literal("failed")
+      )
+    ),
+    message: v.optional(v.string()),
+    engineId: v.optional(v.string()),
+    // The workflow create's correlation key, so an echo that arrives after the
+    // apply stopped waiting still marks the item created.
+    correlationKey: v.optional(v.string()),
+  })
+    .index("by_import", ["importId", "order"])
+    .index("by_instance_key", ["instanceId", "source", "key"])
     .index("by_correlation", ["correlationKey"]),
 
   // workflows: Convex-side mirror of canonical engine WorkflowDefinition, plus

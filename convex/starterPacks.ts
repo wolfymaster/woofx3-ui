@@ -222,7 +222,7 @@ export const builtInGroupIds = internalQuery({
   },
 });
 
-function starterCatalog(bundle: CatalogBundle): StarterCatalog {
+export function starterCatalog(bundle: CatalogBundle): StarterCatalog {
   const triggers = bundle.enabledTriggerIds
     .map((id) => bundle.triggerDefs[id])
     .filter((def) => def !== undefined)

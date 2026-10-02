@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { escapeDollarKeys } from "./lib/dollarKeys";
+import { completeImportItemByCorrelation } from "./lib/setupImportLedger";
 import { completeStarterItemByCorrelation } from "./lib/starterPackLedger";
 import { deleteWorkflowHealth } from "./workflowHealth";
 
@@ -63,6 +64,7 @@ export const resolveCorrelation = internalMutation({
     });
     if (op === "create") {
       await completeStarterItemByCorrelation(ctx, correlationKey, engineWorkflowId);
+      await completeImportItemByCorrelation(ctx, correlationKey, engineWorkflowId);
     }
   },
 });

@@ -5,6 +5,7 @@
 export const SETUP_STEPS = [
   { id: "platforms", title: "Choose your platforms" },
   { id: "twitch", title: "Connect Twitch" },
+  { id: "import", title: "Bring your setup" },
   { id: "interests", title: "What do you want woofx3 to do?" },
   { id: "dashboard", title: "Your dashboard" },
   { id: "overlay", title: "Your overlay" },
@@ -29,15 +30,16 @@ export function setupStepIndex(step: SetupStepId): number {
 export interface SetupProgress {
   platformsChosenAt: number | null;
   twitchUsername: string | null;
+  importChosenAt: number | null;
   interestsChosenAt: number | null;
   completedAt: number | null;
 }
 
 /**
  * The first step not done yet. Steps are done in order, so a user sent to a
- * later step before they got there lands here instead. Skipping the interests
- * question saves an empty answer, and the dashboard step is done by finishing
- * setup, so every step has a record of being passed.
+ * later step before they got there lands here instead. Skipping the import or
+ * the interests question records that it was passed, and the dashboard step is
+ * done by finishing setup, so every step has a record of being passed.
  */
 export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
   if (progress.platformsChosenAt === null) {
@@ -45,6 +47,11 @@ export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
   }
   if (progress.twitchUsername === null) {
     return "twitch";
+  }
+  // Answering the interests question passes the import question too, so a
+  // setup that got past it before it was asked does not go back to it.
+  if (progress.importChosenAt === null && progress.interestsChosenAt === null) {
+    return "import";
   }
   if (progress.interestsChosenAt === null) {
     return "interests";

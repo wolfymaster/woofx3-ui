@@ -996,7 +996,7 @@ function resolveParameters(
   return out;
 }
 
-function catalogAction(ref: StarterActionRef, catalog: StarterCatalog) {
+export function catalogAction(ref: string, catalog: StarterCatalog) {
   const entry = catalog.actions.find((action) => action.canonicalRef === ref);
   if (!entry) {
     throw new Error(`The catalog has no action ${ref}`);
