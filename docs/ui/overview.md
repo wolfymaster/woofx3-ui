@@ -26,12 +26,12 @@ The menu is declared in one place — `client/src/components/layout/nav-config.t
 | Dashboard | `/` | — |
 | Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Supporters, Assets, Workflows |
 | Modules | `/modules` | — (the page renders its own category sidebar) |
-| Help | `/help` | Learning, Logs, Submit Feedback |
+| Help | `/help` | Learning, Setup, Logs, Feedback |
 | Admin | `/admin` | Engine, Integrations, Storage, Appearance |
 
 Admin and Team are not in the primary nav — they are the icon buttons in the header's utility cluster (`UTILITY_SECTIONS`), but Admin renders the same section sidebar as Stream and Help.
 
-`/stream`, `/help`, and `/admin` redirect to their first sub-item. Learning and Submit Feedback are placeholder screens — no engine surface backs them yet.
+`/stream`, `/help`, and `/admin` redirect to their first sub-item. Learning is a placeholder screen. [Feedback](./feedback) is the product-wide voting board.
 
 **Counters, Timers and Queues** are first-party pages for the resource kinds the bundled `woofx3` module provides. Each is a `components/resources/resource-kind-page.tsx` — instances in a rail, the chosen one at `<page>/<instance id>`, creation and settings from the kind's own schema — plus the kind's value display and controls. Every control runs the kind's own action through `hooks/use-resource-action.ts`, exactly what a workflow step or chat command would run, and the value shown is the engine's, mirrored into `resourceValues` from its storage-changed webhook. A timer is stored as the moment it ends while running, so the page counts it down itself; `lib/resource-values.ts` reads each kind's stored shape. A dashboard run reports no result back, so the Queues page checks a new entry against the queue's capacity and duplicate rule before sending it.
 

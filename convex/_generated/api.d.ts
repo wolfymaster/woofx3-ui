@@ -33,6 +33,7 @@ import type * as engineHealth from "../engineHealth.js";
 import type * as engineInfo from "../engineInfo.js";
 import type * as engineSync from "../engineSync.js";
 import type * as engineSyncInternal from "../engineSyncInternal.js";
+import type * as feedback from "../feedback.js";
 import type * as fieldOptions from "../fieldOptions.js";
 import type * as gettingStarted from "../gettingStarted.js";
 import type * as goLive from "../goLive.js";
@@ -68,6 +69,7 @@ import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widg
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_engineSync_syncRow from "../lib/engineSync/syncRow.js";
 import type * as lib_engineTestRun from "../lib/engineTestRun.js";
+import type * as lib_feedback from "../lib/feedback.js";
 import type * as lib_fieldOptions from "../lib/fieldOptions.js";
 import type * as lib_gettingStarted from "../lib/gettingStarted.js";
 import type * as lib_goLiveFacts from "../lib/goLiveFacts.js";
@@ -179,6 +181,7 @@ import type * as resources from "../resources.js";
 import type * as sceneActions from "../sceneActions.js";
 import type * as sceneWidgets from "../sceneWidgets.js";
 import type * as scenes from "../scenes.js";
+import type * as seeds_preview from "../seeds/preview.js";
 import type * as seeds_triggerActions from "../seeds/triggerActions.js";
 import type * as setup from "../setup.js";
 import type * as setupApply from "../setupApply.js";
@@ -243,6 +246,7 @@ declare const fullApi: ApiFromModules<{
   engineInfo: typeof engineInfo;
   engineSync: typeof engineSync;
   engineSyncInternal: typeof engineSyncInternal;
+  feedback: typeof feedback;
   fieldOptions: typeof fieldOptions;
   gettingStarted: typeof gettingStarted;
   goLive: typeof goLive;
@@ -278,6 +282,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/engineSync/syncRow": typeof lib_engineSync_syncRow;
   "lib/engineTestRun": typeof lib_engineTestRun;
+  "lib/feedback": typeof lib_feedback;
   "lib/fieldOptions": typeof lib_fieldOptions;
   "lib/gettingStarted": typeof lib_gettingStarted;
   "lib/goLiveFacts": typeof lib_goLiveFacts;
@@ -389,6 +394,7 @@ declare const fullApi: ApiFromModules<{
   sceneActions: typeof sceneActions;
   sceneWidgets: typeof sceneWidgets;
   scenes: typeof scenes;
+  "seeds/preview": typeof seeds_preview;
   "seeds/triggerActions": typeof seeds_triggerActions;
   setup: typeof setup;
   setupApply: typeof setupApply;
@@ -448,4 +454,139 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  rateLimiter: {
+    lib: {
+      checkRateLimit: FunctionReference<
+        "query",
+        "internal",
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          count?: number;
+          key?: string;
+          name: string;
+          reserve?: boolean;
+          throws?: boolean;
+        },
+        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
+      >;
+      clearAll: FunctionReference<
+        "mutation",
+        "internal",
+        { before?: number },
+        null
+      >;
+      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
+      getValue: FunctionReference<
+        "query",
+        "internal",
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          key?: string;
+          name: string;
+          sampleShards?: number;
+        },
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          shard: number;
+          ts: number;
+          value: number;
+        }
+      >;
+      rateLimit: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          config:
+            | {
+                capacity?: number;
+                kind: "token bucket";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: null;
+              }
+            | {
+                capacity?: number;
+                kind: "fixed window";
+                maxReserved?: number;
+                period: number;
+                rate: number;
+                shards?: number;
+                start?: number;
+              };
+          count?: number;
+          key?: string;
+          name: string;
+          reserve?: boolean;
+          throws?: boolean;
+        },
+        { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
+      >;
+      resetRateLimit: FunctionReference<
+        "mutation",
+        "internal",
+        { key?: string; name: string },
+        null
+      >;
+    };
+    time: {
+      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
+    };
+  };
+};

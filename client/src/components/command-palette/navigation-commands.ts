@@ -34,7 +34,7 @@ const PAGE_KEYWORDS: Record<string, readonly string[]> = {
   modules: ["plugins", "extensions", "marketplace", "install"],
   learning: ["docs", "help", "tutorials"],
   logs: ["events", "debug", "errors"],
-  feedback: ["bug", "report", "suggest"],
+  feedback: ["bug", "report", "suggest", "idea", "vote", "feature request"],
   team: ["members", "users", "sharing", "people"],
   engine: ["instance", "connection", "version", "settings"],
   integrations: ["twitch", "connect", "oauth", "accounts"],

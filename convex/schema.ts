@@ -1,6 +1,7 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 
 // Must match SessionSummarySession and SessionSummaryTotals in
 // convex/lib/sessionSummary.ts, which validates the webhook body before it
@@ -1675,4 +1676,42 @@ export default defineSchema({
     .index("by_endpoint_id", ["endpointId"])
     .index("by_instance_trigger", ["instanceId", "triggerKey"])
     .index("by_instance_module", ["instanceId", "modulePrefix"]),
+
+  // feedbackPosts: the Feedback board's ideas and bug reports. Not instance
+  // scoped: the board is one product-wide list every signed-in user reads and
+  // votes on. `status` is set only by internal functions, since triaging the
+  // board belongs to the operators, not to users.
+  //
+  // voteCount and commentCount mirror feedbackVotes and feedbackComments and
+  // are kept in the same mutation as every insert or delete there; the board
+  // sorts by voteCount, and Convex has no count operator to sort by instead.
+  feedbackPosts: defineTable({
+    authorId: v.id("users"),
+    kind: feedbackKindValidator,
+    title: v.string(),
+    body: v.string(),
+    status: feedbackStatusValidator,
+    voteCount: v.number(),
+    commentCount: v.number(),
+    statusChangedAt: v.optional(v.number()),
+    editedAt: v.optional(v.number()),
+  })
+    .index("by_vote_count", ["voteCount"])
+    .index("by_status", ["status"])
+    .index("by_status_and_vote_count", ["status", "voteCount"])
+    .searchIndex("search_title", { searchField: "title", filterFields: ["status"] }),
+
+  // feedbackVotes: one row per (post, user); its presence is the vote.
+  feedbackVotes: defineTable({
+    postId: v.id("feedbackPosts"),
+    userId: v.id("users"),
+  })
+    .index("by_post_and_user", ["postId", "userId"])
+    .index("by_user", ["userId"]),
+
+  feedbackComments: defineTable({
+    postId: v.id("feedbackPosts"),
+    authorId: v.id("users"),
+    body: v.string(),
+  }).index("by_post", ["postId"]),
 });
