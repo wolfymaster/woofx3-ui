@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { type CuratedSetupPlatform, curatedSetupPlatformError, DEFAULT_SETUP_PLATFORMS } from "./lib/setupPlatforms";
 
 // Curation of the platforms offered at setup. Everything here is internal: the
@@ -73,21 +73,25 @@ export const remove = internalMutation({
  * Inserts each default platform that has no row yet. Rows that already exist
  * are left as they are, so running it again never undoes a later edit.
  */
+export async function seedDefaultSetupPlatforms(ctx: MutationCtx): Promise<string[]> {
+  const inserted: string[] = [];
+  for (const entry of DEFAULT_SETUP_PLATFORMS) {
+    const existing = await ctx.db
+      .query("setupPlatforms")
+      .withIndex("by_marketplace_module", (q) => q.eq("marketplaceModuleId", entry.marketplaceModuleId))
+      .first();
+    if (existing) {
+      continue;
+    }
+    await ctx.db.insert("setupPlatforms", { ...entry });
+    inserted.push(entry.marketplaceModuleId);
+  }
+  return inserted;
+}
+
 export const seedDefaults = internalMutation({
   args: {},
   handler: async (ctx): Promise<{ inserted: string[] }> => {
-    const inserted: string[] = [];
-    for (const entry of DEFAULT_SETUP_PLATFORMS) {
-      const existing = await ctx.db
-        .query("setupPlatforms")
-        .withIndex("by_marketplace_module", (q) => q.eq("marketplaceModuleId", entry.marketplaceModuleId))
-        .first();
-      if (existing) {
-        continue;
-      }
-      await ctx.db.insert("setupPlatforms", { ...entry });
-      inserted.push(entry.marketplaceModuleId);
-    }
-    return { inserted };
+    return { inserted: await seedDefaultSetupPlatforms(ctx) };
   },
 });
