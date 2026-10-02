@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { twitchTokenGrant } from "./twitchTokenGrant";
+import { twitchTokenForEngine, twitchTokenGrant } from "./twitchTokenGrant";
 
 describe("twitchTokenGrant", () => {
   test("gives the token's remaining life as of now, with the app's client id and no refresh token", () => {
@@ -32,5 +32,34 @@ describe("twitchTokenGrant", () => {
       now: 5_000,
     });
     expect(grant.expiresIn).toBe(0);
+  });
+});
+
+describe("twitchTokenForEngine", () => {
+  const link = {
+    platformUserId: "42",
+    accessToken: "a",
+    refreshToken: "r",
+    expiresAt: 10_000_000,
+    scopes: ["chat:read"],
+  };
+
+  test("gives an engine that asks for tokens no refresh token", () => {
+    const token = twitchTokenForEngine({ link, asksForTokens: true, clientId: "app", now: 7_000_000 });
+    expect(token).toEqual({
+      userId: "42",
+      accessToken: "a",
+      expiresIn: 3000,
+      obtainmentTimestamp: 7_000_000,
+      scope: ["chat:read"],
+      clientId: "app",
+    });
+    expect("refreshToken" in token).toBe(false);
+  });
+
+  test("still gives an engine that refreshes itself the refresh token", () => {
+    expect(twitchTokenForEngine({ link, asksForTokens: false, clientId: "app", now: 7_000_000 }).refreshToken).toBe(
+      "r"
+    );
   });
 });

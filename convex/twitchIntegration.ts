@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { readMemberRole } from "./instances";
+import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
@@ -12,7 +13,7 @@ import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
-import { type TwitchTokenRequestedResponse, twitchTokenGrant } from "./lib/twitchTokenGrant";
+import { type TwitchTokenRequestedResponse, twitchTokenForEngine, twitchTokenGrant } from "./lib/twitchTokenGrant";
 import { claimHandoff } from "./oauthConnectHandoff";
 import { freshTwitchToken } from "./platformRealtime";
 
@@ -205,20 +206,19 @@ export const syncToEngine = internalAction({
       throw new Error("AUTH_TWITCH_ID env var is not set");
     }
 
-    const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
-
-    // `clientId` tells an engine the token is this dashboard's: it asks here
-    // for the next one (`grantTokenToEngine`) instead of refreshing it with an
-    // app secret of its own. An engine that predates that ignores the field.
-    const token = {
-      userId: link.platformUserId,
-      accessToken: link.accessToken,
-      refreshToken: link.refreshToken,
-      expiresIn: Math.max(0, Math.floor((link.expiresAt - Date.now()) / 1000)),
-      obtainmentTimestamp: Date.now(),
-      scope: link.scopes,
+    const capabilities = await fetchEngineCapabilities({
+      url: instance.url,
+      clientId: instance.clientId,
+      clientSecret: instance.clientSecret,
+    });
+    const token = twitchTokenForEngine({
+      link,
+      asksForTokens: hasEngineCapability(capabilities, "twitch.dashboardTokens"),
       clientId: twitchClientId,
-    };
+      now: Date.now(),
+    });
+
+    const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
 
     await engine.setTwitchToken(token, link.connectedByUserId ?? undefined);
   },

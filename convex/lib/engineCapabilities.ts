@@ -22,6 +22,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "config.bundles",
   "obs.control",
   "obs.status",
+  "twitch.dashboardTokens",
   "widgets.themes",
   "workflow.delayWait",
   "workflow.dryRun",
