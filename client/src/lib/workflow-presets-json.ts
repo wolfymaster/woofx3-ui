@@ -1,6 +1,7 @@
 import type { ActionStep, ConditionConfig, WorkflowDefinition } from "@woofx3/api";
-import type { ConfigField } from "@woofx3/api/ui-schema";
+import { type ConfigField, isComparisonOperator } from "@woofx3/api/ui-schema";
 import type { TaskDefinition, TriggerConfig as WorkflowTriggerConfig } from "@woofx3/api/workflow-definition";
+import { comparisonChoices, defaultComparison, isComparisonValue } from "@/lib/condition-comparison";
 import { isCommandsSource } from "@/lib/parse-config-fields";
 import type { ActionNode } from "@/lib/workflow-tree";
 import {
@@ -56,7 +57,7 @@ export function incompleteConditionFields(fields: ConfigField[], values: Trigger
       return false;
     }
     const value = values[field.id];
-    return value === undefined || value === "";
+    return value === undefined || value === "" || (isComparisonValue(value) && value.value === "");
   });
 }
 
@@ -89,6 +90,12 @@ export function fieldValuesToConditions(fields: ConfigField[], values: TriggerCo
       continue;
     }
     const path = field.eventPath ?? field.id;
+    if (isComparisonValue(raw)) {
+      if (raw.value !== "") {
+        out.push({ field: `\${trigger.data.${path}}`, operator: raw.operator, value: raw.value });
+      }
+      continue;
+    }
     out.push({
       field: `\${trigger.data.${path}}`,
       operator: field.operator ?? "eq",
@@ -124,6 +131,12 @@ export function decodeConditionValue(
       return { type: "range", min: condition.value[0] as number, max: condition.value[1] as number };
     }
     return { type: "single", value: condition.value as number };
+  }
+  if (comparisonChoices(field)) {
+    // A comparison outside the field's choices is kept rather than replaced by the
+    // default, so opening and saving a condition never changes what it matches.
+    const operator = isComparisonOperator(condition.operator) ? condition.operator : defaultComparison(field).operator;
+    return { operator, value: condition.value as number };
   }
   return condition.value as TriggerConfigValues[string];
 }

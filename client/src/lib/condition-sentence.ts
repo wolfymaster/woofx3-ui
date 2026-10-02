@@ -1,4 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import { comparisonPhrase, formatComparison, isComparisonValue } from "@/lib/condition-comparison";
 import { formatConfigValue, type TriggerConfigValues } from "@/lib/workflow-presets";
 import { ANY_CONDITION } from "@/lib/workflow-presets-json";
 
@@ -79,7 +80,7 @@ function fieldPart(field: SentenceField, value: unknown, optionLabels: OptionLab
   if (value === ANY_CONDITION) {
     return { kind: "field", fieldId: field.id, text: field.anyText ?? `any ${lowerLabel(field)}`, state: "any" };
   }
-  if (value === undefined || value === "") {
+  if (value === undefined || value === "" || (isComparisonValue(value) && value.value === "")) {
     return {
       kind: "field",
       fieldId: field.id,
@@ -98,6 +99,9 @@ export function displayValue(field: SentenceField, value: unknown, optionLabels:
   if (staticLabel ?? loadedLabel) {
     return (staticLabel ?? loadedLabel) as string;
   }
+  if (isComparisonValue(value)) {
+    return formatComparison(value, field.unit);
+  }
   if (field.type === "number" && typeof value === "number") {
     return withOperator(`${value.toLocaleString()}${field.unit ? ` ${field.unit}` : ""}`, field.operator);
   }
@@ -113,16 +117,17 @@ export function displayValue(field: SentenceField, value: unknown, optionLabels:
   return key;
 }
 
+/**
+ * Only a fixed bound reads as part of the amount. A field that can only match one value
+ * says so through the sentence's own wording ("at Tier 1"), not with "exactly".
+ */
 function withOperator(amount: string, operator: SentenceField["operator"]): string {
   switch (operator) {
     case "gte":
-      return `${amount} or more`;
     case "lte":
-      return `${amount} or fewer`;
     case "gt":
-      return `more than ${amount}`;
     case "lt":
-      return `fewer than ${amount}`;
+      return comparisonPhrase(amount, operator);
     default:
       return amount;
   }

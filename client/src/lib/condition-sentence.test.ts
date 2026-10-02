@@ -13,6 +13,14 @@ const TIER: SentenceField = {
 };
 const VIEWERS: SentenceField = { id: "minViewers", label: "Minimum viewers", type: "number", operator: "gte" };
 
+const BITS: SentenceField = {
+  id: "amount",
+  label: "Bits",
+  type: "number",
+  unit: "bits",
+  operator: "gte",
+};
+
 function states(parts: SentencePart[]) {
   return parts.map((part) => (part.kind === "field" ? `[${part.state}:${part.text}]` : part.text)).join("");
 }
@@ -28,6 +36,20 @@ describe("sentenceParts", () => {
     expect(sentenceText(sentenceParts("Someone subs at {tier}", [TIER], { tier: "2000" }))).toBe(
       "Someone subs at Tier 2"
     );
+  });
+
+  test("reads the chosen comparison with the amount", () => {
+    expect(
+      sentenceText(sentenceParts("Someone cheers {amount}", [BITS], { amount: { operator: "eq", value: 69 } }))
+    ).toBe("Someone cheers exactly 69 bits");
+    expect(
+      sentenceText(sentenceParts("Someone cheers {amount}", [BITS], { amount: { operator: "gte", value: 1000 } }))
+    ).toBe("Someone cheers 1,000 bits or more");
+  });
+
+  test("reads a comparison with its amount cleared as missing", () => {
+    const parts = sentenceParts("Someone cheers {amount}", [BITS], { amount: { operator: "eq", value: "" } });
+    expect(states(parts)).toBe("Someone cheers [missing:a bits]");
   });
 
   test("reads a missing required value with an article, capitalized", () => {
