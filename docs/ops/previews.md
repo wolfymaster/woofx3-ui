@@ -12,13 +12,32 @@ Every pull request from a branch in this repository gets its own running copy of
 
 On every push (and when the description changes):
 
-1. **Convex**: `bunx convex deploy --preview-create pr-<n>` pushes the branch's functions and schema to the pull request's preview deployment, creating it on the first push. `SITE_URL` on that deployment is set to the preview's address. Convex replaces the deployment on every push, so its `*.convex.site` address changes each time; OAuth callbacks go through production instead (see [OAuth in a preview](#oauth-in-a-preview)).
+1. **Convex**: `bunx convex deploy --preview-create pr-<n>` pushes the branch's functions and schema to the pull request's preview deployment, creating it on the first push, then seeds it (see [Seeding](#seeding)). `SITE_URL` on that deployment is set to the preview's address. Convex replaces the deployment on every push, so its `*.convex.site` address changes each time; OAuth callbacks go through production instead (see [OAuth in a preview](#oauth-in-a-preview)).
 2. **Image**: the `Dockerfile` is built against that deployment's URLs and pushed as `ghcr.io/wolfymaster/woofx3-ui:pr-<n>-<sha7>`. The production deploy uses the bare commit SHA, so the two never share a tag.
 3. **Maintenance API**: `scripts/preview-ui.sh up` asks the woofx3 maintenance API to create the preview, or to redeploy it to the new tag. The maintenance API places it as a service in the woofx3 project's **staging** environment on Railway, attaches `pr-<n>-woofx3-ui.woofx3.com` as a Railway custom domain, writes the CNAME and ownership TXT record Railway asks for into the `woofx3.com` zone on Cloudflare, and waits for Railway's certificate.
 4. **Engine**: if the preview names an engine release, the maintenance API pairs it with the preview engine running that release, creating the engine in the same staging environment when there is none. The workflow then sets `PREVIEW_ENGINE_URL`, `PREVIEW_ENGINE_VERSION` and `PREVIEW_ENGINE_REGISTRATION_TOKEN` on the Convex preview deployment.
 5. A sticky comment on the pull request says where the preview is, or where it failed.
 
 When the pull request closes, merged or not, `scripts/preview-ui.sh down` removes the UI preview and its DNS records. The Convex preview deployment is left for Convex to clean up, which it does for preview deployments on its own.
+
+## Seeding
+
+A preview deployment starts with empty tables, but some features read tables that only operators fill, with `bunx convex run` against production. The platforms offered during onboarding (`setupPlatforms`) are one: without rows, onboarding stops at "No platforms are set up to choose from yet".
+
+`convex/seeds/preview.ts` fills those tables. The deploy step runs it with `--preview-run seeds/preview:default` after every push, once the functions are live; Convex ignores `--preview-run` on a production deploy.
+
+When a feature depends on another operator-filled table:
+
+1. Put the seed in an exported helper that takes a `MutationCtx`, next to the table's other functions, and have its own `seedDefaults`-style internal mutation call it (see `seedDefaultSetupPlatforms` in `convex/setupPlatforms.ts`).
+2. Call the helper from `convex/seeds/preview.ts`.
+
+Every seed runs on every push, so it must be idempotent and must leave alone rows it did not insert, including ones edited by hand in the preview. Seed only what is safe to commit: secrets such as the OAuth apps in `integrationCredentials` are not seeded, so the integrations that need them do not work in a preview.
+
+To seed a preview by hand, e.g. after clearing a table in the dashboard, use the preview deploy key:
+
+```bash
+CONVEX_DEPLOY_KEY=<preview deploy key> bunx convex run --preview-name pr-<n> seeds/preview:default
+```
 
 ## Choosing an engine
 

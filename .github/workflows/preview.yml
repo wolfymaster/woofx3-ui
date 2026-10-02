@@ -143,6 +143,8 @@ jobs:
       # A preview deploy key creates the named preview deployment on first use
       # and reuses it on every later push. `--cmd` runs with the deployment's
       # URLs set, which is the only place the CLI hands them out.
+      # `--preview-run` seeds the data onboarding needs (convex/seeds/preview.ts)
+      # once the functions are live; it runs on every push, so it is idempotent.
       - name: Deploy Convex to the preview deployment
         id: convex
         working-directory: woofx3-ui
@@ -151,6 +153,7 @@ jobs:
           CONVEX_NAME: ${{ steps.preview.outputs.convex_name }}
         run: |
           bunx convex deploy --preview-create "$CONVEX_NAME" \
+            --preview-run seeds/preview:default \
             --cmd-url-env-var-name VITE_CONVEX_URL \
             --cmd 'printf "convex_url=%s\nconvex_site_url=%s\n" "$VITE_CONVEX_URL" "$VITE_CONVEX_SITE_URL" >> "$GITHUB_OUTPUT"'
 
