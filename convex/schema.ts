@@ -1694,6 +1694,7 @@ export default defineSchema({
     voteCount: v.number(),
     commentCount: v.number(),
     statusChangedAt: v.optional(v.number()),
+    editedAt: v.optional(v.number()),
   })
     .index("by_vote_count", ["voteCount"])
     .index("by_status", ["status"])

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  authorCanChangeFeedbackPost,
   FEEDBACK_BODY_MAX,
   FEEDBACK_COMMENT_MAX,
   FEEDBACK_TITLE_MAX,
@@ -59,5 +60,14 @@ describe("feedbackRateLimitMessage", () => {
     expect(feedbackRateLimitMessage("comment", 5_000)).toBe(
       "You've added a lot of comments recently. Try again in a minute."
     );
+  });
+});
+
+describe("authorCanChangeFeedbackPost", () => {
+  test("only an open post can be changed by its author", () => {
+    expect(authorCanChangeFeedbackPost("open")).toBe(true);
+    for (const status of ["planned", "in_progress", "done", "declined"] as const) {
+      expect(authorCanChangeFeedbackPost(status)).toBe(false);
+    }
   });
 });

@@ -10,6 +10,7 @@ every post, can post, vote and comment. All of it lives in Convex
 | `/help/feedback` | The board: sort by Top (votes) or New, filter by status, load more |
 | `/help/feedback/new` | Post an idea or a bug |
 | `/help/feedback/:postId` | One post with its comments |
+| `/help/feedback/:postId/edit` | Edit your own post while it is open |
 
 ## Data
 
@@ -25,6 +26,20 @@ the post by the same mutation that adds or removes a vote or comment
 
 Title, description and comment limits live in `convex/lib/feedback.ts` and are
 enforced by the mutations; the forms use the same constants.
+
+## Editing and deleting
+
+The author can edit or delete a post while its status is `open`
+(`authorCanChangeFeedbackPost` in `convex/lib/feedback.ts`). Once operators
+move it on, it is fixed: voters backed what it said, and the roadmap points at
+it. The post page shows Edit and Delete only when the query reports
+`canChange`, and `update` and `remove` check the same rule.
+
+An edit that changes anything sets `editedAt`, shown as "edited" next to the
+date. Delete removes the post in its own transaction, so it leaves the board
+at once. Its votes and comments are then removed by
+`internal.feedback.deletePostChildren`, which deletes up to 200 of each per
+transaction and schedules itself again until none are left.
 
 ## Rate limits
 

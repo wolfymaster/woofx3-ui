@@ -3,18 +3,30 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { FeedbackCommentView } from "@convex/feedback";
 import { FEEDBACK_COMMENT_MAX } from "@convex/lib/feedback";
 import { useMutation, useQuery } from "convex/react";
-import { ArrowLeft, Loader2, SearchX } from "lucide-react";
+import { Loader2, Pencil, SearchX, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { EmptyState } from "@/components/common/empty-state";
+import { FeedbackBackLink } from "@/components/feedback/feedback-back-link";
 import { FeedbackPostMeta } from "@/components/feedback/feedback-post-meta";
 import { VoteButton } from "@/components/feedback/vote-button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/hooks/use-toast";
-import { FEEDBACK_PATH, feedbackErrorMessage } from "@/lib/feedback";
+import { FEEDBACK_PATH, feedbackEditPath, feedbackErrorMessage } from "@/lib/feedback";
 
 const COMMENT_TIME_FORMAT: Intl.DateTimeFormatOptions = {
   month: "short",
@@ -24,16 +36,55 @@ const COMMENT_TIME_FORMAT: Intl.DateTimeFormatOptions = {
   minute: "2-digit",
 };
 
-function BackLink() {
+/** Edit and Delete, shown to the author while the post is still open. */
+function AuthorActions({ postId }: { postId: Id<"feedbackPosts"> }) {
+  const [, navigate] = useLocation();
+  const remove = useMutation(api.feedback.remove);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const onDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await remove({ postId });
+      toast({ title: "Post deleted" });
+      navigate(FEEDBACK_PATH);
+    } catch (error) {
+      toast({ title: "Could not delete", description: feedbackErrorMessage(error), variant: "destructive" });
+      setIsDeleting(false);
+    }
+  };
+
   return (
-    <Link
-      href={FEEDBACK_PATH}
-      className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
-      data-testid="link-feedback-back"
-    >
-      <ArrowLeft className="h-4 w-4" />
-      All feedback
-    </Link>
+    <div className="flex gap-2">
+      <Button variant="outline" size="sm" asChild data-testid="button-feedback-edit">
+        <Link href={feedbackEditPath(postId)}>
+          <Pencil className="h-4 w-4 mr-2" />
+          Edit
+        </Link>
+      </Button>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button variant="outline" size="sm" disabled={isDeleting} data-testid="button-feedback-delete">
+            {isDeleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            Delete
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Its votes and comments are deleted with it. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onDelete} data-testid="button-feedback-delete-confirm">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -134,8 +185,8 @@ export default function FeedbackPost() {
   if (post === null) {
     return (
       <div className="container mx-auto p-6 max-w-3xl">
-        <BackLink />
-        <EmptyState icon={SearchX} title="Post not found" description="It may have been removed." />
+        <FeedbackBackLink href={FEEDBACK_PATH} label="All feedback" />
+        <EmptyState icon={SearchX} title="Post not found" description="It may have been deleted." />
       </div>
     );
   }
@@ -143,7 +194,7 @@ export default function FeedbackPost() {
   return (
     <div className="container mx-auto p-6 max-w-3xl space-y-8">
       <div>
-        <BackLink />
+        <FeedbackBackLink href={FEEDBACK_PATH} label="All feedback" />
         <Card>
           <CardContent className="pt-6 flex items-start gap-4">
             <VoteButton postId={post._id} voteCount={post.voteCount} hasVoted={post.hasVoted} />
@@ -153,6 +204,7 @@ export default function FeedbackPost() {
               </h1>
               <FeedbackPostMeta post={post} />
               {post.body && <p className="text-sm whitespace-pre-line break-words">{post.body}</p>}
+              {post.canChange && <AuthorActions postId={post._id} />}
             </div>
           </CardContent>
         </Card>

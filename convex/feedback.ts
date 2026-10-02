@@ -2,10 +2,11 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
 import {
+  authorCanChangeFeedbackPost,
   type FeedbackKind,
   type FeedbackStatus,
   feedbackKindValidator,
@@ -23,6 +24,8 @@ import {
 /** Comments shown on one post. A thread longer than this shows its first comments only. */
 const COMMENT_LIMIT = 200;
 const SIMILAR_LIMIT = 5;
+/** Votes or comments removed per transaction when a deleted post is cleaned up. */
+const CLEANUP_BATCH = 200;
 
 // Per-user token buckets. A burst covers a few posts or a back-and-forth in a
 // thread; after that, new tokens arrive at `rate` per hour. Generous for a
@@ -54,6 +57,9 @@ export type FeedbackPostView = {
   author: FeedbackAuthor;
   hasVoted: boolean;
   isAuthor: boolean;
+  /** The caller wrote it and may still edit or delete it. */
+  canChange: boolean;
+  editedAt: number | null;
 };
 
 export type FeedbackCommentView = {
@@ -115,7 +121,28 @@ async function toPostView(
     author,
     hasVoted: voted,
     isAuthor: post.authorId === userId,
+    canChange: post.authorId === userId && authorCanChangeFeedbackPost(post.status),
+    editedAt: post.editedAt ?? null,
   };
+}
+
+/** The post, if the caller wrote it and it is still open; refuses otherwise. */
+async function requireChangeablePost(
+  ctx: MutationCtx,
+  postId: Id<"feedbackPosts">,
+  userId: Id<"users">
+): Promise<Doc<"feedbackPosts">> {
+  const post = await ctx.db.get(postId);
+  if (!post) {
+    throw new ConvexError("This post no longer exists");
+  }
+  if (post.authorId !== userId) {
+    throw new ConvexError("Only the author can change this post");
+  }
+  if (!authorCanChangeFeedbackPost(post.status)) {
+    throw new ConvexError("This post has been reviewed and can no longer be changed");
+  }
+  return post;
 }
 
 /**
@@ -266,6 +293,55 @@ export const addComment = mutation({
     const commentId = await ctx.db.insert("feedbackComments", { postId: post._id, authorId: userId, body });
     await ctx.db.patch(post._id, { commentCount: post.commentCount + 1 });
     return commentId;
+  },
+});
+
+export const update = mutation({
+  args: { postId: v.id("feedbackPosts"), kind: feedbackKindValidator, title: v.string(), body: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const post = await requireChangeablePost(ctx, args.postId, userId);
+    const title = normalizeFeedbackTitle(args.title);
+    const body = normalizeFeedbackBody(args.body);
+    if (title === post.title && body === post.body && args.kind === post.kind) {
+      return;
+    }
+    await ctx.db.patch(post._id, { kind: args.kind, title, body, editedAt: Date.now() });
+  },
+});
+
+/**
+ * Deletes the post at once, so it leaves the board in this transaction. Its
+ * votes and comments can outnumber what one transaction may delete, so they
+ * are removed afterwards in batches.
+ */
+export const remove = mutation({
+  args: { postId: v.id("feedbackPosts") },
+  handler: async (ctx, args) => {
+    const userId = await requireUserId(ctx);
+    const post = await requireChangeablePost(ctx, args.postId, userId);
+    await ctx.db.delete(post._id);
+    await ctx.scheduler.runAfter(0, internal.feedback.deletePostChildren, { postId: post._id });
+  },
+});
+
+export const deletePostChildren = internalMutation({
+  args: { postId: v.id("feedbackPosts") },
+  handler: async (ctx, args) => {
+    const votes = await ctx.db
+      .query("feedbackVotes")
+      .withIndex("by_post_and_user", (q) => q.eq("postId", args.postId))
+      .take(CLEANUP_BATCH);
+    const comments = await ctx.db
+      .query("feedbackComments")
+      .withIndex("by_post", (q) => q.eq("postId", args.postId))
+      .take(CLEANUP_BATCH);
+    for (const row of [...votes, ...comments]) {
+      await ctx.db.delete(row._id);
+    }
+    if (votes.length === CLEANUP_BATCH || comments.length === CLEANUP_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.feedback.deletePostChildren, args);
+    }
   },
 });
 

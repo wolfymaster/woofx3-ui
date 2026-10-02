@@ -16,6 +16,15 @@ export type FeedbackStatus = Infer<typeof feedbackStatusValidator>;
 export const feedbackKindValidator = v.union(v.literal("idea"), v.literal("bug"));
 export type FeedbackKind = Infer<typeof feedbackKindValidator>;
 
+/**
+ * Whether the author may still edit or delete a post. Only while it is open:
+ * once operators have triaged it, voters and the roadmap depend on what it
+ * says, so it stays as it was.
+ */
+export function authorCanChangeFeedbackPost(status: FeedbackStatus): boolean {
+  return status === "open";
+}
+
 export const FEEDBACK_TITLE_MIN = 4;
 export const FEEDBACK_TITLE_MAX = 120;
 export const FEEDBACK_BODY_MAX = 5_000;

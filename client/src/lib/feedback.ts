@@ -4,9 +4,14 @@ import { ConvexError } from "convex/values";
 export const FEEDBACK_PATH = "/help/feedback";
 export const FEEDBACK_NEW_PATH = `${FEEDBACK_PATH}/new`;
 export const FEEDBACK_POST_ROUTE = `${FEEDBACK_PATH}/:postId`;
+export const FEEDBACK_EDIT_ROUTE = `${FEEDBACK_POST_ROUTE}/edit`;
 
 export function feedbackPostPath(postId: string): string {
   return `${FEEDBACK_PATH}/${encodeURIComponent(postId)}`;
+}
+
+export function feedbackEditPath(postId: string): string {
+  return `${feedbackPostPath(postId)}/edit`;
 }
 
 // Must list every value of feedbackStatusValidator in convex/lib/feedback.ts.

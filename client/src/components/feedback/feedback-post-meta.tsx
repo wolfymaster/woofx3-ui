@@ -17,6 +17,7 @@ export function FeedbackPostMeta({ post }: { post: FeedbackPostView }) {
       </span>
       <span>
         {post.author.name} · {new Date(post._creationTime).toLocaleDateString(undefined, DATE_FORMAT)}
+        {post.editedAt !== null && " · edited"}
       </span>
       <span className="inline-flex items-center gap-1 tabular-nums">
         <MessageSquare className="h-3.5 w-3.5" />
