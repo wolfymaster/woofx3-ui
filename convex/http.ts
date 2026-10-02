@@ -29,6 +29,7 @@ import {
   triggerRefusalResponse,
 } from "./lib/macroTrigger";
 import { SIGNATURE_HEADER, verifySignature } from "./lib/maintenanceSignature";
+import { integrationOfModuleOAuthState } from "./lib/moduleOAuth";
 import { OAUTH_CALLBACK_PATHS, oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
@@ -403,6 +404,71 @@ http.route({
     return redirect(
       `${siteUrl}${withQuery(redirectTo, { integration: "spotify", connect_code: handoffCode }, "/modules")}`
     );
+  }),
+});
+
+http.route({
+  path: OAUTH_CALLBACK_PATHS.module,
+  method: "GET",
+  handler: httpAction(async (ctx, request) => {
+    const siteUrl = process.env.SITE_URL ?? "";
+    const url = new URL(request.url);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    // Until the state is read, neither the integration nor the return path is known.
+    if (!state) {
+      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "module", "missing_params");
+    }
+    const route = await routeOAuthState(state, oauthStateConfigFromEnv());
+    if (route.kind === "forward") {
+      return redirect(forwardedCallbackUrl(route.origin, url));
+    }
+    if (route.kind === "invalid") {
+      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "module", "invalid_state");
+    }
+    const stateResult = await ctx.runMutation(internal.moduleIntegrationState.validateAndConsumeState, { state });
+    const integration = stateResult ? integrationOfModuleOAuthState(stateResult.integration) : null;
+    if (!stateResult || !integration) {
+      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "module", "invalid_state");
+    }
+    const { instanceId, moduleId, redirectTo, userId, data } = stateResult;
+    if (!code) {
+      const declined = url.searchParams.get("error") === "access_denied";
+      return moduleIntegrationErrorRedirect(
+        siteUrl,
+        redirectTo,
+        integration,
+        declined ? "access_denied" : "missing_params"
+      );
+    }
+    // moduleOAuth.start mints states only for a member; checked again in case
+    // the membership went away meanwhile, and once more when it is finished.
+    if (!userId) {
+      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, integration, "not_started_by_user");
+    }
+    if ((await ctx.runQuery(internal.instances.memberRole, { instanceId, userId })) === null) {
+      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, integration, "not_permitted");
+    }
+    const { codeVerifier } = (data ?? {}) as { codeVerifier?: string };
+    if (!codeVerifier) {
+      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, integration, "invalid_state", {
+        reason: "malformed state data",
+      });
+    }
+    // The browser the provider redirected may not be the one that started the
+    // connect, so the authorization waits for that member to claim it
+    // (moduleOAuth.finish) before the engine exchanges it.
+    const handoffCode = generateOpaqueToken();
+    await ctx.runMutation(internal.oauthConnectHandoff.store, {
+      codeHash: await hashOpaqueToken(handoffCode),
+      provider: "module",
+      userId,
+      instanceId,
+      moduleId,
+      redirectTo,
+      moduleOAuth: { integration, code, codeVerifier, redirectUri: oauthCallbackUrl("module") },
+    });
+    return redirect(`${siteUrl}${withQuery(redirectTo, { integration, oauth_code: handoffCode }, "/modules")}`);
   }),
 });
 

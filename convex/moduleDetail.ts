@@ -4,6 +4,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { moduleOAuthIntegrationIds } from "./lib/moduleOAuth";
 import { parseManifestPermissions } from "./lib/modulePermissions";
 import { type ManifestResourceKind, parseManifestResourceKinds } from "./lib/resourceKinds";
 import { logger } from "./logger";
@@ -11,7 +12,16 @@ import { fetchMarketplaceArchivePermissions, fetchMarketplaceDownload, marketpla
 
 export type ManifestSettingAction =
   | { kind: "internal"; request: { event: string; payload?: Record<string, unknown> }; timeoutMs?: number }
-  | { kind: "integration"; integration: string };
+  | {
+      kind: "integration";
+      integration: string;
+      /**
+       * `module`: the manifest declares the integration under `oauth[]`, and
+       * the engine keeps its tokens (moduleOAuth.ts). `builtin`: one this
+       * dashboard implements itself (Spotify's spotifyConnect.ts).
+       */
+      flow: "module" | "builtin";
+    };
 
 export interface ManifestSettingField {
   id: string;
@@ -135,13 +145,17 @@ async function readMarketplacePermissions(marketplaceId: string): Promise<string
   }
 }
 
-function parseManifestSettingAction(value: unknown): ManifestSettingAction | undefined {
+function parseManifestSettingAction(value: unknown, oauthIntegrations: string[]): ManifestSettingAction | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
   }
   const o = value as Record<string, unknown>;
   if (o.kind === "integration" && typeof o.integration === "string") {
-    return { kind: "integration", integration: o.integration };
+    return {
+      kind: "integration",
+      integration: o.integration,
+      flow: oauthIntegrations.includes(o.integration) ? "module" : "builtin",
+    };
   }
   if (o.kind === "internal" && o.request && typeof o.request === "object") {
     const req = o.request as Record<string, unknown>;
@@ -162,10 +176,11 @@ function parseManifestSettingAction(value: unknown): ManifestSettingAction | und
 
 function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
   const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
+  const oauthIntegrations = moduleOAuthIntegrationIds(manifest);
   return asArr(raw.settings)
     .map((s) => {
       const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
-      const action = parseManifestSettingAction(o.action);
+      const action = parseManifestSettingAction(o.action, oauthIntegrations);
       return {
         id: asStr(o.id),
         label: asStr(o.label),

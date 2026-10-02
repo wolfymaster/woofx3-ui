@@ -1016,11 +1016,13 @@ function IntegrationSettingButton({
   action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "integration" }>;
 }) {
   const startSpotify = useAction(api.spotifyConnect.start);
+  const startModuleOAuth = useAction(api.moduleOAuth.start);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Spotify is the only OAuth integration Convex implements; a manifest
-  // naming another gets a disabled button rather than a dead link.
-  const supported = action.integration === "spotify";
+  // A module's own `oauth[]` integration connects through the engine; of the
+  // built-in ones only Spotify exists. Any other gets a disabled button
+  // rather than a dead link.
+  const supported = action.flow === "module" || action.integration === "spotify";
 
   const handleClick = async () => {
     if (!instanceId || !supported) {
@@ -1032,7 +1034,11 @@ function IntegrationSettingButton({
       // The current path already deep-links back to this module (modules.tsx
       // resolves /modules/:id via routeModuleId), so returning to it as-is
       // — plus whatever result params the callback appends — is enough.
-      const { authorizeUrl } = await startSpotify({ instanceId, moduleId, redirectTo: window.location.pathname });
+      const redirectTo = window.location.pathname;
+      const { authorizeUrl } =
+        action.flow === "module"
+          ? await startModuleOAuth({ instanceId, moduleId, integration: action.integration, redirectTo })
+          : await startSpotify({ instanceId, moduleId, redirectTo });
       window.location.assign(authorizeUrl);
     } catch (err) {
       setError(actionErrorMessage(err));
