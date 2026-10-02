@@ -390,6 +390,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       header={header}
       width={scene.width}
       height={scene.height}
+      background={scene.backgroundColor}
       widgets={scene.widgets}
       catalog={sceneCatalog}
       renderers={configFieldRenderers}
