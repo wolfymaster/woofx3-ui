@@ -26,6 +26,22 @@ the post by the same mutation that adds or removes a vote or comment
 Title, description and comment limits live in `convex/lib/feedback.ts` and are
 enforced by the mutations; the forms use the same constants.
 
+## Rate limits
+
+Posting and commenting are limited per user with `@convex-dev/rate-limiter`
+token buckets, defined at the top of `convex/feedback.ts`:
+
+| Action | Burst | Refill |
+|--------|-------|--------|
+| Post | 3 | 5 per hour |
+| Comment | 10 | 30 per hour |
+
+A refused request fails with a message saying how long to wait
+(`feedbackRateLimitMessage`), which the forms show as a toast. Input is
+validated before the limit is consumed, so a rejected title costs nothing.
+Votes are not limited: a vote is a toggle on a row keyed by post and user, so
+repeating it cannot add anything.
+
 ## Duplicates
 
 While someone types a title on the New post page, `feedback.findSimilar`

@@ -1,12 +1,15 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import { components } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, mutation, type QueryCtx, query } from "./_generated/server";
+import { internalMutation, type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
 import {
   type FeedbackKind,
   type FeedbackStatus,
   feedbackKindValidator,
+  feedbackRateLimitMessage,
   feedbackStatusValidator,
   normalizeFeedbackBody,
   normalizeFeedbackComment,
@@ -20,6 +23,22 @@ import {
 /** Comments shown on one post. A thread longer than this shows its first comments only. */
 const COMMENT_LIMIT = 200;
 const SIMILAR_LIMIT = 5;
+
+// Per-user token buckets. A burst covers a few posts or a back-and-forth in a
+// thread; after that, new tokens arrive at `rate` per hour. Generous for a
+// person, slow enough that a script or a stuck client cannot flood the board.
+const rateLimiter = new RateLimiter(components.rateLimiter, {
+  feedbackPost: { kind: "token bucket", rate: 5, period: HOUR, capacity: 3 },
+  feedbackComment: { kind: "token bucket", rate: 30, period: HOUR, capacity: 10 },
+});
+
+async function consumeRateLimit(ctx: MutationCtx, action: "post" | "comment", userId: Id<"users">): Promise<void> {
+  const name = action === "post" ? "feedbackPost" : "feedbackComment";
+  const { ok, retryAfter } = await rateLimiter.limit(ctx, name, { key: userId });
+  if (!ok) {
+    throw new ConvexError(feedbackRateLimitMessage(action, retryAfter));
+  }
+}
 
 export type FeedbackAuthor = { name: string; image: string | null };
 
@@ -194,11 +213,14 @@ export const create = mutation({
   args: { kind: feedbackKindValidator, title: v.string(), body: v.string() },
   handler: async (ctx, args): Promise<Id<"feedbackPosts">> => {
     const userId = await requireUserId(ctx);
+    const title = normalizeFeedbackTitle(args.title);
+    const body = normalizeFeedbackBody(args.body);
+    await consumeRateLimit(ctx, "post", userId);
     const postId = await ctx.db.insert("feedbackPosts", {
       authorId: userId,
       kind: args.kind,
-      title: normalizeFeedbackTitle(args.title),
-      body: normalizeFeedbackBody(args.body),
+      title,
+      body,
       status: "open",
       voteCount: 1,
       commentCount: 0,
@@ -239,11 +261,9 @@ export const addComment = mutation({
     if (!post) {
       throw new ConvexError("This post no longer exists");
     }
-    const commentId = await ctx.db.insert("feedbackComments", {
-      postId: post._id,
-      authorId: userId,
-      body: normalizeFeedbackComment(args.body),
-    });
+    const body = normalizeFeedbackComment(args.body);
+    await consumeRateLimit(ctx, "comment", userId);
+    const commentId = await ctx.db.insert("feedbackComments", { postId: post._id, authorId: userId, body });
     await ctx.db.patch(post._id, { commentCount: post.commentCount + 1 });
     return commentId;
   },

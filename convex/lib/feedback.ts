@@ -52,3 +52,11 @@ export function normalizeFeedbackComment(raw: string): string {
   }
   return body;
 }
+
+/** Why a post or comment was refused for coming too fast, and when the next one will be accepted. */
+export function feedbackRateLimitMessage(action: "post" | "comment", retryAfterMs: number): string {
+  const minutes = Math.ceil(retryAfterMs / 60_000);
+  const wait = minutes <= 1 ? "a minute" : `${minutes} minutes`;
+  const noun = action === "post" ? "posts" : "comments";
+  return `You've added a lot of ${noun} recently. Try again in ${wait}.`;
+}

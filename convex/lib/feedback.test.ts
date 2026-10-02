@@ -3,6 +3,7 @@ import {
   FEEDBACK_BODY_MAX,
   FEEDBACK_COMMENT_MAX,
   FEEDBACK_TITLE_MAX,
+  feedbackRateLimitMessage,
   normalizeFeedbackBody,
   normalizeFeedbackComment,
   normalizeFeedbackTitle,
@@ -44,5 +45,19 @@ describe("normalizeFeedbackComment", () => {
 
   test("refuses a comment over the limit", () => {
     expect(() => normalizeFeedbackComment("x".repeat(FEEDBACK_COMMENT_MAX + 1))).toThrow();
+  });
+});
+
+describe("feedbackRateLimitMessage", () => {
+  test("rounds the wait up to whole minutes", () => {
+    expect(feedbackRateLimitMessage("post", 61_000)).toBe(
+      "You've added a lot of posts recently. Try again in 2 minutes."
+    );
+  });
+
+  test("never says less than a minute", () => {
+    expect(feedbackRateLimitMessage("comment", 5_000)).toBe(
+      "You've added a lot of comments recently. Try again in a minute."
+    );
   });
 });
