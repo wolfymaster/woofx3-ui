@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
+import { unitFor } from "@/lib/amount-unit";
 import { commandNameToSubjectSegment } from "@/lib/command-slug";
 import {
   COMPARISON_LABELS,
@@ -81,6 +82,18 @@ function asComparisonField(field: FieldDescriptor) {
   return field as FieldDescriptor & Pick<ConfigField, "type" | "operator" | "operators">;
 }
 
+/** The unit beside a number input, singular while the input holds exactly 1. */
+function UnitLabel({ unit, amount }: { unit: string | undefined; amount: unknown }) {
+  if (!unit) {
+    return null;
+  }
+  return (
+    <span className="text-sm text-muted-foreground whitespace-nowrap">
+      {typeof amount === "number" ? unitFor(amount, unit) : unit}
+    </span>
+  );
+}
+
 function NumberFieldRenderer({ field, value, onChange }: FieldRendererProps) {
   const choices = comparisonChoices(asComparisonField(field));
   if (choices) {
@@ -104,7 +117,7 @@ function NumberFieldRenderer({ field, value, onChange }: FieldRendererProps) {
           className="flex-1"
           data-testid={`input-${field.id}`}
         />
-        {field.unit && <span className="text-sm text-muted-foreground whitespace-nowrap">{field.unit}</span>}
+        <UnitLabel unit={field.unit} amount={value} />
       </div>
       {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
     </div>
@@ -170,7 +183,7 @@ function ComparisonFieldRenderer({
           className="flex-1"
           data-testid={`input-${field.id}`}
         />
-        {field.unit && <span className="text-sm text-muted-foreground whitespace-nowrap">{field.unit}</span>}
+        <UnitLabel unit={field.unit} amount={comparison.value} />
       </div>
       {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
     </div>
@@ -253,7 +266,7 @@ function RangeFieldRenderer({ field, value, onChange }: FieldRendererProps) {
             className="flex-1"
             data-testid={`input-${field.id}`}
           />
-          {field.unit && <span className="text-sm text-muted-foreground whitespace-nowrap">{field.unit}</span>}
+          <UnitLabel unit={field.unit} amount={configValue.value} />
         </div>
       )}
       {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}

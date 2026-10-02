@@ -1,5 +1,6 @@
 import type { ConfigField, ConfigFieldType, DataShapeField } from "@woofx3/api/ui-schema";
 import type { LucideIcon } from "lucide-react";
+import { formatAmount } from "@/lib/amount-unit";
 import {
   type ComparisonValue,
   comparisonChoices,
@@ -138,6 +139,9 @@ export function formatConfigValue(
 
   if (typeof value === "object" && "type" in value) {
     const cv = value as ConfigValue;
+    if (cv.type === "single" && cv.value !== undefined) {
+      return formatAmount(cv.value, unit);
+    }
     if (cv.type === "single") {
       return `${cv.value}${unit ? ` ${unit}` : ""}`;
     } else {
@@ -145,5 +149,8 @@ export function formatConfigValue(
     }
   }
 
+  if (typeof value === "number") {
+    return formatAmount(value, unit);
+  }
   return `${value}${unit ? ` ${unit}` : ""}`;
 }

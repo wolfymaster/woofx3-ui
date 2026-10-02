@@ -47,6 +47,12 @@ describe("sentenceParts", () => {
     ).toBe("Someone cheers 1,000 bits or more");
   });
 
+  test("reads a singular unit for an amount of 1", () => {
+    expect(
+      sentenceText(sentenceParts("Someone cheers {amount}", [BITS], { amount: { operator: "gte", value: 1 } }))
+    ).toBe("Someone cheers 1 bit or more");
+  });
+
   test("reads a comparison with its amount cleared as missing", () => {
     const parts = sentenceParts("Someone cheers {amount}", [BITS], { amount: { operator: "eq", value: "" } });
     expect(states(parts)).toBe("Someone cheers [missing:a bits]");

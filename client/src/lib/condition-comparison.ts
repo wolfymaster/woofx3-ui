@@ -1,5 +1,6 @@
 import type { ComparisonOperator, ConfigField } from "@woofx3/api/ui-schema";
 import { isComparisonOperator } from "@woofx3/api/ui-schema";
+import { formatAmount } from "@/lib/amount-unit";
 
 /**
  * A trigger condition on a number whose comparison the user picks, such as "at least"
@@ -77,5 +78,5 @@ export function formatComparison(comparison: ComparisonValue, unit?: string): st
   if (comparison.value === "") {
     return "";
   }
-  return comparisonPhrase(`${comparison.value.toLocaleString()}${unit ? ` ${unit}` : ""}`, comparison.operator);
+  return comparisonPhrase(formatAmount(comparison.value, unit), comparison.operator);
 }

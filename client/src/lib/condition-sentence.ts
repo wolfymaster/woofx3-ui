@@ -1,4 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import { formatAmount } from "@/lib/amount-unit";
 import { comparisonPhrase, formatComparison, isComparisonValue } from "@/lib/condition-comparison";
 import { formatConfigValue, type TriggerConfigValues } from "@/lib/workflow-presets";
 import { ANY_CONDITION } from "@/lib/workflow-presets-json";
@@ -103,7 +104,7 @@ export function displayValue(field: SentenceField, value: unknown, optionLabels:
     return formatComparison(value, field.unit);
   }
   if (field.type === "number" && typeof value === "number") {
-    return withOperator(`${value.toLocaleString()}${field.unit ? ` ${field.unit}` : ""}`, field.operator);
+    return withOperator(formatAmount(value, field.unit), field.operator);
   }
   if (field.type === "toggle") {
     return value === true ? lowerLabel(field) : `not ${lowerLabel(field)}`;
