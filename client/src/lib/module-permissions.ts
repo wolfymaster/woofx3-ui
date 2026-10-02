@@ -19,7 +19,18 @@ export interface DescribedPermission {
   known: boolean;
 }
 
+/**
+ * A `net:<host>` permission lets the module's code send requests to that host,
+ * and so whatever the module holds, such as the tokens of an account you
+ * connect. Must match `NET_PERMISSION_PREFIX` in the engine's
+ * barkloader/lib_sandbox/src/net.rs.
+ */
+const NET_PERMISSION_PREFIX = "net:";
+
 export function describePermission(id: string): DescribedPermission {
+  if (id.startsWith(NET_PERMISSION_PREFIX) && id.length > NET_PERMISSION_PREFIX.length) {
+    return { id, description: `Send data to ${id.slice(NET_PERMISSION_PREFIX.length)}`, known: true };
+  }
   const description = Object.hasOwn(PERMISSION_DESCRIPTIONS, id) ? PERMISSION_DESCRIPTIONS[id] : undefined;
   if (description === undefined) {
     return { id, description: `Unknown permission: ${id}`, known: false };
