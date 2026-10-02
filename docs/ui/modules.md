@@ -14,7 +14,7 @@
 
 - Reads `api.moduleRepository.get` plus `api.triggerDefinitions.listByModule` and `api.actionDefinitions.listByModule` to show metadata and every trigger / action the module registered with the UI.
 - Offers the same uninstall entry point as the listing page.
-- For an installed module with webhook triggers, the **Settings** tab lists each trigger's public URL with its last delivery (`api.inboundWebhooks.listForInstanceModule`, rendered by `client/src/components/modules/module-webhook-endpoints.tsx`).
+- For an installed module with webhook triggers, the **Settings** tab lists each trigger's public URL with its last delivery (`api.inboundWebhooks.listForInstanceModule`, rendered by `client/src/components/modules/module-webhook-endpoints.tsx`). The handler's answer is relayed from this deployment's site origin, which also serves sign-in and OAuth callbacks, so it is sent inert (`Content-Security-Policy: sandbox; default-src 'none'`, `nosniff`) and an HTML, SVG or XML answer becomes a 502 (`convex/lib/inboundWebhookRelay.ts`).
 - Settings declared `type: "secret"` render as write-only password fields: the engine never returns a secret's value, only whether one is set.
 - Settings declared `type: "url"` render as URL inputs. The engine lets the module's code reach the origin of the URL entered there, and only the streamer can set it.
 

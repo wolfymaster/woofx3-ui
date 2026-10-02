@@ -9,6 +9,34 @@ export const MAX_RELAYED_BODY_BYTES = 64 * 1024;
 const BODILESS_STATUSES = new Set([204, 205, 304]);
 
 /**
+ * Content types a browser renders as an active document. A module's webhook
+ * answer is served from this deployment's site origin, which also serves
+ * sign-in and OAuth callbacks, so module code may not put a page there.
+ */
+const ACTIVE_CONTENT_TYPES = new Set([
+  "text/html",
+  "application/xhtml+xml",
+  "image/svg+xml",
+  "text/xml",
+  "application/xml",
+]);
+
+/**
+ * Sent with every relayed answer, so a body that slips past the content-type
+ * check still cannot run as a page: no scripts, no subresources, and no
+ * sniffing a harmless type into an active one.
+ */
+const INERT_RESPONSE_HEADERS: Record<string, string> = {
+  "content-security-policy": "sandbox; default-src 'none'",
+  "x-content-type-options": "nosniff",
+};
+
+function isActiveContentType(value: string): boolean {
+  const mediaType = value.split(";")[0]?.trim().toLowerCase() ?? "";
+  return ACTIVE_CONTENT_TYPES.has(mediaType) || mediaType.endsWith("+xml");
+}
+
+/**
  * The request as the engine's `handleInboundWebhook` receives it: header
  * names lowercased with `cookie` dropped (a server-to-server webhook never
  * needs it), one value per query key (the first), and the body decoded as
@@ -49,7 +77,8 @@ export function buildForwardedRequest(
  * Turn the engine's answer into the response the third party gets. The
  * engine already validated the handler's result; anything that would still
  * be unsafe to send — a status outside 200-599, a header other than
- * content-type or x-*, an oversized body — becomes a 502 instead.
+ * content-type or x-*, an active content type, an oversized body — becomes
+ * a 502 instead.
  */
 export function toHttpResponse(engine: InboundWebhookResponse): Response {
   if (!Number.isInteger(engine.status) || engine.status < 200 || engine.status > 599) {
@@ -61,7 +90,13 @@ export function toHttpResponse(engine: InboundWebhookResponse): Response {
     if (lower !== "content-type" && !lower.startsWith("x-")) {
       return new Response(null, { status: 502 });
     }
+    if (lower === "content-type" && isActiveContentType(value)) {
+      return new Response(null, { status: 502 });
+    }
     headers.set(lower, value);
+  }
+  for (const [name, value] of Object.entries(INERT_RESPONSE_HEADERS)) {
+    headers.set(name, value);
   }
   if (new TextEncoder().encode(engine.body).byteLength > MAX_RELAYED_BODY_BYTES) {
     return new Response(null, { status: 502 });
