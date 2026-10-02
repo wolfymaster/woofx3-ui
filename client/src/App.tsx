@@ -18,6 +18,7 @@ import {
   COMMAND_NEW_ROUTE,
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
+import { FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
 import { convexClient as convex } from "./lib/convexClient";
@@ -43,6 +44,8 @@ const Commands = lazy(() => import("@/pages/commands"));
 const Counters = lazy(() => import("@/pages/counters"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const Feedback = lazy(() => import("@/pages/feedback"));
+const FeedbackNew = lazy(() => import("@/pages/feedback-new"));
+const FeedbackPost = lazy(() => import("@/pages/feedback-post"));
 const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
@@ -202,7 +205,9 @@ function AppRoutes() {
                   </Route>
                   <Route path="/help/learning" component={Learning} />
                   <Route path="/help/logs" component={Logs} />
-                  <Route path="/help/feedback" component={Feedback} />
+                  <Route path={FEEDBACK_PATH} component={Feedback} />
+                  <Route path={FEEDBACK_NEW_PATH} component={FeedbackNew} />
+                  <Route path={FEEDBACK_POST_ROUTE} component={FeedbackPost} />
 
                   {/* Admin section */}
                   <Route path="/admin">

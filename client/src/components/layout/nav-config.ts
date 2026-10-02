@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { ALERT_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
+import { FEEDBACK_PATH } from "@/lib/feedback";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
 export const STARTER_PACKS_PATH = "/stream/starter-packs";
@@ -86,7 +87,7 @@ export const HELP_ITEMS: NavItem[] = [
   { id: "learning", label: "Learning", icon: GraduationCap, href: "/help/learning" },
   { id: "setup", label: "Setup", icon: ListChecks, href: "/setup" },
   { id: "logs", label: "Logs", icon: ScrollText, href: "/help/logs" },
-  { id: "feedback", label: "Submit Feedback", icon: MessageSquarePlus, href: "/help/feedback" },
+  { id: "feedback", label: "Feedback", icon: MessageSquarePlus, href: FEEDBACK_PATH },
 ];
 
 export const ADMIN_ITEMS: NavItem[] = [
