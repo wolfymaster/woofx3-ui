@@ -23,7 +23,7 @@ Which path step 2 opens on depends on `provisioning.isAvailable`. It is true onl
 
 ### Managed engine (default)
 
-`ManagedEngineStep` asks for one thing: a **slug**, which becomes the engine's public address `<slug>.on.woofx3.tv`. It is prefilled from the Twitch login (or the workspace name) and cannot be changed later.
+`ManagedEngineStep` asks for one thing: a **username**, shown as `woofx3.tv/<username>`. It is the engine's slug, so the engine is served at `<username>.woofx3.tv`. It is prefilled from the Twitch login (or the workspace name), can be edited, and cannot be changed later.
 
 1. **Slug check.** While the user types, the slug is format-checked locally (`client/src/lib/engine-slug.ts`) and then, debounced, against the maintenance API through `provisioning.checkSlug`. A check that fails to run does not block the user: the server decides on create.
 2. **Create.** "Create my engine" calls `provisioning.startManagedEngine`, which:
