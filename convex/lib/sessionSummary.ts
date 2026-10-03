@@ -252,3 +252,82 @@ export function summaryColumns(summary: ParsedSessionSummary, rawPayload: string
     rawPayload: undefined,
   };
 }
+
+/**
+ * Like planSummaryWrite, for a snapshot the UI took itself of a session that
+ * was still open. Such a snapshot is stamped with Convex's clock, not the
+ * engine's, and can land after the engine's own summary of the session's end,
+ * so it never replaces a stored summary of a closed session: that one is final.
+ */
+export function planOpenSnapshotWrite(
+  stored: { generatedAtMs: number; session?: { status: "open" | "closed" } } | null,
+  incomingGeneratedAtMs: number
+): SummaryWrite {
+  if (stored?.session?.status === "closed") {
+    return "stale";
+  }
+  return planSummaryWrite(stored, incomingGeneratedAtMs);
+}
+
+interface EngineSessionRead {
+  id: string;
+  status: "open" | "closed";
+  startedAt: string;
+  endedAt: string | null;
+  segments: { id: string; startedAt: string; endedAt: string | null }[];
+}
+
+interface EngineSessionTotalsRead {
+  bits: number;
+  cheers: number;
+  subs: number;
+  giftedSubs: number;
+  follows: number;
+  raids: number;
+  raiders: number;
+  peakViewers: number | null;
+  averageViewers: number | null;
+  viewerSampleMinutes: number;
+}
+
+/**
+ * A SESSION_SUMMARY payload built from the engine's session and totals reads,
+ * the same two reads the engine builds its own summary from, so it parses and
+ * stores exactly like one the engine sent. Fields are copied by name so
+ * anything else the engine adds to those reads stays out of the stored row.
+ */
+export function sessionSnapshotPayload(
+  session: EngineSessionRead,
+  totals: EngineSessionTotalsRead,
+  generatedAt: Date
+): Record<string, unknown> {
+  return {
+    type: SESSION_SUMMARY_EVENT_TYPE,
+    sessionId: session.id,
+    schemaVersion: SESSION_SUMMARY_SCHEMA_VERSION,
+    generatedAt: generatedAt.toISOString(),
+    session: {
+      id: session.id,
+      status: session.status,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      segments: session.segments.map((segment) => ({
+        id: segment.id,
+        startedAt: segment.startedAt,
+        endedAt: segment.endedAt,
+      })),
+    },
+    totals: {
+      bits: totals.bits,
+      cheers: totals.cheers,
+      subs: totals.subs,
+      giftedSubs: totals.giftedSubs,
+      follows: totals.follows,
+      raids: totals.raids,
+      raiders: totals.raiders,
+      peakViewers: totals.peakViewers,
+      averageViewers: totals.averageViewers,
+      viewerSampleMinutes: totals.viewerSampleMinutes,
+    },
+  };
+}

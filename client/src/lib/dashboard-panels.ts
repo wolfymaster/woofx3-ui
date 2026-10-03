@@ -74,3 +74,46 @@ export function resizeZone(widgets: DashboardPanelWidget[], zoneId: string, size
   });
   return changed ? next : widgets;
 }
+
+function evenlySplit(widgets: DashboardPanelWidget[]): DashboardPanelWidget[] {
+  const evenSize = widgets.length > 0 ? 100 / widgets.length : undefined;
+  return widgets.map((widget) => ({ ...widget, size: evenSize }));
+}
+
+/**
+ * Moves one widget to `toIndex` within `toZoneId`'s stack, where `toIndex`
+ * counts the destination's widgets without the one being moved. A reorder
+ * within a zone keeps every widget's size, since they still add up to the
+ * zone; a move between zones re-splits both zones evenly, as adding and
+ * removing do. Returns `widgets` itself when the widget is already there.
+ */
+export function moveWidget(
+  widgets: DashboardPanelWidget[],
+  slotId: string,
+  toZoneId: string,
+  toIndex: number
+): DashboardPanelWidget[] {
+  const moving = widgets.find((widget) => widgetSlotId(widget) === slotId);
+  if (!moving) {
+    return widgets;
+  }
+  const fromZoneId = moving.zoneId;
+  const rest = widgets.filter((widget) => widget !== moving);
+  const destination = rest.filter((widget) => widget.zoneId === toZoneId);
+  const index = Math.max(0, Math.min(toIndex, destination.length));
+
+  if (fromZoneId === toZoneId) {
+    const currentIndex = widgets.filter((widget) => widget.zoneId === toZoneId).indexOf(moving);
+    if (currentIndex === index) {
+      return widgets;
+    }
+    const reordered = [...destination.slice(0, index), moving, ...destination.slice(index)];
+    return [...rest.filter((widget) => widget.zoneId !== toZoneId), ...reordered];
+  }
+
+  const source = evenlySplit(rest.filter((widget) => widget.zoneId === fromZoneId));
+  const placed = { ...moving, zoneId: toZoneId };
+  const target = evenlySplit([...destination.slice(0, index), placed, ...destination.slice(index)]);
+  const untouched = rest.filter((widget) => widget.zoneId !== fromZoneId && widget.zoneId !== toZoneId);
+  return [...untouched, ...source, ...target];
+}

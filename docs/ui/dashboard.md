@@ -19,7 +19,31 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 - **Layout** is chosen per panel from `client/src/lib/dashboard-layouts.ts`. Zone ids
   are positional (`${rowIndex}-${columnIndex}`); a zone can hold several stacked,
   resizable widgets, each identified by `slotId`.
-- **Persistence** has two paths. Placement edits (add, remove, resize) are held in
+- **Editing.** The edit button sits next to the panel tabs in the status bar. Edit
+  mode adds Save and Cancel there, plus add, rename and delete panel buttons
+  (double-clicking a tab also renames it; right-clicking a tab still offers the
+  same actions). Those controls go in the status bar, and each widget's edit
+  controls are laid over it, so the canvas keeps the same size in and out of edit
+  mode. While editing, each widget is covered by a drag surface with a remove
+  button. Dragging a widget reorders it within its zone or moves it to another
+  zone on the same panel (`moveWidget` in `client/src/lib/dashboard-panels.ts`); a
+  line shows where it will land. Swiping between panels is turned off while
+  editing so a drag does not move the carousel.
+- **Adding a widget** opens `WidgetPickerDialog`
+  (`client/src/components/dashboard/widget-picker-dialog.tsx`): every registry
+  entry as a card with its description, grouped by category, with a search box.
+- **Widgets keep a fixed height.** Secondary content opens in an overlay rather
+  than expanding inside the widget. See
+  [Dashboard widgets keep a fixed height](/patterns/dashboard-widgets).
+- **Rail.** The icon column on the right opens rail widgets as flyouts. The
+  [getting started checklist](#getting-started-checklist) is pinned first while it
+  has anything left to do. The user's own rail widgets start
+  as Notes and Stream Stats (`DEFAULT_RAIL_WIDGETS` in
+  `client/src/lib/dashboard-rail.ts`). In edit mode any widget can be added to it
+  through the same picker, removed, or dragged to reorder, up to 12. The rail is
+  stored on the user's `dashboardLayouts` row as `railWidgets`, unset until first
+  edited, and saved with the panels on Save.
+- **Persistence** has two paths. Placement edits (add, remove, move, resize) are held in
   local draft state while edit mode is on and written by `setPanelWidgets` on Save,
   so Cancel needs no server round-trip. A widget changing **its own config** outside
   edit mode writes through immediately — otherwise the change would be dropped.
@@ -92,9 +116,9 @@ every requested step failed, it also records the channel's title and
 category, which is what the next run's "same title as last time" is measured
 against: Twitch keeps no history of either.
 
-## Getting started card
+## Getting started checklist
 
-`GettingStartedCard` (`client/src/components/dashboard/getting-started-card.tsx`) is a collapsible strip above the panels, with a short first-session list. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
+The getting started checklist (`client/src/components/dashboard/getting-started-checklist.tsx`) is pinned as the first rail item, above the user's own rail widgets. Its flyout lists the items in one column. While anything is left to do, the rail icon carries a dot, red when an item needs attention (a failed install, say). The rail item cannot be moved or removed in edit mode. `useGettingStarted` is called once by the dashboard and feeds both the icon and the flyout. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
 
 | Item | Done when | Offers |
 |---|---|---|
@@ -103,13 +127,13 @@ against: Twitch keeps no history of either.
 | Set up *platform* (one per platform) | the streamer says so | Open the module page, **Done** |
 | Twitch connected | the instance has a Twitch link | Connect Twitch |
 | Overlay added to OBS | a browser source has loaded a browser-source key (`goLive.overlays.lastLoadedAt`) | Copy browser-source URL, Open scenes |
-| Fire a test follow | the card fired one | **Send a test follow**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
+| Fire a test follow | the checklist fired one | **Send a test follow**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
 | Run your first chat command | the streamer says so | See your commands, **I've tried it** |
 
-- **Items the card records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
-- **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the card (`platform-settings:<id>`).
+- **Items the checklist records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
+- **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the checklist (`platform-settings:<id>`).
 - **OBS connection.** On an engine with the `obs.status` capability, "Set up OBS" follows the engine's actual OBS connection instead of the Done button. `useObsStatus` polls `obsStatus.get` every 5 s while the tab is visible. The item is done once OBS is connected; otherwise it shows why not, for example "OBS refused the password" or "Can't reach OBS at host:port".
-- **When it hides.** The card hides once every item is done, or when someone dismisses it (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
+- **When it hides.** The rail item disappears once every item is done, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
 - **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
 
 Help → **Setup** reopens the setup wizard (`/setup`). Once setup is finished, it opens on the All set page.
@@ -130,9 +154,10 @@ average viewers, and the session's follows, subs, gifted subs, bits and raids.
 
 Rows arrive by the engine's `session.summary` webhook, which fires when a
 session *ends*. A session ends when the next broadcast past the engine's grace
-window begins, not when its own stream goes offline, so the stream that just
-finished appears once the next one starts, and the one in progress never
-appears here. A session that was never live is a real row with every figure at
+window begins, not when its own stream goes offline. Until then the session in
+progress shows from snapshots the UI takes while the widget is open, badged
+"In progress"; see [the session in progress](./stream-recaps#the-session-in-progress).
+A session that was never live is a real row with every figure at
 zero and no viewer figures. Each delivery is a whole snapshot; the table keeps
 one row per `(instanceId, sessionId)` and replaces it only with a snapshot whose
 `generatedAt` is newer, so redeliveries and re-summaries are harmless. A
@@ -177,7 +202,7 @@ moderation methods.
 The widget is three stacked sections, ordered by how fast each has to happen:
 
 - **Block a phrase** — a quick-add box (2 to 500 characters, `*` as a wildcard,
-  Twitch's own rules) above a collapsed list of the channel's blocked terms,
+  Twitch's own rules) above a count that opens the channel's blocked terms in an overlay,
   each removable. The list is read from `GET /helix/moderation/blocked_terms`,
   following the cursor up to 2000 terms, and is loaded once rather than polled.
 - **User** — a username box with the shoutout widget's chatter autocomplete
@@ -477,7 +502,7 @@ instead of a card that shows data and refuses every button.
 
 Twitch keeps **exactly one pinned message per channel**, and pinning a new one
 silently replaces it — so the widget shows a single current pin, not a list. The
-list underneath is *history*: things worth pinning again, kept because the same
+list behind **History** (opened in an overlay) is *history*: things worth pinning again, kept because the same
 message tends to recur stream after stream.
 
 Pinning targets an existing chat message by id (`PUT /helix/chat/pins`), so a
@@ -485,12 +510,15 @@ Pinning targets an existing chat message by id (`PUT /helix/chat/pins`), so a
 means **it posts a visible chat message** from the connected account. Twitch pins
 messages; there is no free-floating pinned text.
 
-Reading the current pin (`GET /helix/chat/pins`) returns only ids and timing —
-no message text, no author. So the widget can quote a pin only when its id
-matches one we recorded; a pin made from Twitch's own UI shows as "pinned
-outside this app". Nothing here receives chat, so there is no other way to learn
-what it says. There is also no EventSub type for pinning, which is why the
-current pin is polled rather than pushed.
+Reading the current pin (`GET /helix/chat/pins`, parsed by
+`convex/lib/twitchPins.ts`) returns the message's text, its sender, when it was
+pinned (`starts_at`) and when the pin expires (`ends_at`, null when it lasts
+until the stream ends). The widget shows the text and sender as Twitch reports
+them. A pin made outside this app, from Twitch's own chat or by a moderator, is
+added to the history the first time the widget sees it (`pins.recordSeenPin`),
+keyed by its message id so it is added once, and can then be pinned again from
+here. There is no EventSub type for pinning, which is why the current pin is
+polled rather than pushed.
 
 Re-pinning has two paths, chosen by `convex/lib/pinStrategy.ts`: reuse the
 stored message id when the entry was created during the current broadcast,

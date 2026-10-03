@@ -173,6 +173,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - **State**: Nanostores (`$`-prefixed atoms) for UI-only state (theme, sidebar, engine URL, current instance ID). Convex for all server-persisted data.
 - **Transport**: Use `client/src/lib/transport/` for woofx3 API calls. `WoofxTransport` interface abstracts browser WebSocket vs future Tauri IPC. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
 - **Shadcn/ui**: Components in `client/src/components/ui/` — extend via composition, never modify directly.
+- **Dashboard widgets keep a fixed height**: nothing inside a widget expands or collapses. Secondary content (history, queues, full lists, extra settings) opens in an overlay via `WidgetOverlay`, like the macro pad's editor. See `docs/patterns/dashboard-widgets.md`.
 - **Instance-scoped queries**: Always use `"skip"` when instanceId may be null:
   ```typescript
   const data = useQuery(api.xxx.list, instance ? { instanceId: instance._id } : "skip");
@@ -183,7 +184,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 ### Frontend (`client/src/`)
 - React 18 + TypeScript, Vite build
 - Auth: `@convex-dev/auth` with Twitch OAuth (custom HTTP endpoints in `convex/http.ts`) and Password provider
-- Auth flow: Login → AuthGuard → BroadcastShell (main layout) → OnboardingGuard (must have account + registered instance + Twitch link; gates the content area only). Setup wizard at `/setup/:step`
+- Auth flow: Login → AuthGuard → BroadcastShell (main layout) → OnboardingGuard (must reach a registered instance, owned or shared through an invitation, with a Twitch link; gates the content area only). Setup wizard at `/setup/:step`
 - Visual workflow builder uses ReactFlow (`pages/workflow-builder.tsx`)
 - Scene editor for browser source overlays (`pages/scene-editor.tsx`)
 

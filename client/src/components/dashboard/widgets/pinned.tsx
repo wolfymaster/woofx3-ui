@@ -1,15 +1,14 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { ChevronRight, Loader2, Pin, PinOff, Radio, RotateCcw, Trash2 } from "lucide-react";
+import { Loader2, Pin, PinOff, Radio, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Textarea } from "@/components/ui/textarea";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 
 // Twitch keeps exactly one pinned message per channel, and pinning a new one
 // replaces it — so this shows a single current pin, not a list. The list below
@@ -24,6 +23,7 @@ const PIN_REFRESH_MS = 60_000;
 interface CurrentPin {
   messageId: string;
   content: string | null;
+  authorName: string | null;
   expiresAt?: string;
 }
 
@@ -48,8 +48,6 @@ export function PinnedWidget() {
   const [current, setCurrent] = useState<CurrentPin | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  /** Session-local, not persisted: a starting height, not a remembered preference. */
-  const [historyOpen, setHistoryOpen] = useState(false);
 
   const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   // Reading the current pin needs only the read scope, which existing links
@@ -141,13 +139,12 @@ export function PinnedWidget() {
           {current ? (
             <div className="flex items-start gap-2 rounded-md border border-border p-2" data-testid="current-pin">
               <Pin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs">
-                {current.content ?? (
-                  // Twitch returns only the message id, never the text — so a pin
-                  // made from Twitch's own UI can be reported but not quoted.
-                  <span className="text-muted-foreground italic">A message pinned outside this app</span>
-                )}
-              </p>
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <p className="whitespace-pre-wrap break-words text-xs">
+                  {current.content ?? <span className="text-muted-foreground italic">A pinned message</span>}
+                </p>
+                {current.authorName && <p className="text-[10px] text-muted-foreground">from {current.authorName}</p>}
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
@@ -205,60 +202,58 @@ export function PinnedWidget() {
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
           ) : history.length === 0 ? null : (
-            // Collapsed by default: the history grows without bound, and the
-            // thing you usually want from this widget is the box above it. The
-            // count goes on the trigger so a fold is not a disappearance.
-            <Collapsible open={historyOpen} onOpenChange={setHistoryOpen}>
-              <CollapsibleTrigger className="flex w-full items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground">
-                <ChevronRight className={cn("h-3 w-3 transition-transform", historyOpen && "rotate-90")} />
-                History · {history.length}
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-1.5">
-                <ul className="space-y-1.5">
-                  {history.map((entry) => (
-                    <li
-                      key={entry.id}
-                      className="flex items-start gap-2 rounded-md border border-border p-2"
-                      data-testid={`pin-history-${entry.id}`}
+            // In an overlay: the history grows without bound, and the thing you
+            // usually want from this widget is the box above it.
+            <WidgetOverlay
+              trigger={`History · ${history.length}`}
+              title="Pinned message history"
+              description="Messages pinned before. Pin one again, or remove it from the list."
+              testId="pin-history"
+            >
+              <ul className="space-y-1.5">
+                {history.map((entry) => (
+                  <li
+                    key={entry.id}
+                    className="flex items-start gap-2 rounded-md border border-border p-2"
+                    data-testid={`pin-history-${entry.id}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="whitespace-pre-wrap break-words text-xs">{entry.content}</p>
+                      <span className="text-[10px] text-muted-foreground">
+                        {entry.lastPinnedAt
+                          ? `Last pinned ${formatWhen(entry.lastPinnedAt)}`
+                          : formatWhen(entry.createdAt)}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0"
+                      onClick={() => handleRepin(entry.id)}
+                      disabled={busy || !canPin}
+                      aria-label={`Pin "${entry.content.slice(0, 40)}" again`}
+                      data-testid={`button-repin-${entry.id}`}
                     >
-                      <div className="min-w-0 flex-1">
-                        <p className="whitespace-pre-wrap break-words text-xs">{entry.content}</p>
-                        <span className="text-[10px] text-muted-foreground">
-                          {entry.lastPinnedAt
-                            ? `Last pinned ${formatWhen(entry.lastPinnedAt)}`
-                            : formatWhen(entry.createdAt)}
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0"
-                        onClick={() => handleRepin(entry.id)}
-                        disabled={busy || !canPin}
-                        aria-label={`Pin "${entry.content.slice(0, 40)}" again`}
-                        data-testid={`button-repin-${entry.id}`}
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
-                        onClick={() => {
-                          if (instanceId) {
-                            void removeFromHistory({ instanceId, entryId: entry.id as Id<"pinnedMessages"> });
-                          }
-                        }}
-                        aria-label="Remove from history"
-                        data-testid={`button-remove-pin-${entry.id}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              </CollapsibleContent>
-            </Collapsible>
+                      <RotateCcw className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => {
+                        if (instanceId) {
+                          void removeFromHistory({ instanceId, entryId: entry.id as Id<"pinnedMessages"> });
+                        }
+                      }}
+                      aria-label="Remove from history"
+                      data-testid={`button-remove-pin-${entry.id}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </WidgetOverlay>
           )}
         </section>
       </div>

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { engineHostname, slugFormatError, suggestSlug } from "@/lib/engine-slug";
+import { engineHostname, slugFormatError, suggestSlug, usernameAddress } from "@/lib/engine-slug";
 
 describe("suggestSlug", () => {
   test("turns a display name into something usable", () => {
@@ -52,6 +52,12 @@ describe("slugFormatError", () => {
 
 describe("engineHostname", () => {
   test("names the address the engine will answer on", () => {
-    expect(engineHostname("wolfymaster")).toBe("wolfymaster.on.woofx3.tv");
+    expect(engineHostname("wolfymaster")).toBe("wolfymaster.woofx3.tv");
+  });
+});
+
+describe("usernameAddress", () => {
+  test("shows the username under woofx3.tv", () => {
+    expect(usernameAddress("wolfymaster")).toBe("woofx3.tv/wolfymaster");
   });
 });

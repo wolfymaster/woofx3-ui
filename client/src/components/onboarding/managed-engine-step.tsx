@@ -7,7 +7,7 @@ import { HelpTip } from "@/components/common/help-tip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ENGINE_DOMAIN, engineHostname, slugFormatError } from "@/lib/engine-slug";
+import { engineHostname, slugFormatError, USERNAME_PREFIX, usernameAddress } from "@/lib/engine-slug";
 
 interface ManagedEngineStepProps {
   accountId: Id<"accounts">;
@@ -29,10 +29,10 @@ type Availability =
   | { state: "unavailable"; reason: string };
 
 /**
- * The default first step of onboarding: pick a name, and woofx3 creates the
- * engine. The slug is the engine's public address, so it is checked against
- * the maintenance API while the user types — finding out it was taken only
- * after pressing Create would mean starting over.
+ * The default first step of onboarding: pick a username, and woofx3 creates
+ * the engine. The username is also the engine's subdomain, so it is checked
+ * against the maintenance API while the user types — finding out it was taken
+ * only after pressing Create would mean starting over.
  */
 export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConnectExisting }: ManagedEngineStepProps) {
   const checkSlug = useAction(api.provisioning.checkSlug);
@@ -99,12 +99,13 @@ export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConne
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <div className="flex items-center gap-1.5">
-          <Label htmlFor="engine-slug">Choose your address</Label>
+          <Label htmlFor="engine-slug">Choose your username</Label>
           <HelpTip term="engine">
-            <p>We run your engine for you at this address.</p>
+            <p>We run your engine for you at {slug && !formatError ? engineHostname(slug) : "this address"}.</p>
           </HelpTip>
         </div>
-        <div className="mt-1 flex items-center gap-2">
+        <div className="mt-1 flex items-center gap-1">
+          <span className="text-sm text-muted-foreground font-mono shrink-0">{USERNAME_PREFIX}</span>
           <Input
             id="engine-slug"
             value={slug}
@@ -116,7 +117,6 @@ export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConne
             required
             data-testid="input-engine-slug"
           />
-          <span className="text-sm text-muted-foreground font-mono shrink-0">.{ENGINE_DOMAIN}</span>
         </div>
 
         <div className="mt-1 min-h-5 text-xs" data-testid="text-slug-status">
@@ -130,7 +130,7 @@ export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConne
           ) : availability.state === "available" ? (
             <span className="text-green-500 inline-flex items-center gap-1">
               <Check className="h-3 w-3" />
-              {engineHostname(slug)} is yours
+              {usernameAddress(slug)} is yours
             </span>
           ) : availability.state === "unavailable" ? (
             <span className="text-destructive inline-flex items-center gap-1">
@@ -141,7 +141,7 @@ export function ManagedEngineStep({ accountId, suggestedSlug, onStarted, onConne
         </div>
 
         <p className="text-xs text-muted-foreground mt-1">
-          Your dashboard, overlays and browser sources all live at this address. It cannot be changed later.
+          Your username is your address on woofx3. It cannot be changed later.
         </p>
       </div>
 

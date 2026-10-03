@@ -22,7 +22,7 @@ import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { Scene, Widget } from "@/types";
 import { LiveScenePreview } from "./live-scene-preview";
-import { WidgetLayoutCanvas, type WidgetsUpdate } from "./widget-layout-canvas";
+import { WidgetLayoutCanvas, type WidgetsChange, type WidgetsUpdate } from "./widget-layout-canvas";
 
 interface SceneCanvasEditorProps {
   instanceId: Id<"instances">;
@@ -214,7 +214,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   }, [scene, createSceneAction, instanceId, navigate, toast]);
 
   const handleWidgetsChange = useCallback(
-    (update: WidgetsUpdate, change: "add" | "edit") => {
+    (update: WidgetsUpdate, change: WidgetsChange) => {
       if (change === "edit") {
         mutateScene((prev) => ({ ...prev, widgets: update(prev.widgets) }));
         return;
@@ -226,9 +226,10 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       setIsDirty(true);
       setScene(next);
       // Persist immediately: the preview is the engine's own overlay, so a widget
-      // that exists only in local state renders nothing at all. This save (and the
-      // overlay reload the engine pushes after it) is what makes adding a widget
-      // show the widget.
+      // that exists only in local state renders nothing at all, and the draft
+      // layout posted to it while editing carries position and size but not
+      // stacking order. This save (and the overlay reload the engine pushes after
+      // it) is what makes an added widget appear and a restacked one change place.
       void persistScene(next, { silent: true });
     },
     [scene, mutateScene, persistScene]

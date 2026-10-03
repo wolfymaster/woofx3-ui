@@ -1,5 +1,7 @@
 /**
- * The subdomain a managed engine is served on: `<slug>.on.woofx3.tv`.
+ * A creator's woofx3 username. It is shown as `woofx3.tv/<username>`, and
+ * their managed engine is served on the subdomain of the same name,
+ * `<username>.woofx3.tv`.
  *
  * The maintenance API is the authority on whether a slug may be used — it
  * owns the reserved words and knows what is taken. These are only the format
@@ -10,7 +12,10 @@
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
 
-export const ENGINE_DOMAIN = "on.woofx3.tv";
+export const ENGINE_DOMAIN = "woofx3.tv";
+
+/** What the username field shows in front of the name. */
+export const USERNAME_PREFIX = `${ENGINE_DOMAIN}/`;
 
 export const SLUG_FORMAT_HINT =
   "3–30 lowercase letters, digits or single hyphens, starting and ending with a letter or digit";
@@ -18,6 +23,11 @@ export const SLUG_FORMAT_HINT =
 /** The public address a slug would be served at. */
 export function engineHostname(slug: string): string {
   return `${slug}.${ENGINE_DOMAIN}`;
+}
+
+/** A username as people see it: `woofx3.tv/<username>`. */
+export function usernameAddress(slug: string): string {
+  return `${USERNAME_PREFIX}${slug}`;
 }
 
 /**

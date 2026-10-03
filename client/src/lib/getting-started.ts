@@ -5,7 +5,7 @@ import type { SetupStatus } from "@convex/setup";
 import type { CheckFix } from "@/lib/go-live-checks";
 import { describeObsStatus, OBS_MODULE_ID } from "@/lib/obs-status";
 
-// The dashboard's getting started card: a short first-session list, from
+// The dashboard's getting started checklist: a short first-session list, from
 // finishing setup to seeing woofx3 react to a follow. Pure, so which items are
 // done and what each offers is testable without Convex or an engine.
 

@@ -88,7 +88,7 @@ export type StreamRecapEngineDetail =
   | { status: "unreachable"; message: string }
   | { status: "failed"; message: string };
 
-type EngineCallFailure = Extract<StreamRecapEngineDetail, { status: "rejected" | "unreachable" | "failed" }>;
+export type EngineCallFailure = Extract<StreamRecapEngineDetail, { status: "rejected" | "unreachable" | "failed" }>;
 
 /** Longest engine error text passed on to the page. */
 export const MAX_ENGINE_ERROR_LENGTH = 200;
