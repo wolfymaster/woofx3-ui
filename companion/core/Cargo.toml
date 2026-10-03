@@ -1,0 +1,24 @@
+[package]
+name = "woofx3-companion-core"
+version = "0.1.0"
+edition = "2021"
+description = "The companion's relay client, bridge and discovery, without Tauri, so they test on any OS"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time", "macros", "rt", "net"] }
+tokio-util = "0.7"
+# The version convex 0.10 pulls in, so the binary carries one copy.
+tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
+# tokio-tungstenite and convex both build rustls without a crypto provider, and
+# rustls then panics on the first TLS handshake. Enabling exactly one provider
+# here lets rustls pick it as the process default.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+futures = "0.3"
+sha2 = "0.10"
+rand = "0.9"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
