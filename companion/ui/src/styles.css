@@ -179,3 +179,85 @@ button.danger {
   justify-content: space-between;
   gap: 12px;
 }
+
+h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.mono {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  user-select: text;
+}
+
+.notice {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: hsl(var(--muted));
+}
+
+.integrations,
+.module {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.module h2 {
+  font-size: 16px;
+}
+
+.endpoint {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--card));
+}
+
+.endpoint-head,
+.endpoint-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.switch,
+.check {
+  display: flex;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.switch {
+  align-items: center;
+}
+
+.check {
+  align-items: flex-start;
+}
+
+.check span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+input[type="text"] {
+  font: inherit;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  user-select: text;
+}

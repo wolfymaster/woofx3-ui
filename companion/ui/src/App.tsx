@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
+import { Integrations, useIntegrations } from "./Integrations";
 import { type CompanionState, commands, currentState, onStateChange, type WindowState } from "./state";
 
 type Tab = "status" | "engine" | "configuration" | "integrations";
 
-/** Only Status works in this release; the rest are placeholders so later panels add content, not layout. */
+/** Engine and Configuration are placeholders so later panels add content, not layout. */
 const TABS: { id: Tab; label: string; enabled: boolean }[] = [
   { id: "status", label: "Status", enabled: true },
   { id: "engine", label: "Engine", enabled: false },
   { id: "configuration", label: "Configuration", enabled: false },
-  { id: "integrations", label: "Integrations", enabled: false },
+  { id: "integrations", label: "Integrations", enabled: true },
 ];
 
 function useWindowState(): WindowState {
@@ -137,10 +138,43 @@ function ConfirmPairing({ state }: { state: Extract<CompanionState, { kind: "con
   );
 }
 
-function Paired({ state }: { state: Extract<CompanionState, { kind: "paired" }> }) {
-  const [tab, setTab] = useState<Tab>("status");
+function StatusPanel({ state }: { state: Extract<CompanionState, { kind: "paired" }> }) {
   const [confirmingUnpair, setConfirmingUnpair] = useState(false);
   const { busy, error, run } = useCommand();
+  return (
+    <section className="panel">
+      <p>
+        Paired with <strong>{state.instanceName}</strong>
+      </p>
+      <p className="status-line">
+        <span className={state.cloudConnected ? "dot ok" : "dot off"} aria-hidden="true" />
+        {state.cloudConnected ? "Connected to woofx3" : "Offline, reconnecting"}
+      </p>
+      {confirmingUnpair ? (
+        <div className="confirm">
+          <p>Unpair this computer? You will need to pair it again from the browser.</p>
+          <div className="row">
+            <button type="button" disabled={busy} onClick={() => setConfirmingUnpair(false)}>
+              Keep paired
+            </button>
+            <button type="button" className="danger" disabled={busy} onClick={() => run(commands.unpair)}>
+              Unpair
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setConfirmingUnpair(true)}>
+          Unpair
+        </button>
+      )}
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
+
+function Paired({ state }: { state: Extract<CompanionState, { kind: "paired" }> }) {
+  const [tab, setTab] = useState<Tab>("status");
+  const integrations = useIntegrations();
   return (
     <>
       <nav className="tabs" aria-label="Sections">
@@ -157,33 +191,13 @@ function Paired({ state }: { state: Extract<CompanionState, { kind: "paired" }> 
           </button>
         ))}
       </nav>
-      <section className="panel">
-        <p>
-          Paired with <strong>{state.instanceName}</strong>
-        </p>
-        <p className="status-line">
-          <span className={state.cloudConnected ? "dot ok" : "dot off"} aria-hidden="true" />
-          {state.cloudConnected ? "Connected to woofx3" : "Offline, reconnecting"}
-        </p>
-        {confirmingUnpair ? (
-          <div className="confirm">
-            <p>Unpair this computer? You will need to pair it again from the browser.</p>
-            <div className="row">
-              <button type="button" disabled={busy} onClick={() => setConfirmingUnpair(false)}>
-                Keep paired
-              </button>
-              <button type="button" className="danger" disabled={busy} onClick={() => run(commands.unpair)}>
-                Unpair
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button type="button" onClick={() => setConfirmingUnpair(true)}>
-            Unpair
-          </button>
-        )}
-        {error && <p className="error">{error}</p>}
-      </section>
+      {tab === "integrations" ? (
+        <section className="panel">
+          <Integrations instanceName={state.instanceName} view={integrations} />
+        </section>
+      ) : (
+        <StatusPanel state={state} />
+      )}
     </>
   );
 }
