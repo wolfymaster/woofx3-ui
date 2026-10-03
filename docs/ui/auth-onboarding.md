@@ -81,7 +81,7 @@ The wizard records that it opened for the signed-in user (`setup.markSeen`, per 
 
 ## After onboarding
 
-`OnboardingGuard` requires an account, at least one registered instance and a Twitch link on the current instance before showing a page inside `BroadcastShell`.
+`OnboardingGuard` requires at least one registered instance the user can reach and a Twitch link on the current instance before showing a page inside `BroadcastShell`. The instance may be one they were invited to: a user who only uses another account's instance, such as a moderator who does not stream, owns no account or instance and never goes through onboarding.
 
 - **No Twitch link:** an owner or admin is sent to setup's first unfinished page. Anyone else sees "Ask an owner or admin to connect Twitch" in the content area, not a redirect.
 - **Link health:** the guard checks only that a link exists. A revoked or under-scoped link is left to the reconnect banner, so an established user is never sent back into setup.

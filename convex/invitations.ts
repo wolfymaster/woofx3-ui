@@ -489,9 +489,17 @@ export const accept = mutation({
       .withIndex("by_account_user", (q) => q.eq("accountId", inv.accountId).eq("userId", userId))
       .first();
 
+    // The account's engine, so the invitee lands on it. An account has one
+    // instance; a registered one is preferred in case an unfinished one lingers.
+    const accountInstances = await ctx.db
+      .query("instances")
+      .withIndex("by_account", (q) => q.eq("accountId", inv.accountId))
+      .take(10);
+    const instanceId = (accountInstances.find((instance) => instance.clientId) ?? accountInstances[0])?._id ?? null;
+
     if (existingMember) {
       await ctx.db.patch(inv._id, { status: "accepted" });
-      return { accountId: inv.accountId, alreadyMember: true as const };
+      return { accountId: inv.accountId, instanceId, alreadyMember: true as const };
     }
 
     await ctx.db.insert("accountMembers", {
@@ -505,6 +513,6 @@ export const accept = mutation({
 
     await ctx.db.patch(inv._id, { status: "accepted" });
 
-    return { accountId: inv.accountId, alreadyMember: false as const };
+    return { accountId: inv.accountId, instanceId, alreadyMember: false as const };
   },
 });
