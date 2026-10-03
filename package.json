@@ -16,7 +16,9 @@
     "lint:fix": "biome check --write .",
     "docs": "bun --cwd docs run docs",
     "docs:build": "bun --cwd docs run docs:build",
-    "docs:preview": "bun --cwd docs run docs:preview"
+    "docs:preview": "bun --cwd docs run docs:preview",
+    "companion:dev": "bun run --cwd companion tauri dev",
+    "companion:build": "bun run --cwd companion tauri build"
   },
   "dependencies": {
     "@auth/core": "^0.37.0",
