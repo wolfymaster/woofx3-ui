@@ -17,6 +17,7 @@ import {
   normalizeUserCode,
   PAIRING_TTL_MS,
 } from "./lib/companionCodes";
+import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { deleteCompanion, deleteCompanionPresence } from "./lib/companionRecords";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
@@ -489,6 +490,8 @@ export const approve = mutation({
       // A new token is unconfirmed until the person at the PC confirms it.
       await ctx.db.patch(existing._id, { ...credential, confirmedAt: undefined });
       await deleteCompanionPresence(ctx, existing._id);
+      // Unconfirmed, it bridges nothing until the person at the PC confirms.
+      await resyncRelayIfBridging(ctx, instanceId);
     } else {
       await ctx.db.insert("companions", { instanceId, installationId: row.installationId, ...credential });
     }

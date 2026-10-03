@@ -9,6 +9,7 @@ import {
   MAX_COMPANION_ROWS_PER_INSTANCE,
   MAX_COMPANION_VERSION_LENGTH,
 } from "./lib/companionCodes";
+import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { approverDisplayName, deleteCompanion } from "./lib/companionRecords";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
@@ -99,6 +100,9 @@ export const confirm = mutation({
     }
     if (companion.confirmedAt === undefined) {
       await ctx.db.patch(companion._id, { confirmedAt: Date.now() });
+      // The same installation paired again keeps its endpoint rows, which
+      // bridge nothing until it is confirmed.
+      await resyncRelayIfBridging(ctx, companion.instanceId);
     }
     return { paired: true };
   },

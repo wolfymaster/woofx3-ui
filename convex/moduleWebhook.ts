@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx } from "./_generated/server";
 import { disableEndpoint, provisionEndpoint, removeEndpointsForModule } from "./inboundWebhooks";
+import { MAX_ENDPOINT_ROWS_PER_COMPANION, scheduleRelaySync } from "./lib/companionEndpoints";
 import {
   pruneActionDefinitions,
   pruneTriggerDefinitions,
@@ -567,6 +568,9 @@ export const processModuleInstallFailed = internalMutation({
  * name+version if the engine didn't echo a version or the key doesn't match.
  * Falls back to deleting any record with the same name when version is absent.
  */
+/** A module names at most a handful of settings in `local[]`. */
+const MAX_PROVENANCE_ROWS_PER_MODULE = 50;
+
 /**
  * Cascade-delete a confirmed-gone module: storage blob, per-instance join
  * rows (matched by createdByRef == the module's moduleKey), global UI
@@ -591,6 +595,7 @@ async function cascadeDeleteModuleRecord(
   const modulePrefix = bareModuleKey(record.moduleKey);
   if (modulePrefix) {
     await removeEndpointsForModule(ctx, { instanceId, modulePrefix });
+    await removeLocalEndpointState(ctx, instanceId, modulePrefix);
   }
 
   // Authoritative cleanup: walk the per-instance join rows by provenance.
@@ -670,6 +675,31 @@ async function cascadeDeleteModuleRecord(
     moduleId: record._id,
   });
   await ctx.db.delete(record._id);
+}
+
+/**
+ * An uninstalled module's local endpoints stop being bridged, and the record
+ * of who wrote its settings goes with the settings. Keyed by the bare module
+ * key, which is the manifest id these rows name the module by.
+ */
+async function removeLocalEndpointState(ctx: MutationCtx, instanceId: Id<"instances">, moduleId: string) {
+  const provenance = await ctx.db
+    .query("moduleSettingProvenance")
+    .withIndex("by_instance_module", (q) => q.eq("instanceId", instanceId).eq("moduleId", moduleId))
+    .take(MAX_PROVENANCE_ROWS_PER_MODULE);
+  for (const row of provenance) {
+    await ctx.db.delete(row._id);
+  }
+  const endpoints = await ctx.db
+    .query("companionEndpoints")
+    .withIndex("by_instance_module", (q) => q.eq("instanceId", instanceId).eq("moduleId", moduleId))
+    .take(MAX_ENDPOINT_ROWS_PER_COMPANION);
+  for (const row of endpoints) {
+    await ctx.db.delete(row._id);
+  }
+  if (endpoints.some((row) => row.enabled)) {
+    await scheduleRelaySync(ctx, instanceId);
+  }
 }
 
 export const processModuleDeleted = internalMutation({

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
+import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { deleteCompanion } from "./lib/companionRecords";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import type { InstanceRole } from "./lib/instanceRoles";
@@ -236,6 +237,11 @@ export const deleteInstanceData = internalMutation({
       }
     }
 
+    const instance = await ctx.db.get(instanceId);
+    if (instance?.companionHostname) {
+      await ctx.scheduler.runAfter(0, internal.companionRelayActions.removeRoute, { instanceId });
+    }
+
     await ctx.db.delete(instanceId);
   },
 });
@@ -317,6 +323,11 @@ export const applyRegistration = internalMutation({
     if (setup?.completedAt) {
       await ctx.scheduler.runAfter(0, internal.setupApply.run, { instanceId });
     }
+
+    // Every handshake comes through here, re-registration included, and an
+    // engine registered again (a new deployment, or one whose database was
+    // reset) has no relay configuration until it is told.
+    await resyncRelayIfBridging(ctx, instanceId);
   },
 });
 

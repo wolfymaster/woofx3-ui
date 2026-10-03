@@ -11,6 +11,7 @@ import {
   installedLocalModules,
   instanceCompanion,
   MAX_BRIDGED_ENDPOINTS,
+  scheduleRelaySync,
 } from "./lib/companionEndpoints";
 import { isEndpointHost, isEndpointPort, localSettingKeys } from "./lib/localEndpoints";
 import { isInstanceMember } from "./lib/teamAccess";
@@ -188,6 +189,9 @@ export const setEndpoint = mutation({
         endpointId: args.endpointId,
         ...fields,
       });
+    }
+    if ((existing?.enabled ?? false) !== args.enabled) {
+      await scheduleRelaySync(ctx, companion.instanceId);
     }
     return null;
   },

@@ -4,11 +4,13 @@ import {
   createEngine,
   currentRelease,
   deleteEngine,
+  ensureCompanionRoute,
   isEngineNotFound,
   isMaintenanceConfigured,
   MaintenanceApiError,
   redeployEngine,
   redeployRefusal,
+  removeCompanionRoute,
   retryRun,
 } from "./maintenanceClient";
 
@@ -198,5 +200,25 @@ describe("configuration", () => {
 
   it("is configured when both are present", () => {
     expect(isMaintenanceConfigured()).toBe(true);
+  });
+});
+
+describe("companion routes", () => {
+  it("allocates an instance's companion hostname idempotently", async () => {
+    stubFetch({ status: 200, body: { hostname: "c-abcdefghijkl.woofx3.tv" } });
+
+    expect(await ensureCompanionRoute("j57abc")).toEqual({ hostname: "c-abcdefghijkl.woofx3.tv" });
+    expect(calls[0].url).toBe("https://maintenance.woofx3.tv/v1/companion-routes/j57abc");
+    expect(calls[0].method).toBe("PUT");
+    expect(calls[0].headers["idempotency-key"]).toBe("j57abc");
+  });
+
+  it("treats removing a hostname that is already gone as done", async () => {
+    stubFetch({ status: 404, body: { error: { code: "not_found", message: "No such route" } } });
+    await removeCompanionRoute("j57abc");
+    expect(calls[0].method).toBe("DELETE");
+
+    stubFetch({ status: 500, body: { error: { code: "internal", message: "boom" } } });
+    await expect(removeCompanionRoute("j57abc")).rejects.toBeInstanceOf(MaintenanceApiError);
   });
 });

@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import {
   assertCanManageAccountTeam,
   canAccessAccount,
@@ -115,6 +116,8 @@ export const removeMember = mutation({
       if (im) {
         await ctx.db.delete(im._id);
       }
+      // A companion this member approved stops bridging with their access.
+      await resyncRelayIfBridging(ctx, inst._id);
     }
   },
 });
@@ -157,6 +160,8 @@ export const updateMemberRole = mutation({
 
     for (const inst of instances) {
       await ensureInstanceMember(ctx, inst._id, args.targetUserId, instanceRole);
+      // A companion this member approved bridges only while they are an admin.
+      await resyncRelayIfBridging(ctx, inst._id);
     }
   },
 });

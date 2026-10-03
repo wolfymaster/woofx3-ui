@@ -1,5 +1,6 @@
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { approvalStands } from "./companionAuth";
 import { MAX_COMPANION_ROWS_PER_INSTANCE } from "./companionCodes";
 import { type LocalEndpoint, readLocalEndpoints } from "./localEndpoints";
@@ -143,4 +144,33 @@ export async function bridgedEndpoints(
  */
 export function bridgeAvailable(): boolean {
   return isRelayConfigured() && isMaintenanceConfigured();
+}
+
+/**
+ * Push the instance's relay configuration to its engine again, because what
+ * it bridges may have changed. Each call bumps `relaySyncVersion`, and the run
+ * it schedules does nothing once a newer version exists, so an endpoint turned
+ * on and then off cannot reach the engine in reverse order.
+ */
+export async function scheduleRelaySync(ctx: MutationCtx, instanceId: Id<"instances">): Promise<void> {
+  const instance = await ctx.db.get(instanceId);
+  if (!instance) {
+    return;
+  }
+  const version = (instance.relaySyncVersion ?? 0) + 1;
+  await ctx.db.patch(instanceId, { relaySyncVersion: version });
+  await ctx.scheduler.runAfter(0, internal.companionRelayActions.syncEngine, { instanceId, version });
+}
+
+/**
+ * `scheduleRelaySync` when the instance's companion has an endpoint turned on,
+ * whether or not it may act right now. For changes that can start or stop the
+ * bridge without touching endpoint rows: the companion re-paired or confirmed,
+ * its approver's role changed, the engine registered again.
+ */
+export async function resyncRelayIfBridging(ctx: MutationCtx, instanceId: Id<"instances">): Promise<void> {
+  const companion = await instanceCompanion(ctx, instanceId);
+  if (companion && (await companionEndpointRows(ctx, companion._id)).some((row) => row.enabled)) {
+    await scheduleRelaySync(ctx, instanceId);
+  }
 }
