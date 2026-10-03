@@ -23,6 +23,7 @@ const PIN_REFRESH_MS = 60_000;
 interface CurrentPin {
   messageId: string;
   content: string | null;
+  authorName: string | null;
   expiresAt?: string;
 }
 
@@ -138,13 +139,12 @@ export function PinnedWidget() {
           {current ? (
             <div className="flex items-start gap-2 rounded-md border border-border p-2" data-testid="current-pin">
               <Pin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-xs">
-                {current.content ?? (
-                  // Twitch returns only the message id, never the text — so a pin
-                  // made from Twitch's own UI can be reported but not quoted.
-                  <span className="text-muted-foreground italic">A message pinned outside this app</span>
-                )}
-              </p>
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <p className="whitespace-pre-wrap break-words text-xs">
+                  {current.content ?? <span className="text-muted-foreground italic">A pinned message</span>}
+                </p>
+                {current.authorName && <p className="text-[10px] text-muted-foreground">from {current.authorName}</p>}
+              </div>
               <Button
                 variant="ghost"
                 size="icon"

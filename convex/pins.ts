@@ -7,6 +7,7 @@ import { planRepin } from "./lib/pinStrategy";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { authorizeTwitch } from "./lib/twitchAuth";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
+import { parsePinsResponse, type TwitchPin } from "./lib/twitchPins";
 
 // Twitch chat pinning, and the local history it is driven from.
 //
@@ -165,12 +166,6 @@ export const recordPinned = internalMutation({
 // Twitch
 // ---------------------------------------------------------------------------
 
-interface TwitchPin {
-  messageId: string;
-  createdAt?: string;
-  expiresAt?: string;
-}
-
 async function fetchCurrentPin(
   accessToken: string,
   clientId: string,
@@ -183,51 +178,88 @@ async function fetchCurrentPin(
   if (!response.ok) {
     throw new Error(`Twitch pin lookup failed: ${response.status} ${await response.text()}`);
   }
-  const body = (await response.json()) as {
-    data?: Array<{ message_id?: string; created_at?: string; expires_at?: string }>;
-  };
-  const pin = body.data?.[0];
-  if (!pin?.message_id) {
-    return null;
-  }
-  return { messageId: pin.message_id, createdAt: pin.created_at, expiresAt: pin.expires_at };
+  return parsePinsResponse(await response.json());
 }
 
 /**
- * What Twitch currently has pinned, with our own text attached when we
- * recognise the message id.
+ * What Twitch currently has pinned, with its text as Twitch reports it.
  *
- * `content` is null for a pin made outside this app — Twitch does not return
- * the message text, and nothing here receives chat, so there is no way to learn
- * what it says.
+ * A pin made outside this app (from Twitch's own chat, or by a moderator) is
+ * added to the history the first time it is seen, so it can be pinned again
+ * from here like one this app posted. `content` is null only when Twitch sent
+ * no text.
  */
 export const currentPin = action({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<{ messageId: string; content: string | null; expiresAt?: string } | null> => {
+  handler: async (
+    ctx,
+    args
+  ): Promise<{ messageId: string; content: string | null; authorName: string | null; expiresAt?: string } | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
     const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(ctx, args.instanceId, PIN_READ_SCOPE);
     const pin = await fetchCurrentPin(accessToken, clientId, broadcasterUserId);
     if (!pin) {
       return null;
     }
 
-    const known: Array<{ twitchMessageId?: string; content: string }> = await ctx.runQuery(
-      internal.pins.knownMessages,
-      { instanceId: args.instanceId }
-    );
-    const match = known.find((entry) => entry.twitchMessageId === pin.messageId);
-    return { messageId: pin.messageId, content: match?.content ?? null, expiresAt: pin.expiresAt };
+    if (pin.text !== null) {
+      await ctx.runMutation(internal.pins.recordSeenPin, {
+        instanceId: args.instanceId,
+        userId,
+        twitchMessageId: pin.messageId,
+        content: pin.text,
+        authorName: pin.senderName ?? undefined,
+        at: pin.pinnedAtMs ?? Date.now(),
+      });
+    }
+
+    return {
+      messageId: pin.messageId,
+      content: pin.text,
+      authorName: pin.senderName,
+      expiresAt: pin.endsAt ?? undefined,
+    };
   },
 });
 
-export const knownMessages = internalQuery({
-  args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<Array<{ twitchMessageId?: string; content: string }>> => {
-    const rows = await ctx.db
+/**
+ * Adds a pin seen on Twitch to the history unless an entry already carries its
+ * message id. The check and the insert share this transaction, so two widgets
+ * polling at once cannot add the same pin twice.
+ *
+ * `userId` is whoever's dashboard first saw the pin, since the history records
+ * a dashboard user rather than a Twitch account; `authorName` keeps who sent it.
+ */
+export const recordSeenPin = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    userId: v.id("users"),
+    twitchMessageId: v.string(),
+    content: v.string(),
+    authorName: v.optional(v.string()),
+    at: v.number(),
+  },
+  handler: async (ctx, args): Promise<void> => {
+    const recent = await ctx.db
       .query("pinnedMessages")
       .withIndex("by_instance_pinned_at", (q) => q.eq("instanceId", args.instanceId))
       .order("desc")
       .take(MAX_HISTORY_READ);
-    return rows.map((row) => ({ twitchMessageId: row.twitchMessageId, content: row.content }));
+    if (recent.some((row) => row.twitchMessageId === args.twitchMessageId)) {
+      return;
+    }
+    await ctx.db.insert("pinnedMessages", {
+      instanceId: args.instanceId,
+      content: args.content,
+      authorName: args.authorName,
+      twitchMessageId: args.twitchMessageId,
+      pinnedAt: args.at,
+      lastPinnedAt: args.at,
+      pinnedByUserId: args.userId,
+    });
   },
 });
 

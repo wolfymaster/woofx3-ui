@@ -504,12 +504,15 @@ Pinning targets an existing chat message by id (`PUT /helix/chat/pins`), so a
 means **it posts a visible chat message** from the connected account. Twitch pins
 messages; there is no free-floating pinned text.
 
-Reading the current pin (`GET /helix/chat/pins`) returns only ids and timing —
-no message text, no author. So the widget can quote a pin only when its id
-matches one we recorded; a pin made from Twitch's own UI shows as "pinned
-outside this app". Nothing here receives chat, so there is no other way to learn
-what it says. There is also no EventSub type for pinning, which is why the
-current pin is polled rather than pushed.
+Reading the current pin (`GET /helix/chat/pins`, parsed by
+`convex/lib/twitchPins.ts`) returns the message's text, its sender, when it was
+pinned (`starts_at`) and when the pin expires (`ends_at`, null when it lasts
+until the stream ends). The widget shows the text and sender as Twitch reports
+them. A pin made outside this app, from Twitch's own chat or by a moderator, is
+added to the history the first time the widget sees it (`pins.recordSeenPin`),
+keyed by its message id so it is added once, and can then be pinned again from
+here. There is no EventSub type for pinning, which is why the current pin is
+polled rather than pushed.
 
 Re-pinning has two paths, chosen by `convex/lib/pinStrategy.ts`: reuse the
 stored message id when the entry was created during the current broadcast,
