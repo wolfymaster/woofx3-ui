@@ -2,7 +2,6 @@ import type { StreamEventFrame } from "@woofx3/api";
 
 // WoofxTransport — abstracts communication with a woofx3 instance.
 // The browser (BrowserTransport) connects directly via WebSocket.
-// Tauri (TauriTransport) will use IPC → Rust → WebSocket.
 // All data returned here is woofx3-owned runtime data, NOT Convex data.
 
 export interface StreamStatus {

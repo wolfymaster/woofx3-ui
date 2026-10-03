@@ -5,7 +5,7 @@ import { $engineUrl } from "@/lib/stores";
 import { transport } from "@/lib/transport";
 
 /**
- * Keeps the browser/Tauri engine transport aligned with the selected Convex instance.
+ * Keeps the browser engine transport aligned with the selected Convex instance.
  * Each instance has its own engine URL and client credentials from registration.
  * The global `$engineUrl` store is a fallback for legacy UX and local overrides.
  */

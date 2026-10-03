@@ -38,4 +38,7 @@ crons.interval("stream live state sweep", { minutes: 10 }, internal.streamStatus
 // sits idle and nothing reports it.
 crons.interval("shoutout queue sweep", { minutes: 10 }, internal.shoutouts.sweepStalledQueues);
 
+// Pairing attempts live ten minutes; this deletes them an hour after expiry.
+crons.interval("companion pairing cleanup", { hours: 1 }, internal.companionPairing.cleanupExpired);
+
 export default crons;

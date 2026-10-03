@@ -171,7 +171,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - **Braces on all branches and loops**: `if (!x) { return null; }` — never `if (!x) return null;`. Same for `for`, `while`, `else` — always use a block body. No exceptions.
 - **Routing**: Wouter v3 — no `<Redirect>` component exists; use `useEffect(() => navigate('/path'), [])` for redirects.
 - **State**: Nanostores (`$`-prefixed atoms) for UI-only state (theme, sidebar, engine URL, current instance ID). Convex for all server-persisted data.
-- **Transport**: Use `client/src/lib/transport/` for woofx3 API calls. `WoofxTransport` interface abstracts browser WebSocket vs future Tauri IPC. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
+- **Transport**: Use `client/src/lib/transport/` for woofx3 API calls. `WoofxTransport` is the interface for realtime browser↔engine channels. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
 - **Shadcn/ui**: Components in `client/src/components/ui/` — extend via composition, never modify directly.
 - **Instance-scoped queries**: Always use `"skip"` when instanceId may be null:
   ```typescript
@@ -183,7 +183,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 ### Frontend (`client/src/`)
 - React 18 + TypeScript, Vite build
 - Auth: `@convex-dev/auth` with Twitch OAuth (custom HTTP endpoints in `convex/http.ts`) and Password provider
-- Auth flow: Login → AuthGuard → BroadcastShell (main layout) → OnboardingGuard (must have account + registered instance + Twitch link; gates the content area only). Setup wizard at `/setup/:step`
+- Auth flow: Login → AuthGuard → BroadcastShell (main layout) → OnboardingGuard (must have account + registered instance + Twitch link; gates the content area only). Setup wizard at `/setup/:step`. Companion pairing approval at `/companion/pair` (AuthGuard only, outside OnboardingGuard)
 - Visual workflow builder uses ReactFlow (`pages/workflow-builder.tsx`)
 - Scene editor for browser source overlays (`pages/scene-editor.tsx`)
 
@@ -196,8 +196,8 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 ### Shared (`shared/api.ts`)
 - Type definitions for the legacy RPC API contract (pagination, stream status, workflows, assets, scenes, modules, etc.)
 
-### Desktop (`src-tauri/`)
-- Tauri shell planned — `TauriTransport` in `client/src/lib/transport/tauri-transport.ts` will use IPC → Rust → WebSocket
+### Companion (`companion/`)
+- A Tauri tray app for the streamer's PC that pairs with an instance through `/companion/pair` and authenticates to Convex with a companion token (only its hash is stored; the `companions` row is the credential). It is not a UI for managing woofx3: the browser is the only management surface. See `docs/ui/companion.md`.
 
 ## Task Management
 

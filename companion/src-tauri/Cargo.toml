@@ -1,0 +1,44 @@
+[package]
+name = "woofx3-companion"
+version = "0.1.0"
+description = "woofx3 companion: pairs this computer with a woofx3 instance and keeps it connected"
+authors = []
+edition = "2021"
+
+[lib]
+name = "woofx3_companion_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "woofx3-companion"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-opener = "2"
+# 2.x only: the 3.0 line is an alpha.
+tauri-plugin-single-instance = "2.5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time", "macros", "rt", "rt-multi-thread"] }
+futures = "0.3"
+convex = { version = "0.10", default-features = false, features = ["rustls-tls-webpki-roots"] }
+# The default `v1` feature picks the native store per platform: Credential
+# Manager on Windows, Keychain on macOS, Secret Service on Linux.
+keyring = "4"
+anyhow = "1"
+hostname = "0.4"
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.3"
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

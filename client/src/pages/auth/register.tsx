@@ -7,7 +7,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { getNextPath, withNextPath } from "@/lib/auth-next";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
+
+/** Where a new account goes: back to the page that sent the visitor to sign in, else onboarding. */
+function afterRegisterPath(): string {
+  return getNextPath() ?? "/auth/onboarding";
+}
 
 export default function Register() {
   const [, navigate] = useLocation();
@@ -22,7 +28,7 @@ export default function Register() {
     setError(null);
     setIsLoading(true);
     try {
-      startTwitchSignIn("/auth/onboarding");
+      startTwitchSignIn(afterRegisterPath());
     } catch {
       setError(TWITCH_SIGN_IN_STORAGE_ERROR);
       setIsLoading(false);
@@ -37,7 +43,7 @@ export default function Register() {
       await signIn("password", { name, email, password, flow: "signUp" });
       // TODO: Show success notice on login form after account creation - when user is redirected
       // to login, display notice telling them account was created and to login
-      navigate("/auth/onboarding");
+      navigate(afterRegisterPath());
     } catch (err: any) {
       setError(err?.message || "Registration failed. Please try again.");
       setIsLoading(false);
@@ -123,7 +129,7 @@ export default function Register() {
           <CardFooter className="justify-center">
             <p className="text-sm text-muted-foreground">
               Already have an account?{" "}
-              <Link href="/auth/login" className="text-primary hover:underline">
+              <Link href={withNextPath("/auth/login")} className="text-primary hover:underline">
                 Sign in
               </Link>
             </p>

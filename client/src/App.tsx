@@ -41,6 +41,7 @@ const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const CommandStepAlertEditor = lazy(() => import("@/pages/command-step-alert-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
+const CompanionPair = lazy(() => import("@/pages/companion-pair"));
 const Counters = lazy(() => import("@/pages/counters"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const Feedback = lazy(() => import("@/pages/feedback"));
@@ -146,6 +147,12 @@ function AppRoutes() {
       <Route path="/setup/:step?">
         <AuthGuard>
           <Setup />
+        </AuthGuard>
+      </Route>
+      {/* Outside OnboardingGuard: pairing the companion comes before a local engine has an instance. */}
+      <Route path="/companion/pair">
+        <AuthGuard>
+          <CompanionPair />
         </AuthGuard>
       </Route>
 

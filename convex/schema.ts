@@ -308,6 +308,59 @@ export default defineSchema({
     .index("by_instance", ["instanceId"])
     .index("by_instance_user", ["instanceId", "userId"]),
 
+  // companionPairings: one row per pairing attempt, from the companion asking
+  // for a code until a person approves or declines it. Only hashes of the
+  // device code and of the companion's own token are stored. Expiry is
+  // `expiresAt`, never a status (see companionPairing.ts).
+  companionPairings: defineTable({
+    deviceCodeHash: v.string(),
+    tokenHash: v.string(),
+    installationId: v.string(),
+    userCode: v.string(),
+    deviceName: v.string(),
+    companionVersion: v.string(),
+    status: v.union(v.literal("pending"), v.literal("approved"), v.literal("denied"), v.literal("cancelled")),
+    instanceId: v.optional(v.id("instances")),
+    approvedBy: v.optional(v.id("users")),
+    createdAt: v.number(),
+    expiresAt: v.number(),
+  })
+    .index("by_device_code_hash", ["deviceCodeHash"])
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_user_code", ["userCode"])
+    .index("by_expires_at", ["expiresAt"])
+    .index("by_instance", ["instanceId"]),
+
+  // companions: a paired companion app. The row is the credential: revoking
+  // deletes it. Only the token's hash is stored. `companionVersion` is the
+  // version that paired; companionPresence holds the running one. An
+  // installation has at most one row per instance: pairing the same install
+  // again replaces that row's token.
+  companions: defineTable({
+    instanceId: v.id("instances"),
+    installationId: v.string(),
+    tokenHash: v.string(),
+    deviceName: v.string(),
+    companionVersion: v.string(),
+    pairedBy: v.id("users"),
+    pairedAt: v.number(),
+    // Set when the person at the PC confirms the pairing on the device;
+    // absent until then, and cleared when the installation pairs again.
+    confirmedAt: v.optional(v.number()),
+  })
+    .index("by_token_hash", ["tokenHash"])
+    .index("by_instance", ["instanceId"])
+    .index("by_instance_installation", ["instanceId", "installationId"]),
+
+  // companionPresence: one row per companion, written by its heartbeat. Kept
+  // apart from `companions` so the heartbeat does not re-run every
+  // subscription that reads the companion itself.
+  companionPresence: defineTable({
+    companionId: v.id("companions"),
+    lastSeenAt: v.number(),
+    companionVersion: v.string(),
+  }).index("by_companion", ["companionId"]),
+
   // platformLinks: OAuth tokens for streaming platforms (Twitch, etc.) per instance
   platformLinks: defineTable({
     instanceId: v.id("instances"),
