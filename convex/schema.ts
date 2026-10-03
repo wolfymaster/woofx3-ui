@@ -70,6 +70,14 @@ export const macroConfigValidator = v.object({
 // client/src/lib/page-intros.ts.
 export const pageIntroIdValidator = v.union(v.literal("workflows"), v.literal("scenes"), v.literal("modules"));
 
+// One widget docked to the dashboard's right-edge rail, opened as a flyout.
+// Exported for the same reason as dashboardPanelWidgetValidator.
+export const dashboardRailWidgetValidator = v.object({
+  slotId: v.string(),
+  type: v.string(),
+  config: v.optional(v.any()),
+});
+
 // Shared shape for dashboardLayouts.panels (and its legacy `pages` alias below).
 const dashboardPanelValidator = v.array(
   v.object({
@@ -508,6 +516,9 @@ export default defineSchema({
     instanceId: v.id("instances"),
     userId: v.id("users"),
     panels: v.optional(dashboardPanelValidator),
+    // Unset until the user first edits the rail; the client then shows its
+    // default rail widgets (client/src/lib/dashboard-rail.ts).
+    railWidgets: v.optional(v.array(dashboardRailWidgetValidator)),
     pages: v.optional(dashboardPanelValidator),
     layoutId: v.optional(v.string()),
     modules: v.optional(

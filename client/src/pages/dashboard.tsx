@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import { useMutation } from "convex/react";
-import { Check, Trash2, X } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CommandBar } from "@/components/dashboard/command-bar";
 import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
@@ -9,6 +9,7 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { GettingStartedCard } from "@/components/dashboard/getting-started-card";
 import { PanelTabs } from "@/components/dashboard/panel-tabs";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
+import { WidgetPickerDialog } from "@/components/dashboard/widget-picker-dialog";
 import { WidgetRail } from "@/components/dashboard/widget-rail";
 import { StatusBarCenterPortal } from "@/components/layout/status-bar-slot";
 import {
@@ -21,21 +22,33 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
 import { Carousel, type CarouselApi, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NotRunningNotice } from "@/components/workflows/not-running-notice";
 import { useInstance } from "@/hooks/use-instance";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
+import { useToast } from "@/hooks/use-toast";
 import {
   assignWidget,
   configureWidget,
   type DashboardPanelWidget,
   isPanelMounted,
+  moveWidget,
   removeWidget,
   resizeZone,
 } from "@/lib/dashboard-panels";
+import {
+  addRailWidget,
+  configureRailWidget,
+  type DashboardRailWidget,
+  moveRailWidget,
+  removeRailWidget,
+  resolveRailWidgets,
+} from "@/lib/dashboard-rail";
 import { $commandBarHidden, $dashboardLayoutHint } from "@/lib/stores";
+
+/** Where a widget chosen in the picker goes. */
+type PickerTarget = { kind: "zone"; panelId: string; zoneId: string } | { kind: "rail" };
 
 export default function Dashboard() {
   const { instance, isLoading: instanceLoading } = useInstance();
@@ -45,13 +58,19 @@ export default function Dashboard() {
   // Starts with the cached instance id, alongside the membership list; the
   // result is only rendered once `instance` confirms that id.
   const panels = useOptimisticInstanceQuery(api.dashboardLayouts.getPanels);
+  const savedRail = useOptimisticInstanceQuery(api.dashboardLayouts.getRailWidgets);
   const addPanel = useMutation(api.dashboardLayouts.addPanel);
   const removePanel = useMutation(api.dashboardLayouts.removePanel);
   const renamePanel = useMutation(api.dashboardLayouts.renamePanel);
   const setPanelWidgets = useMutation(api.dashboardLayouts.setPanelWidgets);
+  const setRailWidgets = useMutation(api.dashboardLayouts.setRailWidgets);
+  const { toast } = useToast();
 
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [draftWidgets, setDraftWidgets] = useState<Record<string, DashboardPanelWidget[]> | null>(null);
+  const [draftRail, setDraftRail] = useState<DashboardRailWidget[] | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [carouselApi, setCarouselApi] = useState<CarouselApi>();
   const [addPanelOpen, setAddPanelOpen] = useState(false);
@@ -63,6 +82,9 @@ export default function Dashboard() {
   // every change, and depending on it would give every canvas new handlers too.
   const panelsRef = useRef(panels);
   panelsRef.current = panels;
+  const railWidgets = resolveRailWidgets(savedRail);
+  const railRef = useRef(railWidgets);
+  railRef.current = railWidgets;
 
   useEffect(() => {
     if (!carouselApi) {
@@ -169,6 +191,7 @@ export default function Dashboard() {
       snapshot[panel.id] = panel.widgets;
     }
     setDraftWidgets(snapshot);
+    setDraftRail(railRef.current);
     setIsEditing(true);
   }, []);
 
@@ -190,13 +213,56 @@ export default function Dashboard() {
     []
   );
 
-  const handleAssignWidget = useCallback(
-    (panelId: string, zoneId: string, type: string) => {
-      // Minted outside the updater, which React may call twice.
-      const slotId = crypto.randomUUID();
-      editDraft(panelId, (widgets) => assignWidget(widgets, zoneId, type, slotId));
+  const handleAddWidget = useCallback((panelId: string, zoneId: string) => {
+    setPickerTarget({ kind: "zone", panelId, zoneId });
+  }, []);
+
+  const handleAddRailWidget = useCallback(() => {
+    setPickerTarget({ kind: "rail" });
+  }, []);
+
+  const handlePickWidget = (type: string) => {
+    if (!pickerTarget) {
+      return;
+    }
+    // Minted outside the updater, which React may call twice.
+    const slotId = crypto.randomUUID();
+    if (pickerTarget.kind === "rail") {
+      setDraftRail((prev) => addRailWidget(prev ?? railRef.current, type, slotId));
+      return;
+    }
+    const { panelId, zoneId } = pickerTarget;
+    editDraft(panelId, (widgets) => assignWidget(widgets, zoneId, type, slotId));
+  };
+
+  const handleMoveWidget = useCallback(
+    (panelId: string, slotId: string, toZoneId: string, toIndex: number) => {
+      editDraft(panelId, (widgets) => moveWidget(widgets, slotId, toZoneId, toIndex));
     },
     [editDraft]
+  );
+
+  const handleRemoveRailWidget = useCallback((slotId: string) => {
+    setDraftRail((prev) => removeRailWidget(prev ?? railRef.current, slotId));
+  }, []);
+
+  const handleMoveRailWidget = useCallback((slotId: string, toIndex: number) => {
+    setDraftRail((prev) => moveRailWidget(prev ?? railRef.current, slotId, toIndex));
+  }, []);
+
+  const handleRailConfigChange = useCallback(
+    (slotId: string, config: Record<string, unknown>) => {
+      if (isEditing) {
+        setDraftRail((prev) => configureRailWidget(prev ?? railRef.current, slotId, config));
+        return;
+      }
+      // Same reason as handleWidgetConfigChange: nothing will Save this later.
+      if (!instanceId) {
+        return;
+      }
+      void setRailWidgets({ instanceId, widgets: configureRailWidget(railRef.current, slotId, config) });
+    },
+    [isEditing, instanceId, setRailWidgets]
   );
 
   const handleRemoveWidget = useCallback(
@@ -277,20 +343,38 @@ export default function Dashboard() {
 
   const handleCancelEdits = () => {
     setDraftWidgets(null);
+    setDraftRail(null);
     setIsEditing(false);
   };
 
   const handleSaveEdits = async () => {
-    if (draftWidgets) {
-      const currentPanelIds = new Set(panels.map((panel) => panel.id));
-      await Promise.all(
-        Object.entries(draftWidgets)
-          .filter(([panelId]) => currentPanelIds.has(panelId))
-          .map(([panelId, widgets]) => setPanelWidgets({ instanceId: instance._id, panelId, widgets }))
-      );
+    const currentPanelIds = new Set(panels.map((panel) => panel.id));
+    const writes: Promise<unknown>[] = Object.entries(draftWidgets ?? {})
+      .filter(([panelId, widgets]) => {
+        const saved = panels.find((panel) => panel.id === panelId)?.widgets;
+        return currentPanelIds.has(panelId) && widgets !== saved;
+      })
+      .map(([panelId, widgets]) => setPanelWidgets({ instanceId: instance._id, panelId, widgets }));
+    if (draftRail && draftRail !== railWidgets) {
+      writes.push(setRailWidgets({ instanceId: instance._id, widgets: draftRail }));
     }
-    setDraftWidgets(null);
-    setIsEditing(false);
+
+    setIsSaving(true);
+    try {
+      await Promise.all(writes);
+      setDraftWidgets(null);
+      setDraftRail(null);
+      setIsEditing(false);
+    } catch (error) {
+      // Stays in edit mode with the draft intact, so nothing is lost to a retry.
+      toast({
+        title: "Couldn't save the dashboard",
+        description: error instanceof Error ? error.message : String(error),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -301,34 +385,28 @@ export default function Dashboard() {
             panels={panels}
             activeIndex={activeIndex}
             isEditing={isEditing}
+            isSaving={isSaving}
             onSelect={handleSelectTab}
             onEnterEdit={enterEditMode}
+            onSaveEdit={() => void handleSaveEdits()}
+            onCancelEdit={handleCancelEdits}
             onRename={handleRenamePanel}
             onAddPanel={openAddPanel}
             onRemovePanel={setRemoveTarget}
           />
         </StatusBarCenterPortal>
 
-        {isEditing && (
-          <div className="flex items-center justify-end gap-2 px-4 py-2 border-b border-border shrink-0">
-            <Button variant="ghost" size="sm" onClick={handleCancelEdits} data-testid="button-cancel-edit">
-              <X className="h-4 w-4 mr-2" />
-              Cancel
-            </Button>
-            <Button size="sm" onClick={() => void handleSaveEdits()} data-testid="button-save-edit">
-              <Check className="h-4 w-4 mr-2" />
-              Save
-            </Button>
-          </div>
-        )}
-
+        {/* First, directly under the app header: until setup is done it is the
+            most important thing on the page. */}
+        <GettingStartedCard instanceId={instance._id} />
         <NotRunningNotice />
 
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
-        <GettingStartedCard instanceId={instance._id} />
         <StarterPacksNudge instanceId={instance._id} />
 
-        <Carousel className="flex-1 min-h-0" setApi={setCarouselApi}>
+        {/* Swiping between panels is off while editing, so dragging a widget
+            does not also drag the carousel. */}
+        <Carousel className="flex-1 min-h-0" setApi={setCarouselApi} opts={{ watchDrag: !isEditing }}>
           <CarouselContent>
             {panels.map((panel, index) => (
               // Every slide keeps its item so Embla's geometry is unchanged; only
@@ -340,8 +418,9 @@ export default function Dashboard() {
                     layoutId={panel.layoutId}
                     widgets={(isEditing && draftWidgets?.[panel.id]) || panel.widgets}
                     isEditing={isEditing}
-                    onAssignWidget={handleAssignWidget}
+                    onAddWidget={handleAddWidget}
                     onRemoveWidget={handleRemoveWidget}
+                    onMoveWidget={handleMoveWidget}
                     onWidgetConfigChange={handleWidgetConfigChange}
                     onResizeWidgets={handleResizeWidgets}
                   />
@@ -350,6 +429,17 @@ export default function Dashboard() {
             ))}
           </CarouselContent>
         </Carousel>
+
+        <WidgetPickerDialog
+          open={pickerTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPickerTarget(null);
+            }
+          }}
+          title={pickerTarget?.kind === "rail" ? "Add a widget to the rail" : "Add a widget"}
+          onSelect={handlePickWidget}
+        />
 
         <Dialog open={addPanelOpen} onOpenChange={setAddPanelOpen}>
           <DialogContent className="max-w-3xl">
@@ -382,7 +472,14 @@ export default function Dashboard() {
         </AlertDialog>
       </div>
 
-      <WidgetRail />
+      <WidgetRail
+        widgets={(isEditing && draftRail) || railWidgets}
+        isEditing={isEditing}
+        onAddWidget={handleAddRailWidget}
+        onRemoveWidget={handleRemoveRailWidget}
+        onMoveWidget={handleMoveRailWidget}
+        onWidgetConfigChange={handleRailConfigChange}
+      />
     </div>
   );
 }

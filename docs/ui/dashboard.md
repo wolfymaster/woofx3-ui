@@ -19,7 +19,29 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 - **Layout** is chosen per panel from `client/src/lib/dashboard-layouts.ts`. Zone ids
   are positional (`${rowIndex}-${columnIndex}`); a zone can hold several stacked,
   resizable widgets, each identified by `slotId`.
-- **Persistence** has two paths. Placement edits (add, remove, resize) are held in
+- **Editing.** The edit button sits next to the panel tabs in the status bar. Edit
+  mode adds Save and Cancel there, plus add, rename and delete panel buttons
+  (double-clicking a tab also renames it; right-clicking a tab still offers the
+  same actions). Those controls go in the status bar, and each widget's edit
+  controls are laid over it, so the canvas keeps the same size in and out of edit
+  mode. While editing, each widget is covered by a drag surface with a remove
+  button. Dragging a widget reorders it within its zone or moves it to another
+  zone on the same panel (`moveWidget` in `client/src/lib/dashboard-panels.ts`); a
+  line shows where it will land. Swiping between panels is turned off while
+  editing so a drag does not move the carousel.
+- **Adding a widget** opens `WidgetPickerDialog`
+  (`client/src/components/dashboard/widget-picker-dialog.tsx`): every registry
+  entry as a card with its description, grouped by category, with a search box.
+- **Widgets keep a fixed height.** Secondary content opens in an overlay rather
+  than expanding inside the widget. See
+  [Dashboard widgets keep a fixed height](/patterns/dashboard-widgets).
+- **Rail.** The icon column on the right opens rail widgets as flyouts. It starts
+  as Notes and Stream Stats (`DEFAULT_RAIL_WIDGETS` in
+  `client/src/lib/dashboard-rail.ts`). In edit mode any widget can be added to it
+  through the same picker, removed, or dragged to reorder, up to 12. The rail is
+  stored on the user's `dashboardLayouts` row as `railWidgets`, unset until first
+  edited, and saved with the panels on Save.
+- **Persistence** has two paths. Placement edits (add, remove, move, resize) are held in
   local draft state while edit mode is on and written by `setPanelWidgets` on Save,
   so Cancel needs no server round-trip. A widget changing **its own config** outside
   edit mode writes through immediately — otherwise the change would be dropped.
@@ -94,7 +116,7 @@ against: Twitch keeps no history of either.
 
 ## Getting started card
 
-`GettingStartedCard` (`client/src/components/dashboard/getting-started-card.tsx`) is a collapsible strip above the panels, with a short first-session list. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
+`GettingStartedCard` (`client/src/components/dashboard/getting-started-card.tsx`) is a collapsible strip at the top of the dashboard, directly under the app header, with a short first-session list. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
 
 | Item | Done when | Offers |
 |---|---|---|
@@ -171,7 +193,7 @@ moderation methods.
 The widget is three stacked sections, ordered by how fast each has to happen:
 
 - **Block a phrase** — a quick-add box (2 to 500 characters, `*` as a wildcard,
-  Twitch's own rules) above a collapsed list of the channel's blocked terms,
+  Twitch's own rules) above a count that opens the channel's blocked terms in an overlay,
   each removable. The list is read from `GET /helix/moderation/blocked_terms`,
   following the cursor up to 2000 terms, and is loaded once rather than polled.
 - **User** — a username box with the shoutout widget's chatter autocomplete
@@ -471,7 +493,7 @@ instead of a card that shows data and refuses every button.
 
 Twitch keeps **exactly one pinned message per channel**, and pinning a new one
 silently replaces it — so the widget shows a single current pin, not a list. The
-list underneath is *history*: things worth pinning again, kept because the same
+list behind **History** (opened in an overlay) is *history*: things worth pinning again, kept because the same
 message tends to recur stream after stream.
 
 Pinning targets an existing chat message by id (`PUT /helix/chat/pins`), so a

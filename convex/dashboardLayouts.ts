@@ -4,9 +4,13 @@ import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
-import { dashboardPanelWidgetValidator } from "./schema";
+import { dashboardPanelWidgetValidator, dashboardRailWidgetValidator } from "./schema";
 
 type DashboardPanel = NonNullable<Doc<"dashboardLayouts">["panels"]>[number];
+type DashboardRailWidget = NonNullable<Doc<"dashboardLayouts">["railWidgets"]>[number];
+
+/** Rail widgets beyond this are refused; the rail is a column of icon buttons, not a list. */
+const MAX_RAIL_WIDGETS = 12;
 
 // Returns the dashboard canvas panels for this instance, in order. Empty
 // array means the user hasn't created a panel yet (canvas shows the layout
@@ -151,5 +155,55 @@ export const setPanelWidgets = mutation({
     const nextPanels = [...panels];
     nextPanels[panelIndex] = { ...panels[panelIndex], widgets: args.widgets };
     await ctx.db.patch(existing._id, { panels: nextPanels });
+  },
+});
+
+// The widgets docked to the dashboard rail. Null means the user has never
+// edited the rail, and the client shows its defaults; an empty array means
+// they removed every rail widget.
+export const getRailWidgets = query({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<DashboardRailWidget[] | null> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId || !(await isInstanceMember(ctx, args.instanceId))) {
+      return null;
+    }
+
+    const row = await ctx.db
+      .query("dashboardLayouts")
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
+      .first();
+
+    return row?.railWidgets ?? null;
+  },
+});
+
+// Replaces the rail's widgets in one write: saved with the panels on Save in
+// edit mode, or straight away when a rail widget changes its own config.
+export const setRailWidgets = mutation({
+  args: {
+    instanceId: v.id("instances"),
+    widgets: v.array(dashboardRailWidgetValidator),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireInstanceRole(ctx, args.instanceId);
+    if (args.widgets.length > MAX_RAIL_WIDGETS) {
+      throw new Error(`The rail holds at most ${MAX_RAIL_WIDGETS} widgets`);
+    }
+    const slotIds = new Set(args.widgets.map((widget) => widget.slotId));
+    if (slotIds.size !== args.widgets.length) {
+      throw new Error("Rail widgets must have distinct slot ids");
+    }
+
+    const existing = await ctx.db
+      .query("dashboardLayouts")
+      .withIndex("by_instance_user", (q) => q.eq("instanceId", args.instanceId).eq("userId", userId))
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, { railWidgets: args.widgets });
+    } else {
+      await ctx.db.insert("dashboardLayouts", { instanceId: args.instanceId, userId, railWidgets: args.widgets });
+    }
   },
 });
