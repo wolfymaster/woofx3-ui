@@ -57,7 +57,7 @@ describe("engineHostname", () => {
 });
 
 describe("usernameAddress", () => {
-  it("shows the username under woofx3.tv", () => {
+  test("shows the username under woofx3.tv", () => {
     expect(usernameAddress("wolfymaster")).toBe("woofx3.tv/wolfymaster");
   });
 });
