@@ -88,6 +88,16 @@ Engine → POST <webhookUrl> (read from engine settings table at call time)
 - The webhook endpoint must be **idempotent** — duplicate deliveries must not create duplicate records (use entity `id` as upsert key).
 - A callback can also be a **request** the engine waits on, answered in the response body. `twitch.token.requested` returns the linked Twitch account's current access token (`twitchIntegration.grantTokenToEngine`): Convex alone holds the refresh token and the Twitch app secret, and renews the token for the engine.
 
+### Channel 3: Engine → Companion (the bridge)
+
+```
+Engine endpoint dialer → wss://<companion hostname>/bridge/<moduleId>/<endpointId> → edge relay → companion's outbound WSS → 127.0.0.1 on the streamer's PC
+```
+
+- A cloud engine reaches a module's local endpoint (OBS) through the companion when Convex routes that endpoint there with `setRelayConfig` (capability `modules.localEndpoints`).
+- Convex only mints the short-lived relay credentials (signed with `RELAY_SIGNING_KEY`, which never leaves Convex) and tells the engine which endpoints use the bridge. The engine asks for its credential with the `relay.credential.requested` callback; bridged traffic never passes through Convex.
+- The companion decides what it dials: only addresses it discovered or the streamer confirmed, for modules installed on its instance. The engine never sends it an address.
+
 ### Account Sharing
 
 Multiple users can be members of the same Account. Account membership grants full access to that account's Instance. Sharing is managed entirely in Convex — the engine has no concept of users or accounts. Adding or removing a user from an account requires no changes to the engine.
