@@ -1,12 +1,13 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
 import { useMutation } from "convex/react";
-import { Trash2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { ListChecks, Trash2 } from "lucide-react";
+import { type ComponentProps, useCallback, useEffect, useRef, useState } from "react";
 import { CommandBar } from "@/components/dashboard/command-bar";
 import { DashboardCanvas, DashboardLayoutPicker } from "@/components/dashboard/dashboard-canvas";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
-import { GettingStartedCard } from "@/components/dashboard/getting-started-card";
+import { GettingStartedChecklist, useGettingStarted } from "@/components/dashboard/getting-started-checklist";
 import { PanelTabs } from "@/components/dashboard/panel-tabs";
 import { StarterPacksNudge } from "@/components/dashboard/starter-packs-nudge";
 import { WidgetPickerDialog } from "@/components/dashboard/widget-picker-dialog";
@@ -46,6 +47,28 @@ import {
   resolveRailWidgets,
 } from "@/lib/dashboard-rail";
 import { $commandBarHidden, $dashboardLayoutHint } from "@/lib/stores";
+
+/**
+ * The rail, with the getting started checklist pinned first while it has
+ * anything left to do. A component of its own so the checklist's hook runs
+ * only once an instance is known.
+ */
+function DashboardRail({
+  instanceId,
+  ...railProps
+}: { instanceId: Id<"instances"> } & Omit<ComponentProps<typeof WidgetRail>, "pinned">) {
+  const gettingStarted = useGettingStarted(instanceId);
+  const pinned = gettingStarted
+    ? {
+        id: "getting-started",
+        label: `Getting started · ${gettingStarted.progress.done} of ${gettingStarted.progress.total} done`,
+        icon: ListChecks,
+        dot: gettingStarted.hasProblem ? ("problem" as const) : ("attention" as const),
+        content: <GettingStartedChecklist gettingStarted={gettingStarted} />,
+      }
+    : null;
+  return <WidgetRail pinned={pinned} {...railProps} />;
+}
 
 /** Where a widget chosen in the picker goes. */
 type PickerTarget = { kind: "zone"; panelId: string; zoneId: string } | { kind: "rail" };
@@ -396,9 +419,6 @@ export default function Dashboard() {
           />
         </StatusBarCenterPortal>
 
-        {/* First, directly under the app header: until setup is done it is the
-            most important thing on the page. */}
-        <GettingStartedCard instanceId={instance._id} />
         <NotRunningNotice />
 
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
@@ -472,7 +492,8 @@ export default function Dashboard() {
         </AlertDialog>
       </div>
 
-      <WidgetRail
+      <DashboardRail
+        instanceId={instance._id}
         widgets={(isEditing && draftRail) || railWidgets}
         isEditing={isEditing}
         onAddWidget={handleAddRailWidget}

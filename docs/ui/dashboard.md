@@ -35,7 +35,9 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 - **Widgets keep a fixed height.** Secondary content opens in an overlay rather
   than expanding inside the widget. See
   [Dashboard widgets keep a fixed height](/patterns/dashboard-widgets).
-- **Rail.** The icon column on the right opens rail widgets as flyouts. It starts
+- **Rail.** The icon column on the right opens rail widgets as flyouts. The
+  [getting started checklist](#getting-started-checklist) is pinned first while it
+  has anything left to do. The user's own rail widgets start
   as Notes and Stream Stats (`DEFAULT_RAIL_WIDGETS` in
   `client/src/lib/dashboard-rail.ts`). In edit mode any widget can be added to it
   through the same picker, removed, or dragged to reorder, up to 12. The rail is
@@ -114,9 +116,9 @@ every requested step failed, it also records the channel's title and
 category, which is what the next run's "same title as last time" is measured
 against: Twitch keeps no history of either.
 
-## Getting started card
+## Getting started checklist
 
-`GettingStartedCard` (`client/src/components/dashboard/getting-started-card.tsx`) is a collapsible strip at the top of the dashboard, directly under the app header, with a short first-session list. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
+The getting started checklist (`client/src/components/dashboard/getting-started-checklist.tsx`) is pinned as the first rail item, above the user's own rail widgets. Its flyout lists the items in one column. While anything is left to do, the rail icon carries a dot, red when an item needs attention (a failed install, say). The rail item cannot be moved or removed in edit mode. `useGettingStarted` is called once by the dashboard and feeds both the icon and the flyout. Its rules are in `client/src/lib/getting-started.ts` (unit-tested).
 
 | Item | Done when | Offers |
 |---|---|---|
@@ -125,13 +127,13 @@ against: Twitch keeps no history of either.
 | Set up *platform* (one per platform) | the streamer says so | Open the module page, **Done** |
 | Twitch connected | the instance has a Twitch link | Connect Twitch |
 | Overlay added to OBS | a browser source has loaded a browser-source key (`goLive.overlays.lastLoadedAt`) | Copy browser-source URL, Open scenes |
-| Fire a test follow | the card fired one | **Send a test follow**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
+| Fire a test follow | the checklist fired one | **Send a test follow**: a `channel.follow` test event with the trigger's sample values, through `useFireTestEvent` |
 | Run your first chat command | the streamer says so | See your commands, **I've tried it** |
 
-- **Items the card records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
-- **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the card (`platform-settings:<id>`).
+- **Items the checklist records itself.** The engine reports no event for a chat command run, and a test follow is only known to have been sent. So those two are recorded in `gettingStartedChecklists.doneItemIds` (`gettingStarted.markDone`). Everything else is read from existing data.
+- **Platform settings.** A chosen platform whose installed module declares settings gets its own item (`setup.status.platformsNeedingSettings`). Spotify (a Client ID and an authorization) and OBS (its WebSocket address, port and password) are two. Those settings are kept on the engine, so this item is also recorded by the checklist (`platform-settings:<id>`).
 - **OBS connection.** On an engine with the `obs.status` capability, "Set up OBS" follows the engine's actual OBS connection instead of the Done button. `useObsStatus` polls `obsStatus.get` every 5 s while the tab is visible. The item is done once OBS is connected; otherwise it shows why not, for example "OBS refused the password" or "Can't reach OBS at host:port".
-- **When it hides.** The card hides once every item is done, or when someone dismisses it (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
+- **When it hides.** The rail item disappears once every item is done, or when someone dismisses it from the bottom of the flyout (`gettingStarted.dismiss`). Both are per instance, like the Go live checklist's dismissals.
 - **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
 
 Help → **Setup** reopens the setup wizard (`/setup`). Once setup is finished, it opens on the All set page.

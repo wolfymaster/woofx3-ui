@@ -2,14 +2,29 @@ import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor,
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { HelpCircle, Plus, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { type ComponentType, type ReactNode, useCallback, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { type DashboardRailWidget, MAX_RAIL_WIDGETS } from "@/lib/dashboard-rail";
 import { getDashboardWidget } from "@/lib/dashboard-widgets/registry";
 import { cn } from "@/lib/utils";
 
+/**
+ * A rail entry the dashboard supplies itself rather than the user placing it:
+ * always first, never moved or removed in edit mode, and gone when the
+ * dashboard stops passing it.
+ */
+export interface RailPinnedItem {
+  id: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+  /** Draws a dot on the icon: "attention" for something to do, "problem" for something wrong. */
+  dot: "attention" | "problem" | null;
+  content: ReactNode;
+}
+
 interface WidgetRailProps {
+  pinned: RailPinnedItem | null;
   /** The saved rail, or its edit-mode draft. */
   widgets: DashboardRailWidget[];
   isEditing: boolean;
@@ -93,7 +108,41 @@ function RailButton({
  * The rail is a column of the dashboard page rather than a `position: fixed`
  * overlay: fixed would sit on top of the app shell's sidebar and header.
  */
+function PinnedRailButton({ item, isOpen, onToggle }: { item: RailPinnedItem; isOpen: boolean; onToggle: () => void }) {
+  const Icon = item.icon;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={item.dot ? `${item.label} (things to do)` : item.label}
+          aria-pressed={isOpen}
+          className={cn(
+            "relative h-9 w-9 rounded-lg flex items-center justify-center transition-colors",
+            isOpen ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+          onClick={onToggle}
+          data-testid={`button-rail-${item.id}`}
+        >
+          <Icon className="h-4 w-4" />
+          {item.dot && (
+            <span
+              className={cn(
+                "absolute right-1.5 top-1.5 h-2 w-2 rounded-full ring-2 ring-background",
+                item.dot === "problem" ? "bg-destructive" : "bg-primary"
+              )}
+              data-testid={`dot-rail-${item.id}`}
+            />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="left">{item.label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function WidgetRail({
+  pinned,
   widgets,
   isEditing,
   onAddWidget,
@@ -117,6 +166,7 @@ export function WidgetRail({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [openSlotId]);
 
+  const openPinned = pinned && pinned.id === openSlotId ? pinned : null;
   const openWidget = widgets.find((widget) => widget.slotId === openSlotId);
   const openEntry = openWidget ? getDashboardWidget(openWidget.type) : undefined;
   const OpenComponent = openEntry?.component;
@@ -146,6 +196,16 @@ export function WidgetRail({
         className="shrink-0 w-[52px] h-full flex flex-col items-center gap-1 py-4 border-l border-border"
         data-testid="dashboard-widget-rail"
       >
+        {pinned && (
+          <>
+            <PinnedRailButton
+              item={pinned}
+              isOpen={openSlotId === pinned.id}
+              onToggle={() => setOpenSlotId((prev) => (prev === pinned.id ? null : pinned.id))}
+            />
+            {widgets.length > 0 && <div className="my-1 h-px w-6 bg-border" />}
+          </>
+        )}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={widgets.map((widget) => widget.slotId)} strategy={verticalListSortingStrategy}>
             {widgets.map((widget) => (
@@ -183,7 +243,7 @@ export function WidgetRail({
         )}
       </div>
 
-      {openWidget && (
+      {(openPinned || openWidget) && (
         <>
           {/* Scrim: dims the canvas and closes the flyout on click. */}
           <button
@@ -195,26 +255,28 @@ export function WidgetRail({
           />
           <Card
             className="fixed right-[64px] top-24 bottom-8 z-50 w-[340px] flex flex-col overflow-hidden shadow-2xl ring-1 ring-primary/15"
-            data-testid={`flyout-rail-${openWidget.type}`}
+            data-testid={`flyout-rail-${openPinned?.id ?? openWidget?.type}`}
           >
             <div className="shrink-0 flex items-center justify-between px-3 py-2 border-b border-border">
-              <span className="text-xs font-semibold">{openEntry?.label ?? openWidget.type}</span>
+              <span className="text-xs font-semibold">{openPinned?.label ?? openEntry?.label ?? openWidget?.type}</span>
               <button
                 type="button"
                 className="text-muted-foreground hover:text-foreground"
                 onClick={() => setOpenSlotId(null)}
-                aria-label={`Close ${openEntry?.label ?? openWidget.type}`}
+                aria-label="Close"
                 data-testid="button-close-rail-flyout"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
             <div className="flex-1 min-h-0 overflow-hidden">
-              {OpenComponent ? (
-                <OpenComponent config={openWidget.config} onConfigChange={handleOpenConfigChange} />
+              {openPinned ? (
+                openPinned.content
+              ) : OpenComponent ? (
+                <OpenComponent config={openWidget?.config} onConfigChange={handleOpenConfigChange} />
               ) : (
                 <div className="h-full flex items-center justify-center p-3 text-center text-sm text-muted-foreground">
-                  Unknown widget type: {openWidget.type}
+                  Unknown widget type: {openWidget?.type}
                 </div>
               )}
             </div>

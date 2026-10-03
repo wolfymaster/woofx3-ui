@@ -2,13 +2,11 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { platformSettingsItemId } from "@convex/lib/gettingStarted";
 import { useMutation, useQuery } from "convex/react";
-import { ChevronDown, Circle, CircleCheck, CircleX, Copy, ListChecks, Loader2, X } from "lucide-react";
+import { Circle, CircleCheck, CircleX, Copy, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useObsStatus } from "@/hooks/use-obs-status";
 import { useToast } from "@/hooks/use-toast";
@@ -69,24 +67,38 @@ function FixLink({ fix }: { fix: CheckFix }) {
   return null;
 }
 
+export interface GettingStarted {
+  items: GettingStartedItem[];
+  progress: { done: number; total: number };
+  /** True when an item needs attention (a failed install, say), not merely to be done. */
+  hasProblem: boolean;
+  busyAction: GettingStartedAction["kind"] | null;
+  runAction: (action: GettingStartedAction) => Promise<void>;
+  /** Why an action can't run yet, or null when it can. */
+  actionUnavailable: (action: GettingStartedAction) => string | null;
+  dismiss: () => void;
+}
+
 /**
- * The first-session checklist above the dashboard: finish setup, get the
- * platforms installed and the overlay into OBS, and see woofx3 react to a test
- * follow. Shown until every item is done or someone dismisses it; both are per
- * instance, so the whole team sees the same card.
+ * The first-session checklist: finish setup, get the platforms installed and
+ * the overlay into OBS, and see woofx3 react to a test follow. Null while
+ * loading, once every item is done, or once someone dismissed it; both are
+ * per instance, so the whole team sees the same list.
+ *
+ * Called once by the dashboard and handed to both the rail icon and its
+ * flyout, so the OBS status poll behind it runs once.
  */
-export function GettingStartedCard({ instanceId }: { instanceId: Id<"instances"> }) {
+export function useGettingStarted(instanceId: Id<"instances">): GettingStarted | null {
   const setup = useQuery(api.setup.status, { instanceId });
   const overlays = useQuery(api.goLive.overlays, { instanceId });
   const state = useQuery(api.gettingStarted.state, { instanceId });
   const markDone = useMutation(api.gettingStarted.markDone);
-  const dismiss = useMutation(api.gettingStarted.dismiss);
+  const dismissMutation = useMutation(api.gettingStarted.dismiss);
   const retryApply = useMutation(api.setup.retryApply);
   const { triggerPresets } = useWorkflowCatalog();
   const fireTestEvent = useFireTestEvent();
   const { toast } = useToast();
   const [busyAction, setBusyAction] = useState<GettingStartedAction["kind"] | null>(null);
-  const [open, setOpen] = useState(true);
 
   const watchesObs = Boolean(state && !state.dismissed && setup?.platformsNeedingSettings.includes(OBS_MODULE_ID));
   const { status: obsStatus } = useObsStatus(instanceId, watchesObs);
@@ -150,85 +162,89 @@ export function GettingStartedCard({ instanceId }: { instanceId: Id<"instances">
     return followPreset ? null : "Available once the Twitch module is installed";
   }
 
+  return {
+    items,
+    progress,
+    hasProblem: items.some((entry) => entry.status === "problem"),
+    busyAction,
+    runAction,
+    actionUnavailable,
+    dismiss: () => void dismissMutation({ instanceId }),
+  };
+}
+
+/** The checklist as one column, sized for the rail's flyout. */
+export function GettingStartedChecklist({ gettingStarted }: { gettingStarted: GettingStarted }) {
+  const { items, progress, busyAction, runAction, actionUnavailable, dismiss } = gettingStarted;
+
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border-b border-border bg-primary/5 shrink-0">
-      <div className="flex items-center gap-3 px-4 py-2">
-        <ListChecks className="h-4 w-4 shrink-0 text-primary" />
-        <CollapsibleTrigger className="group flex min-w-0 flex-1 items-center gap-3 text-left text-sm">
-          <span className="font-medium">Getting started</span>
-          <span className="text-muted-foreground">
-            {progress.done} of {progress.total} done
-          </span>
-          <Progress value={(progress.done / progress.total) * 100} className="hidden h-1.5 max-w-40 flex-1 sm:block" />
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-        </CollapsibleTrigger>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0"
-              aria-label="Dismiss getting started"
-              onClick={() => void dismiss({ instanceId })}
-              data-testid="button-dismiss-getting-started"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Dismiss for everyone on this account</TooltipContent>
-        </Tooltip>
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 space-y-1.5 border-b border-border px-3 py-2.5">
+        <p className="text-xs text-muted-foreground">
+          {progress.done} of {progress.total} done
+        </p>
+        <Progress value={(progress.done / progress.total) * 100} className="h-1.5" />
       </div>
-      <CollapsibleContent>
-        <ul className="grid gap-2 px-4 pb-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="list-getting-started">
-          {items.map((entry: GettingStartedItem) => (
-            <li
-              key={entry.id}
-              className={cn(
-                "flex items-start gap-2.5 rounded-md border bg-card p-2.5",
-                entry.status === "done" && "opacity-70"
+      <ul className="flex-1 min-h-0 space-y-2 overflow-y-auto p-3" data-testid="list-getting-started">
+        {items.map((entry: GettingStartedItem) => (
+          <li
+            key={entry.id}
+            className={cn(
+              "flex items-start gap-2.5 rounded-md border bg-card p-2.5",
+              entry.status === "done" && "opacity-70"
+            )}
+            data-testid={`getting-started-${entry.id}`}
+          >
+            <StatusIcon status={entry.status} />
+            <div className="min-w-0 flex-1 space-y-1">
+              <p className={cn("text-sm font-medium", entry.status === "done" && "line-through")}>{entry.title}</p>
+              <p className="text-xs text-muted-foreground">{entry.summary}</p>
+              {entry.status !== "done" && (entry.fixes.length > 0 || entry.actions.length > 0) && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {entry.fixes.map((fix) => (
+                    <FixLink key={`${fix.kind}-${fix.label}`} fix={fix} />
+                  ))}
+                  {entry.actions.map((action) => {
+                    const unavailable = actionUnavailable(action);
+                    return (
+                      <Button
+                        key={action.kind}
+                        size="sm"
+                        className="h-7 gap-1.5 px-2 text-xs"
+                        disabled={busyAction !== null || unavailable !== null}
+                        onClick={() => void runAction(action)}
+                        data-testid={`button-getting-started-${action.kind}`}
+                      >
+                        {busyAction === action.kind && <Loader2 className="h-3 w-3 animate-spin" />}
+                        {action.label}
+                      </Button>
+                    );
+                  })}
+                </div>
               )}
-              data-testid={`getting-started-${entry.id}`}
-            >
-              <StatusIcon status={entry.status} />
-              <div className="min-w-0 flex-1 space-y-1">
-                <p className={cn("text-sm font-medium", entry.status === "done" && "line-through")}>{entry.title}</p>
-                <p className="text-xs text-muted-foreground">{entry.summary}</p>
-                {entry.status !== "done" && (entry.fixes.length > 0 || entry.actions.length > 0) && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {entry.fixes.map((fix) => (
-                      <FixLink key={`${fix.kind}-${fix.label}`} fix={fix} />
-                    ))}
-                    {entry.actions.map((action) => {
-                      const unavailable = actionUnavailable(action);
-                      return (
-                        <Button
-                          key={action.kind}
-                          size="sm"
-                          className="h-7 gap-1.5 px-2 text-xs"
-                          disabled={busyAction !== null || unavailable !== null}
-                          onClick={() => void runAction(action)}
-                          data-testid={`button-getting-started-${action.kind}`}
-                        >
-                          {busyAction === action.kind && <Loader2 className="h-3 w-3 animate-spin" />}
-                          {action.label}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                )}
-                {entry.actions.map((action) => {
-                  const unavailable = entry.status === "done" ? null : actionUnavailable(action);
-                  return unavailable ? (
-                    <p key={action.kind} className="text-[11px] text-muted-foreground">
-                      {unavailable}
-                    </p>
-                  ) : null;
-                })}
-              </div>
-            </li>
-          ))}
-        </ul>
-      </CollapsibleContent>
-    </Collapsible>
+              {entry.actions.map((action) => {
+                const unavailable = entry.status === "done" ? null : actionUnavailable(action);
+                return unavailable ? (
+                  <p key={action.kind} className="text-[11px] text-muted-foreground">
+                    {unavailable}
+                  </p>
+                ) : null;
+              })}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="shrink-0 border-t border-border px-3 py-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-full text-xs text-muted-foreground"
+          onClick={dismiss}
+          data-testid="button-dismiss-getting-started"
+        >
+          Dismiss for everyone on this account
+        </Button>
+      </div>
+    </div>
   );
 }
