@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Integrations, useIntegrations } from "./Integrations";
-import { type CompanionState, commands, currentState, onStateChange, type WindowState } from "./state";
+import { type CompanionState, commands, currentState, onStateChange, type RelayView, type WindowState } from "./state";
 
 type Tab = "status" | "engine" | "configuration" | "integrations";
 
@@ -138,7 +138,73 @@ function ConfirmPairing({ state }: { state: Extract<CompanionState, { kind: "con
   );
 }
 
-function StatusPanel({ state }: { state: Extract<CompanionState, { kind: "paired" }> }) {
+/** The relay connection that carries local integrations to the cloud engine. */
+function RelayRow({ relay }: { relay: RelayView }) {
+  const { busy, error, run } = useCommand();
+  const reconnect = (
+    <button type="button" disabled={busy} onClick={() => run(commands.reconnectRelay)}>
+      Reconnect
+    </button>
+  );
+  let ok = false;
+  let text: ReactNode;
+  let action: ReactNode = null;
+  switch (relay.kind) {
+    case "notNeeded":
+      text = "Relay: not needed";
+      break;
+    case "unavailable":
+      text = "Relay: your woofx3 doesn't offer it yet";
+      break;
+    case "connecting":
+      text = "Relay: connecting…";
+      break;
+    case "connected":
+      ok = true;
+      text = "Relay: connected";
+      break;
+    case "retrying":
+      text = (
+        <>
+          Relay: retrying in <Seconds until={relay.retryAt} /> ({relay.error})
+        </>
+      );
+      break;
+    case "displaced":
+      text = "Relay: another companion connection for this instance took over";
+      action = reconnect;
+      break;
+    case "refused":
+      text = "Relay: woofx3 refused the connection";
+      action = reconnect;
+      break;
+  }
+  return (
+    <>
+      <div className="update-row">
+        <p className="status-line">
+          <span className={ok ? "dot ok" : "dot off"} aria-hidden="true" />
+          {text}
+        </p>
+        {action}
+      </div>
+      {error && <p className="error">{error}</p>}
+    </>
+  );
+}
+
+function Seconds({ until }: { until: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+  return <span>{Math.max(0, Math.ceil((until - now) / 1000))} s</span>;
+}
+
+function StatusPanel({ state, relay }: { state: Extract<CompanionState, { kind: "paired" }>; relay: RelayView }) {
   const [confirmingUnpair, setConfirmingUnpair] = useState(false);
   const { busy, error, run } = useCommand();
   return (
@@ -150,6 +216,7 @@ function StatusPanel({ state }: { state: Extract<CompanionState, { kind: "paired
         <span className={state.cloudConnected ? "dot ok" : "dot off"} aria-hidden="true" />
         {state.cloudConnected ? "Connected to woofx3" : "Offline, reconnecting"}
       </p>
+      <RelayRow relay={relay} />
       {confirmingUnpair ? (
         <div className="confirm">
           <p>Unpair this computer? You will need to pair it again from the browser.</p>
@@ -196,7 +263,7 @@ function Paired({ state }: { state: Extract<CompanionState, { kind: "paired" }> 
           <Integrations instanceName={state.instanceName} view={integrations} />
         </section>
       ) : (
-        <StatusPanel state={state} />
+        <StatusPanel state={state} relay={integrations.relay} />
       )}
     </>
   );
