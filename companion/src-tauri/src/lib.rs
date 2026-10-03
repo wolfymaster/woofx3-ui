@@ -10,6 +10,8 @@
 mod cloud;
 mod credentials;
 mod installation;
+mod integration_store;
+mod integrations;
 mod pairing;
 mod state;
 mod tray;
@@ -22,7 +24,8 @@ use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
 use cloud::Cloud;
-use state::{CompanionState, ReadyUpdate, WindowState, STATE_EVENT};
+use integrations::Integrations;
+use state::{CompanionState, IntegrationsView, ReadyUpdate, TestResult, WindowState, STATE_EVENT};
 use tray::Tray;
 use update::Downloaded;
 
@@ -31,6 +34,8 @@ pub struct Companion {
     app: AppHandle,
     cloud: Cloud,
     installation_id: String,
+    /// Local endpoints served over the relay while paired and confirmed.
+    integrations: Arc<Integrations>,
     /// The pairing state and the ready update's version under one lock, so
     /// every snapshot sent to the window is consistent.
     view: Mutex<WindowState>,
@@ -51,7 +56,7 @@ pub struct Companion {
 
 /// A poisoned lock only means another thread panicked mid-update; the data is
 /// still a whole value, so keep going rather than take the tray down.
-fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -264,6 +269,83 @@ async fn install_update(companion: State<'_, Arc<Companion>>) -> Result<(), Stri
     update::install(&companion).inspect_err(|err| eprintln!("[companion] {err}"))
 }
 
+#[tauri::command]
+async fn get_integrations(
+    companion: State<'_, Arc<Companion>>,
+) -> Result<IntegrationsView, String> {
+    Ok(companion.integrations.view())
+}
+
+/// Turning an endpoint on needs an address, discovered or confirmed.
+#[tauri::command]
+async fn set_endpoint_enabled(
+    companion: State<'_, Arc<Companion>>,
+    module_id: String,
+    endpoint_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    companion
+        .integrations
+        .set_enabled(&module_id, &endpoint_id, enabled)
+        .await
+}
+
+/// The streamer typed `host:port` and pressed Confirm address.
+#[tauri::command]
+async fn confirm_address(
+    companion: State<'_, Arc<Companion>>,
+    module_id: String,
+    endpoint_id: String,
+    address: String,
+) -> Result<(), String> {
+    companion
+        .integrations
+        .confirm_address(&module_id, &endpoint_id, &address)
+        .await
+}
+
+#[tauri::command]
+async fn use_discovered(
+    companion: State<'_, Arc<Companion>>,
+    module_id: String,
+    endpoint_id: String,
+) -> Result<(), String> {
+    companion
+        .integrations
+        .use_discovered(&module_id, &endpoint_id)
+        .await
+}
+
+#[tauri::command]
+async fn set_share_password(
+    companion: State<'_, Arc<Companion>>,
+    module_id: String,
+    endpoint_id: String,
+    share: bool,
+) -> Result<(), String> {
+    companion
+        .integrations
+        .set_share_password(&module_id, &endpoint_id, share)
+        .await
+}
+
+#[tauri::command]
+async fn test_endpoint(
+    companion: State<'_, Arc<Companion>>,
+    module_id: String,
+    endpoint_id: String,
+) -> Result<TestResult, String> {
+    companion.integrations.test(&module_id, &endpoint_id).await
+}
+
+/// Connects to the relay again after another connection displaced this one
+/// or woofx3 refused a credential.
+#[tauri::command]
+async fn reconnect_relay(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
+    companion.integrations.reconnect_relay();
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -277,11 +359,19 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let cloud = tauri::async_runtime::block_on(Cloud::connect())?;
-            let installation_id = installation::load_or_create(&app.path().app_data_dir()?)?;
+            let app_data_dir = app.path().app_data_dir()?;
+            let installation_id = installation::load_or_create(&app_data_dir)?;
+            let integrations = Arc::new(Integrations::new(
+                handle.clone(),
+                cloud.clone(),
+                &app_data_dir,
+                app.path().config_dir().ok(),
+            ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
                 cloud,
                 installation_id,
+                integrations,
                 view: Mutex::new(WindowState {
                     state: CompanionState::Starting,
                     update: None,
@@ -303,9 +393,18 @@ pub fn run() {
         .on_window_event(|window, event| {
             // Closing the window leaves the companion running in the tray;
             // Quit in the tray menu is the only way out.
-            if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                // Someone looking at the window may just have started OBS.
+                WindowEvent::Focused(true) => {
+                    if let Some(companion) = window.try_state::<Arc<Companion>>() {
+                        companion.integrations.rediscover();
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -316,7 +415,14 @@ pub fn run() {
             confirm_pairing,
             reject_pairing,
             unpair,
-            install_update
+            install_update,
+            get_integrations,
+            set_endpoint_enabled,
+            confirm_address,
+            use_discovered,
+            set_share_password,
+            test_endpoint,
+            reconnect_relay
         ])
         .run(tauri::generate_context!())
         .expect("error while running the woofx3 companion");

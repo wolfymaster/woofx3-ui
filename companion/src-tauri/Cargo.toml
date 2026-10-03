@@ -37,6 +37,10 @@ sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.3"
 uuid = { version = "1", features = ["v4"] }
+tokio-util = "0.7"
+# The relay client, the bridge and OBS discovery, kept free of Tauri so their
+# tests run on any OS.
+woofx3-companion-core = { path = "../core" }
 
 [profile.release]
 codegen-units = 1

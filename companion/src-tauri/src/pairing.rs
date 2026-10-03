@@ -18,10 +18,15 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use futures::StreamExt;
+use tauri::async_runtime::JoinHandle;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::cloud::{decode, PairingStatus, PairingStatusReply, SelfUpdate, StartRequest};
+use crate::cloud::{
+    decode, CompanionInfo, PairingStatus, PairingStatusReply, SelfUpdate, StartRequest,
+};
 use crate::credentials::{self, StoredToken};
+use crate::integration_store::StoreIdentity;
+use crate::integrations;
 use crate::state::CompanionState;
 use crate::Companion;
 
@@ -78,7 +83,9 @@ fn release_on_server(companion: &Companion, token: Option<String>, device_code: 
 }
 
 /// Forgets the local token first, so a slow or offline Convex can never keep
-/// it, then releases it on the server in the background.
+/// it, then releases it on the server in the background. The endpoints this
+/// companion served go with it, so a later pairing starts with nothing
+/// enabled.
 pub async fn forget_and_unpair(
     companion: &Arc<Companion>,
     token: Option<String>,
@@ -87,6 +94,7 @@ pub async fn forget_and_unpair(
     if let Err(err) = credentials::clear().await {
         eprintln!("[companion] could not clear the stored token: {err:#}");
     }
+    companion.integrations.forget().await;
     companion.set_state(CompanionState::Unpaired);
     release_on_server(companion, token, device_code);
 }
@@ -255,12 +263,43 @@ async fn wait_for_approval(
     }
 }
 
+/// Aborts the task it holds when dropped, so a task started by the paired
+/// session ends with it, including when the session itself is aborted.
+struct AbortOnDrop(JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+fn start_integrations(
+    companion: &Arc<Companion>,
+    token: &str,
+    info: &CompanionInfo,
+) -> AbortOnDrop {
+    let identity = StoreIdentity {
+        companion_id: info.companion_id.clone(),
+        instance_id: info.instance_id.clone(),
+    };
+    AbortOnDrop(tauri::async_runtime::spawn(integrations::run(
+        Arc::clone(companion),
+        token.to_string(),
+        identity,
+    )))
+}
+
 /// Follows `companions:self` for as long as the token is paired, and sends the
 /// heartbeat once the pairing is confirmed. Convex's `confirmed` wins over the
 /// local flag, so a confirmation that reached the server survives a crash
 /// before the local store was updated. A null result means the companion was
 /// revoked, rejected, or never approved: the token is given up. A query error
 /// is not a revocation and changes nothing.
+///
+/// Integrations run alongside from the first answer that shows the pairing
+/// confirmed until the session ends. They wait for that answer, not the local
+/// flag, because their store is stamped with the companion and instance ids
+/// it carries.
 pub async fn run_session(
     companion: Arc<Companion>,
     token: String,
@@ -271,6 +310,7 @@ pub async fn run_session(
     let mut confirmed = local_confirmed;
     let mut instance_name = known_name;
     let mut decided = false;
+    let mut integrations: Option<AbortOnDrop> = None;
     if let (true, Some(name)) = (confirmed, &instance_name) {
         decided = true;
         companion.set_state(CompanionState::Paired {
@@ -314,6 +354,9 @@ pub async fn run_session(
                             if newly_confirmed || renamed {
                                 remember(&token, &info.instance_name).await;
                             }
+                                                        if integrations.is_none() {
+                                integrations = Some(start_integrations(&companion, &token, &info));
+                            }
                             companion.set_state(CompanionState::Paired {
                                 instance_name: info.instance_name,
                                 cloud_connected: *connection.borrow(),
@@ -327,6 +370,7 @@ pub async fn run_session(
                         }
                     }
                     SelfUpdate::Unpaired => {
+                        drop(integrations.take());
                         forget_and_unpair(&companion, Some(token), None).await;
                         return;
                     }
@@ -347,6 +391,7 @@ pub async fn run_session(
             _ = heartbeat.tick(), if confirmed => {
                 match companion.cloud.heartbeat(&token, COMPANION_VERSION).await {
                     Ok(beat) if !beat.paired => {
+                        drop(integrations.take());
                         forget_and_unpair(&companion, Some(token), None).await;
                         return;
                     }
