@@ -256,6 +256,36 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # The companion's relay client, bridge and discovery have no Tauri
+  # dependency, so they build and test on Linux without GTK or WebKit.
+  companion-core:
+    name: Companion core
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: companion/core
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion/core -> target
+
+      - name: Rust format
+        run: cargo fmt --check
+
+      - name: Clippy
+        if: ${{ !cancelled() }}
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Rust tests
+        if: ${{ !cancelled() }}
+        run: cargo test
+
   docs:
     name: Docs build
     runs-on: ubuntu-latest
