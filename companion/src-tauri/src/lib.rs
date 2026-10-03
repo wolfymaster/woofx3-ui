@@ -1,6 +1,6 @@
 //! The woofx3 companion: a tray app that pairs this computer with a woofx3
 //! instance through the browser and stays connected to Convex. Its window
-//! renders `CompanionState`; all work happens here, in Rust commands.
+//! renders `WindowState`; all work happens here, in Rust commands.
 //!
 //! Commands are async so none of them runs on the main thread: tray updates
 //! (`MenuItem::set_text`) dispatch to the main thread and wait for it, so a
@@ -13,23 +13,30 @@ mod installation;
 mod pairing;
 mod state;
 mod tray;
+mod update;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
-use tauri::menu::MenuItem;
-use tauri::{AppHandle, Emitter, Manager, State, WindowEvent, Wry};
+use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
 use cloud::Cloud;
-use state::{CompanionState, STATE_EVENT};
+use state::{CompanionState, ReadyUpdate, WindowState, STATE_EVENT};
+use tray::Tray;
+use update::Downloaded;
 
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
     cloud: Cloud,
     installation_id: String,
-    state: Mutex<CompanionState>,
+    /// The pairing state and the ready update's version under one lock, so
+    /// every snapshot sent to the window is consistent.
+    view: Mutex<WindowState>,
+    /// The update behind `view.update`, kept apart because it holds the
+    /// installer's bytes and only `install_update` needs them.
+    ready_update: Mutex<Option<Arc<Downloaded>>>,
     /// The pairing attempt or paired session in progress. Starting another
     /// aborts it, so there is only ever one subscription set per token.
     flow: Mutex<Option<JoinHandle<()>>>,
@@ -39,7 +46,7 @@ pub struct Companion {
     /// The pending pairing's device code, kept so cancelling can tell Convex.
     device_code: Mutex<Option<String>>,
     verification_url: Mutex<Option<String>>,
-    tray_status: Mutex<Option<MenuItem<Wry>>>,
+    tray: Mutex<Option<Tray>>,
 }
 
 /// A poisoned lock only means another thread panicked mid-update; the data is
@@ -52,20 +59,59 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Companion {
     pub fn state(&self) -> CompanionState {
-        lock(&self.state).clone()
+        lock(&self.view).state.clone()
+    }
+
+    fn window_state(&self) -> WindowState {
+        lock(&self.view).clone()
+    }
+
+    fn tray(&self) -> Option<Tray> {
+        lock(&self.tray).clone()
+    }
+
+    fn send_to_window(&self, view: &WindowState) {
+        if let Err(err) = self.app.emit(STATE_EVENT, view) {
+            eprintln!("[companion] could not send state to the window: {err}");
+        }
     }
 
     /// Stores the state, pushes it to the window and refreshes the tray.
     pub fn set_state(&self, next: CompanionState) {
         let label = next.tray_label();
-        *lock(&self.state) = next.clone();
-        if let Err(err) = self.app.emit(STATE_EVENT, &next) {
-            eprintln!("[companion] could not send state to the window: {err}");
-        }
-        let status = lock(&self.tray_status).clone();
-        if let Some(status) = status {
-            if let Err(err) = status.set_text(label) {
+        let view = {
+            let mut view = lock(&self.view);
+            view.state = next;
+            view.clone()
+        };
+        self.send_to_window(&view);
+        if let Some(tray) = self.tray() {
+            if let Err(err) = tray.status.set_text(label) {
                 eprintln!("[companion] could not update the tray: {err}");
+            }
+        }
+    }
+
+    fn ready_update(&self) -> Option<Arc<Downloaded>> {
+        lock(&self.ready_update).clone()
+    }
+
+    /// Keeps a downloaded update for `install_update` and offers it in the
+    /// window and the tray. A newer download replaces an older one.
+    fn set_ready_update(&self, downloaded: Downloaded) {
+        let ready = ReadyUpdate {
+            version: downloaded.version().to_string(),
+        };
+        *lock(&self.ready_update) = Some(Arc::new(downloaded));
+        let view = {
+            let mut view = lock(&self.view);
+            view.update = Some(ready.clone());
+            view.clone()
+        };
+        self.send_to_window(&view);
+        if let Some(tray) = self.tray() {
+            if let Err(err) = tray.show_update(&ready) {
+                eprintln!("[companion] could not add the update to the tray: {err}");
             }
         }
     }
@@ -73,9 +119,9 @@ impl Companion {
     /// Claims the right to start pairing: only from Unpaired or Error, and
     /// only once until the claim is released.
     fn try_begin_start(&self) -> bool {
-        let state = lock(&self.state);
+        let view = lock(&self.view);
         if !matches!(
-            *state,
+            view.state,
             CompanionState::Unpaired | CompanionState::Error { .. }
         ) {
             return false;
@@ -164,8 +210,8 @@ pub fn show_main_window(app: &AppHandle) {
 }
 
 #[tauri::command]
-async fn get_state(companion: State<'_, Arc<Companion>>) -> Result<CompanionState, String> {
-    Ok(companion.state())
+async fn get_state(companion: State<'_, Arc<Companion>>) -> Result<WindowState, String> {
+    Ok(companion.window_state())
 }
 
 /// Ignored unless the companion is unpaired or showing an error, and while
@@ -211,6 +257,13 @@ async fn unpair(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
     companion.stop_and_forget().await
 }
 
+/// Installs the downloaded update and restarts into it. Returns only if that
+/// fails, in which case the update stays ready.
+#[tauri::command]
+async fn install_update(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
+    update::install(&companion).inspect_err(|err| eprintln!("[companion] {err}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -220,6 +273,7 @@ pub fn run() {
             show_main_window(app);
         }))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
             let cloud = tauri::async_runtime::block_on(Cloud::connect())?;
@@ -228,16 +282,21 @@ pub fn run() {
                 app: handle.clone(),
                 cloud,
                 installation_id,
-                state: Mutex::new(CompanionState::Starting),
+                view: Mutex::new(WindowState {
+                    state: CompanionState::Starting,
+                    update: None,
+                }),
+                ready_update: Mutex::new(None),
                 flow: Mutex::new(None),
                 starting: AtomicBool::new(false),
                 device_code: Mutex::new(None),
                 verification_url: Mutex::new(None),
-                tray_status: Mutex::new(None),
+                tray: Mutex::new(None),
             });
-            let status = tray::build(&handle, &companion.state().tray_label())?;
-            *lock(&companion.tray_status) = Some(status);
+            let tray = tray::build(&handle, &companion.state().tray_label())?;
+            *lock(&companion.tray) = Some(tray);
             app.manage(Arc::clone(&companion));
+            tauri::async_runtime::spawn(update::run(Arc::clone(&companion)));
             tauri::async_runtime::spawn(companion.resume());
             Ok(())
         })
@@ -256,7 +315,8 @@ pub fn run() {
             open_verification_url,
             confirm_pairing,
             reject_pairing,
-            unpair
+            unpair,
+            install_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running the woofx3 companion");
