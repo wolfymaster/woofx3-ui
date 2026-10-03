@@ -4,6 +4,7 @@ import {
   isEndpointPort,
   localEndpointOwningSetting,
   localSettingKeys,
+  planCompanionWrites,
   readLocalEndpoints,
 } from "./localEndpoints";
 
@@ -128,5 +129,56 @@ describe("localSettingKeys and localEndpointOwningSetting", () => {
     expect(localEndpointOwningSetting(obsManifest(), "port")).toEqual({ endpoint, role: "port" });
     expect(localEndpointOwningSetting(obsManifest(), "password")?.role).toBe("password");
     expect(localEndpointOwningSetting(obsManifest(), "label")).toBeNull();
+  });
+});
+
+describe("planCompanionWrites", () => {
+  const [endpoint] = readLocalEndpoints(obsManifest());
+
+  test("writes only the keys local[] names", () => {
+    expect(planCompanionWrites(endpoint, { host: "127.0.0.1", port: 4455 }, [], true)).toEqual([
+      { key: "host", value: "127.0.0.1", secret: false },
+      { key: "port", value: "4455", secret: false },
+    ]);
+  });
+
+  test("leaves a key the streamer set by hand", () => {
+    const provenance = [{ key: "port", source: "manual" as const }];
+    expect(planCompanionWrites(endpoint, { port: 4455, password: "pw" }, provenance, true)).toEqual([
+      { key: "password", value: "pw", secret: true },
+    ]);
+  });
+
+  test("skips a value the companion already wrote, but never compares a secret", () => {
+    const provenance = [
+      { key: "port", source: "companion" as const, companionValue: "4455" },
+      { key: "password", source: "companion" as const },
+    ];
+    expect(planCompanionWrites(endpoint, { port: 4455, password: "pw" }, provenance, true)).toEqual([
+      { key: "password", value: "pw", secret: true },
+    ]);
+    expect(planCompanionWrites(endpoint, { port: 4456 }, provenance, true)).toEqual([
+      { key: "port", value: "4456", secret: false },
+    ]);
+  });
+
+  test("includes the password only when the report carries one", () => {
+    expect(planCompanionWrites(endpoint, { port: 4455 }, [], true).map((w) => w.key)).toEqual(["port"]);
+    const { passwordSetting: _p, ...withoutPassword } = endpoint;
+    expect(planCompanionWrites(withoutPassword, { password: "pw" }, [], true)).toEqual([]);
+  });
+
+  test("refuses a password the companion may not provide", () => {
+    expect(() => planCompanionWrites(endpoint, { port: 4455, password: "pw" }, [], false)).toThrow();
+    expect(planCompanionWrites(endpoint, { port: 4455 }, [], false)).toEqual([
+      { key: "port", value: "4455", secret: false },
+    ]);
+  });
+
+  test("refuses a report that is not an address", () => {
+    expect(() => planCompanionWrites(endpoint, { port: 0 }, [], true)).toThrow();
+    expect(() => planCompanionWrites(endpoint, { port: 65536 }, [], true)).toThrow();
+    expect(() => planCompanionWrites(endpoint, { port: 1.5 }, [], true)).toThrow();
+    expect(() => planCompanionWrites(endpoint, { host: "http://obs" }, [], true)).toThrow();
   });
 });
