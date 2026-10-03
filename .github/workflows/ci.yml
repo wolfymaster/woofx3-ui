@@ -110,6 +110,67 @@ jobs:
       - name: Biome check
         run: bunx biome ci . --reporter=github
 
+  # The companion is a Windows app, and its Rust crate does not build on Linux
+  # without GTK and WebKit, so this is the one place it is built and tested.
+  companion:
+    name: Companion
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    env:
+      # Nothing here talks to Convex; build.rs only needs a URL to compile in.
+      WOOFX3_CONVEX_URL: http://127.0.0.1:3210
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache bun install cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ env.BUN_VERSION }}-companion-${{ hashFiles('companion/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-${{ env.BUN_VERSION }}-
+
+      - name: Install companion dependencies
+        working-directory: companion
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck window
+        working-directory: companion
+        run: bunx tsc -p ui
+
+      # Also produces the frontendDist that tauri's build script expects.
+      - name: Build window
+        working-directory: companion
+        run: bun run build
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion/src-tauri -> target
+
+      - name: Rust format
+        working-directory: companion/src-tauri
+        run: cargo fmt --check
+
+      - name: Clippy
+        if: ${{ !cancelled() }}
+        working-directory: companion/src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Rust tests
+        if: ${{ !cancelled() }}
+        working-directory: companion/src-tauri
+        run: cargo test
+
   docs:
     name: Docs build
     runs-on: ubuntu-latest
