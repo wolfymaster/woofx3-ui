@@ -77,12 +77,12 @@ already filed and open in this repo. Nothing below duplicates them.
 
 ## Transport / desktop shell
 
-### TauriTransport is a complete stub — every method throws
+### ~~TauriTransport is a complete stub — every method throws~~ (resolved)
 
-- **Files:** `client/src/lib/transport/tauri-transport.ts` (entire file)
+- **Files:** none remaining
 - **Category:** enhancement
 - **Size:** large
-- **Description:** `connect`/`disconnect`/all subscriptions throw "not yet implemented." Given `src-tauri/` exists as a real target, the desktop app cannot function today. Worth confirming the desktop shell is still an active near-term target before investing here.
+- **Description:** Resolved by removal. There is no desktop UI: the browser is the only management surface, so `TauriTransport` and the `isTauri()` branch were deleted. The Tauri app under `companion/` is a tray companion that pairs with an instance, not a UI (see `docs/ui/companion.md`).
 
 ### BrowserTransport polling silently swallows all errors
 
