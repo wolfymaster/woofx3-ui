@@ -13,23 +13,28 @@ export type StreamRecapEngineState =
  * Loads a recap's engine-held detail once per session. It is a one-off action
  * rather than a subscription: a finished session's samples and leaderboards
  * do not change while the page is open, and the engine may not be reachable.
+ *
+ * A session still in progress does change, so a new `refreshKey` (the stored
+ * summary's `generatedAtMs`) loads it again. That reload keeps the detail
+ * already on screen while it runs, and keeps it if the reload fails.
  */
 export function useStreamRecapEngineDetail(
   instanceId: Id<"instances"> | undefined,
   sessionId: string,
-  enabled: boolean
+  enabled: boolean,
+  refreshKey = 0
 ) {
   const loadEngineDetail = useAction(api.streamRecap.loadEngineDetail);
   const [state, setState] = useState<StreamRecapEngineState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt is a deliberate re-run trigger for retry
+  // biome-ignore lint/correctness/useExhaustiveDependencies: attempt and refreshKey are deliberate re-run triggers
   useEffect(() => {
     if (!instanceId || !enabled) {
       return;
     }
     let cancelled = false;
-    setState({ kind: "loading" });
+    setState((prev) => (prev.kind === "loaded" ? prev : { kind: "loading" }));
     loadEngineDetail({ instanceId, sessionId })
       .then((detail) => {
         if (!cancelled) {
@@ -38,13 +43,14 @@ export function useStreamRecapEngineDetail(
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setState({ kind: "error", message: error instanceof Error ? error.message : String(error) });
+          const message = error instanceof Error ? error.message : String(error);
+          setState((prev) => (prev.kind === "loaded" ? prev : { kind: "error", message }));
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [instanceId, sessionId, enabled, loadEngineDetail, attempt]);
+  }, [instanceId, sessionId, enabled, loadEngineDetail, attempt, refreshKey]);
 
   const retry = useCallback(() => setAttempt((count) => count + 1), []);
   return { state, retry };

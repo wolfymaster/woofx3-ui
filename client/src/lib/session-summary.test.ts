@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { formatLiveDuration, formatSubsBreakdown, formatViewerFigure, liveDurationMs } from "./session-summary";
+import {
+  formatLiveDuration,
+  formatSubsBreakdown,
+  formatViewerFigure,
+  liveDurationMs,
+  type SessionSummaryRow,
+  summarySegments,
+} from "./session-summary";
 
 describe("liveDurationMs", () => {
   it("adds up segments and skips the gaps between them", () => {
@@ -50,5 +57,31 @@ describe("formatSubsBreakdown", () => {
 
   it("groups thousands", () => {
     expect(formatSubsBreakdown(1200, 3400)).toBe(`${(1200).toLocaleString()} subs · ${(3400).toLocaleString()} gifted`);
+  });
+});
+
+describe("summarySegments", () => {
+  const segments = [
+    { id: "a", startedAt: "2026-09-20T00:00:00.000Z", endedAt: "2026-09-20T01:00:00.000Z" },
+    { id: "b", startedAt: "2026-09-20T02:00:00.000Z", endedAt: null },
+  ];
+  const row = (status: "open" | "closed") =>
+    ({
+      generatedAt: "2026-09-20T02:30:00.000Z",
+      session: { status, startedAt: "2026-09-20T00:00:00.000Z", endedAt: null, segments },
+    }) as unknown as SessionSummaryRow;
+
+  it("ends a still-live segment when the summary was taken", () => {
+    const result = summarySegments(row("open"));
+    expect(result[1]).toEqual({ ...segments[1], endedAt: "2026-09-20T02:30:00.000Z", ongoing: true });
+    expect(liveDurationMs(result)).toBe(90 * 60_000);
+  });
+
+  it("leaves a closed session's segments as stored", () => {
+    expect(summarySegments(row("closed"))).toBe(segments);
+  });
+
+  it("has no segments for an unreadable summary", () => {
+    expect(summarySegments({ session: undefined } as unknown as SessionSummaryRow)).toEqual([]);
   });
 });

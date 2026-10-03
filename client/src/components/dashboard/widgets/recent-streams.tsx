@@ -2,10 +2,18 @@ import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { History, Loader2 } from "lucide-react";
 import { Link } from "wouter";
+import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
-import { formatLiveDuration, formatViewerFigure, liveDurationMs, type SessionSummaryRow } from "@/lib/session-summary";
+import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
+import {
+  formatLiveDuration,
+  formatViewerFigure,
+  liveDurationMs,
+  type SessionSummaryRow,
+  summarySegments,
+} from "@/lib/session-summary";
 import { streamRecapPath } from "@/lib/stream-recap-route";
 
 const RECENT_STREAM_LIMIT = 10;
@@ -31,7 +39,7 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
   }
 
   const { session, totals } = row;
-  const liveMs = liveDurationMs(session.segments);
+  const liveMs = liveDurationMs(summarySegments(row));
   const startedOn = new Date(session.startedAt).toLocaleDateString(undefined, DATE_FORMAT);
 
   return (
@@ -41,7 +49,10 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
       data-testid={`recent-stream-${row._id}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{startedOn}</span>
+        <span className="flex items-center gap-2 text-sm font-medium">
+          {startedOn}
+          {session.status === "open" && <OpenSessionBadge />}
+        </span>
         <span className="text-xs text-muted-foreground tabular-nums">
           {session.segments.length === 0 ? "Never went live" : `Live ${formatLiveDuration(liveMs)}`}
         </span>
@@ -66,6 +77,7 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
 export function RecentStreamsWidget() {
   const { instance } = useInstance();
   const instanceId = instance?._id;
+  useOpenSessionRefresh(instanceId);
   const rows = useQuery(
     api.streamSessionSummaries.listRecent,
     instanceId ? { instanceId, limit: RECENT_STREAM_LIMIT } : "skip"

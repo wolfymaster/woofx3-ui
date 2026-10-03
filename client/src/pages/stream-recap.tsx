@@ -13,11 +13,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
+import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import { useRecapClips } from "@/hooks/use-recap-clips";
 import { type StreamRecapEngineState, useStreamRecapEngineDetail } from "@/hooks/use-stream-recap-engine-detail";
 import { useToast } from "@/hooks/use-toast";
 import { RECAP_ENGINE_CAPABILITIES } from "@/lib/engine-capabilities";
-import { formatLiveDuration, formatViewerFigure, liveDurationMs, type SessionSummaryRow } from "@/lib/session-summary";
+import {
+  formatLiveDuration,
+  formatViewerFigure,
+  liveDurationMs,
+  type SessionSummaryRow,
+  summarySegments,
+} from "@/lib/session-summary";
 import { buildThankYouMessage, buildViewerSeries, segmentTimeline, type TimelineSegment } from "@/lib/stream-recap";
 import { STREAM_RECAPS_PATH, sessionIdFromParam } from "@/lib/stream-recap-route";
 
@@ -25,8 +32,6 @@ const ANNOUNCEMENT_SCOPE = "moderator:manage:announcements";
 
 const DATE_FORMAT: Intl.DateTimeFormatOptions = { weekday: "long", month: "long", day: "numeric", year: "numeric" };
 const TIME_FORMAT: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
-
-const NO_SEGMENTS: SessionBody["session"]["segments"] = [];
 
 type SessionBody = {
   session: NonNullable<SessionSummaryRow["session"]>;
@@ -62,14 +67,14 @@ function SegmentBar({ timeline }: { timeline: TimelineSegment[] }) {
             key={segment.id}
             className="absolute inset-y-0 rounded-full bg-primary"
             style={{ left: `${segment.offsetPercent}%`, width: `max(${segment.widthPercent}%, 4px)` }}
-            title={`${formatTime(segment.startedAt)} – ${formatTime(segment.endedAt)}`}
+            title={`${formatTime(segment.startedAt)} – ${segment.ongoing ? "now" : formatTime(segment.endedAt)}`}
           />
         ))}
       </div>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular-nums">
         {timeline.map((segment) => (
           <li key={segment.id}>
-            {formatTime(segment.startedAt)} – {formatTime(segment.endedAt)} (
+            {formatTime(segment.startedAt)} – {segment.ongoing ? "live" : formatTime(segment.endedAt)} (
             {formatLiveDuration(Date.parse(segment.endedAt) - Date.parse(segment.startedAt))})
           </li>
         ))}
@@ -350,10 +355,16 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
   const platformLinks = useQuery(api.instances.getPlatformLinks, { instanceId: row.instanceId });
   const capabilities = useEngineCapabilities(row.instanceId);
   const engineSupport = capabilities.support(...RECAP_ENGINE_CAPABILITIES);
-  const { state, retry } = useStreamRecapEngineDetail(row.instanceId, sessionId, engineSupport === "supported");
+  const inProgress = row.session?.status === "open";
+  const { state, retry } = useStreamRecapEngineDetail(
+    row.instanceId,
+    sessionId,
+    engineSupport === "supported",
+    inProgress ? row.generatedAtMs : 0
+  );
   const clips = useRecapClips(row.instanceId, sessionId);
   const body: SessionBody | null = row.session && row.totals ? { session: row.session, totals: row.totals } : null;
-  const segments = row.session?.segments ?? NO_SEGMENTS;
+  const segments = useMemo(() => summarySegments(row), [row]);
   const detail = okDetail(state);
   const series = useMemo(() => buildViewerSeries(detail?.viewerSamples ?? [], segments), [detail, segments]);
   const timeline = useMemo(() => segmentTimeline(segments), [segments]);
@@ -450,6 +461,7 @@ export default function StreamRecap() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = sessionIdFromParam(params.sessionId);
   const { instance, isLoading } = useInstance();
+  useOpenSessionRefresh(instance?._id);
   const row = useQuery(
     api.streamSessionSummaries.get,
     instance && sessionId ? { instanceId: instance._id, sessionId } : "skip"

@@ -6,6 +6,7 @@ interface Segment {
   id: string;
   startedAt: string;
   endedAt: string | null;
+  ongoing?: boolean;
 }
 
 export interface TimelineSegment {
@@ -15,6 +16,8 @@ export interface TimelineSegment {
   /** Distance from the first segment's start, as a percentage of the whole span. */
   offsetPercent: number;
   widthPercent: number;
+  /** Still live; `endedAt` is when the summary was taken. */
+  ongoing: boolean;
 }
 
 /**
@@ -40,6 +43,7 @@ export function segmentTimeline(segments: ReadonlyArray<Segment>): TimelineSegme
     endedAt: segment.endedAt,
     offsetPercent: span === 0 ? 0 : ((start - spanStart) / span) * 100,
     widthPercent: span === 0 ? 100 : ((end - start) / span) * 100,
+    ongoing: segment.ongoing === true,
   }));
 }
 

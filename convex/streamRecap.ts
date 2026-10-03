@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
-import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import {
   type ClipWindow,
   clipWindow,
@@ -13,8 +13,10 @@ import {
   sortClipsByViews,
   toRecapClip,
 } from "./lib/recapClips";
+import { sessionSnapshotPayload } from "./lib/sessionSummary";
 import {
   classifyEngineCallError,
+  type EngineCallFailure,
   RECAP_LEADERBOARD_LIMIT,
   type StreamRecapEngineApi,
   type StreamRecapEngineDetail,
@@ -63,6 +65,76 @@ export const loadEngineDetail = action({
       logger.warn("stream recap: engine call failed", {
         instanceId,
         sessionId,
+        status: failure.status,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return failure;
+    }
+  },
+});
+
+/**
+ * How old a stored snapshot of the open session may be before another is
+ * taken. Every open recap page, list and Recent Streams widget asks, so this
+ * keeps a room full of viewers to about one engine read per window.
+ */
+const OPEN_SNAPSHOT_MAX_AGE_MS = 30_000;
+
+export type OpenSessionRefresh =
+  | { status: "stored" }
+  | { status: "fresh" }
+  | { status: "no_open_session" }
+  | { status: "unregistered" }
+  | EngineCallFailure;
+
+/**
+ * Takes a snapshot of the engine's open session and stores it as that
+ * session's summary, so a stream in progress shows in the recaps before the
+ * engine sends its own summary when the session ends. That summary, and every
+ * later snapshot, replaces this one.
+ */
+export const refreshOpenSession = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<OpenSessionRefresh> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+    if (!membership) {
+      throw new Error("Not authorized");
+    }
+    const newest = await ctx.runQuery(internal.streamSessionSummaries.newestInternal, { instanceId });
+    if (newest?.session?.status === "open" && Date.now() - newest.receivedAt < OPEN_SNAPSHOT_MAX_AGE_MS) {
+      return { status: "fresh" };
+    }
+    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+    if (!instance?.clientId || !instance.clientSecret) {
+      return { status: "unregistered" };
+    }
+    const { url, clientId, clientSecret } = instance;
+    const session = () => createEngineRpcSession<EngineApi>(url, clientId, clientSecret);
+
+    try {
+      // At most one session is open, and it is always the newest.
+      const page = await session().listStreamSessions({ limit: 1 });
+      const open = page.sessions[0];
+      if (!open || open.status !== "open") {
+        return { status: "no_open_session" };
+      }
+      const totals = await session().getStreamSessionTotals(open.id);
+      if (totals === null) {
+        return { status: "no_open_session" };
+      }
+      await ctx.runMutation(internal.streamSessionSummaries.upsertOpenSnapshot, {
+        instanceId,
+        data: sessionSnapshotPayload(open, totals, new Date()),
+      });
+      return { status: "stored" };
+    } catch (error) {
+      const failure = classifyEngineCallError(error);
+      logger.warn("stream recap: snapshot of the open session failed", {
+        instanceId,
         status: failure.status,
         error: error instanceof Error ? error.message : String(error),
       });
