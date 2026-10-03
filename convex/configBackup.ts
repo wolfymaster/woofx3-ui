@@ -77,11 +77,19 @@ const DENIED_MESSAGE: Record<Permission, string> = {
   canImport: "Only owners and admins can import a backup.",
 };
 
+/**
+ * Checks the caller may do this, then returns a function that opens the
+ * engine session. The session itself must not come back from this async
+ * function: it is a thenable capnweb promise, so resolving it here would send
+ * the batch with only `authenticate` in it and leave the session spent before
+ * the actual call is made. The caller opens it and makes its one call in the
+ * same expression.
+ */
 async function connect(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
   permissions: Permission[]
-): Promise<ConfigBundleEngineApi> {
+): Promise<() => ConfigBundleEngineApi> {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new ConvexError("Sign in to back up or restore configuration.");
@@ -98,7 +106,8 @@ async function connect(
   if (!context.clientId || !context.clientSecret) {
     throw new ConvexError("This instance is not registered with its engine yet.");
   }
-  return createEngineRpcSession<EngineApi & ConfigBundleEngineApi>(context.url, context.clientId, context.clientSecret);
+  const { url, clientId, clientSecret } = context;
+  return () => createEngineRpcSession<EngineApi & ConfigBundleEngineApi>(url, clientId, clientSecret);
 }
 
 /**
@@ -148,8 +157,12 @@ export const exportConfig = action({
   },
   handler: async (ctx, { instanceId, include, includeMembers }): Promise<string[]> => {
     assertSections(include);
-    const engine = await connect(ctx, instanceId, includeMembers ? ["canExport", "canExportMembers"] : ["canExport"]);
-    const bundle = await callEngine("Export", () => engine.exportConfig({ include, includeMembers }));
+    const openEngine = await connect(
+      ctx,
+      instanceId,
+      includeMembers ? ["canExport", "canExportMembers"] : ["canExport"]
+    );
+    const bundle = await callEngine("Export", () => openEngine().exportConfig({ include, includeMembers }));
     return chunkText(`${JSON.stringify(bundle, null, 2)}\n`);
   },
 });
@@ -165,8 +178,10 @@ export const previewImport = action({
   handler: async (ctx, { instanceId, bundleChunks, onConflict, include, applyMembers }): Promise<ConfigImportPlan> => {
     const bundleText = joinBundle(bundleChunks);
     assertSections(include);
-    const engine = await connect(ctx, instanceId, ["canImport"]);
-    return await callEngine("Preview", () => engine.previewImport(bundleText, { onConflict, include, applyMembers }));
+    const openEngine = await connect(ctx, instanceId, ["canImport"]);
+    return await callEngine("Preview", () =>
+      openEngine().previewImport(bundleText, { onConflict, include, applyMembers })
+    );
   },
 });
 
@@ -185,7 +200,9 @@ export const importConfig = action({
   ): Promise<ConfigImportResult> => {
     const bundleText = joinBundle(bundleChunks);
     assertSections(include);
-    const engine = await connect(ctx, instanceId, ["canImport"]);
-    return await callEngine("Import", () => engine.importConfig(bundleText, { onConflict, include, applyMembers }));
+    const openEngine = await connect(ctx, instanceId, ["canImport"]);
+    return await callEngine("Import", () =>
+      openEngine().importConfig(bundleText, { onConflict, include, applyMembers })
+    );
   },
 });
