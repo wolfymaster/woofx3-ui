@@ -1,5 +1,13 @@
 import type { ConfigField, ConfigFieldType, DataShapeField } from "@woofx3/api/ui-schema";
 import type { LucideIcon } from "lucide-react";
+import { formatAmount } from "@/lib/amount-unit";
+import {
+  type ComparisonValue,
+  comparisonChoices,
+  defaultComparison,
+  formatComparison,
+  isComparisonValue,
+} from "@/lib/condition-comparison";
 
 /**
  * A preset's configuration surface: the fields plus whether the user may
@@ -27,7 +35,7 @@ export interface ConfigValue {
 }
 
 export interface TriggerConfigValues {
-  [fieldId: string]: string | number | boolean | ConfigValue | null;
+  [fieldId: string]: string | number | boolean | ConfigValue | ComparisonValue | null;
 }
 
 export interface TriggerPreset {
@@ -100,7 +108,9 @@ export type TierConfig = TriggerVariant;
 export function getDefaultConfigValues(fields: ConfigField[]): TriggerConfigValues {
   const values: TriggerConfigValues = {};
   fields.forEach((field) => {
-    if (field.defaultValue !== undefined) {
+    if (comparisonChoices(field)) {
+      values[field.id] = defaultComparison(field);
+    } else if (field.defaultValue !== undefined) {
       values[field.id] = field.defaultValue as TriggerConfigValues[string];
     } else if (field.type === "range") {
       values[field.id] = { type: "single", value: field.min || 1 };
@@ -115,13 +125,23 @@ export function getDefaultConfigValues(fields: ConfigField[]): TriggerConfigValu
   return values;
 }
 
-export function formatConfigValue(value: ConfigValue | number | string | boolean | null, unit?: string): string {
+export function formatConfigValue(
+  value: ConfigValue | ComparisonValue | number | string | boolean | null,
+  unit?: string
+): string {
   if (value === null || value === undefined) {
     return "";
   }
 
+  if (isComparisonValue(value)) {
+    return formatComparison(value, unit);
+  }
+
   if (typeof value === "object" && "type" in value) {
     const cv = value as ConfigValue;
+    if (cv.type === "single" && cv.value !== undefined) {
+      return formatAmount(cv.value, unit);
+    }
     if (cv.type === "single") {
       return `${cv.value}${unit ? ` ${unit}` : ""}`;
     } else {
@@ -129,5 +149,8 @@ export function formatConfigValue(value: ConfigValue | number | string | boolean
     }
   }
 
+  if (typeof value === "number") {
+    return formatAmount(value, unit);
+  }
   return `${value}${unit ? ` ${unit}` : ""}`;
 }

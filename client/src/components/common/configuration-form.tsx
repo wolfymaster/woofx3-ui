@@ -1,5 +1,10 @@
 import { api } from "@convex/_generated/api";
-import type { InternalConfigFieldSource } from "@woofx3/api/ui-schema";
+import {
+  type ComparisonOperator,
+  type ConfigField,
+  type InternalConfigFieldSource,
+  isComparisonOperator,
+} from "@woofx3/api/ui-schema";
 import { useQuery } from "convex/react";
 import { Braces } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
@@ -14,7 +19,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
+import { unitFor } from "@/lib/amount-unit";
 import { commandNameToSubjectSegment } from "@/lib/command-slug";
+import {
+  COMPARISON_LABELS,
+  type ComparisonValue,
+  comparisonChoices,
+  defaultComparison,
+  isComparisonValue,
+} from "@/lib/condition-comparison";
 import { cn } from "@/lib/utils";
 import { ANY_CONDITION } from "@/lib/workflow-presets-json";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -64,7 +77,28 @@ interface FieldRendererProps {
   onChange: (value: unknown) => void;
 }
 
+/** FieldDescriptor carries a ConfigField's comparison properties untyped, through its index signature. */
+function asComparisonField(field: FieldDescriptor) {
+  return field as FieldDescriptor & Pick<ConfigField, "type" | "operator" | "operators">;
+}
+
+/** The unit beside a number input, singular while the input holds exactly 1. */
+function UnitLabel({ unit, amount }: { unit: string | undefined; amount: unknown }) {
+  if (!unit) {
+    return null;
+  }
+  return (
+    <span className="text-sm text-muted-foreground whitespace-nowrap">
+      {typeof amount === "number" ? unitFor(amount, unit) : unit}
+    </span>
+  );
+}
+
 function NumberFieldRenderer({ field, value, onChange }: FieldRendererProps) {
+  const choices = comparisonChoices(asComparisonField(field));
+  if (choices) {
+    return <ComparisonFieldRenderer field={field} value={value} onChange={onChange} choices={choices} />;
+  }
   return (
     <div className="space-y-2">
       <Label htmlFor={field.id}>
@@ -83,7 +117,73 @@ function NumberFieldRenderer({ field, value, onChange }: FieldRendererProps) {
           className="flex-1"
           data-testid={`input-${field.id}`}
         />
-        {field.unit && <span className="text-sm text-muted-foreground whitespace-nowrap">{field.unit}</span>}
+        <UnitLabel unit={field.unit} amount={value} />
+      </div>
+      {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
+    </div>
+  );
+}
+
+/**
+ * A number whose comparison the user picks, e.g. "At least" or "Exactly" 100 bits. While
+ * the value is Any, the controls start blank on the default comparison, and touching
+ * either one is what turns Any off.
+ */
+function ComparisonFieldRenderer({
+  field,
+  value,
+  onChange,
+  choices,
+}: FieldRendererProps & { choices: ComparisonOperator[] }) {
+  const comparison: ComparisonValue = isComparisonValue(value)
+    ? value
+    : { operator: defaultComparison(asComparisonField(field)).operator, value: typeof value === "number" ? value : "" };
+  // A saved condition may use a comparison the module no longer offers; it stays listed
+  // so the control shows what the condition actually does.
+  const operators = choices.includes(comparison.operator) ? choices : [...choices, comparison.operator];
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={field.id}>
+        {field.label}
+        {field.required && <span className="text-destructive ml-0.5">*</span>}
+      </Label>
+      <Select
+        value={comparison.operator}
+        onValueChange={(operator) => {
+          if (isComparisonOperator(operator)) {
+            onChange({ ...comparison, operator });
+          }
+        }}
+      >
+        <SelectTrigger
+          className="w-full"
+          aria-label={`${field.label} comparison`}
+          data-testid={`select-operator-${field.id}`}
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {operators.map((operator) => (
+            <SelectItem key={operator} value={operator}>
+              {COMPARISON_LABELS[operator]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex items-center gap-2">
+        <Input
+          id={field.id}
+          type="number"
+          min={field.min}
+          max={field.max}
+          value={comparison.value}
+          onChange={(e) => onChange({ ...comparison, value: e.target.value ? Number(e.target.value) : "" })}
+          placeholder={field.placeholder}
+          className="flex-1"
+          data-testid={`input-${field.id}`}
+        />
+        <UnitLabel unit={field.unit} amount={comparison.value} />
       </div>
       {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
     </div>
@@ -166,7 +266,7 @@ function RangeFieldRenderer({ field, value, onChange }: FieldRendererProps) {
             className="flex-1"
             data-testid={`input-${field.id}`}
           />
-          {field.unit && <span className="text-sm text-muted-foreground whitespace-nowrap">{field.unit}</span>}
+          <UnitLabel unit={field.unit} amount={configValue.value} />
         </div>
       )}
       {field.hint && <p className="text-xs text-muted-foreground">{field.hint}</p>}
@@ -326,6 +426,9 @@ const builtinRenderers: Record<string, React.ComponentType<FieldRendererProps>> 
 /** What a field reverts to when toggled out of variable mode — mirrors workflow-presets.ts's
  * getDefaultConfigValues, kept separate since this component has no workflow-specific import. */
 function defaultValueForField(field: FieldDescriptor): unknown {
+  if (comparisonChoices(asComparisonField(field))) {
+    return defaultComparison(asComparisonField(field));
+  }
   if (field.defaultValue !== undefined) {
     return field.defaultValue;
   }
@@ -408,7 +511,7 @@ function VariableToggleWrapper({
 
 function AnyFieldWrapper({ field, value, onChange, children }: FieldRendererProps & { children: ReactNode }) {
   const isAny = value === ANY_CONDITION;
-  const isEmpty = value === undefined || value === "";
+  const isEmpty = isEmptyValue(value);
   const switchId = `${field.id}-any`;
 
   return (
@@ -442,6 +545,11 @@ function AnyFieldWrapper({ field, value, onChange, children }: FieldRendererProp
 // Validation
 // ---------------------------------------------------------------------------
 
+/** Nothing entered yet; a comparison with its amount cleared counts, since it compares against nothing. */
+function isEmptyValue(value: unknown): boolean {
+  return value === undefined || value === "" || (isComparisonValue(value) && value.value === "");
+}
+
 function validateRequired(fields: FieldDescriptor[], values: FieldValues): string[] {
   const missing: string[] = [];
   for (const field of fields) {
@@ -449,7 +557,7 @@ function validateRequired(fields: FieldDescriptor[], values: FieldValues): strin
       continue;
     }
     const v = values[field.id];
-    if (v === undefined || v === null || v === "") {
+    if (v === null || isEmptyValue(v)) {
       missing.push(field.label);
     }
   }

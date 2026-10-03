@@ -5,6 +5,7 @@ import {
   type ConfigFieldSource,
   type ConfigFieldType,
   type DataShapeField,
+  isComparisonOperator,
   LIST_ITEM_FIELD_TYPES,
 } from "@woofx3/api/ui-schema";
 import { isThemeField } from "@/lib/widget-theme-picker";
@@ -98,6 +99,7 @@ export function parseConfigField(item: unknown): ConfigField | null {
       typeof o.operator === "string" && OPERATORS.has(o.operator as ConditionOperator)
         ? (o.operator as ConditionOperator)
         : undefined,
+    operators: Array.isArray(o.operators) ? o.operators.filter(isComparisonOperator) : undefined,
     mediaType: o.mediaType === "image" || o.mediaType === "audio" || o.mediaType === "video" ? o.mediaType : undefined,
     kinds: Array.isArray(o.kinds) ? o.kinds.filter((k): k is string => typeof k === "string") : undefined,
     resourceKind: type === "resource_ref" && typeof o.resourceKind === "string" ? o.resourceKind : undefined,
