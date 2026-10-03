@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { type CompanionState, commands, currentState, onStateChange } from "./state";
+import { type CompanionState, commands, currentState, onStateChange, type WindowState } from "./state";
 
 type Tab = "status" | "engine" | "configuration" | "integrations";
 
@@ -11,8 +11,8 @@ const TABS: { id: Tab; label: string; enabled: boolean }[] = [
   { id: "integrations", label: "Integrations", enabled: false },
 ];
 
-function useCompanionState(): CompanionState {
-  const [state, setState] = useState<CompanionState>({ kind: "starting" });
+function useWindowState(): WindowState {
+  const [state, setState] = useState<WindowState>({ kind: "starting", update: null });
   useEffect(() => {
     let disposed = false;
     let eventSeen = false;
@@ -201,8 +201,23 @@ function ErrorView({ message }: { message: string }) {
   );
 }
 
-export function App() {
-  const state = useCompanionState();
+/** Offered, never forced: the companion restarts only when this is clicked. */
+function UpdateBanner({ version }: { version: string }) {
+  const { busy, error, run } = useCommand();
+  return (
+    <aside className="update-banner">
+      <div className="update-row">
+        <p>woofx3 companion {version} is ready</p>
+        <button type="button" className="primary" disabled={busy} onClick={() => run(commands.installUpdate)}>
+          Restart to update
+        </button>
+      </div>
+      {error && <p className="error">{error}</p>}
+    </aside>
+  );
+}
+
+function Screen({ state }: { state: CompanionState }) {
   switch (state.kind) {
     case "starting":
       return <section className="panel centered muted">Starting…</section>;
@@ -219,4 +234,14 @@ export function App() {
     case "error":
       return <ErrorView message={state.message} />;
   }
+}
+
+export function App() {
+  const view = useWindowState();
+  return (
+    <>
+      {view.update && <UpdateBanner version={view.update.version} />}
+      <Screen state={view} />
+    </>
+  );
 }

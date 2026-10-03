@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-/// What the window renders. Serialized with `kind` as the tag; must match
+/// Where pairing stands. Serialized with `kind` as the tag; must match
 /// `CompanionState` in companion/ui/src/state.ts.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -52,6 +52,30 @@ impl CompanionState {
                 ..
             } => "Offline".to_string(),
         }
+    }
+}
+
+/// What the window renders: where pairing stands, plus the update waiting to
+/// be installed, if any. The pairing state's fields sit at the top level next
+/// to `update`. Must match `WindowState` in companion/ui/src/state.ts.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct WindowState {
+    #[serde(flatten)]
+    pub state: CompanionState,
+    pub update: Option<ReadyUpdate>,
+}
+
+/// A newer release, downloaded and verified, that installs on Restart to
+/// update.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ReadyUpdate {
+    pub version: String,
+}
+
+impl ReadyUpdate {
+    /// The tray menu item that installs it.
+    pub fn tray_label(&self) -> String {
+        format!("Restart to update to {}", self.version)
     }
 }
 
@@ -111,5 +135,41 @@ mod tests {
             }),
             json!({ "kind": "error", "message": "m" })
         );
+    }
+
+    #[test]
+    fn puts_the_state_and_the_ready_update_side_by_side() {
+        let window = |state, update| {
+            serde_json::to_value(WindowState { state, update }).expect("window state serializes")
+        };
+        assert_eq!(
+            window(CompanionState::Unpaired, None),
+            json!({ "kind": "unpaired", "update": null })
+        );
+        assert_eq!(
+            window(
+                CompanionState::Paired {
+                    instance_name: "x".into(),
+                    cloud_connected: false,
+                },
+                Some(ReadyUpdate {
+                    version: "1.2.3".into()
+                }),
+            ),
+            json!({
+                "kind": "paired",
+                "instanceName": "x",
+                "cloudConnected": false,
+                "update": { "version": "1.2.3" },
+            })
+        );
+    }
+
+    #[test]
+    fn names_the_version_on_the_tray_item() {
+        let update = ReadyUpdate {
+            version: "1.2.3".into(),
+        };
+        assert_eq!(update.tray_label(), "Restart to update to 1.2.3");
     }
 }
