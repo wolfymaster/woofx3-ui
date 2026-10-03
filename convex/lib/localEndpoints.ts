@@ -215,3 +215,72 @@ function isIpv6Literal(host: string): boolean {
 export function isEndpointPort(port: number): boolean {
   return Number.isInteger(port) && port >= 1 && port <= 65535;
 }
+
+/** What the companion found for an endpoint. It sends the password only when the streamer opted in. */
+export interface CompanionReport {
+  host?: string;
+  port?: number;
+  password?: string;
+}
+
+/** Who last wrote one setting; see `moduleSettingProvenance` in schema.ts. */
+export interface SettingProvenance {
+  key: string;
+  source: "companion" | "manual";
+  companionValue?: string;
+}
+
+export interface CompanionWrite {
+  key: string;
+  value: string;
+  /** A secret's value is never kept in Convex, so it is not compared or recorded. */
+  secret: boolean;
+}
+
+/**
+ * The module settings a companion report should change. Only keys the
+ * endpoint names, never one the streamer set by hand, and not a value the
+ * companion already wrote: every setting write makes the engine reconnect to
+ * the endpoint, so an unchanged report must write nothing. Throws on a report
+ * that is not an address, and on a password the companion may not provide
+ * (`secretAllowed`: the streamer chose to share it, the endpoint is on, and
+ * its discoverer may hand this module a secret).
+ */
+export function planCompanionWrites(
+  endpoint: LocalEndpoint,
+  report: CompanionReport,
+  provenance: readonly SettingProvenance[],
+  secretAllowed: boolean
+): CompanionWrite[] {
+  if (report.host !== undefined && !isEndpointHost(report.host)) {
+    throw new Error("The reported host is not a host name or IP address.");
+  }
+  if (report.port !== undefined && !isEndpointPort(report.port)) {
+    throw new Error("The reported port is not an integer from 1 to 65535.");
+  }
+  if (report.password !== undefined && endpoint.passwordSetting && !secretAllowed) {
+    throw new Error("The companion may not provide this endpoint's password.");
+  }
+  const byKey = new Map(provenance.map((row) => [row.key, row]));
+  const writes: CompanionWrite[] = [];
+  const consider = (key: string, value: string, secret: boolean) => {
+    const row = byKey.get(key);
+    if (row?.source === "manual") {
+      return;
+    }
+    if (!secret && row?.source === "companion" && row.companionValue === value) {
+      return;
+    }
+    writes.push({ key, value, secret });
+  };
+  if (report.host !== undefined) {
+    consider(endpoint.hostSetting, report.host, false);
+  }
+  if (report.port !== undefined) {
+    consider(endpoint.portSetting, String(report.port), false);
+  }
+  if (report.password !== undefined && endpoint.passwordSetting) {
+    consider(endpoint.passwordSetting, report.password, true);
+  }
+  return writes;
+}
