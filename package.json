@@ -18,7 +18,8 @@
     "docs:build": "bun --cwd docs run docs:build",
     "docs:preview": "bun --cwd docs run docs:preview",
     "companion:dev": "bun run --cwd companion tauri dev",
-    "companion:build": "bun run --cwd companion tauri build"
+    "companion:build": "bun run --cwd companion tauri build",
+    "companion:test": "cargo test --manifest-path companion/core/Cargo.toml"
   },
   "dependencies": {
     "@auth/core": "^0.37.0",
