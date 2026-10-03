@@ -1,16 +1,15 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { ChevronRight, Loader2, Megaphone, Volume2 } from "lucide-react";
+import { Loader2, Megaphone, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { useChatters } from "@/hooks/use-chatters";
 import { useInstance } from "@/hooks/use-instance";
 import { matchChatters } from "@/lib/chatter-match";
-import { cn } from "@/lib/utils";
 import { ShoutoutQueue, type ShoutoutQueueEntry } from "./shoutout-queue";
 
 interface PendingTarget {
@@ -30,8 +29,6 @@ export function ShoutoutWidget() {
   const [pending, setPending] = useState<PendingTarget | null>(null);
   const [isLooking, setIsLooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** Session-local, not persisted: a starting height, not a remembered preference. */
-  const [queueOpen, setQueueOpen] = useState(false);
 
   // Drives the "retrying in Nm" labels without each row owning a timer.
   const [now, setNow] = useState(() => Date.now());
@@ -211,19 +208,17 @@ export function ShoutoutWidget() {
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         ) : entries.length > 0 ? (
-          // Collapsed by default so the widget is only as tall as the thing you
-          // came here to do. The trigger still carries the count and the pacing:
-          // a queue that is about to fire shoutouts should not go silent about
-          // its size just because it is folded away.
-          <Collapsible open={queueOpen} onOpenChange={setQueueOpen}>
-            <CollapsibleTrigger className="flex w-full items-center gap-1 text-[10px] tabular-nums text-muted-foreground hover:text-foreground">
-              <ChevronRight className={cn("h-3 w-3 transition-transform", queueOpen && "rotate-90")} />
-              {entries.length} queued · 2m apart
-            </CollapsibleTrigger>
-            <CollapsibleContent className="pt-1.5">
-              <ShoutoutQueue entries={entries} now={now} onRemove={handleRemove} onReorder={handleReorder} />
-            </CollapsibleContent>
-          </Collapsible>
+          // The trigger carries the count and the pacing: a queue that is about
+          // to fire shoutouts should not go silent about its size just because
+          // the list itself is in an overlay.
+          <WidgetOverlay
+            trigger={`${entries.length} queued · 2m apart`}
+            title="Shoutout queue"
+            description="Sent one at a time, two minutes apart. Drag to reorder."
+            testId="shoutout-queue"
+          >
+            <ShoutoutQueue entries={entries} now={now} onRemove={handleRemove} onReorder={handleReorder} />
+          </WidgetOverlay>
         ) : null}
       </div>
     </div>

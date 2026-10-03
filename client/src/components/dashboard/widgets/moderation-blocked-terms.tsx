@@ -2,10 +2,10 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { BLOCKED_TERM_MAX_LENGTH, type CapabilityStatus, validateBlockedTerm } from "@convex/lib/moderation";
 import { useAction } from "convex/react";
-import { Ban, ChevronRight, Loader2, X } from "lucide-react";
+import { Ban, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { Button } from "@/components/ui/button";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { actionErrorMessage } from "@/lib/action-error";
 import { cn } from "@/lib/utils";
@@ -36,8 +36,6 @@ export function BlockedTermsSection({
   /** One removal at a time, so a double click cannot send the same DELETE twice. */
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** Session-local, not persisted: the list is reference, the input is the point. */
-  const [listOpen, setListOpen] = useState(false);
 
   const ready = addStatus === "ready";
   const canRemove = removeStatus === "ready";
@@ -127,48 +125,44 @@ export function BlockedTermsSection({
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       {ready && terms !== null && terms.length > 0 && (
-        <Collapsible open={listOpen} onOpenChange={setListOpen}>
-          <CollapsibleTrigger className="flex w-full items-center gap-1 text-[10px] tabular-nums text-muted-foreground hover:text-foreground">
-            <ChevronRight className={cn("h-3 w-3 transition-transform", listOpen && "rotate-90")} />
-            {terms.length}
-            {truncated ? "+" : ""} blocked
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-1.5">
-            <ul className="flex flex-wrap gap-1.5">
-              {terms.map((term) => (
-                <li
-                  key={term.id}
-                  className={cn(
-                    "flex max-w-full items-center gap-1 rounded-md border border-border py-0.5 pl-2 text-xs",
-                    canRemove ? "pr-0.5" : "pr-2"
-                  )}
-                >
-                  <span className="truncate">{term.text}</span>
-                  {canRemove && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive"
-                      disabled={removingId !== null}
-                      onClick={() => void handleRemove(term.id)}
-                      aria-label={`Unblock "${term.text}"`}
-                      data-testid={`button-remove-blocked-term-${term.id}`}
-                    >
-                      {removingId === term.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <X className="h-3 w-3" />
-                      )}
-                    </Button>
-                  )}
-                </li>
-              ))}
-            </ul>
-            <div className="pt-1.5">
-              <CapabilityNote status={removeStatus} capability="removeBlockedTerm" />
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
+        // The list is reference and the input is the point, so the list opens
+        // in an overlay.
+        <WidgetOverlay
+          trigger={`${terms.length}${truncated ? "+" : ""} blocked`}
+          title="Blocked terms"
+          description="Twitch blocks chat messages that contain these."
+          testId="blocked-terms"
+        >
+          <ul className="flex flex-wrap gap-1.5">
+            {terms.map((term) => (
+              <li
+                key={term.id}
+                className={cn(
+                  "flex max-w-full items-center gap-1 rounded-md border border-border py-0.5 pl-2 text-xs",
+                  canRemove ? "pr-0.5" : "pr-2"
+                )}
+              >
+                <span className="truncate">{term.text}</span>
+                {canRemove && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive"
+                    disabled={removingId !== null}
+                    onClick={() => void handleRemove(term.id)}
+                    aria-label={`Unblock "${term.text}"`}
+                    data-testid={`button-remove-blocked-term-${term.id}`}
+                  >
+                    {removingId === term.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="pt-1.5">
+            <CapabilityNote status={removeStatus} capability="removeBlockedTerm" />
+          </div>
+        </WidgetOverlay>
       )}
     </section>
   );
