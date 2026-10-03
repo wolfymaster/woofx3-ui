@@ -71,8 +71,10 @@ export const access = query({
 
 type Permission = keyof ConfigBackupAccess;
 
+const NOT_A_MEMBER_MESSAGE = "You are not a member of this instance.";
+
 const DENIED_MESSAGE: Record<Permission, string> = {
-  canExport: "You are not a member of this instance.",
+  canExport: "Only owners and admins can export a backup.",
   canExportMembers: "Only owners and admins can export group members.",
   canImport: "Only owners and admins can import a backup.",
 };
@@ -88,7 +90,7 @@ async function connect(
   }
   const context = await ctx.runQuery(internal.configBackup.engineContextForUser, { instanceId, userId });
   if (!context) {
-    throw new ConvexError(DENIED_MESSAGE.canExport);
+    throw new ConvexError(NOT_A_MEMBER_MESSAGE);
   }
   for (const permission of permissions) {
     if (!context.access[permission]) {

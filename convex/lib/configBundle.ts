@@ -131,17 +131,12 @@ export interface ConfigBackupAccess {
 }
 
 /**
- * Any member may export: a bundle holds no secrets, tokens or module settings,
- * only configuration every member can already read in the UI. Usernames and
- * import stay with owners and admins, since import rewrites configuration in
- * bulk and member lists are personal data.
+ * Backups are instance settings, which are for owners and admins only: a
+ * member can neither export the instance's configuration nor import over it.
  */
 export function configBackupAccess(role: InstanceRole | null): ConfigBackupAccess {
-  if (role === null) {
-    return { canExport: false, canExportMembers: false, canImport: false };
-  }
   const manages = role === "owner" || role === "admin";
-  return { canExport: true, canExportMembers: manages, canImport: manages };
+  return { canExport: manages, canExportMembers: manages, canImport: manages };
 }
 
 export function utf8ByteLength(text: string): number {

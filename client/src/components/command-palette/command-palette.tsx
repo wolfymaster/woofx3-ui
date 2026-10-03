@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useInstance } from "@/hooks/use-instance";
+import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useToast } from "@/hooks/use-toast";
 import {
   inlineArgument,
@@ -99,7 +100,8 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const hosting = instance?.hosting;
-  const navigation = useMemo(() => navigationCommands(hosting), [hosting]);
+  const isAdmin = useIsInstanceAdmin() ?? false;
+  const navigation = useMemo(() => navigationCommands(hosting, isAdmin), [hosting, isAdmin]);
   const items = useItemCommands(instance);
   const actions = useActionCommands(instance, instances, setInstance);
 

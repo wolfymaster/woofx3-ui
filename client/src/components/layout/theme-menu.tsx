@@ -10,6 +10,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useTheme } from "@/hooks/use-theme";
 import { themePalettes } from "@/lib/theme/palettes";
 import { CUSTOM_PALETTE_ID, parseThemeModePreference } from "@/lib/theme/resolve";
@@ -17,6 +18,7 @@ import { CUSTOM_PALETTE_ID, parseThemeModePreference } from "@/lib/theme/resolve
 /** Quick theme switcher for account menus; the full editor lives on the Appearance page. */
 export function ThemeMenuSub() {
   const { modePreference, setMode, paletteId, selectPalette } = useTheme();
+  const isAdmin = useIsInstanceAdmin() ?? false;
 
   return (
     <DropdownMenuSub>
@@ -41,10 +43,15 @@ export function ThemeMenuSub() {
           ))}
           <DropdownMenuRadioItem value={CUSTOM_PALETTE_ID}>Custom</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/admin/appearance">Customize…</Link>
-        </DropdownMenuItem>
+        {/* The Appearance page is an instance setting, so only admins get the link. */}
+        {isAdmin && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link href="/admin/appearance">Customize…</Link>
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

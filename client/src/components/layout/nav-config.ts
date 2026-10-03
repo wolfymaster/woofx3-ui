@@ -66,6 +66,13 @@ export function navItemsFor(items: NavItem[], hosting: InstanceHosting): NavItem
 export interface NavSection extends NavItem {
   /** Sub-navigation rendered in the section sidebar. Absent for single-page sections. */
   children?: NavItem[];
+  /** Instance settings, shown only to the instance's owners and admins. */
+  adminOnly?: boolean;
+}
+
+/** The sections a user with this standing on the current instance may open. */
+export function sectionsFor(sections: NavSection[], isAdmin: boolean): NavSection[] {
+  return isAdmin ? sections : sections.filter((section) => !section.adminOnly);
 }
 
 export const STREAM_ITEMS: NavItem[] = [
@@ -110,7 +117,7 @@ export const MAIN_NAV_SECTIONS: NavSection[] = [
 /** Icon-only entries in the header's right-hand utility cluster. */
 export const UTILITY_SECTIONS: NavSection[] = [
   { id: "team", label: "Team", icon: Users, href: "/team" },
-  { id: "admin", label: "Admin", icon: Settings, href: ADMIN_ITEMS[0].href, children: ADMIN_ITEMS },
+  { id: "admin", label: "Admin", icon: Settings, href: ADMIN_ITEMS[0].href, children: ADMIN_ITEMS, adminOnly: true },
 ];
 
 /** Root path a section owns — everything under it belongs to that section. */

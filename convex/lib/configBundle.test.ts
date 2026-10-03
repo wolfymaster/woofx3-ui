@@ -34,8 +34,8 @@ describe("chunkText", () => {
 });
 
 describe("configBackupAccess", () => {
-  it("lets members export without usernames and never import", () => {
-    expect(configBackupAccess("member")).toEqual({ canExport: true, canExportMembers: false, canImport: false });
+  it("gives members nothing, since backups are an admin setting", () => {
+    expect(configBackupAccess("member")).toEqual({ canExport: false, canExportMembers: false, canImport: false });
   });
 
   it("gives owners and admins everything", () => {

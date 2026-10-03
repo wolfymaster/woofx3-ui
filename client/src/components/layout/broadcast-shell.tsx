@@ -26,6 +26,7 @@ import { useEngineHealth } from "@/hooks/use-engine-health";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
 import { useEngineVersion } from "@/hooks/use-engine-version";
 import { useInstance } from "@/hooks/use-instance";
+import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useLiveState } from "@/hooks/use-live-state";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
@@ -33,7 +34,14 @@ import { formatEngineVersion } from "@/lib/engine-version";
 import { $commandPaletteOpen, $notifications } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
-import { findActiveSection, isSectionActive, MAIN_NAV_SECTIONS, navItemsFor, UTILITY_SECTIONS } from "./nav-config";
+import {
+  findActiveSection,
+  isSectionActive,
+  MAIN_NAV_SECTIONS,
+  navItemsFor,
+  sectionsFor,
+  UTILITY_SECTIONS,
+} from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
 import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
@@ -203,6 +211,8 @@ function AppHeader() {
     .slice(0, 2)
     .toUpperCase();
 
+  const isAdmin = useIsInstanceAdmin() ?? false;
+
   const openCommandPalette = useCallback(() => {
     $commandPaletteOpen.set(true);
   }, []);
@@ -231,7 +241,7 @@ function AppHeader() {
 
       <div className="flex items-center gap-2 shrink-0">
         <div className="hidden md:flex items-center gap-1">
-          {UTILITY_SECTIONS.map((item) => {
+          {sectionsFor(UTILITY_SECTIONS, isAdmin).map((item) => {
             const isActive = isSectionActive(item, location);
 
             return (
@@ -303,9 +313,11 @@ function AppHeader() {
             <DropdownMenuItem asChild>
               <Link href="/team">Team Settings</Link>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin">Admin</Link>
-            </DropdownMenuItem>
+            {isAdmin && (
+              <DropdownMenuItem asChild>
+                <Link href="/admin">Admin</Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => signOut()} className="text-destructive focus:text-destructive">
               Sign out
