@@ -6,6 +6,7 @@ import type { CustomFieldRenderer } from "@/components/common/configuration-form
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
+import { layersTopFirst, moveLayer, nextLayerZIndex } from "@/lib/layer-order";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
 import { CanvasWidgetHandle } from "./canvas-widget-handle";
@@ -13,6 +14,12 @@ import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
 
 export type WidgetsUpdate = (widgets: Widget[]) => Widget[];
+
+/**
+ * What kind of edit an update is. `add` and `restack` are reported apart from
+ * every other edit, for a caller whose preview only shows them after a save.
+ */
+export type WidgetsChange = "add" | "restack" | "edit";
 
 const ALERT_SURFACE = "alert";
 
@@ -25,8 +32,7 @@ interface WidgetLayoutCanvasProps {
   renderers: Record<string, CustomFieldRenderer>;
   /** What text in a widget's settings may reference. A scene has no workflow around it, so it passes none. */
   availableVariables?: VariableOption[];
-  /** An `add` is reported apart from every other edit, for a caller that saves as soon as a widget is added. */
-  onChange: (update: WidgetsUpdate, change: "add" | "edit") => void;
+  onChange: (update: WidgetsUpdate, change: WidgetsChange) => void;
   /** Real widget pixels, drawn over the placeholders and under the handles. */
   preview?: ReactNode;
   /** Drawn in place of a widget's generic placeholder. */
@@ -121,7 +127,7 @@ export function WidgetLayoutCanvas({
           size: { width: 300, height: 200 },
           rotation: 0,
           opacity: 100,
-          zIndex: prev.length + 1,
+          zIndex: nextLayerZIndex(prev),
           locked: false,
           visible: true,
           settings,
@@ -160,7 +166,10 @@ export function WidgetLayoutCanvas({
   const selectedWidget = widgets.find((w) => w.id === selectedWidgetId) ?? null;
   const selectedWidgetFields = (selectedWidget ? (catalogRowFor(selectedWidget)?.settings ?? []) : []) as ConfigField[];
 
-  const layersNewestFirst = [...widgets].sort((a, b) => b.zIndex - a.zIndex);
+  const layers = layersTopFirst(widgets);
+  const moveLayerTo = useCallback((widgetId: string, toIndex: number) => {
+    onChangeRef.current((prev) => moveLayer(prev, widgetId, toIndex), "restack");
+  }, []);
   const taxonomyOf = useCallback((widget: Widget) => catalogRowFor(widget)?.taxonomy, [catalogRowFor]);
 
   return (
@@ -178,13 +187,14 @@ export function WidgetLayoutCanvas({
       }
       layers={
         <LayersList
-          layers={layersNewestFirst}
+          layers={layers}
           selectedId={selectedWidgetId}
           label={(widget) =>
             isAlertWidget(widget) ? `${widget.name} · ${alertWidgetName(widget.settings)}` : widget.name
           }
           taxonomyOf={taxonomyOf}
           onSelect={setSelectedWidgetId}
+          onMove={moveLayerTo}
           emptyMessage="Nothing on the canvas yet. Add a widget to start."
         />
       }
@@ -250,7 +260,7 @@ function CanvasSummary({ width, height, count }: { width: number; height: number
     <div className="flex flex-col gap-4 p-4">
       <h2 className="text-sm font-semibold">Canvas</h2>
       <p className="text-xs text-muted-foreground">
-        Select a widget on the canvas to edit it, or add one from the left.
+        Select a widget on the canvas or in the layers above to edit it, or add one from the left.
       </p>
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Size</dt>
