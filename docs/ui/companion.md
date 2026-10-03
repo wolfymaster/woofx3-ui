@@ -1,15 +1,15 @@
 # Companion app
 
 **Routes:** `/companion/pair` (approval page), the Companion card on `/admin/engine`
-**Primary files:** `companion/` (the app), `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
+**Primary files:** `companion/` (the app; `companion/core/` holds the relay client, bridge and discovery), `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
 
 ## What it is
 
 The woofx3 companion is a small tray app (Tauri 2) for the streamer's PC. It holds outbound connections from that PC to woofx3, so that later it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC.
 
-It is **not** a desktop UI for woofx3. The browser is the only place woofx3 is managed. The companion's own window shows its state and little else: a Status tab today, with Engine, Configuration and Integrations tabs laid out but disabled until they have something to show.
+It is **not** a desktop UI for woofx3. The browser is the only place woofx3 is managed. The companion's own window shows its state and little else: a Status tab and an [Integrations](#integrations) tab, with Engine and Configuration tabs laid out but disabled until they have something to show.
 
-Today it pairs with one instance, shows that it is paired and connected, survives restarts, and [updates itself](#updates). It does not relay engine traffic yet.
+It pairs with one instance, shows that it is paired and connected, survives restarts, and [updates itself](#updates). Once paired and confirmed, it serves the [local endpoints](#integrations) of modules installed on its instance, such as OBS's WebSocket server, to a cloud engine through the relay. It does not carry a local engine's traffic yet.
 
 ## Layout
 
@@ -17,7 +17,10 @@ Today it pairs with one instance, shows that it is paired and connected, survive
 companion/
   package.json        window app (Vite + React), plus the Tauri CLI
   ui/                 the window: renders CompanionState, calls Rust commands
-  src-tauri/          the Rust process: Convex client, credential store, tray
+  src-tauri/          the Rust process: Convex client, credential store, tray,
+                      integrations (integrations.rs, integration_store.rs)
+  core/               woofx3-companion-core: relay frames, the relay client,
+                      the bridge, address rules and OBS discovery. No Tauri.
 ```
 
 The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
@@ -29,7 +32,70 @@ WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:build
 ```
 
-The companion builds on Windows only: its Rust crate needs GTK and WebKit on Linux. CI's **Companion** job (`.github/workflows/ci.yml`) typechecks and builds the window and runs `cargo fmt`, `clippy` and the tests on `windows-latest`. On Linux, `cargo check --target x86_64-pc-windows-gnu` checks the crate.
+The companion builds on Windows only: its Tauri crate needs GTK and WebKit on Linux. CI's **Companion** job (`.github/workflows/ci.yml`) typechecks and builds the window and runs `cargo fmt`, `clippy` and the tests on `windows-latest`. On Linux, `cargo clippy --all-targets --target x86_64-pc-windows-gnu` checks the crate (it needs `rustup target add x86_64-pc-windows-gnu`, but no MinGW linker).
+
+Everything that carries traffic lives in `companion/core`, which has no Tauri dependency, so its tests run on any OS. They run a fake relay and a fake OBS on loopback and drive the real relay client and bridge against them. CI's **Companion core** job runs `cargo fmt --check`, `clippy` and the tests on Linux.
+
+```bash
+bun run companion:test    # cargo test --manifest-path companion/core/Cargo.toml
+```
+
+## Integrations
+
+A module that controls something on the streamer's network declares it in `local[]` (an endpoint with a protocol, the settings holding its host, port and password, and optionally how to discover it). The Integrations tab is generated from those entries for the modules installed on the companion's instance; nothing in it is written per integration. The Rust side (`companion/src-tauri/src/integrations.rs`) runs while the pairing is paired and confirmed, and stops with it.
+
+It subscribes to `companionIntegrations.forCompanion` with the companion's token, and subscribes again with backoff if that fails or ends. The query lists each installed module's endpoints with their setting keys (never values), the copy Convex keeps of what the companion recorded, `manualKeys` (settings the streamer saved by hand), and `relayAvailable`. A deployment without these functions answers "Could not find public function", and the tab says "Integrations need a newer woofx3". Any other error text from Convex is replaced with a fixed message before it is logged or shown, since Convex's own messages can quote a function's arguments, the token among them.
+
+### Discoverers
+
+A discoverer is built into the companion and named by `discover.known`. Each one serves only the modules listed for it in the `DISCOVERERS` table in `integrations.rs`; today that is `obs-websocket` for `woofx3_obs`. A discoverer can read secrets on the PC, so a module that merely declares `known: "obs-websocket"` gets "Discovery not available for this module" and manual entry only, and can never receive the OBS password. Convex enforces the same table (`convex/lib/knownDiscoverers.ts`) when the companion reports values. The table also lists the subprotocols the Test button offers, and the window keys discoverer-specific hints (such as where to switch OBS's WebSocket server on) by the discoverer's id, so nothing else in the tab names a particular integration.
+
+For each endpoint the tab shows:
+
+- **Discovery.** For an endpoint the `obs-websocket` discoverer serves, the companion reads obs-websocket's own config file (`%APPDATA%\obs-studio\plugin_config\obs-websocket\config.json`, OBS 30 and later, at most 64 KiB) every minute and whenever the window gains focus: found on this PC with its port, switched off, or not found. Endpoints with `mdns` discovery, or none, take a typed address.
+- **The address it dials,** as `host:port`, marked "found on this PC" or "you entered it". **Use a different address** asks for `host:port` and saves it only on **Confirm address**. An enabled endpoint dialling a discovered address follows OBS when its port changes.
+- **The enable switch,** disabled until there is an address.
+- **The password opt-in,** off by default, naming the endpoint and the module (display name and id) the password would go to. Only with it on does the password read from OBS's file leave the PC.
+- **The connection state** from the relay, and **Test**, which makes one WebSocket handshake with the stored address (offering `obswebsocket.json` and `obswebsocket.msgpack` to an OBS endpoint) and reports whether it answered within 3 seconds.
+
+### What the companion dials
+
+The companion's own store, `integrations.json` in its app data directory, is the only source of addresses the bridge dials:
+
+```json
+{ "companionId": "…", "instanceId": "…", "endpoints": { "woofx3_obs/obs": { "enabled": true, "address": { "host": "127.0.0.1", "port": 4455, "origin": "discovered" }, "sharePassword": false, "sentPasswordSha256": null } } }
+```
+
+An address gets there only from discovery on this PC or from the streamer confirming it in the window. The relay names a module and an endpoint, never an address, and the bridge answers only for an endpoint that is enabled in the store, belongs to a module `forCompanion` lists as installed, and uses the `websocket` protocol. Anything else is refused with 4403 and nothing is dialled. Convex receives a copy of each address through `companionIntegrations.setEndpoint` to show in the browser, and the companion never reads one back.
+
+A stream already open is checked again whenever the store or the installed modules change. Turning the endpoint off, confirming another address, using the discovered one instead, or uninstalling its module closes every stream whose endpoint no longer resolves to the address it dialled, with 4403.
+
+The file is written atomically. It is stamped with the companion id and instance id from `companions.self`, and a session for any other pairing ignores it and starts empty. Pairing the same installation to the same instance again keeps it, since approval updates that installation's companion row in place and its id does not change; the confirmed addresses exist only on this PC. It is deleted when the companion unpairs or is revoked.
+
+### Filling in module settings
+
+For an enabled endpoint that dials the discovered address, the companion calls `companionIntegrationsActions.reportDiscovered` with host `127.0.0.1` and the discovered port, leaving out any key in `manualKeys`. It sends the password only with the opt-in on, and only when its SHA-256 differs from the digest it stored after the last successful send. The digest is dropped when the password setting becomes manual or stops being manual, so "Use the companion's value" in the browser sends it again. Convex writes only the settings `local[]` names, on modules installed on the companion's instance, and records them as provided by the companion. The companion sends a report only when its values or `manualKeys` changed, and waits 10 minutes before retrying a failed one, since reports are rate limited and every settings write makes the engine reconnect to OBS. An address the streamer typed may be another PC, so nothing is reported for it.
+
+### The relay connection
+
+The companion holds one outbound WebSocket to the relay (`companion/core/src/relay.rs`) while integrations are running, this woofx3 offers the relay, and at least one enabled endpoint resolves. It mints a credential with `companionRelayActions.companionCredential`, connects with it as a Bearer token, renews it at two thirds of its lifetime, and reconnects with jittered backoff from 1 to 60 seconds. Bridged traffic passes through unchanged, text or binary: the engine's obs-websocket client under Bun speaks `obswebsocket.msgpack`, so OBS traffic is binary frames. The bridge offers the local server exactly the subprotocols the engine offered; if the engine offered some and the server picks none, the stream closes with 1002. Each direction of each stream may queue at most 4 MiB, and a stream that would exceed it closes with 1009.
+
+How the relay ends a connection decides what the companion does next:
+
+| From the relay | The companion |
+|---|---|
+| Close 4001, or HTTP 409 `{"error":"displaced"}` at the upgrade | Stops: another companion for the instance took over |
+| Close 4000 | This companion connected again; reconnects with backoff |
+| HTTP 409 `{"error":"stale_credential"}` at the upgrade | Mints a fresh credential and retries with backoff |
+| Close 4401 | Mints again and reconnects |
+
+| Relay state | Shown on the Status tab |
+|---|---|
+| Not needed | No enabled endpoint, or integrations are not running |
+| Connecting, Connected | |
+| Retrying | "Retrying in N s" and the last error |
+| Displaced | Another companion connection for the instance took over. The companion does not take it back on its own; **Reconnect** does |
+| Refused | woofx3 would not issue a credential. The companion asks again when `forCompanion` changes, after 5 minutes, or on **Reconnect**. A revoked companion hears it from `companions.self` and unpairs |
 
 ## Updates
 
@@ -93,7 +159,7 @@ On `/admin/engine`, for managed and self-hosted engines alike: a cloud engine us
 
 ## Companion states
 
-The window renders `WindowState` (`companion/src-tauri/src/state.rs`, mirrored in `companion/ui/src/state.ts`): the pairing state, `CompanionState`, with its fields at the top level, plus `update`, which is `null` or the [ready update](#updates)'s `{ version }`.
+The window renders `WindowState` (`companion/src-tauri/src/state.rs`, mirrored in `companion/ui/src/state.ts`): the pairing state, `CompanionState`, with its fields at the top level, plus `update`, which is `null` or the [ready update](#updates)'s `{ version }`. Integrations and the relay arrive separately as `IntegrationsView` on the `companion://integrations` event (and from `get_integrations`), since they change far more often.
 
 | State | Shown when |
 |---|---|
@@ -109,4 +175,4 @@ On start, a confirmed token resumes the paired session without opening the windo
 
 **Pair** is honoured only from `unpaired` or `error`, and a second click while a code is being requested is ignored. A token left from an earlier pairing is released on the server before the new one replaces it.
 
-Every window command is async, and credential store calls run on Tokio's blocking pool in the order they were asked for. Tray updates wait for the main thread, so nothing that holds a lock may run there.
+Every window command is async, and credential store and integration file calls run on Tokio's blocking pool in the order they were asked for. Convex calls are bounded by a timeout. Tray updates wait for the main thread, so nothing that holds a lock may run there.
