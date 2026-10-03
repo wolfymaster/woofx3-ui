@@ -7,17 +7,11 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { getNextPath, withNextPath } from "@/lib/auth-next";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
 function getLoginNextPath(): string {
-  if (typeof window === "undefined") {
-    return "/";
-  }
-  const next = new URLSearchParams(window.location.search).get("next");
-  if (next && next.startsWith("/")) {
-    return next;
-  }
-  return "/";
+  return getNextPath() ?? "/";
 }
 
 export default function Login() {
@@ -118,7 +112,7 @@ export default function Login() {
           <CardFooter className="justify-center">
             <p className="text-sm text-muted-foreground">
               Don't have an account?{" "}
-              <Link href="/auth/register" className="text-primary hover:underline">
+              <Link href={withNextPath("/auth/register")} className="text-primary hover:underline">
                 Register
               </Link>
             </p>
