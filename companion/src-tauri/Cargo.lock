@@ -6334,7 +6334,25 @@ dependencies = [
  "tauri-plugin-single-instance",
  "tauri-plugin-updater",
  "tokio",
+ "tokio-util",
  "uuid",
+ "woofx3-companion-core",
+]
+
+[[package]]
+name = "woofx3-companion-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures",
+ "rand 0.9.5",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
 ]
 
 [[package]]
