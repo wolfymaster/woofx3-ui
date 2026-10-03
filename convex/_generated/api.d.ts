@@ -21,6 +21,7 @@ import type * as chatCommandActions from "../chatCommandActions.js";
 import type * as chatCommandGroups from "../chatCommandGroups.js";
 import type * as chatCommands from "../chatCommands.js";
 import type * as companionPairing from "../companionPairing.js";
+import type * as companions from "../companions.js";
 import type * as configBackup from "../configBackup.js";
 import type * as crons from "../crons.js";
 import type * as dashboardCounters from "../dashboardCounters.js";
@@ -237,6 +238,7 @@ declare const fullApi: ApiFromModules<{
   chatCommandGroups: typeof chatCommandGroups;
   chatCommands: typeof chatCommands;
   companionPairing: typeof companionPairing;
+  companions: typeof companions;
   configBackup: typeof configBackup;
   crons: typeof crons;
   dashboardCounters: typeof dashboardCounters;
