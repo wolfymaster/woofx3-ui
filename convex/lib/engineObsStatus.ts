@@ -9,13 +9,18 @@ import type { RpcTarget } from "@woofx3/api/client";
  * - `unanswered`: the engine's scene manager did not reply, which says nothing
  *   about OBS itself.
  * - `failure`: `authentication` when OBS refused the password, `unreachable`
- *   when nothing answered at `address` or the connection was lost.
+ *   when nothing answered at `address` or the connection was lost, `relay`
+ *   when the engine goes through the companion and the companion is not
+ *   connected or the relay refused (capability `modules.localEndpoints`).
  * - `address`: the `host:port` last tried; never the password.
+ * - `route`: whether the engine dials OBS directly or through the companion's
+ *   bridge. Absent from engines that predate the bridge.
  */
 export interface ObsStatus {
   state: "connecting" | "connected" | "retrying" | "stopped" | "unanswered";
-  failure: "authentication" | "unreachable" | null;
+  failure: "authentication" | "unreachable" | "relay" | null;
   address: string | null;
+  route?: "direct" | "companion";
 }
 
 export interface ObsStatusApi extends RpcTarget {
@@ -23,7 +28,8 @@ export interface ObsStatusApi extends RpcTarget {
 }
 
 const STATES: ReadonlySet<string> = new Set(["connecting", "connected", "retrying", "stopped", "unanswered"]);
-const FAILURES: ReadonlySet<string> = new Set(["authentication", "unreachable"]);
+const FAILURES: ReadonlySet<string> = new Set(["authentication", "unreachable", "relay"]);
+const ROUTES: ReadonlySet<string> = new Set(["direct", "companion"]);
 
 export const UNANSWERED_OBS_STATUS: ObsStatus = { state: "unanswered", failure: null, address: null };
 
@@ -36,10 +42,14 @@ export function parseObsStatus(raw: unknown): ObsStatus {
   if (typeof reply.state !== "string" || !STATES.has(reply.state)) {
     return UNANSWERED_OBS_STATUS;
   }
-  return {
+  const status: ObsStatus = {
     state: reply.state as ObsStatus["state"],
     failure:
       typeof reply.failure === "string" && FAILURES.has(reply.failure) ? (reply.failure as ObsStatus["failure"]) : null,
     address: typeof reply.address === "string" && reply.address.length > 0 ? reply.address : null,
   };
+  if (typeof reply.route === "string" && ROUTES.has(reply.route)) {
+    status.route = reply.route as NonNullable<ObsStatus["route"]>;
+  }
+  return status;
 }

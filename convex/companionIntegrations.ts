@@ -228,7 +228,13 @@ export const forModule = query({
         v.null(),
         v.object({ deviceName: v.string(), lastSeenAt: v.union(v.number(), v.null()), confirmed: v.boolean() })
       ),
-      provenance: v.array(v.object({ key: v.string(), source: v.union(v.literal("companion"), v.literal("manual")) })),
+      provenance: v.array(
+        v.object({
+          key: v.string(),
+          source: v.union(v.literal("companion"), v.literal("manual")),
+          updatedAt: v.number(),
+        })
+      ),
     })
   ),
   handler: async (ctx, { instanceId, moduleId }) => {
@@ -278,7 +284,7 @@ export const forModule = query({
             confirmed: active !== null,
           }
         : null,
-      provenance: provenance.map((row) => ({ key: row.key, source: row.source })),
+      provenance: provenance.map((row) => ({ key: row.key, source: row.source, updatedAt: row.updatedAt })),
     };
   },
 });
