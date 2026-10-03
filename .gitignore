@@ -5,7 +5,8 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env.local
-src-tauri/target/
+companion/src-tauri/target/
+companion/src-tauri/gen/
 .local/
 .claude/
 .vscode/
