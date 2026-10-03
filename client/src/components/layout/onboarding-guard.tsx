@@ -40,6 +40,11 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  * Redirects users who haven't completed onboarding. Sits inside the shell and
  * gates only the content area, so the shell paints while the check is in flight.
  *
+ * Onboarding is for getting an engine, so it is done once the user can reach
+ * a registered instance, their own or one they were invited to. Someone who
+ * only uses another account's instance, such as a moderator who does not
+ * stream, never owns an account or an instance and is never sent there.
+ *
  * An instance row alone is not onboarding done: a managed engine has one from
  * the moment provisioning starts, and a failed bring-your-own registration
  * leaves one behind too. Only `clientId` says the handshake happened, which is
@@ -58,14 +63,13 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  */
 export function OnboardingGuard({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useConvexAuth();
-  const account = useQuery(api.accounts.getMyAccount);
   const { instance, instances, isLoading: instancesLoading } = useInstance();
   const setup = useQuery(api.setup.status, instance ? { instanceId: instance._id } : "skip");
   const [, navigate] = useLocation();
   const [onDashboard] = useRoute("/");
   const hasRegisteredInstance = instances.some((candidate) => Boolean(candidate?.clientId));
-  const isChecking = account === undefined || instancesLoading || (instance !== null && setup === undefined);
-  const needsOnboarding = !account || !hasRegisteredInstance;
+  const isChecking = instancesLoading || (instance !== null && setup === undefined);
+  const needsOnboarding = !hasRegisteredInstance;
   const needsTwitch = !needsOnboarding && setup !== undefined && setup !== null && setup.twitchUsername === null;
 
   useEffect(() => {

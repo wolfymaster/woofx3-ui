@@ -6,6 +6,7 @@ import { useLocation } from "wouter";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { $currentInstanceId } from "@/lib/stores";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
 function getTokenFromLocation(): string | null {
@@ -47,7 +48,12 @@ export default function AcceptInvite() {
     setStatus("working");
     setMessage(null);
     try {
-      await accept({ token });
+      const { instanceId } = await accept({ token });
+      // Open the account they were invited to, not whichever instance they had
+      // selected before (their own, if they have one).
+      if (instanceId) {
+        $currentInstanceId.set(instanceId);
+      }
       setStatus("done");
       setMessage("You have joined the team. Redirecting…");
       setTimeout(() => navigate("/"), 1500);

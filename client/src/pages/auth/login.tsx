@@ -7,17 +7,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { nextPathFromLocation, withNext } from "@/lib/auth-next-path";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
 function getLoginNextPath(): string {
-  if (typeof window === "undefined") {
-    return "/";
-  }
-  const next = new URLSearchParams(window.location.search).get("next");
-  if (next && next.startsWith("/")) {
-    return next;
-  }
-  return "/";
+  return nextPathFromLocation("/");
+}
+
+/** The raw `?next=`, to hand on to Register when it is a path we would follow. */
+function nextParam(): string | null {
+  const next = nextPathFromLocation("");
+  return next === "" ? null : next;
 }
 
 export default function Login() {
@@ -118,7 +118,7 @@ export default function Login() {
           <CardFooter className="justify-center">
             <p className="text-sm text-muted-foreground">
               Don't have an account?{" "}
-              <Link href="/auth/register" className="text-primary hover:underline">
+              <Link href={withNext("/auth/register", nextParam())} className="text-primary hover:underline">
                 Register
               </Link>
             </p>
