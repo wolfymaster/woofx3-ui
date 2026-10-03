@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
 import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -23,7 +24,12 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { LocalEndpointPanel } from "@/components/modules/local-endpoint-panel";
-import { ModulePermissionList, ModulePermissionsSection } from "@/components/modules/module-permissions";
+import {
+  ModuleLocalEndpointList,
+  ModuleLocalEndpointsSection,
+  ModulePermissionList,
+  ModulePermissionsSection,
+} from "@/components/modules/module-permissions";
 import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endpoints";
 import { ObsConnectionStatus } from "@/components/modules/obs-connection-status";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +41,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { actionErrorMessage } from "@/lib/action-error";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
-import { permissionsToApprove } from "@/lib/module-permissions";
+import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
 import { cn, isNewerVersion } from "@/lib/utils";
 
@@ -109,6 +115,10 @@ interface ModuleDetailPanelProps {
   permissions?: string[] | null;
   /** Permissions the marketplace's latest version declares, for an installed module. */
   latestPermissions?: string[] | null;
+  /** Local endpoints the shown version declares; null when they could not be read. */
+  localEndpoints?: LocalEndpointSummary[] | null;
+  /** Local endpoints the marketplace's latest version declares, for an installed module. */
+  latestLocalEndpoints?: LocalEndpointSummary[] | null;
 }
 
 type TopTab = "details" | "definitions" | "settings" | "resources";
@@ -151,6 +161,8 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
     manifestResourceKinds,
     permissions,
     latestPermissions,
+    localEndpoints,
+    latestLocalEndpoints,
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
@@ -235,6 +247,12 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
                 permissions={permissions}
                 updatePermissions={
                   updateAvailable && latestPermissions ? permissionsToApprove(latestPermissions, permissions ?? []) : []
+                }
+                localEndpoints={localEndpoints}
+                updateLocalEndpoints={
+                  updateAvailable && latestLocalEndpoints
+                    ? localEndpointsToApprove(latestLocalEndpoints, localEndpoints ?? [])
+                    : []
                 }
               />
             ) : topTab === "definitions" ? (
@@ -417,10 +435,14 @@ function DetailsTab({
   module,
   permissions,
   updatePermissions,
+  localEndpoints,
+  updateLocalEndpoints,
 }: {
   module: ModuleDetailMeta;
   permissions: string[] | null | undefined;
   updatePermissions: string[];
+  localEndpoints: LocalEndpointSummary[] | null | undefined;
+  updateLocalEndpoints: LocalEndpointSummary[];
 }) {
   return (
     <ScrollArea className="flex-1 h-full pr-4">
@@ -428,12 +450,14 @@ function DetailsTab({
       {permissions !== undefined && (
         <div className="mb-4 space-y-2">
           <ModulePermissionsSection permissions={permissions} />
-          {updatePermissions.length > 0 && (
+          {localEndpoints !== undefined && <ModuleLocalEndpointsSection endpoints={localEndpoints} />}
+          {(updatePermissions.length > 0 || updateLocalEndpoints.length > 0) && (
             <section className="rounded-md border border-amber-500/40 p-3 space-y-2">
               <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                 Updating to v{module.latestVersion} also lets it:
               </h4>
-              <ModulePermissionList permissions={updatePermissions} />
+              {updatePermissions.length > 0 && <ModulePermissionList permissions={updatePermissions} />}
+              {updateLocalEndpoints.length > 0 && <ModuleLocalEndpointList endpoints={updateLocalEndpoints} />}
             </section>
           )}
         </div>
