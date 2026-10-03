@@ -13,6 +13,7 @@ import {
   type QueryCtx,
   query,
 } from "./_generated/server";
+import { queuedPosition, type ShoutoutEnqueueRequestedResponse } from "./lib/shoutoutEngineRequest";
 import {
   earliestEligibleAt,
   isQueueStalled,
@@ -159,31 +160,83 @@ export const enqueue = mutation({
   },
   handler: async (ctx, args): Promise<Id<"shoutoutQueue">> => {
     await requireMember(ctx, args.instanceId);
-
-    const last = await ctx.db
-      .query("shoutoutQueue")
-      .withIndex("by_instance_and_sort_order", (q) => q.eq("instanceId", args.instanceId))
-      .order("desc")
-      .first();
-
-    const now = Date.now();
-    const id = await ctx.db.insert("shoutoutQueue", {
-      instanceId: args.instanceId,
-      login: args.login.trim().toLowerCase().replace(/^@/, ""),
-      displayName: args.displayName,
-      twitchUserId: args.twitchUserId,
-      profileImageUrl: args.profileImageUrl,
-      broadcasterType: args.broadcasterType,
-      sortOrder: last ? last.sortOrder + 1 : 0,
-      attempts: 0,
-      nextEligibleAt: now,
-      createdAt: now,
-    });
-
-    await ensureProcessorScheduled(ctx, args.instanceId, now);
-    return id;
+    return insertEntry(ctx, args);
   },
 });
+
+/**
+ * A shoutout the engine was asked for, by a workflow or a chat command. It
+ * joins the same queue as the widget's, so one processor paces every
+ * shoutout the channel makes; a user already waiting keeps their place.
+ */
+export const enqueueFromEngine = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    login: v.string(),
+    displayName: v.string(),
+    twitchUserId: v.string(),
+    profileImageUrl: v.optional(v.string()),
+    broadcasterType: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<ShoutoutEnqueueRequestedResponse> => {
+    const link = await ctx.db
+      .query("platformLinks")
+      .withIndex("by_instance", (q) => q.eq("instanceId", args.instanceId))
+      .filter((q) => q.eq(q.field("platform"), "twitch"))
+      .first();
+    if (!link) {
+      return { queued: false, reason: "not_linked" };
+    }
+
+    const entries = await ctx.db
+      .query("shoutoutQueue")
+      .withIndex("by_instance_and_sort_order", (q) => q.eq("instanceId", args.instanceId))
+      .take(MAX_QUEUE_READ);
+    const existing = queuedPosition(entries, args.twitchUserId);
+    if (existing !== null) {
+      return { queued: true, position: existing, alreadyQueued: true };
+    }
+
+    await insertEntry(ctx, args);
+    return { queued: true, position: entries.length + 1, alreadyQueued: false };
+  },
+});
+
+/** Add an entry to the end of the queue and make sure a run is coming for it. */
+async function insertEntry(
+  ctx: MutationCtx,
+  args: {
+    instanceId: Id<"instances">;
+    login: string;
+    displayName: string;
+    twitchUserId: string;
+    profileImageUrl?: string;
+    broadcasterType?: string;
+  }
+): Promise<Id<"shoutoutQueue">> {
+  const last = await ctx.db
+    .query("shoutoutQueue")
+    .withIndex("by_instance_and_sort_order", (q) => q.eq("instanceId", args.instanceId))
+    .order("desc")
+    .first();
+
+  const now = Date.now();
+  const id = await ctx.db.insert("shoutoutQueue", {
+    instanceId: args.instanceId,
+    login: args.login.trim().toLowerCase().replace(/^@/, ""),
+    displayName: args.displayName,
+    twitchUserId: args.twitchUserId,
+    profileImageUrl: args.profileImageUrl,
+    broadcasterType: args.broadcasterType,
+    sortOrder: last ? last.sortOrder + 1 : 0,
+    attempts: 0,
+    nextEligibleAt: now,
+    createdAt: now,
+  });
+
+  await ensureProcessorScheduled(ctx, args.instanceId, now);
+  return id;
+}
 
 export const removeEntry = mutation({
   args: { instanceId: v.id("instances"), entryId: v.id("shoutoutQueue") },
