@@ -17,6 +17,7 @@ const chosenPlatformValidator = v.object({
   marketplaceModuleId: v.string(),
   name: v.optional(v.string()),
   approvedPermissions: v.array(v.string()),
+  approvedLocalEndpoints: v.optional(v.array(v.string())),
 });
 
 export type SetupModuleInstall = NonNullable<Doc<"instanceSetup">["moduleInstalls"]>[number];
@@ -289,16 +290,18 @@ export const retryApply = mutation({
 });
 
 /**
- * Approves the permissions a chosen module's current build asks for, after
- * its install came back needing approval, and installs it again.
+ * Approves the permissions and local endpoints a chosen module's current
+ * build asks for, after its install came back needing approval, and installs
+ * it again.
  */
 export const approveModulePermissions = mutation({
   args: {
     instanceId: v.id("instances"),
     marketplaceModuleId: v.string(),
     approvedPermissions: v.array(v.string()),
+    approvedLocalEndpoints: v.array(v.string()),
   },
-  handler: async (ctx, { instanceId, marketplaceModuleId, approvedPermissions }) => {
+  handler: async (ctx, { instanceId, marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }) => {
     await requireInstanceRole(ctx, instanceId, "admin");
     const row = await readSetupRow(ctx, instanceId);
     if (!row?.completedAt) {
@@ -309,7 +312,9 @@ export const approveModulePermissions = mutation({
     }
     await ctx.db.patch(row._id, {
       platforms: row.platforms.map((platform) =>
-        platform.marketplaceModuleId === marketplaceModuleId ? { ...platform, approvedPermissions } : platform
+        platform.marketplaceModuleId === marketplaceModuleId
+          ? { ...platform, approvedPermissions, approvedLocalEndpoints }
+          : platform
       ),
       applyAttempts: 0,
       updatedAt: Date.now(),

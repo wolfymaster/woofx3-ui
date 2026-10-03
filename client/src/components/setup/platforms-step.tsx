@@ -36,7 +36,7 @@ function initialSelection(platforms: readonly SetupPlatform[], status: SetupStat
 
 /**
  * Setup's first page: which platform modules to install. Checking a platform
- * approves the permissions listed under it; those are what the install later
+ * approves the permissions and local endpoints listed under it; those are what the install later
  * accepts, and a build that asks for more is brought back for approval.
  */
 export function PlatformsStep({ instanceId, status, onContinue }: PlatformsStepProps) {
@@ -122,6 +122,7 @@ export function PlatformsStep({ instanceId, status, onContinue }: PlatformsStepP
             marketplaceModuleId: platform.marketplaceModuleId,
             name: platform.name,
             approvedPermissions: platform.permissions,
+            approvedLocalEndpoints: platform.localEndpoints.map((endpoint) => endpoint.id),
           })),
       });
       onContinue();

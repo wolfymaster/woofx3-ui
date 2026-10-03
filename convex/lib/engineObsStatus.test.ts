@@ -22,4 +22,20 @@ describe("parseObsStatus", () => {
       address: null,
     });
   });
+
+  test("keeps the route and the relay failure, and ignores an unknown route", () => {
+    expect(
+      parseObsStatus({ state: "retrying", failure: "relay", address: "c-x.woofx3.tv", route: "companion" })
+    ).toEqual({
+      state: "retrying",
+      failure: "relay",
+      address: "c-x.woofx3.tv",
+      route: "companion",
+    });
+    expect(parseObsStatus({ state: "connected", route: "carrier-pigeon" })).toEqual({
+      state: "connected",
+      failure: null,
+      address: null,
+    });
+  });
 });

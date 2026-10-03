@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
 import { oauthErrorMessage } from "@convex/lib/oauthErrors";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
@@ -18,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
 import { bareModuleKey } from "@/lib/module-key";
-import { permissionsToApprove } from "@/lib/module-permissions";
+import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 
 interface ModuleListItem {
   _id: Id<"moduleRepository">;
@@ -52,8 +53,12 @@ interface PendingPermissionApproval {
   mode: PermissionApprovalMode;
   /** Shown to the streamer: what this install or update newly allows. */
   toApprove: string[];
+  /** Shown with it: devices on the streamer's network the module newly reaches. */
+  localEndpointsToApprove: LocalEndpointSummary[];
   /** Sent with the install: everything the module may hold once it succeeds. */
   approved: string[];
+  /** Sent with it: the ids of every endpoint the module may reach once it succeeds. */
+  approvedLocalEndpoints: string[];
 }
 
 type SelectedModule =
@@ -335,7 +340,7 @@ export default function Modules() {
   }, [selectedModule]);
 
   const runMarketplaceInstall = useCallback(
-    async (approvedPermissions: string[]) => {
+    async (approvedPermissions: string[], approvedLocalEndpoints: string[]) => {
       if (!instance || !selectedMarketplaceId) {
         return;
       }
@@ -346,6 +351,7 @@ export default function Modules() {
           instanceId: instance._id,
           marketplaceModuleId: selectedMarketplaceId,
           approvedPermissions,
+          approvedLocalEndpoints,
         });
         setPendingModuleKey(moduleKey);
       } catch (err) {
@@ -369,16 +375,28 @@ export default function Modules() {
       }
       const installed = mode === "update" ? moduleDetail.permissions : null;
       const next = mode === "update" ? moduleDetail.latestPermissions : moduleDetail.permissions;
+      const installedEndpoints = mode === "update" ? moduleDetail.localEndpoints : null;
+      const installedEndpointIds = (installedEndpoints ?? []).map((endpoint) => endpoint.id);
       if (next === null || next === undefined) {
-        void runMarketplaceInstall(installed ?? []);
+        void runMarketplaceInstall(installed ?? [], installedEndpointIds);
         return;
       }
       const toApprove = permissionsToApprove(next, installed);
-      if (toApprove.length === 0) {
-        void runMarketplaceInstall(next);
+      const nextEndpoints = mode === "update" ? moduleDetail.latestLocalEndpoints : moduleDetail.localEndpoints;
+      const endpointsToApprove = nextEndpoints ? localEndpointsToApprove(nextEndpoints, installedEndpoints) : [];
+      // Endpoints that could not be read are approved as "none new", like permissions.
+      const approvedEndpointIds = nextEndpoints ? nextEndpoints.map((endpoint) => endpoint.id) : installedEndpointIds;
+      if (toApprove.length === 0 && endpointsToApprove.length === 0) {
+        void runMarketplaceInstall(next, approvedEndpointIds);
         return;
       }
-      setPendingApproval({ mode, toApprove, approved: next });
+      setPendingApproval({
+        mode,
+        toApprove,
+        localEndpointsToApprove: endpointsToApprove,
+        approved: next,
+        approvedLocalEndpoints: approvedEndpointIds,
+      });
     },
     [moduleDetail, runMarketplaceInstall]
   );
@@ -438,6 +456,8 @@ export default function Modules() {
       manifestResourceKinds: moduleDetail.manifestResourceKinds,
       permissions: moduleDetail.permissions,
       latestPermissions: moduleDetail.latestPermissions,
+      localEndpoints: moduleDetail.localEndpoints,
+      latestLocalEndpoints: moduleDetail.latestLocalEndpoints,
     };
   }, [moduleDetail]);
 
@@ -536,6 +556,8 @@ export default function Modules() {
                     manifestResourceKinds={detailProps?.manifestResourceKinds}
                     permissions={detailProps?.permissions}
                     latestPermissions={detailProps?.latestPermissions}
+                    localEndpoints={detailProps?.localEndpoints}
+                    latestLocalEndpoints={detailProps?.latestLocalEndpoints}
                     onRemove={
                       selectedModule.source === "installed"
                         ? () => handleDelete(selectedModule.module._id)
@@ -585,9 +607,10 @@ export default function Modules() {
         mode={pendingApproval?.mode ?? "install"}
         moduleName={meta?.name ?? "This module"}
         permissions={pendingApproval?.toApprove ?? []}
+        localEndpoints={pendingApproval?.localEndpointsToApprove ?? []}
         onApprove={() => {
           if (pendingApproval) {
-            void runMarketplaceInstall(pendingApproval.approved);
+            void runMarketplaceInstall(pendingApproval.approved, pendingApproval.approvedLocalEndpoints);
           }
           setPendingApproval(null);
         }}

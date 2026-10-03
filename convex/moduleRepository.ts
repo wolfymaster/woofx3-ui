@@ -275,47 +275,6 @@ export const enqueueEngineInstall = mutation({
 });
 
 /**
- * Internal-only: cascade-delete a moduleRepository record, its archive blob,
- * and all triggerDefinitions/actionDefinitions rows that point at it.
- *
- * Called from the module.uninstalled webhook processor after the engine has
- * confirmed the uninstall. Not exposed to the UI — all user-initiated removals
- * go through the async requestModuleUninstall action.
- */
-export const deleteRepositoryRecord = internalMutation({
-  args: {
-    moduleId: v.id("moduleRepository"),
-  },
-  handler: async (ctx, args) => {
-    const module = await ctx.db.get(args.moduleId);
-    if (!module) {
-      return;
-    }
-    if (module.archiveKey) {
-      await ctx.storage.delete(module.archiveKey as Id<"_storage">);
-    }
-
-    const triggers = await ctx.db
-      .query("triggerDefinitions")
-      .withIndex("by_module", (q) => q.eq("moduleId", args.moduleId))
-      .collect();
-    for (const trigger of triggers) {
-      await ctx.db.delete(trigger._id);
-    }
-
-    const actions = await ctx.db
-      .query("actionDefinitions")
-      .withIndex("by_module", (q) => q.eq("moduleId", args.moduleId))
-      .collect();
-    for (const action of actions) {
-      await ctx.db.delete(action._id);
-    }
-
-    await ctx.db.delete(args.moduleId);
-  },
-});
-
-/**
  * Internal-only: overwrite a moduleRepository record's cached manifest.
  * Called after install confirmation once the engine's authoritative manifest
  * (fetched via getModuleManifest) is available — see moduleManifestSync.ts.

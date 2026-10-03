@@ -6,6 +6,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { localEndpointOwningSetting } from "./lib/localEndpoints";
 import { declaredSettingsOnly } from "./lib/moduleSettingsVisibility";
 
 export interface ModuleSettingValue {
@@ -79,7 +80,15 @@ export const updateModuleSetting = action({
     if (declaredSettingsOnly([{ key }], manifest).length === 0) {
       throw new Error(`"${key}" is not a setting this module declares`);
     }
-    return createEngineRpcSession<EngineApi>(
+    // A local endpoint's setting saved by hand is the streamer's from now on,
+    // and the companion stops filling it in. Marked before the engine write,
+    // so a companion report in flight cannot overwrite the streamer's value
+    // after it lands; a failed write leaves the key manual, which is what the
+    // streamer was asking for.
+    if (localEndpointOwningSetting(manifest, key)) {
+      await ctx.runMutation(internal.moduleSettingProvenance.markManual, { instanceId, moduleId, key });
+    }
+    return await createEngineRpcSession<EngineApi>(
       instance.url,
       instance.clientId,
       instance.clientSecret
