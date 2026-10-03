@@ -9,7 +9,7 @@ The woofx3 companion is a small tray app (Tauri 2) for the streamer's PC. It hol
 
 It is **not** a desktop UI for woofx3. The browser is the only place woofx3 is managed. The companion's own window shows its state and little else: a Status tab today, with Engine, Configuration and Integrations tabs laid out but disabled until they have something to show.
 
-Today it pairs with one instance, shows that it is paired and connected, and survives restarts. It does not relay engine traffic yet.
+Today it pairs with one instance, shows that it is paired and connected, survives restarts, and [updates itself](#updates). It does not relay engine traffic yet.
 
 ## Layout
 
@@ -28,6 +28,18 @@ The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:build
 ```
+
+The companion builds on Windows only: its Rust crate needs GTK and WebKit on Linux. CI's **Companion** job (`.github/workflows/ci.yml`) typechecks and builds the window and runs `cargo fmt`, `clippy` and the tests on `windows-latest`. On Linux, `cargo check --target x86_64-pc-windows-gnu` checks the crate.
+
+## Updates
+
+The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases).
+
+- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours, only while connected to Convex. Debug builds never check.
+- A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
+- Once downloaded, `WindowState.update` carries its version. The window shows "woofx3 companion {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
+- A failed check, download or signature is logged and tried again at the next interval. It never becomes the `error` state, which is about pairing.
+- The installer is per user, so installs and updates need no administrator prompt.
 
 ## Pairing
 
@@ -81,7 +93,7 @@ On `/admin/engine`, for managed and self-hosted engines alike: a cloud engine us
 
 ## Companion states
 
-The window renders `CompanionState` (`companion/src-tauri/src/state.rs`, mirrored in `companion/ui/src/state.ts`):
+The window renders `WindowState` (`companion/src-tauri/src/state.rs`, mirrored in `companion/ui/src/state.ts`): the pairing state, `CompanionState`, with its fields at the top level, plus `update`, which is `null` or the [ready update](#updates)'s `{ version }`.
 
 | State | Shown when |
 |---|---|
