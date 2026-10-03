@@ -1,0 +1,25 @@
+{
+  "name": "woofx3-companion",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config ui/vite.config.ts",
+    "build": "vite build --config ui/vite.config.ts",
+    "check": "tsc -p ui",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/node": "20.19.27",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "5.6.3",
+    "vite": "^7.3.0"
+  }
+}
