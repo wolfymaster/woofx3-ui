@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
+import { deleteCompanion } from "./lib/companionRecords";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
@@ -203,6 +204,22 @@ export const deleteInstanceData = internalMutation({
       .first();
     if (provisioning) {
       await ctx.db.delete(provisioning._id);
+    }
+
+    const companions = await ctx.db
+      .query("companions")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const companion of companions) {
+      await deleteCompanion(ctx, companion._id);
+    }
+
+    const pairings = await ctx.db
+      .query("companionPairings")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const pairing of pairings) {
+      await ctx.db.delete(pairing._id);
     }
 
     await ctx.db.delete(instanceId);
