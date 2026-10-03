@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { describePermission, describePermissions, permissionsToApprove } from "./module-permissions";
+import {
+  describePermission,
+  describePermissions,
+  localEndpointsToApprove,
+  permissionsToApprove,
+} from "./module-permissions";
 
 describe("describePermission", () => {
   test("known ids read as plain language", () => {
@@ -56,5 +61,19 @@ describe("permissionsToApprove", () => {
   test("an upgrade that keeps or drops permissions needs no approval", () => {
     expect(permissionsToApprove(["twitch.channel"], ["twitch.channel"])).toEqual([]);
     expect(permissionsToApprove([], ["twitch.channel"])).toEqual([]);
+  });
+});
+
+describe("localEndpointsToApprove", () => {
+  const obs = { id: "obs", name: "OBS WebSocket", protocol: "websocket" as const };
+  const lights = { id: "lights", name: "Key Light", protocol: "http" as const };
+
+  test("a fresh install approves every endpoint", () => {
+    expect(localEndpointsToApprove([obs, lights], null)).toEqual([obs, lights]);
+  });
+
+  test("an upgrade asks only for endpoints the installed version did not declare", () => {
+    expect(localEndpointsToApprove([obs, lights], [obs])).toEqual([lights]);
+    expect(localEndpointsToApprove([obs], [obs, lights])).toEqual([]);
   });
 });

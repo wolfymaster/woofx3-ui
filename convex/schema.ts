@@ -504,8 +504,10 @@ export default defineSchema({
   // offering another platform is a row here, not a release.
   // instanceSetup: what was chosen in an instance's setup wizard. One row per
   // instance, shared by its members like the engine it configures.
-  // `approvedPermissions` is what the streamer consented to for each platform;
+  // `approvedPermissions` and `approvedLocalEndpoints` (ids of `local[]`
+  // endpoints) are what the streamer consented to for each platform;
   // installing a build that declares more asks again instead of installing.
+  // A row chosen before endpoints were approved has none approved.
   instanceSetup: defineTable({
     instanceId: v.id("instances"),
     platforms: v.array(
@@ -514,6 +516,7 @@ export default defineSchema({
         // The marketplace name when chosen, for messages about this module.
         name: v.optional(v.string()),
         approvedPermissions: v.array(v.string()),
+        approvedLocalEndpoints: v.optional(v.array(v.string())),
       })
     ),
     platformsChosenAt: v.optional(v.number()),
@@ -535,6 +538,7 @@ export default defineSchema({
           moduleKey: v.optional(v.string()),
           // Set with needs_approval: what the current build asks for beyond the approval.
           unapproved: v.optional(v.array(v.string())),
+          unapprovedLocalEndpoints: v.optional(v.array(v.string())),
           error: v.optional(v.string()),
         })
       )

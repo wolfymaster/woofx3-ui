@@ -1,4 +1,5 @@
-import { AlertTriangle, ShieldCheck } from "lucide-react";
+import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
+import { AlertTriangle, Network, ShieldCheck } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -53,6 +54,41 @@ export function ModulePermissionsSection({ permissions }: { permissions: readonl
   );
 }
 
+export function ModuleLocalEndpointList({ endpoints }: { endpoints: readonly LocalEndpointSummary[] }) {
+  return (
+    <ul className="space-y-1.5">
+      {endpoints.map((endpoint) => (
+        <li key={endpoint.id} className="flex items-start gap-2 text-sm">
+          <Network className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+          <span>
+            {endpoint.name} ({endpoint.protocol}), at the address in its settings
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * What the module reaches on the streamer's own network, as its manifest's
+ * `local[]` declares. Like permissions, this is fixed at install. Renders
+ * nothing for a module that reaches nothing there, or whose declaration could
+ * not be read (the permissions section already says so).
+ */
+export function ModuleLocalEndpointsSection({ endpoints }: { endpoints: readonly LocalEndpointSummary[] | null }) {
+  if (!endpoints || endpoints.length === 0) {
+    return null;
+  }
+  return (
+    <section className="rounded-md border p-3 space-y-2">
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        This module connects to devices on your network:
+      </h4>
+      <ModuleLocalEndpointList endpoints={endpoints} />
+    </section>
+  );
+}
+
 export type PermissionApprovalMode = "install" | "update";
 
 interface ApproveModulePermissionsDialogProps {
@@ -61,6 +97,8 @@ interface ApproveModulePermissionsDialogProps {
   moduleName: string;
   /** The permissions being approved: all of them for an install, only new ones for an update. */
   permissions: readonly string[];
+  /** Local endpoints being approved, by the same rule as `permissions`. */
+  localEndpoints?: readonly LocalEndpointSummary[];
   onApprove: () => void;
   onCancel: () => void;
 }
@@ -75,6 +113,7 @@ export function ApproveModulePermissionsDialog({
   mode,
   moduleName,
   permissions,
+  localEndpoints = [],
   onApprove,
   onCancel,
 }: ApproveModulePermissionsDialogProps) {
@@ -98,9 +137,19 @@ export function ApproveModulePermissionsDialog({
               : "The new version asks for permissions the installed version did not have. Update only if you trust it with them."}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <div className="rounded-md border p-3">
-          <ModulePermissionList permissions={permissions} />
-        </div>
+        {permissions.length > 0 && (
+          <div className="rounded-md border p-3">
+            <ModulePermissionList permissions={permissions} />
+          </div>
+        )}
+        {localEndpoints.length > 0 && (
+          <div className="rounded-md border p-3 space-y-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Connect to devices on your network:
+            </h4>
+            <ModuleLocalEndpointList endpoints={localEndpoints} />
+          </div>
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction onClick={onApprove}>

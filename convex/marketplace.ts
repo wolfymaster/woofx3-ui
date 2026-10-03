@@ -7,6 +7,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import { unapprovedLocalEndpointIds } from "./lib/localEndpoints";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
@@ -126,14 +127,15 @@ export async function fetchMarketplaceDownload(marketplaceModuleId: string): Pro
 }
 
 /**
- * The permissions declared by the manifest inside a marketplace archive.
+ * The manifest inside a marketplace archive.
  *
- * The marketplace API does not expose a module's permissions, so they are read
- * from the archive the engine would install. The bytes are checked against the
- * listing's sha256 so the permissions shown for approval belong to exactly the
- * build whose hash goes into the install's moduleKey.
+ * The marketplace API does not expose a module's permissions or local
+ * endpoints, so they are read from the archive the engine would install. The
+ * bytes are checked against the listing's sha256 so what is shown for
+ * approval belongs to exactly the build whose hash goes into the install's
+ * moduleKey.
  */
-export async function fetchMarketplaceArchivePermissions(download: MarketplaceDownload): Promise<string[]> {
+export async function fetchMarketplaceArchiveManifest(download: MarketplaceDownload): Promise<unknown> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ARCHIVE_TIMEOUT_MS);
   let bytes: Uint8Array;
@@ -162,7 +164,7 @@ export async function fetchMarketplaceArchivePermissions(download: MarketplaceDo
   if (actualSha256 !== download.sha256) {
     throw new Error("Module archive does not match the marketplace's sha256 hash");
   }
-  return parseManifestPermissions(readArchiveManifest(bytes));
+  return readArchiveManifest(bytes);
 }
 
 function asString(value: unknown, fallback = ""): string {
@@ -394,14 +396,16 @@ export type MarketplaceInstallResult =
   | { status: "installed"; moduleKey: string }
   | {
       /**
-       * The archive declares permissions nobody approved, e.g. because the
-       * listing was republished after the streamer reviewed it. Nothing was
-       * sent to the engine.
+       * The archive declares permissions or local endpoints nobody approved,
+       * e.g. because the listing was republished after the streamer reviewed
+       * it. Nothing was sent to the engine.
        */
       status: "needs_approval";
       name: string;
       version: string;
       unapproved: string[];
+      /** Ids of `local[]` endpoints outside the approval. */
+      unapprovedLocalEndpoints: string[];
     };
 
 interface EngineCredentials {
@@ -412,9 +416,9 @@ interface EngineCredentials {
 
 /**
  * Installs the marketplace's current build of a module on an engine, provided
- * every permission its archive declares is in `approvedPermissions`. Callers
- * decide who may install; this only checks consent. Engine and marketplace
- * failures throw.
+ * every permission its archive declares is in `approvedPermissions` and every
+ * local endpoint in `approvedLocalEndpoints`. Callers decide who may install;
+ * this only checks consent. Engine and marketplace failures throw.
  */
 async function installFromMarketplace(
   ctx: ActionCtx,
@@ -423,11 +427,13 @@ async function installFromMarketplace(
     engine,
     marketplaceModuleId,
     approvedPermissions,
+    approvedLocalEndpoints,
   }: {
     instanceId: Id<"instances">;
     engine: EngineCredentials;
     marketplaceModuleId: string;
     approvedPermissions: readonly string[];
+    approvedLocalEndpoints: readonly string[];
   }
 ): Promise<MarketplaceInstallResult> {
   const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`);
@@ -439,10 +445,17 @@ async function installFromMarketplace(
   }
 
   const download = await fetchMarketplaceDownload(marketplaceModuleId);
-  const declaredPermissions = await fetchMarketplaceArchivePermissions(download);
-  const unapproved = unapprovedPermissions(declaredPermissions, approvedPermissions);
-  if (unapproved.length > 0) {
-    return { status: "needs_approval", name: detail.name, version: detail.version, unapproved };
+  const manifest = await fetchMarketplaceArchiveManifest(download);
+  const unapproved = unapprovedPermissions(parseManifestPermissions(manifest), approvedPermissions);
+  const unapprovedLocalEndpoints = unapprovedLocalEndpointIds(manifest, approvedLocalEndpoints);
+  if (unapproved.length > 0 || unapprovedLocalEndpoints.length > 0) {
+    return {
+      status: "needs_approval",
+      name: detail.name,
+      version: detail.version,
+      unapproved,
+      unapprovedLocalEndpoints,
+    };
   }
   const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
 
@@ -487,8 +500,13 @@ export const installModule = action({
     // archive declares one outside this list, which also catches a listing
     // republished with new permissions after the streamer reviewed it.
     approvedPermissions: v.array(v.string()),
+    // Likewise the ids of the `local[]` endpoints the streamer approved.
+    approvedLocalEndpoints: v.array(v.string()),
   },
-  handler: async (ctx, { instanceId, marketplaceModuleId, approvedPermissions }): Promise<{ moduleKey: string }> => {
+  handler: async (
+    ctx,
+    { instanceId, marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }
+  ): Promise<{ moduleKey: string }> => {
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
@@ -510,10 +528,12 @@ export const installModule = action({
       engine: { url: bundle.url, clientId: bundle.clientId, clientSecret: bundle.clientSecret },
       marketplaceModuleId,
       approvedPermissions,
+      approvedLocalEndpoints,
     });
     if (result.status === "needs_approval") {
+      const asked = [...result.unapproved, ...result.unapprovedLocalEndpoints.map((id) => `local endpoint ${id}`)];
       throw new Error(
-        `${result.name}@${result.version} asks for permissions that were not approved (${result.unapproved.join(", ")}). ` +
+        `${result.name}@${result.version} asks for access that was not approved (${asked.join(", ")}). ` +
           "Review the module and install again."
       );
     }
@@ -525,16 +545,21 @@ export const installModule = action({
  * `installModule` without a signed-in user, for installs the streamer approved
  * earlier and that run later on the instance's behalf, such as the platforms
  * chosen at setup once the engine is ready. The approval that authorizes it is
- * `approvedPermissions`, recorded when the streamer chose the module; a build
- * asking for more comes back as `needs_approval` instead of installing.
+ * `approvedPermissions` and `approvedLocalEndpoints`, recorded when the
+ * streamer chose the module; a build asking for more comes back as
+ * `needs_approval` instead of installing.
  */
 export const installApprovedModule = internalAction({
   args: {
     instanceId: v.id("instances"),
     marketplaceModuleId: v.string(),
     approvedPermissions: v.array(v.string()),
+    approvedLocalEndpoints: v.array(v.string()),
   },
-  handler: async (ctx, { instanceId, marketplaceModuleId, approvedPermissions }): Promise<MarketplaceInstallResult> => {
+  handler: async (
+    ctx,
+    { instanceId, marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }
+  ): Promise<MarketplaceInstallResult> => {
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
     if (!instance) {
       throw new Error(`Instance ${instanceId} not found`);
@@ -547,6 +572,7 @@ export const installApprovedModule = internalAction({
       engine: { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret },
       marketplaceModuleId,
       approvedPermissions,
+      approvedLocalEndpoints,
     });
   },
 });

@@ -4,6 +4,7 @@
  * can be tested without a Convex runtime or a marketplace.
  */
 
+import type { LocalEndpointSummary } from "./localEndpoints";
 import type { MarketplaceImages } from "./marketplaceImages";
 
 export interface CuratedSetupPlatform {
@@ -36,6 +37,8 @@ export interface SetupPlatform {
   defaultSelected: boolean;
   /** What the module's archive declares; selecting the platform approves these. */
   permissions: string[];
+  /** The archive's `local[]` endpoints, approved with the permissions. */
+  localEndpoints: LocalEndpointSummary[];
 }
 
 export interface ResolvedSetupPlatforms {
@@ -54,12 +57,14 @@ export interface ResolvedSetupPlatforms {
  * nothing for the streamer to approve. A required entry that is left out is
  * reported, because setup must not continue without it.
  *
- * `permissionsById` holds null for a module whose archive could not be read.
+ * `permissionsById` holds null for a module whose archive could not be read;
+ * `localEndpointsById` holds the endpoints of each archive that could.
  */
 export function resolveSetupPlatforms(
   curated: readonly CuratedSetupPlatform[],
   listing: readonly SetupPlatformListing[],
-  permissionsById: ReadonlyMap<string, string[] | null>
+  permissionsById: ReadonlyMap<string, string[] | null>,
+  localEndpointsById: ReadonlyMap<string, LocalEndpointSummary[]> = new Map()
 ): ResolvedSetupPlatforms {
   const listingById = new Map(listing.map((entry) => [entry.id, entry]));
   const platforms: SetupPlatform[] = [];
@@ -86,6 +91,7 @@ export function resolveSetupPlatforms(
       // A required platform is always selected, whatever the row says.
       defaultSelected: entry.required || entry.defaultSelected,
       permissions,
+      localEndpoints: localEndpointsById.get(entry.marketplaceModuleId) ?? [],
     });
   }
 
@@ -155,6 +161,7 @@ export interface ChosenSetupPlatform {
   marketplaceModuleId: string;
   name?: string;
   approvedPermissions: string[];
+  approvedLocalEndpoints?: string[];
 }
 
 /**

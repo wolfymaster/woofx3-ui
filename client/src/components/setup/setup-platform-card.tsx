@@ -19,7 +19,14 @@ interface SetupPlatformCardProps {
  * required platform is always selected and cannot be toggled.
  */
 export function SetupPlatformCard({ platform, selected, onToggle }: SetupPlatformCardProps) {
-  const permissions = describePermissions(platform.permissions);
+  const permissions = [
+    ...describePermissions(platform.permissions),
+    ...platform.localEndpoints.map((endpoint) => ({
+      id: `local:${endpoint.id}`,
+      description: `Connect to ${endpoint.name} on your network`,
+      known: true,
+    })),
+  ];
 
   function toggle() {
     if (!platform.required) {

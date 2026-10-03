@@ -23,7 +23,7 @@ function moduleLine(install: SetupModuleInstall | undefined): { state: LineState
     return { state: "done", text: "Installed" };
   }
   if (install.status === "needs_approval") {
-    return { state: "attention", text: "Asks for new permissions; review it from the banner" };
+    return { state: "attention", text: "Asks for new access; review it from the banner" };
   }
   return { state: "attention", text: "Install failed; retry it from the banner" };
 }

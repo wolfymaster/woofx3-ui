@@ -50,7 +50,19 @@ describe("resolveSetupPlatforms", () => {
       required: true,
       defaultSelected: true,
       permissions: ["twitch.channel"],
+      localEndpoints: [],
     });
+  });
+
+  test("carries each platform's local endpoints", () => {
+    const obs = { id: "obs", name: "OBS WebSocket", protocol: "websocket" as const };
+    const result = resolveSetupPlatforms(
+      [curated({ marketplaceModuleId: "a" })],
+      [listed("a")],
+      new Map([["a", []]]),
+      new Map([["a", [obs]]])
+    );
+    expect(result.platforms[0]?.localEndpoints).toEqual([obs]);
   });
 
   test("hides an optional platform the marketplace does not list", () => {

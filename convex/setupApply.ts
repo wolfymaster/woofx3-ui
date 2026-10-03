@@ -24,6 +24,7 @@ const moduleInstallValidator = v.object({
   status: v.union(v.literal("installed"), v.literal("needs_approval"), v.literal("failed")),
   moduleKey: v.optional(v.string()),
   unapproved: v.optional(v.array(v.string())),
+  unapprovedLocalEndpoints: v.optional(v.array(v.string())),
   error: v.optional(v.string()),
 });
 
@@ -160,6 +161,7 @@ export const run = internalAction({
           instanceId,
           marketplaceModuleId: platform.marketplaceModuleId,
           approvedPermissions: platform.approvedPermissions,
+          approvedLocalEndpoints: platform.approvedLocalEndpoints ?? [],
         });
         moduleInstalls.push(
           result.status === "installed"
@@ -168,6 +170,7 @@ export const run = internalAction({
                 marketplaceModuleId: platform.marketplaceModuleId,
                 status: "needs_approval",
                 unapproved: result.unapproved,
+                unapprovedLocalEndpoints: result.unapprovedLocalEndpoints,
               }
         );
       } catch (err) {

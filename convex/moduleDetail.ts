@@ -4,11 +4,12 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
 import { moduleOAuthIntegrationIds } from "./lib/moduleOAuth";
 import { parseManifestPermissions } from "./lib/modulePermissions";
 import { type ManifestResourceKind, parseManifestResourceKinds } from "./lib/resourceKinds";
 import { logger } from "./logger";
-import { fetchMarketplaceArchivePermissions, fetchMarketplaceDownload, marketplaceFetch } from "./marketplace";
+import { fetchMarketplaceArchiveManifest, fetchMarketplaceDownload, marketplaceFetch } from "./marketplace";
 
 export type ManifestSettingAction =
   | { kind: "internal"; request: { event: string; payload?: Record<string, unknown> }; timeoutMs?: number }
@@ -74,6 +75,15 @@ export interface ModuleDetailResult {
    * the installed one; null when that archive could not be read.
    */
   latestPermissions?: string[] | null;
+  /** What the manifest of `version` reaches on the streamer's network (`local[]`); null when unreadable, like `permissions`. */
+  localEndpoints: LocalEndpointSummary[] | null;
+  /** `local[]` of `latestVersion`, alongside `latestPermissions`. */
+  latestLocalEndpoints?: LocalEndpointSummary[] | null;
+}
+
+interface ManifestDeclarations {
+  permissions: string[] | null;
+  localEndpoints: LocalEndpointSummary[] | null;
 }
 
 export const getModuleDetail = action({
@@ -117,33 +127,37 @@ export const getModuleDetail = action({
         applyMarketplaceMetadata(detail, marketplaceMeta);
       }
       if (marketplaceId && detail.latestVersion !== undefined && detail.latestVersion !== detail.version) {
-        detail.latestPermissions = await readMarketplacePermissions(marketplaceId);
+        const latest = await readMarketplaceDeclarations(marketplaceId);
+        detail.latestPermissions = latest.permissions;
+        detail.latestLocalEndpoints = latest.localEndpoints;
       }
       return detail;
     }
 
-    const [payload, permissions] = await Promise.all([
+    const [payload, declarations] = await Promise.all([
       marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`),
-      readMarketplacePermissions(moduleId),
+      readMarketplaceDeclarations(moduleId),
     ]);
-    return { ...formatMarketplaceDetail(moduleId, payload), permissions };
+    return { ...formatMarketplaceDetail(moduleId, payload), ...declarations };
   },
 });
 
 /**
  * A detail view still renders when the archive cannot be read; the permissions
- * show as unknown instead. Install does not depend on this read: it re-reads
- * the archive and refuses anything the streamer did not approve.
+ * and local endpoints show as unknown instead. Install does not depend on this
+ * read: it re-reads the archive and refuses permissions the streamer did not
+ * approve.
  */
-async function readMarketplacePermissions(marketplaceId: string): Promise<string[] | null> {
+async function readMarketplaceDeclarations(marketplaceId: string): Promise<ManifestDeclarations> {
   try {
-    return await fetchMarketplaceArchivePermissions(await fetchMarketplaceDownload(marketplaceId));
+    const manifest = await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId));
+    return { permissions: parseManifestPermissions(manifest), localEndpoints: localEndpointSummaries(manifest) };
   } catch (err) {
     logger.warn("could not read marketplace module permissions", {
       marketplaceId,
       error: err instanceof Error ? err.message : String(err),
     });
-    return null;
+    return { permissions: null, localEndpoints: null };
   }
 }
 
@@ -229,6 +243,7 @@ function formatInstalledDetail(
     manifestSettings: parseManifestSettings(manifest),
     manifestResourceKinds: parseManifestResourceKinds(manifest),
     permissions: manifest === undefined || manifest === null ? null : parseManifestPermissions(manifest),
+    localEndpoints: manifest === undefined || manifest === null ? null : localEndpointSummaries(manifest),
     triggers: triggers.map((t) => ({ key: t.slug, name: t.name, description: t.description, color: t.color })),
     actions: actions.map((a) => ({ key: a.slug, name: a.name, description: a.description, color: a.color })),
     functions: functions.map((f) => ({ qualifiedName: f.qualifiedName, runtime: f.runtime })),
@@ -319,6 +334,7 @@ function formatMarketplaceDetail(moduleId: string, payload: unknown): ModuleDeta
     manifestSettings: [],
     manifestResourceKinds: [],
     permissions: null,
+    localEndpoints: null,
     triggers: asArr(module.triggers).map((t) => {
       const o = t && typeof t === "object" ? (t as Record<string, unknown>) : {};
       return {
