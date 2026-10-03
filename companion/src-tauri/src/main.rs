@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    woofx3_ui_lib::run();
+    woofx3_companion_lib::run();
 }

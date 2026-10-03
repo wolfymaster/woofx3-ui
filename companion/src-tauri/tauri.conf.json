@@ -1,32 +1,32 @@
 {
-  "productName": "woofx3",
+  "productName": "woofx3 companion",
   "version": "0.1.0",
-  "identifier": "io.woofx3.ui",
+  "identifier": "tv.woofx3.companion",
   "build": {
     "beforeDevCommand": "bun run dev",
-    "devUrl": "http://localhost:5000",
+    "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "bun run build",
-    "frontendDist": "../dist/public"
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "title": "woofx3",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600,
-        "resizable": true,
-        "fullscreen": false
+        "label": "main",
+        "title": "woofx3 companion",
+        "width": 480,
+        "height": 560,
+        "resizable": false,
+        "visible": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'",
+      "devCsp": "default-src 'self'; connect-src ipc: http://ipc.localhost ws://localhost:1420; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
   }
 }
