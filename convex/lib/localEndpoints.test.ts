@@ -1,5 +1,43 @@
 import { describe, expect, test } from "bun:test";
-import { localEndpointOwningSetting, localSettingKeys, readLocalEndpoints } from "./localEndpoints";
+import {
+  isEndpointHost,
+  isEndpointPort,
+  localEndpointOwningSetting,
+  localSettingKeys,
+  readLocalEndpoints,
+} from "./localEndpoints";
+
+describe("isEndpointHost and isEndpointPort", () => {
+  test("accept IP literals and DNS names", () => {
+    for (const host of ["127.0.0.1", "192.168.1.20", "::1", "fe80::1", "obs-pc", "obs.local", "studio.example.com"]) {
+      expect(isEndpointHost(host)).toBe(true);
+    }
+  });
+
+  test("refuse anything carrying more than a host", () => {
+    const refused = [
+      "",
+      "ws://127.0.0.1",
+      "127.0.0.1:4455",
+      "[::1]",
+      "obs/path",
+      "user@obs",
+      "-obs",
+      "a..b",
+      "300.1.1.1",
+    ];
+    for (const host of refused) {
+      expect(isEndpointHost(host)).toBe(false);
+    }
+  });
+
+  test("ports are integers from 1 to 65535", () => {
+    expect(isEndpointPort(4455)).toBe(true);
+    expect(isEndpointPort(0)).toBe(false);
+    expect(isEndpointPort(65536)).toBe(false);
+    expect(isEndpointPort(44.5)).toBe(false);
+  });
+});
 
 const OBS_ENDPOINT = {
   id: "obs",

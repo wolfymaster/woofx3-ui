@@ -222,6 +222,20 @@ export const deleteInstanceData = internalMutation({
       await ctx.db.delete(pairing._id);
     }
 
+    // Each pass reads past the rows it deleted, so the loop ends once none remain.
+    for (;;) {
+      const provenance = await ctx.db
+        .query("moduleSettingProvenance")
+        .withIndex("by_instance_module", (q) => q.eq("instanceId", instanceId))
+        .take(200);
+      if (provenance.length === 0) {
+        break;
+      }
+      for (const row of provenance) {
+        await ctx.db.delete(row._id);
+      }
+    }
+
     await ctx.db.delete(instanceId);
   },
 });
