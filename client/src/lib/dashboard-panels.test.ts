@@ -4,6 +4,7 @@ import {
   configureWidget,
   type DashboardPanelWidget,
   isPanelMounted,
+  moveWidget,
   removeWidget,
   resizeZone,
 } from "./dashboard-panels";
@@ -61,5 +62,44 @@ describe("resizeZone", () => {
   test("returns the same array when nothing changes", () => {
     const widgets = [chat, macros];
     expect(resizeZone(widgets, "0-0", [100])).toBe(widgets);
+  });
+});
+
+describe("moveWidget", () => {
+  const queue: DashboardPanelWidget = { zoneId: "0-0", slotId: "c", type: "queue", size: 40 };
+  const first: DashboardPanelWidget = { ...chat, size: 60 };
+
+  test("reorders within a zone and keeps each widget's size", () => {
+    const next = moveWidget([first, queue, macros], "c", "0-0", 0);
+    expect(next.filter((w) => w.zoneId === "0-0").map((w) => [w.slotId, w.size])).toEqual([
+      ["c", 40],
+      ["a", 60],
+    ]);
+    expect(next).toContain(macros);
+  });
+
+  test("returns the same array when the widget is already in place", () => {
+    const widgets = [first, queue, macros];
+    expect(moveWidget(widgets, "a", "0-0", 0)).toBe(widgets);
+  });
+
+  test("moves between zones and re-splits both evenly", () => {
+    const next = moveWidget([first, queue, macros], "a", "0-1", 1);
+    expect(next.filter((w) => w.zoneId === "0-0").map((w) => [w.slotId, w.size])).toEqual([["c", 100]]);
+    expect(next.filter((w) => w.zoneId === "0-1").map((w) => [w.slotId, w.size])).toEqual([
+      ["b", 50],
+      ["a", 50],
+    ]);
+  });
+
+  test("can move into an empty zone", () => {
+    const next = moveWidget([first, queue], "c", "1-0", 0);
+    expect(next.find((w) => w.slotId === "c")).toEqual({ zoneId: "1-0", slotId: "c", type: "queue", size: 100 });
+    expect(next.find((w) => w.slotId === "a")?.size).toBe(100);
+  });
+
+  test("clamps an index past the end of the zone", () => {
+    const next = moveWidget([first, queue, macros], "b", "0-0", 9);
+    expect(next.filter((w) => w.zoneId === "0-0").map((w) => w.slotId)).toEqual(["a", "c", "b"]);
   });
 });

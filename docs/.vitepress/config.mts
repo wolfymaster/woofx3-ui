@@ -42,6 +42,7 @@ export default defineConfig({
             { text: "Overview", link: "/patterns/" },
             { text: "configSchema contract", link: "/patterns/config-schema" },
             { text: "In-app help", link: "/patterns/in-app-help" },
+            { text: "Dashboard widgets", link: "/patterns/dashboard-widgets" },
           ],
         },
       ],
