@@ -1,11 +1,55 @@
 import { v } from "convex/values";
-import { internalMutation, internalQuery, query } from "./_generated/server";
-import { parseSessionSummary, planSummaryWrite, summaryColumns } from "./lib/sessionSummary";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
+import {
+  parseSessionSummary,
+  planOpenSnapshotWrite,
+  planSummaryWrite,
+  type SummaryWrite,
+  summaryColumns,
+} from "./lib/sessionSummary";
 import { isInstanceMember } from "./lib/teamAccess";
 import { logger } from "./logger";
 
 const DEFAULT_RECENT_LIMIT = 10;
 const MAX_RECENT_LIMIT = 50;
+
+async function storeSummary(
+  ctx: MutationCtx,
+  instanceId: Id<"instances">,
+  data: unknown,
+  plan: (stored: Doc<"streamSessionSummaries"> | null, incomingGeneratedAtMs: number) => SummaryWrite
+) {
+  const parsed = parseSessionSummary(data);
+  if (!parsed.ok) {
+    return { outcome: "invalid" as const, reason: parsed.reason };
+  }
+  const summary = parsed.summary;
+  if (summary.body === null) {
+    logger.warn("session summary: keeping a schemaVersion this deployment does not interpret", {
+      instanceId,
+      sessionId: summary.sessionId,
+      schemaVersion: summary.schemaVersion,
+    });
+  }
+  const columns = summaryColumns(summary, JSON.stringify(data));
+
+  const existing = await ctx.db
+    .query("streamSessionSummaries")
+    .withIndex("by_instance_session", (q) => q.eq("instanceId", instanceId).eq("sessionId", summary.sessionId))
+    .unique();
+
+  if (plan(existing, summary.generatedAtMs) === "stale") {
+    return { outcome: "stale" as const };
+  }
+  const row = { instanceId, ...columns, receivedAt: Date.now() };
+  if (existing === null) {
+    await ctx.db.insert("streamSessionSummaries", row);
+    return { outcome: "insert" as const };
+  }
+  await ctx.db.replace(existing._id, row);
+  return { outcome: "replace" as const };
+}
 
 /**
  * Stores one SESSION_SUMMARY delivery. Idempotent on (instance, session): a
@@ -17,36 +61,31 @@ export const upsertFromWebhook = internalMutation({
     instanceId: v.id("instances"),
     data: v.any(),
   },
-  handler: async (ctx, { instanceId, data }) => {
-    const parsed = parseSessionSummary(data);
-    if (!parsed.ok) {
-      return { outcome: "invalid" as const, reason: parsed.reason };
-    }
-    const summary = parsed.summary;
-    if (summary.body === null) {
-      logger.warn("session summary: keeping a schemaVersion this deployment does not interpret", {
-        instanceId,
-        sessionId: summary.sessionId,
-        schemaVersion: summary.schemaVersion,
-      });
-    }
-    const columns = summaryColumns(summary, JSON.stringify(data));
+  handler: async (ctx, { instanceId, data }) => storeSummary(ctx, instanceId, data, planSummaryWrite),
+});
 
-    const existing = await ctx.db
+/**
+ * Stores a snapshot of the engine's open session that the UI took itself
+ * (streamRecap.refreshOpenSession), so a stream in progress has a recap before
+ * the engine summarises it at its end. Never replaces a closed session's row.
+ */
+export const upsertOpenSnapshot = internalMutation({
+  args: {
+    instanceId: v.id("instances"),
+    data: v.any(),
+  },
+  handler: async (ctx, { instanceId, data }) => storeSummary(ctx, instanceId, data, planOpenSnapshotWrite),
+});
+
+/** The instance's newest stored session, for deciding whether a fresh snapshot is needed. */
+export const newestInternal = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    return ctx.db
       .query("streamSessionSummaries")
-      .withIndex("by_instance_session", (q) => q.eq("instanceId", instanceId).eq("sessionId", summary.sessionId))
-      .unique();
-
-    if (planSummaryWrite(existing, summary.generatedAtMs) === "stale") {
-      return { outcome: "stale" as const };
-    }
-    const row = { instanceId, ...columns, receivedAt: Date.now() };
-    if (existing === null) {
-      await ctx.db.insert("streamSessionSummaries", row);
-      return { outcome: "insert" as const };
-    }
-    await ctx.db.replace(existing._id, row);
-    return { outcome: "replace" as const };
+      .withIndex("by_instance_started", (q) => q.eq("instanceId", instanceId))
+      .order("desc")
+      .first();
   },
 });
 

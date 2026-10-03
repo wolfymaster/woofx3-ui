@@ -3,10 +3,37 @@
 `/stream/recaps` lists every stream the engine has sent a summary for, newest
 first, and
 `/stream/recaps/:sessionId` shows one of them: how the stream went and who
-supported it. Summaries normally arrive once a session has ended; one whose
-session was still open when it was taken is badged "In progress", since its
-totals can still change. Both read the same `streamSessionSummaries` rows as the dashboard's
+supported it. The engine sends a summary when a session ends. The session in
+progress shows too, from snapshots the UI takes itself (below), badged "In
+progress" since its totals can still change. Both read the same `streamSessionSummaries` rows as the dashboard's
 [recent streams](./dashboard#recent-streams) widget, whose rows link here.
+
+## The session in progress
+
+`streamRecap.refreshOpenSession` asks the engine for its newest session
+(`listStreamSessions`, limit 1) and, when that session is open, for its totals
+(`getStreamSessionTotals`): the two reads the engine builds its own summary
+from. `sessionSnapshotPayload` (`convex/lib/sessionSummary.ts`) turns them into
+the same payload the engine would send, which is parsed and stored as that
+session's summary. The engine's summary at the session's end, and every later
+snapshot, replaces it.
+
+`useOpenSessionRefresh` calls it from the recap list, a recap page and the
+Recent streams widget: once when one opens, then every minute while the stream
+is live and someone is looking at the tab. Convex skips the engine when the
+stored snapshot of the open session is under 30 seconds old, so many viewers
+cost about one read per window.
+
+A snapshot is stamped with Convex's clock, not the engine's, and may land after
+the engine's summary of the session's end. `planOpenSnapshotWrite` therefore
+never lets it replace a stored summary of a closed session.
+
+In a snapshot the segment still live has no end. `summarySegments`
+(`client/src/lib/session-summary.ts`) ends it at the snapshot's `generatedAt`,
+the moment its totals describe, so the live time, the timeline (where it reads
+"live") and the viewer chart include it. A recap page of an open session loads
+the viewer chart and leaderboards again with each new snapshot, keeping the
+ones on screen while it does.
 
 ## Where each part comes from
 

@@ -2,8 +2,10 @@ import { describe, expect, it } from "bun:test";
 import {
   type ParsedSessionSummary,
   parseSessionSummary,
+  planOpenSnapshotWrite,
   planSummaryWrite,
   SESSION_SUMMARY_EVENT_TYPE,
+  sessionSnapshotPayload,
   summaryColumns,
 } from "./sessionSummary";
 
@@ -200,5 +202,47 @@ describe("planSummaryWrite", () => {
     const utc = withFollows("2026-09-20T04:00:00.000Z", 12);
     const laterWithOffset = withFollows("2026-09-19T23:30:00-05:00", 20);
     expect(deliver([laterWithOffset, utc]).get("session-1")?.follows).toBe(20);
+  });
+});
+
+describe("planOpenSnapshotWrite", () => {
+  it("never replaces the summary of a closed session", () => {
+    expect(planOpenSnapshotWrite({ generatedAtMs: 100, session: { status: "closed" } }, 200)).toBe("stale");
+  });
+
+  it("replaces an older open snapshot", () => {
+    expect(planOpenSnapshotWrite({ generatedAtMs: 100, session: { status: "open" } }, 200)).toBe("replace");
+  });
+
+  it("inserts when nothing is stored", () => {
+    expect(planOpenSnapshotWrite(null, 200)).toBe("insert");
+  });
+});
+
+describe("sessionSnapshotPayload", () => {
+  it("builds a payload that parses like the engine's own summary", () => {
+    const engine = summaryBody();
+    const payload = sessionSnapshotPayload(
+      { ...engine.session, status: "open", endedAt: null } as never,
+      { ...engine.totals, sessionId: "session-1" } as never,
+      new Date("2026-09-20T02:00:00.000Z")
+    );
+    const parsed = parseSessionSummary(payload);
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.summary.generatedAt).toBe("2026-09-20T02:00:00.000Z");
+      expect(parsed.summary.body?.session.status).toBe("open");
+      expect(parsed.summary.body?.totals.follows).toBe(12);
+    }
+  });
+
+  it("leaves out fields the stored row does not keep", () => {
+    const engine = summaryBody();
+    const payload = sessionSnapshotPayload(
+      engine.session as never,
+      { ...engine.totals, sessionId: "session-1" } as never,
+      new Date()
+    ) as { totals: Record<string, unknown> };
+    expect(payload.totals.sessionId).toBeUndefined();
   });
 });

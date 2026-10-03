@@ -2,11 +2,37 @@ import type { Doc } from "@convex/_generated/dataModel";
 
 export type SessionSummaryRow = Doc<"streamSessionSummaries">;
 
+export interface SummarySegment {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  /** Still live when the summary was taken; its `endedAt` is that moment, not a real end. */
+  ongoing?: boolean;
+}
+
+/**
+ * A summary's segments, ready to measure and draw. In a summary of a session
+ * still in progress, the segment still live has no end, so it is cut off at
+ * the moment the summary was taken: the same moment its totals describe. A
+ * closed session's segments come back as stored.
+ */
+export function summarySegments(row: SessionSummaryRow): SummarySegment[] {
+  const session = row.session;
+  if (!session) {
+    return [];
+  }
+  if (session.status !== "open") {
+    return session.segments;
+  }
+  return session.segments.map((segment) =>
+    segment.endedAt === null ? { ...segment, endedAt: row.generatedAt, ongoing: true } : segment
+  );
+}
+
 /**
  * Time actually live in a session: its segments added up, so the gaps a
  * session spans between brief dropouts are not counted. A segment with no end
- * contributes nothing, since a summarised session is closed and an open
- * segment in one has no meaningful length.
+ * contributes nothing; summarySegments gives a still-live one an end first.
  */
 export function liveDurationMs(segments: ReadonlyArray<{ startedAt: string; endedAt: string | null }>): number {
   let total = 0;

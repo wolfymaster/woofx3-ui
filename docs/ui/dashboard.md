@@ -124,9 +124,10 @@ average viewers, and the session's follows, subs, gifted subs, bits and raids.
 
 Rows arrive by the engine's `session.summary` webhook, which fires when a
 session *ends*. A session ends when the next broadcast past the engine's grace
-window begins, not when its own stream goes offline, so the stream that just
-finished appears once the next one starts, and the one in progress never
-appears here. A session that was never live is a real row with every figure at
+window begins, not when its own stream goes offline. Until then the session in
+progress shows from snapshots the UI takes while the widget is open, badged
+"In progress"; see [the session in progress](./stream-recaps#the-session-in-progress).
+A session that was never live is a real row with every figure at
 zero and no viewer figures. Each delivery is a whole snapshot; the table keeps
 one row per `(instanceId, sessionId)` and replaces it only with a snapshot whose
 `generatedAt` is newer, so redeliveries and re-summaries are harmless. A

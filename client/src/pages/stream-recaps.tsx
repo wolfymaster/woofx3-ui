@@ -6,12 +6,14 @@ import { PageHeader } from "@/components/layout/page-header";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Card } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
+import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import {
   formatLiveDuration,
   formatSubsBreakdown,
   formatViewerFigure,
   liveDurationMs,
   type SessionSummaryRow,
+  summarySegments,
 } from "@/lib/session-summary";
 import { streamRecapPath } from "@/lib/stream-recap-route";
 
@@ -28,7 +30,7 @@ function RecapRow({ row }: { row: SessionSummaryRow }) {
   const subheading = session
     ? session.segments.length === 0
       ? "Never went live"
-      : `Live ${formatLiveDuration(liveDurationMs(session.segments))}`
+      : `Live ${formatLiveDuration(liveDurationMs(summarySegments(row)))}`
     : `Schema ${row.schemaVersion}`;
 
   return (
@@ -59,6 +61,7 @@ function RecapRow({ row }: { row: SessionSummaryRow }) {
 
 export default function StreamRecaps() {
   const { instance, isLoading } = useInstance();
+  useOpenSessionRefresh(instance?._id);
   const rows = useQuery(
     api.streamSessionSummaries.listRecent,
     instance ? { instanceId: instance._id, limit: RECAP_LIST_LIMIT } : "skip"
