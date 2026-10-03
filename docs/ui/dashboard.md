@@ -73,7 +73,7 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `macro-pad` | automation | One-click buttons — see below |
 | `stream-stats` | utility | Viewers, uptime, category |
 | `recent-streams` | utility | Totals for the last finished sessions, from `streamSessionSummaries` — see below |
-| `notes` | utility | Per-stream scratch pad |
+| `notes` | utility | Scratch pad shared by everyone on the instance — see below |
 
 ## Go live checklist
 
@@ -137,6 +137,12 @@ The getting started checklist (`client/src/components/dashboard/getting-started-
 - **Test follow availability.** Sending a test follow needs a registered engine and the follow trigger in the catalog, which comes from the Twitch module. Until then the button is disabled, with the reason.
 
 Help → **Setup** reopens the setup wizard (`/setup`). Once setup is finished, it opens on the All set page.
+
+## Notes
+
+`notes` is one note per instance (`instanceNotes`, `convex/dashboardNotes.ts`), shared by every member like the macro pad: a streamer and their moderators keep one set of notes for the channel. It saves 800 ms after typing stops and when the widget closes. Another member's save replaces the text on screen only while this widget has no unsaved edit of its own, keeping the caret where it was, so it never overwrites what is being typed. Two people typing at once is last write wins, and the footer names whoever saved last.
+
+Notes used to be private per member (`dashboardNotes`, now read only by the migration). `bunx convex run migrations/backfillSharedNotes:default` folds them into the shared note: one member's notes as they were, several members' joined under each author's name.
 
 ## Recent streams
 

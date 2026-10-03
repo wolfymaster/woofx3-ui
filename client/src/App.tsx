@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
 import { Route, Switch, useLocation } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { AdminOnly } from "@/components/layout/admin-only";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
@@ -215,11 +216,31 @@ function AppRoutes() {
                   <Route path="/admin">
                     <Redirect to="/admin/engine" />
                   </Route>
-                  <Route path="/admin/engine" component={AdminEngine} />
-                  <Route path="/admin/integrations" component={AdminIntegrations} />
-                  <Route path="/admin/storage" component={AdminStorage} />
-                  <Route path="/admin/backup" component={AdminBackup} />
-                  <Route path="/admin/appearance" component={AdminAppearance} />
+                  <Route path="/admin/engine">
+                    <AdminOnly>
+                      <AdminEngine />
+                    </AdminOnly>
+                  </Route>
+                  <Route path="/admin/integrations">
+                    <AdminOnly>
+                      <AdminIntegrations />
+                    </AdminOnly>
+                  </Route>
+                  <Route path="/admin/storage">
+                    <AdminOnly>
+                      <AdminStorage />
+                    </AdminOnly>
+                  </Route>
+                  <Route path="/admin/backup">
+                    <AdminOnly>
+                      <AdminBackup />
+                    </AdminOnly>
+                  </Route>
+                  <Route path="/admin/appearance">
+                    <AdminOnly>
+                      <AdminAppearance />
+                    </AdminOnly>
+                  </Route>
 
                   <Route path="/team" component={Team} />
                   <Route path="/team/invite" component={TeamInvite} />

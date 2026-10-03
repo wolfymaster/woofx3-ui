@@ -667,10 +667,18 @@ export default defineSchema({
     dismissedAt: v.number(),
   }).index("by_user_and_intro", ["userId", "introId"]),
 
-  // dashboardNotes: freeform scratch text behind the dashboard's Notes rail
-  // widget. Per user and per instance — notes are private working memory
-  // ("remember to thank the raider"), not shared channel state, so an account
-  // shared with a moderator does not hand them the owner's notes.
+  // instanceNotes: freeform text behind the dashboard's Notes widget, one row
+  // per instance, shared by every member like the macro pad: a streamer and
+  // their moderators keep one set of notes for the channel.
+  instanceNotes: defineTable({
+    instanceId: v.id("instances"),
+    content: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.id("users"),
+  }).index("by_instance", ["instanceId"]),
+
+  // dashboardNotes: legacy per-user notes from before instanceNotes. Read only
+  // by migrations/backfillSharedNotes; nothing writes it.
   dashboardNotes: defineTable({
     instanceId: v.id("instances"),
     userId: v.id("users"),

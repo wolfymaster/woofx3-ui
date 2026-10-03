@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { type InstanceHosting, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "@/components/layout/nav-config";
 import { navigationCommands } from "./navigation-commands";
 
-function hrefs(hosting: InstanceHosting): string[] {
-  return navigationCommands(hosting).flatMap((command) =>
+function hrefs(hosting: InstanceHosting, isAdmin = true): string[] {
+  return navigationCommands(hosting, isAdmin).flatMap((command) =>
     command.action.type === "navigate" ? [command.action.href] : []
   );
 }
@@ -23,8 +23,14 @@ describe("navigationCommands", () => {
     expect(hrefs("managed")).not.toContain("/admin/storage");
   });
 
+  test("leaves out instance settings for a member", () => {
+    expect(hrefs("external", true)).toContain("/admin/engine");
+    expect(hrefs("external", false).filter((href) => href.startsWith("/admin"))).toEqual([]);
+    expect(hrefs("external", false)).toContain("/team");
+  });
+
   test("gives every entry a unique id", () => {
-    const ids = navigationCommands("external").map((command) => command.id);
+    const ids = navigationCommands("external", true).map((command) => command.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 });

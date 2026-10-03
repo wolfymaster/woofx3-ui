@@ -1,4 +1,3 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import type { StorageConfig } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -11,10 +10,9 @@ export const getConfig = action({
     instanceId: v.id("instances"),
   },
   handler: async (ctx, args): Promise<StorageConfig | null> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      return null;
-    }
+    // Admin only, like setConfig: the engine's storage config can carry the
+    // storage provider's credentials, and storage is an instance setting.
+    const userId = await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
 
     const bundle: { url: string; clientId: string | null; clientSecret: string | null } | null = await ctx.runQuery(
       internal.workflowCatalogContext.catalogContextForUser,

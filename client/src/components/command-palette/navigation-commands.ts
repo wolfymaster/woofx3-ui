@@ -5,6 +5,7 @@ import {
   type NavItem,
   navItemsFor,
   STREAM_ITEMS,
+  sectionsFor,
   UTILITY_SECTIONS,
 } from "@/components/layout/nav-config";
 import { COMMAND_GROUP_NEW_ROUTE, COMMAND_GROUPS_PATH, COMMAND_NEW_ROUTE } from "@/lib/command-editor-route";
@@ -58,10 +59,10 @@ function pageCommand(item: NavItem, section?: string): PaletteCommand {
 
 /**
  * Every destination in the menu for an instance hosted this way, in menu order, plus the
- * pages it only reaches by a link.
+ * pages it only reaches by a link. Instance settings are left out for a non-admin.
  */
-export function navigationCommands(hosting: InstanceHosting): PaletteCommand[] {
-  const sections = [...MAIN_NAV_SECTIONS, ...UTILITY_SECTIONS];
+export function navigationCommands(hosting: InstanceHosting, isAdmin: boolean): PaletteCommand[] {
+  const sections = sectionsFor([...MAIN_NAV_SECTIONS, ...UTILITY_SECTIONS], isAdmin);
   const pages: PaletteCommand[] = [];
   for (const section of sections) {
     if (!section.children) {

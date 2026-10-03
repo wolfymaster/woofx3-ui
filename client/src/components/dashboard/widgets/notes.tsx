@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import type { InstanceNote } from "@convex/dashboardNotes";
 import { useMutation, useQuery } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,10 +7,28 @@ import { useInstance } from "@/hooks/use-instance";
 
 const SAVE_DEBOUNCE_MS = 800;
 
+function lastEditLabel(note: InstanceNote | null): string {
+  if (!note || note.updatedByMe || !note.updatedByName) {
+    return "Shared with your team · saved automatically";
+  }
+  const when = new Date(note.updatedAt).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `Last edited by ${note.updatedByName} · ${when}`;
+}
+
 /**
- * Freeform scratch pad, per user and per instance. Saves on a debounce while
- * typing, and flushes any pending edit on unmount so closing the rail flyout
- * mid-sentence doesn't drop the last keystrokes.
+ * Freeform scratch pad, one per instance and shared by its members. Saves on a
+ * debounce while typing, and flushes any pending edit on unmount so closing
+ * the rail flyout mid-sentence doesn't drop the last keystrokes.
+ *
+ * Another member's save replaces the text on screen only while this widget has
+ * no edit of its own waiting to be saved, so it never overwrites what is being
+ * typed. Two people typing at once is last write wins, and the footer says
+ * whose write that was.
  */
 export function NotesWidget() {
   const { instance } = useInstance();
@@ -25,13 +44,25 @@ export function NotesWidget() {
   const saveRef = useRef(saveNotes);
   saveRef.current = saveNotes;
 
-  // Adopt the server value once, then let local state own the text — otherwise
-  // a reactive echo of our own save would fight the cursor position.
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const remoteContent = stored === undefined ? undefined : (stored?.content ?? "");
+
   useEffect(() => {
-    if (draft === null && stored !== undefined) {
-      setDraft(stored?.content ?? "");
+    if (remoteContent === undefined || pendingRef.current !== null) {
+      return;
     }
-  }, [stored, draft]);
+    // Restores the caret so a remote edit landing while the note is focused
+    // does not throw it to the end of the text.
+    const textarea = textareaRef.current;
+    const caret = textarea && document.activeElement === textarea ? textarea.selectionStart : null;
+    setDraft(remoteContent);
+    if (caret !== null) {
+      requestAnimationFrame(() => {
+        const position = Math.min(caret, remoteContent.length);
+        textareaRef.current?.setSelectionRange(position, position);
+      });
+    }
+  }, [remoteContent]);
 
   const instanceId = instance?._id;
 
@@ -63,7 +94,11 @@ export function NotesWidget() {
     timerRef.current = setTimeout(() => {
       setSaving(true);
       void saveRef.current({ instanceId, content: value }).finally(() => {
-        pendingRef.current = null;
+        // Only this save's text: anything typed while it was in flight is
+        // still waiting for its own save, and must keep remote edits out.
+        if (pendingRef.current === value) {
+          pendingRef.current = null;
+        }
         setSaving(false);
       });
     }, SAVE_DEBOUNCE_MS);
@@ -80,14 +115,15 @@ export function NotesWidget() {
   return (
     <div className="h-full flex flex-col">
       <Textarea
+        ref={textareaRef}
         value={draft ?? ""}
         onChange={(e) => handleChange(e.target.value)}
-        placeholder="Anything worth remembering this stream…"
+        placeholder="Anything worth remembering this stream… Everyone on this account sees these notes."
         className="flex-1 min-h-0 resize-none border-0 rounded-none focus-visible:ring-0 text-sm"
         data-testid="input-dashboard-notes"
       />
       <div className="shrink-0 px-3 py-1.5 border-t border-border text-[10px] uppercase tracking-wider text-muted-foreground">
-        {saving ? "Saving…" : "Saved automatically"}
+        {saving ? "Saving…" : lastEditLabel(stored ?? null)}
       </div>
     </div>
   );
