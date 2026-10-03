@@ -82,10 +82,157 @@ impl ReadyUpdate {
 /// Must match `STATE_EVENT` in companion/ui/src/state.ts.
 pub const STATE_EVENT: &str = "companion://state";
 
+/// Must match `INTEGRATIONS_EVENT` in companion/ui/src/state.ts.
+pub const INTEGRATIONS_EVENT: &str = "companion://integrations";
+
+/// What the Integrations tab and the Status tab's relay row render. Sent on
+/// its own event, apart from `WindowState`, because it changes with every
+/// relay reconnect and discovery pass. Must match `IntegrationsView` in
+/// companion/ui/src/state.ts.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IntegrationsView {
+    pub availability: Availability,
+    /// Whether this woofx3 offers the companion relay at all.
+    pub relay_available: bool,
+    pub relay: RelayView,
+    pub modules: Vec<ModuleView>,
+}
+
+impl IntegrationsView {
+    pub fn off() -> Self {
+        IntegrationsView {
+            availability: Availability::Off,
+            relay_available: false,
+            relay: RelayView::NotNeeded,
+            modules: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Availability {
+    /// Not paired and confirmed, so integrations are not running.
+    Off,
+    Loading,
+    Ready,
+    /// The woofx3 this companion talks to predates companion integrations.
+    Unavailable,
+    Failed {
+        message: String,
+    },
+}
+
+/// The companion's connection to the relay.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RelayView {
+    /// No enabled endpoint needs it.
+    NotNeeded,
+    /// Endpoints are enabled, but this woofx3 does not offer the relay.
+    Unavailable,
+    Connecting,
+    Connected,
+    /// `retry_at` is milliseconds since the epoch on this PC's clock.
+    #[serde(rename_all = "camelCase")]
+    Retrying {
+        retry_at: u64,
+        error: String,
+    },
+    /// Another companion connection for this instance took over. The
+    /// companion does not take it back on its own.
+    Displaced,
+    /// woofx3 would not issue a relay credential.
+    Refused,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModuleView {
+    pub module_id: String,
+    pub module_name: String,
+    pub endpoints: Vec<EndpointView>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EndpointView {
+    pub id: String,
+    pub name: String,
+    /// Only WebSocket endpoints can be carried over the relay today.
+    pub bridgeable: bool,
+    /// The built-in discoverer serving this endpoint, when one does. The
+    /// window keys its discoverer-specific hints by it.
+    pub discoverer: Option<String>,
+    pub discovery: DiscoveryView,
+    /// The address the bridge dials, once discovered or confirmed.
+    pub address: Option<AddressView>,
+    pub enabled: bool,
+    pub share_password: bool,
+    /// The endpoint has a password setting and its discoverer reads one.
+    pub can_share_password: bool,
+    /// The streamer typed the password into the module's settings, so the
+    /// companion leaves it alone.
+    pub password_set_by_hand: bool,
+    /// Why the last attempt to fill in the module's settings failed.
+    pub report_error: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddressView {
+    /// `host:port`, with brackets around an IPv6 host.
+    pub display: String,
+    pub origin: woofx3_companion_core::AddressOrigin,
+}
+
+/// What discovery found for an endpoint. Must match `DiscoveryView` in
+/// companion/ui/src/state.ts.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum DiscoveryView {
+    /// The endpoint declares no discovery: its address is entered by hand.
+    Manual,
+    /// It names a discoverer this companion does not have.
+    Unsupported,
+    /// It names a discoverer this companion has, which does not serve its
+    /// module.
+    NotPermitted,
+    /// Discovery has not run yet.
+    Searching,
+    NotFound,
+    /// The server is configured but switched off.
+    ServerOff {
+        port: u16,
+    },
+    #[serde(rename_all = "camelCase")]
+    Found {
+        port: u16,
+        has_password: bool,
+    },
+    /// The discoverer's source exists but could not be read.
+    Unreadable,
+}
+
+/// The result of the Test button. Must match `TestResult` in
+/// companion/ui/src/state.ts.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum TestResult {
+    Ok { protocol: Option<String> },
+    Refused { reason: String },
+    TimedOut,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn to_wire<T: Serialize>(value: &T) -> serde_json::Value {
+        serde_json::to_value(value).expect("serializes")
+    }
 
     fn wire(state: CompanionState) -> serde_json::Value {
         serde_json::to_value(state).expect("state serializes")
@@ -161,6 +308,154 @@ mod tests {
                 "instanceName": "x",
                 "cloudConnected": false,
                 "update": { "version": "1.2.3" },
+            })
+        );
+    }
+
+    #[test]
+    fn serializes_the_integrations_view_as_the_typescript_mirror_expects() {
+        let view = IntegrationsView {
+            availability: Availability::Ready,
+            relay_available: true,
+            relay: RelayView::Retrying {
+                retry_at: 1_700_000_000_000,
+                error: "e".into(),
+            },
+            modules: vec![ModuleView {
+                module_id: "woofx3_obs".into(),
+                module_name: "OBS".into(),
+                endpoints: vec![EndpointView {
+                    id: "obs".into(),
+                    name: "OBS WebSocket".into(),
+                    bridgeable: true,
+                    discoverer: Some("obs-websocket".into()),
+                    discovery: DiscoveryView::Found {
+                        port: 4455,
+                        has_password: true,
+                    },
+                    address: Some(AddressView {
+                        display: "127.0.0.1:4455".into(),
+                        origin: woofx3_companion_core::AddressOrigin::Discovered,
+                    }),
+                    enabled: true,
+                    share_password: false,
+                    can_share_password: true,
+                    password_set_by_hand: false,
+                    report_error: None,
+                }],
+            }],
+        };
+        assert_eq!(
+            serde_json::to_value(view).expect("serializes"),
+            json!({
+                "availability": { "kind": "ready" },
+                "relayAvailable": true,
+                "relay": { "kind": "retrying", "retryAt": 1_700_000_000_000u64, "error": "e" },
+                "modules": [{
+                    "moduleId": "woofx3_obs",
+                    "moduleName": "OBS",
+                    "endpoints": [{
+                        "id": "obs",
+                        "name": "OBS WebSocket",
+                        "bridgeable": true,
+                        "discoverer": "obs-websocket",
+                        "discovery": { "kind": "found", "port": 4455, "hasPassword": true },
+                        "address": { "display": "127.0.0.1:4455", "origin": "discovered" },
+                        "enabled": true,
+                        "sharePassword": false,
+                        "canSharePassword": true,
+                        "passwordSetByHand": false,
+                        "reportError": null,
+                    }],
+                }],
+            })
+        );
+    }
+
+    #[test]
+    fn serializes_each_integration_variant() {
+        assert_eq!(to_wire(&Availability::Off), json!({ "kind": "off" }));
+        assert_eq!(
+            to_wire(&Availability::Loading),
+            json!({ "kind": "loading" })
+        );
+        assert_eq!(
+            to_wire(&Availability::Unavailable),
+            json!({ "kind": "unavailable" })
+        );
+        assert_eq!(
+            to_wire(&Availability::Failed {
+                message: "m".into()
+            }),
+            json!({ "kind": "failed", "message": "m" })
+        );
+        assert_eq!(
+            to_wire(&RelayView::NotNeeded),
+            json!({ "kind": "notNeeded" })
+        );
+        assert_eq!(
+            to_wire(&RelayView::Unavailable),
+            json!({ "kind": "unavailable" })
+        );
+        assert_eq!(
+            to_wire(&RelayView::Connecting),
+            json!({ "kind": "connecting" })
+        );
+        assert_eq!(
+            to_wire(&RelayView::Connected),
+            json!({ "kind": "connected" })
+        );
+        assert_eq!(
+            to_wire(&RelayView::Displaced),
+            json!({ "kind": "displaced" })
+        );
+        assert_eq!(to_wire(&RelayView::Refused), json!({ "kind": "refused" }));
+        assert_eq!(to_wire(&DiscoveryView::Manual), json!({ "kind": "manual" }));
+        assert_eq!(
+            to_wire(&DiscoveryView::Unsupported),
+            json!({ "kind": "unsupported" })
+        );
+        assert_eq!(
+            to_wire(&DiscoveryView::NotPermitted),
+            json!({ "kind": "notPermitted" })
+        );
+        assert_eq!(
+            to_wire(&DiscoveryView::Searching),
+            json!({ "kind": "searching" })
+        );
+        assert_eq!(
+            to_wire(&DiscoveryView::NotFound),
+            json!({ "kind": "notFound" })
+        );
+        assert_eq!(
+            to_wire(&DiscoveryView::ServerOff { port: 4455 }),
+            json!({ "kind": "serverOff", "port": 4455 })
+        );
+        assert_eq!(
+            to_wire(&DiscoveryView::Unreadable),
+            json!({ "kind": "unreadable" })
+        );
+        assert_eq!(
+            to_wire(&TestResult::Ok {
+                protocol: Some("obswebsocket.json".into())
+            }),
+            json!({ "kind": "ok", "protocol": "obswebsocket.json" })
+        );
+        assert_eq!(
+            to_wire(&TestResult::Refused { reason: "r".into() }),
+            json!({ "kind": "refused", "reason": "r" })
+        );
+        assert_eq!(
+            to_wire(&TestResult::TimedOut),
+            json!({ "kind": "timedOut" })
+        );
+        assert_eq!(
+            to_wire(&IntegrationsView::off()),
+            json!({
+                "availability": { "kind": "off" },
+                "relayAvailable": false,
+                "relay": { "kind": "notNeeded" },
+                "modules": [],
             })
         );
     }
