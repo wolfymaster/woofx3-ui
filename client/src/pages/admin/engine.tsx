@@ -4,7 +4,7 @@ import { useStore } from "@nanostores/react";
 import { useAction, useMutation as useConvexMutation } from "convex/react";
 import { AlertTriangle, CheckCircle2, Loader2, Server, XCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CompanionsCard } from "@/components/engine/companions-card";
+import { CompanionCard } from "@/components/engine/companion-card";
 import { ManagedEngineCard } from "@/components/engine/managed-engine-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { EngineSyncCard } from "@/components/settings/engine-sync-card";
@@ -160,7 +160,7 @@ function EngineSettings() {
       <div className="space-y-4">
         <ManagedEngineCard instanceId={instance._id} />
         {instance.clientId && <EngineSyncCard instanceId={instance._id} />}
-        <CompanionsCard instanceId={instance._id} />
+        <CompanionCard instanceId={instance._id} />
         <DangerZone instanceId={instance._id} managed />
       </div>
     );
@@ -265,7 +265,7 @@ function EngineSettings() {
         </CardContent>
       </Card>
       <EngineSyncCard instanceId={instance._id} />
-      <CompanionsCard instanceId={instance._id} />
+      <CompanionCard instanceId={instance._id} />
       <DangerZone instanceId={instance._id} />
     </div>
   );

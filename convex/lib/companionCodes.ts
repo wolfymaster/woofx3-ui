@@ -98,3 +98,20 @@ export const MAX_COMPANION_VERSION_LENGTH = 32;
 export function isValidCompanionVersion(version: string): boolean {
   return version.length > 0 && version.length <= MAX_COMPANION_VERSION_LENGTH;
 }
+
+/**
+ * The bound on companion rows read for one instance. An instance has at most
+ * one companion, so more than one row means rows written before that rule;
+ * reading a few lets approval sweep them up.
+ */
+export const MAX_COMPANION_ROWS_PER_INSTANCE = 10;
+
+/**
+ * Of an instance's companion rows, those an approval from `installationId`
+ * replaces. An instance has at most one companion, so approving a new
+ * installation removes every other one; the same installation is updated in
+ * place instead, keeping its id.
+ */
+export function companionsReplacedBy<T extends { installationId: string }>(rows: T[], installationId: string): T[] {
+  return rows.filter((row) => row.installationId !== installationId);
+}

@@ -5,6 +5,7 @@ import {
   hashCompanionToken,
   isCompanionToken,
   isValidCompanionVersion,
+  MAX_COMPANION_ROWS_PER_INSTANCE,
   MAX_COMPANION_VERSION_LENGTH,
 } from "./lib/companionCodes";
 import { approverDisplayName, deleteCompanion } from "./lib/companionRecords";
@@ -18,8 +19,6 @@ import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
  * than a user session: the companions row is the credential, so a token whose
  * hash has no row is not paired, and every token function fails closed.
  */
-
-const MAX_COMPANIONS_LISTED = 20;
 
 async function rowByToken(ctx: QueryCtx, token: string): Promise<Doc<"companions"> | null> {
   if (!isCompanionToken(token)) {
@@ -175,13 +174,16 @@ export const unpair = mutation({
 });
 
 /**
- * Companions of an instance for its members. `lastSeenAt` is null until the
- * first heartbeat; whether that is "online" is judged in the browser, since
- * this query does not re-run as time passes.
+ * The instance's companion, for its members, or null when it has none. An
+ * instance has at most one (approving a new one replaces it); should older
+ * rows remain, the most recently paired is the one shown. `lastSeenAt` is
+ * null until the first heartbeat; whether that is "online" is judged in the
+ * browser, since this query does not re-run as time passes.
  */
-export const listForInstance = query({
+export const forInstance = query({
   args: { instanceId: v.id("instances") },
-  returns: v.array(
+  returns: v.union(
+    v.null(),
     v.object({
       companionId: v.id("companions"),
       deviceName: v.string(),
@@ -194,29 +196,35 @@ export const listForInstance = query({
   ),
   handler: async (ctx, { instanceId }) => {
     if (!(await isInstanceMember(ctx, instanceId))) {
-      return [];
+      return null;
     }
     const rows = await ctx.db
       .query("companions")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .take(MAX_COMPANIONS_LISTED);
-    const result = [];
+      .take(MAX_COMPANION_ROWS_PER_INSTANCE);
+    let companion: Doc<"companions"> | null = null;
     for (const row of rows) {
-      const presence = await ctx.db
-        .query("companionPresence")
-        .withIndex("by_companion", (q) => q.eq("companionId", row._id))
-        .first();
-      result.push({
-        companionId: row._id,
-        deviceName: row.deviceName,
-        companionVersion: presence?.companionVersion ?? row.companionVersion,
-        pairedAt: row.pairedAt,
-        lastSeenAt: presence?.lastSeenAt ?? null,
-        confirmed: row.confirmedAt !== undefined,
-        approvalStands: await approvalStands(ctx, row),
-      });
+      if (!companion || row.pairedAt > companion.pairedAt) {
+        companion = row;
+      }
     }
-    return result;
+    if (!companion) {
+      return null;
+    }
+    const companionId = companion._id;
+    const presence = await ctx.db
+      .query("companionPresence")
+      .withIndex("by_companion", (q) => q.eq("companionId", companionId))
+      .first();
+    return {
+      companionId,
+      deviceName: companion.deviceName,
+      companionVersion: presence?.companionVersion ?? companion.companionVersion,
+      pairedAt: companion.pairedAt,
+      lastSeenAt: presence?.lastSeenAt ?? null,
+      confirmed: companion.confirmedAt !== undefined,
+      approvalStands: await approvalStands(ctx, companion),
+    };
   },
 });
 

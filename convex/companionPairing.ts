@@ -5,20 +5,23 @@ import { components, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import {
+  companionsReplacedBy,
   formatUserCode,
   generateUserCode,
   isInstallationId,
   isSha256Hex,
   isValidCompanionVersion,
+  MAX_COMPANION_ROWS_PER_INSTANCE,
   MAX_COMPANION_VERSION_LENGTH,
   MAX_DEVICE_NAME_LENGTH,
   normalizeUserCode,
   PAIRING_TTL_MS,
 } from "./lib/companionCodes";
-import { deleteCompanionPresence } from "./lib/companionRecords";
+import { deleteCompanion, deleteCompanionPresence } from "./lib/companionRecords";
 import { requireInstanceRole } from "./lib/instanceAccess";
 import { roleSatisfies } from "./lib/instanceRoles";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
+import { getInstanceMembership } from "./lib/teamAccess";
 
 /**
  * Pairing a companion app with an instance, in the shape of the OAuth device
@@ -382,11 +385,69 @@ async function findPendingByUserCode(ctx: QueryCtx, rawUserCode: string, now: nu
   return { ok: true, row };
 }
 
+/** The instance's companion rows; at most one is expected, see MAX_COMPANION_ROWS_PER_INSTANCE. */
+async function companionsOf(ctx: QueryCtx, instanceId: Id<"instances">) {
+  return ctx.db
+    .query("companions")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .take(MAX_COMPANION_ROWS_PER_INSTANCE);
+}
+
+/**
+ * The companion an approval of this code for this instance would replace, for
+ * the approval page's warning. An instance has at most one companion, so
+ * approving a different installation removes the current one. Null when
+ * nothing would be replaced (no companion, or the same installation pairing
+ * again), when the code is not pending, or when the caller is not an admin of
+ * the instance. It takes the user code rather than returning the pairing's
+ * installation id, so installation ids never reach the browser; no token data
+ * is returned either.
+ */
+export const replacementForApproval = query({
+  args: { userCode: v.string(), instanceId: v.id("instances") },
+  returns: v.union(
+    v.null(),
+    v.object({ deviceName: v.string(), pairedAt: v.number(), lastSeenAt: v.union(v.number(), v.null()) })
+  ),
+  handler: async (ctx, { userCode: rawUserCode, instanceId }) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+    const membership = await getInstanceMembership(ctx, instanceId, userId);
+    if (!roleSatisfies(membership?.role, "admin")) {
+      return null;
+    }
+    const userCode = normalizeUserCode(rawUserCode);
+    if (!userCode) {
+      return null;
+    }
+    const pairing = await latestByUserCode(ctx, userCode);
+    if (!pairing || pairing.status !== "pending") {
+      return null;
+    }
+    const [replaced] = companionsReplacedBy(await companionsOf(ctx, instanceId), pairing.installationId);
+    if (!replaced) {
+      return null;
+    }
+    const presence = await ctx.db
+      .query("companionPresence")
+      .withIndex("by_companion", (q) => q.eq("companionId", replaced._id))
+      .first();
+    return {
+      deviceName: replaced.deviceName,
+      pairedAt: replaced.pairedAt,
+      lastSeenAt: presence?.lastSeenAt ?? null,
+    };
+  },
+});
+
 /**
  * Writes the companion's credential and closes the pairing in one
- * transaction. An installation already paired with this instance keeps its
- * companion id and gets the new token, so pairing the same PC again does not
- * leave a duplicate behind.
+ * transaction. An instance has at most one companion: a companion from
+ * another installation is deleted here, and its `companions:self`
+ * subscription turning null unpairs it. The same installation pairing again
+ * keeps its companion id and gets the new token.
  */
 export const approve = mutation({
   args: { userCode: v.string(), instanceId: v.id("instances") },
@@ -412,6 +473,9 @@ export const approve = mutation({
       .first();
     if (tokenHolder && tokenHolder._id !== existing?._id) {
       throw new ConvexError("This companion's token is already in use. Start pairing again from the companion.");
+    }
+    for (const replaced of companionsReplacedBy(await companionsOf(ctx, instanceId), row.installationId)) {
+      await deleteCompanion(ctx, replaced._id);
     }
 
     const credential = {
