@@ -4,12 +4,17 @@ import { safeNextPath, withNext } from "./auth-next-path";
 describe("safeNextPath", () => {
   test("keeps a path on this site", () => {
     expect(safeNextPath("/auth/accept-invite?token=abc", "/")).toBe("/auth/accept-invite?token=abc");
+    expect(safeNextPath("/companion/pair?code=BCDF-GHJK", "/")).toBe("/companion/pair?code=BCDF-GHJK");
+    expect(safeNextPath("/", "/auth/onboarding")).toBe("/");
   });
 
   test("refuses another site and anything that is not a path", () => {
     expect(safeNextPath("//evil.example", "/")).toBe("/");
     expect(safeNextPath("https://evil.example", "/")).toBe("/");
     expect(safeNextPath(null, "/auth/onboarding")).toBe("/auth/onboarding");
+    expect(safeNextPath("/\\evil.example", "/")).toBe("/");
+    expect(safeNextPath("/%2F%2Fevil.example", "/auth/onboarding")).toBe("/auth/onboarding");
+    expect(safeNextPath("javascript:alert(1)", "/")).toBe("/");
   });
 });
 
