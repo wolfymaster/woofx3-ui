@@ -126,7 +126,8 @@ async function request<T>(path: string, init: { method: string; body?: unknown; 
   if (!response.ok) {
     throw new MaintenanceApiError(response.status, ...errorFrom(text, response.status));
   }
-  return JSON.parse(text) as T;
+  // A 204 (a DELETE) has no body.
+  return (text === "" ? undefined : JSON.parse(text)) as T;
 }
 
 /** The API answers `{ error: { code, message } }`; anything else (a proxy's HTML, say) still needs a code. */
@@ -224,6 +225,30 @@ export function redeployRefusal(error: unknown): RedeployRefusal | null {
 /** Whether a maintenance call failed because the API has no such engine, so there is nothing left to tear down. */
 export function isEngineNotFound(error: unknown): boolean {
   return error instanceof MaintenanceApiError && error.status === 404;
+}
+
+/**
+ * The hostname the edge relay serves an instance's companion bridge on
+ * (`c-<12 base32 chars>.woofx3.tv`, derived from the instance id). Idempotent:
+ * every call for an instance answers the same hostname.
+ */
+export function ensureCompanionRoute(instanceId: string): Promise<{ hostname: string }> {
+  return request(`/v1/companion-routes/${encodeURIComponent(instanceId)}`, {
+    method: "PUT",
+    idempotencyKey: instanceId,
+  });
+}
+
+/** Remove an instance's companion hostname. Succeeds when it is already gone. */
+export async function removeCompanionRoute(instanceId: string): Promise<void> {
+  try {
+    await request<unknown>(`/v1/companion-routes/${encodeURIComponent(instanceId)}`, { method: "DELETE" });
+  } catch (error) {
+    if (error instanceof MaintenanceApiError && error.status === 404) {
+      return;
+    }
+    throw error;
+  }
 }
 
 /** Start a deprovision run: the route, the container, the database and the role all go. */
