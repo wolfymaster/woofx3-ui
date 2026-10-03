@@ -25,8 +25,14 @@ interface OverlayEditorShellProps {
 }
 
 /**
- * The frame both overlay editors share: a left rail of widgets and layers, the
- * canvas in the middle, and a fixed right rail for the selection's settings.
+ * The frame both overlay editors share: a left rail of widgets to add, the
+ * canvas in the middle, and a fixed right rail with the layers above the
+ * selection's settings. Layers sit beside the settings because picking a layer
+ * is how a widget gets selected, and the left rail is left whole for the
+ * widget palette, which grows with every module installed.
+ *
+ * The layers list takes at most two fifths of the right rail and scrolls past
+ * that, so a long stack never pushes the settings out of reach.
  *
  * The right rail is always present, showing `inspectorFallback` when nothing is
  * selected. That is load-bearing, not decoration: the scene editor used to float
@@ -50,12 +56,14 @@ export function OverlayEditorShell({
     <div className={cn("flex min-h-0 flex-col overflow-hidden", className)}>
       {header}
       <div className="grid min-h-0 flex-1 grid-cols-[216px_minmax(0,1fr)_320px]">
-        <aside className="flex min-h-0 flex-col gap-6 overflow-y-auto border-r p-4">
-          {palette}
-          {layers}
-        </aside>
+        <aside className="flex min-h-0 flex-col overflow-y-auto border-r p-4">{palette}</aside>
         <StageArea canvas={canvas}>{stage}</StageArea>
-        <aside className="flex min-h-0 flex-col overflow-y-auto border-l">{inspector ?? inspectorFallback}</aside>
+        <aside className="flex min-h-0 flex-col border-l">
+          <div className="max-h-[40%] shrink-0 overflow-y-auto border-b p-4" data-testid="editor-layers">
+            {layers}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">{inspector ?? inspectorFallback}</div>
+        </aside>
       </div>
     </div>
   );

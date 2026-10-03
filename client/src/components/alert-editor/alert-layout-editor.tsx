@@ -33,6 +33,7 @@ import {
   withCenter,
 } from "@/lib/alert-editor";
 import { type AlertLayout, readAlertLayout, writeAlertLayout } from "@/lib/alert-layout";
+import { layersTopFirst, moveLayer } from "@/lib/layer-order";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -126,6 +127,12 @@ export function AlertLayoutEditor({
     );
   }, []);
 
+  const moveLayerTo = useCallback((widgetId: string, toIndex: number) => {
+    setLayout((current) =>
+      current ? { ...current, widgets: moveLayer(current.widgets, widgetId, toIndex) } : current
+    );
+  }, []);
+
   const deleteLayer = useCallback((widgetId: string) => {
     setLayout((current) =>
       current ? { ...current, widgets: current.widgets.filter((widget) => widget.id !== widgetId) } : current
@@ -198,7 +205,7 @@ export function AlertLayoutEditor({
   const selectedFields = (selected
     ? (catalog.find((row) => row.widgetId === selected.widgetCanonicalId)?.settings ?? [])
     : []) as unknown as ConfigField[];
-  const layersNewestFirst = [...layout.widgets].sort((a, b) => b.zIndex - a.zIndex);
+  const layers = layersTopFirst(layout.widgets);
   const readout = `${layout.width} × ${layout.height}`;
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
 
@@ -223,7 +230,7 @@ export function AlertLayoutEditor({
 
   const layerList = (horizontal = false) => (
     <LayersList
-      layers={layersNewestFirst}
+      layers={layers}
       selectedId={selectedId}
       label={layerLabel}
       taxonomyOf={taxonomyOf}
@@ -232,6 +239,7 @@ export function AlertLayoutEditor({
         return duration > 0 ? formatSeconds(duration) : "auto";
       }}
       onSelect={setSelectedId}
+      onMove={moveLayerTo}
       horizontal={horizontal}
       emptyMessage="No layers yet. Add a widget to start."
     />
