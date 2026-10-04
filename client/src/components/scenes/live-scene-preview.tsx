@@ -9,7 +9,7 @@ interface LiveScenePreviewProps {
   sceneId: Id<"scenes"> | undefined;
   width: number;
   height: number;
-  /** The editor's current widgets, saved or not; the overlay is moved to match. */
+  /** The editor's current widgets, saved or not; the overlay shows them. */
   widgets: readonly Widget[];
 }
 
@@ -32,10 +32,10 @@ interface LiveScenePreviewProps {
  * browser-source URL leaves this untouched.
  *
  * The overlay renders the scene as last saved, and applies each save the
- * engine reports in place — as does every copy open in OBS. In between, the
- * editor's draft positions and sizes are posted into the frame on every change
- * and on every load, so a widget follows the drag before it is saved (see
- * docs/ui/scenes.md).
+ * engine reports in place — as does every copy open in OBS. The editor's draft
+ * is posted into the frame on every change and on every load, so a widget
+ * follows a drag, and shows a new setting or appears when added, before it is
+ * saved (see docs/ui/scenes.md).
  */
 export function LiveScenePreview({ sceneId, width, height, widgets }: LiveScenePreviewProps) {
   const getOrCreatePreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
@@ -105,7 +105,7 @@ export function LiveScenePreview({ sceneId, width, height, widgets }: LiveSceneP
       ref={frameRef}
       // Fires again whenever the overlay reloads (a restarted engine, or a save
       // it could not apply in place); the reloaded page knows only the saved
-      // layout, not a drag still in progress.
+      // scene, not the draft.
       onLoad={() => postLayout(widgetsRef.current)}
       src={overlayUrl}
       title="Scene preview"

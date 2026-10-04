@@ -15,12 +15,6 @@ import { WidgetSettingsPanel } from "./widget-settings-panel";
 
 export type WidgetsUpdate = (widgets: Widget[]) => Widget[];
 
-/**
- * What kind of edit an update is. `add` and `restack` are reported apart from
- * every other edit, for a caller whose preview only shows them after a save.
- */
-export type WidgetsChange = "add" | "restack" | "edit";
-
 const ALERT_SURFACE = "alert";
 
 interface WidgetLayoutCanvasProps {
@@ -32,7 +26,7 @@ interface WidgetLayoutCanvasProps {
   renderers: Record<string, CustomFieldRenderer>;
   /** What text in a widget's settings may reference. A scene has no workflow around it, so it passes none. */
   availableVariables?: VariableOption[];
-  onChange: (update: WidgetsUpdate, change: WidgetsChange) => void;
+  onChange: (update: WidgetsUpdate) => void;
   /** Real widget pixels, drawn over the placeholders and under the handles. */
   preview?: ReactNode;
   /** Drawn in place of a widget's generic placeholder. */
@@ -84,7 +78,7 @@ export function WidgetLayoutCanvas({
   onChangeRef.current = onChange;
 
   const editWidget = useCallback((widgetId: string, change: (widget: Widget) => Widget) => {
-    onChangeRef.current((prev) => prev.map((w) => (w.id === widgetId ? change(w) : w)), "edit");
+    onChangeRef.current((prev) => prev.map((w) => (w.id === widgetId ? change(w) : w)));
   }, []);
 
   const moveWidget = useCallback(
@@ -133,7 +127,7 @@ export function WidgetLayoutCanvas({
           settings,
         };
         return [...prev, widget];
-      }, "add");
+      });
       setSelectedWidgetId(id);
     },
     [catalog, onChange, isAlertWidget]
@@ -141,7 +135,7 @@ export function WidgetLayoutCanvas({
 
   const deleteWidget = useCallback(
     (widgetId: string) => {
-      onChange((prev) => prev.filter((w) => w.id !== widgetId), "edit");
+      onChange((prev) => prev.filter((w) => w.id !== widgetId));
       setSelectedWidgetId((id) => (id === widgetId ? null : id));
     },
     [onChange]
@@ -168,7 +162,7 @@ export function WidgetLayoutCanvas({
 
   const layers = layersTopFirst(widgets);
   const moveLayerTo = useCallback((widgetId: string, toIndex: number) => {
-    onChangeRef.current((prev) => moveLayer(prev, widgetId, toIndex), "restack");
+    onChangeRef.current((prev) => moveLayer(prev, widgetId, toIndex));
   }, []);
   const taxonomyOf = useCallback((widget: Widget) => catalogRowFor(widget)?.taxonomy, [catalogRowFor]);
 

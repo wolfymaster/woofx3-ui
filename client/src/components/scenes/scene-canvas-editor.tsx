@@ -22,7 +22,7 @@ import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { Scene, Widget } from "@/types";
 import { LiveScenePreview } from "./live-scene-preview";
-import { WidgetLayoutCanvas, type WidgetsChange, type WidgetsUpdate } from "./widget-layout-canvas";
+import { WidgetLayoutCanvas, type WidgetsUpdate } from "./widget-layout-canvas";
 
 interface SceneCanvasEditorProps {
   instanceId: Id<"instances">;
@@ -125,52 +125,39 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     }
   }, [convexSceneId, rotateBrowserSourceKey, copyKeyToClipboard, toast]);
 
-  // Takes the scene to persist rather than reading state, so a caller that just
-  // built the next scene (a widget add) can save it without waiting for a re-render.
-  const persistScene = useCallback(
-    async (next: Scene, { silent = false }: { silent?: boolean } = {}) => {
-      setIsSaving(true);
-      // Everything this query serves until the echo lands describes the scene as
-      // it was before this save.
-      echoWatermark.current = fetchedScene?.updatedAt ?? echoWatermark.current;
-      try {
-        await updateSceneAction({
-          instanceId,
-          engineSceneId,
-          name: next.name,
-          description: next.description,
-          widgetsJson: JSON.stringify(next.widgets),
-          layoutJson: JSON.stringify({
-            width: next.width,
-            height: next.height,
-            backgroundColor: next.backgroundColor,
-          }),
-        });
-        setIsDirty(false);
-        if (!silent) {
-          toast({ title: "Scene saved" });
-        }
-        return true;
-      } catch (err) {
-        toast({
-          title: "Save failed",
-          description: err instanceof Error ? err.message : String(err),
-          variant: "destructive",
-        });
-        return false;
-      } finally {
-        setIsSaving(false);
-      }
-    },
-    [instanceId, engineSceneId, updateSceneAction, toast, fetchedScene?.updatedAt]
-  );
-
   const handleSave = useCallback(async () => {
     if (!scene) {
       return;
     }
-    await persistScene(scene);
-  }, [scene, persistScene]);
+    setIsSaving(true);
+    // Everything this query serves until the echo lands describes the scene as
+    // it was before this save.
+    echoWatermark.current = fetchedScene?.updatedAt ?? echoWatermark.current;
+    try {
+      await updateSceneAction({
+        instanceId,
+        engineSceneId,
+        name: scene.name,
+        description: scene.description,
+        widgetsJson: JSON.stringify(scene.widgets),
+        layoutJson: JSON.stringify({
+          width: scene.width,
+          height: scene.height,
+          backgroundColor: scene.backgroundColor,
+        }),
+      });
+      setIsDirty(false);
+      toast({ title: "Scene saved" });
+    } catch (err) {
+      toast({
+        title: "Save failed",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  }, [scene, instanceId, engineSceneId, updateSceneAction, toast, fetchedScene?.updatedAt]);
 
   const handleDeleteScene = useCallback(async () => {
     try {
@@ -214,25 +201,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   }, [scene, createSceneAction, instanceId, navigate, toast]);
 
   const handleWidgetsChange = useCallback(
-    (update: WidgetsUpdate, change: WidgetsChange) => {
-      if (change === "edit") {
-        mutateScene((prev) => ({ ...prev, widgets: update(prev.widgets) }));
-        return;
-      }
-      if (!scene) {
-        return;
-      }
-      const next: Scene = { ...scene, widgets: update(scene.widgets) };
-      setIsDirty(true);
-      setScene(next);
-      // Persist immediately: the preview is the engine's own overlay, so a widget
-      // that exists only in local state renders nothing at all, and the draft
-      // layout posted to it while editing carries position and size but not
-      // stacking order. This save (and the overlay update the engine pushes after
-      // it) is what makes an added widget appear and a restacked one change place.
-      void persistScene(next, { silent: true });
-    },
-    [scene, mutateScene, persistScene]
+    (update: WidgetsUpdate) => mutateScene((prev) => ({ ...prev, widgets: update(prev.widgets) })),
+    [mutateScene]
   );
 
   if (isLoading) {
