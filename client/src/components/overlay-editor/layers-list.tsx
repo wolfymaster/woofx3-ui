@@ -34,7 +34,7 @@ interface LayersListProps {
   onSelect: (widgetId: string) => void;
   /** A layer dragged to `toIndex` of `layers`, topmost first. See moveLayer in lib/layer-order.ts. */
   onMove: (widgetId: string, toIndex: number) => void;
-  /** Gives each layer a delete button. Omitted where the editor deletes from elsewhere. */
+  /** Gives each layer a delete button. */
   onDelete?: (widgetId: string) => void;
   /** The phone layout lays the layers out as one sideways-scrolling row. */
   horizontal?: boolean;
@@ -105,7 +105,10 @@ function LayerRow({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+          className={cn(
+            "shrink-0 text-muted-foreground hover:text-destructive",
+            horizontal ? "-mr-3 h-11 w-11 rounded-full" : "h-7 w-7"
+          )}
           onClick={() => onDelete(widget.id)}
           aria-label={`Delete ${label}`}
           data-testid={`button-delete-layer-${widget.id}`}

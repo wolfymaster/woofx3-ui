@@ -1,5 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { Minus, Plus, Trash2 } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Button } from "@/components/ui/button";
@@ -54,7 +54,6 @@ interface LayerInspectorProps {
   isLongest: boolean;
   availableVariables: VariableOption[];
   onChange: (widget: Widget) => void;
-  onDelete: () => void;
 }
 
 /** Edits the selected layer. Every change keeps the layer's center where it was. */
@@ -65,7 +64,6 @@ export function LayerInspector({
   isLongest,
   availableVariables,
   onChange,
-  onDelete,
 }: LayerInspectorProps) {
   const kind = layerKind(widget);
   const center = centerOf(widget);
@@ -86,19 +84,6 @@ export function LayerInspector({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold">{widget.name}</h2>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-11 w-11 text-muted-foreground hover:bg-destructive/10 hover:text-destructive lg:h-8 lg:w-8"
-          onClick={onDelete}
-          aria-label="Delete layer"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
-
       {kind === "text" && (
         <>
           <div className="flex flex-col gap-2">
