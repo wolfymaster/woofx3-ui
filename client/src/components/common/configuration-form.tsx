@@ -568,6 +568,13 @@ function validateRequired(fields: FieldDescriptor[], values: FieldValues): strin
 // ConfigurationForm
 // ---------------------------------------------------------------------------
 
+/**
+ * Called as a plain function inside ConfigurationForm's render, not mounted as
+ * a component, so it must not call hooks itself: a renderer that needs state
+ * returns an element of its own component, `(props) => <MyField {...props} />`.
+ * Hooks called directly would count as the form's own, and the form's hook count
+ * would change whenever its fields do.
+ */
 export type CustomFieldRenderer = (props: {
   field: FieldDescriptor;
   value: unknown;

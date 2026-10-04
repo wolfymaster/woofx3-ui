@@ -34,7 +34,7 @@ interface MediaFieldValue {
   type: string;
 }
 
-const MediaFieldRenderer: CustomFieldRenderer = ({ field, value, onChange }) => {
+function MediaField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
   const [modalOpen, setModalOpen] = useState(false);
   const MediaIcon = field.mediaType === "audio" ? FileAudio : field.mediaType === "video" ? FileVideo : FileImage;
 
@@ -101,7 +101,9 @@ const MediaFieldRenderer: CustomFieldRenderer = ({ field, value, onChange }) => 
       />
     </div>
   );
-};
+}
+
+const MediaFieldRenderer: CustomFieldRenderer = (props) => <MediaField {...props} />;
 
 // ---------------------------------------------------------------------------
 // Resource-ref field — module-declared "kind" picker (e.g. counters). Lists
@@ -111,7 +113,7 @@ const MediaFieldRenderer: CustomFieldRenderer = ({ field, value, onChange }) => 
 // generic ConfigurationForm because it needs instance/Convex context.
 // ---------------------------------------------------------------------------
 
-const ResourceRefFieldRenderer: CustomFieldRenderer = ({ field, value, onChange }) => {
+function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
   const resourceKind = typeof field.resourceKind === "string" ? field.resourceKind : undefined;
@@ -204,7 +206,9 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = ({ field, value, onChange 
       )}
     </div>
   );
-};
+}
+
+const ResourceRefFieldRenderer: CustomFieldRenderer = (props) => <ResourceRefField {...props} />;
 
 // ---------------------------------------------------------------------------
 // Alert widget name — picked from the names the alert widgets on the
