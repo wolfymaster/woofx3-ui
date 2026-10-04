@@ -218,7 +218,6 @@ export function AlertLayoutEditor({
       isLongest={selected.id === longestId}
       availableVariables={availableVariables}
       onChange={(next) => editLayer(selected.id, () => next)}
-      onDelete={() => deleteLayer(selected.id)}
     />
   ) : null;
 
@@ -240,6 +239,7 @@ export function AlertLayoutEditor({
       }}
       onSelect={setSelectedId}
       onMove={moveLayerTo}
+      onDelete={deleteLayer}
       horizontal={horizontal}
       emptyMessage="No layers yet. Add a widget to start."
     />
