@@ -37,6 +37,7 @@ import { forwardedCallbackUrl, mintOAuthState, oauthStateConfigFromEnv, routeOAu
 import { withQuery } from "./lib/safeRedirect";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
+import { parseEngineShoutoutTarget, SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE } from "./lib/shoutoutEngineRequest";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 import { TWITCH_TOKEN_REQUESTED_EVENT_TYPE } from "./lib/twitchTokenGrant";
 import { widgetCanonicalKey } from "./lib/widgetKey";
@@ -549,6 +550,21 @@ http.route({
       return new Response(JSON.stringify(answer), {
         headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
       });
+    }
+
+    // Also a request: the engine waits for the queue position, and only sends
+    // a shoutout itself when it has no dashboard queue at all.
+    if (eventType === SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE) {
+      const target = parseEngineShoutoutTarget(event);
+      if (!target) {
+        logger.warn("webhook: shoutout request without a target", { instanceId: instance._id });
+        return corsJson({ error: "Shoutout request needs twitchUserId and login" }, 400);
+      }
+      const answer = await ctx.runMutation(internal.shoutouts.enqueueFromEngine, {
+        instanceId: instance._id,
+        ...target,
+      });
+      return corsJson(answer);
     }
 
     // Handled ahead of the switch because the engine types this repo builds
