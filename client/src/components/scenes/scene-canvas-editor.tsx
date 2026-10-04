@@ -228,7 +228,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       // Persist immediately: the preview is the engine's own overlay, so a widget
       // that exists only in local state renders nothing at all, and the draft
       // layout posted to it while editing carries position and size but not
-      // stacking order. This save (and the overlay reload the engine pushes after
+      // stacking order. This save (and the overlay update the engine pushes after
       // it) is what makes an added widget appear and a restacked one change place.
       void persistScene(next, { silent: true });
     },

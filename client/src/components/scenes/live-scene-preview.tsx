@@ -31,8 +31,8 @@ interface LiveScenePreviewProps {
  * The preview's overlay token is its own, so rotating or revoking the public
  * browser-source URL leaves this untouched.
  *
- * The overlay renders the scene as last saved, and reloads itself whenever the
- * engine reports a save — as does every copy open in OBS. In between, the
+ * The overlay renders the scene as last saved, and applies each save the
+ * engine reports in place — as does every copy open in OBS. In between, the
  * editor's draft positions and sizes are posted into the frame on every change
  * and on every load, so a widget follows the drag before it is saved (see
  * docs/ui/scenes.md).
@@ -103,8 +103,9 @@ export function LiveScenePreview({ sceneId, width, height, widgets }: LiveSceneP
     // preview surface only — nothing in it needs to be directly interactive.
     <iframe
       ref={frameRef}
-      // Fires again each time the overlay reloads itself after a save; the
-      // reloaded page knows only the saved layout, not a drag still in progress.
+      // Fires again whenever the overlay reloads (a restarted engine, or a save
+      // it could not apply in place); the reloaded page knows only the saved
+      // layout, not a drag still in progress.
       onLoad={() => postLayout(widgetsRef.current)}
       src={overlayUrl}
       title="Scene preview"
