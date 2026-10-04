@@ -195,6 +195,7 @@ export function WidgetLayoutCanvas({
           taxonomyOf={taxonomyOf}
           onSelect={setSelectedWidgetId}
           onMove={moveLayerTo}
+          onDelete={deleteWidget}
           emptyMessage="Nothing on the canvas yet. Add a widget to start."
         />
       }
@@ -245,7 +246,6 @@ export function WidgetLayoutCanvas({
             onChangeSetting={(key, value) =>
               editWidget(selectedWidget.id, (w) => ({ ...w, settings: { ...w.settings, [key]: value } }))
             }
-            onDelete={() => deleteWidget(selectedWidget.id)}
           />
         ) : null
       }

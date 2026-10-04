@@ -1,11 +1,9 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { Trash2 } from "lucide-react";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
   type FieldDescriptor,
 } from "@/components/common/configuration-form";
-import { Button } from "@/components/ui/button";
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -17,36 +15,18 @@ interface WidgetSettingsPanelProps {
   renderers: Record<string, CustomFieldRenderer>;
   availableVariables?: VariableOption[];
   onChangeSetting: (key: string, value: unknown) => void;
-  onDelete: () => void;
 }
 
-/** Right-side settings pane for the currently-selected canvas widget — replaces the old
- * gear-icon popover so configuring a widget doesn't require hunting for a tiny trigger. */
+/** Right-side settings pane for the currently-selected canvas widget. */
 export function WidgetSettingsPanel({
   widget,
   fields,
   renderers,
   availableVariables,
   onChangeSetting,
-  onDelete,
 }: WidgetSettingsPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="p-4 border-b flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{widget.name}</p>
-          <p className="text-[11px] text-muted-foreground font-mono break-all">{widget.widgetCanonicalId}</p>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-destructive hover:text-destructive shrink-0"
-          onClick={onDelete}
-          data-testid="button-delete-widget"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
       <div className="flex-1 overflow-y-auto p-4">
         {fields.length === 0 ? (
           <p className="text-xs text-muted-foreground">This widget has no configurable settings.</p>

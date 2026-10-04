@@ -15,8 +15,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, Trash2 } from "lucide-react";
 import { widgetIconFor } from "@/components/overlay-editor/widget-icon";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Widget } from "@/types";
 
@@ -33,6 +34,8 @@ interface LayersListProps {
   onSelect: (widgetId: string) => void;
   /** A layer dragged to `toIndex` of `layers`, topmost first. See moveLayer in lib/layer-order.ts. */
   onMove: (widgetId: string, toIndex: number) => void;
+  /** Gives each layer a delete button. Omitted where the editor deletes from elsewhere. */
+  onDelete?: (widgetId: string) => void;
   /** The phone layout lays the layers out as one sideways-scrolling row. */
   horizontal?: boolean;
   emptyMessage: string;
@@ -47,6 +50,7 @@ function LayerRow({
   horizontal,
   canDrag,
   onSelect,
+  onDelete,
 }: {
   widget: Widget;
   label: string;
@@ -56,6 +60,7 @@ function LayerRow({
   horizontal: boolean;
   canDrag: boolean;
   onSelect: (widgetId: string) => void;
+  onDelete: ((widgetId: string) => void) | undefined;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: widget.id,
@@ -96,6 +101,18 @@ function LayerRow({
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {note ? <span className="shrink-0 font-mono text-xs text-muted-foreground">{note}</span> : null}
       </button>
+      {onDelete && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+          onClick={() => onDelete(widget.id)}
+          aria-label={`Delete ${label}`}
+          data-testid={`button-delete-layer-${widget.id}`}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      )}
     </div>
   );
 }
@@ -117,6 +134,7 @@ export function LayersList({
   meta,
   onSelect,
   onMove,
+  onDelete,
   horizontal = false,
   emptyMessage,
 }: LayersListProps) {
@@ -162,6 +180,7 @@ export function LayersList({
                   horizontal={horizontal}
                   canDrag={canDrag}
                   onSelect={onSelect}
+                  onDelete={onDelete}
                 />
               ))}
             </div>
