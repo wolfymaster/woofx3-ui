@@ -26,12 +26,28 @@ describe("buildPreviewLayoutMessage", () => {
         { id: "w1", x: 10, y: 20, width: 300, height: 200 },
         { id: "w2", x: 0, y: 0, width: 50, height: 60 },
       ],
+      placements: [
+        {
+          id: "w1",
+          widgetCanonicalId: "woofx3:widget:text",
+          position: { x: 10, y: 20 },
+          size: { width: 300, height: 200 },
+          settings: { text: "hello" },
+        },
+        {
+          id: "w2",
+          widgetCanonicalId: "woofx3:widget:text",
+          position: { x: 0, y: 0 },
+          size: { width: 50, height: 60 },
+          settings: { text: "hello" },
+        },
+      ],
     });
   });
 
   // The overlay hides every widget a layout leaves out, so an empty scene must
   // still send a message rather than nothing.
   test("sends an empty layout for a scene with no widgets", () => {
-    expect(buildPreviewLayoutMessage([])).toEqual({ type: PREVIEW_LAYOUT_MESSAGE, widgets: [] });
+    expect(buildPreviewLayoutMessage([])).toEqual({ type: PREVIEW_LAYOUT_MESSAGE, widgets: [], placements: [] });
   });
 });
