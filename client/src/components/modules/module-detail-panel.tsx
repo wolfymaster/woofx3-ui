@@ -30,6 +30,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { useInstance } from "@/hooks/use-instance";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { actionErrorMessage } from "@/lib/action-error";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
@@ -817,6 +819,24 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
           if (field.type === "button") {
             return <SettingButtonRow key={field.id} instanceId={instanceId} moduleId={moduleId} field={field} />;
           }
+          if (field.type === "resource_ref" && field.resourceKind) {
+            const linked = values[field.id] ?? loadedValues?.[field.id] ?? "";
+            return (
+              <ResourceRefSettingRow
+                key={field.id}
+                field={field}
+                resourceKind={field.resourceKind}
+                value={linked}
+                busy={saving === field.id}
+                saved={saveSuccess === field.id}
+                onChange={(value) => {
+                  setValues((prev) => ({ ...prev, [field.id]: value }));
+                  // Picking or creating an instance is the whole edit, so it saves at once.
+                  void saveSetting(field.id, value, false);
+                }}
+              />
+            );
+          }
           if (field.type === "secret") {
             return (
               <SecretSettingRow
@@ -888,6 +908,54 @@ function settingInputType(type: string): "number" | "url" | "text" {
     return "url";
   }
   return "text";
+}
+
+interface ResourceRefSettingRowProps {
+  field: ManifestSettingField;
+  resourceKind: string;
+  value: string;
+  busy: boolean;
+  saved: boolean;
+  onChange: (value: string) => void;
+}
+
+/**
+ * A setting that links a resource instance — the timer a module adds time
+ * to. Picks from every instance of the kind, or creates one, with the same
+ * picker a workflow step uses. "New" creates the instance under the module
+ * that declares the kind (`woofx3` for a timer), never under this module.
+ */
+function ResourceRefSettingRow({ field, resourceKind, value, busy, saved, onChange }: ResourceRefSettingRowProps) {
+  const { instance } = useInstance();
+  const instanceId = instance?._id;
+  const kind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: resourceKind } : "skip");
+  const ResourcePicker = configFieldRenderers.resource_ref;
+  return (
+    <div className="space-y-2">
+      <ResourcePicker
+        field={{
+          id: field.id,
+          label: field.label,
+          type: "resource_ref",
+          required: field.required,
+          resourceKind,
+          ...(kind?.moduleName ? { moduleName: kind.moduleName } : {}),
+          ...(field.description ? { hint: field.description } : {}),
+        }}
+        value={value}
+        onChange={(next) => onChange(typeof next === "string" ? next : "")}
+        availableVariables={[]}
+      />
+      {busy && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+      {saved && (
+        <p className="flex items-center text-xs text-muted-foreground">
+          <Check className="h-3 w-3 mr-1" />
+          Saved
+        </p>
+      )}
+      {kind === null && <p className="text-xs text-destructive">No installed module provides {resourceKind}s.</p>}
+    </div>
+  );
 }
 
 interface SecretSettingRowProps {

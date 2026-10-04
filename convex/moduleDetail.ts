@@ -32,6 +32,8 @@ export interface ManifestSettingField {
   defaultValue?: string;
   /** Present only when `type === "button"`. */
   action?: ManifestSettingAction;
+  /** Present only when `type === "resource_ref"`: the kind of instance it links. */
+  resourceKind?: string;
 }
 
 export type { ManifestResourceKind };
@@ -174,7 +176,7 @@ function parseManifestSettingAction(value: unknown, oauthIntegrations: string[])
   return undefined;
 }
 
-function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
+export function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
   const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
   const oauthIntegrations = moduleOAuthIntegrationIds(manifest);
   return asArr(raw.settings)
@@ -189,6 +191,7 @@ function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
         required: typeof o.required === "boolean" ? o.required : false,
         ...(o.defaultValue !== undefined ? { defaultValue: String(o.defaultValue) } : {}),
         ...(action ? { action } : {}),
+        ...(typeof o.resourceKind === "string" && o.resourceKind !== "" ? { resourceKind: o.resourceKind } : {}),
       };
     })
     .filter((s) => s.id);
