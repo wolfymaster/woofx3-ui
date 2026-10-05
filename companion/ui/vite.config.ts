@@ -8,6 +8,12 @@ export default defineConfig({
   root: import.meta.dirname,
   plugins: [react()],
   clearScreen: false,
+  // The companion's CSS is plain. An inline config stops Vite searching up to
+  // the dashboard's postcss.config.js, whose Tailwind plugin the companion
+  // doesn't install.
+  css: {
+    postcss: {},
+  },
   server: {
     port: 1420,
     strictPort: true,
