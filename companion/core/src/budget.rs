@@ -23,12 +23,22 @@ impl ByteBudget {
     /// Takes `bytes` from the budget until the returned charge is dropped, or
     /// returns None when that would exceed the limit.
     pub fn charge(&self, bytes: usize) -> Option<Charge> {
-        let limit = self.limit;
-        self.used
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |used| {
-                used.checked_add(bytes).filter(|total| *total <= limit)
-            })
-            .ok()?;
+        // An explicit compare-exchange loop rather than `fetch_update`, which
+        // newer toolchains deprecate in favour of a `try_update` older ones
+        // don't have.
+        let mut used = self.used.load(Ordering::Acquire);
+        loop {
+            let total = used
+                .checked_add(bytes)
+                .filter(|total| *total <= self.limit)?;
+            match self
+                .used
+                .compare_exchange_weak(used, total, Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => break,
+                Err(actual) => used = actual,
+            }
+        }
         Some(Charge {
             used: Arc::clone(&self.used),
             bytes,
