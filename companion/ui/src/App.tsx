@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
-import { type CompanionState, commands, currentState, onStateChange, type WindowState } from "./state";
+import { type ReactNode, useEffect, useState } from "react";
+import { Integrations, useIntegrations } from "./Integrations";
+import { type CompanionState, commands, currentState, onStateChange, type RelayView, type WindowState } from "./state";
 
 type Tab = "status" | "engine" | "configuration" | "integrations";
 
-/** Only Status works in this release; the rest are placeholders so later panels add content, not layout. */
+/** Engine and Configuration are placeholders so later panels add content, not layout. */
 const TABS: { id: Tab; label: string; enabled: boolean }[] = [
   { id: "status", label: "Status", enabled: true },
   { id: "engine", label: "Engine", enabled: false },
   { id: "configuration", label: "Configuration", enabled: false },
-  { id: "integrations", label: "Integrations", enabled: false },
+  { id: "integrations", label: "Integrations", enabled: true },
 ];
 
 function useWindowState(): WindowState {
@@ -137,10 +138,110 @@ function ConfirmPairing({ state }: { state: Extract<CompanionState, { kind: "con
   );
 }
 
-function Paired({ state }: { state: Extract<CompanionState, { kind: "paired" }> }) {
-  const [tab, setTab] = useState<Tab>("status");
+/** The relay connection that carries local integrations to the cloud engine. */
+function RelayRow({ relay }: { relay: RelayView }) {
+  const { busy, error, run } = useCommand();
+  const reconnect = (
+    <button type="button" disabled={busy} onClick={() => run(commands.reconnectRelay)}>
+      Reconnect
+    </button>
+  );
+  let ok = false;
+  let text: ReactNode;
+  let action: ReactNode = null;
+  switch (relay.kind) {
+    case "notNeeded":
+      text = "Relay: not needed";
+      break;
+    case "unavailable":
+      text = "Relay: your woofx3 doesn't offer it yet";
+      break;
+    case "connecting":
+      text = "Relay: connecting…";
+      break;
+    case "connected":
+      ok = true;
+      text = "Relay: connected";
+      break;
+    case "retrying":
+      text = (
+        <>
+          Relay: retrying in <Seconds until={relay.retryAt} /> ({relay.error})
+        </>
+      );
+      break;
+    case "displaced":
+      text = "Relay: another companion connection for this instance took over";
+      action = reconnect;
+      break;
+    case "refused":
+      text = "Relay: woofx3 refused the connection";
+      action = reconnect;
+      break;
+  }
+  return (
+    <>
+      <div className="update-row">
+        <p className="status-line">
+          <span className={ok ? "dot ok" : "dot off"} aria-hidden="true" />
+          {text}
+        </p>
+        {action}
+      </div>
+      {error && <p className="error">{error}</p>}
+    </>
+  );
+}
+
+function Seconds({ until }: { until: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, []);
+  return <span>{Math.max(0, Math.ceil((until - now) / 1000))} s</span>;
+}
+
+function StatusPanel({ state, relay }: { state: Extract<CompanionState, { kind: "paired" }>; relay: RelayView }) {
   const [confirmingUnpair, setConfirmingUnpair] = useState(false);
   const { busy, error, run } = useCommand();
+  return (
+    <section className="panel">
+      <p>
+        Paired with <strong>{state.instanceName}</strong>
+      </p>
+      <p className="status-line">
+        <span className={state.cloudConnected ? "dot ok" : "dot off"} aria-hidden="true" />
+        {state.cloudConnected ? "Connected to woofx3" : "Offline, reconnecting"}
+      </p>
+      <RelayRow relay={relay} />
+      {confirmingUnpair ? (
+        <div className="confirm">
+          <p>Unpair this computer? You will need to pair it again from the browser.</p>
+          <div className="row">
+            <button type="button" disabled={busy} onClick={() => setConfirmingUnpair(false)}>
+              Keep paired
+            </button>
+            <button type="button" className="danger" disabled={busy} onClick={() => run(commands.unpair)}>
+              Unpair
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setConfirmingUnpair(true)}>
+          Unpair
+        </button>
+      )}
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
+
+function Paired({ state }: { state: Extract<CompanionState, { kind: "paired" }> }) {
+  const [tab, setTab] = useState<Tab>("status");
+  const integrations = useIntegrations();
   return (
     <>
       <nav className="tabs" aria-label="Sections">
@@ -157,33 +258,13 @@ function Paired({ state }: { state: Extract<CompanionState, { kind: "paired" }> 
           </button>
         ))}
       </nav>
-      <section className="panel">
-        <p>
-          Paired with <strong>{state.instanceName}</strong>
-        </p>
-        <p className="status-line">
-          <span className={state.cloudConnected ? "dot ok" : "dot off"} aria-hidden="true" />
-          {state.cloudConnected ? "Connected to woofx3" : "Offline, reconnecting"}
-        </p>
-        {confirmingUnpair ? (
-          <div className="confirm">
-            <p>Unpair this computer? You will need to pair it again from the browser.</p>
-            <div className="row">
-              <button type="button" disabled={busy} onClick={() => setConfirmingUnpair(false)}>
-                Keep paired
-              </button>
-              <button type="button" className="danger" disabled={busy} onClick={() => run(commands.unpair)}>
-                Unpair
-              </button>
-            </div>
-          </div>
-        ) : (
-          <button type="button" onClick={() => setConfirmingUnpair(true)}>
-            Unpair
-          </button>
-        )}
-        {error && <p className="error">{error}</p>}
-      </section>
+      {tab === "integrations" ? (
+        <section className="panel">
+          <Integrations instanceName={state.instanceName} view={integrations} />
+        </section>
+      ) : (
+        <StatusPanel state={state} relay={integrations.relay} />
+      )}
     </>
   );
 }
