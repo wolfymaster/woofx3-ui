@@ -39,8 +39,18 @@ export interface EditorSocket {
 
 export type EditorStatus = "connecting" | "ready" | "reconnecting" | "unavailable" | "closed";
 
+/** Another editor of the scene: who, and the widget it has selected. */
+export interface EditorPresence {
+  name: string;
+  selection: string | null;
+}
+
 export interface EditorState {
   status: EditorStatus;
+  /** The version edits go to: the draft, or the published scene (live). */
+  version: SceneVersion;
+  /** The scene's other editors, by editor id. */
+  others: Record<string, EditorPresence>;
   /** The version being edited, as the editor should show it; null until it arrives. */
   doc: SceneDocument | null;
   meta: Record<string, PlacementMeta>;
@@ -100,6 +110,9 @@ export class SceneEditorClient {
    *  has transformed it against what was missed. */
   private resent: string | null = null;
   private readonly flushMs: number;
+  /** This editor's own presence, announced again after a reconnect. */
+  private presence: EditorPresence | null = null;
+  private others: Record<string, EditorPresence> = {};
 
   constructor(private readonly options: SceneEditorClientOptions) {
     this.version = options.version ?? "draft";
@@ -174,6 +187,15 @@ export class SceneEditorClient {
     this.send({ type: "publish" });
   }
 
+  /** Tell the scene's other editors who this is and what it has selected. */
+  setPresence(presence: EditorPresence): void {
+    if (this.presence && this.presence.name === presence.name && this.presence.selection === presence.selection) {
+      return;
+    }
+    this.presence = presence;
+    this.send({ type: "presence", ...presence });
+  }
+
   discard(): void {
     this.flush();
     this.send({ type: "discard" });
@@ -221,6 +243,8 @@ export class SceneEditorClient {
         return;
       }
       this.socket = null;
+      // The others are told again when this reconnects; until then it cannot know.
+      this.others = {};
       this.retry();
     };
   }
@@ -280,6 +304,10 @@ export class SceneEditorClient {
           this.send({ type: "submit", version, base: pending.base, opId: pending.opId, ops });
         }
         if (this.versions.published && this.versions.draft) {
+          if (this.status !== "ready" && this.presence) {
+            // A new socket is a new editor to the others: announce it again.
+            this.send({ type: "presence", ...this.presence });
+          }
           this.setStatus("ready");
         }
         this.emit();
@@ -319,6 +347,24 @@ export class SceneEditorClient {
       case "discarded":
         this.emit();
         return;
+      case "presence": {
+        const editorId = typeof message.editorId === "string" ? message.editorId : "";
+        if (!editorId) {
+          return;
+        }
+        const others = { ...this.others };
+        if (message.left === true) {
+          delete others[editorId];
+        } else {
+          others[editorId] = {
+            name: typeof message.name === "string" ? message.name : "",
+            selection: typeof message.selection === "string" ? message.selection : null,
+          };
+        }
+        this.others = others;
+        this.emit();
+        return;
+      }
       default:
         return;
     }
@@ -418,6 +464,8 @@ export class SceneEditorClient {
     const state = this.versions[this.version];
     this.options.onChange({
       status: this.status,
+      version: this.version,
+      others: this.others,
       doc: state?.doc ?? null,
       meta: state?.meta ?? {},
       hasDraft: this.hasDraft,

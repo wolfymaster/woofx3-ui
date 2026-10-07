@@ -1,7 +1,7 @@
 import { alertWidgetName, nextAlertWidgetName } from "@convex/lib/alertWidgets";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { type ReactNode, useCallback, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
@@ -9,7 +9,7 @@ import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
 import { layersTopFirst, moveLayer, nextLayerZIndex } from "@/lib/layer-order";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
-import { CanvasWidgetHandle } from "./canvas-widget-handle";
+import { CanvasWidgetHandle, type RemoteSelection } from "./canvas-widget-handle";
 import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
 
@@ -37,6 +37,10 @@ interface WidgetLayoutCanvasProps {
   className?: string;
   /** Any CSS color. Transparent lets the stage's dot grid show through, as OBS shows the scene beneath. */
   background?: string;
+  /** Told whenever the selected widget changes (null: none). */
+  onSelectionChange?: (widgetId: string | null) => void;
+  /** Other editors working on this canvas, by the widget each has selected. */
+  remoteSelections?: Record<string, RemoteSelection[]>;
 }
 
 /**
@@ -57,8 +61,13 @@ export function WidgetLayoutCanvas({
   header,
   className,
   background = "transparent",
+  onSelectionChange,
+  remoteSelections,
 }: WidgetLayoutCanvasProps) {
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
+  useEffect(() => {
+    onSelectionChange?.(selectedWidgetId);
+  }, [selectedWidgetId, onSelectionChange]);
   // StageArea re-observes whenever this identity changes, so it is not rebuilt per render.
   const canvasSize = useMemo(() => ({ width, height }), [width, height]);
 
@@ -221,6 +230,7 @@ export function WidgetLayoutCanvas({
                 key={widget.id}
                 widget={widget}
                 isSelected={selectedWidgetId === widget.id}
+                remote={remoteSelections?.[widget.id]}
                 scale={zoom}
                 onSelect={setSelectedWidgetId}
                 onMove={moveWidget}

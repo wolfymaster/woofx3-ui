@@ -68,6 +68,8 @@ An engine with the `scenes.editorSessions` capability edits the scene live throu
 - **Other editors.** Their ops arrive on the socket, are transformed against the pending local ones (as the server transforms the local ones against them), and become the canvas (`canvasOfDocument`); two people typing in one field both keep their typing. Unconfirmed edits survive a reconnect: they are resent against the number they were made at, and the server knows one it already applied.
 - **Preview.** The preview overlay loads with `?view=draft` and follows the draft as Scene Manager sequences it. The editor still posts widget positions while dragging, for instant feedback, but no longer posts placements.
 - **Name and description** are not part of the scene document; they save through `updateScene` a moment after typing stops.
+- **Live.** The header's **Live** switch sends this editor's changes to the published scene instead of the draft, so they reach OBS as they are made (a red **LIVE** badge says so). The engine copies each live change into the draft too, so a later publish cannot undo it, and the draft keeps its other edits. Each open editor chooses for itself and starts on the draft; in live mode the preview shows what is published.
+- **Who else is editing.** Each editor tells the others its name and the widget it has selected (`setPresence`, from the canvas's `onSelectionChange`). Widgets another editor has selected get an outline and a name tag in that editor's colour (`remoteSelections` on `WidgetLayoutCanvas`). Nothing about presence is stored.
 
 ## Widget System
 

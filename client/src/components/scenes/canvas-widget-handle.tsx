@@ -5,9 +5,18 @@ import type { Widget } from "@/types";
 
 const MIN_WIDGET_SIZE = 50;
 
+/** Another editor that has this widget selected. */
+export interface RemoteSelection {
+  name: string;
+  /** Any CSS color, the same for that editor everywhere on the canvas. */
+  color: string;
+}
+
 interface CanvasWidgetHandleProps {
   widget: Widget;
   isSelected: boolean;
+  /** Other editors that have this widget selected. */
+  remote?: RemoteSelection[];
   scale: number;
   onSelect: (widgetId: string) => void;
   onMove: (widgetId: string, x: number, y: number) => void;
@@ -41,6 +50,7 @@ type GestureUpdate = { mode: "move"; x: number; y: number } | { mode: "resize"; 
 export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
   widget,
   isSelected,
+  remote,
   scale,
   onSelect,
   onMove,
@@ -148,6 +158,8 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
         // +10 keeps every handle above LiveScenePreview's iframe (z-index 1) and the
         // fallback layer (z-index 0) regardless of the widget's own stacking order.
         zIndex: widget.zIndex + 10,
+        // Another editor's selection, in its colour, outside this editor's own.
+        boxShadow: remote?.[0] ? `0 0 0 2px ${remote[0].color}` : undefined,
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -163,6 +175,20 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
       {showLabel && (
         <span className="absolute -top-5 left-0 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground whitespace-nowrap">
           {widget.name}
+        </span>
+      )}
+
+      {remote && remote.length > 0 && (
+        <span className="absolute -top-5 right-0 flex gap-1" data-testid={`canvas-widget-${widget.id}-editors`}>
+          {remote.map((editor) => (
+            <span
+              key={`${editor.name}-${editor.color}`}
+              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-white whitespace-nowrap"
+              style={{ backgroundColor: editor.color }}
+            >
+              {editor.name || "Someone"}
+            </span>
+          ))}
         </span>
       )}
 
