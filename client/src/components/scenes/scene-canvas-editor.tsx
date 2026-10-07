@@ -1,7 +1,8 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
-import { ArrowLeft, Link, MoreVertical, Save, Settings, Trash2 } from "lucide-react";
+import type { FunctionReturnType } from "convex/server";
+import { ArrowLeft, Link, MoreVertical, Save, Settings, Trash2, Undo2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -17,8 +18,11 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
+import { canvasOfDocument, documentOfCanvas } from "@/lib/scene-document-widgets";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { Scene, Widget } from "@/types";
 import { LiveScenePreview } from "./live-scene-preview";
@@ -55,22 +59,41 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // that stale pre-save state; the echo is the first one above it.
   const echoWatermark = useRef(0);
 
+  // An engine with editor sessions edits the scene live through sceneManager:
+  // every change is sent as it is made and saved for you, into a draft OBS
+  // does not show until it is published. Older engines save with the button.
+  const sessionMode = useEngineCapabilities(instanceId).support("scenes.editorSessions") === "supported";
+  const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
+  const session = useSceneEditorSession({ instanceId, engineSceneId, sceneId: convexSceneId, enabled: sessionMode });
+  const sessionDoc = session.state.doc;
+  // Read by mutateScene, which sends each edit as it is made.
+  const sceneRef = useRef<Scene | null>(null);
+  sceneRef.current = scene;
+  const sessionDocRef = useRef(sessionDoc);
+  sessionDocRef.current = sessionDoc;
+
   useEffect(() => {
-    if (fetchedScene && !isDirty && fetchedScene.updatedAt > echoWatermark.current) {
-      setScene({
-        id: fetchedScene._id as string,
-        engineSceneId: fetchedScene.engineSceneId ?? "",
-        name: fetchedScene.name,
-        description: fetchedScene.description ?? "",
-        width: fetchedScene.width ?? 1920,
-        height: fetchedScene.height ?? 1080,
-        backgroundColor: fetchedScene.backgroundColor ?? "transparent",
-        widgets: (fetchedScene.widgets ?? []) as Widget[],
-        createdAt: new Date(fetchedScene.createdAt).toISOString(),
-        updatedAt: new Date(fetchedScene.updatedAt).toISOString(),
-      });
+    if (sessionMode) {
+      return;
     }
-  }, [fetchedScene, isDirty]);
+    if (fetchedScene && !isDirty && fetchedScene.updatedAt > echoWatermark.current) {
+      setScene(sceneOf(fetchedScene));
+    }
+  }, [fetchedScene, isDirty, sessionMode]);
+
+  // In session mode the canvas is the session's document, kept current as
+  // other editors' changes arrive; name and description are the scene's own.
+  // Only the starting name and description come from it: its later pushes are ignored.
+  const fetchedSceneRef = useRef(fetchedScene);
+  fetchedSceneRef.current = fetchedScene;
+  const sceneLoaded = fetchedScene !== undefined && fetchedScene !== null;
+  useEffect(() => {
+    const fetched = fetchedSceneRef.current;
+    if (!sessionMode || !sessionDoc || !sceneLoaded || !fetched) {
+      return;
+    }
+    setScene((prev) => ({ ...(prev ?? sceneOf(fetched)), ...canvasOfDocument(sessionDoc) }));
+  }, [sessionMode, sessionDoc, sceneLoaded]);
 
   const updateSceneAction = useAction(api.sceneActions.updateScene);
   const deleteSceneAction = useAction(api.sceneActions.deleteScene);
@@ -78,12 +101,51 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const getOrCreateBrowserSourceKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
   const rotateBrowserSourceKey = useAction(api.browserSource.rotateBrowserSourceKey);
 
-  const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
+  const sessionEdit = session.edit;
+  const mutateScene = useCallback(
+    (updater: (prev: Scene) => Scene) => {
+      const prev = sceneRef.current;
+      if (!prev) {
+        return;
+      }
+      const next = updater(prev);
+      sceneRef.current = next;
+      setScene(next);
+      if (sessionMode) {
+        // Straight to the session, never from an effect on the scene: a
+        // render that follows another editor's change must not send the
+        // canvas it replaced.
+        sessionEdit(documentOfCanvas(next, sessionDocRef.current));
+        if (next.name !== prev.name || next.description !== prev.description) {
+          setIsDirty(true);
+        }
+      } else {
+        setIsDirty(true);
+      }
+    },
+    [sessionMode, sessionEdit]
+  );
 
-  const mutateScene = useCallback((updater: (prev: Scene) => Scene) => {
-    setIsDirty(true);
-    setScene((prev) => (prev ? updater(prev) : prev));
-  }, []);
+  // In session mode the name and description, which are not part of the
+  // document, save themselves a moment after typing stops.
+  const sceneName = scene?.name;
+  const sceneDescription = scene?.description;
+  useEffect(() => {
+    if (!sessionMode || !isDirty || sceneName === undefined) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      setIsDirty(false);
+      updateSceneAction({ instanceId, engineSceneId, name: sceneName, description: sceneDescription }).catch((err) =>
+        toast({
+          title: "Couldn't save the scene's name",
+          description: err instanceof Error ? err.message : String(err),
+          variant: "destructive",
+        })
+      );
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [sessionMode, isDirty, sceneName, sceneDescription, updateSceneAction, instanceId, engineSceneId, toast]);
 
   const copyKeyToClipboard = useCallback(async (key: string) => {
     const browserSourceUrl = browserSourceUrlForKey(key);
@@ -327,10 +389,43 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Button onClick={handleSave} disabled={isSaving || !isDirty} data-testid="button-save-scene">
-          <Save className="h-4 w-4 mr-2" />
-          {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
-        </Button>
+        {sessionMode ? (
+          <>
+            <span className="text-xs text-muted-foreground" data-testid="text-scene-sync">
+              {session.state.status === "reconnecting"
+                ? "Reconnecting…"
+                : session.state.status === "unavailable"
+                  ? "Can't reach the scene manager"
+                  : session.state.hasDraft
+                    ? "Draft saved · not on stream yet"
+                    : "Up to date"}
+            </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={session.discard}
+                  disabled={!session.state.hasDraft}
+                  aria-label="Discard draft"
+                  data-testid="button-discard-draft"
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Discard draft</TooltipContent>
+            </Tooltip>
+            <Button onClick={session.publish} disabled={!session.state.hasDraft} data-testid="button-publish-scene">
+              <Upload className="h-4 w-4 mr-2" />
+              Publish
+            </Button>
+          </>
+        ) : (
+          <Button onClick={handleSave} disabled={isSaving || !isDirty} data-testid="button-save-scene">
+            <Save className="h-4 w-4 mr-2" />
+            {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
+          </Button>
+        )}
 
         {/* Scene actions */}
         <DropdownMenu>
@@ -367,8 +462,31 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       renderers={configFieldRenderers}
       onChange={handleWidgetsChange}
       preview={
-        <LiveScenePreview sceneId={convexSceneId} width={scene.width} height={scene.height} widgets={scene.widgets} />
+        <LiveScenePreview
+          sceneId={convexSceneId}
+          width={scene.width}
+          height={scene.height}
+          widgets={scene.widgets}
+          followDraft={sessionMode}
+        />
       }
     />
   );
+}
+
+type FetchedScene = NonNullable<FunctionReturnType<typeof api.scenes.getByEngineSceneId>>;
+
+function sceneOf(fetchedScene: FetchedScene): Scene {
+  return {
+    id: fetchedScene._id as string,
+    engineSceneId: fetchedScene.engineSceneId ?? "",
+    name: fetchedScene.name,
+    description: fetchedScene.description ?? "",
+    width: fetchedScene.width ?? 1920,
+    height: fetchedScene.height ?? 1080,
+    backgroundColor: fetchedScene.backgroundColor ?? "transparent",
+    widgets: (fetchedScene.widgets ?? []) as Widget[],
+    createdAt: new Date(fetchedScene.createdAt).toISOString(),
+    updatedAt: new Date(fetchedScene.updatedAt).toISOString(),
+  };
 }

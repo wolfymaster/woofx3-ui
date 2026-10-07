@@ -11,6 +11,12 @@ interface LiveScenePreviewProps {
   height: number;
   /** The editor's current widgets, saved or not; the overlay shows them. */
   widgets: readonly Widget[];
+  /**
+   * The overlay follows the scene's draft as sceneManager sequences it (an
+   * engine with editor sessions): it is told only where widgets are being
+   * dragged, for instant feedback, and gets everything else as ops.
+   */
+  followDraft?: boolean;
 }
 
 /**
@@ -37,7 +43,7 @@ interface LiveScenePreviewProps {
  * follows a drag, and shows a new setting or appears when added, before it is
  * saved (see docs/ui/scenes.md).
  */
-export function LiveScenePreview({ sceneId, width, height, widgets }: LiveScenePreviewProps) {
+export function LiveScenePreview({ sceneId, width, height, widgets, followDraft = false }: LiveScenePreviewProps) {
   const getOrCreatePreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
   // undefined = loading; null = not ready yet (scene not synced, or mint failed).
   const [overlayUrl, setOverlayUrl] = useState<string | null | undefined>(undefined);
@@ -55,9 +61,9 @@ export function LiveScenePreview({ sceneId, width, height, widgets }: LiveSceneP
       }
       // Addressed to the overlay's origin, so a frame that has navigated
       // somewhere else never receives it.
-      frame.postMessage(buildPreviewLayoutMessage(current), new URL(overlayUrl).origin);
+      frame.postMessage(buildPreviewLayoutMessage(current, { placements: !followDraft }), new URL(overlayUrl).origin);
     },
-    [overlayUrl]
+    [overlayUrl, followDraft]
   );
 
   useEffect(() => {
@@ -107,7 +113,7 @@ export function LiveScenePreview({ sceneId, width, height, widgets }: LiveSceneP
       // it could not apply in place); the reloaded page knows only the saved
       // scene, not the draft.
       onLoad={() => postLayout(widgetsRef.current)}
-      src={overlayUrl}
+      src={followDraft ? withDraftView(overlayUrl) : overlayUrl}
       title="Scene preview"
       sandbox="allow-scripts allow-same-origin"
       // Chrome gates a public page reaching a private address behind the Local
@@ -125,4 +131,11 @@ export function LiveScenePreview({ sceneId, width, height, widgets }: LiveSceneP
       data-testid="live-scene-preview"
     />
   );
+}
+
+/** The overlay URL showing the scene's draft rather than what is published. */
+function withDraftView(overlayUrl: string): string {
+  const url = new URL(overlayUrl);
+  url.searchParams.set("view", "draft");
+  return url.toString();
 }

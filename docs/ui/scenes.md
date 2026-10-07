@@ -32,7 +32,7 @@ The rail only appears once a scene is selected, and it belongs to the editor: `W
 
 The editor has three regions:
 
-1. **Header** — back to the listing, editable name, a **scene-settings popover** (gear: description, width/height, background), the **browser-source dropdown** (Copy / Rotate), Save (dirty-gated), and a `⋮` menu (Duplicate / Delete scene, via `sceneActions`).
+1. **Header** — back to the listing, editable name, a **scene-settings popover** (gear: description, width/height, background), the **browser-source dropdown** (Copy / Rotate), Save (dirty-gated) or, on an engine with editor sessions, the sync status with **Discard** and **Publish** (see [Editor sessions](#editor-sessions)), and a `⋮` menu (Duplicate / Delete scene, via `sceneActions`).
 2. **Widget catalog rail** — installed widgets from `useQuery(api.sceneWidgets.listForInstance)`; clicking one adds it to the canvas.
 3. **Canvas** — `flex-1` zoomable surface with absolute-positioned placeholder boxes (the engine renders real widgets in the overlay; this is a layout surface). Drag to move, corner handle to resize; clicking the background deselects. Zoom in/out and fit sit in the bottom-left corner (the canvas has no grid overlay — the width and height live in the scene-settings popover). Selecting a widget opens its settings panel on the right; each row of the layers list carries the widget's delete button.
 4. **Right rail** — **Layers** on top, then the selected widget's settings (or a canvas summary when nothing is selected). Layers are listed topmost first; clicking one selects it, and dragging one by its grip (or arrow keys on a focused grip) moves it up or down the stack. A move renumbers every widget's `zIndex` from 1 at the bottom and stores the widgets bottom first, because the editor stacks by `zIndex` while the engine's Scene Manager stacks by array order (`moveLayer` in `client/src/lib/layer-order.ts`). The scene saves straight away after a move, as it does after adding a widget: the draft layout posted to the preview carries position and size but not order, so only a save restacks the real widgets. The Alert action's layout editor shares this rail (`OverlayEditorShell`, `LayersList`), with the same reordering.
@@ -57,7 +57,17 @@ A cached URL that is not the current `{publicUrl}/scene/{engineSceneId}?token=�
 
 **Local Network Access.** The preview iframe carries `allow="local-network-access"`. When an engine hostname resolves to a LAN address (split-horizon DNS in dev — `streamware.dev.woofx3.tv` → `192.168.0.x`), Chrome treats the load as a public page reaching the local network and gates it behind a permission whose default allowlist is `self`; without the attribute it is auto-denied with no prompt and the overlay silently renders nothing. The attribute is inert once the engine resolves to a public address. The browser source is a top-level redirect, so it has no frame to delegate to — and OBS does not enforce Local Network Access in any case.
 
-Saves go through `useAction(api.sceneActions.updateScene)` (`widgetsJson` + `layoutJson`); a dirty flag drives the Save button and protects in-flight edits from the post-save webhook re-push.
+On an engine without editor sessions, saves go through `useAction(api.sceneActions.updateScene)` (`widgetsJson` + `layoutJson`); a dirty flag drives the Save button and protects in-flight edits from the post-save webhook re-push.
+
+### Editor sessions
+
+An engine with the `scenes.editorSessions` capability edits the scene live through its Scene Manager, and there is no Save button: every change is sent as it is made and saved for you, into a **draft** that OBS does not show until it is **published**. **Discard** throws the draft away. (Engine side: woofx3 docs/services/scene-documents.md.)
+
+- **Connecting.** `useSceneEditorSession` asks `sceneActions.getSceneEditorSession` for a short-lived token and opens Scene Manager's editor socket at the origin the preview overlay is served from (`/scene/{id}/edit`). A dropped socket reconnects with a fresh token.
+- **Sending edits.** The editor keeps its React state as before. `mutateScene`, which every edit passes through, hands the new canvas to the session (`documentOfCanvas` in `client/src/lib/scene-document-widgets.ts`), and `SceneEditorClient` (`client/src/lib/scene-editor-client.ts`) sends the difference from what it last saw as json0 ops at most every 200 ms: one op in flight, later edits composed into one, text as splices. Edits go to the session from `mutateScene` and never from an effect on the scene state, so a render after another editor's change cannot send back the canvas it replaced.
+- **Other editors.** Their ops arrive on the socket, are transformed against the pending local ones (as the server transforms the local ones against them), and become the canvas (`canvasOfDocument`); two people typing in one field both keep their typing. Unconfirmed edits survive a reconnect: they are resent against the number they were made at, and the server knows one it already applied.
+- **Preview.** The preview overlay loads with `?view=draft` and follows the draft as Scene Manager sequences it. The editor still posts widget positions while dragging, for instant feedback, but no longer posts placements.
+- **Name and description** are not part of the scene document; they save through `updateScene` a moment after typing stops.
 
 ## Widget System
 

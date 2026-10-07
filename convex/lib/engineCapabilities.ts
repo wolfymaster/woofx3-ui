@@ -24,6 +24,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "modules.oauth",
   "obs.control",
   "obs.status",
+  "scenes.editorSessions",
   "twitch.dashboardTokens",
   "widgets.themes",
   "workflow.delayWait",
