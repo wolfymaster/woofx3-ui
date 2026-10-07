@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { localEndpointSummaries } from "@convex/lib/localEndpoints";
 import { parseManifestPermissions } from "@convex/lib/modulePermissions";
 import Editor from "@monaco-editor/react";
 import { useMutation, useQuery } from "convex/react";
@@ -18,7 +19,11 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
-import { ApproveModulePermissionsDialog, ModulePermissionsSection } from "@/components/modules/module-permissions";
+import {
+  ApproveModulePermissionsDialog,
+  ModuleLocalEndpointsSection,
+  ModulePermissionsSection,
+} from "@/components/modules/module-permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -27,7 +32,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
 import { buildModuleArchive, computeModuleKey, readModuleArchive } from "@/lib/module-archive";
 import { bareModuleKey } from "@/lib/module-key";
-import { permissionsToApprove } from "@/lib/module-permissions";
+import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
 
 interface FileNode {
@@ -348,6 +353,17 @@ export default function ModuleInstall() {
     const installedPermissions = installedRow?.manifest ? parseManifestPermissions(installedRow.manifest) : null;
     return permissionsToApprove(declaredPermissions, installedPermissions);
   }, [declaredPermissions, installedRow]);
+  const declaredLocalEndpoints = useMemo(
+    () => (editedManifest === null ? null : localEndpointSummaries(editedManifest)),
+    [editedManifest]
+  );
+  const localEndpointsNeedingApproval = useMemo(() => {
+    if (!declaredLocalEndpoints) {
+      return [];
+    }
+    const installedEndpoints = installedRow?.manifest ? localEndpointSummaries(installedRow.manifest) : null;
+    return localEndpointsToApprove(declaredLocalEndpoints, installedEndpoints);
+  }, [declaredLocalEndpoints, installedRow]);
 
   // Find manifest file on load
   useEffect(() => {
@@ -558,12 +574,12 @@ export default function ModuleInstall() {
   }, [files, editedManifest, instance, generateUploadUrl, uploadAndDeliver]);
 
   const handleInstallClick = useCallback(() => {
-    if (permissionsNeedingApproval.length > 0) {
+    if (permissionsNeedingApproval.length > 0 || localEndpointsNeedingApproval.length > 0) {
       setApprovalOpen(true);
       return;
     }
     void handleInstall();
-  }, [permissionsNeedingApproval, handleInstall]);
+  }, [permissionsNeedingApproval, localEndpointsNeedingApproval, handleInstall]);
 
   const allChecksPassed = checkResults.length > 0 && checkResults.every((r) => r.status === "pass");
   const selectedContent = selectedPath ? files[selectedPath] : null;
@@ -699,6 +715,7 @@ export default function ModuleInstall() {
 
           <div className="p-4 border-t shrink-0 space-y-3">
             {editedManifest !== undefined && <ModulePermissionsSection permissions={declaredPermissions} />}
+            {editedManifest !== undefined && <ModuleLocalEndpointsSection endpoints={declaredLocalEndpoints} />}
             {installEvent?.status === "success" ? (
               <div className="p-3 rounded-md border bg-green-500/10 border-green-500/20">
                 <div className="flex items-center gap-2 text-sm text-green-500">
@@ -753,6 +770,7 @@ export default function ModuleInstall() {
         mode={installedRow ? "update" : "install"}
         moduleName={typeof editedManifest?.name === "string" ? editedManifest.name : "This module"}
         permissions={permissionsNeedingApproval}
+        localEndpoints={localEndpointsNeedingApproval}
         onApprove={() => {
           setApprovalOpen(false);
           void handleInstall();

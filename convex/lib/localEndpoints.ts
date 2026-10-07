@@ -155,6 +155,42 @@ export function readLocalEndpoints(manifest: unknown): LocalEndpoint[] {
   return endpoints;
 }
 
+/** What the install review shows of an endpoint: what the module reaches on the streamer's network. */
+export interface LocalEndpointSummary {
+  id: string;
+  name: string;
+  protocol: LocalProtocol;
+}
+
+export function localEndpointSummaries(manifest: unknown): LocalEndpointSummary[] {
+  return readLocalEndpoints(manifest).map(({ id, name, protocol }) => ({ id, name, protocol }));
+}
+
+/**
+ * The endpoints a streamer has to approve before `next` is installed: all of
+ * them for a fresh install, and those the installed version did not declare
+ * for an upgrade. LAN reach is fixed at install, like permissions.
+ */
+export function unapprovedLocalEndpoints<T extends { id: string }>(
+  next: readonly T[],
+  installed: readonly { id: string }[] | null
+): T[] {
+  const known = new Set((installed ?? []).map((endpoint) => endpoint.id));
+  return next.filter((endpoint) => !known.has(endpoint.id));
+}
+
+/**
+ * The ids of the endpoints `manifest` declares that are not in `approved`.
+ * The server-side half of the install review: an install is refused while
+ * this is non-empty, like a permission nobody approved.
+ */
+export function unapprovedLocalEndpointIds(manifest: unknown, approved: readonly string[]): string[] {
+  const known = new Set(approved);
+  return readLocalEndpoints(manifest)
+    .map((endpoint) => endpoint.id)
+    .filter((id) => !known.has(id));
+}
+
 /** The setting keys an endpoint names, host first. */
 export function localSettingKeys(endpoint: LocalEndpoint): string[] {
   return [endpoint.hostSetting, endpoint.portSetting, ...(endpoint.passwordSetting ? [endpoint.passwordSetting] : [])];

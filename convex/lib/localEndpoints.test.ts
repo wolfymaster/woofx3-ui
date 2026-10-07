@@ -6,6 +6,7 @@ import {
   localSettingKeys,
   planCompanionWrites,
   readLocalEndpoints,
+  unapprovedLocalEndpointIds,
 } from "./localEndpoints";
 
 describe("isEndpointHost and isEndpointPort", () => {
@@ -180,5 +181,13 @@ describe("planCompanionWrites", () => {
     expect(() => planCompanionWrites(endpoint, { port: 65536 }, [], true)).toThrow();
     expect(() => planCompanionWrites(endpoint, { port: 1.5 }, [], true)).toThrow();
     expect(() => planCompanionWrites(endpoint, { host: "http://obs" }, [], true)).toThrow();
+  });
+});
+
+describe("unapprovedLocalEndpointIds", () => {
+  test("lists declared endpoints outside the approval", () => {
+    expect(unapprovedLocalEndpointIds(obsManifest(), [])).toEqual(["obs"]);
+    expect(unapprovedLocalEndpointIds(obsManifest(), ["obs"])).toEqual([]);
+    expect(unapprovedLocalEndpointIds({ id: "x" }, [])).toEqual([]);
   });
 });

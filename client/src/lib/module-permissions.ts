@@ -1,3 +1,4 @@
+import { type LocalEndpointSummary, unapprovedLocalEndpoints } from "@convex/lib/localEndpoints";
 import { unapprovedPermissions } from "@convex/lib/modulePermissions";
 
 /**
@@ -50,4 +51,16 @@ export function describePermissions(ids: readonly string[]): DescribedPermission
  */
 export function permissionsToApprove(next: readonly string[], installed: readonly string[] | null): string[] {
   return unapprovedPermissions(next, installed ?? []);
+}
+
+/**
+ * The local endpoints a streamer has to approve, by the same rule as
+ * permissions: what the module reaches on their network is fixed at install,
+ * so an upgrade that adds an endpoint asks again. Keyed by endpoint id.
+ */
+export function localEndpointsToApprove(
+  next: readonly LocalEndpointSummary[],
+  installed: readonly LocalEndpointSummary[] | null
+): LocalEndpointSummary[] {
+  return unapprovedLocalEndpoints(next, installed);
 }
