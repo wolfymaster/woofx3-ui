@@ -1,7 +1,8 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import {
   ArrowLeft,
   Bell,
@@ -21,6 +22,7 @@ import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
+import { LocalEndpointPanel } from "@/components/modules/local-endpoint-panel";
 import { ModulePermissionList, ModulePermissionsSection } from "@/components/modules/module-permissions";
 import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endpoints";
 import { ObsConnectionStatus } from "@/components/modules/obs-connection-status";
@@ -252,6 +254,9 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
               <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
                 {instanceId && module.identifier && (
                   <ModuleWebhookEndpoints instanceId={instanceId} modulePrefix={module.identifier} />
+                )}
+                {instanceId && module.identifier && (
+                  <LocalEndpointPanel instanceId={instanceId} moduleId={module.identifier} />
                 )}
                 {instanceId && module.identifier === OBS_MODULE_ID && <ObsConnectionStatus instanceId={instanceId} />}
                 <SettingsTab
@@ -703,6 +708,55 @@ function WorkflowList({ items }: { items: ModuleDetailWorkflow[] | undefined }) 
 
 // --- Settings Tab ---
 
+/** Who wrote a setting a local endpoint names, and whether the companion could fill it again. */
+interface SettingSource {
+  source: "companion" | "manual" | null;
+  /** The companion has the setting's endpoint turned on, so handing the setting back to it means something. */
+  companionEnabled: boolean;
+}
+
+function settingSourcesFrom(
+  view: FunctionReturnType<typeof api.companionIntegrations.forModule> | undefined
+): Map<string, SettingSource> {
+  const sources = new Map<string, SettingSource>();
+  if (!view) {
+    return sources;
+  }
+  const recorded = new Map(view.provenance.map((row) => [row.key, row.source]));
+  for (const endpoint of view.endpoints) {
+    const companionEnabled = endpoint.state?.enabled ?? false;
+    for (const key of [endpoint.hostSetting, endpoint.portSetting, endpoint.passwordSetting]) {
+      if (key) {
+        sources.set(key, { source: recorded.get(key) ?? null, companionEnabled });
+      }
+    }
+  }
+  return sources;
+}
+
+function FromCompanionBadge() {
+  return (
+    <Badge variant="secondary" className="ml-2 text-[10px]">
+      From companion
+    </Badge>
+  );
+}
+
+/** Under a local endpoint's setting: what editing it does, or how to hand it back to the companion. */
+function SettingSourceNote({ source, onReturn }: { source: SettingSource | undefined; onReturn: () => void }) {
+  if (source?.source === "companion") {
+    return <p className="text-xs text-muted-foreground">Editing this stops the companion from updating it.</p>;
+  }
+  if (source?.source === "manual" && source.companionEnabled) {
+    return (
+      <button type="button" className="text-xs text-primary underline-offset-4 hover:underline" onClick={onReturn}>
+        Use the companion's value
+      </button>
+    );
+  }
+  return null;
+}
+
 interface SettingsTabProps {
   instanceId?: Id<"instances">;
   moduleId: string;
@@ -723,6 +777,30 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
 
   const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  const localView = useQuery(
+    api.companionIntegrations.forModule,
+    instanceId && moduleId ? { instanceId, moduleId } : "skip"
+  );
+  const returnToCompanion = useMutation(api.moduleSettingProvenance.useCompanionValue);
+  const settingSources = useMemo(() => settingSourcesFrom(localView), [localView]);
+
+  // The companion writes settings in the engine, which pushes nothing here, so
+  // the form reloads when Convex records a new companion write.
+  const companionWrites =
+    localView === undefined
+      ? null
+      : (localView?.provenance ?? [])
+          .filter((row) => row.source === "companion")
+          .map((row) => `${row.key}@${row.updatedAt}`)
+          .join(",");
+  const [seenCompanionWrites, setSeenCompanionWrites] = useState<string | null>(null);
+  if (companionWrites !== null && companionWrites !== seenCompanionWrites) {
+    setSeenCompanionWrites(companionWrites);
+    if (seenCompanionWrites !== null && loadState === "loaded") {
+      setLoadState("idle");
+    }
+  }
 
   function loadSettings() {
     if (!instanceId || !moduleId) {
@@ -800,6 +878,16 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     }
   }
 
+  function returnSettingToCompanion(key: string) {
+    if (!instanceId) {
+      return;
+    }
+    setSaveError(null);
+    returnToCompanion({ instanceId, moduleId, key }).catch((err: unknown) => {
+      setSaveError(actionErrorMessage(err));
+    });
+  }
+
   function clearSecret(key: string) {
     if (!window.confirm("Clear this secret? The module loses it until a new value is saved.")) {
       return;
@@ -849,17 +937,21 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
                 onChange={(value) => setValues((prev) => ({ ...prev, [field.id]: value }))}
                 onSave={() => void saveSetting(field.id, values[field.id] ?? "", true)}
                 onClear={() => clearSecret(field.id)}
+                source={settingSources.get(field.id)}
+                onReturnToCompanion={() => returnSettingToCompanion(field.id)}
               />
             );
           }
           const currentValue = values[field.id] ?? loadedValues?.[field.id] ?? field.defaultValue ?? "";
           const isDirty = currentValue !== (loadedValues?.[field.id] ?? field.defaultValue ?? "");
+          const source = settingSources.get(field.id);
           return (
             <div key={field.id} className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor={`setting-${field.id}`} className="text-sm font-medium">
                   {field.label}
                   {field.required && <span className="text-destructive ml-1">*</span>}
+                  {source?.source === "companion" && <FromCompanionBadge />}
                 </Label>
                 <Button
                   size="sm"
@@ -888,6 +980,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
                 onChange={(e) => setValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                 className="font-mono text-sm"
               />
+              <SettingSourceNote source={source} onReturn={() => returnSettingToCompanion(field.id)} />
             </div>
           );
         })}
@@ -967,19 +1060,34 @@ interface SecretSettingRowProps {
   onChange: (value: string) => void;
   onSave: () => void;
   onClear: () => void;
+  /** Set when a local endpoint names the setting. */
+  source?: SettingSource;
+  onReturnToCompanion: () => void;
 }
 
 /**
  * A `secret` setting. The stored value never comes back from the engine, so
  * the field always starts empty and shows only whether a value is set.
  */
-function SecretSettingRow({ field, isSet, value, busy, saved, onChange, onSave, onClear }: SecretSettingRowProps) {
+function SecretSettingRow({
+  field,
+  isSet,
+  value,
+  busy,
+  saved,
+  onChange,
+  onSave,
+  onClear,
+  source,
+  onReturnToCompanion,
+}: SecretSettingRowProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <Label htmlFor={`setting-${field.id}`} className="text-sm font-medium">
           {field.label}
           {field.required && !isSet && <span className="text-destructive ml-1">*</span>}
+          {source?.source === "companion" && isSet && <FromCompanionBadge />}
         </Label>
         <div className="flex items-center gap-2">
           <Badge variant={isSet ? "secondary" : "outline"} className="text-xs">
@@ -1020,6 +1128,7 @@ function SecretSettingRow({ field, isSet, value, busy, saved, onChange, onSave, 
         onChange={(e) => onChange(e.target.value)}
         className="font-mono text-sm"
       />
+      <SettingSourceNote source={source} onReturn={onReturnToCompanion} />
     </div>
   );
 }

@@ -55,12 +55,23 @@ A manifest may declare a top-level `permissions` array (`twitch.moderation`, `tw
 
 A manifest may declare `local[]`: things on the streamer's own network the module reaches, such as the OBS WebSocket. Each entry names the settings that hold the address (`hostSetting` a `text` setting, `portSetting` a `number`, `passwordSetting` an optional `secret`) and how the device can be found (`discover`). The engine validates the block at install; `convex/lib/localEndpoints.ts` reads it back and keeps only entries the engine would have installed.
 
+- **How the endpoint is reached.** On the Settings tab, `LocalEndpointPanel` (`client/src/components/modules/local-endpoint-panel.tsx`) explains each endpoint, from `companionIntegrations.forModule` and the engine's capabilities (`localEndpointSituation` in `client/src/lib/local-endpoints.ts`). It names the endpoint by its declared `name`, never a particular app:
+
+  | Situation | Shown |
+  |---|---|
+  | `viaCompanion`: the companion has the endpoint turned on | "Connected through the companion on {device}", or "your companion on {device} is offline" when its last heartbeat is over three minutes old, and the address it dials |
+  | `companionNothingFound`: a confirmed companion, endpoint off | Check that {endpoint} is running, then turn it on (or, for an endpoint without discovery, enter its address) in the companion's Integrations tab |
+  | `noCompanion`: no companion, or one not confirmed on its device | Install the woofx3 companion, with a download link when `VITE_COMPANION_DOWNLOAD_URL` is set, and the warning that an engine not on that computer can't reach `127.0.0.1` |
+  | `unsupported`: the engine lacks `modules.localEndpoints`, or this deployment has no relay or no maintenance API | Nothing; the settings page is as before |
+
+- **Provenance on setting rows.** A setting a `local[]` entry names shows **From companion** when the companion wrote it (`moduleSettingProvenance`). It stays editable, with "Editing this stops the companion from updating it": saving it through `moduleSettingsActions.updateModuleSetting` marks it `manual`, and the companion leaves a manual key alone. A manual key whose endpoint the companion has turned on offers **Use the companion's value** (`moduleSettingProvenance.useCompanionValue`), which deletes the row so the companion fills the field on its next report. The form reloads the settings when Convex records a new companion write, since the engine pushes nothing.
+
 ## OBS connection status
 
 On the OBS module's Settings tab (`woofx3_obs`), `ObsConnectionStatus` shows whether the engine is connected to OBS, above the address, port and password.
 
 - **Where it comes from:** `obsStatus.get` calls the engine's `getObsStatus()` (capability `obs.status`). The engine answers from its connection's own state, so it's cheap to poll. `useObsStatus` asks every 5 s while the tab is visible.
-- **What it says:** "Connected to OBS at host:port", "OBS refused the password", or "Can't reach OBS at host:port". An engine whose scene manager did not answer shows "Can't check OBS right now", which is not a verdict on OBS.
+- **What it says:** "Connected to OBS at host:port" ("Connected to OBS through the companion" when the engine's `route` is `companion`), "OBS refused the password", "Can't reach OBS at host:port", or, for the `relay` failure, that the companion isn't connected. An engine whose scene manager did not answer shows "Can't check OBS right now", which is not a verdict on OBS.
 - **Older engines:** those without the capability show nothing.
 - **Local types:** the response shape is declared in `convex/lib/engineObsStatus.ts` and must match `ObsStatus` in the engine's shared API types.
 

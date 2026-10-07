@@ -31,4 +31,18 @@ describe("describeObsStatus", () => {
       text: "Connecting to OBS at 127.0.0.1:4455…",
     });
   });
+
+  test("says the connection goes through the companion, without the relay's hostname", () => {
+    expect(
+      describeObsStatus({ state: "connected", failure: null, address: "c-abcdefghijkl.woofx3.tv", route: "companion" })
+    ).toEqual({ tone: "ok", text: "Connected to OBS through the companion" });
+  });
+
+  test("tells a disconnected companion apart from a closed OBS", () => {
+    const relay = describeObsStatus({ state: "retrying", failure: "relay", address: null, route: "companion" });
+    expect(relay).toEqual({
+      tone: "problem",
+      text: "Your companion isn't connected, so the engine can't reach OBS. Open the woofx3 companion on your PC.",
+    });
+  });
 });
