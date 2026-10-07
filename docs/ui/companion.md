@@ -1,6 +1,7 @@
 # Companion app
 
-**Primary files:** `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
+**Routes:** `/companion/pair` (approval page), the Companion card on `/admin/engine`
+**Primary files:** `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
 
 ## What it is
 
@@ -8,7 +9,7 @@ The woofx3 companion is a small tray app (Tauri 2) for the streamer's PC. It hol
 
 It is **not** a desktop UI for woofx3. The browser is the only place woofx3 is managed.
 
-This page covers what Convex does for it: pairing a companion with an instance, and the token the companion then authenticates with.
+This page covers pairing a companion with an instance, in Convex and in the browser, and the token the companion then authenticates with.
 
 ## Pairing
 
@@ -30,9 +31,15 @@ The **installation id** is a UUID the companion generates once and keeps in its 
 
 An instance has at most one companion. Approving a pairing from a different installation **replaces** the current companion: `approve` deletes its row and presence row in the same transaction, and the old companion's `companions.self` subscription turns null, so it drops to Unpaired at once. Pairing the same installation again updates the row in place and keeps its id, with no warning.
 
-Before Approve is enabled, the approval page asks `companionPairing.replacementForApproval` with the user code and the chosen instance. It answers with the device name and last-seen time of the companion that approving would replace, or null. It compares installation ids on the server, so they never reach the browser, and it answers only an admin of the instance, with no token data.
+Before Approve is enabled, the approval page asks `companionPairing.replacementForApproval` with the user code and the chosen instance. It answers with the device name and last-seen time of the companion that approving would replace, or null. It compares installation ids on the server, so they never reach the browser, and it answers only an admin of the instance, with no token data. When it names a companion, the page shows "This replaces the companion on {device}, last seen {time}" and requires a second checkbox. The confirmation is tied to that companion, so choosing another instance asks again.
 
-Because there is only one companion, holding a confirmed companion row is the privilege. A phished approval can only replace the streamer's own companion, and that is visible: the real companion drops to Unpaired, and `companions.forInstance` names the new device. The rule that picks which rows an approval replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
+Because there is only one companion, holding a confirmed companion row is the privilege. A phished approval can only replace the streamer's own companion, and that is visible: the real companion drops to Unpaired, and the Companion card shows the new device. The rule that picks which rows an approval replaces is `companionsReplacedBy` in `convex/lib/companionCodes.ts`, which is unit tested.
+
+### The approval page
+
+`/companion/pair` sits under `AuthGuard` but outside `BroadcastShell` and `OnboardingGuard`, like `/setup`. A streamer whose engine will run on their own PC has no registered instance until the companion exists, so the onboarding guard must not catch them. A signed-out visitor goes to `/auth/login?next=…`; the `next` path is carried through to registration too, so a new account lands back on the page.
+
+The device name is shown as "Reported by the device", since the companion chooses it. Approve stays disabled until the person ticks "This matches the code shown in the companion on my computer", even when the code came in the link. The page calls `companionPairing.timeLeft` once when a code loads and counts down from that with `performance.now()`, so the browser's own clock never decides that a code has expired.
 
 ### Who may approve
 
@@ -52,7 +59,11 @@ Only the token's hash is stored. The `companions` row is the credential: a token
 - `companions.heartbeat` — every 60 seconds once confirmed. It writes `companionPresence`, a separate table, so the heartbeat does not re-run subscriptions that read the companion itself.
 - `companions.confirm` — the person at the PC confirmed the pairing; sets `confirmedAt`.
 - `companions.unpair` — the companion removing itself. It clears its local token first, so an offline Convex never keeps it.
-- `companions.revoke` — an admin removing the companion. Deleting the row is the revocation.
+- `companions.revoke` — an admin removing the companion from the Companion card. Deleting the row is the revocation.
 - `companions.forInstance` — the instance's companion for its members (null when there is none), with device, version, pairing date, last heartbeat and whether the device confirmed it.
 
 A companion acts with its approver's authority, so it stays paired only while the person who approved it is still an admin or owner of the instance. Removing them, or lowering them to member, unpairs it, the same rule as remote macro triggers. Deleting the instance deletes its companion, its presence row and the instance's pairings.
+
+## The Companion card
+
+On `/admin/engine`, for managed and self-hosted engines alike: a cloud engine uses a companion for local integrations too. It shows the instance's companion from `companions.forInstance` (null when there is none) with device, version and pairing date. It reads **Online** when the last heartbeat is under three minutes old, otherwise "Last seen …". A companion the device has not confirmed yet reads "Awaiting confirmation on the device". The card re-renders once a minute so the badge ages without new data. Admins and owners get **Revoke**.
