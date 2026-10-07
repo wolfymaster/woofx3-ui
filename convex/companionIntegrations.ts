@@ -1,7 +1,7 @@
 import { HOUR, RateLimiter } from "@convex-dev/rate-limiter";
 import { ConvexError, v } from "convex/values";
 import { components } from "./_generated/api";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { confirmedCompanionByToken } from "./lib/companionAuth";
 import {
   activeInstanceCompanion,
@@ -13,6 +13,7 @@ import {
   MAX_BRIDGED_ENDPOINTS,
   scheduleRelaySync,
 } from "./lib/companionEndpoints";
+import { companionMayProvideSecret } from "./lib/knownDiscoverers";
 import { isEndpointHost, isEndpointPort, localSettingKeys } from "./lib/localEndpoints";
 import { isInstanceMember } from "./lib/teamAccess";
 
@@ -25,6 +26,7 @@ import { isInstanceMember } from "./lib/teamAccess";
 
 const rateLimiter = new RateLimiter(components.rateLimiter, {
   companionEndpointWrites: { kind: "token bucket", rate: 60, period: HOUR, capacity: 20 },
+  companionSettingReports: { kind: "token bucket", rate: 30, period: HOUR, capacity: 10 },
 });
 
 const discoverValidator = v.object({ mdns: v.optional(v.string()), known: v.optional(v.string()) });
@@ -278,5 +280,81 @@ export const forModule = query({
         : null,
       provenance: provenance.map((row) => ({ key: row.key, source: row.source })),
     };
+  },
+});
+
+/**
+ * Where a companion's report may write: the endpoint as an installed module
+ * on the companion's own instance declares it, and who wrote its settings.
+ * Null for anything else, which makes this the only way the companion can
+ * write module settings: only keys local[] names, only on its instance.
+ */
+export const reportTarget = internalQuery({
+  args: { token: v.string(), moduleId: v.string(), endpointId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      companionId: v.id("companions"),
+      instanceId: v.id("instances"),
+      endpoint: v.object({
+        id: v.string(),
+        name: v.string(),
+        protocol: v.union(v.literal("websocket"), v.literal("http")),
+        hostSetting: v.string(),
+        portSetting: v.string(),
+        passwordSetting: v.optional(v.string()),
+        discover: v.optional(discoverValidator),
+      }),
+      provenance: v.array(
+        v.object({
+          key: v.string(),
+          source: v.union(v.literal("companion"), v.literal("manual")),
+          companionValue: v.optional(v.string()),
+        })
+      ),
+      secretAllowed: v.boolean(),
+    })
+  ),
+  handler: async (ctx, { token, moduleId, endpointId }) => {
+    const companion = await confirmedCompanionByToken(ctx, token);
+    if (!companion) {
+      return null;
+    }
+    const endpoint = await installedLocalEndpoint(ctx, companion.instanceId, moduleId, endpointId);
+    if (!endpoint) {
+      return null;
+    }
+    const keys = new Set(localSettingKeys(endpoint));
+    const provenance = await ctx.db
+      .query("moduleSettingProvenance")
+      .withIndex("by_instance_module", (q) => q.eq("instanceId", companion.instanceId).eq("moduleId", moduleId))
+      .take(50);
+    const row = await ctx.db
+      .query("companionEndpoints")
+      .withIndex("by_companion_endpoint", (q) =>
+        q.eq("companionId", companion._id).eq("moduleId", moduleId).eq("endpointId", endpointId)
+      )
+      .first();
+    return {
+      companionId: companion._id,
+      instanceId: companion.instanceId,
+      endpoint,
+      secretAllowed: (row?.enabled && row.sharesPassword && companionMayProvideSecret(moduleId, endpoint)) === true,
+      provenance: provenance
+        .filter((row) => keys.has(row.key))
+        .map((row) => ({ key: row.key, source: row.source, companionValue: row.companionValue })),
+    };
+  },
+});
+
+export const consumeReportBudget = internalMutation({
+  args: { companionId: v.id("companions") },
+  returns: v.null(),
+  handler: async (ctx, { companionId }) => {
+    const limit = await rateLimiter.limit(ctx, "companionSettingReports", { key: companionId });
+    if (!limit.ok) {
+      throw new ConvexError("Too many setting reports. Try again in a few minutes.");
+    }
+    return null;
   },
 });

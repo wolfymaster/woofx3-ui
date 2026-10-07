@@ -110,8 +110,12 @@ OBS <-ws 127.0.0.1:4455- Companion ==(outbound WSS)== Relay DO <==wss /bridge/<m
 
 1. The companion subscribes to `companionIntegrations.forCompanion({ token })`: each installed module's endpoints, the setting keys they name (never values), what the companion last recorded, which keys the streamer set by hand (`manualKeys`), and `relayAvailable`. Null unless the token is a confirmed companion's.
 2. It discovers what it can (OBS's port from obs-websocket's own config file) or the streamer confirms an address in the companion window, and records it with `companionIntegrations.setEndpoint`. The companion keeps the address it dials in its own store; the copy in `companionEndpoints` is for display. Enabling needs an address.
-3. Turning an endpoint on or off schedules `companionRelayActions.syncEngine`, which tells the engine with `setRelayConfig({ bridgeOrigin, endpoints })`, or `setRelayConfig(null)` when nothing is bridged. At most 50 endpoints are bridged (`MAX_BRIDGED_ENDPOINTS`, the engine's limit), and `setEndpoint` refuses to turn on a 51st.
-4. The companion holds its relay connection with a credential from `companionRelayActions.companionCredential`. The engine gets its own by the `relay.credential.requested` callback.
+3. It fills in the module's settings with `companionIntegrationsActions.reportDiscovered`: only keys `local[]` names, only on modules installed on its instance, never a `manual` key, and nothing when the report is unchanged, since every setting write makes the engine reconnect. Provenance is read again right before each key is written, so a key the streamer saves by hand meanwhile is skipped. Convex never stores the password, and refuses one unless all of these hold:
+   - the streamer opted in on the Integrations tab (`sharesPassword`);
+   - the endpoint is turned on;
+   - the endpoint's discoverer may hand this module a secret. The allowlist is in `convex/lib/knownDiscoverers.ts`; `obs-websocket` serves only `woofx3_obs`. Another module that declares the same discoverer still gets the host and port, never the password. The companion enforces the same table.
+4. Turning an endpoint on or off schedules `companionRelayActions.syncEngine`, which tells the engine with `setRelayConfig({ bridgeOrigin, endpoints })`, or `setRelayConfig(null)` when nothing is bridged. At most 50 endpoints are bridged (`MAX_BRIDGED_ENDPOINTS`, the engine's limit), and `setEndpoint` refuses to turn on a 51st.
+5. The companion holds its relay connection with a credential from `companionRelayActions.companionCredential`. The engine gets its own by the `relay.credential.requested` callback.
 
 ### Relay hostnames and credentials
 
@@ -136,6 +140,7 @@ All four must hold, or the module settings page is unchanged and nothing is brid
 ### Data
 
 - `companionEndpoints`: per companion and endpoint, `enabled`, the display `address`, `discovered`, `sharesPassword`. Deleted with the companion, and with the module when it is uninstalled. Re-pairing the same installation to the same instance keeps them; the companion wipes its own store when it pairs to a different instance.
+- `moduleSettingProvenance`: per instance, module and setting key, `companion` (with `companionValue` for non-secrets) or `manual`. No row means never touched. Deleted when the module is uninstalled (`cascadeDeleteModuleRecord` in `convex/moduleWebhook.ts`) or the instance is deleted.
 
 ### Keeping the engine in step
 
