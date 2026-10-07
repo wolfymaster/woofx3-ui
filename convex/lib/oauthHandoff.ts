@@ -44,7 +44,12 @@ export async function hashOpaqueToken(token: string): Promise<string> {
   if (!isOpaqueToken(token)) {
     throw new Error("hashOpaqueToken: not an opaque token");
   }
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  return sha256Hex(token);
+}
+
+/** Lowercase hex SHA-256 of the UTF-8 bytes of `value`. */
+export async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
   let hex = "";
   const bytes = new Uint8Array(digest);
   for (let i = 0; i < bytes.length; i += 1) {

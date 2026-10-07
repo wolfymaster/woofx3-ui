@@ -15,13 +15,16 @@ Convex is the **multi-tenant control plane**: auth, accounts, instances, assets,
 | Alert log | `engineAlerts.ts` (mirror of the engine's dispatch log, plus the Alerts dashboard's `overview` counters), `alertActions.ts` (`replayAlert`, `skipCurrentAlert` and `clearAlertQueue` proxies) |
 | Platform | `twitchAuth.ts`, `chatCommands.ts`, `dashboardLayouts.ts` |
 | Engine connectivity | `engineHealth.ts`, `lib/engineInstanceUrl.ts`, `registration.ts` |
+| Companion app | `companionPairing.ts` (device-authorization pairing, approval page), `companions.ts` (token-authenticated companion functions, the instance's one companion for the admin card, revoke), `lib/companionCodes.ts`, `lib/companionRecords.ts` — see [Companion app](/ui/companion) |
 
 ## Instance access
 
 An instance id is not a secret, so every public query, mutation and action that takes one (or a row id that resolves to one: a module, scene or resource) must check the caller's `instanceMembers` row. Being signed in is not enough. Use `requireInstanceRole` / `requireInstanceRoleInAction` (`lib/instanceAccess.ts`) where a refusal should throw, and `isInstanceMember` (`lib/teamAccess.ts`) in live queries that should answer a non-member with nothing. Roles are ordered in `lib/instanceRoles.ts`:
 
 - **member:** read everything on the instance and change its content (modules, module settings, resources, scenes, workflows, dashboards).
-- **admin or owner:** also change what the instance is bound to (engine registration, deletion, the linked Twitch channel).
+- **admin or owner:** also change what the instance is bound to (engine registration, deletion, the linked Twitch channel, pairing a companion app).
+
+Functions the companion app calls (`companions.self`, `heartbeat`, `unpair`) have no user session. They authenticate with the companion's device token instead of instance membership: only the token's SHA-256 hash is stored, the `companions` row is the credential, and a token with no row, or whose approver is no longer an admin, fails closed. See [Companion app](/ui/companion#tokens-and-revocation).
 
 Secret values stay off the client. Module `secret` settings and storage credentials are masked by the engine before they reach Convex. Platform tokens and the instance's `webhookSecret` are stripped from public queries. The instance `clientSecret` is the one exception: the browser's live engine WebSocket authenticates with it.
 
