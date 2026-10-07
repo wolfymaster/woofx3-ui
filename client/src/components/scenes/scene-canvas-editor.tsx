@@ -5,6 +5,7 @@ import type { FunctionReturnType } from "convex/server";
 import { ArrowLeft, Link, MoreVertical, Save, Settings, Trash2, Undo2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
@@ -66,6 +68,40 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
   const session = useSceneEditorSession({ instanceId, engineSceneId, sceneId: convexSceneId, enabled: sessionMode });
   const sessionDoc = session.state.doc;
+
+  // Live editing: this editor's changes go straight to what OBS shows, and
+  // are copied into the draft so a later publish cannot undo them. Each open
+  // editor chooses for itself, and every one starts on the draft.
+  const [live, setLive] = useState(false);
+  const setSessionVersion = session.setVersion;
+  useEffect(() => {
+    setSessionVersion(live ? "published" : "draft");
+  }, [live, setSessionVersion]);
+
+  // Who else is editing, and where: other editors' selections, in a colour
+  // each keeps for as long as it is connected.
+  const me = useQuery(api.users.getMe);
+  const myName = me?.name ?? me?.email ?? "";
+  const [selection, setSelection] = useState<string | null>(null);
+  const setPresence = session.setPresence;
+  const ready = session.state.status === "ready";
+  useEffect(() => {
+    if (sessionMode && ready) {
+      setPresence({ name: myName, selection });
+    }
+  }, [sessionMode, ready, myName, selection, setPresence]);
+  const others = session.state.others;
+  const remoteSelections = useMemo(() => {
+    const byWidget: Record<string, { name: string; color: string }[]> = {};
+    for (const [editorId, presence] of Object.entries(others)) {
+      if (presence.selection) {
+        const editors = byWidget[presence.selection] ?? [];
+        editors.push({ name: presence.name, color: editorColor(editorId) });
+        byWidget[presence.selection] = editors;
+      }
+    }
+    return byWidget;
+  }, [others]);
   // Read by mutateScene, which sends each edit as it is made.
   const sceneRef = useRef<Scene | null>(null);
   sceneRef.current = scene;
@@ -391,15 +427,41 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
 
         {sessionMode ? (
           <>
+            {live && (
+              <Badge className="bg-red-600 text-white hover:bg-red-600" data-testid="badge-live">
+                LIVE
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground" data-testid="text-scene-sync">
               {session.state.status === "reconnecting"
                 ? "Reconnecting…"
                 : session.state.status === "unavailable"
                   ? "Can't reach the scene manager"
-                  : session.state.hasDraft
-                    ? "Draft saved · not on stream yet"
-                    : "Up to date"}
+                  : live
+                    ? "Changes go straight to stream"
+                    : session.state.hasDraft
+                      ? "Draft saved · not on stream yet"
+                      : "Up to date"}
             </span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5">
+                  <Switch
+                    id="scene-live"
+                    checked={live}
+                    onCheckedChange={setLive}
+                    aria-label="Edit live"
+                    data-testid="switch-scene-live"
+                  />
+                  <Label htmlFor="scene-live" className="text-xs">
+                    Live
+                  </Label>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                {live ? "Back to editing the draft" : "Edit what's on stream right now, without publishing"}
+              </TooltipContent>
+            </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -461,13 +523,15 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       catalog={sceneCatalog}
       renderers={configFieldRenderers}
       onChange={handleWidgetsChange}
+      onSelectionChange={setSelection}
+      remoteSelections={sessionMode ? remoteSelections : undefined}
       preview={
         <LiveScenePreview
           sceneId={convexSceneId}
           width={scene.width}
           height={scene.height}
           widgets={scene.widgets}
-          followDraft={sessionMode}
+          followDraft={sessionMode && !live}
         />
       }
     />
@@ -489,4 +553,13 @@ function sceneOf(fetchedScene: FetchedScene): Scene {
     createdAt: new Date(fetchedScene.createdAt).toISOString(),
     updatedAt: new Date(fetchedScene.updatedAt).toISOString(),
   };
+}
+
+/** A colour for another editor, the same for as long as it is connected. */
+function editorColor(editorId: string): string {
+  let hash = 0;
+  for (const char of editorId) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return `hsl(${hash % 360} 75% 45%)`;
 }

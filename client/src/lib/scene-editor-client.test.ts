@@ -51,6 +51,14 @@ class FakeServer {
     return socket;
   }
 
+  presence(from: FakeSocket, message: any): void {
+    for (const socket of this.sockets) {
+      if (socket !== from) {
+        socket.deliver({ type: "presence", editorId: from.id, name: message.name, selection: message.selection });
+      }
+    }
+  }
+
   submit(from: FakeSocket, message: any): void {
     const known = this.log.find((entry) => entry.opId === message.opId);
     if (known) {
@@ -83,7 +91,11 @@ class FakeServer {
   }
 }
 
+let socketIds = 0;
+
 class FakeSocket implements EditorSocket {
+  readonly id = `editor-${++socketIds}`;
+  readonly sent: any[] = [];
   onopen: (() => void) | null = null;
   onclose: (() => void) | null = null;
   onmessage: ((event: { data: unknown }) => void) | null = null;
@@ -98,6 +110,10 @@ class FakeSocket implements EditorSocket {
     queueMicrotask(() => {
       if (!this.closed && message.type === "submit") {
         this.server.submit(this, message);
+      }
+      if (!this.closed && message.type === "presence") {
+        this.sent.push(message);
+        this.server.presence(this, message);
       }
     });
   }
@@ -116,7 +132,14 @@ class FakeSocket implements EditorSocket {
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 function editor(server: FakeServer) {
-  let state: EditorState = { status: "connecting", doc: null, meta: {}, hasDraft: false };
+  let state: EditorState = {
+    status: "connecting",
+    version: "draft",
+    others: {},
+    doc: null,
+    meta: {},
+    hasDraft: false,
+  };
   const sockets: FakeSocket[] = [];
   const client = new SceneEditorClient({
     open: async () => "ws://fake",
@@ -226,5 +249,50 @@ describe("SceneEditorClient", () => {
     client.start();
     await settle();
     expect(state!.status).toBe("unavailable");
+  });
+});
+
+describe("SceneEditorClient — presence and live editing", () => {
+  it("hears where the other editors are, and forgets one that leaves", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const one = editor(server);
+    const two = editor(server);
+    await settle();
+    one.client.setPresence({ name: "Wolfy", selection: "a" });
+    await settle();
+    expect(Object.values(two.state().others)).toEqual([{ name: "Wolfy", selection: "a" }]);
+    const [editorId] = Object.keys(two.state().others);
+    two.sockets[0]!.deliver({ type: "presence", editorId, left: true });
+    await settle();
+    expect(two.state().others).toEqual({});
+  });
+
+  it("announces itself again after a reconnect", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const one = editor(server);
+    await settle();
+    one.client.setPresence({ name: "Wolfy", selection: "a" });
+    await settle();
+    one.sockets[0]!.close();
+    await settle();
+    await settle();
+    expect(one.sockets[1]!.sent).toEqual([{ type: "presence", name: "Wolfy", selection: "a" }]);
+  });
+
+  it("edits the published scene when switched to live", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const one = editor(server);
+    await settle();
+    one.client.setVersion("published");
+    expect(one.state().version).toBe("published");
+    const sent: any[] = [];
+    const socket = one.sockets[0]!;
+    const original = socket.send.bind(socket);
+    socket.send = (data: string) => {
+      sent.push(JSON.parse(data));
+      original(data);
+    };
+    one.type("hello");
+    expect(sent.at(-1)).toMatchObject({ type: "submit", version: "published" });
   });
 });

@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SceneDocument, SceneVersion } from "@/lib/scene-document";
-import { type EditorState, SceneEditorClient } from "@/lib/scene-editor-client";
+import { type EditorPresence, type EditorState, SceneEditorClient } from "@/lib/scene-editor-client";
 
 interface UseSceneEditorSessionArgs {
   instanceId: Id<"instances">;
@@ -22,9 +22,18 @@ export interface SceneEditorSessionHandle {
   discard: () => void;
   /** Edit the published scene (live) or the draft. */
   setVersion: (version: SceneVersion) => void;
+  /** Tell the scene's other editors who this is and what it has selected. */
+  setPresence: (presence: EditorPresence) => void;
 }
 
-const IDLE: EditorState = { status: "connecting", doc: null, meta: {}, hasDraft: false };
+const IDLE: EditorState = {
+  status: "connecting",
+  version: "draft",
+  others: {},
+  doc: null,
+  meta: {},
+  hasDraft: false,
+};
 
 /**
  * The scene editor's connection to sceneManager: a short-lived token from the
@@ -75,6 +84,7 @@ export function useSceneEditorSession({
   const publish = useCallback(() => clientRef.current?.publish(), []);
   const discard = useCallback(() => clientRef.current?.discard(), []);
   const setVersion = useCallback((version: SceneVersion) => clientRef.current?.setVersion(version), []);
+  const setPresence = useCallback((presence: EditorPresence) => clientRef.current?.setPresence(presence), []);
 
-  return { state, edit, publish, discard, setVersion };
+  return { state, edit, publish, discard, setVersion, setPresence };
 }
