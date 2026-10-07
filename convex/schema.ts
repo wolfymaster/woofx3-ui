@@ -156,6 +156,14 @@ export default defineSchema({
     engineStreamwareBaseUrl: v.optional(v.string()),
     engineSceneOverlayBaseUrl: v.optional(v.string()),
     engineInfoFetchedAt: v.optional(v.number()),
+    // The hostname (`c-<12 base32 chars>.woofx3.tv`) the edge relay serves
+    // this instance's companion bridge on. Allocated by the maintenance API
+    // the first time the instance routes an endpoint through its companion.
+    companionHostname: v.optional(v.string()),
+    // Bumped each time the engine's relay configuration may need to change.
+    // A sync run carries the version it was scheduled for and does nothing
+    // once a newer one exists, so two runs cannot land in reverse order.
+    relaySyncVersion: v.optional(v.number()),
   })
     .index("by_account", ["accountId"])
     .index("by_webhook_secret", ["webhookSecret"]),
@@ -368,6 +376,41 @@ export default defineSchema({
     lastSeenAt: v.number(),
     companionVersion: v.string(),
   }).index("by_companion", ["companionId"]),
+
+  // companionEndpoints: what the instance's companion does for each local[]
+  // endpoint of an installed module. The companion is the authority for the
+  // address it dials (it keeps its own copy); `address` here is for display.
+  // Rows belong to the companion and go when it is revoked or replaced.
+  companionEndpoints: defineTable({
+    companionId: v.id("companions"),
+    instanceId: v.id("instances"),
+    moduleId: v.string(),
+    endpointId: v.string(),
+    enabled: v.boolean(),
+    address: v.optional(v.object({ host: v.string(), port: v.number() })),
+    discovered: v.boolean(),
+    sharesPassword: v.boolean(),
+    updatedAt: v.number(),
+  })
+    .index("by_companion", ["companionId"])
+    .index("by_instance_module", ["instanceId", "moduleId"])
+    .index("by_companion_endpoint", ["companionId", "moduleId", "endpointId"])
+    .index("by_enabled_instance", ["enabled", "instanceId"]),
+
+  // moduleSettingProvenance: who last wrote a module setting named by local[].
+  // No row: never touched, so the companion may fill it. "companion": the
+  // companion wrote `companionValue` (absent for secrets, which Convex never
+  // keeps). "manual": the streamer saved it, and the companion leaves it alone.
+  moduleSettingProvenance: defineTable({
+    instanceId: v.id("instances"),
+    moduleId: v.string(),
+    key: v.string(),
+    source: v.union(v.literal("companion"), v.literal("manual")),
+    companionValue: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_instance_module", ["instanceId", "moduleId"])
+    .index("by_instance_module_key", ["instanceId", "moduleId", "key"]),
 
   // platformLinks: OAuth tokens for streaming platforms (Twitch, etc.) per instance
   platformLinks: defineTable({
