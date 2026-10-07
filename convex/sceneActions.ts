@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import type { SceneEditorSession, SceneEditorSessionApi } from "./lib/sceneEditorSession";
 import type { WidgetThemes, WidgetThemesApi } from "./lib/widgetThemes";
 
 type InstanceContext = {
@@ -147,5 +148,28 @@ export const listWidgetThemes = action({
 
     const rpc = createEngineRpcSession<EngineApi & WidgetThemesApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     return await rpc.listWidgetThemes(args.widgetCanonicalId);
+  },
+});
+
+/**
+ * A token to open sceneManager's editor socket for one scene, and the socket's
+ * path relative to sceneManager's public URL. Null when the engine does not
+ * know the scene or cannot reach sceneManager. Requires the
+ * `scenes.editorSessions` capability; the token is short-lived, so a
+ * reconnecting editor asks again.
+ */
+export const getSceneEditorSession = action({
+  args: {
+    instanceId: v.id("instances"),
+    engineSceneId: v.string(),
+  },
+  handler: async (ctx, args): Promise<SceneEditorSession | null> => {
+    const bundle = await requireInstanceContext(ctx, args.instanceId);
+    const rpc = createEngineRpcSession<EngineApi & SceneEditorSessionApi>(
+      bundle.url,
+      bundle.clientId,
+      bundle.clientSecret
+    );
+    return await rpc.getSceneEditorSession(args.engineSceneId);
   },
 });

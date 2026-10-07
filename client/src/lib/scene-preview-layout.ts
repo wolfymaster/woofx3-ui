@@ -17,19 +17,27 @@ export const PREVIEW_LAYOUT_MESSAGE = "woofx3.scene-preview.layout";
 export interface PreviewLayoutMessage {
   type: typeof PREVIEW_LAYOUT_MESSAGE;
   widgets: { id: string; x: number; y: number; width: number; height: number }[];
-  placements: Pick<Widget, "id" | "widgetCanonicalId" | "position" | "size" | "settings">[];
+  /** Absent when the overlay follows the draft from sceneManager instead. */
+  placements?: Pick<Widget, "id" | "widgetCanonicalId" | "position" | "size" | "settings">[];
 }
 
-export function buildPreviewLayoutMessage(widgets: readonly Widget[]): PreviewLayoutMessage {
+export function buildPreviewLayoutMessage(
+  widgets: readonly Widget[],
+  options: { placements?: boolean } = {}
+): PreviewLayoutMessage {
+  const layout = widgets.map((widget) => ({
+    id: widget.id,
+    x: widget.position.x,
+    y: widget.position.y,
+    width: widget.size.width,
+    height: widget.size.height,
+  }));
+  if (options.placements === false) {
+    return { type: PREVIEW_LAYOUT_MESSAGE, widgets: layout };
+  }
   return {
     type: PREVIEW_LAYOUT_MESSAGE,
-    widgets: widgets.map((widget) => ({
-      id: widget.id,
-      x: widget.position.x,
-      y: widget.position.y,
-      width: widget.size.width,
-      height: widget.size.height,
-    })),
+    widgets: layout,
     placements: widgets.map(({ id, widgetCanonicalId, position, size, settings }) => ({
       id,
       widgetCanonicalId,
