@@ -54,6 +54,7 @@ export default defineConfig({
           items: [
             { text: "Deploying to production", link: "/ops/deploy" },
             { text: "Pull request previews", link: "/ops/previews" },
+            { text: "Companion releases", link: "/ops/companion-releases" },
           ],
         },
       ],

@@ -31,7 +31,7 @@ WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:build
 
 ## Updates
 
-The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`).
+The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases).
 
 - It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours, only while connected to Convex. Debug builds never check.
 - A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
