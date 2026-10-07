@@ -6,8 +6,17 @@
 
 pub mod address;
 pub mod backoff;
+pub mod bridge;
+mod budget;
 pub mod frame;
 pub mod obs_config;
+pub mod relay;
+
+pub use address::{AddressOrigin, ConfirmedAddress};
+pub use bridge::{probe, EndpointResolver, ProbeOutcome};
+pub use relay::{
+    run_relay, run_relay_with, CredentialSource, RelayGrant, RelayOptions, RelayStatus, Stopped,
+};
 
 #[cfg(test)]
 mod tests {
