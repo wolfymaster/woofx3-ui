@@ -179,6 +179,17 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
   const onlyInstance = instances?.length === 1 ? instances[0].instanceId : null;
   const instanceId = chosen ?? onlyInstance;
 
+  // An instance has one companion, so approving may replace another device.
+  // The confirmation is keyed to the companion it was given for, so choosing
+  // another instance, or the companion changing meanwhile, asks again.
+  const replacement = useQuery(
+    api.companionPairing.replacementForApproval,
+    instanceId ? { userCode: code, instanceId } : "skip"
+  );
+  const replacementKey = replacement && instanceId ? `${instanceId}:${replacement.pairedAt}` : null;
+  const [replaceConfirmedFor, setReplaceConfirmedFor] = useState<string | null>(null);
+  const replaceSettled = replacement === null || (replacementKey !== null && replaceConfirmedFor === replacementKey);
+
   async function run(action: () => Promise<string | null>) {
     setBusy(true);
     setError(null);
@@ -285,6 +296,30 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
                 This matches the code shown in the companion on my computer
               </Label>
             </div>
+            {replacement && replacementKey && (
+              <Alert variant="destructive" data-testid="alert-replaces-companion">
+                <AlertDescription className="space-y-3">
+                  <p>
+                    This replaces the companion on <strong>{replacement.deviceName}</strong>, last seen{" "}
+                    {replacement.lastSeenAt === null
+                      ? "never"
+                      : formatDistanceToNow(new Date(replacement.lastSeenAt), { addSuffix: true })}
+                    . An instance has one companion; that computer is unpaired at once.
+                  </p>
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="replace-companion"
+                      checked={replaceConfirmedFor === replacementKey}
+                      onCheckedChange={(checked) => setReplaceConfirmedFor(checked === true ? replacementKey : null)}
+                      data-testid="checkbox-replace-companion"
+                    />
+                    <Label htmlFor="replace-companion" className="text-sm font-normal leading-snug">
+                      Replace the companion on {replacement.deviceName}
+                    </Label>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
           </>
         )}
 
@@ -308,7 +343,7 @@ function PendingApproval({ code, pairing, msLeft }: { code: string; pairing: Pen
         {instances.length > 0 && (
           <Button
             className="flex-1"
-            disabled={busy || !instanceId || !codeMatches}
+            disabled={busy || !instanceId || !codeMatches || !replaceSettled}
             onClick={() => {
               if (instanceId) {
                 void run(async () => {
