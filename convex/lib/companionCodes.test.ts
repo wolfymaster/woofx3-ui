@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  companionsReplacedBy,
   formatUserCode,
   generateUserCode,
   hashCompanionToken,
@@ -84,4 +85,23 @@ test("isValidCompanionVersion bounds the length", () => {
   expect(isValidCompanionVersion("0.1.0")).toBe(true);
   expect(isValidCompanionVersion("")).toBe(false);
   expect(isValidCompanionVersion("1".repeat(MAX_COMPANION_VERSION_LENGTH + 1))).toBe(false);
+});
+
+describe("companionsReplacedBy", () => {
+  const rows = [
+    { id: "a", installationId: "install-a" },
+    { id: "b", installationId: "install-b" },
+  ];
+
+  test("replaces another installation's companion", () => {
+    expect(companionsReplacedBy(rows, "install-c").map((row) => row.id)).toEqual(["a", "b"]);
+  });
+
+  test("keeps the same installation's companion, which is updated in place", () => {
+    expect(companionsReplacedBy(rows, "install-a").map((row) => row.id)).toEqual(["b"]);
+  });
+
+  test("replaces nothing on an instance with no companion", () => {
+    expect(companionsReplacedBy([], "install-a")).toEqual([]);
+  });
 });
