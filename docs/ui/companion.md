@@ -1,7 +1,7 @@
 # Companion app
 
 **Routes:** `/companion/pair` (approval page), the Companion card on `/admin/engine`
-**Primary files:** `companion/` (the app), `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
+**Primary files:** `companion/` (the app; `companion/core/` holds the relay protocol and discovery), `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
 
 ## What it is
 
@@ -18,6 +18,8 @@ companion/
   package.json        window app (Vite + React), plus the Tauri CLI
   ui/                 the window: renders CompanionState, calls Rust commands
   src-tauri/          the Rust process: Convex client, credential store, tray
+  core/               woofx3-companion-core: relay frames, reconnect backoff,
+                      address rules and OBS discovery. No Tauri.
 ```
 
 The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
@@ -29,7 +31,13 @@ WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:build
 ```
 
-The companion builds on Windows only: its Rust crate needs GTK and WebKit on Linux. CI's **Companion** job (`.github/workflows/ci.yml`) typechecks and builds the window and runs `cargo fmt`, `clippy` and the tests on `windows-latest`. On Linux, `cargo check --target x86_64-pc-windows-gnu` checks the crate.
+The companion builds on Windows only: its Tauri crate needs GTK and WebKit on Linux. CI's **Companion** job (`.github/workflows/ci.yml`) typechecks and builds the window and runs `cargo fmt`, `clippy` and the tests on `windows-latest`. On Linux, `cargo clippy --all-targets --target x86_64-pc-windows-gnu` checks the crate (it needs `rustup target add x86_64-pc-windows-gnu`, but no MinGW linker).
+
+The relay protocol and discovery live in `companion/core`, which has no Tauri dependency, so its tests run on any OS. CI's **Companion core** job runs `cargo fmt --check`, `clippy` and the tests on Linux.
+
+```bash
+bun run companion:test    # cargo test --manifest-path companion/core/Cargo.toml
+```
 
 ## Updates
 
