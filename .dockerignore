@@ -4,7 +4,7 @@ dist
 .github
 .env*
 docs
-src-tauri
+companion
 .agents
 .claude
 .local
