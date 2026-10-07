@@ -47,7 +47,10 @@ function ProblemStrip({
   const platform = status.platforms.find((entry) => entry.marketplaceModuleId === install.marketplaceModuleId);
   const name = platform?.name ?? install.marketplaceModuleId;
   const needsApproval = install.status === "needs_approval";
-  const unapproved = describePermissions(install.unapproved ?? []);
+  const unapproved = [
+    ...describePermissions(install.unapproved ?? []).map((permission) => permission.description.toLowerCase()),
+    ...(install.unapprovedLocalEndpoints ?? []).map((id) => `connect to "${id}" on your network`),
+  ];
 
   async function run(action: () => Promise<unknown>) {
     setError(null);
@@ -68,6 +71,10 @@ function ProblemStrip({
             instanceId,
             marketplaceModuleId: install.marketplaceModuleId,
             approvedPermissions: [...(platform?.approvedPermissions ?? []), ...(install.unapproved ?? [])],
+            approvedLocalEndpoints: [
+              ...(platform?.approvedLocalEndpoints ?? []),
+              ...(install.unapprovedLocalEndpoints ?? []),
+            ],
           })
         : retryApply({ instanceId })
     );
@@ -81,8 +88,7 @@ function ProblemStrip({
       <p className="min-w-0 flex-1">
         {needsApproval ? (
           <>
-            {name} was not installed: its latest version also asks to{" "}
-            {unapproved.map((permission) => permission.description.toLowerCase()).join("; ")}.
+            {name} was not installed: its latest version also asks to {unapproved.join("; ")}.
           </>
         ) : (
           <>

@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { format, formatDistanceToNow } from "date-fns";
 import { Laptop, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -19,25 +19,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { useToast } from "@/hooks/use-toast";
-
-/** A companion heartbeats every 60 s, so three missed beats reads as offline. */
-const ONLINE_WINDOW_MS = 3 * 60_000;
-
-/**
- * `forInstance` does not re-run as time passes, so the card keeps its own
- * clock and an online badge ages to "last seen" without new data.
- */
-function useMinuteClock(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, []);
-  return now;
-}
+import { isCompanionOnline } from "@/lib/local-endpoints";
 
 function errorMessage(error: unknown): string {
   if (error instanceof ConvexError) {
@@ -69,7 +53,7 @@ export function CompanionCard({ instanceId }: { instanceId: Id<"instances"> }) {
     }
   }
 
-  const online = companion?.lastSeenAt != null && now - companion.lastSeenAt < ONLINE_WINDOW_MS;
+  const online = companion ? isCompanionOnline(companion.lastSeenAt, now) : false;
 
   return (
     <Card>

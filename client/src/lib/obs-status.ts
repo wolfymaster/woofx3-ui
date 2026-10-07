@@ -14,6 +14,10 @@ export interface ObsStatusDescription {
 export function describeObsStatus(status: ObsStatus): ObsStatusDescription {
   const where = status.address ? ` at ${status.address}` : "";
   if (status.state === "connected") {
+    // Through the bridge, `address` is the relay's hostname, which says nothing useful to the streamer.
+    if (status.route === "companion") {
+      return { tone: "ok", text: "Connected to OBS through the companion" };
+    }
     return { tone: "ok", text: `Connected to OBS${where}` };
   }
   if (status.state === "unanswered") {
@@ -26,6 +30,12 @@ export function describeObsStatus(status: ObsStatus): ObsStatusDescription {
     return {
       tone: "problem",
       text: "OBS refused the password. Copy it from OBS under Tools → WebSocket Server Settings → Show Connect Info.",
+    };
+  }
+  if (status.failure === "relay") {
+    return {
+      tone: "problem",
+      text: "Your companion isn't connected, so the engine can't reach OBS. Open the woofx3 companion on your PC.",
     };
   }
   if (status.failure === "unreachable") {
