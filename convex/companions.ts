@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mutation, type QueryCtx, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
+import { approvalStands, companionByToken, rowByToken } from "./lib/companionAuth";
 import {
   hashCompanionToken,
   isCompanionToken,
@@ -8,48 +9,16 @@ import {
   MAX_COMPANION_ROWS_PER_INSTANCE,
   MAX_COMPANION_VERSION_LENGTH,
 } from "./lib/companionCodes";
+import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { approverDisplayName, deleteCompanion } from "./lib/companionRecords";
 import { requireInstanceRole } from "./lib/instanceAccess";
-import { roleSatisfies } from "./lib/instanceRoles";
-import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
+import { isInstanceMember } from "./lib/teamAccess";
 
 /**
  * Functions a paired companion calls with its token, and the instance admin's
- * view of its companions. These authenticate with the companion token rather
- * than a user session: the companions row is the credential, so a token whose
- * hash has no row is not paired, and every token function fails closed.
+ * view of its companions. Token functions authenticate through
+ * lib/companionAuth.ts and fail closed.
  */
-
-async function rowByToken(ctx: QueryCtx, token: string): Promise<Doc<"companions"> | null> {
-  if (!isCompanionToken(token)) {
-    return null;
-  }
-  const tokenHash = await hashCompanionToken(token);
-  return ctx.db
-    .query("companions")
-    .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
-    .first();
-}
-
-/**
- * Whether the person who approved the pairing may still bind devices to the
- * instance. A companion acts on the instance with its approver's authority,
- * so removing that person or lowering them below admin unpairs it, as it does
- * for remote macro triggers (`approvalStands` in macroTriggers.ts).
- */
-async function approvalStands(ctx: QueryCtx, companion: Doc<"companions">): Promise<boolean> {
-  const membership = await getInstanceMembership(ctx, companion.instanceId, companion.pairedBy);
-  return roleSatisfies(membership?.role, "admin");
-}
-
-/** The companion a token authenticates, or null when it is not, or no longer, paired. */
-async function companionByToken(ctx: QueryCtx, token: string): Promise<Doc<"companions"> | null> {
-  const companion = await rowByToken(ctx, token);
-  if (!companion || !(await approvalStands(ctx, companion))) {
-    return null;
-  }
-  return companion;
-}
 
 /**
  * The companion subscribes to this with the token it generated. While it is
@@ -131,6 +100,9 @@ export const confirm = mutation({
     }
     if (companion.confirmedAt === undefined) {
       await ctx.db.patch(companion._id, { confirmedAt: Date.now() });
+      // The same installation paired again keeps its endpoint rows, which
+      // bridge nothing until it is confirmed.
+      await resyncRelayIfBridging(ctx, companion.instanceId);
     }
     return { paired: true };
   },

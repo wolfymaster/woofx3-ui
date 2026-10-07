@@ -8,6 +8,7 @@ import { auth } from "./auth";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "./lib/engineTestRun";
 import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
 import {
@@ -517,6 +518,35 @@ http.route({
     const envelope = payload as CallbackEnvelope;
     const event = escapeDollarKeys(envelope.data) as CallbackEvent;
     const eventType: string = event?.type ?? (payload.type as string | undefined) ?? "";
+
+    // Also a request: the engine waits for a bridge credential, about every
+    // four minutes while it bridges. Answered ahead of the event log, which
+    // records only a failure: the body is a live credential, so no CORS
+    // headers, no caching, and it is never logged.
+    if (eventType === RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE) {
+      try {
+        const answer = await ctx.runAction(internal.companionRelayActions.engineCredential, {
+          instanceId: instance._id,
+        });
+        return new Response(JSON.stringify(answer), {
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error("webhook: relay credential request failed", { instanceId: instance._id, error: message });
+        await ctx.runMutation(internal.engineEventLog.record, {
+          instanceId: instance._id,
+          eventType,
+          payload: JSON.stringify({ error: message }),
+          envelopeId: typeof envelope.id === "string" ? envelope.id : undefined,
+          engineEventTime: typeof envelope.time === "string" ? envelope.time : undefined,
+        });
+        return new Response(JSON.stringify({ error: "Could not issue a relay credential" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+        });
+      }
+    }
 
     logger.info("webhook: event received", {
       instanceId: instance._id,

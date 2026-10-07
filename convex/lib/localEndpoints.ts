@@ -178,3 +178,40 @@ export function localEndpointOwningSetting(
   }
   return null;
 }
+
+const MAX_HOSTNAME_CHARS = 253;
+const HOSTNAME_LABEL_PATTERN = /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/;
+const IPV4_PATTERN = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
+const IPV6_PATTERN = /^[0-9A-Fa-f:.]{2,45}$/;
+const NUMERIC_DOTTED_PATTERN = /^[\d.]+$/;
+
+/**
+ * A host the companion may report it dials: an IP literal (IPv6 without
+ * brackets) or a DNS name. Never a scheme, path, port or userinfo; the port
+ * travels separately.
+ */
+export function isEndpointHost(host: string): boolean {
+  if (IPV4_PATTERN.test(host)) {
+    return true;
+  }
+  if (host.includes(":")) {
+    return IPV6_PATTERN.test(host) && isIpv6Literal(host);
+  }
+  if (host.length === 0 || host.length > MAX_HOSTNAME_CHARS || NUMERIC_DOTTED_PATTERN.test(host)) {
+    return false;
+  }
+  return host.split(".").every((label) => HOSTNAME_LABEL_PATTERN.test(label));
+}
+
+/** The URL parser is the IPv6 grammar; a bracketed literal it accepts is one. */
+function isIpv6Literal(host: string): boolean {
+  try {
+    return new URL(`http://[${host}]/`).hostname.length > 2;
+  } catch {
+    return false;
+  }
+}
+
+export function isEndpointPort(port: number): boolean {
+  return Number.isInteger(port) && port >= 1 && port <= 65535;
+}
