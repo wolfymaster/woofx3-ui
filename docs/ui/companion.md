@@ -29,6 +29,8 @@ WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:build
 ```
 
+The companion builds on Windows only: its Rust crate needs GTK and WebKit on Linux. CI's **Companion** job (`.github/workflows/ci.yml`) typechecks and builds the window and runs `cargo fmt`, `clippy` and the tests on `windows-latest`. On Linux, `cargo check --target x86_64-pc-windows-gnu` checks the crate.
+
 ## Updates
 
 The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases).
