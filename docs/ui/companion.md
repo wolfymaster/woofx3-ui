@@ -86,6 +86,60 @@ A companion acts with its approver's authority, so it stays paired only while th
 
 On `/admin/engine`, for managed and self-hosted engines alike: a cloud engine uses a companion for local integrations too. It shows the instance's companion from `companions.forInstance` (null when there is none) with device, version and pairing date. It reads **Online** when the last heartbeat is under three minutes old, otherwise "Last seen …". A companion the device has not confirmed yet reads "Awaiting confirmation on the device". The card re-renders once a minute so the badge ages without new data. Admins and owners get **Revoke**.
 
+## Bridging local endpoints
+
+A cloud engine cannot reach `127.0.0.1` on the streamer's PC. For each `local[]` endpoint of an installed module (see [Modules](./modules.md#local-endpoints-local)), the companion can carry the engine's connection instead: the engine dials a bridge on the edge relay, the relay carries it over the companion's outbound connection, and the companion connects it to the address on the PC.
+
+```
+OBS <-ws 127.0.0.1:4455- Companion ==(outbound WSS)== Relay DO <==wss /bridge/<module>/<endpoint>== Engine
+```
+
+### The flow
+
+1. The companion subscribes to `companionIntegrations.forCompanion({ token })`: each installed module's endpoints, the setting keys they name (never values), what the companion last recorded, which keys the streamer set by hand (`manualKeys`), and `relayAvailable`. Null unless the token is a confirmed companion's.
+2. It discovers what it can (OBS's port from obs-websocket's own config file) or the streamer confirms an address in the companion window, and records it with `companionIntegrations.setEndpoint`. The companion keeps the address it dials in its own store; the copy in `companionEndpoints` is for display. Enabling needs an address.
+3. Turning an endpoint on or off schedules `companionRelayActions.syncEngine`, which tells the engine with `setRelayConfig({ bridgeOrigin, endpoints })`, or `setRelayConfig(null)` when nothing is bridged. At most 50 endpoints are bridged (`MAX_BRIDGED_ENDPOINTS`, the engine's limit), and `setEndpoint` refuses to turn on a 51st.
+4. The companion holds its relay connection with a credential from `companionRelayActions.companionCredential`. The engine gets its own by the `relay.credential.requested` callback.
+
+### Relay hostnames and credentials
+
+- **Hostnames.** Each instance's bridge is served on a hostname the maintenance API allocates (`PUT /v1/companion-routes/{instanceId}`, derived from the instance id, so idempotent), stored as `instances.companionHostname`. Convex checks only its shape (`c-` and twelve base32 characters, under any domain) and otherwise takes it as the API returns it. The companion itself connects to the fixed `RELAY_URL`.
+- **Changing the relay's domain.** The domain comes from the maintenance API's `PUBLIC_BASE_DOMAIN`. Convex caches the hostname and never asks again, so changing that domain requires clearing `companionHostname` on every instance. Each instance then allocates its hostname again on its next sync or credential request.
+- **Credentials** are `wfxr1.<kid>.<claims>.<HMAC-SHA256>` (`convex/lib/relayCredential.ts`), lasting five minutes, minted only by Convex with `RELAY_SIGNING_KEY` / `RELAY_SIGNING_KEY_ID`; the relay holds the same key and checks them without a lookup. A companion credential is issued only to a confirmed companion with an endpoint to bridge, and is rate limited.
+- **The callback.** `relay.credential.requested` answers `{ relay: { bridgeOrigin, endpoints, credential, expiresAt } }`, or `{ relay: null }` when the instance bridges nothing, which makes the engine clear its relay configuration. The answer is never cached. A successful request is not logged at all, since an engine asks about every four minutes. A failure is logged and recorded in `engineEventLog` with the error, never a credential.
+
+### Revocation
+
+Revoking, unpairing or replacing the companion deletes its row and its `companionEndpoints` rows, and schedules `syncEngine`, which clears the engine's relay configuration within seconds. A companion can also stop bridging without its row being deleted. Re-pairing the same installation leaves it unconfirmed until the person at the PC confirms. Removing its approver from the account, or lowering them below admin, voids its approval. Both schedule `syncEngine` as well. Independently of Convex reaching anything: a deleted companion cannot mint again, the relay closes its socket when its five-minute credential expires without a refresh, and a newer companion's credential displaces it. So a revoked companion is cut off within five minutes at most.
+
+### When the bridge is offered
+
+All four must hold, or the module settings page is unchanged and nothing is bridged:
+
+- Convex env has `RELAY_URL`, `RELAY_SIGNING_KEY` and `RELAY_SIGNING_KEY_ID`.
+- The maintenance API is configured (`MAINTENANCE_API_URL`, `MAINTENANCE_API_KEY`). A self-hosted dashboard without it offers no bridge.
+- The engine lists the capability `modules.localEndpoints`.
+- The instance has a confirmed companion.
+
+### Data
+
+- `companionEndpoints`: per companion and endpoint, `enabled`, the display `address`, `discovered`, `sharesPassword`. Deleted with the companion, and with the module when it is uninstalled. Re-pairing the same installation to the same instance keeps them; the companion wipes its own store when it pairs to a different instance.
+
+### Keeping the engine in step
+
+Every change goes through `scheduleRelaySync` (`convex/lib/companionEndpoints.ts`). The cases:
+
+- an endpoint turned on or off;
+- the companion confirmed with endpoints already on;
+- the companion revoked, re-paired or replaced;
+- its approver's role changing;
+- a module with enabled endpoints uninstalled;
+- the engine registering again. Every handshake, re-registration included, goes through `instances.applyRegistration`.
+
+Each call bumps `instances.relaySyncVersion`. A `syncEngine` run checks that version before and after asking the engine for its capabilities, and does nothing once a newer one exists, so an endpoint turned on and then off cannot reach the engine in reverse order. A failed run retries after 10 s, 60 s and 5 min.
+
+Every 15 minutes the `companion relay resync` cron (`companionRelay.resyncBridgedInstances`) sends the configuration again to each instance with an endpoint turned on. It pages through the enabled rows of `companionEndpoints` only, so an idle deployment costs one empty index read. This repairs an engine that restarted, or one whose session cleared its configuration with `setRelayConfig(null)`. The engine's own credential requests also heal it, since a `{ relay: null }` answer clears a configuration it should not hold.
+
 ## Companion states
 
 The window renders `CompanionState` (`companion/src-tauri/src/state.rs`, mirrored in `companion/ui/src/state.ts`):
