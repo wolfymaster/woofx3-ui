@@ -51,6 +51,10 @@ A manifest may declare a top-level `permissions` array (`twitch.moderation`, `tw
 - **Server-side check.** `api.marketplace.installModule` takes `approvedPermissions` and re-reads the archive it installs; it refuses when the archive declares a permission outside that list. This catches a listing republished with new permissions after the streamer reviewed it, and an unreadable listing (approved as "none new") can never install a permission the streamer did not see. ZIP uploads are not re-checked on the server: the browser supplies both the manifest and the archive there.
 - **Installing later, without a session.** `internal.marketplace.installApprovedModule` runs the same install for an instance rather than a signed-in user, using permissions approved earlier (for example, the platforms chosen at setup, installed once the engine is ready). A build that declares more than was approved comes back as `{ status: "needs_approval", unapproved }` without reaching the engine, so the caller can ask again instead of installing silently.
 
+## Local endpoints (`local[]`)
+
+A manifest may declare `local[]`: things on the streamer's own network the module reaches, such as the OBS WebSocket. Each entry names the settings that hold the address (`hostSetting` a `text` setting, `portSetting` a `number`, `passwordSetting` an optional `secret`) and how the device can be found (`discover`). The engine validates the block at install; `convex/lib/localEndpoints.ts` reads it back and keeps only entries the engine would have installed.
+
 ## OBS connection status
 
 On the OBS module's Settings tab (`woofx3_obs`), `ObsConnectionStatus` shows whether the engine is connected to OBS, above the address, port and password.
