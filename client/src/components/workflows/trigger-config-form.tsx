@@ -21,6 +21,7 @@ import { alertTargetChoices } from "@/lib/alert-target";
 import type { ConfigField, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
 import { AssetLibraryModal, type SelectedAsset } from "./asset-library-modal";
+import { ScenePlacementsFieldRenderer, ScenesFieldRenderer } from "./scene-field-renderers";
 
 // ---------------------------------------------------------------------------
 // Media field — uses AssetLibraryModal, so it lives here as a custom renderer
@@ -298,6 +299,8 @@ export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   resource_ref: ResourceRefFieldRenderer,
   "field:layout": LayoutFieldRenderer,
   "source:alertWidgets": AlertWidgetNameRenderer,
+  "source:scenes": ScenesFieldRenderer,
+  "source:scenePlacements": ScenePlacementsFieldRenderer,
   // A theme is chosen per widget placement, never by a workflow, so it takes no variable toggle.
   [`field:${THEME_FIELD_TYPE}`]: ThemeFieldRenderer,
 };
