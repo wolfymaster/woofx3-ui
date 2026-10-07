@@ -184,7 +184,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 ### Frontend (`client/src/`)
 - React 18 + TypeScript, Vite build
 - Auth: `@convex-dev/auth` with Twitch OAuth (custom HTTP endpoints in `convex/http.ts`) and Password provider
-- Auth flow: Login → AuthGuard → BroadcastShell (main layout) → OnboardingGuard (must reach a registered instance, owned or shared through an invitation, with a Twitch link; gates the content area only). Setup wizard at `/setup/:step`
+- Auth flow: Login → AuthGuard → BroadcastShell (main layout) → OnboardingGuard (must reach a registered instance, owned or shared through an invitation, with a Twitch link; gates the content area only). Setup wizard at `/setup/:step`. Companion pairing approval at `/companion/pair` (AuthGuard only, outside OnboardingGuard)
 - Visual workflow builder uses ReactFlow (`pages/workflow-builder.tsx`)
 - Scene editor for browser source overlays (`pages/scene-editor.tsx`)
 
