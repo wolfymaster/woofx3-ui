@@ -147,7 +147,10 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
     <div
       className={cn(
         "absolute cursor-move touch-none group border-2 border-dashed border-transparent hover:border-white/40",
-        isSelected && "!border-solid !border-primary"
+        isSelected && "!border-solid !border-primary",
+        // Hidden on stream, but still here to be placed.
+        widget.visible === false &&
+          "border-white/30 bg-[repeating-linear-gradient(45deg,transparent_0_6px,rgba(255,255,255,0.08)_6px_12px)]"
       )}
       style={{
         left: widget.position.x,

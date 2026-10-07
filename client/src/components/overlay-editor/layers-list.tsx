@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2 } from "lucide-react";
+import { Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
 import { widgetIconFor } from "@/components/overlay-editor/widget-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -36,6 +36,8 @@ interface LayersListProps {
   onMove: (widgetId: string, toIndex: number) => void;
   /** Gives each layer a delete button. */
   onDelete?: (widgetId: string) => void;
+  /** Gives each layer a show/hide button; a hidden layer is struck through. */
+  onToggleVisible?: (widgetId: string) => void;
   /** The phone layout lays the layers out as one sideways-scrolling row. */
   horizontal?: boolean;
   emptyMessage: string;
@@ -51,6 +53,7 @@ function LayerRow({
   canDrag,
   onSelect,
   onDelete,
+  onToggleVisible,
 }: {
   widget: Widget;
   label: string;
@@ -61,7 +64,9 @@ function LayerRow({
   canDrag: boolean;
   onSelect: (widgetId: string) => void;
   onDelete: ((widgetId: string) => void) | undefined;
+  onToggleVisible: ((widgetId: string) => void) | undefined;
 }) {
+  const hidden = onToggleVisible !== undefined && widget.visible === false;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: widget.id,
     disabled: !canDrag,
@@ -98,9 +103,22 @@ function LayerRow({
         className={cn("flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left", !canDrag && "pl-2")}
       >
         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className={cn("min-w-0 flex-1 truncate", hidden && "text-muted-foreground line-through")}>{label}</span>
         {note ? <span className="shrink-0 font-mono text-xs text-muted-foreground">{note}</span> : null}
       </button>
+      {onToggleVisible && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("shrink-0 text-muted-foreground", horizontal ? "h-11 w-11 rounded-full" : "h-7 w-7")}
+          onClick={() => onToggleVisible(widget.id)}
+          aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
+          aria-pressed={hidden}
+          data-testid={`button-visibility-layer-${widget.id}`}
+        >
+          {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+        </Button>
+      )}
       {onDelete && (
         <Button
           variant="ghost"
@@ -138,6 +156,7 @@ export function LayersList({
   onSelect,
   onMove,
   onDelete,
+  onToggleVisible,
   horizontal = false,
   emptyMessage,
 }: LayersListProps) {
@@ -184,6 +203,7 @@ export function LayersList({
                   canDrag={canDrag}
                   onSelect={onSelect}
                   onDelete={onDelete}
+                  onToggleVisible={onToggleVisible}
                 />
               ))}
             </div>

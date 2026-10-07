@@ -524,6 +524,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       renderers={configFieldRenderers}
       onChange={handleWidgetsChange}
       onSelectionChange={setSelection}
+      canHide
       remoteSelections={sessionMode ? remoteSelections : undefined}
       preview={
         <LiveScenePreview

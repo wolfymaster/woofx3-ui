@@ -41,6 +41,8 @@ interface WidgetLayoutCanvasProps {
   onSelectionChange?: (widgetId: string | null) => void;
   /** Other editors working on this canvas, by the widget each has selected. */
   remoteSelections?: Record<string, RemoteSelection[]>;
+  /** Widgets can be hidden from the layers list: on a scene, where a hidden widget keeps running out of sight. */
+  canHide?: boolean;
 }
 
 /**
@@ -63,6 +65,7 @@ export function WidgetLayoutCanvas({
   background = "transparent",
   onSelectionChange,
   remoteSelections,
+  canHide = false,
 }: WidgetLayoutCanvasProps) {
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   useEffect(() => {
@@ -89,6 +92,11 @@ export function WidgetLayoutCanvas({
   const editWidget = useCallback((widgetId: string, change: (widget: Widget) => Widget) => {
     onChangeRef.current((prev) => prev.map((w) => (w.id === widgetId ? change(w) : w)));
   }, []);
+
+  const toggleVisible = useCallback(
+    (widgetId: string) => editWidget(widgetId, (w) => ({ ...w, visible: w.visible === false })),
+    [editWidget]
+  );
 
   const moveWidget = useCallback(
     (widgetId: string, x: number, y: number) => {
@@ -199,6 +207,7 @@ export function WidgetLayoutCanvas({
           onSelect={setSelectedWidgetId}
           onMove={moveLayerTo}
           onDelete={deleteWidget}
+          onToggleVisible={canHide ? toggleVisible : undefined}
           emptyMessage="Nothing on the canvas yet. Add a widget to start."
         />
       }
