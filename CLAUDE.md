@@ -171,7 +171,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - **Braces on all branches and loops**: `if (!x) { return null; }` — never `if (!x) return null;`. Same for `for`, `while`, `else` — always use a block body. No exceptions.
 - **Routing**: Wouter v3 — no `<Redirect>` component exists; use `useEffect(() => navigate('/path'), [])` for redirects.
 - **State**: Nanostores (`$`-prefixed atoms) for UI-only state (theme, sidebar, engine URL, current instance ID). Convex for all server-persisted data.
-- **Transport**: Use `client/src/lib/transport/` for woofx3 API calls. `WoofxTransport` interface abstracts browser WebSocket vs future Tauri IPC. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
+- **Transport**: Use `client/src/lib/transport/` for woofx3 API calls. `WoofxTransport` is the interface for realtime browser↔engine channels. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
 - **Shadcn/ui**: Components in `client/src/components/ui/` — extend via composition, never modify directly.
 - **Instance-scoped queries**: Always use `"skip"` when instanceId may be null:
   ```typescript
@@ -196,8 +196,8 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 ### Shared (`shared/api.ts`)
 - Type definitions for the legacy RPC API contract (pagination, stream status, workflows, assets, scenes, modules, etc.)
 
-### Desktop (`src-tauri/`)
-- Tauri shell planned — `TauriTransport` in `client/src/lib/transport/tauri-transport.ts` will use IPC → Rust → WebSocket
+### Companion (`companion/`)
+- A Tauri app for the streamer's PC (`companion/src-tauri/`). It is not a UI for managing woofx3: the browser is the only management surface and has one transport.
 
 ## Task Management
 
