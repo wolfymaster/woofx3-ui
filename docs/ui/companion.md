@@ -1,15 +1,33 @@
 # Companion app
 
 **Routes:** `/companion/pair` (approval page), the Companion card on `/admin/engine`
-**Primary files:** `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
+**Primary files:** `companion/` (the app), `client/src/pages/companion-pair.tsx`, `client/src/components/engine/companion-card.tsx`, `convex/companionPairing.ts`, `convex/companions.ts`, `convex/lib/companionCodes.ts`, `convex/lib/companionRecords.ts`
 
 ## What it is
 
 The woofx3 companion is a small tray app (Tauri 2) for the streamer's PC. It holds outbound connections from that PC to woofx3, so that later it can carry work a cloud service cannot do on its own, such as reaching OBS on the streamer's own machine or an engine running on that PC.
 
-It is **not** a desktop UI for woofx3. The browser is the only place woofx3 is managed.
+It is **not** a desktop UI for woofx3. The browser is the only place woofx3 is managed. The companion's own window shows its state and little else: a Status tab today, with Engine, Configuration and Integrations tabs laid out but disabled until they have something to show.
 
-This page covers pairing a companion with an instance, in Convex and in the browser, and the token the companion then authenticates with.
+Today it pairs with one instance, shows that it is paired and connected, and survives restarts. It does not relay engine traffic yet.
+
+## Layout
+
+```
+companion/
+  package.json        window app (Vite + React), plus the Tauri CLI
+  ui/                 the window: renders CompanionState, calls Rust commands
+  src-tauri/          the Rust process: Convex client, credential store, tray
+```
+
+The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
+
+The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
+
+```bash
+WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev
+WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:build
+```
 
 ## Pairing
 
@@ -67,3 +85,23 @@ A companion acts with its approver's authority, so it stays paired only while th
 ## The Companion card
 
 On `/admin/engine`, for managed and self-hosted engines alike: a cloud engine uses a companion for local integrations too. It shows the instance's companion from `companions.forInstance` (null when there is none) with device, version and pairing date. It reads **Online** when the last heartbeat is under three minutes old, otherwise "Last seen …". A companion the device has not confirmed yet reads "Awaiting confirmation on the device". The card re-renders once a minute so the badge ages without new data. Admins and owners get **Revoke**.
+
+## Companion states
+
+The window renders `CompanionState` (`companion/src-tauri/src/state.rs`, mirrored in `companion/ui/src/state.ts`):
+
+| State | Shown when |
+|---|---|
+| `starting` | Before the stored token has been read |
+| `offline` | A token is stored but Convex has not answered within a few seconds, so whether it is still paired cannot be told |
+| `unpaired` | No token. The window opens with a **Pair** button |
+| `pairing` | A code is showing; a countdown runs to its expiry on this PC's clock |
+| `confirmPairing` | Approved in the browser; waiting for Confirm or Reject |
+| `paired` | Confirmed. Shows the instance and whether Convex is connected |
+| `error` | Pairing was declined or expired, or the credential store failed; **Try again** starts over |
+
+On start, a confirmed token resumes the paired session without opening the window. An unconfirmed token returns to the confirm screen if `companions.self` still answers for it unconfirmed, goes straight to `paired` if the server says it was confirmed, and to `unpaired` (releasing the token on the server) if `self` is null.
+
+**Pair** is honoured only from `unpaired` or `error`, and a second click while a code is being requested is ignored. A token left from an earlier pairing is released on the server before the new one replaces it.
+
+Every window command is async, and credential store calls run on Tokio's blocking pool in the order they were asked for. Tray updates wait for the main thread, so nothing that holds a lock may run there.

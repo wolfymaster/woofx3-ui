@@ -1,0 +1,165 @@
+/* Palette mirrors client/src/index.css so the companion reads as part of woofx3. */
+:root {
+  --background: 0 0% 100%;
+  --foreground: 0 0% 9%;
+  --border: 0 0% 89%;
+  --card: 0 0% 98%;
+  --muted: 0 0% 92%;
+  --muted-foreground: 0 0% 35%;
+  --primary: 262 83% 58%;
+  --primary-foreground: 0 0% 98%;
+  --destructive: 0 84% 48%;
+  --success: 142 71% 45%;
+  --radius: 8px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 98%;
+    --border: 0 0% 16%;
+    --card: 0 0% 9%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+    color-scheme: dark;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  user-select: none;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+
+.panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+}
+
+.panel.centered {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.muted {
+  color: hsl(var(--muted-foreground));
+}
+
+.error {
+  color: hsl(var(--destructive));
+}
+
+.code {
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  user-select: text;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  font: inherit;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  background: hsl(var(--primary));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+button.danger {
+  background: hsl(var(--destructive));
+  border-color: hsl(var(--destructive));
+  color: hsl(var(--primary-foreground));
+}
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid hsl(var(--border));
+  padding: 0 12px;
+}
+
+.tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  padding: 10px 12px;
+}
+
+.tab.active {
+  border-bottom-color: hsl(var(--primary));
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot.ok {
+  background: hsl(var(--success));
+}
+
+.dot.off {
+  background: hsl(var(--muted-foreground));
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--muted));
+}
