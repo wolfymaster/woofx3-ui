@@ -61,6 +61,14 @@ Signatures name the version they were signed for, and the companion requires tha
 
 If the private key is lost, no new release can be signed with it, and every installed companion accepts only that key, so **installed companions can never update again**. Users would have to download and install a companion built with a new key by hand. Rotating to a new key on purpose works the same way: ship one last release, signed with the old key, whose `pubkey` is the new one, and only then switch the secret.
 
+## Test installers
+
+CI's **Companion installer** job builds an unsigned NSIS installer on `windows-latest` for every pull request that touches `companion/` or `.github/workflows/ci.yml`, for every push to `master` and `release`, and for a manual run of the workflow. Download it from the run's **Artifacts** section; it is kept for 14 days.
+
+- It pairs with the **dev** Convex deployment: the job compiles in the repository variable `COMPANION_DEV_CONVEX_URL`, and fails if it is unset.
+- It has no updater artifacts, because those need the signing key, which only the release workflow holds. A test installer still checks for updates against `companion-latest` like any release build, so uninstall it before installing a real release.
+- Windows shows the SmartScreen warning on first run; choose **More info → Run anyway**.
+
 ## Limits
 
 - **No Windows code signing yet.** The installer has no Authenticode signature, so SmartScreen warns on download and on first run ("Windows protected your PC") until enough people have run it. The updater's signature is a separate thing and works regardless; an update the companion downloads itself does not normally get the warning, since it does not come through a browser.
