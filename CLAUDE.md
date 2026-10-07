@@ -198,7 +198,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - Type definitions for the legacy RPC API contract (pagination, stream status, workflows, assets, scenes, modules, etc.)
 
 ### Companion (`companion/`)
-- A Tauri app for the streamer's PC (`companion/src-tauri/`). It is not a UI for managing woofx3: the browser is the only management surface and has one transport.
+- A Tauri tray app for the streamer's PC that pairs with an instance through `/companion/pair` and authenticates to Convex with a companion token (only its hash is stored; the `companions` row is the credential). It is not a UI for managing woofx3: the browser is the only management surface. See `docs/ui/companion.md`.
 
 ## Task Management
 
