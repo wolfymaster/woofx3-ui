@@ -33,7 +33,12 @@ import {
  * Each edit names the version its canvas was read from, and one read from
  * the other version is dropped: diffed against the wrong version, a canvas
  * read from the draft would push every draft change to what OBS shows, and
- * one read from the published scene would undo the draft's own edits.
+ * one read from the published scene would undo the draft's own edits. An
+ * edit made before this client has seen any snapshot of its version is
+ * dropped too: that canvas came from somewhere else (an earlier client, or
+ * the cached scene), and diffing it against the snapshot would undo whatever
+ * changed since. Once a version is loaded its edits are kept across
+ * reconnects, folded into what is pending and resent.
  *
  * `publish` and `discard` are sent in the order they were asked for, each
  * once the draft's edits are on the wire and, after a reconnect, once the
@@ -41,8 +46,8 @@ import {
  * change made before it. `stop` keeps the session going (reconnecting if it
  * has to) until the edits and commands made before it are through, so
  * leaving the editor loses none of them. While it drains it shows the others
- * no selection and ignores what they do, except where its own pending edits
- * must be transformed against it.
+ * no selection and keeps following the server, reporting nothing. `abandon`
+ * closes at once instead, for a scene that no longer exists.
  */
 
 /** The slice of a WebSocket this uses (injectable for tests). */
@@ -164,6 +169,9 @@ export class SceneEditorClient {
    * reported after this.
    */
   stop(): void {
+    if (this.stopped) {
+      return;
+    }
     this.flush();
     this.stopped = true;
     if (this.flushTimer !== null) {
@@ -183,6 +191,21 @@ export class SceneEditorClient {
       this.presence = { name: this.presence.name, selection: null };
       this.send({ type: "presence", ...this.presence });
     }
+  }
+
+  /**
+   * Close the session now, dropping whatever `stop` would have waited for:
+   * for a scene that was deleted, where resending to it can only fail.
+   */
+  abandon(): void {
+    this.stopped = true;
+    this.desired = null;
+    this.draftCommands.length = 0;
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.close();
   }
 
   /**
@@ -209,10 +232,11 @@ export class SceneEditorClient {
   /**
    * The editor changed the document it shows, read from `version`; it is
    * sent within `flushMs`. A document read from the version this is not
-   * editing is dropped (see the class comment).
+   * editing, or from one this has no snapshot of yet, is dropped (see the
+   * class comment).
    */
   edit(doc: SceneDocument, version: SceneVersion): void {
-    if (this.stopped || version !== this.version) {
+    if (this.stopped || version !== this.version || !this.versions[version]) {
       return;
     }
     this.desired = doc;
@@ -233,7 +257,6 @@ export class SceneEditorClient {
     const state = this.versions[this.version];
     const desired = this.desired;
     if (!state || !desired) {
-      // Nothing to diff against yet: kept for when there is.
       return;
     }
     this.desired = null;
@@ -258,11 +281,6 @@ export class SceneEditorClient {
       return;
     }
     this.flush();
-    // A canvas still waiting here had no snapshot of its version to be
-    // diffed against. It is that version's, so it must not be diffed
-    // against the other one; the editor reads the canvas again from the
-    // version it switches to.
-    this.desired = null;
     this.version = version;
     this.emit();
   }
@@ -377,9 +395,6 @@ export class SceneEditorClient {
 
   private receive(message: Record<string, unknown>): void {
     const version = message.version === "published" || message.version === "draft" ? message.version : null;
-    if (this.draining && !this.drainNeeds(message.type, version)) {
-      return;
-    }
     if (typeof message.hasDraft === "boolean") {
       this.hasDraft = message.hasDraft;
     }
@@ -490,27 +505,6 @@ export class SceneEditorClient {
       }
       default:
         return;
-    }
-  }
-
-  /**
-   * Whether a draining session still needs a message: its own answers, the
-   * snapshots it resends from, and other editors' ops on a version where
-   * its pending edits must be transformed against them. Everything else
-   * would only update a view nobody sees.
-   */
-  private drainNeeds(type: unknown, version: SceneVersion | null): boolean {
-    switch (type) {
-      case "snapshot":
-      case "ack":
-      case "reject":
-        return true;
-      case "ops": {
-        const state = version ? this.versions[version] : undefined;
-        return state !== undefined && (state.inflight !== null || state.buffer !== null);
-      }
-      default:
-        return false;
     }
   }
 

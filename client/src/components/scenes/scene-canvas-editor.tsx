@@ -89,6 +89,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     sceneId: convexSceneId,
     enabled: sessionMode,
     version: live ? "published" : "draft",
+    unsavedOutsideSession: sessionMode && isDirty,
   });
   const sessionDoc = session.state.doc;
   const sessionVersion = session.state.version;
@@ -211,9 +212,11 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     [updateSceneAction, instanceId, engineSceneId, toast]
   );
   const unsavedNameRef = useRef<{ name: string; description: string | undefined } | null>(null);
-  const nameSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Set while the scene is being deleted: saving its name then would only
-  // fail, or race the delete.
+  // While the scene is being deleted its name is not saved: that would only
+  // fail, or race the delete. The state holds the debounce back and, when a
+  // delete fails, schedules a name still unsaved again; the ref is what a
+  // timer already running and the save on close read, as they see no render.
+  const [deleting, setDeleting] = useState(false);
   const deletingRef = useRef(false);
   useEffect(() => {
     if (!sessionMode || !isDirty || sceneName === undefined) {
@@ -221,18 +224,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       return;
     }
     unsavedNameRef.current = { name: sceneName, description: sceneDescription };
+    if (deleting) {
+      return;
+    }
     const timer = setTimeout(() => {
-      nameSaveTimerRef.current = null;
+      if (deletingRef.current) {
+        return;
+      }
       unsavedNameRef.current = null;
       setIsDirty(false);
       saveNameAndDescription(sceneName, sceneDescription);
     }, 800);
-    nameSaveTimerRef.current = timer;
-    return () => {
-      clearTimeout(timer);
-      nameSaveTimerRef.current = null;
-    };
-  }, [sessionMode, isDirty, sceneName, sceneDescription, saveNameAndDescription]);
+    return () => clearTimeout(timer);
+  }, [sessionMode, isDirty, sceneName, sceneDescription, saveNameAndDescription, deleting]);
   const saveNameRef = useRef(saveNameAndDescription);
   saveNameRef.current = saveNameAndDescription;
   useEffect(() => {
@@ -318,26 +322,26 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     }
   }, [scene, instanceId, engineSceneId, updateSceneAction, toast, fetchedScene?.updatedAt]);
 
+  const abandonSession = session.abandon;
   const handleDeleteScene = useCallback(async () => {
     deletingRef.current = true;
-    if (nameSaveTimerRef.current !== null) {
-      clearTimeout(nameSaveTimerRef.current);
-      nameSaveTimerRef.current = null;
-    }
+    setDeleting(true);
     try {
       await deleteSceneAction({ instanceId, engineSceneId });
+      // Edits still on their way would only be resent to a scene that is gone.
+      abandonSession();
       toast({ title: "Scene deleted" });
       navigate("/stream/scenes");
     } catch (err) {
-      // The scene is still there: a name still unsaved saves when the editor closes.
       deletingRef.current = false;
+      setDeleting(false);
       toast({
         title: "Delete failed",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
     }
-  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast]);
+  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession]);
 
   const handleDuplicateScene = useCallback(async () => {
     if (!scene) {
