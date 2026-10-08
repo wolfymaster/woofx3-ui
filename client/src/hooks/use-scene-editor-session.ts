@@ -14,6 +14,12 @@ interface UseSceneEditorSessionArgs {
   enabled: boolean;
   /** The version edits go to: the draft, or the published scene (live). */
   version: SceneVersion;
+  /**
+   * Whether the editor holds changes the session does not carry (the scene's
+   * name and description) that are not saved yet; closing the tab asks first
+   * while they are, as it does for the session's own edits.
+   */
+  unsavedOutsideSession: boolean;
 }
 
 export interface SceneEditorSessionHandle {
@@ -27,6 +33,8 @@ export interface SceneEditorSessionHandle {
   discard: () => void;
   /** Tell the scene's other editors who this is and what it has selected. */
   setPresence: (presence: EditorPresence) => void;
+  /** Close the session at once, sending nothing more: for a scene that was deleted. */
+  abandon: () => void;
 }
 
 const IDLE: EditorState = {
@@ -54,6 +62,7 @@ export function useSceneEditorSession({
   sceneId,
   enabled,
   version,
+  unsavedOutsideSession,
 }: UseSceneEditorSessionArgs): SceneEditorSessionHandle {
   const getSession = useAction(api.sceneActions.getSceneEditorSession);
   const getPreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
@@ -61,6 +70,8 @@ export function useSceneEditorSession({
   const clientRef = useRef<SceneEditorClient | null>(null);
   const versionRef = useRef(version);
   versionRef.current = version;
+  const unsavedOutsideSessionRef = useRef(unsavedOutsideSession);
+  unsavedOutsideSessionRef.current = unsavedOutsideSession;
 
   useEffect(() => {
     if (!enabled || !sceneId) {
@@ -104,12 +115,11 @@ export function useSceneEditorSession({
     }
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       const client = clientRef.current;
-      if (!client) {
-        return;
-      }
-      client.flush();
-      if (client.hasUnconfirmed()) {
+      client?.flush();
+      if (client?.hasUnconfirmed() || unsavedOutsideSessionRef.current) {
         event.preventDefault();
+        // Browsers that predate preventDefault here prompt only for a non-empty returnValue.
+        event.returnValue = "Changes to this scene are still being saved.";
       }
     };
     window.addEventListener("beforeunload", onBeforeUnload);
@@ -123,6 +133,7 @@ export function useSceneEditorSession({
   const publish = useCallback(() => clientRef.current?.publish(), []);
   const discard = useCallback(() => clientRef.current?.discard(), []);
   const setPresence = useCallback((presence: EditorPresence) => clientRef.current?.setPresence(presence), []);
+  const abandon = useCallback(() => clientRef.current?.abandon(), []);
 
-  return { state, edit, publish, discard, setPresence };
+  return { state, edit, publish, discard, setPresence, abandon };
 }

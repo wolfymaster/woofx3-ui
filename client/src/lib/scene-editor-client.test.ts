@@ -367,4 +367,164 @@ describe("SceneEditorClient — what the editor shows, and what reaches the engi
     expect(server.doc.widgets.a!.settings.text).toBe("hello");
     expect(e.sockets[0]!.closed).toBe(true);
   });
+
+  it("does not diff a canvas waiting for its version's snapshot against the other version", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const e = editor(server);
+    // Before any snapshot: there is nothing to diff the draft canvas against yet.
+    e.client.edit({ layout: {}, widgets: { a: placement("draft only") } }, "draft");
+    e.client.setVersion("published");
+    await settle();
+    e.client.flush();
+    await settle();
+    expect(server.received).toEqual([]);
+    expect(server.doc.widgets.a!.settings.text).toBe("hi");
+  });
+
+  it("publishes after a reconnect only once the draft's unconfirmed edits are resent", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.sockets[0]!.close();
+    e.type("hello");
+    e.client.publish();
+    await settle();
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "publish"]);
+  });
+
+  it("sends every publish and discard asked for, in order", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.sockets[0]!.close();
+    e.client.publish();
+    e.client.discard();
+    await settle();
+    await settle();
+    expect(server.received).toEqual(["publish", "discard"]);
+  });
+
+  it("reconnects on stop to deliver edits made while the socket was down", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.sockets[0]!.close();
+    e.type("hello");
+    e.client.stop();
+    await settle();
+    await settle();
+    expect(server.doc.widgets.a!.settings.text).toBe("hello");
+    expect(e.sockets[1]!.closed).toBe(true);
+  });
+
+  it("reports the edits saved when the last change turns out to change nothing", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const one = editor(server);
+    const two = editor(server);
+    await settle();
+    one.client.edit(structuredClone(one.state().doc!), "draft");
+    // Something else is reported while that edit waits for the next send.
+    two.client.setPresence({ name: "Other", selection: null });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(one.state().unsaved).toBe(true);
+    one.client.flush();
+    expect(one.state().unsaved).toBe(false);
+  });
+
+  it("clears its selection for the others while it drains", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const one = editor(server);
+    const two = editor(server);
+    await settle();
+    one.client.setPresence({ name: "Wolfy", selection: "a" });
+    await settle();
+    one.type("hi!");
+    one.client.stop();
+    await settle();
+    expect(one.sockets[0]!.sent.at(-1)).toEqual({ type: "presence", name: "Wolfy", selection: null });
+    expect(Object.values(two.state().others)).toEqual([{ name: "Wolfy", selection: null }]);
+    expect(one.sockets[0]!.closed).toBe(true);
+  });
+
+  it("drops an edit made before its version's first snapshot, so a canvas from another session is never sent", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const e = editor(server);
+    // A canvas the editor still shows from before this client existed.
+    e.client.edit({ layout: {}, widgets: { a: placement("stale canvas") } }, "draft");
+    await settle();
+    e.client.flush();
+    await settle();
+    expect(server.received).toEqual([]);
+    expect(e.text()).toBe("hi");
+  });
+
+  it("keeps edits made on a loaded canvas while the socket reconnects", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.sockets[0]!.close();
+    const doc = structuredClone(e.state().doc!);
+    doc.widgets.a!.settings.text = "while reconnecting";
+    e.client.edit(doc, "draft");
+    await settle();
+    await settle();
+    expect(server.doc.widgets.a!.settings.text).toBe("while reconnecting");
+    expect(e.text()).toBe("while reconnecting");
+  });
+
+  it("closes at once on abandon, without resending what is unconfirmed", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const e = editor(server);
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.type("hi!");
+    e.client.abandon();
+    expect(e.sockets[0]!.closed).toBe(true);
+    server.deaf = null;
+    await settle();
+    await settle();
+    expect(e.sockets.length).toBe(1);
+  });
+
+  it("does nothing on a stop after abandon or a second stop", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.type("hello");
+    e.client.abandon();
+    e.client.stop();
+    await settle();
+    await settle();
+    expect(e.sockets.length).toBe(1);
+    expect(e.sockets[0]!.closed).toBe(true);
+  });
+
+  it("keeps every version's document current while it drains", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const one = editor(server);
+    const two = editor(server);
+    await settle();
+    // One drains on an edit of the published scene that never reaches the
+    // server, with nothing of the draft's pending.
+    one.client.setVersion("published");
+    const socket = one.sockets[0]!;
+    const original = socket.send.bind(socket);
+    socket.send = (data: string) => {
+      if (JSON.parse(data).type !== "submit") {
+        original(data);
+      }
+    };
+    one.type("live");
+    one.client.stop();
+    two.type("hi there");
+    await settle();
+    const draft = (one.client as unknown as { versions: { draft: { seq: number; doc: SceneDocument } } }).versions
+      .draft;
+    expect(draft.seq).toBe(server.seq);
+    expect(draft.doc.widgets.a!.settings.text).toBe("hi there");
+  });
 });
