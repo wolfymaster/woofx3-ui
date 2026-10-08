@@ -31,7 +31,7 @@ describe("readAlertLayout", () => {
         position: { x: 16, y: 908 },
         size: { width: 1888, height: 156 },
         rotation: 0,
-        opacity: 100,
+        opacity: 1,
         zIndex: 1,
         locked: false,
         visible: true,

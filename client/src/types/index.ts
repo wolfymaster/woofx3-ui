@@ -127,6 +127,7 @@ export interface Widget {
   position: { x: number; y: number };
   size: { width: number; height: number };
   rotation: number;
+  /** 0 (transparent) to 1 (opaque), as CSS takes it. */
   opacity: number;
   zIndex: number;
   locked: boolean;

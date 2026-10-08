@@ -193,7 +193,7 @@ export function newLayer(row: CatalogWidget, existing: readonly Widget[], canvas
     position: { x: 0, y: 0 },
     size,
     rotation: 0,
-    opacity: 100,
+    opacity: 1,
     zIndex: existing.reduce((top, w) => Math.max(top, w.zIndex), 0) + 1,
     locked: false,
     visible: true,

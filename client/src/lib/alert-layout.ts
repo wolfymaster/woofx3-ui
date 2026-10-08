@@ -34,7 +34,7 @@ export function readAlertLayout(raw: unknown, nameOf: (widgetCanonicalId: string
       position: { x: numberOr(position.x, 0), y: numberOr(position.y, 0) },
       size: { width: numberOr(size.width, 300), height: numberOr(size.height, 200) },
       rotation: numberOr(entry.rotation, 0),
-      opacity: numberOr(entry.opacity, 100),
+      opacity: numberOr(entry.opacity, 1),
       zIndex: index + 1,
       locked: entry.locked === true,
       visible: entry.visible !== false,

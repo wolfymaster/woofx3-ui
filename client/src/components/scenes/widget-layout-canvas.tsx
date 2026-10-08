@@ -137,7 +137,7 @@ export function WidgetLayoutCanvas({
           position: { x: 100, y: 100 },
           size: { width: 300, height: 200 },
           rotation: 0,
-          opacity: 100,
+          opacity: 1,
           zIndex: nextLayerZIndex(prev),
           locked: false,
           visible: true,
