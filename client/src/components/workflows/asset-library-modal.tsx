@@ -1,5 +1,5 @@
-import { ChevronRight, FileText, FolderOpen, Image, Loader2, Music, Search, Upload, Video } from "lucide-react";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { ChevronRight, FileText, FolderOpen, Image, Link2, Loader2, Music, Search, Upload, Video } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,26 +12,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInstance } from "@/hooks/use-instance";
 import { useResourceUpload } from "@/hooks/use-resource-upload";
 import { type Resource, useResources } from "@/hooks/use-resources";
 import { useToast } from "@/hooks/use-toast";
+import {
+  externalMediaValue,
+  isExternalMediaValue,
+  type MediaKind,
+  type MediaValue,
+  parseMediaUrl,
+} from "@/lib/media-value";
 import { cn } from "@/lib/utils";
 
-// Asset picker for config fields that take a media value, backed by the
-// engine resource API.
-
-/** What a caller receives on select. Deliberately narrow: config values are
- *  persisted, so only the fields a consumer needs are handed over. */
-export interface SelectedAsset {
-  id: string;
-  name: string;
-  url: string;
-  /** "image" | "video" | "audio" | "other" */
-  type: string;
-}
+// Asset picker for config fields that take a media value: a file from the
+// engine resource library, a new upload, or a URL hosted elsewhere.
 
 const KIND_ICONS: Record<string, React.ReactNode> = {
   image: <Image className="h-5 w-5" />,
@@ -51,10 +49,13 @@ interface Crumb {
 export interface AssetLibraryModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (asset: SelectedAsset) => void;
+  /** Receives only the fields a consumer persists; see MediaValue. */
+  onSelect: (value: MediaValue) => void;
   /** Restrict to these resource kinds, e.g. ["image"]. Folders always show so
    *  the tree stays navigable. */
   filterTypes?: string[];
+  /** The field's current value, so an external URL reopens in the URL tab. */
+  current?: MediaValue | null;
   title?: string;
   description?: string;
 }
@@ -64,8 +65,9 @@ export function AssetLibraryModal({
   onOpenChange,
   onSelect,
   filterTypes,
+  current,
   title = "Select an asset",
-  description = "Choose a file from your library or upload a new one.",
+  description = "Choose a file from your library, upload a new one, or link to one hosted elsewhere.",
 }: AssetLibraryModalProps) {
   const { instance } = useInstance();
   const { toast } = useToast();
@@ -74,7 +76,24 @@ export function AssetLibraryModal({
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<Resource | null>(null);
   const [tab, setTab] = useState("library");
+  const [urlInput, setUrlInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const declaredKind = singleMediaKind(filterTypes);
+  const parsedUrl = parseMediaUrl(urlInput);
+  const urlError = urlInput.trim() !== "" && !parsedUrl ? "Enter a full http:// or https:// address." : null;
+
+  // Each opening starts from the field's value rather than whatever the last
+  // session left behind, so an external URL is shown where it can be edited.
+  const currentExternalUrl = current && isExternalMediaValue(current) ? current.url : null;
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setTab(currentExternalUrl ? "url" : "library");
+    setUrlInput(currentExternalUrl ?? "");
+    setPicked(null);
+  }, [open, currentExternalUrl]);
 
   const currentFolderId = trail[trail.length - 1].id;
   const { upload, isUploading, progress } = useResourceUpload(instance?._id);
@@ -107,7 +126,18 @@ export function AssetLibraryModal({
     }
   }, []);
 
+  const isUrlTab = tab === "url";
+  const canConfirm = isUrlTab ? parsedUrl !== null : Boolean(picked?.url);
+
   const confirm = () => {
+    if (isUrlTab) {
+      if (!parsedUrl) {
+        return;
+      }
+      onSelect(externalMediaValue(parsedUrl, declaredKind));
+      onOpenChange(false);
+      return;
+    }
     if (!picked?.url) {
       return;
     }
@@ -151,12 +181,15 @@ export function AssetLibraryModal({
           <p className="text-sm text-muted-foreground py-8 text-center">Select an instance to browse assets.</p>
         ) : (
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="grid grid-cols-2 w-full">
+            <TabsList className="grid grid-cols-3 w-full">
               <TabsTrigger value="library" data-testid="tab-asset-library">
                 Library
               </TabsTrigger>
               <TabsTrigger value="upload" data-testid="tab-asset-upload">
                 Upload
+              </TabsTrigger>
+              <TabsTrigger value="url" data-testid="tab-asset-url">
+                URL
               </TabsTrigger>
             </TabsList>
 
@@ -297,6 +330,43 @@ export function AssetLibraryModal({
                 data-testid="input-asset-upload"
               />
             </TabsContent>
+
+            <TabsContent value="url" className="mt-4 space-y-3">
+              <form
+                noValidate
+                className="space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  confirm();
+                }}
+              >
+                <Label htmlFor="asset-url-input">File URL</Label>
+                <div className="relative">
+                  <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="asset-url-input"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="https://example.com/file.png"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    className="pl-9"
+                    aria-invalid={urlError !== null}
+                    aria-describedby="asset-url-hint"
+                    data-testid="input-asset-url"
+                  />
+                </div>
+                <p
+                  id="asset-url-hint"
+                  className={cn("text-xs", urlError ? "text-destructive" : "text-muted-foreground")}
+                >
+                  {urlError ?? "Link to a file hosted elsewhere. It must stay reachable for your overlay to show it."}
+                </p>
+              </form>
+              {parsedUrl && <UrlPreview key={parsedUrl.toString()} url={parsedUrl} declaredKind={declaredKind} />}
+            </TabsContent>
           </Tabs>
         )}
 
@@ -304,11 +374,60 @@ export function AssetLibraryModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={confirm} disabled={!picked?.url} data-testid="button-confirm-asset">
-            {picked ? `Select ${picked.name}` : "Select"}
+          <Button onClick={confirm} disabled={!canConfirm} data-testid="button-confirm-asset">
+            {isUrlTab ? "Use URL" : picked ? `Select ${picked.name}` : "Select"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function singleMediaKind(filterTypes: string[] | undefined): MediaKind | undefined {
+  if (filterTypes?.length !== 1) {
+    return undefined;
+  }
+  const [kind] = filterTypes;
+  return kind === "image" || kind === "video" || kind === "audio" ? kind : undefined;
+}
+
+/**
+ * A preview of the file behind a URL. A failed load is reported but does not
+ * block selection: some hosts refuse to be embedded in the dashboard yet serve
+ * the overlay fine.
+ */
+function UrlPreview({ url, declaredKind }: { url: URL; declaredKind: MediaKind | undefined }) {
+  const [failed, setFailed] = useState(false);
+  const kind = externalMediaValue(url, declaredKind).type;
+  const src = url.toString();
+
+  let media: React.ReactNode = null;
+  if (kind === "image") {
+    media = <img src={src} alt="" className="max-h-56 w-full object-contain" onError={() => setFailed(true)} />;
+  } else if (kind === "video") {
+    media = <video src={src} controls muted playsInline className="max-h-56 w-full" onError={() => setFailed(true)} />;
+  } else if (kind === "audio") {
+    media = (
+      // biome-ignore lint/a11y/useMediaCaption: a preview of the user's own file has no caption track to offer
+      <audio src={src} controls className="w-full" onError={() => setFailed(true)} />
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2" data-testid="asset-url-preview">
+      {media && !failed ? (
+        <div className="flex items-center justify-center overflow-hidden rounded">{media}</div>
+      ) : (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          {KIND_ICONS[kind] ?? KIND_ICONS.other}
+          <p className="text-xs">
+            {failed
+              ? "Could not load a preview. The link may still work in your overlay."
+              : "No preview for this file type."}
+          </p>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground break-all">{src}</p>
+    </div>
   );
 }

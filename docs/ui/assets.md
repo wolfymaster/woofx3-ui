@@ -18,3 +18,9 @@
 - Supports **grid and table** layouts, search, type filters (image, video, audio, etc.), and confirmation dialogs for destructive actions.
 
 When extending assets, preserve the pattern: **metadata in Convex**, **blobs** via the storage adapter / upload URL flow, never direct browser → arbitrary cloud without going through the backend.
+
+## Picking media for a setting
+
+Every `media` / `asset` config field (scene widget settings, alert layers, workflow actions, module and resource settings) renders through one picker, `AssetLibraryModal` in `client/src/components/workflows/asset-library-modal.tsx`, via `configFieldRenderers`. It offers three tabs: **Library**, **Upload**, and **URL** for a file hosted elsewhere (absolute `http`/`https` only, with an image, video or audio preview).
+
+The stored value is a `MediaValue` (`client/src/lib/media-value.ts`). A library file is `{ id, name, url, type }`; an external URL is `{ source: "url", name, url, type }` with no resource id. Renderers read only `url`, so both play the same way in overlays and previews.
