@@ -7,7 +7,9 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { unapprovedLocalEndpointIds } from "./lib/localEndpoints";
+import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
@@ -65,6 +67,11 @@ export interface MarketplaceModuleSummary {
   featuredRank?: number;
   counts: MarketplaceModuleCounts;
   updatedAt?: string;
+  /**
+   * "dev" for a module the marketplace hides from the public catalog. Only an
+   * instance with marketplace dev access is ever sent one.
+   */
+  tier: "public" | "dev";
 }
 
 export interface MarketplaceModuleDetail extends MarketplaceModuleSummary {
@@ -83,14 +90,23 @@ function getMarketplaceUrl(): string {
   return url.replace(/\/$/, "");
 }
 
-export async function marketplaceFetch(path: string): Promise<unknown> {
+/** The marketplace access `instanceId` has. Every marketplace request must be made at one. */
+export async function marketplaceAccessForInstance(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">
+): Promise<MarketplaceAccess> {
+  return await ctx.runQuery(internal.instances.getMarketplaceAccess, { instanceId });
+}
+
+export async function marketplaceFetch(path: string, access: MarketplaceAccess): Promise<unknown> {
   const base = getMarketplaceUrl();
+  const headers = marketplaceRequestHeaders(access, process.env.MARKETPLACE_DEV_TOKEN);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), MARKETPLACE_TIMEOUT_MS);
   try {
     const res = await fetch(`${base}${path}`, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers,
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -112,8 +128,11 @@ export interface MarketplaceDownload {
   sha256: string;
 }
 
-export async function fetchMarketplaceDownload(marketplaceModuleId: string): Promise<MarketplaceDownload> {
-  const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`);
+export async function fetchMarketplaceDownload(
+  marketplaceModuleId: string,
+  access: MarketplaceAccess
+): Promise<MarketplaceDownload> {
+  const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`, access);
   const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
   const url = asString(obj.url);
   if (!url) {
@@ -216,6 +235,7 @@ function parseSummary(raw: unknown): MarketplaceModuleSummary | null {
     tags: asStringArray(obj.tags),
     images: parseMarketplaceImages(obj.images),
     counts: parseCounts(obj.counts),
+    tier: obj.tier === "dev" ? "dev" : "public",
   };
   const featuredRank = parseFeaturedRank(obj.featuredRank);
   if (featuredRank !== undefined) {
@@ -359,8 +379,8 @@ function parseDetail(raw: unknown): MarketplaceModuleDetail | null {
 }
 
 /** Every module the marketplace lists. Entries it cannot parse are dropped. */
-export async function fetchMarketplaceListing(): Promise<MarketplaceModuleSummary[]> {
-  const payload = await marketplaceFetch("/modules");
+export async function fetchMarketplaceListing(access: MarketplaceAccess): Promise<MarketplaceModuleSummary[]> {
+  const payload = await marketplaceFetch("/modules", access);
   const rawList =
     payload && typeof payload === "object" && Array.isArray((payload as Record<string, unknown>).modules)
       ? ((payload as Record<string, unknown>).modules as unknown[])
@@ -369,25 +389,22 @@ export async function fetchMarketplaceListing(): Promise<MarketplaceModuleSummar
 }
 
 export const listModules = action({
-  args: {},
-  handler: async (ctx): Promise<MarketplaceModuleSummary[]> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
-    return await fetchMarketplaceListing();
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<MarketplaceModuleSummary[]> => {
+    await requireInstanceRoleInAction(ctx, instanceId);
+    return await fetchMarketplaceListing(await marketplaceAccessForInstance(ctx, instanceId));
   },
 });
 
 export const getModule = action({
-  args: { marketplaceModuleId: v.string() },
-  handler: async (ctx, { marketplaceModuleId }): Promise<MarketplaceModuleDetail> => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+  args: { instanceId: v.id("instances"), marketplaceModuleId: v.string() },
+  handler: async (ctx, { instanceId, marketplaceModuleId }): Promise<MarketplaceModuleDetail> => {
+    await requireInstanceRoleInAction(ctx, instanceId);
 
-    const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`);
+    const payload = await marketplaceFetch(
+      `/modules/${encodeURIComponent(marketplaceModuleId)}`,
+      await marketplaceAccessForInstance(ctx, instanceId)
+    );
     const rawModule = payload && typeof payload === "object" ? (payload as Record<string, unknown>).module : undefined;
     const detail = parseDetail(rawModule);
     if (!detail) {
@@ -441,7 +458,8 @@ async function installFromMarketplace(
     approvedLocalEndpoints: readonly string[];
   }
 ): Promise<MarketplaceInstallResult> {
-  const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`);
+  const access = await marketplaceAccessForInstance(ctx, instanceId);
+  const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`, access);
   const rawModule =
     detailPayload && typeof detailPayload === "object" ? (detailPayload as Record<string, unknown>).module : undefined;
   const detail = parseDetail(rawModule);
@@ -449,7 +467,7 @@ async function installFromMarketplace(
     throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
   }
 
-  const download = await fetchMarketplaceDownload(marketplaceModuleId);
+  const download = await fetchMarketplaceDownload(marketplaceModuleId, access);
   const manifest = await fetchMarketplaceArchiveManifest(download);
   const unapproved = unapprovedPermissions(parseManifestPermissions(manifest), approvedPermissions);
   const unapprovedLocalEndpoints = unapprovedLocalEndpointIds(manifest, approvedLocalEndpoints);

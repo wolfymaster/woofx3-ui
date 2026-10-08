@@ -15,6 +15,7 @@ export interface ModuleStoreCardData {
   images: MarketplaceImages;
   isInstalled: boolean;
   updateAvailable: boolean;
+  isDev: boolean;
 }
 
 interface ModuleStoreCardProps {
@@ -64,6 +65,15 @@ export function ModuleStoreCard({ module, size = "default", onClick }: ModuleSto
         <span className="absolute bottom-2 left-2 text-[10px] font-medium px-1.5 py-0.5 rounded bg-background/70 backdrop-blur-sm">
           {module.category}
         </span>
+        {module.isDev && (
+          <Badge
+            variant="outline"
+            className="absolute bottom-2 right-2 text-[9px] py-0 px-1.5 bg-background/80 backdrop-blur-sm border-amber-500/60 text-amber-600 dark:text-amber-400"
+            title="Dev-tier module: hidden from the public catalog"
+          >
+            Dev
+          </Badge>
+        )}
       </div>
 
       <CardContent className="p-3 flex flex-col gap-2 flex-1">

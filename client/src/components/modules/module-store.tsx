@@ -62,6 +62,7 @@ export function ModuleStore({ catalog, selectedCategory, onSelectCategory, heade
         images: m.images,
         isInstalled: installedVersion !== undefined,
         updateAvailable: installedVersion ? isNewerVersion(m.version, installedVersion) : false,
+        isDev: m.tier === "dev",
       };
     },
     [installedVersionsByMarketplaceId]
