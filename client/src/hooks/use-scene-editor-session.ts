@@ -110,6 +110,8 @@ export function useSceneEditorSession({
       client.flush();
       if (client.hasUnconfirmed()) {
         event.preventDefault();
+        // Browsers that predate preventDefault here prompt only for a returnValue.
+        event.returnValue = "";
       }
     };
     window.addEventListener("beforeunload", onBeforeUnload);

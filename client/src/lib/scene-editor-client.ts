@@ -35,10 +35,14 @@ import {
  * read from the draft would push every draft change to what OBS shows, and
  * one read from the published scene would undo the draft's own edits.
  *
- * `publish` and `discard` wait for the draft's edits to be on the wire, so a
- * publish includes the last change made before it. `stop` keeps the socket
- * open until the edits made before it are confirmed, so leaving the editor
- * loses none of them.
+ * `publish` and `discard` are sent in the order they were asked for, each
+ * once the draft's edits are on the wire and, after a reconnect, once the
+ * draft's unconfirmed edits have been resent, so a publish includes the last
+ * change made before it. `stop` keeps the session going (reconnecting if it
+ * has to) until the edits and commands made before it are through, so
+ * leaving the editor loses none of them. While it drains it shows the others
+ * no selection and ignores what they do, except where its own pending edits
+ * must be transformed against it.
  */
 
 /** The slice of a WebSocket this uses (injectable for tests). */
@@ -122,7 +126,12 @@ export class SceneEditorClient {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private attempts = 0;
+  /** Nothing is reported or accepted from the editor after `stop`. */
   private stopped = false;
+  /** Stopped, but still finishing what was asked before `stop` (see `stop`). */
+  private draining = false;
+  /** The versions whose snapshot this socket has delivered; both are needed before anything is sent for the draft. */
+  private readonly synced = new Set<SceneVersion>();
   /** The op id resent after a reconnect: it is not shown until the server
    *  has transformed it against what was missed. */
   private resent: string | null = null;
@@ -130,8 +139,8 @@ export class SceneEditorClient {
   /** This editor's own presence, announced again after a reconnect. */
   private presence: EditorPresence | null = null;
   private others: Record<string, EditorPresence> = {};
-  /** A publish or discard waiting for the draft's buffered edits to be sent. */
-  private draftCommand: "publish" | "discard" | null = null;
+  /** Publishes and discards waiting for the draft's edits to be on the wire, oldest first. */
+  private readonly draftCommands: Array<"publish" | "discard"> = [];
   /** `unsaved` as last reported, to report only when it changes. */
   private reportedUnsaved = false;
   private readonly drainMs: number;
@@ -149,25 +158,31 @@ export class SceneEditorClient {
   }
 
   /**
-   * Close the session. Edits not yet confirmed are sent first, and the
-   * socket stays open (up to `drainMs`) until the engine confirms them;
-   * nothing is reported after this.
+   * Close the session. Edits not yet confirmed, and publishes or discards not
+   * yet sent, go first: for up to `drainMs` the session stays open, and
+   * reconnects if its socket drops, until they are through. Nothing is
+   * reported after this.
    */
   stop(): void {
     this.flush();
     this.stopped = true;
-    for (const timer of [this.flushTimer, this.retryTimer]) {
-      if (timer !== null) {
-        clearTimeout(timer);
-      }
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
     }
-    this.flushTimer = null;
-    this.retryTimer = null;
-    if (this.socket && this.hasUnconfirmed()) {
-      this.drainTimer = setTimeout(() => this.close(), this.drainMs);
+    if (!this.hasWork()) {
+      this.close();
       return;
     }
-    this.close();
+    this.draining = true;
+    this.drainTimer = setTimeout(() => this.close(), this.drainMs);
+    // The protocol has no leave short of closing, and a new editor for this
+    // scene may already be open: an empty selection keeps this one off the
+    // others' canvases meanwhile.
+    if (this.presence?.selection) {
+      this.presence = { name: this.presence.name, selection: null };
+      this.send({ type: "presence", ...this.presence });
+    }
   }
 
   /**
@@ -179,6 +194,16 @@ export class SceneEditorClient {
       return true;
     }
     return Object.values(this.versions).some((state) => state.inflight !== null || state.buffer !== null);
+  }
+
+  /** Whether `stop` has anything to wait for: unconfirmed edits, or commands not yet sent. */
+  private hasWork(): boolean {
+    return this.hasUnconfirmed() || this.draftCommands.length > 0;
+  }
+
+  /** Whether the session is still connecting and processing: running, or draining after `stop`. */
+  private get active(): boolean {
+    return !this.stopped || this.draining;
   }
 
   /**
@@ -214,6 +239,9 @@ export class SceneEditorClient {
     this.desired = null;
     const ops = diffDocuments(state.doc, desired);
     if (ops.length === 0) {
+      if (this.reportedUnsaved !== this.hasUnconfirmed()) {
+        this.emit();
+      }
       return;
     }
     state.doc = applyOps(state.doc, ops);
@@ -226,7 +254,15 @@ export class SceneEditorClient {
 
   /** Edit the published scene (live) or the draft from now on. */
   setVersion(version: SceneVersion): void {
+    if (version === this.version) {
+      return;
+    }
     this.flush();
+    // A canvas still waiting here had no snapshot of its version to be
+    // diffed against. It is that version's, so it must not be diffed
+    // against the other one; the editor reads the canvas again from the
+    // version it switches to.
+    this.desired = null;
     this.version = version;
     this.emit();
   }
@@ -251,24 +287,29 @@ export class SceneEditorClient {
   }
 
   private draftAction(command: "publish" | "discard"): void {
+    if (this.stopped) {
+      return;
+    }
     this.flush();
-    this.draftCommand = command;
-    this.sendDraftCommand();
+    this.draftCommands.push(command);
+    this.sendDraftCommands();
   }
 
   /**
-   * Sends the waiting publish or discard once nothing of the draft's is
-   * buffered: the engine applies messages in order, so everything already
-   * sent lands before it.
+   * Sends the waiting publishes and discards, in order, once nothing of the
+   * draft's is buffered and this socket has resent the draft's unconfirmed
+   * edits: the engine applies messages in order, so everything already sent
+   * lands before them.
    */
-  private sendDraftCommand(): void {
+  private sendDraftCommands(): void {
     const draft = this.versions.draft;
-    if (this.draftCommand === null || !this.socket || this.status !== "ready" || !draft || draft.buffer !== null) {
+    if (!this.socket || !this.synced.has("published") || !this.synced.has("draft") || !draft || draft.buffer !== null) {
       return;
     }
-    const command = this.draftCommand;
-    this.draftCommand = null;
-    this.send({ type: command });
+    for (const command of this.draftCommands.splice(0)) {
+      this.send({ type: command });
+    }
+    this.closeIfDrained();
   }
 
   // ---------------------------------------------------------------------------
@@ -279,20 +320,24 @@ export class SceneEditorClient {
       url = await this.options.open();
     } catch {
       url = null;
-      if (!this.stopped) {
+      if (this.active) {
         this.retry();
         return;
       }
     }
-    if (this.stopped) {
+    if (!this.active) {
       return;
     }
     if (url === null) {
       this.setStatus("unavailable");
+      if (this.draining) {
+        this.close();
+      }
       return;
     }
     const socket = (this.options.createSocket ?? ((u) => new WebSocket(u) as unknown as EditorSocket))(url);
     this.socket = socket;
+    this.synced.clear();
     socket.onopen = () => {
       this.attempts = 0;
     };
@@ -309,10 +354,11 @@ export class SceneEditorClient {
       this.receive(message);
     };
     socket.onclose = () => {
-      if (this.socket !== socket || this.stopped) {
+      if (this.socket !== socket || !this.active) {
         return;
       }
       this.socket = null;
+      this.synced.clear();
       // The others are told again when this reconnects; until then it cannot know.
       this.others = {};
       this.retry();
@@ -331,6 +377,9 @@ export class SceneEditorClient {
 
   private receive(message: Record<string, unknown>): void {
     const version = message.version === "published" || message.version === "draft" ? message.version : null;
+    if (this.draining && !this.drainNeeds(message.type, version)) {
+      return;
+    }
     if (typeof message.hasDraft === "boolean") {
       this.hasDraft = message.hasDraft;
     }
@@ -345,6 +394,7 @@ export class SceneEditorClient {
           this.flush();
         }
         const previous = this.versions[version];
+        this.synced.add(version);
         const fresh: VersionState = {
           version,
           seq: snapshot.seq,
@@ -373,14 +423,15 @@ export class SceneEditorClient {
           this.resent = pending.opId;
           this.send({ type: "submit", version, base: pending.base, opId: pending.opId, ops });
         }
-        if (this.versions.published && this.versions.draft) {
-          if (this.status !== "ready" && this.presence) {
+        if (this.synced.has("published") && this.synced.has("draft")) {
+          if (this.status !== "ready" && this.presence && !this.stopped) {
             // A new socket is a new editor to the others: announce it again.
             this.send({ type: "presence", ...this.presence });
           }
           this.setStatus("ready");
-          this.sendDraftCommand();
+          this.sendDraftCommands();
         }
+        this.closeIfDrained();
         this.emit();
         return;
       }
@@ -411,6 +462,7 @@ export class SceneEditorClient {
           if (message.error !== "resync") {
             this.send({ type: "snapshot", version });
           }
+          this.closeIfDrained();
         }
         return;
       }
@@ -438,6 +490,27 @@ export class SceneEditorClient {
       }
       default:
         return;
+    }
+  }
+
+  /**
+   * Whether a draining session still needs a message: its own answers, the
+   * snapshots it resends from, and other editors' ops on a version where
+   * its pending edits must be transformed against them. Everything else
+   * would only update a view nobody sees.
+   */
+  private drainNeeds(type: unknown, version: SceneVersion | null): boolean {
+    switch (type) {
+      case "snapshot":
+      case "ack":
+      case "reject":
+        return true;
+      case "ops": {
+        const state = version ? this.versions[version] : undefined;
+        return state !== undefined && (state.inflight !== null || state.buffer !== null);
+      }
+      default:
+        return false;
     }
   }
 
@@ -509,9 +582,13 @@ export class SceneEditorClient {
       this.submit(state, buffer);
     }
     if (state.version === "draft") {
-      this.sendDraftCommand();
+      this.sendDraftCommands();
     }
-    if (this.stopped && !this.hasUnconfirmed()) {
+    this.closeIfDrained();
+  }
+
+  private closeIfDrained(): void {
+    if (this.draining && !this.hasWork()) {
       this.close();
     }
   }
@@ -526,10 +603,14 @@ export class SceneEditorClient {
   }
 
   private close(): void {
-    if (this.drainTimer !== null) {
-      clearTimeout(this.drainTimer);
-      this.drainTimer = null;
+    this.draining = false;
+    for (const timer of [this.drainTimer, this.retryTimer]) {
+      if (timer !== null) {
+        clearTimeout(timer);
+      }
     }
+    this.drainTimer = null;
+    this.retryTimer = null;
     this.socket?.close();
     this.socket = null;
     this.status = "closed";
