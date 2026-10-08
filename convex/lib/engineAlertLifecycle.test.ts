@@ -77,6 +77,25 @@ describe("acceptsTransition", () => {
     ).toBe(true);
   });
 
+  test("orders by version when both snapshots carry one", () => {
+    const stored = { status: "completed" as const, engineVersion: 4, engineUpdatedAt: T1 };
+    expect(acceptsTransition(stored, { status: "failed", engineVersion: 5, engineUpdatedAt: T0 })).toBe(true);
+    expect(acceptsTransition(stored, { status: "timed_out", engineVersion: 3, engineUpdatedAt: T1 })).toBe(false);
+    expect(acceptsTransition(stored, { status: "playing", engineVersion: 2, engineUpdatedAt: T1 })).toBe(false);
+  });
+
+  test("accepts the same version delivered again", () => {
+    const stored = { status: "playing" as const, engineVersion: 2, engineUpdatedAt: T1 };
+    expect(acceptsTransition(stored, { ...stored })).toBe(true);
+  });
+
+  test("falls back to stage and timestamp when either snapshot has no version", () => {
+    const versioned = { status: "completed" as const, engineVersion: 3, engineUpdatedAt: T1 };
+    expect(acceptsTransition(at("completed", T1), { ...at("timed_out", T0), engineVersion: 9 })).toBe(false);
+    expect(acceptsTransition(versioned, at("timed_out", T0))).toBe(false);
+    expect(acceptsTransition(at("timed_out", T0), { ...at("completed", T1), engineVersion: 1 })).toBe(true);
+  });
+
   // Only `alert.recorded` can carry a status this build does not know, so it
   // is the alert's starting point, not an ending.
   test("treats an unknown status as a starting point", () => {
@@ -147,6 +166,16 @@ describe("readAlertSnapshot", () => {
 
   test("reads a snapshot and keeps only the fields it knows", () => {
     expect(readAlertSnapshot({ ...snapshot, addedLater: "x" })).toEqual(snapshot);
+  });
+
+  test("copies the version", () => {
+    expect(readAlertSnapshot({ ...snapshot, version: 3 })).toEqual({ ...snapshot, version: 3 });
+  });
+
+  test("refuses a version that is not a positive integer", () => {
+    for (const version of [0, -1, 1.5, "3", Number.NaN]) {
+      expect(readAlertSnapshot({ ...snapshot, version })).toBeNull();
+    }
   });
 
   test("refuses a snapshot missing a required field or with a mistyped one", () => {

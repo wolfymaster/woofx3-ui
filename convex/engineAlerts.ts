@@ -36,6 +36,7 @@ const snapshotValidator = v.object({
   playedAt: v.optional(v.string()),
   completedAt: v.optional(v.string()),
   error: v.optional(v.string()),
+  version: v.optional(v.number()),
   createdAt: v.string(),
   updatedAt: v.string(),
 });
@@ -208,6 +209,7 @@ async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snap
     completedAt: snapshot.completedAt,
     error: snapshot.error,
     engineUpdatedAt: snapshot.updatedAt,
+    engineVersion: snapshot.version,
   };
   const now = Date.now();
 
@@ -241,7 +243,10 @@ async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snap
   // such would keep an alert the engine lost track of in flight indefinitely.
   // Real progress clears the sweep's unconfirmed mark, so an alert the sweep
   // gave up on still lands when the engine does report it.
-  const progressed = existing.status !== lifecycle.status || existing.engineUpdatedAt !== lifecycle.engineUpdatedAt;
+  const progressed =
+    existing.status !== lifecycle.status ||
+    existing.engineUpdatedAt !== lifecycle.engineUpdatedAt ||
+    existing.engineVersion !== lifecycle.engineVersion;
   await ctx.db.patch(
     existing._id,
     progressed ? { ...lifecycle, progressedAt: now, unconfirmedAt: undefined } : lifecycle

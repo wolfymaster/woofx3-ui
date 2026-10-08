@@ -42,13 +42,11 @@ export function isEngineAlertStatus(raw: string): raw is EngineAlertStatus {
 }
 
 /**
- * Callback subjects for an alert leaving the engine for the overlay and for the
- * overlay starting to play it. Must match `EngineEventType.ALERT_DISPATCHED` and
+ * Callback subject for an overlay starting to play an alert. Must match
  * `EngineEventType.ALERT_PLAYING` in woofx3 `shared/clients/typescript/api/webhooks.ts`.
  * Kept here rather than read from those types because the engine types this
- * repo builds against may predate them.
+ * repo builds against may predate it.
  */
-export const ALERT_DISPATCHED_EVENT_TYPE = "alert.dispatched";
 export const ALERT_PLAYING_EVENT_TYPE = "alert.playing";
 
 /**
@@ -74,7 +72,7 @@ export function normaliseStatus(raw: string): EngineAlertStatus {
  * alert. Terminal statuses share a stage because the engine lets a late
  * overlay report replace an earlier verdict (a completion after a timeout),
  * and the mirror follows the engine; `acceptsTransition` orders them by the
- * engine's timestamp. `replayed` sits above them: the operator superseded the
+ * engine's version, or its timestamp for an engine that sends no version. `replayed` sits above them: the operator superseded the
  * row, and a straggling verdict for the original play does not undo that.
  *
  * `unknown` ranks with the initial statuses. The engine picks a lifecycle
@@ -141,6 +139,8 @@ export function parseEngineTimestamp(raw: string): bigint | null {
 /** One snapshot of an alert: its status and the engine's last write to the row. */
 export interface AlertLifecyclePoint {
   status: EngineAlertStatus;
+  /** The engine row's `version`, when the engine sends one. */
+  engineVersion?: number;
   /** The engine row's `updated_at`, an RFC 3339 string. */
   engineUpdatedAt: string;
 }
@@ -148,14 +148,23 @@ export interface AlertLifecyclePoint {
 /**
  * Whether a row holding `current` should take `incoming` from a callback.
  *
- * Refused when the status would move backwards, or when the engine wrote the
- * incoming snapshot before the stored one: two verdicts share a stage, so only
- * the timestamp tells an out-of-order retry of the older one from a real late
- * verdict. An identical timestamp is the same engine write delivered again, so
- * it is accepted and changes nothing. A timestamp that does not parse is not
- * evidence of order, so the comparison is skipped and the stage alone decides.
+ * When both snapshots carry the engine's version, it alone decides: the engine
+ * increments it on every write it publishes and only ever moves an alert
+ * forward, so the higher version is the newer write. An equal version is the
+ * same write delivered again, so it is accepted and changes nothing.
+ *
+ * An engine that sends no version is ordered by stage and timestamp. Refused
+ * when the status would move backwards, or when the engine wrote the incoming
+ * snapshot before the stored one: two verdicts share a stage, so only the
+ * timestamp tells an out-of-order retry of the older one from a real late
+ * verdict. An identical timestamp is the same engine write delivered again. A
+ * timestamp that does not parse is not evidence of order, so the comparison is
+ * skipped and the stage alone decides.
  */
 export function acceptsTransition(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): boolean {
+  if (current.engineVersion !== undefined && incoming.engineVersion !== undefined) {
+    return incoming.engineVersion >= current.engineVersion;
+  }
   if (stageOf(incoming.status) < stageOf(current.status)) {
     return false;
   }
@@ -266,6 +275,8 @@ export interface EngineAlertSnapshot {
   playedAt?: string;
   completedAt?: string;
   error?: string;
+  /** Counts the engine's writes to the row; absent from older engines. */
+  version?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -284,16 +295,16 @@ const SNAPSHOT_OPTIONAL = [
 /**
  * The alert snapshot a callback carries, or null when it is not one.
  *
- * For callbacks this repo cannot type from the engine's package (see
- * `ALERT_DISPATCHED_EVENT_TYPE`). Only the snapshot's known fields are copied,
- * so a field a newer engine adds does not fail the mutation's validator.
+ * Every alert callback goes through here. Only the snapshot's known fields are
+ * copied, so a field a newer engine adds does not fail the mutation's
+ * validator. `version`, when present, must be a positive integer.
  */
 export function readAlertSnapshot(value: unknown): EngineAlertSnapshot | null {
   if (typeof value !== "object" || value === null) {
     return null;
   }
   const source = value as Record<string, unknown>;
-  const snapshot: Record<string, string> = {};
+  const snapshot: Record<string, string | number> = {};
   for (const key of SNAPSHOT_REQUIRED) {
     const field = source[key];
     if (typeof field !== "string") {
@@ -310,6 +321,13 @@ export function readAlertSnapshot(value: unknown): EngineAlertSnapshot | null {
       return null;
     }
     snapshot[key] = field;
+  }
+  const version = source.version;
+  if (version !== undefined) {
+    if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 1) {
+      return null;
+    }
+    snapshot.version = version;
   }
   return snapshot as unknown as EngineAlertSnapshot;
 }

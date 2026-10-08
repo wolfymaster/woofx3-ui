@@ -1508,7 +1508,7 @@ export default defineSchema({
 
   // engineAlerts: engine-authoritative log of dispatched alerts. Mirrors the
   // engine's alert rows; written by ALERT_RECORDED and updated by
-  // ALERT_DISPATCHED/PLAYING/REPLAYED/COMPLETED/FAILED/TIMED_OUT/SKIPPED. Distinct from `alerts`
+  // ALERT_PLAYING/REPLAYED/COMPLETED/FAILED/TIMED_OUT/SKIPPED. Distinct from `alerts`
   // (the browser-source queue) and `alertHistory` (the local fire log).
   engineAlerts: defineTable({
     instanceId: v.id("instances"),
@@ -1538,6 +1538,10 @@ export default defineSchema({
     error: v.optional(v.string()),
     engineCreatedAt: v.string(),
     engineUpdatedAt: v.string(),
+    // The engine row's write counter, which orders its snapshots; absent for
+    // engines that do not send one. See acceptsTransition in
+    // lib/engineAlertLifecycle.ts.
+    engineVersion: v.optional(v.number()),
     createdAt: v.number(), // Convex-side ingest time
     // When the mirror last saw the status or the engine's snapshot change, on
     // Convex's clock. The in-flight staleness bound is measured from it.
