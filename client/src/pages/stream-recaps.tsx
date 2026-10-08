@@ -42,7 +42,7 @@ function RecapRow({ row }: { row: SessionSummaryRow }) {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 text-sm font-medium">
           {heading}
-          {session?.status === "open" && <OpenSessionBadge />}
+          {row.inProgress && <OpenSessionBadge />}
         </div>
         <div className="text-xs text-muted-foreground tabular-nums">{subheading}</div>
       </div>
@@ -81,7 +81,7 @@ export default function StreamRecaps() {
       <div className="py-16 text-center" data-testid="recaps-empty">
         <History className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
         <p className="text-sm text-muted-foreground">
-          No stream recaps yet. A stream's recap appears once the next one starts.
+          No stream recaps yet. A stream's recap appears here once you go live.
         </p>
       </div>
     );

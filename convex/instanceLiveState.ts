@@ -1,6 +1,7 @@
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
-import { internalMutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, type MutationCtx, query } from "./_generated/server";
 import { claimPendingStreamStartMarker } from "./lib/goLiveMarker";
 import { isInstanceMember } from "./lib/teamAccess";
 
@@ -19,6 +20,25 @@ export const getForInstance = query({
       .first();
   },
 });
+
+/**
+ * How long after a stream goes offline its session is snapshotted. The engine
+ * closes the session's live segment from the same bus event that produces the
+ * offline callback, with no ordering between the two, so the snapshot waits
+ * long enough to read the segment closed.
+ */
+const OFFLINE_SNAPSHOT_DELAY_MS = 15_000;
+
+/**
+ * Called only on a live-to-offline transition, so a redelivered offline
+ * callback, or a poll confirming a stream already recorded as offline, does not
+ * schedule another snapshot.
+ */
+async function scheduleOfflineSnapshot(ctx: MutationCtx, instanceId: Id<"instances">): Promise<void> {
+  await ctx.scheduler.runAfter(OFFLINE_SNAPSHOT_DELAY_MS, internal.streamRecap.snapshotAfterStreamOffline, {
+    instanceId,
+  });
+}
 
 export const onStreamOnline = internalMutation({
   args: {
@@ -121,6 +141,9 @@ export const recordPoll = internalMutation({
     if (isLive && !existing?.isLive) {
       await claimPendingStreamStartMarker(ctx, instanceId, patch.lastUpdatedAt);
     }
+    if (!isLive && existing?.isLive) {
+      await scheduleOfflineSnapshot(ctx, instanceId);
+    }
   },
 });
 
@@ -188,6 +211,9 @@ export const onStreamOffline = internalMutation({
       await ctx.db.patch(existing._id, patch);
     } else {
       await ctx.db.insert("instanceLiveState", patch);
+    }
+    if (existing?.isLive) {
+      await scheduleOfflineSnapshot(ctx, instanceId);
     }
   },
 });

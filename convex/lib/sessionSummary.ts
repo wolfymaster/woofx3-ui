@@ -331,3 +331,30 @@ export function sessionSnapshotPayload(
     },
   };
 }
+
+/**
+ * Whether a stored summary describes a stream that is live right now.
+ *
+ * The engine keeps a session open after its stream goes offline, until the next
+ * broadcast either continues it (a dropout inside its grace window) or replaces
+ * it, so `status: "open"` says only that the engine has not closed it yet. A
+ * session is in progress only while the instance is live, and, when the engine
+ * has announced which session it is in, only if it is that one: an older row
+ * still stored as open (its closing summary never arrived) is not live just
+ * because a later stream is.
+ */
+export function isSummaryInProgress(
+  row: { sessionId: string; session?: { status: "open" | "closed" } },
+  liveState: { isLive: boolean; sessionId?: string } | null
+): boolean {
+  if (row.session?.status !== "open") {
+    return false;
+  }
+  if (liveState === null || !liveState.isLive) {
+    return false;
+  }
+  if (liveState.sessionId === undefined) {
+    return true;
+  }
+  return liveState.sessionId === row.sessionId;
+}

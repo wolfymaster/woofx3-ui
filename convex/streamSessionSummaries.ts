@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, type MutationCtx, query } from "./_generated/server";
+import { internalMutation, internalQuery, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
+  isSummaryInProgress,
   parseSessionSummary,
   planOpenSnapshotWrite,
   planSummaryWrite,
@@ -49,6 +50,21 @@ async function storeSummary(
   }
   await ctx.db.replace(existing._id, row);
   return { outcome: "replace" as const };
+}
+
+/**
+ * Rows as the recap pages read them, each with whether its stream is live now.
+ * Derived on every read rather than stored, so a session the engine still holds
+ * open across an offline gap reads as finished the moment the stream goes down
+ * and as in progress again if the next broadcast continues it, with nothing to
+ * fall out of step.
+ */
+async function withInProgress(ctx: QueryCtx, instanceId: Id<"instances">, rows: Doc<"streamSessionSummaries">[]) {
+  const liveState = await ctx.db
+    .query("instanceLiveState")
+    .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+    .first();
+  return rows.map((row) => ({ ...row, inProgress: isSummaryInProgress(row, liveState) }));
 }
 
 /**
@@ -100,11 +116,12 @@ export const listRecent = query({
       return [];
     }
     const take = Math.min(Math.max(Math.floor(limit ?? DEFAULT_RECENT_LIMIT), 1), MAX_RECENT_LIMIT);
-    return ctx.db
+    const rows = await ctx.db
       .query("streamSessionSummaries")
       .withIndex("by_instance_started", (q) => q.eq("instanceId", instanceId))
       .order("desc")
       .take(take);
+    return withInProgress(ctx, instanceId, rows);
   },
 });
 
@@ -118,10 +135,15 @@ export const get = query({
     if (!(await isInstanceMember(ctx, instanceId))) {
       return null;
     }
-    return ctx.db
+    const row = await ctx.db
       .query("streamSessionSummaries")
       .withIndex("by_instance_session", (q) => q.eq("instanceId", instanceId).eq("sessionId", sessionId))
       .unique();
+    if (row === null) {
+      return null;
+    }
+    const [withStatus] = await withInProgress(ctx, instanceId, [row]);
+    return withStatus;
   },
 });
 

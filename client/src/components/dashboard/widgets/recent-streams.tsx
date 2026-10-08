@@ -51,7 +51,7 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-2 text-sm font-medium">
           {startedOn}
-          {session.status === "open" && <OpenSessionBadge />}
+          {row.inProgress && <OpenSessionBadge />}
         </span>
         <span className="text-xs text-muted-foreground tabular-nums">
           {session.segments.length === 0 ? "Never went live" : `Live ${formatLiveDuration(liveMs)}`}
@@ -100,9 +100,7 @@ export function RecentStreamsWidget() {
           <div className="py-8 px-3 text-center">
             <History className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
             <p className="text-sm text-muted-foreground">
-              {instance
-                ? "No finished streams yet. A stream shows up here once the next one starts."
-                : "No instance connected"}
+              {instance ? "No streams yet. A stream shows up here once you go live." : "No instance connected"}
             </p>
           </div>
         ) : (

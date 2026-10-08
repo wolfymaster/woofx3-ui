@@ -355,12 +355,15 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
   const platformLinks = useQuery(api.instances.getPlatformLinks, { instanceId: row.instanceId });
   const capabilities = useEngineCapabilities(row.instanceId);
   const engineSupport = capabilities.support(...RECAP_ENGINE_CAPABILITIES);
-  const inProgress = row.session?.status === "open";
+  // Keyed on any open session, not only a live one: the snapshot taken after
+  // the stream goes offline carries its last minutes, which the chart and
+  // leaderboards should then pick up too.
+  const engineDetailRefreshKey = row.session?.status === "open" ? row.generatedAtMs : 0;
   const { state, retry } = useStreamRecapEngineDetail(
     row.instanceId,
     sessionId,
     engineSupport === "supported",
-    inProgress ? row.generatedAtMs : 0
+    engineDetailRefreshKey
   );
   const clips = useRecapClips(row.instanceId, sessionId);
   const body: SessionBody | null = row.session && row.totals ? { session: row.session, totals: row.totals } : null;
@@ -389,7 +392,7 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
           actions={
             <>
               <TopClipTile state={clips.state} />
-              {body?.session.status === "open" && <OpenSessionBadge />}
+              {row.inProgress && <OpenSessionBadge />}
             </>
           }
         />
