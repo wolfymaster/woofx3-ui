@@ -20,6 +20,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "analytics.gauges",
   "analytics.sessions",
   "config.bundles",
+  "modules.files",
   "modules.localEndpoints",
   "modules.oauth",
   "obs.control",

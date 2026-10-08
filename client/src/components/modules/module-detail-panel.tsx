@@ -9,6 +9,8 @@ import {
   ArrowLeft,
   Bell,
   Check,
+  ChevronDown,
+  ChevronRight,
   Download,
   FileCode,
   Loader2,
@@ -25,6 +27,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { LocalEndpointPanel } from "@/components/modules/local-endpoint-panel";
+import { ModuleFileContentView, ModuleFilesTab } from "@/components/modules/module-files";
 import {
   ModuleLocalEndpointList,
   ModuleLocalEndpointsSection,
@@ -35,6 +38,7 @@ import { ModuleWebhookEndpoints } from "@/components/modules/module-webhook-endp
 import { ObsConnectionStatus } from "@/components/modules/obs-connection-status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,8 +46,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useInstance } from "@/hooks/use-instance";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
+import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
 import { actionErrorMessage } from "@/lib/action-error";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
+import { matchFunctionFile } from "@/lib/module-files";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
 import { cn, isNewerVersion } from "@/lib/utils";
@@ -121,7 +127,7 @@ interface ModuleDetailPanelProps {
   latestLocalEndpoints?: LocalEndpointSummary[] | null;
 }
 
-type TopTab = "details" | "definitions" | "settings" | "resources";
+type TopTab = "details" | "definitions" | "files" | "settings" | "resources";
 type ResourceType = "actions" | "triggers" | "workflows" | "widgets" | "functions";
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -167,6 +173,12 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
 
   const [topTab, setTopTab] = useState<TopTab>("details");
   const [resourceTab, setResourceTab] = useState<ResourceType>("actions");
+  const moduleFiles = useModuleFiles({
+    instanceId,
+    moduleId: module.identifier,
+    isInstalled: module.isInstalled,
+    version: module.version,
+  });
 
   const resourceCounts: Record<ResourceType, number | undefined> = {
     actions: actions?.length,
@@ -221,6 +233,9 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
           <TopTabButton active={topTab === "definitions"} onClick={() => setTopTab("definitions")}>
             DEFINITIONS
           </TopTabButton>
+          <TopTabButton active={topTab === "files"} onClick={() => setTopTab("files")}>
+            FILES
+          </TopTabButton>
           {module.isInstalled && (
             <>
               <TopTabButton active={topTab === "settings"} onClick={() => setTopTab("settings")}>
@@ -265,7 +280,10 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
                 functions={functions}
                 widgets={widgets}
                 workflows={workflows}
+                files={moduleFiles}
               />
+            ) : topTab === "files" ? (
+              <ModuleFilesTab files={moduleFiles} />
             ) : topTab === "settings" ? (
               <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
                 {instanceId && module.identifier && (
@@ -552,10 +570,11 @@ interface ResourcesTabProps {
   functions: ModuleDetailFunction[] | undefined;
   widgets: ModuleDetailWidget[] | undefined;
   workflows: ModuleDetailWorkflow[] | undefined;
+  files: ModuleFiles;
 }
 
 function ResourcesTab(props: ResourcesTabProps) {
-  const { activeType, onSelectType, counts, triggers, actions, functions, widgets, workflows } = props;
+  const { activeType, onSelectType, counts, triggers, actions, functions, widgets, workflows, files } = props;
   return (
     <div className="flex-1 min-h-0 grid grid-cols-4 gap-6">
       <div className="col-span-1 space-y-1">
@@ -586,7 +605,7 @@ function ResourcesTab(props: ResourcesTabProps) {
       <ScrollArea className="col-span-3 h-full pr-4">
         {activeType === "actions" && <ActionList items={actions} />}
         {activeType === "triggers" && <TriggerList items={triggers} />}
-        {activeType === "functions" && <FunctionList items={functions} />}
+        {activeType === "functions" && <FunctionList items={functions} files={files} />}
         {activeType === "widgets" && <WidgetList items={widgets} />}
         {activeType === "workflows" && <WorkflowList items={workflows} />}
       </ScrollArea>
@@ -656,21 +675,67 @@ function ActionList({ items }: { items: ModuleDetailAction[] | undefined }) {
   );
 }
 
-function FunctionList({ items }: { items: ModuleDetailFunction[] | undefined }) {
+function FunctionList({ items, files }: { items: ModuleDetailFunction[] | undefined; files: ModuleFiles }) {
+  const { loadList, list } = files;
+  const hasFunctions = items !== undefined && items.length > 0;
+  // The file list is what links a function to its source; fetched only once there is a function to link.
+  useEffect(() => {
+    if (hasFunctions) {
+      loadList();
+    }
+  }, [hasFunctions, loadList]);
+
   if (items === undefined) {
     return <LoadingState />;
   }
   if (items.length === 0) {
     return <EmptyState message="No functions" />;
   }
+  const listed = list.status === "ready" && list.list.available ? list.list.files : [];
   return (
     <div className="space-y-2">
       {items.map((fn) => (
-        <div key={fn.qualifiedName} className="flex items-start gap-3 p-3 rounded-md border bg-card">
-          <FunctionRowContent fn={fn} />
-        </div>
+        <FunctionRow key={fn.qualifiedName} fn={fn} filePath={matchFunctionFile(fn.file, listed)} files={files} />
       ))}
     </div>
+  );
+}
+
+/** A function, which opens its source file inline when that file is in the module's file list. */
+function FunctionRow({
+  fn,
+  filePath,
+  files,
+}: {
+  fn: ModuleDetailFunction;
+  filePath: string | null;
+  files: ModuleFiles;
+}) {
+  const [open, setOpen] = useState(false);
+  if (filePath === null) {
+    return (
+      <div className="flex items-start gap-3 p-3 rounded-md border bg-card">
+        <FunctionRowContent fn={fn} />
+      </div>
+    );
+  }
+  const Chevron = open ? ChevronDown : ChevronRight;
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="rounded-md border bg-card">
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-start gap-3 p-3 rounded-md text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid={`function-row-${fn.qualifiedName}`}
+        >
+          <FunctionRowContent fn={fn} />
+          <Chevron className="h-4 w-4 shrink-0 self-center text-muted-foreground" />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="px-3 pb-3">
+        <ModuleFileContentView files={files} path={filePath} />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
