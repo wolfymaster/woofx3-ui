@@ -1,4 +1,5 @@
-import { AlertCircle, BellRing, CheckCircle2, Loader2, type LucideIcon, SkipForward } from "lucide-react";
+import { isEngineAlertStatus, outcomeOf } from "@convex/lib/engineAlertLifecycle";
+import { AlertCircle, BellRing, CheckCircle2, HelpCircle, Loader2, type LucideIcon, SkipForward } from "lucide-react";
 
 /**
  * How each point of an alert's lifecycle is named and drawn.
@@ -24,10 +25,30 @@ export function alertStatusStyle(status: string) {
   return ALERT_STATUS[status] ?? ALERT_STATUS.sent;
 }
 
+const UNCONFIRMED_STYLE = {
+  icon: HelpCircle,
+  color: "text-gray-500",
+  bg: "bg-gray-500/10",
+  label: "Unconfirmed",
+};
+
+/**
+ * The descriptor for one alert row, which differs from its status's when the
+ * alert never settled: a row the overview counts as unconfirmed must not keep
+ * spinning in the feed as though it were still on its way.
+ */
+export function engineAlertStyle(alert: { status: string; _creationTime: number }, now: number) {
+  const style = alertStatusStyle(alert.status);
+  if (!isEngineAlertStatus(alert.status)) {
+    return style;
+  }
+  return outcomeOf(alert.status, alert._creationTime, now) === "unconfirmed" ? UNCONFIRMED_STYLE : style;
+}
+
 /**
  * Whether an alert ended badly.
  *
- * Must agree with `outcomeOf` in convex/engineAlerts.ts: the dashboard counts
+ * Must agree with `outcomeOf` in convex/lib/engineAlertLifecycle.ts: the dashboard counts
  * failures there and filters for them here, and the two disagreeing would show
  * a tile saying three failures above a list holding two.
  */

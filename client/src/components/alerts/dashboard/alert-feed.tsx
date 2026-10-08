@@ -12,7 +12,7 @@ import { alertEventType, alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { replayResultToast } from "@/lib/alert-queue";
 import { alertRunPath } from "@/lib/alert-run-route";
-import { alertStatusStyle } from "@/lib/alert-status";
+import { engineAlertStyle } from "@/lib/alert-status";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
@@ -57,7 +57,7 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
 
-  const style = alertStatusStyle(alert.status);
+  const style = engineAlertStyle(alert, Date.now());
   const StatusIcon = style.icon;
   const target = alertTarget(alert.payload);
   const event = alertEventType(alert.payload);

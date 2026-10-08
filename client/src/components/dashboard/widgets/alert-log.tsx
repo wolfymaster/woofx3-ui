@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import { alertStatusStyle, isFailureStatus } from "@/lib/alert-status";
+import { engineAlertStyle, isFailureStatus } from "@/lib/alert-status";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,7 @@ const ALERT_LIMIT = 30;
 
 interface AlertRow {
   _id: string;
+  _creationTime: number;
   status: string;
   error?: string;
   payload: string;
@@ -22,7 +23,7 @@ interface AlertRow {
 }
 
 function AlertLogItem({ alert }: { alert: AlertRow }) {
-  const config = alertStatusStyle(alert.status);
+  const config = engineAlertStyle(alert, Date.now());
   const StatusIcon = config.icon;
   const target = alertTarget(alert.payload);
   const friendly = alert.error ? describeAlertFailure(alert.error) : null;
