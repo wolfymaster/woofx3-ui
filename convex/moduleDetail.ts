@@ -5,6 +5,12 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
+import {
+  installedFunctionSummaries,
+  type ModuleFunctionSummary,
+  marketplaceFunctionSummaries,
+  type RegisteredFunction,
+} from "./lib/moduleFunctionSummary";
 import { moduleOAuthIntegrationIds } from "./lib/moduleOAuth";
 import { parseManifestPermissions } from "./lib/modulePermissions";
 import { type ManifestResourceKind, parseManifestResourceKinds } from "./lib/resourceKinds";
@@ -36,7 +42,7 @@ export interface ManifestSettingField {
   resourceKind?: string;
 }
 
-export type { ManifestResourceKind };
+export type { ManifestResourceKind, ModuleFunctionSummary };
 
 export interface ModuleDetailResult {
   id: string;
@@ -53,7 +59,7 @@ export interface ModuleDetailResult {
   isInstalled: boolean;
   triggers: Array<{ key: string; name: string; description: string; color: string }>;
   actions: Array<{ key: string; name: string; description: string; color: string }>;
-  functions: Array<{ qualifiedName: string; runtime?: string }>;
+  functions: ModuleFunctionSummary[];
   widgets: Array<{ slug: string; name: string }>;
   workflows: Array<{ slug: string; name: string }>;
   /** Convex _id of the installed module, only present for installed modules. */
@@ -126,38 +132,44 @@ export const getModuleDetail = action({
         applyMarketplaceMetadata(detail, marketplaceMeta);
       }
       if (marketplaceId && detail.latestVersion !== undefined && detail.latestVersion !== detail.version) {
-        const latest = await readMarketplaceDeclarations(marketplaceId);
+        const latest = manifestDeclarations(await readMarketplaceManifest(marketplaceId));
         detail.latestPermissions = latest.permissions;
         detail.latestLocalEndpoints = latest.localEndpoints;
       }
       return detail;
     }
 
-    const [payload, declarations] = await Promise.all([
+    const [payload, manifest] = await Promise.all([
       marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`),
-      readMarketplaceDeclarations(moduleId),
+      readMarketplaceManifest(moduleId),
     ]);
-    return { ...formatMarketplaceDetail(moduleId, payload), ...declarations };
+    return { ...formatMarketplaceDetail(moduleId, payload, manifest), ...manifestDeclarations(manifest) };
   },
 });
 
 /**
- * A detail view still renders when the archive cannot be read; the permissions
- * and local endpoints show as unknown instead. Install does not depend on this
- * read: it re-reads the archive and refuses permissions the streamer did not
- * approve.
+ * Null when the archive cannot be read. The detail view still renders: the
+ * permissions and local endpoints show as unknown, and functions lose their
+ * file paths. Install does not depend on this read: it re-reads the archive
+ * and refuses permissions the streamer did not approve.
  */
-async function readMarketplaceDeclarations(marketplaceId: string): Promise<ManifestDeclarations> {
+async function readMarketplaceManifest(marketplaceId: string): Promise<unknown> {
   try {
-    const manifest = await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId));
-    return { permissions: parseManifestPermissions(manifest), localEndpoints: localEndpointSummaries(manifest) };
+    return await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId));
   } catch (err) {
-    logger.warn("could not read marketplace module permissions", {
+    logger.warn("could not read marketplace module manifest", {
       marketplaceId,
       error: err instanceof Error ? err.message : String(err),
     });
+    return null;
+  }
+}
+
+function manifestDeclarations(manifest: unknown): ManifestDeclarations {
+  if (manifest === null) {
     return { permissions: null, localEndpoints: null };
   }
+  return { permissions: parseManifestPermissions(manifest), localEndpoints: localEndpointSummaries(manifest) };
 }
 
 function parseManifestSettingAction(value: unknown, oauthIntegrations: string[]): ManifestSettingAction | undefined {
@@ -224,7 +236,7 @@ function formatInstalledDetail(
   },
   triggers: Array<{ slug: string; name: string; description: string; color: string }>,
   actions: Array<{ slug: string; name: string; description: string; color: string }>,
-  functions: Array<{ qualifiedName: string; runtime: string }>,
+  functions: RegisteredFunction[],
   widgets: Array<{ widgetId: string; name: string }>,
   manifest: unknown
 ): ModuleDetailResult {
@@ -245,7 +257,7 @@ function formatInstalledDetail(
     localEndpoints: manifest === undefined || manifest === null ? null : localEndpointSummaries(manifest),
     triggers: triggers.map((t) => ({ key: t.slug, name: t.name, description: t.description, color: t.color })),
     actions: actions.map((a) => ({ key: a.slug, name: a.name, description: a.description, color: a.color })),
-    functions: functions.map((f) => ({ qualifiedName: f.qualifiedName, runtime: f.runtime })),
+    functions: installedFunctionSummaries(functions, manifest),
     widgets: widgets.map((w) => ({ slug: w.widgetId, name: w.name })),
     // The Convex workflows table carries no module link, so a module's declared workflows are not
     // available from the DB. They are merged in from the marketplace manifest (see mergeMarketplaceMetadata).
@@ -317,12 +329,13 @@ function asArr(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function formatMarketplaceDetail(moduleId: string, payload: unknown): ModuleDetailResult {
+function formatMarketplaceDetail(moduleId: string, payload: unknown, manifest: unknown): ModuleDetailResult {
   const raw = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
   const module = raw.module && typeof raw.module === "object" ? (raw.module as Record<string, unknown>) : raw;
 
+  const id = asStr(module.id, moduleId);
   const result: ModuleDetailResult = {
-    id: asStr(module.id, moduleId),
+    id,
     name: asStr(module.name, moduleId),
     description: asStr(module.description),
     version: asStr(module.version, "0.0.0"),
@@ -352,14 +365,7 @@ function formatMarketplaceDetail(moduleId: string, payload: unknown): ModuleDeta
         color: asStr(o.color, "#6366f1"),
       };
     }),
-    functions: asArr(module.functions).map((f) => {
-      const o = f && typeof f === "object" ? (f as Record<string, unknown>) : {};
-      const entry: { qualifiedName: string; runtime?: string } = { qualifiedName: asStr(o.qualifiedName) };
-      if (typeof o.runtime === "string") {
-        entry.runtime = o.runtime;
-      }
-      return entry;
-    }),
+    functions: marketplaceFunctionSummaries(id, asArr(module.functions), manifest),
     widgets: asArr(module.widgets).map((w) => {
       const o = w && typeof w === "object" ? (w as Record<string, unknown>) : {};
       return { slug: asStr(o.slug), name: asStr(o.name) };

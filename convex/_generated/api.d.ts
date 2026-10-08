@@ -105,6 +105,7 @@ import type * as lib_manualRunOrigin from "../lib/manualRunOrigin.js";
 import type * as lib_marketplaceImages from "../lib/marketplaceImages.js";
 import type * as lib_moderation from "../lib/moderation.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
+import type * as lib_moduleFunctionSummary from "../lib/moduleFunctionSummary.js";
 import type * as lib_moduleKey from "../lib/moduleKey.js";
 import type * as lib_moduleOAuth from "../lib/moduleOAuth.js";
 import type * as lib_modulePermissions from "../lib/modulePermissions.js";
@@ -336,6 +337,7 @@ declare const fullApi: ApiFromModules<{
   "lib/marketplaceImages": typeof lib_marketplaceImages;
   "lib/moderation": typeof lib_moderation;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;
+  "lib/moduleFunctionSummary": typeof lib_moduleFunctionSummary;
   "lib/moduleKey": typeof lib_moduleKey;
   "lib/moduleOAuth": typeof lib_moduleOAuth;
   "lib/modulePermissions": typeof lib_modulePermissions;
