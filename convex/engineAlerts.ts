@@ -5,7 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
   ALERT_IN_FLIGHT_STALE_MS,
-  acceptsTransition,
+  mergeLifecycle,
   normaliseStatus,
   outcomeOf,
   UNSETTLED_STATUSES,
@@ -189,7 +189,7 @@ export const overview = query({
  * engine can only ever touch its own rows, and a row never changes instance.
  * `alert.recorded` and the lifecycle callbacks are retried independently and
  * may arrive in any order, so either one may be the first to create the row,
- * and `acceptsTransition` drops a snapshot older than the row: it would also
+ * and `mergeLifecycle` drops a snapshot older than the row: it would also
  * unset lifecycle timestamps the row already holds.
  */
 async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snapshot: AlertSnapshot): Promise<void> {
@@ -236,34 +236,18 @@ async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snap
     });
     return;
   }
-  if (!acceptsTransition(existing, lifecycle)) {
+  const merge = mergeLifecycle(existing, lifecycle);
+  if (merge === null) {
     return;
   }
-  // A redelivery of the snapshot already held is not progress; counting it as
-  // such would keep an alert the engine lost track of in flight indefinitely.
-  // Real progress clears the sweep's unconfirmed mark, so an alert the sweep
-  // gave up on still lands when the engine does report it.
-  const progressed =
-    existing.status !== lifecycle.status ||
-    existing.engineUpdatedAt !== lifecycle.engineUpdatedAt ||
-    existing.engineVersion !== lifecycle.engineVersion;
   await ctx.db.patch(
     existing._id,
-    progressed ? { ...lifecycle, progressedAt: now, unconfirmedAt: undefined } : lifecycle
+    merge.progressed ? { ...merge.merged, progressedAt: now, unconfirmedAt: undefined } : merge.merged
   );
 }
 
-export const recordFromWebhook = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    snapshot: snapshotValidator,
-  },
-  handler: async (ctx, { instanceId, snapshot }) => {
-    await mergeSnapshot(ctx, instanceId, snapshot);
-  },
-});
-
-export const updateFromWebhook = internalMutation({
+/** Merge the snapshot any alert callback carries; see `mergeSnapshot`. */
+export const mergeFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
     snapshot: snapshotValidator,

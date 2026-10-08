@@ -63,24 +63,22 @@ export function normaliseStatus(raw: string): EngineAlertStatus {
 }
 
 /**
- * How far along an alert a status is. A status may replace another of equal
- * or higher stage, never a lower one.
+ * How far along an alert a status is. See `allowsStatusChange` for which
+ * moves between stages the mirror takes.
  *
  * Callbacks are projected from two outbox subjects (`created` and `updated`)
  * and retried independently, so `alert.recorded` can land after the alert has
  * already finished. Ranking keeps that late snapshot from reviving a settled
- * alert. Terminal statuses share a stage because the engine lets a late
- * overlay report replace an earlier verdict (a completion after a timeout),
- * and the mirror follows the engine; `acceptsTransition` orders them by the
- * engine's version, or its timestamp for an engine that sends no version. `replayed` sits above them: the operator superseded the
- * row, and a straggling verdict for the original play does not undo that.
+ * alert. Verdicts share a stage, so the first one stands. `replayed` sits
+ * above them: the operator superseded the row, and a straggling verdict for
+ * the original play does not undo that.
  *
  * `unknown` ranks with the initial statuses. The engine picks a lifecycle
  * callback's subject by the status it carries, so only `alert.recorded` -- the
  * alert as it was created -- can deliver a status this build does not know.
- * Ranked low, it never settles an alert or blocks the dispatch, playback and
- * verdict that follow it; left unsettled, the staleness sweep still retires it
- * if nothing follows.
+ * Ranked low, it never settles an alert or blocks the playback and verdict
+ * that follow it; left unsettled, the staleness sweep still retires it if
+ * nothing follows.
  */
 function stageOf(status: EngineAlertStatus): number {
   switch (status) {
@@ -145,28 +143,56 @@ export interface AlertLifecyclePoint {
   engineUpdatedAt: string;
 }
 
+/** The verdicts that may replace `timed_out`: the overlay's own report. */
+const REAL_VERDICTS: ReadonlySet<EngineAlertStatus> = new Set<EngineAlertStatus>(["completed", "failed", "skipped"]);
+
+/**
+ * Whether the engine's lifecycle lets a row at `from` move to `to`. Must match
+ * `transitionUpdateSQL` in woofx3 `db/database/repository/alert_repository.go`.
+ *
+ * A row moves only to a later stage, so the first verdict wins and `replayed`
+ * follows anything but itself. The single exception is a real verdict
+ * replacing `timed_out`: the timeout is the engine giving up on hearing back,
+ * and a late overlay report is the truth. The same status is allowed too, as
+ * the same write delivered again. Initial statuses may replace each other:
+ * only `alert.recorded` carries them, so none of them is evidence of progress.
+ */
+function allowsStatusChange(from: EngineAlertStatus, to: EngineAlertStatus): boolean {
+  if (from === to) {
+    return true;
+  }
+  if (from === "timed_out" && REAL_VERDICTS.has(to)) {
+    return true;
+  }
+  const fromStage = stageOf(from);
+  const toStage = stageOf(to);
+  return toStage > fromStage || (toStage === 0 && fromStage === 0);
+}
+
 /**
  * Whether a row holding `current` should take `incoming` from a callback.
  *
- * When both snapshots carry the engine's version, it alone decides: the engine
- * increments it on every write it publishes and only ever moves an alert
- * forward, so the higher version is the newer write. An equal version is the
- * same write delivered again, so it is accepted and changes nothing.
+ * The lifecycle rule is checked first, whatever the versions say: the engine
+ * never publishes a move it refuses, so a snapshot that would make one is not
+ * the engine's newest write, and it never moves a row back.
  *
- * An engine that sends no version is ordered by stage and timestamp. Refused
- * when the status would move backwards, or when the engine wrote the incoming
- * snapshot before the stored one: two verdicts share a stage, so only the
- * timestamp tells an out-of-order retry of the older one from a real late
- * verdict. An identical timestamp is the same engine write delivered again. A
+ * Among the moves the rule allows, the engine's version decides when both
+ * snapshots carry one: the engine increments it on every write it publishes,
+ * so the higher version is the newer write. An equal version is the same write
+ * delivered again, so it is accepted and changes nothing.
+ *
+ * Otherwise (an engine or outbox row that predates versions) the timestamp
+ * decides: refused when the engine wrote the incoming snapshot before the
+ * stored one. An identical timestamp is the same write delivered again. A
  * timestamp that does not parse is not evidence of order, so the comparison is
- * skipped and the stage alone decides.
+ * skipped and the rule alone decides.
  */
 export function acceptsTransition(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): boolean {
+  if (!allowsStatusChange(current.status, incoming.status)) {
+    return false;
+  }
   if (current.engineVersion !== undefined && incoming.engineVersion !== undefined) {
     return incoming.engineVersion >= current.engineVersion;
-  }
-  if (stageOf(incoming.status) < stageOf(current.status)) {
-    return false;
   }
   const currentAt = parseEngineTimestamp(current.engineUpdatedAt);
   const incomingAt = parseEngineTimestamp(incoming.engineUpdatedAt);
@@ -177,23 +203,67 @@ export function acceptsTransition(current: AlertLifecyclePoint, incoming: AlertL
 }
 
 /**
+ * Whether `incoming` is a later engine write than `current`, rather than the
+ * same write delivered again: by version when both carry one, else by
+ * `updatedAt`. Two timestamps that do not both parse count as different
+ * writes when they differ at all.
+ */
+export function isNewerEngineWrite(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): boolean {
+  if (current.engineVersion !== undefined && incoming.engineVersion !== undefined) {
+    return incoming.engineVersion > current.engineVersion;
+  }
+  const currentAt = parseEngineTimestamp(current.engineUpdatedAt);
+  const incomingAt = parseEngineTimestamp(incoming.engineUpdatedAt);
+  if (currentAt !== null && incomingAt !== null) {
+    return incomingAt > currentAt;
+  }
+  return incoming.engineUpdatedAt !== current.engineUpdatedAt;
+}
+
+/**
+ * What merging a callback's `incoming` snapshot into a row holding `current`
+ * stores, or null when the row keeps what it has (see `acceptsTransition`).
+ *
+ * A snapshot without a version (from an engine or outbox row that predates
+ * versions) keeps the version the row already holds: it is still the newest
+ * version the mirror knows of, and erasing it would make the next versioned
+ * snapshot fall back to timestamps.
+ *
+ * `progressed` is whether the alert moved: its status changed, or this is a
+ * later engine write. A redelivery of the snapshot already held is not
+ * progress; counting it as such would keep an alert the engine lost track of
+ * in flight indefinitely. Real progress clears the sweep's unconfirmed mark,
+ * so an alert the sweep gave up on still lands when the engine does report it.
+ */
+export function mergeLifecycle<T extends AlertLifecyclePoint>(
+  current: AlertLifecyclePoint,
+  incoming: T
+): { merged: T; progressed: boolean } | null {
+  if (!acceptsTransition(current, incoming)) {
+    return null;
+  }
+  const merged = { ...incoming, engineVersion: incoming.engineVersion ?? current.engineVersion };
+  const progressed = current.status !== incoming.status || isNewerEngineWrite(current, incoming);
+  return { merged, progressed };
+}
+
+/**
  * How long an alert may go without the mirror hearing it move before it stops
  * counting as in flight, measured on Convex's clock from the row's
  * `progressedAt`.
  *
- * An alert plays for seconds, and the engine reports it leaving for the overlay,
- * starting to play and finishing. Past this bound the engine has lost track of
- * it -- an overlay closed mid-play, the engine restarted, a callback was never
- * delivered -- and no callback is coming to settle it. Counting it as in flight
- * forever would make the tile grow without bound, so the sweep marks it
- * unconfirmed instead.
+ * An alert plays for seconds, and the engine reports it starting to play and
+ * finishing. Past this bound the engine has lost track of it -- an overlay
+ * closed mid-play, the engine restarted, a callback was never delivered -- and
+ * no callback is coming to settle it. Counting it as in flight forever would
+ * make the tile grow without bound, so the sweep marks it unconfirmed instead.
  *
  * One bound covers every unsettled status, `pending` included. The engine does
  * not hold an alert back waiting for an overlay (one with no running scene to
- * play on fails at once), and an engine that predates the dispatch and playing
- * callbacks still sends its verdict within seconds of creating the alert. The
- * mark is not final either way: any later progress clears it, so an alert that
- * does wait longer returns to its real state the moment the engine reports it.
+ * play on fails at once), and an engine that predates the playing callback
+ * still sends its verdict within seconds of creating the alert. The mark is
+ * not final either way: any later progress clears it, so an alert that does
+ * wait longer returns to its real state the moment the engine reports it.
  */
 export const ALERT_IN_FLIGHT_STALE_MS = 15 * 60 * 1000;
 
@@ -297,7 +367,9 @@ const SNAPSHOT_OPTIONAL = [
  *
  * Every alert callback goes through here. Only the snapshot's known fields are
  * copied, so a field a newer engine adds does not fail the mutation's
- * validator. `version`, when present, must be a positive integer.
+ * validator. A `version` that is not a positive integer is left out, with a
+ * warning, rather than failing the callback: the snapshot still merges,
+ * ordered as one from an engine that sends no version.
  */
 export function readAlertSnapshot(value: unknown): EngineAlertSnapshot | null {
   if (typeof value !== "object" || value === null) {
@@ -323,11 +395,10 @@ export function readAlertSnapshot(value: unknown): EngineAlertSnapshot | null {
     snapshot[key] = field;
   }
   const version = source.version;
-  if (version !== undefined) {
-    if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 1) {
-      return null;
-    }
+  if (typeof version === "number" && Number.isSafeInteger(version) && version >= 1) {
     snapshot.version = version;
+  } else if (version !== undefined) {
+    console.warn(`engineAlertLifecycle: alert ${snapshot.id} has malformed version ${JSON.stringify(version)}`);
   }
   return snapshot as unknown as EngineAlertSnapshot;
 }

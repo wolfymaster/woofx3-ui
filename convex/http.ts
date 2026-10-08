@@ -589,11 +589,7 @@ http.route({
         logger.warn("webhook: alert callback without a valid alert", { instanceId: instance._id, eventType });
         return corsJson({ error: "Alert callback needs an alert snapshot" }, 400);
       }
-      const merge =
-        eventType === EngineEventType.ALERT_RECORDED
-          ? internal.engineAlerts.recordFromWebhook
-          : internal.engineAlerts.updateFromWebhook;
-      await ctx.runMutation(merge, { instanceId: instance._id, snapshot });
+      await ctx.runMutation(internal.engineAlerts.mergeFromWebhook, { instanceId: instance._id, snapshot });
       return corsJson({ success: true, type: eventType });
     }
 
