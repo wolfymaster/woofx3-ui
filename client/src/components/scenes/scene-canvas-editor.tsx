@@ -66,23 +66,34 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // An engine with editor sessions edits the scene live through sceneManager:
   // every change is sent as it is made and saved for you, into a draft OBS
   // does not show until it is published. Older engines save with the button.
-  // Once seen, the capability holds for as long as the editor is open on
-  // that instance: the capabilities reload after an engine reconnect, and
-  // dropping to the Save-button editor meanwhile would swap the published
-  // scene from the cache in for the draft on the canvas. Another instance is
-  // another engine, which has to show the capability itself.
+  // Once seen, the capability holds for as long as the editor is open: the
+  // capabilities reload after an engine reconnect, and dropping to the
+  // Save-button editor meanwhile would swap the published scene from the
+  // cache in for the draft on the canvas. The editor is keyed by instance
+  // (see pages/scenes.tsx), so another instance starts over and has to show
+  // the capability itself.
   const sessionSupported = useEngineCapabilities(instanceId).support("scenes.editorSessions") === "supported";
-  const [sessionInstance, setSessionInstance] = useState<Id<"instances"> | null>(sessionSupported ? instanceId : null);
-  if (sessionSupported && sessionInstance !== instanceId) {
-    setSessionInstance(instanceId);
+  const [sessionMode, setSessionMode] = useState(sessionSupported);
+  if (sessionSupported && !sessionMode) {
+    setSessionMode(true);
   }
-  const sessionMode = sessionInstance === instanceId;
 
   // Live editing: this editor's changes go straight to what OBS shows, and
   // are copied into the draft so a later publish cannot undo them. Each open
   // editor chooses for itself, and every one starts on the draft.
   const [live, setLive] = useState(false);
   const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
+  const handleDraftCommandsDropped = useCallback(
+    (commands: Array<"publish" | "discard">) => {
+      const what = commands.includes("publish") ? "Publish" : "Discard";
+      toast({
+        title: `${what} didn't go through`,
+        description: "The engine refused a change to the draft made before it. Check the scene and try again.",
+        variant: "destructive",
+      });
+    },
+    [toast]
+  );
   const session = useSceneEditorSession({
     instanceId,
     engineSceneId,
@@ -90,6 +101,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     enabled: sessionMode,
     version: live ? "published" : "draft",
     unsavedOutsideSession: sessionMode && isDirty,
+    onDraftCommandsDropped: handleDraftCommandsDropped,
   });
   const sessionDoc = session.state.doc;
   const sessionVersion = session.state.version;
@@ -144,9 +156,10 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const sceneLoaded = fetchedScene !== undefined && fetchedScene !== null;
   useEffect(() => {
     if (!sessionDoc) {
-      // No session document: the session is (re)connecting, and the canvas
-      // shown is not one it has read. Edits to it are not sent until the next
-      // snapshot replaces it.
+      // No session document: the session has no snapshot of the version it
+      // edits yet (it is new, or was just made again), and the canvas shown
+      // is not one it has read. Edits to it are not sent until the snapshot
+      // replaces it. A reconnect keeps the document, so this is not that.
       canvasVersionRef.current = null;
     }
     const fetched = fetchedSceneRef.current;
@@ -213,10 +226,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   );
   const unsavedNameRef = useRef<{ name: string; description: string | undefined } | null>(null);
   // While the scene is being deleted its name is not saved: that would only
-  // fail, or race the delete. The state holds the debounce back and, when a
-  // delete fails, schedules a name still unsaved again; the ref is what a
-  // timer already running and the save on close read, as they see no render.
-  const [deleting, setDeleting] = useState(false);
+  // fail, or race the delete. The delete owns the unsaved name meanwhile and
+  // saves it if the delete fails, whether or not the editor is still open.
   const deletingRef = useRef(false);
   useEffect(() => {
     if (!sessionMode || !isDirty || sceneName === undefined) {
@@ -224,9 +235,6 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       return;
     }
     unsavedNameRef.current = { name: sceneName, description: sceneDescription };
-    if (deleting) {
-      return;
-    }
     const timer = setTimeout(() => {
       if (deletingRef.current) {
         return;
@@ -236,7 +244,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       saveNameAndDescription(sceneName, sceneDescription);
     }, 800);
     return () => clearTimeout(timer);
-  }, [sessionMode, isDirty, sceneName, sceneDescription, saveNameAndDescription, deleting]);
+  }, [sessionMode, isDirty, sceneName, sceneDescription, saveNameAndDescription]);
   const saveNameRef = useRef(saveNameAndDescription);
   saveNameRef.current = saveNameAndDescription;
   useEffect(() => {
@@ -325,7 +333,6 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const abandonSession = session.abandon;
   const handleDeleteScene = useCallback(async () => {
     deletingRef.current = true;
-    setDeleting(true);
     try {
       await deleteSceneAction({ instanceId, engineSceneId });
       // Edits still on their way would only be resent to a scene that is gone.
@@ -334,14 +341,22 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       navigate("/stream/scenes");
     } catch (err) {
       deletingRef.current = false;
-      setDeleting(false);
+      // The name typed before or during the delete, which neither its pause
+      // nor the editor closing saved. Read from the ref, it is the latest
+      // even when the editor has closed since.
+      const unsaved = unsavedNameRef.current;
+      if (unsaved) {
+        unsavedNameRef.current = null;
+        setIsDirty(false);
+        saveNameAndDescription(unsaved.name, unsaved.description);
+      }
       toast({
         title: "Delete failed",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
     }
-  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession]);
+  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession, saveNameAndDescription]);
 
   const handleDuplicateScene = useCallback(async () => {
     if (!scene) {

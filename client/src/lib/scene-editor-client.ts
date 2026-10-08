@@ -41,13 +41,17 @@ import {
  * reconnects, folded into what is pending and resent.
  *
  * `publish` and `discard` are sent in the order they were asked for, each
- * once the draft's edits are on the wire and, after a reconnect, once the
- * draft's unconfirmed edits have been resent, so a publish includes the last
- * change made before it. `stop` keeps the session going (reconnecting if it
- * has to) until the edits and commands made before it are through, so
- * leaving the editor loses none of them. While it drains it shows the others
- * no selection and keeps following the server, reporting nothing. `abandon`
- * closes at once instead, for a scene that no longer exists.
+ * once the engine has confirmed every edit of the draft's (after a reconnect,
+ * the resent ones too), so a publish includes the last change made before
+ * it. An edit to the draft that keeps changing holds them back until it
+ * pauses, and goes with them. When the engine refuses an edit to the draft
+ * while they wait, they are dropped and reported (`onDraftCommandsDropped`)
+ * rather than sent without it. `stop` keeps the session going (reconnecting
+ * at once, and quickly, if it has to) until the edits and commands made
+ * before it are through, so leaving the editor loses none of them. While it
+ * drains it shows the others no selection and keeps following the server,
+ * reporting nothing. `abandon` closes at once instead, for a scene that no
+ * longer exists.
  */
 
 /** The slice of a WebSocket this uses (injectable for tests). */
@@ -94,6 +98,14 @@ export interface SceneEditorClientOptions {
   retryDelayMs?: (attempt: number) => number;
   /** How long `stop` waits for unconfirmed edits before closing anyway. */
   drainMs?: number;
+  /** The session closed: stopped with nothing to wait for, drained, timed out, or abandoned. */
+  onClose?: () => void;
+  /**
+   * Publishes and discards that were waiting when the engine refused an edit
+   * to the draft: sent now, they would act on a draft without that edit.
+   * Called after `stop` too.
+   */
+  onDraftCommandsDropped?: (commands: Array<"publish" | "discard">) => void;
 }
 
 interface Pending {
@@ -113,6 +125,12 @@ interface VersionState {
   inflight: Pending | null;
   buffer: Json0Component[] | null;
 }
+
+/**
+ * The longest wait between reconnects while draining: a drain has only
+ * `drainMs` to deliver, and the usual backoff can outlast it.
+ */
+const DRAIN_RETRY_MAX_MS = 250;
 
 let opCounter = 0;
 function nextOpId(): string {
@@ -165,7 +183,8 @@ export class SceneEditorClient {
   /**
    * Close the session. Edits not yet confirmed, and publishes or discards not
    * yet sent, go first: for up to `drainMs` the session stays open, and
-   * reconnects if its socket drops, until they are through. Nothing is
+   * reconnects if its socket drops, until they are through. An engine that
+   * would not open a session ("unavailable") closes it at once. Nothing is
    * reported after this.
    */
   stop(): void {
@@ -178,12 +197,20 @@ export class SceneEditorClient {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    if (!this.hasWork()) {
+    // "unavailable" is the engine declining to open a session at all, and
+    // nothing retries from there: there is nothing to wait for.
+    if (!this.hasWork() || this.status === "unavailable") {
       this.close();
       return;
     }
     this.draining = true;
     this.drainTimer = setTimeout(() => this.close(), this.drainMs);
+    if (this.retryTimer !== null) {
+      // The backoff may run past the drain: reconnect now instead.
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+      void this.connect();
+    }
     // The protocol has no leave short of closing, and a new editor for this
     // scene may already be open: an empty selection keeps this one off the
     // others' canvases meanwhile.
@@ -217,6 +244,11 @@ export class SceneEditorClient {
       return true;
     }
     return Object.values(this.versions).some((state) => state.inflight !== null || state.buffer !== null);
+  }
+
+  /** Whether this is still delivering, after `stop`, what was asked before it. */
+  isDraining(): boolean {
+    return this.draining;
   }
 
   /** Whether `stop` has anything to wait for: unconfirmed edits, or commands not yet sent. */
@@ -314,14 +346,21 @@ export class SceneEditorClient {
   }
 
   /**
-   * Sends the waiting publishes and discards, in order, once nothing of the
-   * draft's is buffered and this socket has resent the draft's unconfirmed
-   * edits: the engine applies messages in order, so everything already sent
-   * lands before them.
+   * Sends the waiting publishes and discards, in order, once this socket has
+   * both snapshots and the engine has confirmed every edit of the draft's.
+   * Sending them behind an edit still in flight would publish without it if
+   * the engine refused it.
    */
   private sendDraftCommands(): void {
     const draft = this.versions.draft;
-    if (!this.socket || !this.synced.has("published") || !this.synced.has("draft") || !draft || draft.buffer !== null) {
+    if (
+      !this.socket ||
+      !this.synced.has("published") ||
+      !this.synced.has("draft") ||
+      !draft ||
+      draft.inflight !== null ||
+      draft.buffer !== null
+    ) {
       return;
     }
     for (const command of this.draftCommands.splice(0)) {
@@ -385,7 +424,8 @@ export class SceneEditorClient {
 
   private retry(): void {
     this.setStatus("reconnecting");
-    const delay = this.options.retryDelayMs?.(this.attempts) ?? Math.min(500 * 2 ** this.attempts, 10_000);
+    const backoff = this.options.retryDelayMs?.(this.attempts) ?? Math.min(500 * 2 ** this.attempts, 10_000);
+    const delay = this.draining ? Math.min(backoff, DRAIN_RETRY_MAX_MS) : backoff;
     this.attempts += 1;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
@@ -476,6 +516,11 @@ export class SceneEditorClient {
           state.inflight = null;
           if (message.error !== "resync") {
             this.send({ type: "snapshot", version });
+          }
+          if (state.version === "draft" && this.draftCommands.length > 0) {
+            // The refused edit is gone for good: a publish sent now would
+            // put the draft on stream without it.
+            this.options.onDraftCommandsDropped?.(this.draftCommands.splice(0));
           }
           this.closeIfDrained();
         }
@@ -608,6 +653,7 @@ export class SceneEditorClient {
     this.socket?.close();
     this.socket = null;
     this.status = "closed";
+    this.options.onClose?.();
   }
 
   private send(message: unknown): void {

@@ -6,7 +6,12 @@ import {
   type SceneSnapshot,
   transformOps,
 } from "@/lib/scene-document";
-import { type EditorSocket, type EditorState, SceneEditorClient } from "@/lib/scene-editor-client";
+import {
+  type EditorSocket,
+  type EditorState,
+  SceneEditorClient,
+  type SceneEditorClientOptions,
+} from "@/lib/scene-editor-client";
 
 function placement(text: string) {
   return {
@@ -36,6 +41,8 @@ class FakeServer {
   deaf: FakeSocket | null = null;
   /** Every submit, publish and discard, in the order they arrived. */
   received: string[] = [];
+  /** Refuse the next submit as invalid, as the engine does an op it cannot apply. */
+  refuseNext = false;
 
   constructor(doc: SceneDocument) {
     this.doc = doc;
@@ -62,6 +69,11 @@ class FakeServer {
   }
 
   submit(from: FakeSocket, message: any): void {
+    if (this.refuseNext) {
+      this.refuseNext = false;
+      from.deliver({ type: "reject", opId: message.opId, version: "draft", error: "invalid" });
+      return;
+    }
     const known = this.log.find((entry) => entry.opId === message.opId);
     if (known) {
       from.deliver({ type: "ack", opId: message.opId, version: "draft", seq: known.seq });
@@ -136,7 +148,7 @@ class FakeSocket implements EditorSocket {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 5));
 
-function editor(server: FakeServer) {
+function editor(server: FakeServer, overrides: Partial<SceneEditorClientOptions> = {}) {
   let state: EditorState = {
     status: "connecting",
     version: "draft",
@@ -159,6 +171,7 @@ function editor(server: FakeServer) {
     },
     flushMs: 1,
     retryDelayMs: () => 1,
+    ...overrides,
   });
   client.start();
   const text = () => state.doc?.widgets.a?.settings.text;
@@ -526,5 +539,94 @@ describe("SceneEditorClient — what the editor shows, and what reaches the engi
       .draft;
     expect(draft.seq).toBe(server.seq);
     expect(draft.doc.widgets.a!.settings.text).toBe("hi there");
+  });
+});
+
+describe("SceneEditorClient — draining after stop, and commands behind refused edits", () => {
+  it("reconnects at once on stop instead of waiting out a long backoff", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server, { retryDelayMs: () => 10_000, drainMs: 1_000 });
+    await settle();
+    e.sockets[0]!.close();
+    e.type("hello");
+    e.client.stop();
+    await settle();
+    await settle();
+    expect(server.doc.widgets.a!.settings.text).toBe("hello");
+    expect(e.sockets[1]!.closed).toBe(true);
+  });
+
+  it("keeps reconnect attempts short while it drains", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    let opens = 0;
+    const e = editor(server, {
+      retryDelayMs: () => 10_000,
+      drainMs: 2_000,
+      open: async () => {
+        opens += 1;
+        if (opens === 2) {
+          throw new Error("engine briefly unreachable");
+        }
+        return "ws://fake";
+      },
+    });
+    await settle();
+    e.sockets[0]!.close();
+    e.type("hello");
+    e.client.stop();
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(server.doc.widgets.a!.settings.text).toBe("hello");
+    expect(e.client.isDraining()).toBe(false);
+  });
+
+  it("closes at once on stop when the engine will not open a session", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    let opens = 0;
+    let closed = false;
+    const e = editor(server, {
+      open: async () => {
+        opens += 1;
+        return opens === 1 ? "ws://fake" : null;
+      },
+      onClose: () => {
+        closed = true;
+      },
+    });
+    await settle();
+    e.sockets[0]!.close();
+    await settle();
+    expect(e.state().status).toBe("unavailable");
+    e.type("hello");
+    e.client.stop();
+    expect(closed).toBe(true);
+    expect(e.client.isDraining()).toBe(false);
+  });
+
+  it("holds a publish until the edit before it is acknowledged", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.type("hello");
+    e.client.publish();
+    await settle();
+    expect(server.received).toEqual(["submit:draft"]);
+  });
+
+  it("drops and reports a publish waiting behind an edit the engine refused", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    let dropped: string[] = [];
+    const e = editor(server, {
+      onDraftCommandsDropped: (commands) => {
+        dropped = commands;
+      },
+    });
+    await settle();
+    server.refuseNext = true;
+    e.type("hello");
+    e.client.publish();
+    await settle();
+    expect(server.received).toEqual(["submit:draft"]);
+    expect(dropped).toEqual(["publish"]);
   });
 });

@@ -20,6 +20,12 @@ interface UseSceneEditorSessionArgs {
    * while they are, as it does for the session's own edits.
    */
   unsavedOutsideSession: boolean;
+  /**
+   * A Publish or Discard was not sent because the engine refused an edit to
+   * the draft made before it. Called after the editor unmounts too, while the
+   * session drains.
+   */
+  onDraftCommandsDropped: (commands: Array<"publish" | "discard">) => void;
 }
 
 export interface SceneEditorSessionHandle {
@@ -35,6 +41,44 @@ export interface SceneEditorSessionHandle {
   setPresence: (presence: EditorPresence) => void;
   /** Close the session at once, sending nothing more: for a scene that was deleted. */
   abandon: () => void;
+}
+
+const UNSAVED_PROMPT = "Changes to this scene are still being saved.";
+
+/**
+ * Clients still delivering edits after their editor unmounted. Their hook's
+ * own beforeunload listener went with the editor, so this one listener, kept
+ * on the window while any client is here, asks before the tab closes on them.
+ */
+const drainingClients = new Set<SceneEditorClient>();
+
+function askWhileDraining(event: BeforeUnloadEvent): void {
+  for (const client of drainingClients) {
+    if (client.isDraining()) {
+      event.preventDefault();
+      event.returnValue = UNSAVED_PROMPT;
+      return;
+    }
+  }
+}
+
+function trackDrain(client: SceneEditorClient): void {
+  if (!client.isDraining()) {
+    return;
+  }
+  if (drainingClients.size === 0) {
+    window.addEventListener("beforeunload", askWhileDraining);
+  }
+  drainingClients.add(client);
+}
+
+function untrackDrain(client: SceneEditorClient): void {
+  if (!drainingClients.delete(client)) {
+    return;
+  }
+  if (drainingClients.size === 0) {
+    window.removeEventListener("beforeunload", askWhileDraining);
+  }
 }
 
 const IDLE: EditorState = {
@@ -63,6 +107,7 @@ export function useSceneEditorSession({
   enabled,
   version,
   unsavedOutsideSession,
+  onDraftCommandsDropped,
 }: UseSceneEditorSessionArgs): SceneEditorSessionHandle {
   const getSession = useAction(api.sceneActions.getSceneEditorSession);
   const getPreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
@@ -72,6 +117,8 @@ export function useSceneEditorSession({
   versionRef.current = version;
   const unsavedOutsideSessionRef = useRef(unsavedOutsideSession);
   unsavedOutsideSessionRef.current = unsavedOutsideSession;
+  const onDraftCommandsDroppedRef = useRef(onDraftCommandsDropped);
+  onDraftCommandsDroppedRef.current = onDraftCommandsDropped;
 
   useEffect(() => {
     if (!enabled || !sceneId) {
@@ -92,12 +139,15 @@ export function useSceneEditorSession({
         return url.toString();
       },
       onChange: setState,
+      onClose: () => untrackDrain(client),
+      onDraftCommandsDropped: (commands) => onDraftCommandsDroppedRef.current(commands),
       version: versionRef.current,
     });
     clientRef.current = client;
     client.start();
     return () => {
       client.stop();
+      trackDrain(client);
       clientRef.current = null;
       setState(IDLE);
     };
@@ -119,7 +169,7 @@ export function useSceneEditorSession({
       if (client?.hasUnconfirmed() || unsavedOutsideSessionRef.current) {
         event.preventDefault();
         // Browsers that predate preventDefault here prompt only for a non-empty returnValue.
-        event.returnValue = "Changes to this scene are still being saved.";
+        event.returnValue = UNSAVED_PROMPT;
       }
     };
     window.addEventListener("beforeunload", onBeforeUnload);
