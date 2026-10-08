@@ -18,7 +18,10 @@ import {
  * last saw is sent as json0 ops. One submit is in flight at a time and later
  * edits compose into one buffered op, so typing or dragging sends a few ops a
  * second however fast it is. Edits show at once: the document this reports is
- * what the server confirmed with the pending ops applied.
+ * what the server confirmed with the pending ops applied, and with the
+ * editor's latest edit, not yet sent, on top. Reporting less would hand the
+ * editor a canvas older than the one it shows, and a widget being dragged
+ * would jump back to where it was at the last send.
  *
  * Another editor's ops are transformed against the pending ones the way the
  * server transforms the pending ones against them (theirs win a tie), so every
@@ -26,6 +29,16 @@ import {
  * a fresh session and resends the unconfirmed ops against the number they
  * were made at; the server transforms them against what was missed, and knows
  * one it already applied by its id.
+ *
+ * Each edit names the version its canvas was read from, and one read from
+ * the other version is dropped: diffed against the wrong version, a canvas
+ * read from the draft would push every draft change to what OBS shows, and
+ * one read from the published scene would undo the draft's own edits.
+ *
+ * `publish` and `discard` wait for the draft's edits to be on the wire, so a
+ * publish includes the last change made before it. `stop` keeps the socket
+ * open until the edits made before it are confirmed, so leaving the editor
+ * loses none of them.
  */
 
 /** The slice of a WebSocket this uses (injectable for tests). */
@@ -56,6 +69,8 @@ export interface EditorState {
   meta: Record<string, PlacementMeta>;
   /** Whether the draft differs from what is published. */
   hasDraft: boolean;
+  /** Whether edits made in this editor are still on their way to the engine. */
+  unsaved: boolean;
 }
 
 export interface SceneEditorClientOptions {
@@ -68,6 +83,8 @@ export interface SceneEditorClientOptions {
   flushMs?: number;
   /** Delay before the n-th reconnect attempt. */
   retryDelayMs?: (attempt: number) => number;
+  /** How long `stop` waits for unconfirmed edits before closing anyway. */
+  drainMs?: number;
 }
 
 interface Pending {
@@ -113,10 +130,17 @@ export class SceneEditorClient {
   /** This editor's own presence, announced again after a reconnect. */
   private presence: EditorPresence | null = null;
   private others: Record<string, EditorPresence> = {};
+  /** A publish or discard waiting for the draft's buffered edits to be sent. */
+  private draftCommand: "publish" | "discard" | null = null;
+  /** `unsaved` as last reported, to report only when it changes. */
+  private reportedUnsaved = false;
+  private readonly drainMs: number;
+  private drainTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly options: SceneEditorClientOptions) {
     this.version = options.version ?? "draft";
     this.flushMs = options.flushMs ?? 200;
+    this.drainMs = options.drainMs ?? 5000;
   }
 
   start(): void {
@@ -124,6 +148,11 @@ export class SceneEditorClient {
     void this.connect();
   }
 
+  /**
+   * Close the session. Edits not yet confirmed are sent first, and the
+   * socket stays open (up to `drainMs`) until the engine confirms them;
+   * nothing is reported after this.
+   */
   stop(): void {
     this.flush();
     this.stopped = true;
@@ -134,13 +163,33 @@ export class SceneEditorClient {
     }
     this.flushTimer = null;
     this.retryTimer = null;
-    this.socket?.close();
-    this.socket = null;
-    this.setStatus("closed");
+    if (this.socket && this.hasUnconfirmed()) {
+      this.drainTimer = setTimeout(() => this.close(), this.drainMs);
+      return;
+    }
+    this.close();
   }
 
-  /** The editor changed the document it shows; it is sent within `flushMs`. */
-  edit(doc: SceneDocument): void {
+  /**
+   * Whether edits made in this editor have not been confirmed by the engine:
+   * not yet sent, sent and unanswered, or waiting behind those.
+   */
+  hasUnconfirmed(): boolean {
+    if (this.desired !== null) {
+      return true;
+    }
+    return Object.values(this.versions).some((state) => state.inflight !== null || state.buffer !== null);
+  }
+
+  /**
+   * The editor changed the document it shows, read from `version`; it is
+   * sent within `flushMs`. A document read from the version this is not
+   * editing is dropped (see the class comment).
+   */
+  edit(doc: SceneDocument, version: SceneVersion): void {
+    if (this.stopped || version !== this.version) {
+      return;
+    }
     this.desired = doc;
     if (this.flushTimer === null) {
       this.flushTimer = setTimeout(() => {
@@ -182,9 +231,9 @@ export class SceneEditorClient {
     this.emit();
   }
 
+  /** Make the draft what OBS shows, with every edit made before this. */
   publish(): void {
-    this.flush();
-    this.send({ type: "publish" });
+    this.draftAction("publish");
   }
 
   /** Tell the scene's other editors who this is and what it has selected. */
@@ -196,9 +245,30 @@ export class SceneEditorClient {
     this.send({ type: "presence", ...presence });
   }
 
+  /** Throw the draft away, with every edit made to it before this. */
   discard(): void {
+    this.draftAction("discard");
+  }
+
+  private draftAction(command: "publish" | "discard"): void {
     this.flush();
-    this.send({ type: "discard" });
+    this.draftCommand = command;
+    this.sendDraftCommand();
+  }
+
+  /**
+   * Sends the waiting publish or discard once nothing of the draft's is
+   * buffered: the engine applies messages in order, so everything already
+   * sent lands before it.
+   */
+  private sendDraftCommand(): void {
+    const draft = this.versions.draft;
+    if (this.draftCommand === null || !this.socket || this.status !== "ready" || !draft || draft.buffer !== null) {
+      return;
+    }
+    const command = this.draftCommand;
+    this.draftCommand = null;
+    this.send({ type: command });
   }
 
   // ---------------------------------------------------------------------------
@@ -309,6 +379,7 @@ export class SceneEditorClient {
             this.send({ type: "presence", ...this.presence });
           }
           this.setStatus("ready");
+          this.sendDraftCommand();
         }
         this.emit();
         return;
@@ -437,12 +508,31 @@ export class SceneEditorClient {
       state.buffer = null;
       this.submit(state, buffer);
     }
+    if (state.version === "draft") {
+      this.sendDraftCommand();
+    }
+    if (this.stopped && !this.hasUnconfirmed()) {
+      this.close();
+    }
   }
 
   private submit(state: VersionState, ops: Json0Component[]): void {
     const pending: Pending = { opId: nextOpId(), ops, base: state.seq };
     state.inflight = pending;
     this.send({ type: "submit", version: state.version, base: pending.base, opId: pending.opId, ops });
+    if (!this.reportedUnsaved) {
+      this.emit();
+    }
+  }
+
+  private close(): void {
+    if (this.drainTimer !== null) {
+      clearTimeout(this.drainTimer);
+      this.drainTimer = null;
+    }
+    this.socket?.close();
+    this.socket = null;
+    this.status = "closed";
   }
 
   private send(message: unknown): void {
@@ -461,14 +551,20 @@ export class SceneEditorClient {
   }
 
   private emit(): void {
+    if (this.stopped) {
+      return;
+    }
     const state = this.versions[this.version];
+    this.reportedUnsaved = this.hasUnconfirmed();
     this.options.onChange({
       status: this.status,
       version: this.version,
       others: this.others,
-      doc: state?.doc ?? null,
+      // `desired` is only ever the editing version's (see `edit`).
+      doc: state ? (this.desired ?? state.doc) : null,
       meta: state?.meta ?? {},
       hasDraft: this.hasDraft,
+      unsaved: this.reportedUnsaved,
     });
   }
 }

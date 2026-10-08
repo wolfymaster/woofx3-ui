@@ -34,6 +34,8 @@ class FakeServer {
   sockets = new Set<FakeSocket>();
   /** Drop acks and ops events to this socket, as a dying connection would. */
   deaf: FakeSocket | null = null;
+  /** Every submit, publish and discard, in the order they arrived. */
+  received: string[] = [];
 
   constructor(doc: SceneDocument) {
     this.doc = doc;
@@ -108,6 +110,9 @@ class FakeSocket implements EditorSocket {
     const message = JSON.parse(data);
     // The network: the server sees it on a later tick.
     queueMicrotask(() => {
+      if (!this.closed && ["submit", "publish", "discard"].includes(message.type)) {
+        this.server.received.push(message.type === "submit" ? `submit:${message.version}` : message.type);
+      }
       if (!this.closed && message.type === "submit") {
         this.server.submit(this, message);
       }
@@ -139,6 +144,7 @@ function editor(server: FakeServer) {
     doc: null,
     meta: {},
     hasDraft: false,
+    unsaved: false,
   };
   const sockets: FakeSocket[] = [];
   const client = new SceneEditorClient({
@@ -159,7 +165,7 @@ function editor(server: FakeServer) {
   const type = (value: string) => {
     const doc = structuredClone(state.doc!);
     doc.widgets.a!.settings.text = value;
-    client.edit(doc);
+    client.edit(doc, state.version);
     client.flush();
   };
   return { client, state: () => state, text, type, sockets };
@@ -294,5 +300,71 @@ describe("SceneEditorClient — presence and live editing", () => {
     };
     one.type("hello");
     expect(sent.at(-1)).toMatchObject({ type: "submit", version: "published" });
+  });
+});
+
+describe("SceneEditorClient — what the editor shows, and what reaches the engine", () => {
+  it("reports an edit not yet sent, so the canvas never steps back to the last send", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const one = editor(server);
+    const two = editor(server);
+    await settle();
+    const doc = structuredClone(one.state().doc!);
+    doc.widgets.a!.x = 40;
+    // Not flushed: still waiting for the next send when something else is reported.
+    one.client.edit(doc, "draft");
+    two.client.setPresence({ name: "Other", selection: null });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(one.state().doc!.widgets.a!.x).toBe(40);
+  });
+
+  it("drops an edit of a canvas read from the version it is not editing", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi") } });
+    const e = editor(server);
+    await settle();
+    const draftCanvas = structuredClone(e.state().doc!);
+    draftCanvas.widgets.a!.settings.text = "draft only";
+    e.client.setVersion("published");
+    e.client.edit(draftCanvas, "draft");
+    e.client.flush();
+    await settle();
+    expect(server.received).toEqual([]);
+  });
+
+  it("publishes only after the edits made before it are sent", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.type("h");
+    // Waits behind the first, which has no ack yet.
+    e.type("hello");
+    e.client.publish();
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "submit:draft", "publish"]);
+  });
+
+  it("reports edits on their way, and then that they arrived", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.type("hi");
+    expect(e.state().unsaved).toBe(true);
+    await settle();
+    expect(e.state().unsaved).toBe(false);
+  });
+
+  it("keeps the socket open on stop until the edits made before it are confirmed", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.type("h");
+    e.type("hello");
+    e.client.stop();
+    expect(e.sockets[0]!.closed).toBe(false);
+    await settle();
+    expect(server.doc.widgets.a!.settings.text).toBe("hello");
+    expect(e.sockets[0]!.closed).toBe(true);
   });
 });

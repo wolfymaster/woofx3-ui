@@ -12,16 +12,19 @@ interface UseSceneEditorSessionArgs {
   sceneId: Id<"scenes"> | undefined;
   /** False for an engine without `scenes.editorSessions`: the hook stays idle. */
   enabled: boolean;
+  /** The version edits go to: the draft, or the published scene (live). */
+  version: SceneVersion;
 }
 
 export interface SceneEditorSessionHandle {
   state: EditorState;
-  /** The editor changed its canvas; sent within a fifth of a second. */
-  edit: (doc: SceneDocument) => void;
+  /**
+   * The editor changed its canvas, read from `version`; sent within a fifth of
+   * a second. A canvas read from the version the session is not editing is dropped.
+   */
+  edit: (doc: SceneDocument, version: SceneVersion) => void;
   publish: () => void;
   discard: () => void;
-  /** Edit the published scene (live) or the draft. */
-  setVersion: (version: SceneVersion) => void;
   /** Tell the scene's other editors who this is and what it has selected. */
   setPresence: (presence: EditorPresence) => void;
 }
@@ -33,23 +36,31 @@ const IDLE: EditorState = {
   doc: null,
   meta: {},
   hasDraft: false,
+  unsaved: false,
 };
 
 /**
  * The scene editor's connection to sceneManager: a short-lived token from the
  * engine (through Convex) opens sceneManager's editor socket, at the origin the
  * scene's preview overlay is served from. See `SceneEditorClient`.
+ *
+ * A client made again (the scene or the engine's capabilities reloaded) starts
+ * on the version the editor is on, so it never edits the draft under a LIVE
+ * badge or the published scene without one.
  */
 export function useSceneEditorSession({
   instanceId,
   engineSceneId,
   sceneId,
   enabled,
+  version,
 }: UseSceneEditorSessionArgs): SceneEditorSessionHandle {
   const getSession = useAction(api.sceneActions.getSceneEditorSession);
   const getPreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
   const [state, setState] = useState<EditorState>(IDLE);
   const clientRef = useRef<SceneEditorClient | null>(null);
+  const versionRef = useRef(version);
+  versionRef.current = version;
 
   useEffect(() => {
     if (!enabled || !sceneId) {
@@ -70,6 +81,7 @@ export function useSceneEditorSession({
         return url.toString();
       },
       onChange: setState,
+      version: versionRef.current,
     });
     clientRef.current = client;
     client.start();
@@ -80,11 +92,37 @@ export function useSceneEditorSession({
     };
   }, [enabled, sceneId, instanceId, engineSceneId, getSession, getPreviewUrl]);
 
-  const edit = useCallback((doc: SceneDocument) => clientRef.current?.edit(doc), []);
+  useEffect(() => {
+    clientRef.current?.setVersion(version);
+  }, [version]);
+
+  // Closing the tab skips React's cleanup: send what is waiting, and ask the
+  // browser to hold the page while edits are still on their way.
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      const client = clientRef.current;
+      if (!client) {
+        return;
+      }
+      client.flush();
+      if (client.hasUnconfirmed()) {
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [enabled]);
+
+  const edit = useCallback(
+    (doc: SceneDocument, docVersion: SceneVersion) => clientRef.current?.edit(doc, docVersion),
+    []
+  );
   const publish = useCallback(() => clientRef.current?.publish(), []);
   const discard = useCallback(() => clientRef.current?.discard(), []);
-  const setVersion = useCallback((version: SceneVersion) => clientRef.current?.setVersion(version), []);
   const setPresence = useCallback((presence: EditorPresence) => clientRef.current?.setPresence(presence), []);
 
-  return { state, edit, publish, discard, setVersion, setPresence };
+  return { state, edit, publish, discard, setPresence };
 }
