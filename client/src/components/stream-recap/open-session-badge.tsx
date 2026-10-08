@@ -1,8 +1,8 @@
 import { Badge } from "@/components/ui/badge";
 
 /**
- * Marks a summary taken while its session was still open: its totals can still
- * grow, so it is not a finished stream's final figures.
+ * Marks the session whose stream is live right now: its totals are still
+ * growing, so they are not a finished stream's final figures.
  */
 export function OpenSessionBadge() {
   return (

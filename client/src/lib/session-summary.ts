@@ -1,6 +1,7 @@
 import type { Doc } from "@convex/_generated/dataModel";
 
-export type SessionSummaryRow = Doc<"streamSessionSummaries">;
+/** A stored summary as the recap queries return it; `inProgress` is true only while its stream is live. */
+export type SessionSummaryRow = Doc<"streamSessionSummaries"> & { inProgress: boolean };
 
 export interface SummarySegment {
   id: string;
@@ -11,12 +12,16 @@ export interface SummarySegment {
 }
 
 /**
- * A summary's segments, ready to measure and draw. In a summary of a session
- * still in progress, the segment still live has no end, so it is cut off at
- * the moment the summary was taken: the same moment its totals describe. A
+ * A summary's segments, ready to measure and draw. In a summary of an open
+ * session, a segment still live when the summary was taken has no end, so it
+ * is cut off at that moment: the same moment its totals describe. It is marked
+ * ongoing only while the stream is in fact live; a stream that has since gone
+ * down keeps that cut-off as its last known end until a newer summary lands. A
  * closed session's segments come back as stored.
  */
-export function summarySegments(row: SessionSummaryRow): SummarySegment[] {
+export function summarySegments(
+  row: Pick<SessionSummaryRow, "session" | "generatedAt" | "inProgress">
+): SummarySegment[] {
   const session = row.session;
   if (!session) {
     return [];
@@ -24,9 +29,15 @@ export function summarySegments(row: SessionSummaryRow): SummarySegment[] {
   if (session.status !== "open") {
     return session.segments;
   }
-  return session.segments.map((segment) =>
-    segment.endedAt === null ? { ...segment, endedAt: row.generatedAt, ongoing: true } : segment
-  );
+  return session.segments.map((segment) => {
+    if (segment.endedAt !== null) {
+      return segment;
+    }
+    if (row.inProgress) {
+      return { ...segment, endedAt: row.generatedAt, ongoing: true };
+    }
+    return { ...segment, endedAt: row.generatedAt };
+  });
 }
 
 /**

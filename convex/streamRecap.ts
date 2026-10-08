@@ -1,7 +1,8 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import {
   type ClipWindow,
@@ -89,9 +90,52 @@ export type OpenSessionRefresh =
 
 /**
  * Takes a snapshot of the engine's open session and stores it as that
- * session's summary, so a stream in progress shows in the recaps before the
- * engine sends its own summary when the session ends. That summary, and every
- * later snapshot, replaces this one.
+ * session's summary. The engine's own summary, sent when the session ends, and
+ * every later snapshot replace it.
+ */
+async function snapshotOpenSession(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  reason: string
+): Promise<OpenSessionRefresh> {
+  const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+  if (!instance?.clientId || !instance.clientSecret) {
+    return { status: "unregistered" };
+  }
+  const { url, clientId, clientSecret } = instance;
+  const session = () => createEngineRpcSession<EngineApi>(url, clientId, clientSecret);
+
+  try {
+    // At most one session is open, and it is always the newest.
+    const page = await session().listStreamSessions({ limit: 1 });
+    const open = page.sessions[0];
+    if (!open || open.status !== "open") {
+      return { status: "no_open_session" };
+    }
+    const totals = await session().getStreamSessionTotals(open.id);
+    if (totals === null) {
+      return { status: "no_open_session" };
+    }
+    await ctx.runMutation(internal.streamSessionSummaries.upsertOpenSnapshot, {
+      instanceId,
+      data: sessionSnapshotPayload(open, totals, new Date()),
+    });
+    return { status: "stored" };
+  } catch (error) {
+    const failure = classifyEngineCallError(error);
+    logger.warn("stream recap: snapshot of the open session failed", {
+      instanceId,
+      reason,
+      status: failure.status,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return failure;
+  }
+}
+
+/**
+ * Snapshots the open session for a page showing recaps, so a stream in
+ * progress shows in the recaps before the engine summarises it.
  */
 export const refreshOpenSession = action({
   args: { instanceId: v.id("instances") },
@@ -108,38 +152,23 @@ export const refreshOpenSession = action({
     if (newest?.session?.status === "open" && Date.now() - newest.receivedAt < OPEN_SNAPSHOT_MAX_AGE_MS) {
       return { status: "fresh" };
     }
-    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
-    if (!instance?.clientId || !instance.clientSecret) {
-      return { status: "unregistered" };
-    }
-    const { url, clientId, clientSecret } = instance;
-    const session = () => createEngineRpcSession<EngineApi>(url, clientId, clientSecret);
+    return snapshotOpenSession(ctx, instanceId, "page");
+  },
+});
 
-    try {
-      // At most one session is open, and it is always the newest.
-      const page = await session().listStreamSessions({ limit: 1 });
-      const open = page.sessions[0];
-      if (!open || open.status !== "open") {
-        return { status: "no_open_session" };
-      }
-      const totals = await session().getStreamSessionTotals(open.id);
-      if (totals === null) {
-        return { status: "no_open_session" };
-      }
-      await ctx.runMutation(internal.streamSessionSummaries.upsertOpenSnapshot, {
-        instanceId,
-        data: sessionSnapshotPayload(open, totals, new Date()),
-      });
-      return { status: "stored" };
-    } catch (error) {
-      const failure = classifyEngineCallError(error);
-      logger.warn("stream recap: snapshot of the open session failed", {
-        instanceId,
-        status: failure.status,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return failure;
-    }
+/**
+ * Snapshots the open session once its stream has gone offline. The engine
+ * keeps the session open until the next broadcast decides whether to continue
+ * it, so without this the stored row would keep the figures and still-live
+ * segment of the last snapshot taken while live, or none at all if nobody had
+ * a recap open. Scheduled by instanceLiveState on the live-to-offline
+ * transition; skips the freshness check because a snapshot taken moments
+ * before the stream went down is exactly the one this replaces.
+ */
+export const snapshotAfterStreamOffline = internalAction({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<OpenSessionRefresh> => {
+    return snapshotOpenSession(ctx, instanceId, "stream_offline");
   },
 });
 

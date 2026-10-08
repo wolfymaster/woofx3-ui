@@ -65,20 +65,27 @@ describe("summarySegments", () => {
     { id: "a", startedAt: "2026-09-20T00:00:00.000Z", endedAt: "2026-09-20T01:00:00.000Z" },
     { id: "b", startedAt: "2026-09-20T02:00:00.000Z", endedAt: null },
   ];
-  const row = (status: "open" | "closed") =>
+  const row = (status: "open" | "closed", inProgress: boolean) =>
     ({
       generatedAt: "2026-09-20T02:30:00.000Z",
+      inProgress,
       session: { status, startedAt: "2026-09-20T00:00:00.000Z", endedAt: null, segments },
     }) as unknown as SessionSummaryRow;
 
   it("ends a still-live segment when the summary was taken", () => {
-    const result = summarySegments(row("open"));
+    const result = summarySegments(row("open", true));
     expect(result[1]).toEqual({ ...segments[1], endedAt: "2026-09-20T02:30:00.000Z", ongoing: true });
     expect(liveDurationMs(result)).toBe(90 * 60_000);
   });
 
+  it("does not call a segment ongoing once the stream has gone offline", () => {
+    const result = summarySegments(row("open", false));
+    expect(result[1]).toStrictEqual({ ...segments[1], endedAt: "2026-09-20T02:30:00.000Z" });
+    expect(liveDurationMs(result)).toBe(90 * 60_000);
+  });
+
   it("leaves a closed session's segments as stored", () => {
-    expect(summarySegments(row("closed"))).toBe(segments);
+    expect(summarySegments(row("closed", false))).toBe(segments);
   });
 
   it("has no segments for an unreadable summary", () => {

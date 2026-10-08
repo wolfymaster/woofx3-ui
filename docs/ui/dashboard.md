@@ -153,10 +153,10 @@ so the gaps a session spans across brief dropouts are left out), peak and
 average viewers, and the session's follows, subs, gifted subs, bits and raids.
 
 Rows arrive by the engine's `session.summary` webhook, which fires when a
-session *ends*. A session ends when the next broadcast past the engine's grace
-window begins, not when its own stream goes offline. Until then the session in
-progress shows from snapshots the UI takes while the widget is open, badged
-"In progress"; see [the session in progress](./stream-recaps#the-session-in-progress).
+session *ends*. The engine ends a session when the next broadcast past its
+grace window begins, not when its own stream goes offline. Until then the
+current session shows from snapshots the UI takes, badged "In progress" only
+while its stream is live; see [when a session is in progress](./stream-recaps#when-a-session-is-in-progress).
 A session that was never live is a real row with every figure at
 zero and no viewer figures. Each delivery is a whole snapshot; the table keeps
 one row per `(instanceId, sessionId)` and replaces it only with a snapshot whose

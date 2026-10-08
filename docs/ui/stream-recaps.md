@@ -3,9 +3,9 @@
 `/stream/recaps` lists every stream the engine has sent a summary for, newest
 first, and
 `/stream/recaps/:sessionId` shows one of them: how the stream went and who
-supported it. The engine sends a summary when a session ends. The session in
-progress shows too, from snapshots the UI takes itself (below), badged "In
-progress" since its totals can still change. Both read the same `streamSessionSummaries` rows as the dashboard's
+supported it. The engine sends a summary when a session ends. The current
+session shows too, from snapshots the UI takes itself (below), badged "In
+progress" while its stream is live since its totals can still change. Both read the same `streamSessionSummaries` rows as the dashboard's
 [recent streams](./dashboard#recent-streams) widget, whose rows link here.
 
 ## The session in progress
@@ -31,9 +31,34 @@ never lets it replace a stored summary of a closed session.
 In a snapshot the segment still live has no end. `summarySegments`
 (`client/src/lib/session-summary.ts`) ends it at the snapshot's `generatedAt`,
 the moment its totals describe, so the live time, the timeline (where it reads
-"live") and the viewer chart include it. A recap page of an open session loads
+"live" while the row is in progress) and the viewer chart include it. A recap page of an open session loads
 the viewer chart and leaderboards again with each new snapshot, keeping the
 ones on screen while it does.
+
+## When a session is in progress
+
+The engine keeps a session open after its stream goes offline: the next
+`stream.online` either continues it (back within the engine's grace window, a
+dropout) or closes it and starts another, and only then does the engine send
+its summary. So a stored `status: "open"` means the engine has not closed the
+session yet, not that the stream is live.
+
+`listRecent` and `get` add `inProgress` to each row instead
+(`isSummaryInProgress` in `convex/lib/sessionSummary.ts`): true only while the
+instance's `instanceLiveState` says it is live and, when the engine has
+announced its session, that session is this row's. It is derived on every read
+and never stored, so a session reads as finished the moment its stream goes
+down, reads as in progress again if the next broadcast continues it, and an
+open row whose closing summary never arrived cannot stay stuck. Time live is
+the segments added up, so the offline gap inside a continued session is never
+counted.
+
+On the live-to-offline transition, whether from the `stream.offline` callback
+or a poll, `instanceLiveState` schedules `streamRecap.snapshotAfterStreamOffline`
+15 seconds later, once the engine has closed the live segment. That snapshot
+records the stream's final figures and the segment's end even when nobody has
+a recap open. A redelivered offline callback finds the instance already offline
+and schedules nothing.
 
 ## Where each part comes from
 
