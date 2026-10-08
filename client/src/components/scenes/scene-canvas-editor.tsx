@@ -24,7 +24,9 @@ import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
+import type { SceneVersion } from "@/lib/scene-document";
 import { canvasOfDocument, documentOfCanvas } from "@/lib/scene-document-widgets";
+import type { EditorState } from "@/lib/scene-editor-client";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { Scene, Widget } from "@/types";
 import { LiveScenePreview } from "./live-scene-preview";
@@ -64,19 +66,30 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // An engine with editor sessions edits the scene live through sceneManager:
   // every change is sent as it is made and saved for you, into a draft OBS
   // does not show until it is published. Older engines save with the button.
-  const sessionMode = useEngineCapabilities(instanceId).support("scenes.editorSessions") === "supported";
-  const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
-  const session = useSceneEditorSession({ instanceId, engineSceneId, sceneId: convexSceneId, enabled: sessionMode });
-  const sessionDoc = session.state.doc;
+  // Once seen, the capability holds for as long as the editor is open: the
+  // capabilities reload after an engine reconnect, and dropping to the
+  // Save-button editor meanwhile would swap the published scene from the
+  // cache in for the draft on the canvas.
+  const sessionSupported = useEngineCapabilities(instanceId).support("scenes.editorSessions") === "supported";
+  const [sessionMode, setSessionMode] = useState(sessionSupported);
+  if (sessionSupported && !sessionMode) {
+    setSessionMode(true);
+  }
 
   // Live editing: this editor's changes go straight to what OBS shows, and
   // are copied into the draft so a later publish cannot undo them. Each open
   // editor chooses for itself, and every one starts on the draft.
   const [live, setLive] = useState(false);
-  const setSessionVersion = session.setVersion;
-  useEffect(() => {
-    setSessionVersion(live ? "published" : "draft");
-  }, [live, setSessionVersion]);
+  const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
+  const session = useSceneEditorSession({
+    instanceId,
+    engineSceneId,
+    sceneId: convexSceneId,
+    enabled: sessionMode,
+    version: live ? "published" : "draft",
+  });
+  const sessionDoc = session.state.doc;
+  const sessionVersion = session.state.version;
 
   // Who else is editing, and where: other editors' selections, in a colour
   // each keeps for as long as it is connected.
@@ -107,6 +120,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   sceneRef.current = scene;
   const sessionDocRef = useRef(sessionDoc);
   sessionDocRef.current = sessionDoc;
+  // The version the canvas was last read from, set together with sceneRef so
+  // an edit is always sent as an edit of the version its canvas shows.
+  const canvasVersionRef = useRef<SceneVersion | null>(null);
 
   useEffect(() => {
     if (sessionMode) {
@@ -128,8 +144,11 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     if (!sessionMode || !sessionDoc || !sceneLoaded || !fetched) {
       return;
     }
-    setScene((prev) => ({ ...(prev ?? sceneOf(fetched)), ...canvasOfDocument(sessionDoc) }));
-  }, [sessionMode, sessionDoc, sceneLoaded]);
+    const next = { ...(sceneRef.current ?? sceneOf(fetched)), ...canvasOfDocument(sessionDoc) };
+    sceneRef.current = next;
+    canvasVersionRef.current = sessionVersion;
+    setScene(next);
+  }, [sessionMode, sessionDoc, sessionVersion, sceneLoaded]);
 
   const updateSceneAction = useAction(api.sceneActions.updateScene);
   const deleteSceneAction = useAction(api.sceneActions.deleteScene);
@@ -150,8 +169,12 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       if (sessionMode) {
         // Straight to the session, never from an effect on the scene: a
         // render that follows another editor's change must not send the
-        // canvas it replaced.
-        sessionEdit(documentOfCanvas(next, sessionDocRef.current));
+        // canvas it replaced. A canvas not yet read from the session (the
+        // cached scene shown while it connects) is never sent.
+        const canvasVersion = canvasVersionRef.current;
+        if (canvasVersion !== null) {
+          sessionEdit(documentOfCanvas(next, sessionDocRef.current), canvasVersion);
+        }
         if (next.name !== prev.name || next.description !== prev.description) {
           setIsDirty(true);
         }
@@ -163,25 +186,46 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   );
 
   // In session mode the name and description, which are not part of the
-  // document, save themselves a moment after typing stops.
+  // document, save themselves a moment after typing stops, or at once when
+  // the editor closes first.
   const sceneName = scene?.name;
   const sceneDescription = scene?.description;
-  useEffect(() => {
-    if (!sessionMode || !isDirty || sceneName === undefined) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      setIsDirty(false);
-      updateSceneAction({ instanceId, engineSceneId, name: sceneName, description: sceneDescription }).catch((err) =>
+  const saveNameAndDescription = useCallback(
+    (name: string, description: string | undefined) => {
+      updateSceneAction({ instanceId, engineSceneId, name, description }).catch((err) =>
         toast({
           title: "Couldn't save the scene's name",
           description: err instanceof Error ? err.message : String(err),
           variant: "destructive",
         })
       );
+    },
+    [updateSceneAction, instanceId, engineSceneId, toast]
+  );
+  const unsavedNameRef = useRef<{ name: string; description: string | undefined } | null>(null);
+  useEffect(() => {
+    if (!sessionMode || !isDirty || sceneName === undefined) {
+      unsavedNameRef.current = null;
+      return;
+    }
+    unsavedNameRef.current = { name: sceneName, description: sceneDescription };
+    const timer = setTimeout(() => {
+      unsavedNameRef.current = null;
+      setIsDirty(false);
+      saveNameAndDescription(sceneName, sceneDescription);
     }, 800);
     return () => clearTimeout(timer);
-  }, [sessionMode, isDirty, sceneName, sceneDescription, updateSceneAction, instanceId, engineSceneId, toast]);
+  }, [sessionMode, isDirty, sceneName, sceneDescription, saveNameAndDescription]);
+  const saveNameRef = useRef(saveNameAndDescription);
+  saveNameRef.current = saveNameAndDescription;
+  useEffect(() => {
+    return () => {
+      const unsaved = unsavedNameRef.current;
+      if (unsaved) {
+        saveNameRef.current(unsaved.name, unsaved.description);
+      }
+    };
+  }, []);
 
   const copyKeyToClipboard = useCallback(async (key: string) => {
     const browserSourceUrl = browserSourceUrlForKey(key);
@@ -433,15 +477,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
               </Badge>
             )}
             <span className="text-xs text-muted-foreground" data-testid="text-scene-sync">
-              {session.state.status === "reconnecting"
-                ? "Reconnecting…"
-                : session.state.status === "unavailable"
-                  ? "Can't reach the scene manager"
-                  : live
-                    ? "Changes go straight to stream"
-                    : session.state.hasDraft
-                      ? "Draft saved · not on stream yet"
-                      : "Up to date"}
+              {sessionStatusText(session.state, live)}
             </span>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -462,25 +498,39 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 {live ? "Back to editing the draft" : "Edit what's on stream right now, without publishing"}
               </TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={session.discard}
-                  disabled={!session.state.hasDraft}
-                  aria-label="Discard draft"
-                  data-testid="button-discard-draft"
-                >
-                  <Undo2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Discard draft</TooltipContent>
-            </Tooltip>
-            <Button onClick={session.publish} disabled={!session.state.hasDraft} data-testid="button-publish-scene">
-              <Upload className="h-4 w-4 mr-2" />
-              Publish
-            </Button>
+            {/* Live edits are already on stream, so there is no draft to publish or discard. */}
+            {!live && (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={session.discard}
+                      disabled={!session.state.hasDraft}
+                      aria-label="Discard draft"
+                      data-testid="button-discard-draft"
+                    >
+                      <Undo2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Discard draft</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      onClick={session.publish}
+                      disabled={!session.state.hasDraft}
+                      data-testid="button-publish-scene"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Publish
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Put the draft on stream</TooltipContent>
+                </Tooltip>
+              </>
+            )}
           </>
         ) : (
           <Button onClick={handleSave} disabled={isSaving || !isDirty} data-testid="button-save-scene">
@@ -537,6 +587,23 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       }
     />
   );
+}
+
+/** The session's state in a few words: where this editor's changes are, and whether they have arrived. */
+function sessionStatusText(state: EditorState, live: boolean): string {
+  if (state.status === "reconnecting") {
+    return "Reconnecting…";
+  }
+  if (state.status === "unavailable") {
+    return "Can't reach the scene manager";
+  }
+  if (state.unsaved) {
+    return live ? "Saving · going to stream…" : "Saving draft…";
+  }
+  if (live) {
+    return "Saved · on stream";
+  }
+  return state.hasDraft ? "Draft saved · not on stream yet" : "Up to date";
 }
 
 type FetchedScene = NonNullable<FunctionReturnType<typeof api.scenes.getByEngineSceneId>>;
