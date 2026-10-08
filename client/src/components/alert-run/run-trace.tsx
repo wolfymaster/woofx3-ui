@@ -6,7 +6,6 @@ import { type ReactNode, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { engineAlertStyle } from "@/lib/alert-status";
 import { alertTone, buildTrace, initialSpanId, type RunAlertRecord, type TraceSpan } from "@/lib/run-trace";
@@ -39,11 +38,10 @@ interface RunTraceProps {
  */
 export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
   const data = useQuery(api.workflowRuns.runWithSteps, { instanceId, engineRunId });
-  const now = useMinuteClock();
   const timeline = useMemo(() => (data ? buildTimeline(data.run, data.steps) : null), [data]);
   const trace = useMemo(
-    () => (data && timeline ? buildTrace(data.run, timeline, data.alerts, now) : null),
-    [data, timeline, now]
+    () => (data && timeline ? buildTrace(data.run, timeline, data.alerts) : null),
+    [data, timeline]
   );
   // Null until someone picks a span, so the default can follow the run as it
   // updates live -- a step failing after the page opened becomes the default.
@@ -128,7 +126,7 @@ export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
           <Stat
             icon={BellRing}
             label="Overlay alert"
-            value={lastAlert ? engineAlertStyle(lastAlert.status, lastAlert.progressedAt, now).label : "—"}
+            value={lastAlert ? engineAlertStyle(lastAlert).label : "—"}
             detail={
               alerts.length > 1
                 ? `${alerts.length} published`
@@ -136,7 +134,7 @@ export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
                   ? (lastAlert.error ?? "published")
                   : "none published"
             }
-            bad={lastAlert !== undefined && alertTone(lastAlert, now) === "failure"}
+            bad={lastAlert !== undefined && alertTone(lastAlert) === "failure"}
           />
         </div>
 
@@ -168,7 +166,7 @@ export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
         <Card className="p-4">
           {/* Keyed so each span's panels start from their own defaults rather than
               inheriting the last span's filter or view. */}
-          <SpanDetails key={subject.span.id} subject={subject} now={now} />
+          <SpanDetails key={subject.span.id} subject={subject} />
         </Card>
       )}
     </div>

@@ -8,12 +8,10 @@ export interface AlertTotals {
   completed: number;
   failed: number;
   inFlight: number;
-  /** Never settled and too old to still be on its way; see ALERT_IN_FLIGHT_STALE_MS. */
+  /** Never settled, and marked by the server once it was too old to still be on its way; see ALERT_IN_FLIGHT_STALE_MS. */
   unconfirmed: number;
   skipped: number;
   replayed: number;
-  /** Ended with a status this build does not know; see normaliseStatus. */
-  unknown: number;
 }
 
 interface AlertStatTilesProps {

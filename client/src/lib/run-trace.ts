@@ -48,8 +48,8 @@ export interface RunAlertRecord {
   playedAt?: string;
   completedAt?: string;
   engineCreatedAt: string;
-  /** The row's `lastProgressAt`, on Convex's clock; see engineAlertLifecycle.ts. */
-  progressedAt: number;
+  /** Set once the server's staleness sweep gave up on the alert; see engineAlertLifecycle.ts. */
+  unconfirmedAt?: number;
 }
 
 export interface Trace {
@@ -76,13 +76,13 @@ const TARGET_TICK_COUNT = 5;
 /**
  * How an alert's span should look, counted the way the Alerts dashboard counts
  * it: an alert that never settled stops reading as running once the dashboard
- * would call it unconfirmed. `now` is a ticking clock (`useMinuteClock`).
+ * would call it unconfirmed.
  */
-export function alertTone(alert: { status: string; progressedAt: number }, now: number): Tone {
+export function alertTone(alert: { status: string; unconfirmedAt?: number }): Tone {
   if (!isEngineAlertStatus(alert.status)) {
     return "neutral";
   }
-  switch (outcomeOf(alert.status, alert.progressedAt, now)) {
+  switch (outcomeOf({ status: alert.status, unconfirmedAt: alert.unconfirmedAt })) {
     case "failed":
       return "failure";
     case "completed":
@@ -92,7 +92,6 @@ export function alertTone(alert: { status: string; progressedAt: number }, now: 
       return "running";
     case "unconfirmed":
     case "skipped":
-    case "unknown":
       return "neutral";
   }
 }
@@ -107,8 +106,7 @@ interface RawSpan extends Omit<TraceSpan, "startMs" | "endMs" | "marks"> {
 export function buildTrace(
   run: { engineRunId: string; status: string; startedAt?: string; completedAt?: string },
   timeline: Timeline,
-  alerts: readonly RunAlertRecord[],
-  now: number
+  alerts: readonly RunAlertRecord[]
 ): Trace {
   const runStart = parseEngineTime(run.startedAt);
   const runEnd = parseEngineTime(run.completedAt);
@@ -167,7 +165,7 @@ export function buildTrace(
   }
 
   for (const alert of alerts) {
-    const tone = alertTone(alert, now);
+    const tone = alertTone(alert);
     const start = parseEngineTime(alert.dispatchedAt) ?? parseEngineTime(alert.engineCreatedAt);
     const played = parseEngineTime(alert.playedAt);
     raw.push({

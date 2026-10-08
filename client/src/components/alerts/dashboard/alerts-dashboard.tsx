@@ -20,6 +20,8 @@ import type { AlertMenuSection } from "@/lib/alert-groups";
 /** How many dispatches the feed shows. Enough to cover a busy hour without paging. */
 const FEED_LIMIT = 40;
 
+const HOUR_MS = 60 * 60 * 1000;
+
 interface AlertsDashboardProps {
   /** Every alert trigger, in the rail's menu order — see flattenAlertTree. */
   sections: AlertMenuSection[];
@@ -36,11 +38,11 @@ interface AlertsDashboardProps {
 export function AlertsDashboard({ sections }: AlertsDashboardProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  // One clock for the tiles and the feed, so an alert turns unconfirmed in both
-  // at once.
-  const now = useMinuteClock();
+  // The overview's window ends with the current hour. Only the hour is sent, so
+  // the query's arguments change once an hour rather than every minute.
+  const hourStart = Math.floor(useMinuteClock() / HOUR_MS) * HOUR_MS;
   const overview = useLastLoaded(
-    useQuery(api.engineAlerts.overview, instanceId ? { instanceId, now } : "skip"),
+    useQuery(api.engineAlerts.overview, instanceId ? { instanceId, hourStart } : "skip"),
     instanceId
   );
   const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: FEED_LIMIT } : "skip");
@@ -141,7 +143,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
                 No failures in the last {alerts.length} alerts. Nothing to diagnose.
               </p>
             ) : (
-              <AlertFeed instanceId={instanceId} alerts={shown} eventNames={eventNames} now={now} />
+              <AlertFeed instanceId={instanceId} alerts={shown} eventNames={eventNames} />
             )}
           </Card>
         </div>

@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
-  ALERT_IN_FLIGHT_STALE_MS,
-  ALERT_QUEUED_STALE_MS,
   acceptsTransition,
   type EngineAlertStatus,
   isFailureStatus,
-  lastProgressAt,
   normaliseStatus,
   outcomeOf,
+  parseEngineTimestamp,
+  readAlertSnapshot,
+  UNSETTLED_STATUSES,
 } from "./engineAlertLifecycle";
 
 const T0 = "2026-09-17T08:49:58.000Z";
@@ -62,11 +62,50 @@ describe("acceptsTransition", () => {
     expect(acceptsTransition(at("completed"), at("completed"))).toBe(true);
   });
 
-  test("lets an unknown status settle an alert in flight, never replace a verdict", () => {
-    expect(acceptsTransition(at("playing"), at("unknown", T1))).toBe(true);
+  // Engine rows carry microseconds; two writes in one millisecond must still
+  // be told apart.
+  test("orders snapshots below the millisecond", () => {
+    const earlier = "2026-09-17T08:50:03.123400Z";
+    const later = "2026-09-17T08:50:03.123456789Z";
+    expect(acceptsTransition(at("completed", later), at("timed_out", earlier))).toBe(false);
+    expect(acceptsTransition(at("timed_out", earlier), at("completed", later))).toBe(true);
+  });
+
+  test("accepts the same engine write written at different precisions", () => {
+    expect(
+      acceptsTransition(at("completed", "2026-09-17T08:50:03.120Z"), at("completed", "2026-09-17T08:50:03.12Z"))
+    ).toBe(true);
+  });
+
+  // Only `alert.recorded` can carry a status this build does not know, so it
+  // is the alert's starting point, not an ending.
+  test("treats an unknown status as a starting point", () => {
+    expect(acceptsTransition(at("unknown"), at("dispatched", T1))).toBe(true);
+    expect(acceptsTransition(at("unknown"), at("playing", T1))).toBe(true);
     expect(acceptsTransition(at("unknown"), at("completed", T1))).toBe(true);
+    expect(acceptsTransition(at("sent"), at("unknown", T1))).toBe(true);
+    expect(acceptsTransition(at("playing"), at("unknown", T1))).toBe(false);
     expect(acceptsTransition(at("completed"), at("unknown", T1))).toBe(false);
-    expect(acceptsTransition(at("unknown"), at("sent", T1))).toBe(false);
+  });
+});
+
+describe("parseEngineTimestamp", () => {
+  test("keeps every fractional digit", () => {
+    expect(parseEngineTimestamp("1970-01-01T00:00:01.000000001Z")).toBe(1_000_000_001n);
+    expect(parseEngineTimestamp("1970-01-01T00:00:00.5Z")).toBe(500_000_000n);
+    expect(parseEngineTimestamp("1970-01-01T00:00:00Z")).toBe(0n);
+  });
+
+  test("applies the UTC offset", () => {
+    expect(parseEngineTimestamp("1970-01-01T01:00:00+01:00")).toBe(0n);
+    expect(parseEngineTimestamp("1969-12-31T23:30:00-00:30")).toBe(0n);
+  });
+
+  test("refuses what is not an RFC 3339 timestamp", () => {
+    expect(parseEngineTimestamp("not a time")).toBeNull();
+    expect(parseEngineTimestamp("2026-09-17 08:50:03Z")).toBeNull();
+    expect(parseEngineTimestamp("2026-13-17T08:50:03Z")).toBeNull();
+    expect(parseEngineTimestamp("2026-09-17T08:50:03.1234567890Z")).toBeNull();
   });
 });
 
@@ -81,40 +120,40 @@ describe("normaliseStatus", () => {
 });
 
 describe("outcomeOf", () => {
-  const now = 100 * ALERT_QUEUED_STALE_MS;
-
-  test("counts an alert on its way as in flight", () => {
-    expect(outcomeOf("sent", now - 1000, now)).toBe("inFlight");
-    expect(outcomeOf("playing", now - ALERT_IN_FLIGHT_STALE_MS, now)).toBe("inFlight");
+  test("counts an unsettled alert as in flight until the sweep marks it", () => {
+    for (const status of UNSETTLED_STATUSES) {
+      expect(outcomeOf({ status })).toBe("inFlight");
+      expect(outcomeOf({ status, unconfirmedAt: 1 })).toBe("unconfirmed");
+    }
   });
 
-  test("stops counting an alert in flight once no verdict can be expected", () => {
-    expect(outcomeOf("sent", now - ALERT_IN_FLIGHT_STALE_MS - 1, now)).toBe("unconfirmed");
-    expect(outcomeOf("playing", 0, now)).toBe("unconfirmed");
-  });
-
-  // A queued alert waits for an overlay to connect, which can take a whole break.
-  test("gives a queued alert longer than a dispatched one", () => {
-    expect(outcomeOf("pending", now - ALERT_IN_FLIGHT_STALE_MS - 1, now)).toBe("inFlight");
-    expect(outcomeOf("pending", now - ALERT_QUEUED_STALE_MS - 1, now)).toBe("unconfirmed");
-  });
-
-  test("never ages a settled alert", () => {
-    expect(outcomeOf("completed", 0, now)).toBe("completed");
-    expect(outcomeOf("timed_out", 0, now)).toBe("failed");
-    expect(outcomeOf("skipped", 0, now)).toBe("skipped");
-    expect(outcomeOf("replayed", 0, now)).toBe("replayed");
-    expect(outcomeOf("unknown", 0, now)).toBe("unknown");
+  test("counts a settled alert by its verdict, mark or not", () => {
+    expect(outcomeOf({ status: "completed", unconfirmedAt: 1 })).toBe("completed");
+    expect(outcomeOf({ status: "timed_out" })).toBe("failed");
+    expect(outcomeOf({ status: "skipped" })).toBe("skipped");
+    expect(outcomeOf({ status: "replayed" })).toBe("replayed");
   });
 });
 
-describe("lastProgressAt", () => {
-  test("measures from the last progress the mirror saw", () => {
-    expect(lastProgressAt({ progressedAt: 500, _creationTime: 100 })).toBe(500);
+describe("readAlertSnapshot", () => {
+  const snapshot = {
+    id: "a1",
+    payload: "{}",
+    status: "playing",
+    createdAt: T0,
+    updatedAt: T1,
+    playedAt: T1,
+  };
+
+  test("reads a snapshot and keeps only the fields it knows", () => {
+    expect(readAlertSnapshot({ ...snapshot, addedLater: "x" })).toEqual(snapshot);
   });
 
-  test("falls back to the row's creation", () => {
-    expect(lastProgressAt({ _creationTime: 100 })).toBe(100);
+  test("refuses a snapshot missing a required field or with a mistyped one", () => {
+    expect(readAlertSnapshot({ ...snapshot, id: undefined })).toBeNull();
+    expect(readAlertSnapshot({ ...snapshot, playedAt: 5 })).toBeNull();
+    expect(readAlertSnapshot(null)).toBeNull();
+    expect(readAlertSnapshot("alert")).toBeNull();
   });
 });
 

@@ -45,4 +45,9 @@ crons.interval("companion pairing cleanup", { hours: 1 }, internal.companionPair
 // that lost it. Reads only enabled companion endpoints.
 crons.interval("companion relay resync", { minutes: 15 }, internal.companionRelay.resyncBridgedInstances, {});
 
+// Marks alerts the engine lost track of as unconfirmed, so the dashboard stops
+// counting them in flight. Reads only unsettled rows already past the bound;
+// at this cadence an alert is marked within five minutes of crossing it.
+crons.interval("engine alert staleness sweep", { minutes: 5 }, internal.engineAlerts.markStaleAlerts, {});
+
 export default crons;

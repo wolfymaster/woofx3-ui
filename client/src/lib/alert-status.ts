@@ -21,9 +21,9 @@ export const ALERT_STATUS: Record<string, { icon: LucideIcon; color: string; bg:
   unknown: { icon: HelpCircle, color: "text-gray-500", bg: "bg-gray-500/10", label: "Unknown" },
 };
 
-/** The descriptor for a status, falling back to `sent` for one this build does not know. */
+/** The descriptor for a status, falling back to `unknown` for one this build does not know. */
 export function alertStatusStyle(status: string) {
-  return ALERT_STATUS[status] ?? ALERT_STATUS.sent;
+  return ALERT_STATUS[status] ?? ALERT_STATUS.unknown;
 }
 
 const UNCONFIRMED_STYLE = {
@@ -38,15 +38,17 @@ const UNCONFIRMED_STYLE = {
  * never settled: a row the overview counts as unconfirmed must not keep
  * spinning in the feed as though it were still on its way.
  *
- * `progressedAt` is the alert's `lastProgressAt`, and `now` a ticking clock
- * (`useMinuteClock`) so the row turns unconfirmed while it is on screen.
+ * `unconfirmedAt` is the row's mark from the server's staleness sweep, so the
+ * row and the overview change together when the sweep runs.
  */
-export function engineAlertStyle(status: string, progressedAt: number, now: number) {
-  const style = alertStatusStyle(status);
-  if (!isEngineAlertStatus(status)) {
+export function engineAlertStyle(alert: { status: string; unconfirmedAt?: number }) {
+  const style = alertStatusStyle(alert.status);
+  if (!isEngineAlertStatus(alert.status)) {
     return style;
   }
-  return outcomeOf(status, progressedAt, now) === "unconfirmed" ? UNCONFIRMED_STYLE : style;
+  return outcomeOf({ status: alert.status, unconfirmedAt: alert.unconfirmedAt }) === "unconfirmed"
+    ? UNCONFIRMED_STYLE
+    : style;
 }
 
 /** The fraction of settled alerts that played, or null when none have settled. */

@@ -1502,7 +1502,7 @@ export default defineSchema({
 
   // engineAlerts: engine-authoritative log of dispatched alerts. Mirrors the
   // engine's alert rows; written by ALERT_RECORDED and updated by
-  // ALERT_REPLAYED/COMPLETED/FAILED/TIMED_OUT/SKIPPED. Distinct from `alerts`
+  // ALERT_DISPATCHED/PLAYING/REPLAYED/COMPLETED/FAILED/TIMED_OUT/SKIPPED. Distinct from `alerts`
   // (the browser-source queue) and `alertHistory` (the local fire log).
   engineAlerts: defineTable({
     instanceId: v.id("instances"),
@@ -1536,6 +1536,10 @@ export default defineSchema({
     // When the mirror last saw the status or the engine's snapshot change, on
     // Convex's clock. The in-flight staleness bound is measured from it.
     progressedAt: v.optional(v.number()),
+    // When the staleness sweep (engineAlerts.markStaleAlerts) gave up waiting
+    // for an unsettled alert to move, on Convex's clock. Cleared by the next
+    // progress, so a late callback still lands.
+    unconfirmedAt: v.optional(v.number()),
   })
     .index("by_instance", ["instanceId"])
     // Scoped to the instance: alert ids come from each engine, and an engine
@@ -1543,7 +1547,10 @@ export default defineSchema({
     .index("by_engine_id", ["instanceId", "engineAlertId"])
     .index("by_instance_status", ["instanceId", "status"])
     // The alerts one run published, for that run's trace.
-    .index("by_instance_workflow", ["instanceId", "workflowId"]),
+    .index("by_instance_workflow", ["instanceId", "workflowId"])
+    // The staleness sweep's work list: unmarked rows first, by status, oldest
+    // progress first.
+    .index("by_unconfirmedAt_and_status_and_progressedAt", ["unconfirmedAt", "status", "progressedAt"]),
 
   // workflowRuns: durable history of runs the engine recorded, projected from
   // the db-proxy outbox. Distinct from transientEvents, which carries the live

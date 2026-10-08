@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { ALERT_IN_FLIGHT_STALE_MS } from "@convex/lib/engineAlertLifecycle";
 import { alertStatusStyle, engineAlertStyle, successRate, unsettledDetail } from "./alert-status";
 
 describe("alertStatusStyle", () => {
@@ -11,24 +10,22 @@ describe("alertStatusStyle", () => {
   // The engine's status set grows; a build that does not know a value still
   // has to draw the row rather than crash on an undefined descriptor.
   test("falls back for a status this build does not know", () => {
-    expect(alertStatusStyle("teleported")).toBe(alertStatusStyle("sent"));
+    expect(alertStatusStyle("teleported")).toBe(alertStatusStyle("unknown"));
   });
 });
 
 describe("engineAlertStyle", () => {
-  const now = 2 * ALERT_IN_FLIGHT_STALE_MS;
-
   test("draws an alert on its way by its status", () => {
-    expect(engineAlertStyle("sent", now - 1000, now).label).toBe("Sent");
+    expect(engineAlertStyle({ status: "sent" }).label).toBe("Sent");
   });
 
-  test("stops drawing an alert that never settled as still on its way", () => {
-    expect(engineAlertStyle("playing", 0, now).label).toBe("Unconfirmed");
-    expect(engineAlertStyle("completed", 0, now).label).toBe("Played");
+  test("draws an alert the server marked unconfirmed as unconfirmed", () => {
+    expect(engineAlertStyle({ status: "playing", unconfirmedAt: 1 }).label).toBe("Unconfirmed");
+    expect(engineAlertStyle({ status: "completed", unconfirmedAt: 1 }).label).toBe("Played");
   });
 
   test("draws a status the mirror could not read as unknown", () => {
-    expect(engineAlertStyle("unknown", 0, now).label).toBe("Unknown");
+    expect(engineAlertStyle({ status: "unknown" }).label).toBe("Unknown");
   });
 });
 

@@ -7,6 +7,7 @@ import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
+import { ALERT_DISPATCHED_EVENT_TYPE, ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "./lib/engineAlertLifecycle";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "./lib/engineTestRun";
@@ -563,6 +564,19 @@ http.route({
           occurredAt: cancelled.occurredAt,
         },
       });
+      return corsJson({ success: true, type: eventType });
+    }
+
+    // Ahead of the switch for the same reason as SESSION_SUMMARY. Merged like
+    // the other alert lifecycle callbacks, so the row's progress advances as
+    // the alert leaves for the overlay and starts playing.
+    if (eventType === ALERT_DISPATCHED_EVENT_TYPE || eventType === ALERT_PLAYING_EVENT_TYPE) {
+      const snapshot = readAlertSnapshot((event as unknown as { alert?: unknown }).alert);
+      if (!snapshot) {
+        logger.warn("webhook: alert lifecycle callback without a valid alert", { instanceId: instance._id, eventType });
+        return corsJson({ error: "Alert lifecycle callback needs an alert snapshot" }, 400);
+      }
+      await ctx.runMutation(internal.engineAlerts.updateFromWebhook, { instanceId: instance._id, snapshot });
       return corsJson({ success: true, type: eventType });
     }
 

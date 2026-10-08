@@ -27,17 +27,11 @@ export type SpanSubject =
  * Everything recorded about one span, pulled out of its payloads: the identity and
  * timing fields as a table, the failure in plain words, then each payload as fields
  * with the raw JSON a toggle away.
- *
- * `now` is the clock the trace was drawn with, so an alert's label and its
- * span's tone agree on whether it is still running.
  */
-export function SpanDetails({ subject, now }: { subject: SpanSubject; now: number }) {
+export function SpanDetails({ subject }: { subject: SpanSubject }) {
   const { span } = subject;
   const style = TONE_STYLE[span.tone];
-  const statusLabel =
-    subject.kind === "alert"
-      ? engineAlertStyle(subject.alert.status, subject.alert.progressedAt, now).label
-      : span.status;
+  const statusLabel = subject.kind === "alert" ? engineAlertStyle(subject.alert).label : span.status;
   const timing = [
     span.startMs === null ? null : `starts at +${formatDuration(span.startMs)}`,
     span.startMs !== null && span.endMs !== null ? `took ${formatDuration(span.endMs - span.startMs)}` : null,
