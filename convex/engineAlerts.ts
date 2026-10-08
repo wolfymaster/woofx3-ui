@@ -2,18 +2,8 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { acceptsTransition, type EngineAlertStatus, isEngineAlertStatus, outcomeOf } from "./lib/engineAlertLifecycle";
 import { getInstanceMembership } from "./lib/teamAccess";
-
-type EngineAlertStatus =
-  | "sent"
-  | "playing"
-  | "completed"
-  | "failed"
-  | "replayed"
-  | "timed_out"
-  | "skipped"
-  | "pending"
-  | "dispatched";
 
 const STATUS_VALIDATOR = v.union(
   v.literal("sent"),
@@ -27,21 +17,9 @@ const STATUS_VALIDATOR = v.union(
   v.literal("dispatched")
 );
 
-const KNOWN_STATUSES: ReadonlySet<EngineAlertStatus> = new Set<EngineAlertStatus>([
-  "sent",
-  "playing",
-  "completed",
-  "failed",
-  "replayed",
-  "timed_out",
-  "skipped",
-  "pending",
-  "dispatched",
-]);
-
 function normaliseStatus(raw: string): EngineAlertStatus {
-  if (KNOWN_STATUSES.has(raw as EngineAlertStatus)) {
-    return raw as EngineAlertStatus;
+  if (isEngineAlertStatus(raw)) {
+    return raw;
   }
   // Unknown lifecycle value from a future engine version — fall back to "sent"
   // so the row is still queryable. Convex would reject anything outside the
@@ -121,35 +99,6 @@ const OVERVIEW_HOURS_MAX = 24 * 7;
  */
 const OVERVIEW_MAX_ROWS = 300;
 
-/** What a lifecycle status counts as on the dashboard. */
-type AlertOutcome = "completed" | "failed" | "inFlight" | "skipped" | "replayed";
-
-/**
- * An alert's outcome for counting purposes.
- *
- * `replayed` is neither a success nor a failure: the operator superseded that
- * row, and the re-fire is its own row, so counting it either way would report
- * one alert twice.
- */
-function outcomeOf(status: EngineAlertStatus): AlertOutcome {
-  switch (status) {
-    case "completed":
-      return "completed";
-    case "failed":
-    case "timed_out":
-      return "failed";
-    case "sent":
-    case "pending":
-    case "dispatched":
-    case "playing":
-      return "inFlight";
-    case "skipped":
-      return "skipped";
-    case "replayed":
-      return "replayed";
-  }
-}
-
 /**
  * How alerts have gone lately: totals by outcome, and one bucket per hour.
  *
@@ -171,7 +120,8 @@ export const overview = query({
     const hours = Math.min(Math.max(Math.round(windowHours ?? OVERVIEW_HOURS_DEFAULT), 1), OVERVIEW_HOURS_MAX);
     // Aligned to the hour so every bucket but the last covers a whole one, and
     // the chart's labels are wall-clock hours rather than offsets from now.
-    const since = Math.floor(Date.now() / HOUR_MS) * HOUR_MS - (hours - 1) * HOUR_MS;
+    const now = Date.now();
+    const since = Math.floor(now / HOUR_MS) * HOUR_MS - (hours - 1) * HOUR_MS;
 
     const rows = await ctx.db
       .query("engineAlerts")
@@ -184,10 +134,10 @@ export const overview = query({
       total: 0,
       failed: 0,
     }));
-    const totals = { total: 0, completed: 0, failed: 0, inFlight: 0, skipped: 0, replayed: 0 };
+    const totals = { total: 0, completed: 0, failed: 0, inFlight: 0, unconfirmed: 0, skipped: 0, replayed: 0 };
 
     for (const row of rows) {
-      const outcome = outcomeOf(row.status);
+      const outcome = outcomeOf(row.status, row._creationTime, now);
       totals.total += 1;
       totals[outcome] += 1;
 
@@ -238,11 +188,14 @@ export const recordFromWebhook = internalMutation({
       .query("engineAlerts")
       .withIndex("by_engine_id", (q) => q.eq("engineAlertId", snapshot.id))
       .first();
-    if (existing) {
-      await ctx.db.patch(existing._id, row);
-    } else {
+    if (!existing) {
       await ctx.db.insert("engineAlerts", row);
+      return;
     }
+    if (!acceptsTransition(existing.status, row.status)) {
+      return;
+    }
+    await ctx.db.patch(existing._id, row);
   },
 });
 
@@ -271,7 +224,11 @@ export const updateFromWebhook = internalMutation({
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, patch);
+      // A snapshot older than the row would also unset the lifecycle
+      // timestamps the row already holds, so it is dropped whole.
+      if (acceptsTransition(existing.status, patch.status)) {
+        await ctx.db.patch(existing._id, patch);
+      }
     } else {
       // Lifecycle event arrived before the recorded event — insert the row
       // with the data we have so the row exists when subsequent events land.

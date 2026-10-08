@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { alertStatusStyle, isFailureStatus, successRate } from "./alert-status";
+import { ALERT_IN_FLIGHT_STALE_MS } from "@convex/lib/engineAlertLifecycle";
+import { alertStatusStyle, engineAlertStyle, isFailureStatus, successRate } from "./alert-status";
 
 describe("alertStatusStyle", () => {
   test("names each lifecycle point in the words the UI uses", () => {
@@ -11,6 +12,19 @@ describe("alertStatusStyle", () => {
   // has to draw the row rather than crash on an undefined descriptor.
   test("falls back for a status this build does not know", () => {
     expect(alertStatusStyle("teleported")).toBe(alertStatusStyle("sent"));
+  });
+});
+
+describe("engineAlertStyle", () => {
+  const now = 2 * ALERT_IN_FLIGHT_STALE_MS;
+
+  test("draws an alert on its way by its status", () => {
+    expect(engineAlertStyle({ status: "sent", _creationTime: now - 1000 }, now).label).toBe("Sent");
+  });
+
+  test("stops drawing an alert that never settled as still on its way", () => {
+    expect(engineAlertStyle({ status: "playing", _creationTime: 0 }, now).label).toBe("Unconfirmed");
+    expect(engineAlertStyle({ status: "completed", _creationTime: 0 }, now).label).toBe("Played");
   });
 });
 
