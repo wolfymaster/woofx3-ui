@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
+import { functionLocation, type ModuleFunctionSummary } from "@convex/lib/moduleFunctionSummary";
 import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
 import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -75,10 +76,7 @@ export interface ModuleDetailAction {
   color: string;
 }
 
-export interface ModuleDetailFunction {
-  qualifiedName: string;
-  runtime?: string;
-}
+export type ModuleDetailFunction = ModuleFunctionSummary;
 
 export interface ModuleDetailWidget {
   slug: string;
@@ -669,16 +667,37 @@ function FunctionList({ items }: { items: ModuleDetailFunction[] | undefined }) 
     <div className="space-y-2">
       {items.map((fn) => (
         <div key={fn.qualifiedName} className="flex items-start gap-3 p-3 rounded-md border bg-card">
-          <div className="h-8 w-8 rounded flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
-            <FileCode className="h-4 w-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium font-mono">{fn.qualifiedName}</p>
-            {fn.runtime && <p className="text-xs text-muted-foreground">{fn.runtime}</p>}
-          </div>
+          <FunctionRowContent fn={fn} />
         </div>
       ))}
     </div>
+  );
+}
+
+/** The inside of a function row, kept apart from its container so the row can become a button. */
+function FunctionRowContent({ fn }: { fn: ModuleDetailFunction }) {
+  const location = functionLocation(fn);
+  return (
+    <>
+      <div className="h-8 w-8 rounded flex items-center justify-center shrink-0 bg-muted text-muted-foreground">
+        <FileCode className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium truncate">{fn.name}</p>
+          {fn.runtime && (
+            <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-mono shrink-0">
+              {fn.runtime}
+            </Badge>
+          )}
+        </div>
+        {location && (
+          <p className="text-xs text-muted-foreground font-mono truncate" title={location}>
+            {location}
+          </p>
+        )}
+      </div>
+    </>
   );
 }
 
