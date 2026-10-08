@@ -164,6 +164,12 @@ export default defineSchema({
     // A sync run carries the version it was scheduled for and does nothing
     // once a newer one exists, so two runs cannot land in reverse order.
     relaySyncVersion: v.optional(v.number()),
+    // Lets this instance see and install the marketplace's dev-tier modules,
+    // which are hidden from everyone else. Operator-only: set with
+    // `instances.setMarketplaceDevAccess`, never from the dashboard, since any
+    // owner could otherwise opt their own instance in. See
+    // lib/marketplaceAccess.ts.
+    marketplaceDevAccess: v.optional(v.boolean()),
   })
     .index("by_account", ["accountId"])
     .index("by_webhook_secret", ["webhookSecret"]),

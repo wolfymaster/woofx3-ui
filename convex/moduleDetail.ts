@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
+import type { MarketplaceAccess } from "./lib/marketplaceAccess";
 import {
   installedFunctionSummaries,
   type ModuleFunctionSummary,
@@ -15,7 +16,12 @@ import { moduleOAuthIntegrationIds } from "./lib/moduleOAuth";
 import { parseManifestPermissions } from "./lib/modulePermissions";
 import { type ManifestResourceKind, parseManifestResourceKinds } from "./lib/resourceKinds";
 import { logger } from "./logger";
-import { fetchMarketplaceArchiveManifest, fetchMarketplaceDownload, marketplaceFetch } from "./marketplace";
+import {
+  fetchMarketplaceArchiveManifest,
+  fetchMarketplaceDownload,
+  marketplaceAccessForInstance,
+  marketplaceFetch,
+} from "./marketplace";
 
 export type ManifestSettingAction =
   | { kind: "internal"; request: { event: string; payload?: Record<string, unknown> }; timeoutMs?: number }
@@ -98,6 +104,7 @@ export const getModuleDetail = action({
   },
   handler: async (ctx, { instanceId, moduleId }): Promise<ModuleDetailResult> => {
     await requireInstanceRoleInAction(ctx, instanceId);
+    const access = await marketplaceAccessForInstance(ctx, instanceId);
 
     const installedModule = await ctx.runQuery(internal.moduleRepository.resolveModuleForDetail, {
       instanceId,
@@ -117,7 +124,7 @@ export const getModuleDetail = action({
         ctx.runQuery(internal.actionDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(internal.moduleFunctions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(internal.moduleWidgets.listByModule, { moduleId: installedModule._id }),
-        marketplaceId ? fetchMarketplaceMetadata(marketplaceId) : Promise.resolve(null),
+        marketplaceId ? fetchMarketplaceMetadata(marketplaceId, access) : Promise.resolve(null),
       ]);
 
       const detail = formatInstalledDetail(
@@ -132,7 +139,7 @@ export const getModuleDetail = action({
         applyMarketplaceMetadata(detail, marketplaceMeta);
       }
       if (marketplaceId && detail.latestVersion !== undefined && detail.latestVersion !== detail.version) {
-        const latest = manifestDeclarations(await readMarketplaceManifest(marketplaceId));
+        const latest = manifestDeclarations(await readMarketplaceManifest(marketplaceId, access));
         detail.latestPermissions = latest.permissions;
         detail.latestLocalEndpoints = latest.localEndpoints;
       }
@@ -140,8 +147,8 @@ export const getModuleDetail = action({
     }
 
     const [payload, manifest] = await Promise.all([
-      marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`),
-      readMarketplaceManifest(moduleId),
+      marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`, access),
+      readMarketplaceManifest(moduleId, access),
     ]);
     return { ...formatMarketplaceDetail(moduleId, payload, manifest), ...manifestDeclarations(manifest) };
   },
@@ -153,9 +160,9 @@ export const getModuleDetail = action({
  * file paths. Install does not depend on this read: it re-reads the archive
  * and refuses permissions the streamer did not approve.
  */
-async function readMarketplaceManifest(marketplaceId: string): Promise<unknown> {
+async function readMarketplaceManifest(marketplaceId: string, access: MarketplaceAccess): Promise<unknown> {
   try {
-    return await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId));
+    return await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId, access));
   } catch (err) {
     logger.warn("could not read marketplace module manifest", {
       marketplaceId,
@@ -274,9 +281,12 @@ interface MarketplaceMergeData {
   workflows: Array<{ slug: string; name: string }>;
 }
 
-async function fetchMarketplaceMetadata(marketplaceId: string): Promise<MarketplaceMergeData | null> {
+async function fetchMarketplaceMetadata(
+  marketplaceId: string,
+  access: MarketplaceAccess
+): Promise<MarketplaceMergeData | null> {
   try {
-    const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceId)}`);
+    const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceId)}`, access);
     const raw = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
     const module = raw.module && typeof raw.module === "object" ? (raw.module as Record<string, unknown>) : raw;
     const data: MarketplaceMergeData = { workflows: parseWorkflows(module.workflows) };

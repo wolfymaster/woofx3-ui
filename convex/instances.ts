@@ -8,6 +8,7 @@ import { deleteCompanion } from "./lib/companionRecords";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
+import { type MarketplaceAccess, marketplaceAccessFor } from "./lib/marketplaceAccess";
 import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAccess";
 
 /**
@@ -63,6 +64,31 @@ export const getInternal = internalQuery({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
     return ctx.db.get(instanceId);
+  },
+});
+
+/**
+ * Grants or revokes an instance's access to the marketplace's dev-tier
+ * modules. Internal so only an operator can run it, from outside the
+ * dashboard:
+ *
+ *   bunx convex run instances:setMarketplaceDevAccess '{"instanceId": "…", "enabled": true}'
+ */
+export const setMarketplaceDevAccess = internalMutation({
+  args: { instanceId: v.id("instances"), enabled: v.boolean() },
+  handler: async (ctx, { instanceId, enabled }) => {
+    const instance = await ctx.db.get(instanceId);
+    if (!instance) {
+      throw new Error(`Instance ${instanceId} not found`);
+    }
+    await ctx.db.patch(instanceId, { marketplaceDevAccess: enabled ? true : undefined });
+  },
+});
+
+export const getMarketplaceAccess = internalQuery({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<MarketplaceAccess> => {
+    return marketplaceAccessFor(await ctx.db.get(instanceId));
   },
 });
 

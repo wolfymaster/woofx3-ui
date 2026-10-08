@@ -8,7 +8,12 @@ import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEn
 import { parseManifestPermissions } from "./lib/modulePermissions";
 import { NO_SETUP_PLATFORMS_MESSAGE, type ResolvedSetupPlatforms, resolveSetupPlatforms } from "./lib/setupPlatforms";
 import { logger } from "./logger";
-import { fetchMarketplaceArchiveManifest, fetchMarketplaceDownload, fetchMarketplaceListing } from "./marketplace";
+import {
+  fetchMarketplaceArchiveManifest,
+  fetchMarketplaceDownload,
+  fetchMarketplaceListing,
+  marketplaceAccessForInstance,
+} from "./marketplace";
 
 /**
  * The platforms to offer while setting up an instance, with the permissions
@@ -24,10 +29,11 @@ export const listForSetup = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<ResolvedSetupPlatforms> => {
     await requireInstanceRoleInAction(ctx, instanceId);
+    const access = await marketplaceAccessForInstance(ctx, instanceId);
 
     const [curated, listing] = await Promise.all([
       ctx.runQuery(internal.setupPlatforms.listCurated, {}),
-      fetchMarketplaceListing(),
+      fetchMarketplaceListing(access),
     ]);
     if (curated.length === 0) {
       logger.error("setupPlatforms is empty; run setupPlatforms:seedDefaults");
@@ -40,7 +46,7 @@ export const listForSetup = action({
         .filter((entry) => listedIds.has(entry.marketplaceModuleId))
         .map(async (entry): Promise<[string, unknown]> => {
           try {
-            const download = await fetchMarketplaceDownload(entry.marketplaceModuleId);
+            const download = await fetchMarketplaceDownload(entry.marketplaceModuleId, access);
             return [entry.marketplaceModuleId, await fetchMarketplaceArchiveManifest(download)];
           } catch (err) {
             logger.warn("could not read setup platform permissions", {

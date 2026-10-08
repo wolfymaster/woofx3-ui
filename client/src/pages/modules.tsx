@@ -85,7 +85,7 @@ export default function Modules() {
     },
     [navigate]
   );
-  const catalog = useMarketplaceCatalog();
+  const catalog = useMarketplaceCatalog(instance?._id ?? null);
 
   // Set from the query string an integration's OAuth callback redirects with.
   // Only the integration, a one-time code and an error code are read from it;

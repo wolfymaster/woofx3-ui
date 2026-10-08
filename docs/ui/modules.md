@@ -41,6 +41,18 @@ There is no dedicated upgrade RPC — **an update is an install of the newer ver
 - Both sides upgrade **in place**. The engine replaces the previous version's registrations under a unique constraint on module name, and `moduleWebhook.processModuleInstalled` patches the existing `moduleRepository` row (`findSupersededModule` matches on the version-free leading segment of the `moduleKey`) instead of inserting a second one. Keeping the `_id` stable is what keeps trigger/action definitions, functions, widgets, assets and resource instances pointed at the module across an upgrade.
 - `getModuleDetail` is an action, not a reactive query, so the panel refetches once the install's transient event reports success — otherwise it would keep rendering the superseded version and its "Update available" notice.
 
+## Dev-tier modules
+
+The marketplace can hold **dev-tier** modules: pushed to production for testing and hidden from the public catalog. This Convex deployment serves every streamer, so dev access is granted per instance rather than by configuration:
+
+- **Flag.** `instances.marketplaceDevAccess`, set only by an operator: `bunx convex run instances:setMarketplaceDevAccess '{"instanceId": "…", "enabled": true}'`. No dashboard path sets it, because any owner could then opt their own instance in.
+- **Token.** For a flagged instance, Convex sends the marketplace's read-only dev token (`MARKETPLACE_DEV_TOKEN` in the Convex environment) as a bearer credential. It never reaches the browser. A flagged instance with no token configured gets an error rather than a quietly public catalog.
+- **One rule for every call.** `marketplaceFetch`, `fetchMarketplaceDownload` and `fetchMarketplaceListing` require a `MarketplaceAccess` (`convex/lib/marketplaceAccess.ts`), resolved from the instance with `marketplaceAccessForInstance`. There is no default, so a new call site cannot widen access by leaving the argument out. That is also why `api.marketplace.listModules` and `getModule` take an `instanceId`: the catalog differs between instances, and `useMarketplaceCatalog` discards a list fetched for a different one.
+- **What the engine sees.** Only the presigned download URL, as for any marketplace install. It needs no credential.
+- **Store.** Dev-tier listings carry `tier: "dev"` and show a **Dev** badge on their store card.
+
+Revoking the flag hides the catalog's dev modules from that instance again; modules it already installed stay installed, and their detail view simply stops showing marketplace metadata.
+
 ## Module permissions (install review)
 
 A manifest may declare a top-level `permissions` array (`twitch.moderation`, `twitch.channel`, ..., and `net:<host>` for each host its code sends requests to, shown as "Send data to `<host>`"). The **engine enforces** it: a module can only call a privileged capability it declares, and install refuses an id the engine does not know. What the UI adds is **consent**: the streamer sees what a module asks for and approves it before the engine is told to install it. The UI never grants or withholds a capability, and approving a permission here does not change what the engine allows.
