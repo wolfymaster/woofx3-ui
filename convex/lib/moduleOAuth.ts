@@ -9,13 +9,16 @@
 export interface ModuleOAuthIntegration {
   id: string;
   authorizeUrl: string;
+  tokenUrl: string;
   scopes: string[];
   clientIdSetting: string;
+  clientSecretSetting?: string;
+  hosts: string[];
 }
 
 /**
  * The `moduleIntegrationState.integration` of a module OAuth connect, kept
- * apart from the built-in integrations' (`spotify`) that share the table.
+ * apart from any other integration flow that shares the table.
  */
 export function moduleOAuthStateIntegration(id: string): string {
   return `oauth:${id}`;
@@ -46,11 +49,28 @@ export function readModuleOAuthIntegration(manifest: unknown, id: string): Modul
     if (typeof raw.authorizeUrl !== "string" || !raw.authorizeUrl.startsWith("https://")) {
       return null;
     }
+    if (typeof raw.tokenUrl !== "string" || !raw.tokenUrl.startsWith("https://")) {
+      return null;
+    }
     if (typeof raw.clientIdSetting !== "string" || raw.clientIdSetting === "") {
       return null;
     }
+    if (raw.clientSecretSetting !== undefined && typeof raw.clientSecretSetting !== "string") {
+      return null;
+    }
+    if (!Array.isArray(raw.hosts) || raw.hosts.length === 0 || !raw.hosts.every((h) => typeof h === "string")) {
+      return null;
+    }
     const scopes = Array.isArray(raw.scopes) ? raw.scopes.filter((s): s is string => typeof s === "string") : [];
-    return { id, authorizeUrl: raw.authorizeUrl, scopes, clientIdSetting: raw.clientIdSetting };
+    return {
+      id,
+      authorizeUrl: raw.authorizeUrl,
+      tokenUrl: raw.tokenUrl,
+      scopes,
+      clientIdSetting: raw.clientIdSetting,
+      ...(raw.clientSecretSetting === undefined ? {} : { clientSecretSetting: raw.clientSecretSetting }),
+      hosts: raw.hosts,
+    };
   }
   return null;
 }

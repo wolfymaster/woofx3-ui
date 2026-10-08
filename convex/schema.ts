@@ -1206,8 +1206,8 @@ export default defineSchema({
   // whether or not they are claimed.
   // integrationCredentials: the OAuth apps woofx3 provides for first-party
   // integrations, one row per integration. Managed instances use them when a
-  // module has no app of its own (spotifyIntegration.resolveClientId); external
-  // instances bring their own. Written only through internal functions
+  // module has no app of its own and its declaration fits the app
+  // (lib/integrationClientId.ts); external instances bring their own. Written only through internal functions
   // (integrationCredentials.ts), and never returned to a browser.
   integrationCredentials: defineTable({
     integration: v.literal("spotify"),
@@ -1218,7 +1218,7 @@ export default defineSchema({
 
   oauthConnectHandoffs: defineTable({
     codeHash: v.string(),
-    provider: v.union(v.literal("twitch"), v.literal("spotify"), v.literal("module")),
+    provider: v.union(v.literal("twitch"), v.literal("module")),
     userId: v.id("users"),
     instanceId: v.id("instances"),
     moduleId: v.optional(v.string()),
@@ -1234,13 +1234,6 @@ export default defineSchema({
         scopes: v.array(v.string()),
       })
     ),
-    spotify: v.optional(
-      v.object({
-        clientId: v.string(),
-        authToken: v.string(),
-        refreshToken: v.string(),
-      })
-    ),
     // A module OAuth connect (`moduleOAuth.ts`) carries the authorization
     // code, not tokens: the engine exchanges it and keeps the tokens.
     moduleOAuth: v.optional(
@@ -1249,6 +1242,7 @@ export default defineSchema({
         code: v.string(),
         codeVerifier: v.string(),
         redirectUri: v.string(),
+        clientId: v.string(),
       })
     ),
     createdAt: v.number(),
@@ -1257,8 +1251,8 @@ export default defineSchema({
   // moduleIntegrationState: short-lived, one-time-use state for a module
   // setting's "integration" button (see moduleDetail.ts's ManifestSettingAction).
   // Generic across integration *types*, not just OAuth — `data` is opaque here
-  // and interpreted only by whichever integration populated it (e.g. Spotify's
-  // OAuth-with-PKCE flow stores { clientId, codeVerifier }). Distinct from
+  // and interpreted only by whichever integration populated it (e.g. a module
+  // OAuth connect stores { clientId, codeVerifier }). Distinct from
   // twitchOAuthState: this is module-scoped (instanceId + moduleId), not the
   // account-level login-bridge case.
   moduleIntegrationState: defineTable({
@@ -1267,7 +1261,7 @@ export default defineSchema({
     moduleId: v.string(),
     integration: v.string(),
     redirectTo: v.string(),
-    // The signed-in member who started the flow (spotifyConnect.start). Rows
+    // The signed-in member who started the flow (moduleOAuth.start). Rows
     // without one predate that check and are refused at the callback.
     userId: v.optional(v.id("users")),
     data: v.any(),

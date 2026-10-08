@@ -68,7 +68,7 @@ describe("handoffRefusal", () => {
 
   test("a missing row or another provider's row is invalid", () => {
     expect(handoffRefusal(null, { provider: "twitch", userId: "user-a" }, now)).toBe("connect_code_invalid");
-    expect(handoffRefusal(row, { provider: "spotify", userId: "user-a" }, now)).toBe("connect_code_invalid");
+    expect(handoffRefusal(row, { provider: "module", userId: "user-a" }, now)).toBe("connect_code_invalid");
   });
 
   test("expires after the handoff lifetime", () => {

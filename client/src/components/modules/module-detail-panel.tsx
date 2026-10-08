@@ -1216,14 +1216,12 @@ function IntegrationSettingButton({
   field: ManifestSettingField;
   action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "integration" }>;
 }) {
-  const startSpotify = useAction(api.spotifyConnect.start);
   const startModuleOAuth = useAction(api.moduleOAuth.start);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A module's own `oauth[]` integration connects through the engine; of the
-  // built-in ones only Spotify exists. Any other gets a disabled button
-  // rather than a dead link.
-  const supported = action.flow === "module" || action.integration === "spotify";
+  // Only an integration the manifest declares under `oauth[]` can connect;
+  // any other gets a disabled button rather than a dead link.
+  const supported = action.declared;
 
   const handleClick = async () => {
     if (!instanceId || !supported) {
@@ -1236,10 +1234,12 @@ function IntegrationSettingButton({
       // resolves /modules/:id via routeModuleId), so returning to it as-is
       // — plus whatever result params the callback appends — is enough.
       const redirectTo = window.location.pathname;
-      const { authorizeUrl } =
-        action.flow === "module"
-          ? await startModuleOAuth({ instanceId, moduleId, integration: action.integration, redirectTo })
-          : await startSpotify({ instanceId, moduleId, redirectTo });
+      const { authorizeUrl } = await startModuleOAuth({
+        instanceId,
+        moduleId,
+        integration: action.integration,
+        redirectTo,
+      });
       window.location.assign(authorizeUrl);
     } catch (err) {
       setError(actionErrorMessage(err));

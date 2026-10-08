@@ -35,12 +35,12 @@ interface ModuleListItem {
 }
 
 /**
- * A connect the OAuth callback sent the browser back with. `builtin` is
- * Spotify's own flow (spotifyConnect.ts); `module` is a module's `oauth[]`
- * integration (moduleOAuth.ts). `label` names the provider to the streamer.
+ * A connect of a module's `oauth[]` integration (moduleOAuth.ts) the OAuth
+ * callback sent the browser back with. `label` names the provider to the
+ * streamer.
  */
 type OAuthResult =
-  | { status: "finishing"; flow: "builtin" | "module"; connectCode: string; label: string }
+  | { status: "finishing"; connectCode: string; label: string }
   | { status: "connected"; label: string }
   | { status: "error"; message: string };
 
@@ -90,8 +90,7 @@ export default function Modules() {
   // Set from the query string an integration's OAuth callback redirects with.
   // Only the integration, a one-time code and an error code are read from it;
   // the text shown is fixed (lib/oauthErrors.ts). An `oauth_code` is redeemed
-  // by moduleOAuth.finish and Spotify's `connect_code` by
-  // spotifyConnect.finish, which only the member who started the connect can do.
+  // by moduleOAuth.finish, which only the member who started the connect can do.
   const [oauthResult, setOauthResult] = useState<OAuthResult | null>(() => {
     const params = new URLSearchParams(window.location.search);
     const integration = params.get("integration");
@@ -101,11 +100,7 @@ export default function Modules() {
     const label = integrationLabel(integration);
     const oauthCode = params.get("oauth_code");
     if (oauthCode) {
-      return { status: "finishing", flow: "module", connectCode: oauthCode, label };
-    }
-    const connectCode = params.get("connect_code");
-    if (connectCode && integration === "spotify") {
-      return { status: "finishing", flow: "builtin", connectCode, label };
+      return { status: "finishing", connectCode: oauthCode, label };
     }
     if (params.get("status") === "error") {
       return { status: "error", message: oauthErrorMessage(params.get("error"), label) };
@@ -113,7 +108,6 @@ export default function Modules() {
     return null;
   });
 
-  const finishSpotify = useAction(api.spotifyConnect.finish);
   const finishModuleOAuth = useAction(api.moduleOAuth.finish);
   const { isAuthenticated } = useConvexAuth();
   const finishingCodeRef = useRef<string | null>(null);
@@ -127,8 +121,7 @@ export default function Modules() {
     }
     finishingCodeRef.current = oauthResult.connectCode;
     const { label } = oauthResult;
-    const finish = oauthResult.flow === "module" ? finishModuleOAuth : finishSpotify;
-    finish({ code: oauthResult.connectCode })
+    finishModuleOAuth({ code: oauthResult.connectCode })
       .then((result) => {
         setOauthResult(
           result.ok
@@ -140,7 +133,7 @@ export default function Modules() {
         console.error("[modules] finishing the OAuth connect failed:", String(err));
         setOauthResult({ status: "error", message: oauthErrorMessage(null, label) });
       });
-  }, [finishModuleOAuth, finishSpotify, isAuthenticated, oauthResult]);
+  }, [finishModuleOAuth, isAuthenticated, oauthResult]);
 
   const oauthUrlStrippedRef = useRef(false);
   useEffect(() => {

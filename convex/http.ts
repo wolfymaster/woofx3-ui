@@ -312,104 +312,6 @@ function moduleIntegrationErrorRedirect(
 }
 
 http.route({
-  path: OAUTH_CALLBACK_PATHS.spotify,
-  method: "GET",
-  handler: httpAction(async (ctx, request) => {
-    const siteUrl = process.env.SITE_URL ?? "";
-
-    const url = new URL(request.url);
-    const code = url.searchParams.get("code");
-    const state = url.searchParams.get("state");
-
-    if (!state) {
-      // No redirectTo is known without a valid state row, so /modules is the
-      // best available destination.
-      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "spotify", "missing_params");
-    }
-    const route = await routeOAuthState(state, oauthStateConfigFromEnv());
-    if (route.kind === "forward") {
-      return redirect(forwardedCallbackUrl(route.origin, url));
-    }
-    if (route.kind === "invalid") {
-      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "spotify", "invalid_state");
-    }
-
-    const stateResult = await ctx.runMutation(internal.moduleIntegrationState.validateAndConsumeState, { state });
-    if (!stateResult || stateResult.integration !== "spotify") {
-      return moduleIntegrationErrorRedirect(siteUrl, "/modules", "spotify", "invalid_state");
-    }
-    const { instanceId, moduleId, redirectTo, userId, data } = stateResult;
-    if (!code) {
-      const declined = url.searchParams.get("error") === "access_denied";
-      return moduleIntegrationErrorRedirect(
-        siteUrl,
-        redirectTo,
-        "spotify",
-        declined ? "access_denied" : "missing_params"
-      );
-    }
-    // spotifyConnect.start mints states only for a member; checked again in
-    // case the membership went away while the user was on Spotify's page, and
-    // once more when the connect is finished.
-    if (!userId) {
-      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "not_started_by_user");
-    }
-    if ((await ctx.runQuery(internal.instances.memberRole, { instanceId, userId })) === null) {
-      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "not_permitted");
-    }
-    const { clientId, codeVerifier } = (data ?? {}) as { clientId?: string; codeVerifier?: string };
-    if (!clientId || !codeVerifier) {
-      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "invalid_state", {
-        reason: "malformed state data",
-      });
-    }
-
-    const tokenRes = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: oauthCallbackUrl("spotify"),
-        client_id: clientId,
-        code_verifier: codeVerifier,
-      }),
-    });
-
-    if (!tokenRes.ok) {
-      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "token_exchange_failed", {
-        status: tokenRes.status,
-      });
-    }
-
-    const tokenData = await tokenRes.json();
-    if (typeof tokenData?.access_token !== "string" || typeof tokenData?.refresh_token !== "string") {
-      return moduleIntegrationErrorRedirect(siteUrl, redirectTo, "spotify", "token_exchange_failed", {
-        fields: fieldNames(tokenData),
-      });
-    }
-
-    // Held for the member who started the connect rather than written here;
-    // see the Twitch callback above.
-    const handoffCode = generateOpaqueToken();
-    await ctx.runMutation(internal.oauthConnectHandoff.store, {
-      codeHash: await hashOpaqueToken(handoffCode),
-      provider: "spotify",
-      userId,
-      instanceId,
-      moduleId,
-      redirectTo,
-      spotify: { clientId, authToken: tokenData.access_token, refreshToken: tokenData.refresh_token },
-    });
-
-    logger.info("spotify authorized, redirecting to frontend to finish", { instanceId, moduleId });
-    return redirect(
-      `${siteUrl}${withQuery(redirectTo, { integration: "spotify", connect_code: handoffCode }, "/modules")}`
-    );
-  }),
-});
-
-http.route({
   path: OAUTH_CALLBACK_PATHS.module,
   method: "GET",
   handler: httpAction(async (ctx, request) => {
@@ -451,8 +353,8 @@ http.route({
     if ((await ctx.runQuery(internal.instances.memberRole, { instanceId, userId })) === null) {
       return moduleIntegrationErrorRedirect(siteUrl, redirectTo, integration, "not_permitted");
     }
-    const { codeVerifier } = (data ?? {}) as { codeVerifier?: string };
-    if (!codeVerifier) {
+    const { clientId, codeVerifier } = (data ?? {}) as { clientId?: string; codeVerifier?: string };
+    if (!clientId || !codeVerifier) {
       return moduleIntegrationErrorRedirect(siteUrl, redirectTo, integration, "invalid_state", {
         reason: "malformed state data",
       });
@@ -468,7 +370,7 @@ http.route({
       instanceId,
       moduleId,
       redirectTo,
-      moduleOAuth: { integration, code, codeVerifier, redirectUri: oauthCallbackUrl("module") },
+      moduleOAuth: { integration, code, codeVerifier, redirectUri: oauthCallbackUrl("module"), clientId },
     });
     return redirect(`${siteUrl}${withQuery(redirectTo, { integration, oauth_code: handoffCode }, "/modules")}`);
   }),
