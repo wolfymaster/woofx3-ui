@@ -1,5 +1,6 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import { toMediaValue } from "@/lib/media-value";
 import { isCommandsSource, parseConfigFields } from "@/lib/parse-config-fields";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import { formatConfigValue } from "@/lib/workflow-presets";
@@ -11,7 +12,7 @@ function formatFieldSummaryValue(field: ConfigField, raw: unknown, resourceLabel
     return "";
   }
   if (field.type === "media" || field.type === "asset") {
-    return (raw as { name?: string } | null)?.name ?? "";
+    return toMediaValue(raw)?.name ?? "";
   }
   if (field.type === "toggle") {
     return raw ? "On" : "Off";

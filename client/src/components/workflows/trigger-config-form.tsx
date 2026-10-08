@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { THEME_FIELD_TYPE } from "@convex/lib/widgetThemes";
 import { useAction, useQuery } from "convex/react";
-import { FileAudio, FileImage, FileVideo, Plus, Upload, X } from "lucide-react";
+import { FileAudio, FileImage, FileVideo, Link2, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import {
@@ -18,38 +18,26 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTargetChoices } from "@/lib/alert-target";
+import { isExternalMediaValue, toMediaValue } from "@/lib/media-value";
 import type { ConfigField, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
-import { AssetLibraryModal, type SelectedAsset } from "./asset-library-modal";
+import { AssetLibraryModal } from "./asset-library-modal";
 import { ScenePlacementsFieldRenderer, ScenesFieldRenderer } from "./scene-field-renderers";
 
 // ---------------------------------------------------------------------------
 // Media field — uses AssetLibraryModal, so it lives here as a custom renderer
-// rather than in the generic ConfigurationForm.
+// rather than in the generic ConfigurationForm. The stored value is a
+// MediaValue: a library asset or an external URL.
 // ---------------------------------------------------------------------------
-
-interface MediaFieldValue {
-  id: string;
-  name: string;
-  url: string;
-  type: string;
-}
 
 function MediaField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
   const [modalOpen, setModalOpen] = useState(false);
-  const MediaIcon = field.mediaType === "audio" ? FileAudio : field.mediaType === "video" ? FileVideo : FileImage;
+  const FileIcon = field.mediaType === "audio" ? FileAudio : field.mediaType === "video" ? FileVideo : FileImage;
 
-  const assetValue = value as MediaFieldValue | null;
+  const assetValue = toMediaValue(value);
+  const isExternal = assetValue !== null && isExternalMediaValue(assetValue);
+  const MediaIcon = isExternal ? Link2 : FileIcon;
   const filterTypes = field.mediaType ? [field.mediaType] : undefined;
-
-  const handleSelect = (asset: SelectedAsset) => {
-    onChange({
-      id: asset.id,
-      name: asset.name,
-      url: asset.url,
-      type: asset.type,
-    });
-  };
 
   return (
     <div className="space-y-2">
@@ -58,7 +46,9 @@ function MediaField({ field, value, onChange }: Parameters<CustomFieldRenderer>[
         <Card className="p-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <MediaIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-sm truncate">{assetValue.name}</span>
+            <span className="text-sm truncate" title={assetValue.url}>
+              {assetValue.name}
+            </span>
           </div>
           <div className="flex items-center gap-1 shrink-0">
             <Button
@@ -88,17 +78,18 @@ function MediaField({ field, value, onChange }: Parameters<CustomFieldRenderer>[
           data-testid={`button-select-${field.id}`}
         >
           <Upload className="h-4 w-4" />
-          Browse Library
+          Browse Library or URL
         </Button>
       )}
 
       <AssetLibraryModal
         open={modalOpen}
         onOpenChange={setModalOpen}
-        onSelect={handleSelect}
+        onSelect={onChange}
         filterTypes={filterTypes}
+        current={assetValue}
         title={`Select ${field.label}`}
-        description={`Choose ${field.mediaType ? `a ${field.mediaType} file` : "an asset"} from your library or upload a new one.`}
+        description={`Choose ${field.mediaType ? `a ${field.mediaType} file` : "an asset"} from your library, upload one, or link to one hosted elsewhere.`}
       />
     </div>
   );
