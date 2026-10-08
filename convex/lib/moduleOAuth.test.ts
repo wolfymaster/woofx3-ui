@@ -27,8 +27,11 @@ describe("readModuleOAuthIntegration", () => {
     expect(readModuleOAuthIntegration(MANIFEST, "spotify")).toEqual({
       id: "spotify",
       authorizeUrl: "https://accounts.spotify.com/authorize",
+      tokenUrl: "https://accounts.spotify.com/api/token",
       scopes: ["user-read-playback-state", "user-modify-playback-state"],
       clientIdSetting: "clientId",
+      clientSecretSetting: "clientSecret",
+      hosts: ["api.spotify.com"],
     });
   });
 
@@ -38,6 +41,10 @@ describe("readModuleOAuthIntegration", () => {
     expect(readModuleOAuthIntegration(null, "spotify")).toBeNull();
     const insecure = { oauth: [{ ...MANIFEST.oauth[0], authorizeUrl: "http://accounts.spotify.com/authorize" }] };
     expect(readModuleOAuthIntegration(insecure, "spotify")).toBeNull();
+    const insecureToken = { oauth: [{ ...MANIFEST.oauth[0], tokenUrl: "http://accounts.spotify.com/api/token" }] };
+    expect(readModuleOAuthIntegration(insecureToken, "spotify")).toBeNull();
+    const noHosts = { oauth: [{ ...MANIFEST.oauth[0], hosts: [] }] };
+    expect(readModuleOAuthIntegration(noHosts, "spotify")).toBeNull();
   });
 
   test("lists the ids a module's buttons may connect", () => {
@@ -74,7 +81,7 @@ describe("moduleOAuthAuthorizeUrl", () => {
   });
 });
 
-test("a module OAuth state is told apart from a built-in integration's", () => {
+test("a module OAuth state is told apart from another integration's", () => {
   expect(integrationOfModuleOAuthState(moduleOAuthStateIntegration("spotify"))).toBe("spotify");
   expect(integrationOfModuleOAuthState("spotify")).toBeNull();
   expect(integrationOfModuleOAuthState("oauth:")).toBeNull();

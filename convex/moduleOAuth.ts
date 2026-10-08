@@ -1,11 +1,18 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action, internalMutation } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import { type ActionCtx, action, internalMutation } from "./_generated/server";
 import { readMemberRole } from "./instances";
 import { fetchEngineCapabilities, hasEngineCapability } from "./lib/engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
-import { moduleOAuthAuthorizeUrl, moduleOAuthStateIntegration, readModuleOAuthIntegration } from "./lib/moduleOAuth";
+import { chooseIntegrationClientId, type IntegrationClientId } from "./lib/integrationClientId";
+import {
+  type ModuleOAuthIntegration,
+  moduleOAuthAuthorizeUrl,
+  moduleOAuthStateIntegration,
+  readModuleOAuthIntegration,
+} from "./lib/moduleOAuth";
 import { oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
@@ -24,8 +31,52 @@ interface ModuleOAuthEngineApi extends EngineApi {
   completeModuleOAuth(
     moduleId: string,
     integration: string,
-    authorization: { code: string; codeVerifier: string; redirectUri: string; clientId?: string }
+    authorization: { code: string; codeVerifier: string; redirectUri: string; clientId?: string; tokenUrl?: string }
   ): Promise<{ connected: true; scope: string[] }>;
+}
+
+type EngineCredentials = { url: string; clientId: string; clientSecret: string };
+
+function engineCredentials(instance: Doc<"instances"> | null): EngineCredentials | null {
+  if (!instance?.clientId || !instance.clientSecret) {
+    return null;
+  }
+  return { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
+}
+
+/**
+ * The module's declaration of `integration` and the OAuth app a connect of it
+ * uses (lib/integrationClientId.ts), or null when the module declares none.
+ * The declaration is the engine's installed manifest, the one the engine
+ * exchanges the code with.
+ */
+async function resolveConnect(
+  ctx: ActionCtx,
+  instance: Doc<"instances">,
+  engine: EngineCredentials,
+  moduleId: string,
+  integration: string
+): Promise<{ declared: ModuleOAuthIntegration; app: IntegrationClientId } | null> {
+  const module = await ctx.runQuery(internal.moduleRepository.resolveModuleForDetail, {
+    instanceId: instance._id,
+    moduleId,
+  });
+  const declared = readModuleOAuthIntegration(module?.manifest, integration);
+  if (!declared) {
+    return null;
+  }
+  const { settings } = await createEngineRpcSession<EngineApi>(
+    engine.url,
+    engine.clientId,
+    engine.clientSecret
+  ).getModuleSettings(moduleId);
+  const app = chooseIntegrationClientId({
+    integration: declared,
+    moduleClientId: settings.find((s) => s.key === declared.clientIdSetting)?.value,
+    hosting: instance.hosting,
+    platformClientIds: await ctx.runQuery(internal.integrationCredentials.clientIds, {}),
+  });
+  return { declared, app };
 }
 
 /**
@@ -34,7 +85,8 @@ interface ModuleOAuthEngineApi extends EngineApi {
  * provider's authorize URL for the browser to navigate to. Any member may
  * connect, as any member may edit a module's settings.
  *
- * The client id is the module's own (`clientIdSetting`). The engine keeps the
+ * The client id is the module's own (`clientIdSetting`), or on a managed
+ * instance the app woofx3 provides for that provider. The engine keeps the
  * tokens once the connect finishes (`finish`); the dashboard never sees them.
  */
 export const start = action({
@@ -54,28 +106,27 @@ export const start = action({
       throw new ConvexError("You are not a member of this instance.");
     }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
-    if (!instance?.clientId || !instance.clientSecret) {
+    const engine = engineCredentials(instance);
+    if (!instance || !engine) {
       throw new ConvexError("This instance is not connected to its engine yet.");
     }
-    const engine = { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
     if (!hasEngineCapability(await fetchEngineCapabilities(engine), "modules.oauth")) {
       throw new ConvexError("Update this engine to connect this module's account.");
     }
 
-    const module = await ctx.runQuery(internal.moduleRepository.resolveModuleForDetail, { instanceId, moduleId });
-    const declared = readModuleOAuthIntegration(module?.manifest, integration);
-    if (!declared) {
+    const resolved = await resolveConnect(ctx, instance, engine, moduleId, integration);
+    if (!resolved) {
       throw new ConvexError(`This module has no ${integration} connection to set up.`);
     }
-    const { settings } = await createEngineRpcSession<EngineApi>(
-      engine.url,
-      engine.clientId,
-      engine.clientSecret
-    ).getModuleSettings(moduleId);
-    const clientId = settings.find((s) => s.key === declared.clientIdSetting)?.value;
-    if (!clientId) {
-      throw new ConvexError("Enter the app's client ID in this module's settings, then connect again.");
+    const { declared, app } = resolved;
+    if ("missing" in app) {
+      throw new ConvexError(
+        app.missing === "module_app"
+          ? "Enter the app's client ID in this module's settings, then connect again."
+          : "This connection is not available yet. Enter your own app's client ID in this module's settings to use it now."
+      );
     }
+    const { clientId } = app;
 
     const state = await mintOAuthState(oauthStateConfigFromEnv());
     const codeVerifier = generateCodeVerifier();
@@ -86,7 +137,7 @@ export const start = action({
       integration: moduleOAuthStateIntegration(integration),
       redirectTo: safeRelativePath(redirectTo, "/modules"),
       userId,
-      data: { codeVerifier },
+      data: { clientId, codeVerifier },
     });
     return {
       authorizeUrl: moduleOAuthAuthorizeUrl({
@@ -128,6 +179,12 @@ export type FinishModuleOAuthResult =
  * with the one-time code the callback gave it: only the signed-in member who
  * started the connect can finish it. The engine exchanges the authorization
  * and keeps the tokens.
+ *
+ * The app is chosen again first, so a module updated while the streamer was
+ * on the provider's page cannot exchange an authorization of woofx3's app at
+ * endpoints the app no longer fits. The engine is told the `tokenUrl` that
+ * choice was made for and refuses the exchange if the module changed again
+ * since.
  */
 export const finish = action({
   args: { code: v.string() },
@@ -147,16 +204,27 @@ export const finish = action({
       return { ok: false, error: claimed.error };
     }
     const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId: claimed.instanceId });
-    if (!instance?.clientId || !instance.clientSecret) {
+    const engine = engineCredentials(instance);
+    if (!instance || !engine) {
       return { ok: false, error: "engine_write_failed" };
     }
-    const { integration, code: authorizationCode, codeVerifier, redirectUri } = claimed.moduleOAuth;
+    const { integration, code: authorizationCode, codeVerifier, redirectUri, clientId } = claimed.moduleOAuth;
+    const resolved = await resolveConnect(ctx, instance, engine, claimed.moduleId, integration);
+    if (!resolved || !("clientId" in resolved.app) || resolved.app.clientId !== clientId) {
+      return { ok: false, error: "invalid_state" };
+    }
     try {
       await createEngineRpcSession<ModuleOAuthEngineApi>(
-        instance.url,
-        instance.clientId,
-        instance.clientSecret
-      ).completeModuleOAuth(claimed.moduleId, integration, { code: authorizationCode, codeVerifier, redirectUri });
+        engine.url,
+        engine.clientId,
+        engine.clientSecret
+      ).completeModuleOAuth(claimed.moduleId, integration, {
+        code: authorizationCode,
+        codeVerifier,
+        redirectUri,
+        clientId,
+        tokenUrl: resolved.declared.tokenUrl,
+      });
     } catch (err) {
       console.error("[module-oauth] the engine could not finish the connect", String(err));
       return { ok: false, error: "token_exchange_failed" };

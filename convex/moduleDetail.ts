@@ -17,11 +17,10 @@ export type ManifestSettingAction =
       kind: "integration";
       integration: string;
       /**
-       * `module`: the manifest declares the integration under `oauth[]`, and
-       * the engine keeps its tokens (moduleOAuth.ts). `builtin`: one this
-       * dashboard implements itself (Spotify's spotifyConnect.ts).
+       * Whether the manifest declares the integration under `oauth[]`, the
+       * only integrations a button can connect (moduleOAuth.ts).
        */
-      flow: "module" | "builtin";
+      declared: boolean;
     };
 
 export interface ManifestSettingField {
@@ -170,7 +169,7 @@ function parseManifestSettingAction(value: unknown, oauthIntegrations: string[])
     return {
       kind: "integration",
       integration: o.integration,
-      flow: oauthIntegrations.includes(o.integration) ? "module" : "builtin",
+      declared: oauthIntegrations.includes(o.integration),
     };
   }
   if (o.kind === "internal" && o.request && typeof o.request === "object") {

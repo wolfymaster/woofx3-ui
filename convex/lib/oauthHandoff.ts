@@ -58,7 +58,7 @@ export async function sha256Hex(value: string): Promise<string> {
   return hex;
 }
 
-export type HandoffProvider = "twitch" | "spotify" | "module";
+export type HandoffProvider = "twitch" | "module";
 
 export type HandoffRefusal = "connect_code_invalid" | "connect_code_expired" | "wrong_user";
 
