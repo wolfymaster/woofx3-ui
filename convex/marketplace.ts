@@ -136,6 +136,11 @@ export async function fetchMarketplaceDownload(marketplaceModuleId: string): Pro
  * moduleKey.
  */
 export async function fetchMarketplaceArchiveManifest(download: MarketplaceDownload): Promise<unknown> {
+  return readArchiveManifest(await fetchMarketplaceArchive(download));
+}
+
+/** A marketplace module's archive bytes, checked against the listing's sha256. */
+export async function fetchMarketplaceArchive(download: MarketplaceDownload): Promise<Uint8Array> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ARCHIVE_TIMEOUT_MS);
   let bytes: Uint8Array;
@@ -164,7 +169,7 @@ export async function fetchMarketplaceArchiveManifest(download: MarketplaceDownl
   if (actualSha256 !== download.sha256) {
     throw new Error("Module archive does not match the marketplace's sha256 hash");
   }
-  return readArchiveManifest(bytes);
+  return bytes;
 }
 
 function asString(value: unknown, fallback = ""): string {

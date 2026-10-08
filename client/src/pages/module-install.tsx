@@ -31,6 +31,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
 import { buildModuleArchive, computeModuleKey, readModuleArchive } from "@/lib/module-archive";
+import { getLanguageFromPath } from "@/lib/module-files";
 import { bareModuleKey } from "@/lib/module-key";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 import { cn } from "@/lib/utils";
@@ -174,28 +175,6 @@ function FileExplorer({
       <div className="p-2">{files.map((node) => renderNode(node))}</div>
     </ScrollArea>
   );
-}
-
-function getLanguageFromPath(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase();
-  const langMap: Record<string, string> = {
-    js: "javascript",
-    jsx: "javascript",
-    ts: "typescript",
-    tsx: "typescript",
-    json: "json",
-    yaml: "yaml",
-    yml: "yaml",
-    md: "markdown",
-    html: "html",
-    css: "css",
-    py: "python",
-    go: "go",
-    rs: "rust",
-    sh: "shell",
-    bash: "shell",
-  };
-  return langMap[ext || ""] || "plaintext";
 }
 
 // Checks Pipeline
