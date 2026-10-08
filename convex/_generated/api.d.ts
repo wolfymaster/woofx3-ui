@@ -62,6 +62,7 @@ import type * as lib_completionPolling from "../lib/completionPolling.js";
 import type * as lib_configBundle from "../lib/configBundle.js";
 import type * as lib_definitionCatalog from "../lib/definitionCatalog.js";
 import type * as lib_dollarKeys from "../lib/dollarKeys.js";
+import type * as lib_engineAlertLifecycle from "../lib/engineAlertLifecycle.js";
 import type * as lib_engineCapabilities from "../lib/engineCapabilities.js";
 import type * as lib_engineInstanceUrl from "../lib/engineInstanceUrl.js";
 import type * as lib_engineObsStatus from "../lib/engineObsStatus.js";
@@ -296,6 +297,7 @@ declare const fullApi: ApiFromModules<{
   "lib/configBundle": typeof lib_configBundle;
   "lib/definitionCatalog": typeof lib_definitionCatalog;
   "lib/dollarKeys": typeof lib_dollarKeys;
+  "lib/engineAlertLifecycle": typeof lib_engineAlertLifecycle;
   "lib/engineCapabilities": typeof lib_engineCapabilities;
   "lib/engineInstanceUrl": typeof lib_engineInstanceUrl;
   "lib/engineObsStatus": typeof lib_engineObsStatus;

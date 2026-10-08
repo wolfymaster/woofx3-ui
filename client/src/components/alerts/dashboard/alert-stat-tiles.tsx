@@ -1,6 +1,6 @@
 import { Activity, AlertCircle, CheckCircle2, type LucideIcon, Percent } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { successRate } from "@/lib/alert-status";
+import { successRate, unsettledDetail } from "@/lib/alert-status";
 import { cn } from "@/lib/utils";
 
 export interface AlertTotals {
@@ -8,7 +8,7 @@ export interface AlertTotals {
   completed: number;
   failed: number;
   inFlight: number;
-  /** Never settled and too old to still be on its way; see ALERT_IN_FLIGHT_STALE_MS. */
+  /** Never settled, and marked by the server once it was too old to still be on its way; see ALERT_IN_FLIGHT_STALE_MS. */
   unconfirmed: number;
   skipped: number;
   replayed: number;
@@ -33,7 +33,7 @@ export function AlertStatTiles({ totals, hours, truncated }: AlertStatTilesProps
         icon={Activity}
         label="Alerts"
         value={truncated ? `${totals.total}+` : totals.total}
-        detail={totalDetail(totals, window)}
+        detail={unsettledDetail(totals) ?? window}
         testId="alert-stat-total"
       />
       <Tile icon={CheckCircle2} label="Played" value={totals.completed} detail={window} testId="alert-stat-played" />
@@ -58,16 +58,6 @@ export function AlertStatTiles({ totals, hours, truncated }: AlertStatTilesProps
       />
     </div>
   );
-}
-
-function totalDetail(totals: AlertTotals, window: string): string {
-  if (totals.inFlight > 0) {
-    return `${totals.inFlight} still in flight`;
-  }
-  if (totals.unconfirmed > 0) {
-    return `${totals.unconfirmed} never confirmed`;
-  }
-  return window;
 }
 
 interface TileProps {

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import { alertStatusStyle } from "@/lib/alert-status";
+import { engineAlertStyle } from "@/lib/alert-status";
 import { alertTone, buildTrace, initialSpanId, type RunAlertRecord, type TraceSpan } from "@/lib/run-trace";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -126,7 +126,7 @@ export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
           <Stat
             icon={BellRing}
             label="Overlay alert"
-            value={lastAlert ? alertStatusStyle(lastAlert.status).label : "—"}
+            value={lastAlert ? engineAlertStyle(lastAlert).label : "—"}
             detail={
               alerts.length > 1
                 ? `${alerts.length} published`
@@ -134,7 +134,7 @@ export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
                   ? (lastAlert.error ?? "published")
                   : "none published"
             }
-            bad={lastAlert !== undefined && alertTone(lastAlert.status) === "failure"}
+            bad={lastAlert !== undefined && alertTone(lastAlert) === "failure"}
           />
         </div>
 

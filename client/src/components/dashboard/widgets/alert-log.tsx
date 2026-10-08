@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { isFailureStatus } from "@convex/lib/engineAlertLifecycle";
 import { useQuery } from "convex/react";
 import { BellRing, Loader2 } from "lucide-react";
 import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
@@ -7,7 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import { engineAlertStyle, isFailureStatus } from "@/lib/alert-status";
+import { engineAlertStyle } from "@/lib/alert-status";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ const ALERT_LIMIT = 30;
 interface AlertRow {
   _id: string;
   _creationTime: number;
+  unconfirmedAt?: number;
   status: string;
   error?: string;
   payload: string;
@@ -23,7 +25,7 @@ interface AlertRow {
 }
 
 function AlertLogItem({ alert }: { alert: AlertRow }) {
-  const config = engineAlertStyle(alert, Date.now());
+  const config = engineAlertStyle(alert);
   const StatusIcon = config.icon;
   const target = alertTarget(alert.payload);
   const friendly = alert.error ? describeAlertFailure(alert.error) : null;

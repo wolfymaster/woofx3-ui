@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { isFailureStatus } from "@convex/lib/engineAlertLifecycle";
 import { useQuery } from "convex/react";
 import { BellRing, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -12,11 +13,14 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useInstance } from "@/hooks/use-instance";
+import { useLastLoaded } from "@/hooks/use-last-loaded";
+import { useMinuteClock } from "@/hooks/use-minute-clock";
 import type { AlertMenuSection } from "@/lib/alert-groups";
-import { isFailureStatus } from "@/lib/alert-status";
 
 /** How many dispatches the feed shows. Enough to cover a busy hour without paging. */
 const FEED_LIMIT = 40;
+
+const HOUR_MS = 60 * 60 * 1000;
 
 interface AlertsDashboardProps {
   /** Every alert trigger, in the rail's menu order — see flattenAlertTree. */
@@ -34,7 +38,13 @@ interface AlertsDashboardProps {
 export function AlertsDashboard({ sections }: AlertsDashboardProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const overview = useQuery(api.engineAlerts.overview, instanceId ? { instanceId } : "skip");
+  // The overview's window ends with the current hour. Only the hour is sent, so
+  // the query's arguments change once an hour rather than every minute.
+  const hourStart = Math.floor(useMinuteClock() / HOUR_MS) * HOUR_MS;
+  const overview = useLastLoaded(
+    useQuery(api.engineAlerts.overview, instanceId ? { instanceId, hourStart } : "skip"),
+    instanceId
+  );
   const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: FEED_LIMIT } : "skip");
 
   const [failuresOnly, setFailuresOnly] = useState(false);

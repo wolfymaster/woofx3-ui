@@ -144,6 +144,7 @@ export const runWithSteps = query({
         playedAt: alert.playedAt,
         completedAt: alert.completedAt,
         engineCreatedAt: alert.engineCreatedAt,
+        unconfirmedAt: alert.unconfirmedAt,
       })),
     };
   },

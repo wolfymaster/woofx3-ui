@@ -1,8 +1,15 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { type Infer, v } from "convex/values";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, type QueryCtx, query } from "./_generated/server";
-import { acceptsTransition, type EngineAlertStatus, isEngineAlertStatus, outcomeOf } from "./lib/engineAlertLifecycle";
+import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
+import {
+  ALERT_IN_FLIGHT_STALE_MS,
+  acceptsTransition,
+  normaliseStatus,
+  outcomeOf,
+  UNSETTLED_STATUSES,
+} from "./lib/engineAlertLifecycle";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 const STATUS_VALIDATOR = v.union(
@@ -14,18 +21,9 @@ const STATUS_VALIDATOR = v.union(
   v.literal("timed_out"),
   v.literal("skipped"),
   v.literal("pending"),
-  v.literal("dispatched")
+  v.literal("dispatched"),
+  v.literal("unknown")
 );
-
-function normaliseStatus(raw: string): EngineAlertStatus {
-  if (isEngineAlertStatus(raw)) {
-    return raw;
-  }
-  // Unknown lifecycle value from a future engine version — fall back to "sent"
-  // so the row is still queryable. Convex would reject anything outside the
-  // union; we deliberately coerce here rather than drop the alert.
-  return "sent";
-}
 
 const snapshotValidator = v.object({
   id: v.string(),
@@ -41,6 +39,8 @@ const snapshotValidator = v.object({
   createdAt: v.string(),
   updatedAt: v.string(),
 });
+
+type AlertSnapshot = Infer<typeof snapshotValidator>;
 
 /**
  * Whether the signed-in user may read this instance's alerts.
@@ -102,6 +102,17 @@ const OVERVIEW_MAX_ROWS = 300;
 /**
  * How alerts have gone lately: totals by outcome, and one bucket per hour.
  *
+ * Whether an alert is still on its way comes from the row alone: the staleness
+ * sweep (`markStaleAlerts`) marks an alert unconfirmed on Convex's clock, so no
+ * caller's clock takes part in it.
+ *
+ * Only the window needs a time, and a query cannot read the clock -- it is not
+ * re-run as time passes -- so `hourStart` comes from the caller: the start of
+ * its current hour. Hour-aligned so the arguments change once an hour rather
+ * than with every tick, and so every bucket but the last covers a whole hour
+ * and the chart's labels are wall-clock hours. A skewed caller clock can only
+ * shift which hours the window covers.
+ *
  * Both the window and the buckets are measured on `_creationTime` -- when the
  * webhook landed -- rather than on the engine's own `engineCreatedAt`. One
  * clock means a row can never fall outside the window that selected it. The
@@ -110,18 +121,19 @@ const OVERVIEW_MAX_ROWS = 300;
 export const overview = query({
   args: {
     instanceId: v.id("instances"),
+    hourStart: v.number(),
     windowHours: v.optional(v.number()),
   },
-  handler: async (ctx, { instanceId, windowHours }) => {
+  handler: async (ctx, { instanceId, hourStart, windowHours }) => {
+    if (!Number.isFinite(hourStart) || hourStart % HOUR_MS !== 0) {
+      throw new Error("overview: hourStart must be an epoch-milliseconds time on the hour");
+    }
     if (!(await canRead(ctx, instanceId))) {
       return null;
     }
 
     const hours = Math.min(Math.max(Math.round(windowHours ?? OVERVIEW_HOURS_DEFAULT), 1), OVERVIEW_HOURS_MAX);
-    // Aligned to the hour so every bucket but the last covers a whole one, and
-    // the chart's labels are wall-clock hours rather than offsets from now.
-    const now = Date.now();
-    const since = Math.floor(now / HOUR_MS) * HOUR_MS - (hours - 1) * HOUR_MS;
+    const since = hourStart - (hours - 1) * HOUR_MS;
 
     const rows = await ctx.db
       .query("engineAlerts")
@@ -134,10 +146,18 @@ export const overview = query({
       total: 0,
       failed: 0,
     }));
-    const totals = { total: 0, completed: 0, failed: 0, inFlight: 0, unconfirmed: 0, skipped: 0, replayed: 0 };
+    const totals = {
+      total: 0,
+      completed: 0,
+      failed: 0,
+      inFlight: 0,
+      unconfirmed: 0,
+      skipped: 0,
+      replayed: 0,
+    };
 
     for (const row of rows) {
-      const outcome = outcomeOf(row.status, row._creationTime, now);
+      const outcome = outcomeOf(row);
       totals.total += 1;
       totals[outcome] += 1;
 
@@ -161,41 +181,80 @@ export const overview = query({
   },
 });
 
+/**
+ * Merge one engine snapshot into the instance's mirror of that alert.
+ *
+ * The lookup is scoped to the instance the callback authenticated as, so an
+ * engine can only ever touch its own rows, and a row never changes instance.
+ * `alert.recorded` and the lifecycle callbacks are retried independently and
+ * may arrive in any order, so either one may be the first to create the row,
+ * and `acceptsTransition` drops a snapshot older than the row: it would also
+ * unset lifecycle timestamps the row already holds.
+ */
+async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snapshot: AlertSnapshot): Promise<void> {
+  const status = normaliseStatus(snapshot.status);
+  if (status === "unknown") {
+    console.warn(`engineAlerts: alert ${snapshot.id} has unrecognised status "${snapshot.status}"`);
+  }
+  const lifecycle = {
+    status,
+    engineStatus: status === "unknown" ? snapshot.status : undefined,
+    payload: snapshot.payload,
+    workflowId: snapshot.workflowId || undefined,
+    sourceEventId: snapshot.sourceEventId || undefined,
+    envelopeId: snapshot.envelopeId || undefined,
+    dispatchedAt: snapshot.dispatchedAt,
+    playedAt: snapshot.playedAt,
+    completedAt: snapshot.completedAt,
+    error: snapshot.error,
+    engineUpdatedAt: snapshot.updatedAt,
+  };
+  const now = Date.now();
+
+  // Nothing should write a second row for one alert, but if one exists the
+  // callback still has to land: throwing would fail every retry of it forever.
+  // The oldest row is the one kept up to date, and the index order makes that
+  // the same row on every delivery.
+  const matches = await ctx.db
+    .query("engineAlerts")
+    .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineAlertId", snapshot.id))
+    .take(2);
+  if (matches.length > 1) {
+    console.warn(`engineAlerts: instance ${instanceId} has more than one row for alert ${snapshot.id}`);
+  }
+  const existing = matches[0];
+  if (!existing) {
+    await ctx.db.insert("engineAlerts", {
+      instanceId,
+      engineAlertId: snapshot.id,
+      engineCreatedAt: snapshot.createdAt,
+      createdAt: now,
+      progressedAt: now,
+      ...lifecycle,
+    });
+    return;
+  }
+  if (!acceptsTransition(existing, lifecycle)) {
+    return;
+  }
+  // A redelivery of the snapshot already held is not progress; counting it as
+  // such would keep an alert the engine lost track of in flight indefinitely.
+  // Real progress clears the sweep's unconfirmed mark, so an alert the sweep
+  // gave up on still lands when the engine does report it.
+  const progressed = existing.status !== lifecycle.status || existing.engineUpdatedAt !== lifecycle.engineUpdatedAt;
+  await ctx.db.patch(
+    existing._id,
+    progressed ? { ...lifecycle, progressedAt: now, unconfirmedAt: undefined } : lifecycle
+  );
+}
+
 export const recordFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
     snapshot: snapshotValidator,
   },
   handler: async (ctx, { instanceId, snapshot }) => {
-    const row = {
-      instanceId,
-      engineAlertId: snapshot.id,
-      payload: snapshot.payload,
-      workflowId: snapshot.workflowId || undefined,
-      sourceEventId: snapshot.sourceEventId || undefined,
-      status: normaliseStatus(snapshot.status),
-      envelopeId: snapshot.envelopeId || undefined,
-      dispatchedAt: snapshot.dispatchedAt,
-      playedAt: snapshot.playedAt,
-      completedAt: snapshot.completedAt,
-      error: snapshot.error,
-      engineCreatedAt: snapshot.createdAt,
-      engineUpdatedAt: snapshot.updatedAt,
-      createdAt: Date.now(),
-    };
-
-    const existing = await ctx.db
-      .query("engineAlerts")
-      .withIndex("by_engine_id", (q) => q.eq("engineAlertId", snapshot.id))
-      .first();
-    if (!existing) {
-      await ctx.db.insert("engineAlerts", row);
-      return;
-    }
-    if (!acceptsTransition(existing.status, row.status)) {
-      return;
-    }
-    await ctx.db.patch(existing._id, row);
+    await mergeSnapshot(ctx, instanceId, snapshot);
   },
 });
 
@@ -205,40 +264,58 @@ export const updateFromWebhook = internalMutation({
     snapshot: snapshotValidator,
   },
   handler: async (ctx, { instanceId, snapshot }) => {
-    const existing = await ctx.db
-      .query("engineAlerts")
-      .withIndex("by_engine_id", (q) => q.eq("engineAlertId", snapshot.id))
-      .first();
+    await mergeSnapshot(ctx, instanceId, snapshot);
+  },
+});
 
-    const patch = {
-      status: normaliseStatus(snapshot.status),
-      payload: snapshot.payload,
-      workflowId: snapshot.workflowId || undefined,
-      sourceEventId: snapshot.sourceEventId || undefined,
-      envelopeId: snapshot.envelopeId || undefined,
-      dispatchedAt: snapshot.dispatchedAt,
-      playedAt: snapshot.playedAt,
-      completedAt: snapshot.completedAt,
-      error: snapshot.error,
-      engineUpdatedAt: snapshot.updatedAt,
-    };
+/** Most rows one sweep marks before handing the rest to a fresh transaction. */
+const STALE_SWEEP_BATCH = 200;
 
-    if (existing) {
-      // A snapshot older than the row would also unset the lifecycle
-      // timestamps the row already holds, so it is dropped whole.
-      if (acceptsTransition(existing.status, patch.status)) {
-        await ctx.db.patch(existing._id, patch);
+/**
+ * Mark every unsettled alert that has not moved for `ALERT_IN_FLIGHT_STALE_MS`
+ * as unconfirmed, by setting `unconfirmedAt`.
+ *
+ * Run by a cron rather than worked out when reading, because a query cannot
+ * read the clock and the viewer's clock is not Convex's. The index holds only
+ * unmarked rows at the front, so each run reads exactly the rows that are due.
+ * A row the mirror has no `progressedAt` for is measured from its creation,
+ * the first progress the mirror saw of it.
+ */
+export const markStaleAlerts = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const cutoff = now - ALERT_IN_FLIGHT_STALE_MS;
+    let remaining = STALE_SWEEP_BATCH;
+    for (const status of UNSETTLED_STATUSES) {
+      const measured = await ctx.db
+        .query("engineAlerts")
+        .withIndex("by_unconfirmedAt_and_status_and_progressedAt", (q) =>
+          q.eq("unconfirmedAt", undefined).eq("status", status).gte("progressedAt", 0).lt("progressedAt", cutoff)
+        )
+        .take(remaining);
+      remaining -= measured.length;
+      const unmeasured =
+        remaining > 0
+          ? await ctx.db
+              .query("engineAlerts")
+              .withIndex("by_unconfirmedAt_and_status_and_progressedAt", (q) =>
+                q
+                  .eq("unconfirmedAt", undefined)
+                  .eq("status", status)
+                  .eq("progressedAt", undefined)
+                  .lt("_creationTime", cutoff)
+              )
+              .take(remaining)
+          : [];
+      remaining -= unmeasured.length;
+      for (const row of [...measured, ...unmeasured]) {
+        await ctx.db.patch(row._id, { unconfirmedAt: now });
       }
-    } else {
-      // Lifecycle event arrived before the recorded event — insert the row
-      // with the data we have so the row exists when subsequent events land.
-      await ctx.db.insert("engineAlerts", {
-        instanceId,
-        engineAlertId: snapshot.id,
-        engineCreatedAt: snapshot.createdAt,
-        createdAt: Date.now(),
-        ...patch,
-      });
+      if (remaining === 0) {
+        await ctx.scheduler.runAfter(0, internal.engineAlerts.markStaleAlerts, {});
+        return;
+      }
     }
   },
 });

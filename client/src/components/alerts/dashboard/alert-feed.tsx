@@ -57,7 +57,7 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
 
-  const style = engineAlertStyle(alert, Date.now());
+  const style = engineAlertStyle(alert);
   const StatusIcon = style.icon;
   const target = alertTarget(alert.payload);
   const event = alertEventType(alert.payload);

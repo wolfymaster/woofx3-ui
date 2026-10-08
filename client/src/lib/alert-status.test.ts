@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ALERT_IN_FLIGHT_STALE_MS } from "@convex/lib/engineAlertLifecycle";
-import { alertStatusStyle, engineAlertStyle, isFailureStatus, successRate } from "./alert-status";
+import { alertStatusStyle, engineAlertStyle, successRate, unsettledDetail } from "./alert-status";
 
 describe("alertStatusStyle", () => {
   test("names each lifecycle point in the words the UI uses", () => {
@@ -11,35 +10,35 @@ describe("alertStatusStyle", () => {
   // The engine's status set grows; a build that does not know a value still
   // has to draw the row rather than crash on an undefined descriptor.
   test("falls back for a status this build does not know", () => {
-    expect(alertStatusStyle("teleported")).toBe(alertStatusStyle("sent"));
+    expect(alertStatusStyle("teleported")).toBe(alertStatusStyle("unknown"));
   });
 });
 
 describe("engineAlertStyle", () => {
-  const now = 2 * ALERT_IN_FLIGHT_STALE_MS;
-
   test("draws an alert on its way by its status", () => {
-    expect(engineAlertStyle({ status: "sent", _creationTime: now - 1000 }, now).label).toBe("Sent");
+    expect(engineAlertStyle({ status: "sent" }).label).toBe("Sent");
   });
 
-  test("stops drawing an alert that never settled as still on its way", () => {
-    expect(engineAlertStyle({ status: "playing", _creationTime: 0 }, now).label).toBe("Unconfirmed");
-    expect(engineAlertStyle({ status: "completed", _creationTime: 0 }, now).label).toBe("Played");
+  test("draws an alert the server marked unconfirmed as unconfirmed", () => {
+    expect(engineAlertStyle({ status: "playing", unconfirmedAt: 1 }).label).toBe("Unconfirmed");
+    expect(engineAlertStyle({ status: "completed", unconfirmedAt: 1 }).label).toBe("Played");
+  });
+
+  test("draws a status the mirror could not read as unknown", () => {
+    expect(engineAlertStyle({ status: "unknown" }).label).toBe("Unknown");
   });
 });
 
-describe("isFailureStatus", () => {
-  test("counts a timeout as a failure, as the server's totals do", () => {
-    expect(isFailureStatus("failed")).toBe(true);
-    expect(isFailureStatus("timed_out")).toBe(true);
+describe("unsettledDetail", () => {
+  test("is null when everything settled", () => {
+    expect(unsettledDetail({ inFlight: 0, unconfirmed: 0 })).toBeNull();
   });
 
-  // A skip is an operator's decision and a replay supersedes its row; neither
-  // is the overlay failing to play something.
-  test("does not count a skip or a replay as a failure", () => {
-    expect(isFailureStatus("skipped")).toBe(false);
-    expect(isFailureStatus("replayed")).toBe(false);
-    expect(isFailureStatus("playing")).toBe(false);
+  // One playing alert must not hide the ones the engine lost track of.
+  test("names in-flight and unconfirmed alerts together", () => {
+    expect(unsettledDetail({ inFlight: 1, unconfirmed: 12 })).toBe("1 in flight · 12 never confirmed");
+    expect(unsettledDetail({ inFlight: 0, unconfirmed: 3 })).toBe("3 never confirmed");
+    expect(unsettledDetail({ inFlight: 2, unconfirmed: 0 })).toBe("2 in flight");
   });
 });
 

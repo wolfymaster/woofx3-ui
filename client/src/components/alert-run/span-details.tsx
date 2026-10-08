@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import { alertStatusStyle } from "@/lib/alert-status";
+import { engineAlertStyle } from "@/lib/alert-status";
 import { parsePayload, splitCloudEvent } from "@/lib/payload-fields";
 import type { RunAlertRecord, TraceSpan } from "@/lib/run-trace";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,7 @@ export type SpanSubject =
 export function SpanDetails({ subject }: { subject: SpanSubject }) {
   const { span } = subject;
   const style = TONE_STYLE[span.tone];
-  const statusLabel = subject.kind === "alert" ? alertStatusStyle(subject.alert.status).label : span.status;
+  const statusLabel = subject.kind === "alert" ? engineAlertStyle(subject.alert).label : span.status;
   const timing = [
     span.startMs === null ? null : `starts at +${formatDuration(span.startMs)}`,
     span.startMs !== null && span.endMs !== null ? `took ${formatDuration(span.endMs - span.startMs)}` : null,

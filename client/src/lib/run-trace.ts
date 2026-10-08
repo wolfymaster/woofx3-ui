@@ -1,4 +1,4 @@
-import { isFailureStatus } from "./alert-status";
+import { isEngineAlertStatus, outcomeOf } from "@convex/lib/engineAlertLifecycle";
 import { parseEngineTime, type Timeline, type Tone } from "./workflow-run-timeline";
 
 /**
@@ -48,6 +48,8 @@ export interface RunAlertRecord {
   playedAt?: string;
   completedAt?: string;
   engineCreatedAt: string;
+  /** Set once the server's staleness sweep gave up on the alert; see engineAlertLifecycle.ts. */
+  unconfirmedAt?: number;
 }
 
 export interface Trace {
@@ -71,21 +73,25 @@ const TRIGGER_WINDOW_MS = 60_000;
 
 const TARGET_TICK_COUNT = 5;
 
-/** Map an alert's lifecycle status to how its span should look. */
-export function alertTone(status: string): Tone {
-  if (isFailureStatus(status)) {
-    return "failure";
+/**
+ * How an alert's span should look, counted the way the Alerts dashboard counts
+ * it: an alert that never settled stops reading as running once the dashboard
+ * would call it unconfirmed.
+ */
+export function alertTone(alert: { status: string; unconfirmedAt?: number }): Tone {
+  if (!isEngineAlertStatus(alert.status)) {
+    return "neutral";
   }
-  switch (status) {
+  switch (outcomeOf({ status: alert.status, unconfirmedAt: alert.unconfirmedAt })) {
+    case "failed":
+      return "failure";
     case "completed":
     case "replayed":
       return "success";
-    case "sent":
-    case "pending":
-    case "dispatched":
-    case "playing":
+    case "inFlight":
       return "running";
-    default:
+    case "unconfirmed":
+    case "skipped":
       return "neutral";
   }
 }
@@ -159,7 +165,7 @@ export function buildTrace(
   }
 
   for (const alert of alerts) {
-    const tone = alertTone(alert.status);
+    const tone = alertTone(alert);
     const start = parseEngineTime(alert.dispatchedAt) ?? parseEngineTime(alert.engineCreatedAt);
     const played = parseEngineTime(alert.playedAt);
     raw.push({
