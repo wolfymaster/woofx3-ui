@@ -31,7 +31,7 @@ interface ModuleOAuthEngineApi extends EngineApi {
   completeModuleOAuth(
     moduleId: string,
     integration: string,
-    authorization: { code: string; codeVerifier: string; redirectUri: string; clientId?: string }
+    authorization: { code: string; codeVerifier: string; redirectUri: string; clientId?: string; tokenUrl?: string }
   ): Promise<{ connected: true; scope: string[] }>;
 }
 
@@ -182,7 +182,9 @@ export type FinishModuleOAuthResult =
  *
  * The app is chosen again first, so a module updated while the streamer was
  * on the provider's page cannot exchange an authorization of woofx3's app at
- * endpoints the app no longer fits.
+ * endpoints the app no longer fits. The engine is told the `tokenUrl` that
+ * choice was made for and refuses the exchange if the module changed again
+ * since.
  */
 export const finish = action({
   args: { code: v.string() },
@@ -221,6 +223,7 @@ export const finish = action({
         codeVerifier,
         redirectUri,
         clientId,
+        tokenUrl: resolved.declared.tokenUrl,
       });
     } catch (err) {
       console.error("[module-oauth] the engine could not finish the connect", String(err));
