@@ -10,7 +10,7 @@ function widget(id: string, x: number, y: number, width: number, height: number)
     position: { x, y },
     size: { width, height },
     rotation: 0,
-    opacity: 100,
+    opacity: 1,
     zIndex: 1,
     locked: false,
     visible: true,

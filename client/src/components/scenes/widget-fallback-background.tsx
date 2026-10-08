@@ -24,7 +24,7 @@ export function WidgetFallbackBackground({ widget, label, children }: WidgetFall
     top: widget.position.y,
     width: widget.size.width,
     height: widget.size.height,
-    opacity: widget.opacity / 100,
+    opacity: widget.opacity,
   };
   if (children) {
     return (

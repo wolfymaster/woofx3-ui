@@ -23,7 +23,7 @@ function widget(id: string, extra: Partial<Widget> = {}): Widget {
     position: { x: 0, y: 0 },
     size: { width: 200, height: 100 },
     rotation: 0,
-    opacity: 100,
+    opacity: 1,
     zIndex: 1,
     locked: false,
     visible: true,

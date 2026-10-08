@@ -53,7 +53,7 @@ export function setupOverlayWidgets(alertWidget: WidgetCatalogEntry | undefined)
       position: { x: 0, y: 0 },
       size: { ...SETUP_OVERLAY_SIZE },
       rotation: 0,
-      opacity: 100,
+      opacity: 1,
       zIndex: 1,
       locked: false,
       visible: true,

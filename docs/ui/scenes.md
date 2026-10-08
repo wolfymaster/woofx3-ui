@@ -131,7 +131,7 @@ interface Widget {
   position: { x: number; y: number };
   size: { width: number; height: number };
   rotation: number;
-  opacity: number;               // 0-100
+  opacity: number;               // 0 (transparent) to 1 (opaque)
   zIndex: number;
   locked: boolean;
   visible: boolean;
