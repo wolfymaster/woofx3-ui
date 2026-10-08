@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { isFailureStatus } from "@convex/lib/engineAlertLifecycle";
 import { useQuery } from "convex/react";
 import { BellRing, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -12,8 +13,9 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useInstance } from "@/hooks/use-instance";
+import { useLastLoaded } from "@/hooks/use-last-loaded";
+import { useMinuteClock } from "@/hooks/use-minute-clock";
 import type { AlertMenuSection } from "@/lib/alert-groups";
-import { isFailureStatus } from "@/lib/alert-status";
 
 /** How many dispatches the feed shows. Enough to cover a busy hour without paging. */
 const FEED_LIMIT = 40;
@@ -34,7 +36,13 @@ interface AlertsDashboardProps {
 export function AlertsDashboard({ sections }: AlertsDashboardProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const overview = useQuery(api.engineAlerts.overview, instanceId ? { instanceId } : "skip");
+  // One clock for the tiles and the feed, so an alert turns unconfirmed in both
+  // at once.
+  const now = useMinuteClock();
+  const overview = useLastLoaded(
+    useQuery(api.engineAlerts.overview, instanceId ? { instanceId, now } : "skip"),
+    instanceId
+  );
   const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: FEED_LIMIT } : "skip");
 
   const [failuresOnly, setFailuresOnly] = useState(false);
@@ -133,7 +141,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
                 No failures in the last {alerts.length} alerts. Nothing to diagnose.
               </p>
             ) : (
-              <AlertFeed instanceId={instanceId} alerts={shown} eventNames={eventNames} />
+              <AlertFeed instanceId={instanceId} alerts={shown} eventNames={eventNames} now={now} />
             )}
           </Card>
         </div>

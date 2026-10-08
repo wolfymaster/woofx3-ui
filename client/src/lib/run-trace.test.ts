@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { ALERT_IN_FLIGHT_STALE_MS } from "@convex/lib/engineAlertLifecycle";
 import { alertTone, axisTicks, buildTrace, initialSpanId } from "./run-trace";
 import { buildTimeline } from "./workflow-run-timeline";
 
@@ -38,10 +39,13 @@ const ALERT = {
   playedAt: "2026-09-17T08:49:59.000Z",
   completedAt: "2026-09-17T08:50:03.000Z",
   engineCreatedAt: "2026-09-17T08:49:58.400Z",
+  progressedAt: Date.parse("2026-09-17T08:49:58.500Z"),
 };
 
+const NOW = Date.parse("2026-09-17T08:51:00.000Z");
+
 function trace(run = RUN, steps = STEPS, alerts = [ALERT]) {
-  return buildTrace(run, buildTimeline(run, steps), alerts);
+  return buildTrace(run, buildTimeline(run, steps), alerts, NOW);
 }
 
 describe("buildTrace", () => {
@@ -101,7 +105,7 @@ describe("buildTrace", () => {
 
   test("survives a run with nothing timed", () => {
     const bare = { engineRunId: "r", workflowId: "w", status: "completed" };
-    const result = buildTrace(bare, buildTimeline(bare, []), []);
+    const result = buildTrace(bare, buildTimeline(bare, []), [], NOW);
     expect(result.originMs).toBeNull();
     expect(result.spanMs).toBe(1);
     expect(result.spans.map((span) => span.id)).toEqual(["run"]);
@@ -134,10 +138,30 @@ describe("initialSpanId", () => {
 });
 
 describe("alertTone", () => {
+  const at = (status: string, progressedAt = NOW) => alertTone({ status, progressedAt }, NOW);
+
   test("follows the alert lifecycle", () => {
-    expect(alertTone("completed")).toBe("success");
-    expect(alertTone("timed_out")).toBe("failure");
-    expect(alertTone("playing")).toBe("running");
-    expect(alertTone("skipped")).toBe("neutral");
+    expect(at("completed")).toBe("success");
+    expect(at("timed_out")).toBe("failure");
+    expect(at("playing")).toBe("running");
+    expect(at("skipped")).toBe("neutral");
+  });
+
+  // The dashboard counts such an alert as unconfirmed; the trace must not keep
+  // drawing it as still running.
+  test("stops drawing an alert that never settled as running", () => {
+    expect(at("playing", NOW - ALERT_IN_FLIGHT_STALE_MS - 1)).toBe("neutral");
+  });
+
+  test("draws a status this build does not know as neutral", () => {
+    expect(at("unknown")).toBe("neutral");
+    expect(at("teleported")).toBe("neutral");
+  });
+
+  test("keeps a running alert's span open", () => {
+    const running = { ...ALERT, status: "playing", completedAt: undefined };
+    expect(trace(RUN, STEPS, [running]).spans.at(-1)?.open).toBe(true);
+    const lost = { ...running, progressedAt: NOW - ALERT_IN_FLIGHT_STALE_MS - 1 };
+    expect(trace(RUN, STEPS, [lost]).spans.at(-1)?.open).toBe(false);
   });
 });

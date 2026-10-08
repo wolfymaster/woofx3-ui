@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { lastProgressAt } from "@convex/lib/engineAlertLifecycle";
 import { useAction } from "convex/react";
 import { BellRing, Loader2, RotateCcw, ScrollText } from "lucide-react";
 import { useState } from "react";
@@ -21,10 +22,12 @@ interface AlertFeedProps {
   alerts: Doc<"engineAlerts">[];
   /** CloudEvent type → the trigger's own name, so a row reads "Follow", not "channel.follow". */
   eventNames: Map<string, string>;
+  /** A ticking clock (`useMinuteClock`), shared with the tiles above the feed. */
+  now: number;
 }
 
 /** Recent dispatches, newest first, each replayable. */
-export function AlertFeed({ instanceId, alerts, eventNames }: AlertFeedProps) {
+export function AlertFeed({ instanceId, alerts, eventNames, now }: AlertFeedProps) {
   if (alerts.length === 0) {
     return (
       <div className="flex flex-col items-center px-4 py-12 text-center" data-testid="alert-feed-empty">
@@ -40,7 +43,7 @@ export function AlertFeed({ instanceId, alerts, eventNames }: AlertFeedProps) {
   return (
     <ul className="divide-y divide-border" data-testid="alert-feed">
       {alerts.map((alert) => (
-        <AlertFeedRow key={alert._id} instanceId={instanceId} alert={alert} eventNames={eventNames} />
+        <AlertFeedRow key={alert._id} instanceId={instanceId} alert={alert} eventNames={eventNames} now={now} />
       ))}
     </ul>
   );
@@ -50,14 +53,15 @@ interface AlertFeedRowProps {
   instanceId: Id<"instances">;
   alert: Doc<"engineAlerts">;
   eventNames: Map<string, string>;
+  now: number;
 }
 
-function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
+function AlertFeedRow({ instanceId, alert, eventNames, now }: AlertFeedRowProps) {
   const replay = useAction(api.alertActions.replay);
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
 
-  const style = engineAlertStyle(alert, Date.now());
+  const style = engineAlertStyle(alert.status, lastProgressAt(alert), now);
   const StatusIcon = style.icon;
   const target = alertTarget(alert.payload);
   const event = alertEventType(alert.payload);

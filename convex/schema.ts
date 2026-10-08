@@ -1519,8 +1519,12 @@ export default defineSchema({
       v.literal("timed_out"),
       v.literal("skipped"),
       v.literal("pending"),
-      v.literal("dispatched")
+      v.literal("dispatched"),
+      v.literal("unknown")
     ),
+    // The engine's raw status when it is one this build does not know and
+    // `status` holds "unknown"; see normaliseStatus in lib/engineAlertLifecycle.ts.
+    engineStatus: v.optional(v.string()),
     envelopeId: v.optional(v.string()),
     dispatchedAt: v.optional(v.string()),
     playedAt: v.optional(v.string()),
@@ -1529,9 +1533,14 @@ export default defineSchema({
     engineCreatedAt: v.string(),
     engineUpdatedAt: v.string(),
     createdAt: v.number(), // Convex-side ingest time
+    // When the mirror last saw the status or the engine's snapshot change, on
+    // Convex's clock. The in-flight staleness bound is measured from it.
+    progressedAt: v.optional(v.number()),
   })
     .index("by_instance", ["instanceId"])
-    .index("by_engine_id", ["engineAlertId"])
+    // Scoped to the instance: alert ids come from each engine, and an engine
+    // must never reach another instance's rows by naming one of their ids.
+    .index("by_engine_id", ["instanceId", "engineAlertId"])
     .index("by_instance_status", ["instanceId", "status"])
     // The alerts one run published, for that run's trace.
     .index("by_instance_workflow", ["instanceId", "workflowId"]),

@@ -1,13 +1,15 @@
 import { api } from "@convex/_generated/api";
+import { isFailureStatus, lastProgressAt } from "@convex/lib/engineAlertLifecycle";
 import { useQuery } from "convex/react";
 import { BellRing, Loader2 } from "lucide-react";
 import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useInstance } from "@/hooks/use-instance";
+import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import { engineAlertStyle, isFailureStatus } from "@/lib/alert-status";
+import { engineAlertStyle } from "@/lib/alert-status";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
@@ -16,14 +18,15 @@ const ALERT_LIMIT = 30;
 interface AlertRow {
   _id: string;
   _creationTime: number;
+  progressedAt?: number;
   status: string;
   error?: string;
   payload: string;
   engineCreatedAt: string;
 }
 
-function AlertLogItem({ alert }: { alert: AlertRow }) {
-  const config = engineAlertStyle(alert, Date.now());
+function AlertLogItem({ alert, now }: { alert: AlertRow; now: number }) {
+  const config = engineAlertStyle(alert.status, lastProgressAt(alert), now);
   const StatusIcon = config.icon;
   const target = alertTarget(alert.payload);
   const friendly = alert.error ? describeAlertFailure(alert.error) : null;
@@ -65,6 +68,7 @@ export function AlertLogWidget() {
   const { instance } = useInstance();
   const instanceId = instance?._id;
   const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: ALERT_LIMIT } : "skip");
+  const now = useMinuteClock();
 
   const failures = alerts?.filter((alert) => isFailureStatus(alert.status)).length ?? 0;
 
@@ -98,7 +102,7 @@ export function AlertLogWidget() {
               </p>
             </div>
           ) : (
-            alerts.map((alert) => <AlertLogItem key={alert._id} alert={alert} />)
+            alerts.map((alert) => <AlertLogItem key={alert._id} alert={alert} now={now} />)
           )}
         </div>
       </ScrollArea>

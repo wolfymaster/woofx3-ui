@@ -1,4 +1,4 @@
-import { isFailureStatus } from "./alert-status";
+import { isEngineAlertStatus, outcomeOf } from "@convex/lib/engineAlertLifecycle";
 import { parseEngineTime, type Timeline, type Tone } from "./workflow-run-timeline";
 
 /**
@@ -48,6 +48,8 @@ export interface RunAlertRecord {
   playedAt?: string;
   completedAt?: string;
   engineCreatedAt: string;
+  /** The row's `lastProgressAt`, on Convex's clock; see engineAlertLifecycle.ts. */
+  progressedAt: number;
 }
 
 export interface Trace {
@@ -71,21 +73,26 @@ const TRIGGER_WINDOW_MS = 60_000;
 
 const TARGET_TICK_COUNT = 5;
 
-/** Map an alert's lifecycle status to how its span should look. */
-export function alertTone(status: string): Tone {
-  if (isFailureStatus(status)) {
-    return "failure";
+/**
+ * How an alert's span should look, counted the way the Alerts dashboard counts
+ * it: an alert that never settled stops reading as running once the dashboard
+ * would call it unconfirmed. `now` is a ticking clock (`useMinuteClock`).
+ */
+export function alertTone(alert: { status: string; progressedAt: number }, now: number): Tone {
+  if (!isEngineAlertStatus(alert.status)) {
+    return "neutral";
   }
-  switch (status) {
+  switch (outcomeOf(alert.status, alert.progressedAt, now)) {
+    case "failed":
+      return "failure";
     case "completed":
     case "replayed":
       return "success";
-    case "sent":
-    case "pending":
-    case "dispatched":
-    case "playing":
+    case "inFlight":
       return "running";
-    default:
+    case "unconfirmed":
+    case "skipped":
+    case "unknown":
       return "neutral";
   }
 }
@@ -100,7 +107,8 @@ interface RawSpan extends Omit<TraceSpan, "startMs" | "endMs" | "marks"> {
 export function buildTrace(
   run: { engineRunId: string; status: string; startedAt?: string; completedAt?: string },
   timeline: Timeline,
-  alerts: readonly RunAlertRecord[]
+  alerts: readonly RunAlertRecord[],
+  now: number
 ): Trace {
   const runStart = parseEngineTime(run.startedAt);
   const runEnd = parseEngineTime(run.completedAt);
@@ -159,7 +167,7 @@ export function buildTrace(
   }
 
   for (const alert of alerts) {
-    const tone = alertTone(alert.status);
+    const tone = alertTone(alert, now);
     const start = parseEngineTime(alert.dispatchedAt) ?? parseEngineTime(alert.engineCreatedAt);
     const played = parseEngineTime(alert.playedAt);
     raw.push({

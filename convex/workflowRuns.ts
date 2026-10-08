@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { lastProgressAt } from "./lib/engineAlertLifecycle";
 import { hasRecordedTriggerEvent } from "./lib/runTriggerEvent";
 import { getInstanceMembership } from "./lib/teamAccess";
 
@@ -144,6 +145,7 @@ export const runWithSteps = query({
         playedAt: alert.playedAt,
         completedAt: alert.completedAt,
         engineCreatedAt: alert.engineCreatedAt,
+        progressedAt: lastProgressAt(alert),
       })),
     };
   },

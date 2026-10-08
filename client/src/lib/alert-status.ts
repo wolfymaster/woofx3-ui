@@ -18,6 +18,7 @@ export const ALERT_STATUS: Record<string, { icon: LucideIcon; color: string; bg:
   failed: { icon: AlertCircle, color: "text-red-500", bg: "bg-red-500/10", label: "Failed" },
   timed_out: { icon: AlertCircle, color: "text-amber-500", bg: "bg-amber-500/10", label: "Timed out" },
   skipped: { icon: SkipForward, color: "text-gray-500", bg: "bg-gray-500/10", label: "Skipped" },
+  unknown: { icon: HelpCircle, color: "text-gray-500", bg: "bg-gray-500/10", label: "Unknown" },
 };
 
 /** The descriptor for a status, falling back to `sent` for one this build does not know. */
@@ -33,27 +34,19 @@ const UNCONFIRMED_STYLE = {
 };
 
 /**
- * The descriptor for one alert row, which differs from its status's when the
- * alert never settled: a row the overview counts as unconfirmed must not keep
+ * The descriptor for one alert, which differs from its status's when the alert
+ * never settled: a row the overview counts as unconfirmed must not keep
  * spinning in the feed as though it were still on its way.
+ *
+ * `progressedAt` is the alert's `lastProgressAt`, and `now` a ticking clock
+ * (`useMinuteClock`) so the row turns unconfirmed while it is on screen.
  */
-export function engineAlertStyle(alert: { status: string; _creationTime: number }, now: number) {
-  const style = alertStatusStyle(alert.status);
-  if (!isEngineAlertStatus(alert.status)) {
+export function engineAlertStyle(status: string, progressedAt: number, now: number) {
+  const style = alertStatusStyle(status);
+  if (!isEngineAlertStatus(status)) {
     return style;
   }
-  return outcomeOf(alert.status, alert._creationTime, now) === "unconfirmed" ? UNCONFIRMED_STYLE : style;
-}
-
-/**
- * Whether an alert ended badly.
- *
- * Must agree with `outcomeOf` in convex/lib/engineAlertLifecycle.ts: the dashboard counts
- * failures there and filters for them here, and the two disagreeing would show
- * a tile saying three failures above a list holding two.
- */
-export function isFailureStatus(status: string): boolean {
-  return status === "failed" || status === "timed_out";
+  return outcomeOf(status, progressedAt, now) === "unconfirmed" ? UNCONFIRMED_STYLE : style;
 }
 
 /** The fraction of settled alerts that played, or null when none have settled. */
@@ -63,4 +56,20 @@ export function successRate(totals: { completed: number; failed: number }): numb
     return null;
   }
   return totals.completed / settled;
+}
+
+/**
+ * What in a window of alerts has not settled, or null when everything has.
+ * In-flight and unconfirmed alerts are both named when both exist: one playing
+ * alert must not hide a dozen the engine lost track of.
+ */
+export function unsettledDetail(totals: { inFlight: number; unconfirmed: number }): string | null {
+  const parts: string[] = [];
+  if (totals.inFlight > 0) {
+    parts.push(`${totals.inFlight} in flight`);
+  }
+  if (totals.unconfirmed > 0) {
+    parts.push(`${totals.unconfirmed} never confirmed`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
