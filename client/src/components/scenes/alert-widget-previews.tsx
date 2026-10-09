@@ -25,10 +25,9 @@ export function alertWidgetPreview(widget: Widget): ReactNode {
   }
 }
 
-/** The Text widget's look: `{primary}…{primary}` segments shown in the highlight color, never as markup. */
+/** The Text widget's look: its text as written, never as markup, with any `{primary}` marker dropped. */
 export function TextWidgetPreview({ settings }: { settings: Record<string, unknown> }) {
   const text = typeof settings.text === "string" ? settings.text : "";
-  const highlight = stringOr(settings.highlightColor, "#ec6758");
   const align = ALIGNMENTS.find((a) => a === settings.align) ?? "center";
   return (
     <div className="w-full h-full flex items-center p-2 box-border">
@@ -43,12 +42,7 @@ export function TextWidgetPreview({ settings }: { settings: Record<string, unkno
           textShadow: "0 2px 8px rgba(0, 0, 0, 0.7)",
         }}
       >
-        {text.split("{primary}").map((segment, i) => (
-          // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and never reorder
-          <span key={i} style={i % 2 === 1 ? { color: highlight } : undefined}>
-            {segment}
-          </span>
-        ))}
+        {text.split("{primary}").join("")}
       </div>
     </div>
   );
