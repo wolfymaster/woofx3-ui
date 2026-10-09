@@ -41,6 +41,10 @@ Curated sets of workflows and chat commands (raid welcome, follower thanks, sub 
 - A full-width screen with a back link, wrapping **`BasicWorkflowEditor`**: a step-based wizard driven by presets (`client/src/lib/workflow-presets.ts`) and `useWorkflowCatalog` for trigger/action definitions.
 - On save it navigates to the new workflow's editor.
 
+## Action picker
+
+`components/workflows/action-picker-dialog.tsx` is where an action is chosen, from the workflow builder and from an alert's trigger card. `lib/action-menu.ts` decides where each action is listed, from its first `taxonomy` entry: the first segment is the section in the left rail, the second the heading inside it (`platform.obs` lists under **Platforms › OBS**, `system.counter` under **Built-in › Counters**). The engine's own `system` family leads as **Built-in**. An action with no taxonomy, or a malformed first entry, is listed under its module as a section of its own, so an engine that sends no action taxonomy shows one section per module. Search matches name, then description, then the section, heading or module, across every section; the rail counts each section's matches. The manifest side is documented in the engine's `docs/barkloader/modules.md` (Taxonomy).
+
 ## Editor (`/stream/workflows/:id`)
 
 - A header bar (back, click-to-rename title, enabled badge, **Save**, and a kebab with *View JSON* and *Delete*) above **`StepListEditor`**, which reads the workflow id from the route itself.

@@ -11,7 +11,7 @@ interface StepTilesProps {
 /**
  * Every action in the catalog as a tile, always on show, so adding a step is one click
  * and never a menu to open first. Ordered as the action picker orders them: the
- * engine's own actions, then each module's.
+ * engine's own actions, then each section in turn.
  */
 export function StepTiles({ actionPresets, onAdd }: StepTilesProps) {
   const ordered = useMemo(() => flattenActionMenu(actionMenuGroups(actionPresets, "")), [actionPresets]);
