@@ -1,7 +1,7 @@
-import { QUEUE_KIND } from "@convex/lib/resourceKinds";
 import { ChevronsRight, ListOrdered, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
-import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
+import type { KindView } from "@/components/resources/kind-views";
+import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,21 +14,14 @@ import {
   queueEntries,
 } from "@/lib/resource-values";
 
-const BASE_PATH = "/stream/queues";
-
-export default function Queues() {
-  return (
-    <ResourceKindPage
-      kind={QUEUE_KIND}
-      title="Queues"
-      description="Lines your viewers join: games with viewers, song requests, shoutouts. Work through them here, from a chat command, or from any workflow."
-      icon={ListOrdered}
-      basePath={BASE_PATH}
-      railValue={({ value }) => queueEntries(value).length.toLocaleString()}
-      detail={(props) => <QueuePanel {...props} />}
-    />
-  );
-}
+/** A woofx3 queue: its entries in order, worked through with the queue's own actions. */
+export const queueView: KindView = {
+  description:
+    "Lines your viewers join: games with viewers, song requests, shoutouts. Work through them here, from a chat command, or from any workflow.",
+  icon: ListOrdered,
+  railValue: ({ value }) => queueEntries(value).length.toLocaleString(),
+  detail: (props) => <QueuePanel {...props} />,
+};
 
 /** The queue's entries in order and what can be done to them, through the queue's own actions. */
 function QueuePanel(props: ResourceDetailProps) {
