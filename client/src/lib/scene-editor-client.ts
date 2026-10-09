@@ -46,22 +46,31 @@ import {
  * edit made before the click, after a reconnect the resent ones too, so a
  * publish includes the last change made before it; with the draft locked
  * there is nothing made after it to order. The engine's answer settles it:
- * `published` or `discarded`, or `error`, reported as a failure. The engine's
- * `error` names neither the message nor an id, so nothing else that could
- * fail is in flight while the command is: it also waits for the published
- * scene's in-flight edit, and live edits made while it is pending are held
- * (and shown) until the answer. A socket that drops after the command was
- * sent and before its answer leaves only the engine knowing whether it ran:
- * it is not sent again but reported as uncertain, and editing unlocks. One
- * still waiting to be sent when the socket drops is sent after the reconnect.
- * An edit made before the click that the engine refuses drops the command
- * (reported), rather than publishing a draft without it.
+ * `published` or `discarded`, or an `error` naming the command, reported as
+ * a failure. An `error` naming a submit is that op's refusal. An engine that
+ * names neither leaves the error to be attributed by what is in flight, so
+ * nothing else that could fail is in flight while the command is: it also
+ * waits for the published scene's in-flight edit, and live edits made while
+ * it is pending are held (and shown) until the answer, as is a resend of
+ * them after a resync. A socket that drops after the command was sent and
+ * before its answer leaves only the engine knowing whether it ran: it is not
+ * sent again but reported as uncertain, and editing unlocks. One still
+ * waiting to be sent when the socket drops is sent after the reconnect. An
+ * edit made before the click that the engine refuses drops the command
+ * (reported), rather than publishing a draft without it. Neither is taken
+ * while the engine will not open a session or the scene is gone.
+ *
+ * A scene the engine does not have (`error` `not_found` on open) is gone:
+ * whatever is pending is reported as such and dropped, and this stops
+ * reconnecting (status `gone`).
  *
  * `stop` keeps the session going (reconnecting at once, then a few more times
  * with a short backoff, if it has to) until the edits made before it are
  * confirmed and any Publish or Discard is answered, so leaving the editor
  * loses none of them; whatever is still waiting when that runs out is
- * reported. While it drains it shows the others no selection and keeps
+ * reported. A command already sent on an open socket is waited on longer
+ * (`commandAnswerMs`): the engine has it, and only its answer says whether
+ * it ran. While it drains it shows the others no selection and keeps
  * following the server, reporting nothing but those reports. `abandon` closes
  * at once instead, for a scene that no longer exists.
  */
@@ -85,12 +94,15 @@ export type DraftCommand = "publish" | "discard";
  * answer; it may have run. `undelivered`: the session closed first, with this
  * command not yet sent and, when `edits` is true, edits made in this editor
  * that the engine never confirmed (some may have arrived with the answer lost).
+ * `gone`: the engine no longer has the scene; this command, and these edits
+ * when `edits` is true, were dropped with it.
  */
 export type DroppedWork =
   | { reason: "failed" | "refused" | "uncertain"; command: DraftCommand }
-  | { reason: "undelivered"; command: DraftCommand | null; edits: boolean };
+  | { reason: "undelivered"; command: DraftCommand | null; edits: boolean }
+  | { reason: "gone"; command: DraftCommand | null; edits: boolean };
 
-export type EditorStatus = "connecting" | "ready" | "reconnecting" | "unavailable" | "closed";
+export type EditorStatus = "connecting" | "ready" | "reconnecting" | "unavailable" | "gone" | "closed";
 
 /** Another editor of the scene: who, and the widget it has selected. */
 export interface EditorPresence {
@@ -131,10 +143,21 @@ export interface SceneEditorClientOptions {
    * `DRAIN_ATTEMPT_MS` (or this, if shorter) from when it began.
    */
   drainMs?: number;
+  /**
+   * How long after `stop` a drain keeps waiting for the answer to a Publish
+   * or Discard it sent on a socket that is still open, past `drainMs`.
+   */
+  commandAnswerMs?: number;
   /** The session closed: stopped with nothing to wait for, drained, timed out, or abandoned. */
   onClose?: () => void;
   /** See `DroppedWork`. Called after `stop` too, while the session drains. */
   onDropped?: (dropped: DroppedWork) => void;
+  /**
+   * The Publish or Discard waiting for its answer changed. Called after
+   * `stop` too, unlike `onChange`, so a draining session's command can lock
+   * the scene's draft in another editor.
+   */
+  onCommandChange?: (command: DraftCommand | null) => void;
 }
 
 interface Pending {
@@ -160,6 +183,16 @@ interface VersionState {
    * the snapshot rather than sent on its own.
    */
   resyncing: boolean;
+  /**
+   * `inflight` is unconfirmed edits resent after a reconnect or resync. It is
+   * not shown until the server has transformed it against what was missed.
+   */
+  resent: boolean;
+  /**
+   * `inflight` is such a resend that a Publish or Discard holds (see
+   * `advance`): not sent yet, it goes once the command is answered.
+   */
+  resendHeld: boolean;
 }
 
 interface PendingCommand {
@@ -185,6 +218,9 @@ const DRAIN_RETRY_DELAYS_MS = [250, 500, 1000, 2000];
  */
 const DRAIN_ATTEMPT_MS = 3000;
 
+/** The default `commandAnswerMs`. */
+const COMMAND_ANSWER_MS = 15_000;
+
 let opCounter = 0;
 function nextOpId(): string {
   opCounter += 1;
@@ -208,9 +244,6 @@ export class SceneEditorClient {
   private draining = false;
   /** The versions whose snapshot this socket has delivered; both are needed before a command is sent. */
   private readonly synced = new Set<SceneVersion>();
-  /** The op id resent after a reconnect: it is not shown until the server
-   *  has transformed it against what was missed. */
-  private resent: string | null = null;
   private readonly flushMs: number;
   /** This editor's own presence, announced again after a reconnect. */
   private presence: EditorPresence | null = null;
@@ -222,6 +255,9 @@ export class SceneEditorClient {
   /** `unsaved` as last reported, to report only when it changes. */
   private reportedUnsaved = false;
   private readonly drainMs: number;
+  private readonly commandAnswerMs: number;
+  /** While draining: when `stop` began it. */
+  private drainStartedAt = 0;
   /** While draining: when the drain stops starting attempts (see `drainMs`). */
   private drainDeadline = 0;
   /** When the current connection attempt began: its `connect`, or `stop` for the socket it found. */
@@ -232,6 +268,7 @@ export class SceneEditorClient {
     this.version = options.version ?? "draft";
     this.flushMs = options.flushMs ?? 200;
     this.drainMs = options.drainMs ?? 5000;
+    this.commandAnswerMs = options.commandAnswerMs ?? COMMAND_ANSWER_MS;
   }
 
   start(): void {
@@ -257,15 +294,16 @@ export class SceneEditorClient {
       this.flushTimer = null;
     }
     // "unavailable" is the engine declining to open a session at all, and
-    // nothing retries from there: there is nothing to wait for.
-    if (!this.hasPending() || this.status === "unavailable") {
+    // nothing retries from there or from "gone": there is nothing to wait for.
+    if (!this.hasPending() || this.status === "unavailable" || this.status === "gone") {
       this.close();
       return;
     }
     this.draining = true;
     this.drainRetries = 0;
-    this.attemptStartedAt = Date.now();
-    this.drainDeadline = this.attemptStartedAt + this.drainMs;
+    this.drainStartedAt = Date.now();
+    this.attemptStartedAt = this.drainStartedAt;
+    this.drainDeadline = this.drainStartedAt + this.drainMs;
     this.drainTimer = setTimeout(() => this.endDrainAttempts(), this.drainMs);
     if (this.retryTimer !== null) {
       // The backoff may run past the drain: reconnect now instead.
@@ -315,6 +353,11 @@ export class SceneEditorClient {
     return this.hasUnconfirmed() || this.command !== null;
   }
 
+  /** The Publish or Discard waiting for the engine's answer. */
+  pendingCommand(): DraftCommand | null {
+    return this.command?.command ?? null;
+  }
+
   /** Whether the session is still connecting and processing: running, or draining after `stop`. */
   private get active(): boolean {
     return !this.stopped || this.draining;
@@ -324,11 +367,19 @@ export class SceneEditorClient {
    * The editor changed the document it shows, read from `version`; it is
    * sent within `flushMs`. A document read from the version this is not
    * editing, or from one this has no snapshot of yet, is dropped (see the
-   * class comment), as is one of the draft while a Publish or Discard waits.
+   * class comment), as is one of the draft while a Publish or Discard waits,
+   * and every one once the scene is gone. Returns whether it was taken: the
+   * editor shows the session's document again for one that was not.
    */
-  edit(doc: SceneDocument, version: SceneVersion): void {
-    if (this.stopped || version !== this.version || !this.versions[version] || this.draftLocked(version)) {
-      return;
+  edit(doc: SceneDocument, version: SceneVersion): boolean {
+    if (
+      this.stopped ||
+      this.status === "gone" ||
+      version !== this.version ||
+      !this.versions[version] ||
+      this.draftLocked(version)
+    ) {
+      return false;
     }
     this.desired = doc;
     if (this.flushTimer === null) {
@@ -337,6 +388,7 @@ export class SceneEditorClient {
         this.flush();
       }, this.flushMs);
     }
+    return true;
   }
 
   /**
@@ -376,9 +428,9 @@ export class SceneEditorClient {
     this.emit();
   }
 
-  /** Make the draft what OBS shows, with every edit made before this. */
-  publish(): void {
-    this.draftAction("publish");
+  /** Make the draft what OBS shows, with every edit made before this. Returns whether it was taken (see `draftAction`). */
+  publish(): boolean {
+    return this.draftAction("publish");
   }
 
   /** Tell the scene's other editors who this is and what it has selected. */
@@ -390,21 +442,34 @@ export class SceneEditorClient {
     this.send({ type: "presence", ...presence });
   }
 
-  /** Throw the draft away, with every edit made to it before this. */
-  discard(): void {
-    this.draftAction("discard");
+  /** Throw the draft away, with every edit made to it before this. Returns whether it was taken (see `draftAction`). */
+  discard(): boolean {
+    return this.draftAction("discard");
   }
 
-  /** Asking for a second command while one waits does nothing: the draft it would act on is locked. */
-  private draftAction(command: DraftCommand): void {
-    if (this.stopped || this.command !== null) {
-      return;
+  /**
+   * Takes the command unless one already waits (the draft it would act on is
+   * locked), or no session can carry it: the engine would not open one, or
+   * the scene is gone. Returns whether it was taken.
+   */
+  private draftAction(command: DraftCommand): boolean {
+    if (this.stopped || this.command !== null || this.status === "unavailable" || this.status === "gone") {
+      return false;
     }
     // The edit made just before the click is one the command covers.
     this.flush();
-    this.command = { command, sent: false };
+    this.setCommand({ command, sent: false });
     this.emit();
     this.advance();
+    return true;
+  }
+
+  private setCommand(command: PendingCommand | null): void {
+    const changed = (this.command?.command ?? null) !== (command?.command ?? null);
+    this.command = command;
+    if (changed) {
+      this.options.onCommandChange?.(command?.command ?? null);
+    }
   }
 
   /** Whether edits to `version` are refused: the draft while a Publish or Discard waits. */
@@ -421,8 +486,15 @@ export class SceneEditorClient {
    */
   private advance(): void {
     for (const state of Object.values(this.versions)) {
-      const held = this.command !== null && (state.version === "published" || this.command.sent);
-      if (state.inflight === null && state.buffer !== null && !held && !state.resyncing) {
+      if (this.heldByCommand(state.version)) {
+        continue;
+      }
+      if (state.resendHeld && state.inflight) {
+        state.resendHeld = false;
+        this.sendSubmit(state.version, state.inflight);
+        continue;
+      }
+      if (state.inflight === null && state.buffer !== null && !state.resyncing) {
         const ops = state.buffer;
         state.buffer = null;
         this.submit(state, ops);
@@ -430,6 +502,11 @@ export class SceneEditorClient {
     }
     this.sendCommandIfReady();
     this.closeIfDrained();
+  }
+
+  /** Whether a waiting command keeps `version`'s edits from being sent (see `advance`). */
+  private heldByCommand(version: SceneVersion): boolean {
+    return this.command !== null && (version === "published" || this.command.sent);
   }
 
   /**
@@ -443,7 +520,8 @@ export class SceneEditorClient {
       return;
     }
     const { draft, published } = this.versions;
-    if (draft?.inflight || draft?.buffer || published?.inflight) {
+    // A held resend is not in flight: it waits for this command's answer.
+    if (draft?.inflight || draft?.buffer || (published?.inflight && !published.resendHeld)) {
       return;
     }
     command.sent = true;
@@ -452,7 +530,7 @@ export class SceneEditorClient {
 
   /** The waiting command is over; editing the draft unlocks, and what it held goes. */
   private settleCommand(report: DroppedWork | null): void {
-    this.command = null;
+    this.setCommand(null);
     if (report) {
       this.options.onDropped?.(report);
     }
@@ -474,7 +552,7 @@ export class SceneEditorClient {
         return;
       }
     }
-    if (!this.active) {
+    if (!this.active || this.status === "gone") {
       return;
     }
     if (url === null) {
@@ -546,16 +624,26 @@ export class SceneEditorClient {
 
   /**
    * The drain's deadline: no attempt starts after it. One already under way
-   * gets until `DRAIN_ATTEMPT_MS` from its start to deliver.
+   * gets until `DRAIN_ATTEMPT_MS` from its start to deliver. A command sent
+   * on the open socket gets until `commandAnswerMs` from `stop` for its
+   * answer, however the attempt that sent it is doing: the engine has it.
    */
   private endDrainAttempts(): void {
     this.drainTimer = null;
-    const left = this.attemptStartedAt + Math.min(DRAIN_ATTEMPT_MS, this.drainMs) - Date.now();
+    const now = Date.now();
+    if (this.command?.sent && this.socket !== null) {
+      const answerLeft = this.drainStartedAt + Math.max(this.commandAnswerMs, this.drainMs) - now;
+      if (answerLeft > 0) {
+        this.drainTimer = setTimeout(() => this.close(), answerLeft);
+        return;
+      }
+    }
+    const left = this.attemptStartedAt + Math.min(DRAIN_ATTEMPT_MS, this.drainMs) - now;
     if (this.retryTimer !== null || left <= 0) {
       this.close();
       return;
     }
-    this.drainTimer = setTimeout(() => this.close(), left);
+    this.drainTimer = setTimeout(() => this.endDrainAttempts(), left);
   }
 
   private receive(message: Record<string, unknown>): void {
@@ -583,6 +671,8 @@ export class SceneEditorClient {
           inflight: null,
           buffer: null,
           resyncing: false,
+          resent: false,
+          resendHeld: false,
         };
         this.versions[version] = fresh;
         const inflight = previous?.inflight ?? null;
@@ -598,8 +688,12 @@ export class SceneEditorClient {
             base: inflight ? inflight.base : previous.seq,
           };
           fresh.inflight = pending;
-          this.resent = pending.opId;
-          this.send({ type: "submit", version, base: pending.base, opId: pending.opId, ops });
+          fresh.resent = true;
+          if (this.heldByCommand(version)) {
+            fresh.resendHeld = true;
+          } else {
+            this.sendSubmit(version, pending);
+          }
         }
         if (this.synced.has("published") && this.synced.has("draft")) {
           if (this.status !== "ready" && this.presence && !this.stopped) {
@@ -623,9 +717,6 @@ export class SceneEditorClient {
         if (state?.inflight && state.inflight.opId === message.opId && typeof message.seq === "number") {
           // A resent op acknowledged without its ops was applied before the
           // drop, and the snapshot already shows it.
-          if (this.resent === message.opId) {
-            this.resent = null;
-          }
           this.confirm(state, message.seq);
           this.emit();
         }
@@ -634,22 +725,7 @@ export class SceneEditorClient {
       case "reject": {
         const state = version ? this.versions[version] : undefined;
         if (state?.inflight && state.inflight.opId === message.opId) {
-          // What the server would not take is dropped; it sends its document
-          // for a resync, and an invalid op leaves the edits since it pending,
-          // resent with the snapshot.
-          state.inflight = null;
-          state.resyncing = true;
-          if (message.error !== "resync") {
-            this.send({ type: "snapshot", version });
-          }
-          if (state.version === "draft" && this.command) {
-            // Made before the click: sent now, the command would act on a
-            // draft without it.
-            this.settleCommand({ reason: "refused", command: this.command.command });
-            return;
-          }
-          this.sendCommandIfReady();
-          this.closeIfDrained();
+          this.refuseInflight(state, message.error === "resync");
         }
         return;
       }
@@ -662,12 +738,7 @@ export class SceneEditorClient {
         this.emit();
         return;
       case "error":
-        // The engine's answer to a message that failed. While a command
-        // waits, nothing else is in flight that could fail (see the class
-        // comment), so it is the command's, or one it was waiting on.
-        if (this.command) {
-          this.settleCommand({ reason: "failed", command: this.command.command });
-        }
+        this.receiveError(message);
         return;
       case "presence": {
         const editorId = typeof message.editorId === "string" ? message.editorId : "";
@@ -692,6 +763,103 @@ export class SceneEditorClient {
     }
   }
 
+  /**
+   * The server would not take `state`'s in-flight op, which is dropped. The
+   * version starts again from the server's document, its snapshot already
+   * on the way when `snapshotComing`; edits made since are resent with it.
+   */
+  private refuseInflight(state: VersionState, snapshotComing: boolean): void {
+    state.inflight = null;
+    state.resent = false;
+    state.resendHeld = false;
+    state.resyncing = true;
+    if (!snapshotComing) {
+      this.send({ type: "snapshot", version: state.version });
+    }
+    if (state.version === "draft" && this.command) {
+      // Made before the click: sent now, the command would act on a draft without it.
+      this.settleCommand({ reason: "refused", command: this.command.command });
+      return;
+    }
+    this.sendCommandIfReady();
+    this.closeIfDrained();
+  }
+
+  /**
+   * The engine's answer to a message that failed, or to opening a scene it
+   * does not have. It names the message (`for`), and a submit's op id; an
+   * engine that does not is attributed by what is in flight (see the class
+   * comment): the command once sent, as nothing else is then, and otherwise
+   * an in-flight op.
+   */
+  private receiveError(message: Record<string, unknown>): void {
+    if (message.reason === "not_found") {
+      this.sceneGone();
+      return;
+    }
+    const failed = message.for;
+    if (failed === "submit") {
+      const state = Object.values(this.versions).find(
+        (candidate) =>
+          candidate.inflight !== null &&
+          candidate.inflight.opId === message.opId &&
+          (message.version === undefined || message.version === candidate.version)
+      );
+      if (state) {
+        this.refuseInflight(state, false);
+      }
+      return;
+    }
+    if (failed === "publish" || failed === "discard") {
+      if (this.command?.sent && this.command.command === failed) {
+        this.settleCommand({ reason: "failed", command: failed });
+      }
+      return;
+    }
+    if (failed !== undefined) {
+      return;
+    }
+    if (this.command?.sent) {
+      this.settleCommand({ reason: "failed", command: this.command.command });
+      return;
+    }
+    const { draft, published } = this.versions;
+    const inflight = [draft, published].find((state) => state?.inflight && !state.resendHeld);
+    if (inflight) {
+      this.refuseInflight(inflight, false);
+    }
+  }
+
+  /**
+   * The engine does not have the scene: nothing pending can be delivered,
+   * and no reconnect can open it. What was pending is reported and dropped.
+   */
+  private sceneGone(): void {
+    const command = this.command?.command ?? null;
+    const edits = this.hasUnconfirmed();
+    this.forgetPending();
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    if (command !== null || edits) {
+      this.options.onDropped?.({ reason: "gone", command, edits });
+    }
+    if (this.draining) {
+      this.close();
+      return;
+    }
+    const socket = this.socket;
+    this.socket = null;
+    this.synced.clear();
+    socket?.close();
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.setStatus("gone");
+  }
+
   private receiveOps(version: SceneVersion, message: Record<string, unknown>): void {
     const state = this.versions[version];
     const ops = message.ops as Json0Component[];
@@ -708,10 +876,10 @@ export class SceneEditorClient {
       }
     }
     if (state.inflight && message.opId === state.inflight.opId) {
-      if (this.resent === message.opId) {
+      if (state.resent) {
         // A resent op was not shown: show it as the server applied it, after
         // any edits buffered since, like another editor's.
-        this.resent = null;
+        state.resent = false;
         state.doc = applyOps(state.doc, this.transformBuffer(state, ops));
       }
       this.confirm(state, seq);
@@ -724,7 +892,7 @@ export class SceneEditorClient {
       this.flush();
     }
     let remote = ops;
-    if (state.inflight && this.resent !== state.inflight.opId) {
+    if (state.inflight && !state.resent) {
       const inflight = state.inflight.ops;
       state.inflight.ops = transformOps(inflight, remote, "left");
       remote = transformOps(remote, inflight, "right");
@@ -756,7 +924,10 @@ export class SceneEditorClient {
 
   private confirm(state: VersionState, seq: number): void {
     state.seq = Math.max(state.seq, seq);
+    // A held resend confirmed here is its op's first submission, answered on this socket.
     state.inflight = null;
+    state.resent = false;
+    state.resendHeld = false;
     this.advance();
   }
 
@@ -769,16 +940,22 @@ export class SceneEditorClient {
   private submit(state: VersionState, ops: Json0Component[]): void {
     const pending: Pending = { opId: nextOpId(), ops, base: state.seq };
     state.inflight = pending;
-    this.send({ type: "submit", version: state.version, base: pending.base, opId: pending.opId, ops });
+    this.sendSubmit(state.version, pending);
+  }
+
+  private sendSubmit(version: SceneVersion, pending: Pending): void {
+    this.send({ type: "submit", version, base: pending.base, opId: pending.opId, ops: pending.ops });
   }
 
   /** Forgets every edit and command not yet through, sending none of them. */
   private forgetPending(): void {
     this.desired = null;
-    this.command = null;
+    this.setCommand(null);
     for (const state of Object.values(this.versions)) {
       state.inflight = null;
       state.buffer = null;
+      state.resent = false;
+      state.resendHeld = false;
     }
   }
 

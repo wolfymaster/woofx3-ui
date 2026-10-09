@@ -6,8 +6,12 @@
  * it has pending (see `SceneEditorClient.stop`). So a scene's sessions are
  * found here rather than through the mounted editor, to close them when the
  * scene is deleted, and closing the tab asks first while any of them, or any
- * mounted editor's own unsaved fields, has work not yet through.
+ * mounted editor's own unsaved fields, has work not yet through. A Publish or
+ * Discard one of them waits on locks the scene's draft in every editor of
+ * the scene, including one opened after the editor that asked for it closed.
  */
+
+import type { DraftCommand } from "@/lib/scene-editor-client";
 
 /** The slice of `SceneEditorClient` this needs. */
 export interface TrackedSession {
@@ -17,6 +21,8 @@ export interface TrackedSession {
   hasPending(): boolean;
   /** Close at once, sending nothing more. */
   abandon(): void;
+  /** The Publish or Discard waiting for the engine's answer. */
+  pendingCommand(): DraftCommand | null;
 }
 
 /** The slice of `window` this needs (injectable for tests). */
@@ -35,6 +41,12 @@ export interface SceneEditorSessions {
   registerUnsavedCheck(check: () => boolean): () => void;
   /** Abandon every session of a scene, including one still draining after its editor closed. */
   abandonScene(sceneKey: string): void;
+  /** The Publish or Discard any session of the scene waits on, or null. */
+  commandOf(sceneKey: string): DraftCommand | null;
+  /** A session's pending command changed; tells the listeners. */
+  commandChanged(): void;
+  /** Call `listener` whenever `commandOf` may have changed, until the returned function is called. */
+  subscribe(listener: () => void): () => void;
   /**
    * Whether closing the tab now would lose work. Flushes each session first:
    * closing the tab skips React's cleanup, so this is the last chance to send.
@@ -55,7 +67,14 @@ export function sceneKeyOf(instanceId: string, engineSceneId: string): string {
 export function createSceneEditorSessions(target: UnloadTarget | null): SceneEditorSessions {
   const sessions = new Map<TrackedSession, string>();
   const unsavedChecks = new Set<() => boolean>();
+  const commandListeners = new Set<() => void>();
   let listening = false;
+
+  const commandChanged = (): void => {
+    for (const listener of [...commandListeners]) {
+      listener();
+    }
+  };
 
   const hasUnsentWork = (): boolean => {
     let unsent = false;
@@ -95,9 +114,11 @@ export function createSceneEditorSessions(target: UnloadTarget | null): SceneEdi
     register(session, sceneKey) {
       sessions.set(session, sceneKey);
       syncListener();
+      commandChanged();
       return () => {
         if (sessions.delete(session)) {
           syncListener();
+          commandChanged();
         }
       };
     },
@@ -116,6 +137,22 @@ export function createSceneEditorSessions(target: UnloadTarget | null): SceneEdi
           session.abandon();
         }
       }
+    },
+    commandOf(sceneKey) {
+      for (const [session, key] of sessions) {
+        const command = key === sceneKey ? session.pendingCommand() : null;
+        if (command !== null) {
+          return command;
+        }
+      }
+      return null;
+    },
+    commandChanged,
+    subscribe(listener) {
+      commandListeners.add(listener);
+      return () => {
+        commandListeners.delete(listener);
+      };
     },
     hasUnsentWork,
   };

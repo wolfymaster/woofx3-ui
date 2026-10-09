@@ -55,6 +55,12 @@ class FakeServer {
   refuseNext = false;
   /** Refuse the submit with this number (counting from 1) as invalid. */
   refuseSubmit: number | null = null;
+  /** Answer the next draft or published submit with the engine's error instead of applying it. */
+  failNextSubmit = false;
+  /** Send errors as an engine that does not name the failed message does: no `for`, no op id. */
+  legacyErrors = false;
+  /** The scene is not on the engine: opening a socket is answered `not_found` and closed. */
+  gone = false;
   private submits = 0;
 
   constructor(doc: SceneDocument) {
@@ -67,6 +73,11 @@ class FakeServer {
     this.sockets.add(socket);
     queueMicrotask(() => {
       socket.onopen?.();
+      if (this.gone) {
+        socket.deliver(this.legacyErrors ? { type: "error", reason: "not_found" } : NOT_FOUND);
+        queueMicrotask(() => socket.close());
+        return;
+      }
       const snapshot = (): SceneSnapshot => ({ sceneId: "s1", name: "Main", seq: this.seq, doc: this.doc, meta: {} });
       socket.deliver({
         type: "snapshot",
@@ -79,6 +90,15 @@ class FakeServer {
     return socket;
   }
 
+  /** Answers a snapshot request with that version's document. */
+  resync(from: FakeSocket, version: "draft" | "published"): void {
+    const snapshot: SceneSnapshot =
+      version === "draft"
+        ? { sceneId: "s1", name: "Main", seq: this.seq, doc: this.doc, meta: {} }
+        : { sceneId: "s1", name: "Main", seq: this.publishedSeq, doc: this.published, meta: {} };
+    from.deliver({ type: "snapshot", version, snapshot, hasDraft: this.seq > 0 });
+  }
+
   presence(from: FakeSocket, message: any): void {
     for (const socket of this.sockets) {
       if (socket !== from) {
@@ -88,17 +108,23 @@ class FakeServer {
   }
 
   /** The engine's answer to a message that threw. */
-  private fail(from: FakeSocket): boolean {
+  error(from: FakeSocket, named: Record<string, unknown>): void {
+    from.deliver(
+      this.legacyErrors ? { type: "error", reason: "failed" } : { type: "error", reason: "failed", ...named }
+    );
+  }
+
+  private fail(from: FakeSocket, command: "publish" | "discard"): boolean {
     if (!this.failCommand) {
       return false;
     }
     this.failCommand = false;
-    from.deliver({ type: "error", reason: "failed" });
+    this.error(from, { for: command });
     return true;
   }
 
   publish(from: FakeSocket): void {
-    if (this.fail(from)) {
+    if (this.fail(from, "publish")) {
       return;
     }
     this.published = structuredClone(this.doc);
@@ -118,7 +144,7 @@ class FakeServer {
 
   /** Resets the draft to what is published, as one op from no editor, before answering. */
   discard(from: FakeSocket): void {
-    if (this.fail(from)) {
+    if (this.fail(from, "discard")) {
       return;
     }
     const ops = diffDocuments(this.doc, this.published);
@@ -138,6 +164,11 @@ class FakeServer {
   }
 
   submit(from: FakeSocket, message: any): void {
+    if (this.failNextSubmit) {
+      this.failNextSubmit = false;
+      this.error(from, { for: "submit", opId: message.opId, version: message.version });
+      return;
+    }
     if (message.version === "published") {
       // Only ever one editor's, in these tests: applied as made.
       this.published = applyOps(this.published, message.ops);
@@ -184,6 +215,8 @@ class FakeServer {
   }
 }
 
+const NOT_FOUND = { type: "error", for: "open", reason: "not_found" };
+
 let socketIds = 0;
 
 class FakeSocket implements EditorSocket {
@@ -212,6 +245,9 @@ class FakeSocket implements EditorSocket {
       }
       if (!this.closed && message.type === "discard") {
         this.server.discard(this);
+      }
+      if (!this.closed && message.type === "snapshot") {
+        this.server.resync(this, message.version);
       }
       if (!this.closed && message.type === "presence") {
         this.sent.push(message);
@@ -937,7 +973,7 @@ describe("SceneEditorClient — Publish and Discard", () => {
   it("reports a publish sent but unanswered when the drain runs out as uncertain", async () => {
     const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
     const reports: DroppedWork[] = [];
-    const e = editor(server, { drainMs: 30, onDropped: (work) => reports.push(work) });
+    const e = editor(server, { drainMs: 30, commandAnswerMs: 40, onDropped: (work) => reports.push(work) });
     await settle();
     server.holdAnswer = true;
     e.client.publish();
@@ -984,5 +1020,219 @@ describe("SceneEditorClient — Publish and Discard", () => {
     expect(e.closed()).toBe(true);
     expect(server.received).toEqual([]);
     expect(reports).toEqual([{ reason: "undelivered", command: "publish", edits: false }]);
+  });
+});
+
+describe("SceneEditorClient — errors and a scene that is gone", () => {
+  it("treats an error naming an in-flight edit as its refusal, dropping the publish waiting on it", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { onDropped: (work) => reports.push(work) });
+    await settle();
+    server.failNextSubmit = true;
+    e.type("hello");
+    e.client.publish();
+    await settle();
+    expect(reports).toEqual([{ reason: "refused", command: "publish" }]);
+    expect(server.received).toEqual(["submit:draft"]);
+    expect(e.state().command).toBeNull();
+    expect(e.client.hasUnconfirmed()).toBe(false);
+    expect(e.text()).toBe("");
+    e.type("again");
+    await settle();
+    expect(server.doc.widgets.a!.settings.text).toBe("again");
+  });
+
+  it("settles only the command an error names, leaving a live edit in flight to its own answer", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { onDropped: (work) => reports.push(work) });
+    await settle();
+    e.type("draft");
+    await settle();
+    server.failCommand = true;
+    e.client.publish();
+    await settle();
+    expect(reports).toEqual([{ reason: "failed", command: "publish" }]);
+    e.client.setVersion("published");
+    server.failNextSubmit = true;
+    e.type("live");
+    await settle();
+    // The live edit's error resyncs the published scene; nothing reports a command.
+    expect(reports).toEqual([{ reason: "failed", command: "publish" }]);
+    expect(e.client.hasUnconfirmed()).toBe(false);
+    e.type("live again");
+    await settle();
+    expect(server.published.widgets.a!.settings.text).toBe("live again");
+  });
+
+  it("attributes an unnamed error to the draft edit in flight while the publish is not yet sent", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    server.legacyErrors = true;
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { onDropped: (work) => reports.push(work) });
+    await settle();
+    server.failNextSubmit = true;
+    e.type("hello");
+    e.client.publish();
+    await settle();
+    expect(reports).toEqual([{ reason: "refused", command: "publish" }]);
+    expect(e.client.hasUnconfirmed()).toBe(false);
+    e.type("again");
+    await settle();
+    expect(server.doc.widgets.a!.settings.text).toBe("again");
+  });
+
+  it("attributes an unnamed error to the sent command", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    server.legacyErrors = true;
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { onDropped: (work) => reports.push(work) });
+    await settle();
+    e.type("abc");
+    server.failCommand = true;
+    e.client.discard();
+    await settle();
+    expect(reports).toEqual([{ reason: "failed", command: "discard" }]);
+    expect(e.state().command).toBeNull();
+  });
+
+  it("holds a resync's resend of live edits behind a sent publish", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.type("draft");
+    await settle();
+    server.holdAnswer = true;
+    e.client.publish();
+    await settle();
+    e.client.setVersion("published");
+    e.type("live");
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "publish"]);
+    // A resync of the published scene, as after an op this client could not apply.
+    e.sockets[0]!.deliver({
+      type: "snapshot",
+      version: "published",
+      snapshot: { sceneId: "s1", name: "Main", seq: server.publishedSeq, doc: server.published, meta: {} },
+      hasDraft: true,
+    });
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "publish"]);
+    expect(e.client.hasUnconfirmed()).toBe(true);
+    server.releaseAnswer();
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "publish", "submit:published"]);
+    expect(e.client.hasUnconfirmed()).toBe(false);
+  });
+
+  it("reports what was pending as gone when the scene is not found, and stops reconnecting", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { onDropped: (work) => reports.push(work) });
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.type("hello");
+    e.client.publish();
+    await settle();
+    server.deaf = null;
+    server.gone = true;
+    e.sockets[0]!.close();
+    await settle();
+    await settle();
+    expect(reports).toEqual([{ reason: "gone", command: "publish", edits: true }]);
+    expect(e.state().status).toBe("gone");
+    expect(e.state().command).toBeNull();
+    const sockets = e.sockets.length;
+    await settle();
+    await settle();
+    expect(e.sockets.length).toBe(sockets);
+    expect(e.client.publish()).toBe(false);
+    e.client.stop();
+    expect(e.closed()).toBe(true);
+  });
+
+  it("knows a missing scene from an engine that does not name the open", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    server.gone = true;
+    server.legacyErrors = true;
+    const e = editor(server);
+    await settle();
+    await settle();
+    expect(e.state().status).toBe("gone");
+    expect(e.sockets.length).toBe(1);
+  });
+
+  it("closes a draining session when the scene turns out to be gone", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { onDropped: (work) => reports.push(work) });
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.type("hello");
+    e.client.stop();
+    server.deaf = null;
+    server.gone = true;
+    e.sockets[0]!.close();
+    await settle();
+    await settle();
+    expect(e.closed()).toBe(true);
+    expect(reports).toEqual([{ reason: "gone", command: null, edits: true }]);
+  });
+
+  it("does not take a publish or discard while the engine will not open a session", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server, { open: async () => null });
+    await settle();
+    expect(e.state().status).toBe("unavailable");
+    expect(e.client.publish()).toBe(false);
+    expect(e.client.discard()).toBe(false);
+    expect(e.state().command).toBeNull();
+  });
+
+  it("says whether it took an edit, refusing one of the locked draft", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    const doc = structuredClone(e.state().doc!);
+    doc.widgets.a!.settings.text = "x";
+    expect(e.client.edit(doc, "draft")).toBe(true);
+    expect(e.client.edit(doc, "published")).toBe(false);
+    server.holdAnswer = true;
+    expect(e.client.publish()).toBe(true);
+    expect(e.client.edit(doc, "draft")).toBe(false);
+  });
+
+  it("tells onCommandChange about the command while it drains", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const commands: Array<string | null> = [];
+    const e = editor(server, { onCommandChange: (command) => commands.push(command) });
+    await settle();
+    server.holdAnswer = true;
+    e.client.publish();
+    e.client.stop();
+    await settle();
+    expect(commands).toEqual(["publish"]);
+    expect(e.client.pendingCommand()).toBe("publish");
+    server.releaseAnswer();
+    await settle();
+    expect(commands).toEqual(["publish", null]);
+    expect(e.closed()).toBe(true);
+  });
+
+  it("waits past the drain for the answer to a publish sent on an open socket", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { drainMs: 30, commandAnswerMs: 500, onDropped: (work) => reports.push(work) });
+    await settle();
+    server.holdAnswer = true;
+    e.client.publish();
+    e.client.stop();
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(e.closed()).toBe(false);
+    server.releaseAnswer();
+    await settle();
+    expect(e.closed()).toBe(true);
+    expect(reports).toEqual([]);
   });
 });

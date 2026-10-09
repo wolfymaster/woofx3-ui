@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { SceneDocument, SceneVersion } from "@/lib/scene-document";
 import { type DroppedWork, type EditorPresence, type EditorState, SceneEditorClient } from "@/lib/scene-editor-client";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
@@ -34,17 +34,27 @@ interface UseSceneEditorSessionArgs {
 }
 
 export interface SceneEditorSessionHandle {
+  /**
+   * The session's state. `command` is also a Publish or Discard that another
+   * session of the scene waits on (one left draining by an editor that
+   * closed): the draft is locked until it is answered either way.
+   */
   state: EditorState;
   /**
    * The editor changed its canvas, read from `version`; sent within a fifth of
    * a second. A canvas read from the version the session is not editing is
-   * dropped, as is a draft canvas while a Publish or Discard waits (`state.command`).
+   * dropped, as is a draft canvas while a Publish or Discard waits (`state.command`),
+   * and every canvas once the scene is gone. Returns whether it was taken.
    */
-  edit: (doc: SceneDocument, version: SceneVersion) => void;
-  /** Does nothing while a Publish or Discard already waits. */
-  publish: () => void;
-  /** Does nothing while a Publish or Discard already waits. */
-  discard: () => void;
+  edit: (doc: SceneDocument, version: SceneVersion) => boolean;
+  /**
+   * Returns whether it was taken: not while a Publish or Discard already
+   * waits, nor without a session to carry it (no session, the engine would
+   * not open one, or the scene is gone).
+   */
+  publish: () => boolean;
+  /** As `publish`. */
+  discard: () => boolean;
   /** Tell the scene's other editors who this is and what it has selected. */
   setPresence: (presence: EditorPresence) => void;
   /**
@@ -98,6 +108,11 @@ export function useSceneEditorSession({
   const sceneNameRef = useRef(sceneName);
   sceneNameRef.current = sceneName;
 
+  const sceneKey = sceneKeyOf(instanceId, engineSceneId);
+  const sharedCommand = useSyncExternalStore(sceneEditorSessions.subscribe, () =>
+    sceneEditorSessions.commandOf(sceneKey)
+  );
+
   // The editor saves its own unsaved changes as it unmounts.
   useEffect(() => sceneEditorSessions.registerUnsavedCheck(() => unsavedOutsideSessionRef.current), []);
 
@@ -122,6 +137,7 @@ export function useSceneEditorSession({
       onChange: setState,
       onClose: () => unregister(),
       onDropped: (dropped) => onDroppedRef.current(dropped, sceneNameRef.current),
+      onCommandChange: () => sceneEditorSessions.commandChanged(),
       version: versionRef.current,
     });
     const unregister = sceneEditorSessions.register(client, sceneKeyOf(instanceId, engineSceneId));
@@ -141,16 +157,25 @@ export function useSceneEditorSession({
   }, [version]);
 
   const edit = useCallback(
-    (doc: SceneDocument, docVersion: SceneVersion) => clientRef.current?.edit(doc, docVersion),
+    (doc: SceneDocument, docVersion: SceneVersion) => clientRef.current?.edit(doc, docVersion) ?? false,
     []
   );
-  const publish = useCallback(() => clientRef.current?.publish(), []);
-  const discard = useCallback(() => clientRef.current?.discard(), []);
+  // Another session's command locks the draft too, though this client does not know of it.
+  const publish = useCallback(
+    () => sceneEditorSessions.commandOf(sceneKey) === null && (clientRef.current?.publish() ?? false),
+    [sceneKey]
+  );
+  const discard = useCallback(
+    () => sceneEditorSessions.commandOf(sceneKey) === null && (clientRef.current?.discard() ?? false),
+    [sceneKey]
+  );
   const setPresence = useCallback((presence: EditorPresence) => clientRef.current?.setPresence(presence), []);
-  const abandon = useCallback(
-    () => sceneEditorSessions.abandonScene(sceneKeyOf(instanceId, engineSceneId)),
-    [instanceId, engineSceneId]
+  const abandon = useCallback(() => sceneEditorSessions.abandonScene(sceneKey), [sceneKey]);
+
+  const sharedState = useMemo(
+    () => (state.command === null && sharedCommand !== null ? { ...state, command: sharedCommand } : state),
+    [state, sharedCommand]
   );
 
-  return { state, edit, publish, discard, setPresence, abandon };
+  return { state: sharedState, edit, publish, discard, setPresence, abandon };
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import type { DraftCommand } from "@/lib/scene-editor-client";
 import {
   createSceneEditorSessions,
   sceneKeyOf,
@@ -35,6 +36,7 @@ function fakeSession(pending = false) {
     pending,
     flushed: 0,
     abandoned: false,
+    command: null as DraftCommand | null,
     flush() {
       session.flushed += 1;
     },
@@ -43,6 +45,9 @@ function fakeSession(pending = false) {
     },
     abandon() {
       session.abandoned = true;
+    },
+    pendingCommand() {
+      return session.command;
     },
   } satisfies TrackedSession & Record<string, unknown>;
   return session;
@@ -109,5 +114,45 @@ describe("sceneEditorSessions", () => {
     sessions.register(session, sceneKeyOf("i1", "s1"));
     sessions.abandonScene(sceneKeyOf("i2", "s1"));
     expect(session.abandoned).toBe(false);
+  });
+
+  it("locks a scene's draft on a command any of its sessions waits on, until it is answered", () => {
+    const sessions = createSceneEditorSessions(null);
+    const draining = fakeSession(true);
+    const reopened = fakeSession();
+    const other = fakeSession();
+    sessions.register(draining, sceneKeyOf("i1", "s1"));
+    sessions.register(reopened, sceneKeyOf("i1", "s1"));
+    sessions.register(other, sceneKeyOf("i1", "s2"));
+    let notified = 0;
+    const unsubscribe = sessions.subscribe(() => {
+      notified += 1;
+    });
+    draining.command = "publish";
+    sessions.commandChanged();
+    expect(notified).toBe(1);
+    expect(sessions.commandOf(sceneKeyOf("i1", "s1"))).toBe("publish");
+    expect(sessions.commandOf(sceneKeyOf("i1", "s2"))).toBeNull();
+    draining.command = null;
+    sessions.commandChanged();
+    expect(sessions.commandOf(sceneKeyOf("i1", "s1"))).toBeNull();
+    unsubscribe();
+    sessions.commandChanged();
+    expect(notified).toBe(2);
+  });
+
+  it("lifts the lock when the session holding the command closes", () => {
+    const sessions = createSceneEditorSessions(null);
+    const draining = fakeSession(true);
+    draining.command = "discard";
+    const unregister = sessions.register(draining, sceneKeyOf("i1", "s1"));
+    let notified = 0;
+    sessions.subscribe(() => {
+      notified += 1;
+    });
+    expect(sessions.commandOf(sceneKeyOf("i1", "s1"))).toBe("discard");
+    unregister();
+    expect(notified).toBe(1);
+    expect(sessions.commandOf(sceneKeyOf("i1", "s1"))).toBeNull();
   });
 });
