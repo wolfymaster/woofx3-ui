@@ -1,3 +1,5 @@
+import type { PlacementTransition } from "@convex/lib/widgetTransitions";
+
 export interface Module {
   id: string;
   name: string;
@@ -133,6 +135,9 @@ export interface Widget {
   locked: boolean;
   visible: boolean;
   settings: Record<string, unknown>;
+  /** How the widget enters when shown and leaves when hidden; absent means it simply appears. */
+  transitionIn?: PlacementTransition;
+  transitionOut?: PlacementTransition;
 }
 
 export interface PaginatedResponse<T> {

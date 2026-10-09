@@ -43,6 +43,7 @@ import { parseEngineShoutoutTarget, SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE } from
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 import { TWITCH_TOKEN_REQUESTED_EVENT_TYPE } from "./lib/twitchTokenGrant";
 import { widgetCanonicalKey } from "./lib/widgetKey";
+import { readWidgetTransitions } from "./lib/widgetTransitions";
 import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
 import { logger } from "./logger";
 import { canonicalIdForStorageKey } from "./resourceValues";
@@ -719,6 +720,7 @@ http.route({
             surfaces: widget.surfaces,
             hostsSurface: widget.hostsSurface,
             taxonomy: widget.taxonomy,
+            transitions: readWidgetTransitions(widget),
           });
         }
         return corsJson({ success: true, type: event.type });

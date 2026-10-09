@@ -1481,6 +1481,10 @@ export default defineSchema({
     // Absent on rows registered before widgets declared it, and empty for a
     // widget whose author declared none.
     taxonomy: v.optional(v.array(v.string())),
+    // Transition types the widget plays on its own content, offered beside
+    // the generic ones when a placement picks how it enters and leaves (see
+    // lib/widgetTransitions.ts). Absent on rows from engines that predate it.
+    transitions: v.optional(v.array(v.object({ id: v.string(), label: v.string() }))),
     createdAt: v.number(),
   })
     .index("by_module", ["moduleId"])

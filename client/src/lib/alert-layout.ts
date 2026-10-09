@@ -1,3 +1,4 @@
+import { placementTransitions } from "@convex/lib/widgetTransitions";
 import type { Widget } from "@/types";
 
 /** The canvas a new alert layout starts on. */
@@ -6,7 +7,8 @@ export const DEFAULT_ALERT_CANVAS = { width: 1920, height: 1080 } as const;
 /**
  * An Alert step's `layout` parameter: widgets placed on a canvas, which each
  * alert widget scales to fit. The scene manager reads `width`, `height` and,
- * per widget, `id`, `widgetCanonicalId`, `position`, `size` and `settings`.
+ * per widget, `id`, `widgetCanonicalId`, `position`, `size`, `settings`,
+ * `transitionIn` and `transitionOut`.
  */
 export interface AlertLayout {
   width: number;
@@ -39,6 +41,7 @@ export function readAlertLayout(raw: unknown, nameOf: (widgetCanonicalId: string
       locked: entry.locked === true,
       visible: entry.visible !== false,
       settings: isRecord(entry.settings) ? entry.settings : {},
+      ...placementTransitions(entry),
     };
   });
   return {

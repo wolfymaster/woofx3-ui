@@ -88,7 +88,7 @@ Widgets are **engine-registered module widgets only** — no arbitrary/custom wi
 
 - **Themes:** a widget that declares a theme contract gets a `theme` settings field from the engine (manifests cannot declare it). The settings panel renders it as a picker (`components/scenes/theme-field.tsx`) offering **Default** plus the installed themes that fit the widget's contract, fetched with `sceneActions.listWidgetThemes` → engine `listWidgetThemes(widgetCanonicalId)`. The stored value is the theme's canonical id (`{moduleId}:theme:{id}`) in `settings.theme`; Default leaves it unset. A stored theme that is no longer installed or no longer compatible gets a notice, because the overlay renders the widget's defaults for it. Themes come and go only with module installs, so the picker refetches when `moduleRepository.installedRevision` changes (the `module.installed` and `module.deleted` webhooks move it).
 
-The canvas itself — palette, drag/resize handles, placeholders and the settings panel — is `WidgetLayoutCanvas`, shared by the scene editor and the Alert action's layout editor (`alert-layout-field.tsx`). It edits whatever widgets it is handed and saves nothing.
+The canvas itself — palette, drag/resize handles, placeholders and the settings panel with its transitions — is `WidgetLayoutCanvas`, shared by the scene editor and the Alert action's layout editor (`alert-layout-field.tsx`). It edits whatever widgets it is handed and saves nothing.
 
 ## Browser source
 
@@ -140,8 +140,25 @@ interface Widget {
   locked: boolean;
   visible: boolean;
   settings: Record<string, unknown>;  // per-instance widget configuration
+  transitionIn?: PlacementTransition;  // how it enters; absent means none
+  transitionOut?: PlacementTransition; // how it leaves; absent means none
 }
 ```
+
+### Transitions
+
+Below a selected widget's settings, the panel has **Enter** and **Exit** pickers
+(`components/scenes/widget-transitions-section.tsx`), on a scene and in an alert
+layout alike. Each picks a type, a duration in milliseconds, an easing and, for
+a slide, a direction, stored on the placement as `{ type, durationMs, easing?,
+direction? }`. The types are the generic ones every widget gets (fade, slide,
+zoom, bounce, spin, pop, blur), which the overlay plays on the widget's box,
+then any the widget declares for its own content (the Text widget's typewriter,
+letters and wave), which come from the catalog row's `transitions`. **Preview**
+plays a generic type on a stand-in box with the overlay's keyframes; a widget's
+own type plays only in the overlay. The shape and the generic list live in
+`convex/lib/widgetTransitions.ts` and must match the engine's module SDK, which
+refuses anything else (woofx3 `docs/services/widget-transitions.md`).
 
 ### Showing and hiding from a workflow
 
