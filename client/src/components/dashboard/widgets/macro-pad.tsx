@@ -285,7 +285,7 @@ export function MacroPadModule() {
   // click from being swallowed as the start of a drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
 
-  // Chat-command and workflow macros run in Convex through the same path as a
+  // Chat-command, workflow and action macros run in Convex through the same path as a
   // remote trigger URL. HTTP-request macros are fetched from here, in the
   // browser, so a target on the streamer's local network stays reachable.
   // Send-message macros post through the signed-in user's Twitch link.
@@ -403,7 +403,7 @@ export function MacroPadModule() {
           <EmptyState
             icon={Zap}
             title="No macros yet"
-            description="Add a button to send a chat message, run a chat command, fire a workflow, or make an HTTP request in one click."
+            description="Add a button to send a chat message, run a chat command, fire a workflow, run an action, or make an HTTP request in one click."
             action={{ label: "Add Macro", onClick: handleAddMacro }}
             className="h-full py-6"
           />

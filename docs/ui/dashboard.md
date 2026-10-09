@@ -293,7 +293,8 @@ the engine reads as Finished.
 
 ## Macro pad
 
-Square buttons that fire a chat command, a workflow, or an HTTP request. Its own
+Square buttons that send a chat message, fire a chat command, a workflow, a single
+catalog action, or an HTTP request. Its own
 edit mode (distinct from the dashboard's) enables drag-to-reorder via dnd-kit plus
 per-button edit and delete.
 
@@ -317,23 +318,28 @@ treatment the module detail panel gives catalog colors. The label keeps the them
 foreground so any choice stays readable.
 
 Buttons support **variables**: any <code v-pre>{{name}}</code> written into the command,
-URL, body, or a header value is collected from the user in a prompt before the macro runs.
+URL, body, a header value, or any text setting of an action is collected from the user in a prompt before the macro runs.
 The <code v-pre>{{…}}</code> delimiter is deliberately distinct from the workflow engine's `${…}`
 and the shared TS resolver's `{…}` (see `convex/lib/macroVariables.ts` for why) —
 variable names are restricted to `[A-Za-z0-9_]`.
 
-`chat-command` and `trigger-workflow` macros run in Convex through `macros.run`,
+`chat-command`, `trigger-workflow` and `run-action` macros run in Convex through `macros.run`,
 the same `planMacroRun` / `executeMacroPlan` path a remote trigger uses
 (`convex/lib/macroTrigger.ts`, `convex/lib/macroExecution.ts`). A workflow macro
 calls the engine's `triggerWorkflowByName`; a chat-command macro must be a
 `!command` and calls the engine's `executeCommand` as the linked Twitch
 broadcaster, exactly as if they had typed it — the engine cannot post a plain chat
-message. `http-request` fetches straight from the browser, so it is subject to
+message. An action macro holds one action picked from the instance's catalog (the
+workflow builder's action picker) with its settings filled in through the same form
+a workflow step uses, and calls the engine's `runActions` with that one step. The
+engine records no run for it, so there is no outcome to watch. The step is stored
+with `$ref` as `ref`, since Convex refuses `$` field names, and is converted back
+just before the RPC (`macroActionToEngineStep`). `http-request` fetches straight from the browser, so it is subject to
 CORS and its headers are visible to anyone with dashboard access.
 
 ### Trigger macros from a Stream Deck or phone
 
-Any `chat-command` or `trigger-workflow` macro can get a **remote trigger**: a
+Any `chat-command`, `trigger-workflow` or `run-action` macro can get a **remote trigger**: a
 secret token that presses the button with a single HTTP request, so an Elgato
 Stream Deck, Bitfocus Companion, Touch Portal, or a phone shortcut can drive the
 show without the dashboard open.

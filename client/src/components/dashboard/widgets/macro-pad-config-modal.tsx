@@ -16,14 +16,18 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import {
   chatCommandParts,
   extractMacroVariables,
+  type MacroActionStep,
   type MacroActionType,
   type MacroButton,
   type MacroHttpMethod,
   type MacroInput,
 } from "@/lib/macro-pad";
+import { MacroActionStepEditor } from "./macro-action-step";
 import { MacroColorPicker } from "./macro-color-picker";
 import { MacroIconPicker } from "./macro-icon-picker";
 import { MacroRemoteTrigger } from "./macro-remote-trigger";
@@ -70,6 +74,9 @@ export function MacroConfigModal({
   const [httpMethod, setHttpMethod] = useState<MacroHttpMethod>("GET");
   const [httpHeaders, setHttpHeaders] = useState("");
   const [httpBody, setHttpBody] = useState("");
+  // Held with its settings' `$` keys restored; escaped again on save.
+  const [actionStep, setActionStep] = useState<MacroActionStep | null>(null);
+  const { actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
   // A macro with a trigger URL does, from anywhere, whatever it is set to do;
   // macros.updateMacro enforces that only a manager may change that.
@@ -98,6 +105,14 @@ export function MacroConfigModal({
       setHttpMethod(macro.config.method || "GET");
       setHttpHeaders(JSON.stringify(macro.config.headers || {}, null, 2));
       setHttpBody(macro.config.body || "");
+      setActionStep(
+        macro.config.actionStep
+          ? {
+              ...macro.config.actionStep,
+              parameters: unescapeDollarKeys(macro.config.actionStep.parameters ?? {}) as Record<string, unknown>,
+            }
+          : null
+      );
     } else {
       setLabel("");
       setIcon(undefined);
@@ -111,6 +126,7 @@ export function MacroConfigModal({
       setHttpMethod("GET");
       setHttpHeaders("");
       setHttpBody("");
+      setActionStep(null);
     }
   }, [macro, open]);
 
@@ -135,8 +151,9 @@ export function MacroConfigModal({
         ...(type === "send-message" && { message }),
         ...(type === "chat-command" && { commandText }),
         ...(type === "http-request" && { url: httpUrl, body: httpBody, headers: parsedHeaders }),
+        ...(type === "run-action" && actionStep && { actionStep }),
       }),
-    [type, message, commandText, httpUrl, httpBody, parsedHeaders]
+    [type, message, commandText, httpUrl, httpBody, parsedHeaders, actionStep]
   );
 
   const selectedCommand = commands.find((option) => option.command === command);
@@ -149,7 +166,8 @@ export function MacroConfigModal({
     label.trim().length > 0 &&
     (type !== "send-message" || message.trim().length > 0) &&
     (type !== "chat-command" || command.length > 0) &&
-    (type !== "trigger-workflow" || workflowId.length > 0);
+    (type !== "trigger-workflow" || workflowId.length > 0) &&
+    (type !== "run-action" || actionStep !== null);
 
   const handleSave = () => {
     if (!isComplete) {
@@ -171,6 +189,13 @@ export function MacroConfigModal({
           headers: parsedHeaders,
           body: httpBody,
         }),
+        ...(type === "run-action" &&
+          actionStep && {
+            actionStep: {
+              ...actionStep,
+              parameters: escapeDollarKeys(actionStep.parameters ?? {}) as Record<string, unknown>,
+            },
+          }),
       },
     };
 
@@ -221,10 +246,11 @@ export function MacroConfigModal({
 
           <fieldset disabled={behaviorLocked} className="min-w-0">
             <Tabs value={type} onValueChange={(v) => setType(v as MacroActionType)}>
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-5">
                 <TabsTrigger value="send-message">Send Message</TabsTrigger>
                 <TabsTrigger value="chat-command">Chat Command</TabsTrigger>
                 <TabsTrigger value="trigger-workflow">Workflow</TabsTrigger>
+                <TabsTrigger value="run-action">Action</TabsTrigger>
                 <TabsTrigger value="http-request">HTTP Request</TabsTrigger>
               </TabsList>
 
@@ -304,6 +330,18 @@ export function MacroConfigModal({
                 </div>
               </TabsContent>
 
+              <TabsContent value="run-action" className="space-y-4 mt-4">
+                <MacroActionStepEditor
+                  value={actionStep}
+                  onChange={setActionStep}
+                  actionPresets={actionPresets}
+                  catalogLoading={catalogLoading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Runs this one action on the engine, the same way a workflow step would.
+                </p>
+              </TabsContent>
+
               <TabsContent value="http-request" className="space-y-4 mt-4">
                 <div className="space-y-2">
                   <Label htmlFor="http-url">URL</Label>
@@ -370,8 +408,8 @@ export function MacroConfigModal({
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Write <code className="font-mono">{"{{name}}"}</code> anywhere above to be asked for its value each time
-                the button is pressed.
+                Write <code className="font-mono">{"{{name}}"}</code> in any text above to be asked for its value each
+                time the button is pressed.
               </p>
             )}
           </div>

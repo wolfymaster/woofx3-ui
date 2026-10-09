@@ -14,6 +14,7 @@ import {
   MACRO_TRIGGER_PATH_PREFIX,
   MACRO_TRIGGER_RATE_LIMIT,
   MAX_VARIABLE_VALUE_LENGTH,
+  macroActionToEngineStep,
   macroBehaviorFingerprint,
   macroTriggerUrl,
   missingMacroVariables,
@@ -234,6 +235,38 @@ describe("planMacroRun", () => {
 
   test("refuses a workflow macro with nothing selected", () => {
     expect(planMacroRun("trigger-workflow", {}, {})).toMatchObject({ ok: false, status: 422 });
+  });
+
+  test("plans an action with variables filled in through nested settings", () => {
+    const config = {
+      actionStep: {
+        action: "function",
+        function: "obs.setScene",
+        ref: "obs:action:setScene",
+        parameters: { scene: "{{scene}}", options: { tags: ["{{scene}}-live"] }, delay: 3 },
+      },
+    };
+    expect(planMacroRun("run-action", config, { scene: "Gaming" })).toEqual({
+      ok: true,
+      plan: {
+        kind: "run-action",
+        step: {
+          action: "function",
+          function: "obs.setScene",
+          ref: "obs:action:setScene",
+          parameters: { scene: "Gaming", options: { tags: ["Gaming-live"] }, delay: 3 },
+        },
+      },
+    });
+  });
+
+  test("asks for an action's variables before running it", () => {
+    const config = { actionStep: { action: "print", parameters: { text: "hi {{name}}" } } };
+    expect(planMacroRun("run-action", config, {})).toMatchObject({ ok: false, status: 400 });
+  });
+
+  test("refuses an action macro with nothing selected", () => {
+    expect(planMacroRun("run-action", {}, {})).toMatchObject({ ok: false, status: 422 });
   });
 
   test("plans a chat command with its variables filled in", () => {
@@ -500,7 +533,30 @@ describe("canTriggerRemotely", () => {
   test("allows only the types Convex can run without a signed-in user", () => {
     expect(canTriggerRemotely("chat-command")).toBe(true);
     expect(canTriggerRemotely("trigger-workflow")).toBe(true);
+    expect(canTriggerRemotely("run-action")).toBe(true);
     expect(canTriggerRemotely("http-request")).toBe(false);
     expect(canTriggerRemotely("send-message")).toBe(false);
+  });
+});
+
+describe("macroActionToEngineStep", () => {
+  test("restores the catalog ref and escaped setting keys for the engine", () => {
+    expect(
+      macroActionToEngineStep({
+        action: "function",
+        function: "obs.setScene",
+        ref: "obs:action:setScene",
+        parameters: { layout: { __$schema: "v1" } },
+      })
+    ).toEqual({
+      action: "function",
+      function: "obs.setScene",
+      $ref: "obs:action:setScene",
+      parameters: { layout: { $schema: "v1" } },
+    });
+  });
+
+  test("leaves out what the stored step does not name", () => {
+    expect(macroActionToEngineStep({ action: "print" })).toEqual({ action: "print", parameters: {} });
   });
 });

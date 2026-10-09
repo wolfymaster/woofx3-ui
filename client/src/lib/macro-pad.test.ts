@@ -97,6 +97,16 @@ describe("isHexColor", () => {
   });
 });
 
+describe("action settings variables", () => {
+  test("finds variables in nested settings, after the free-text fields", () => {
+    const config: MacroConfig = {
+      message: "{{first}}",
+      actionStep: { action: "print", parameters: { list: ["{{second}}"], nested: { deep: "{{third}} {{first}}" } } },
+    };
+    expect(extractMacroVariables(config)).toEqual(["first", "second", "third"]);
+  });
+});
+
 describe("hasMacroVariables", () => {
   test("is true only when a variable is present", () => {
     expect(hasMacroVariables({ command: "!so {{channel}}" })).toBe(true);
@@ -142,6 +152,19 @@ describe("applyMacroVariables", () => {
     applyMacroVariables(config, { channel: "x", v: "y" });
     expect(config.command).toBe("!so {{channel}}");
     expect(config.headers).toEqual({ A: "{{v}}" });
+  });
+
+  test("substitutes into an action's settings without touching its handler or non-text values", () => {
+    const config: MacroConfig = {
+      actionStep: { action: "function", function: "{{fn}}", parameters: { text: "hi {{name}}", count: 2 } },
+    };
+    const result = applyMacroVariables(config, { name: "ana", fn: "x" });
+    expect(result.actionStep).toEqual({
+      action: "function",
+      function: "{{fn}}",
+      parameters: { text: "hi ana", count: 2 },
+    });
+    expect(config.actionStep?.parameters).toEqual({ text: "hi {{name}}", count: 2 });
   });
 
   test("passes picker-backed fields through unchanged", () => {

@@ -6,10 +6,13 @@
 // token itself is shown once, when it is minted. Everything here is pure so
 // the HTTP route, the dashboard action and the tests share one decision.
 
+import type { ActionStep } from "@woofx3/api";
+import { unescapeDollarKeys } from "./dollarKeys";
 import {
   applyMacroVariables,
   extractMacroVariables,
   isMacroVariableName,
+  type MacroActionStep,
   type MacroActionType,
   type MacroConfig,
 } from "./macroVariables";
@@ -288,7 +291,10 @@ export const CHAT_COMMAND_RUN_RESTRICTION = "Only owners and admins can run chat
 
 export type MacroRunPlan =
   | { kind: "trigger-workflow"; workflowNameOrId: string }
-  | { kind: "chat-command"; commandName: string; text: string };
+  | { kind: "chat-command"; commandName: string; text: string }
+  // The step stays in its stored form (no `$` keys) because a plan crosses
+  // Convex function boundaries; executeMacroPlan converts it for the engine.
+  | { kind: "run-action"; step: MacroActionStep };
 
 export type PlanResult = { ok: true; plan: MacroRunPlan } | { ok: false; status: 400 | 422; error: string };
 
@@ -329,7 +335,22 @@ export function chatCommandFromConfig(config: MacroConfig): { commandName: strin
  * does not carry.
  */
 export function canTriggerRemotely(type: MacroActionType): boolean {
-  return type === "chat-command" || type === "trigger-workflow";
+  return type === "chat-command" || type === "trigger-workflow" || type === "run-action";
+}
+
+/** The engine's ActionStep for a stored macro action, with its `$` keys restored. */
+export function macroActionToEngineStep(stored: MacroActionStep): ActionStep {
+  const step: ActionStep = {
+    action: stored.action,
+    parameters: unescapeDollarKeys(stored.parameters ?? {}) as Record<string, unknown>,
+  };
+  if (stored.function) {
+    step.function = stored.function;
+  }
+  if (stored.ref) {
+    step.$ref = stored.ref;
+  }
+  return step;
 }
 
 /**
@@ -387,6 +408,13 @@ export function planMacroRun(
       return { ok: false, status: 422, error: "this macro has no workflow selected" };
     }
     return { ok: true, plan: { kind: "trigger-workflow", workflowNameOrId } };
+  }
+
+  if (type === "run-action") {
+    if (!resolved.actionStep || resolved.actionStep.action.trim() === "") {
+      return { ok: false, status: 422, error: "this macro has no action selected" };
+    }
+    return { ok: true, plan: { kind: "run-action", step: resolved.actionStep } };
   }
 
   const parsed = chatCommandFromConfig(resolved);
