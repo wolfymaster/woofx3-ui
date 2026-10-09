@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { QUEUE_KIND } from "@convex/lib/resourceKinds";
 import { useAction, useQuery } from "convex/react";
 import { ChevronsRight, Plus, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -18,8 +19,6 @@ import {
   queueCapacity,
   queueEntries,
 } from "@/lib/resource-values";
-
-const QUEUE_KIND = "queue";
 
 const QUEUES_PATH = "/stream/queues";
 

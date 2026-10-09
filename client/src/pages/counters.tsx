@@ -1,3 +1,4 @@
+import { COUNTER_KIND } from "@convex/lib/resourceKinds";
 import { Check, Circle, Minus, Plus, RotateCcw, Tally5 } from "lucide-react";
 import { useState } from "react";
 import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
@@ -16,7 +17,7 @@ const GOAL_REACHED_EVENT = "goal.reached";
 export default function Counters() {
   return (
     <ResourceKindPage
-      kind="counter"
+      kind={COUNTER_KIND}
       title="Counters"
       description="Numbers your stream keeps: deaths, wins, hugs given. Change them here, from a chat command, or from any workflow."
       icon={Tally5}

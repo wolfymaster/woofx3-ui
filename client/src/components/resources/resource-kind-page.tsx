@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { bareKind } from "@convex/lib/resourceKinds";
 import { useAction, useQuery } from "convex/react";
 import { Loader2, type LucideIcon, Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -46,7 +47,7 @@ export interface ResourceDetailProps {
 }
 
 interface ResourceKindPageProps {
-  /** The resource kind this page is for, e.g. `counter`. */
+  /** The resource kind this page is for, as `module:kind`, e.g. `woofx3:counter`. */
   kind: string;
   title: string;
   description: string;
@@ -119,7 +120,8 @@ export function ResourceKindPage({
   // The one segment below this kind's route names the instance on show, if any.
   const selectedId = subPathSegments(location, basePath)[0] ?? "";
   const selected = sorted.find((row) => row.resourceInstanceId === selectedId);
-  const noun = kindDefinition?.name.toLowerCase() ?? kind;
+  const kindName = bareKind(kind);
+  const noun = kindDefinition?.name.toLowerCase() ?? kindName;
 
   const detailProps = (row: ResourceInstanceDoc): ResourceDetailProps => ({
     instance: row,
@@ -142,7 +144,7 @@ export function ResourceKindPage({
         <EmptyState
           icon={icon}
           title={`${title} aren't available yet`}
-          description={`No installed module provides ${kind}s. They come with the woofx3 module — restart the engine to install its latest version.`}
+          description={`No installed module provides ${kindName}s. They come with the woofx3 module — restart the engine to install its latest version.`}
         />
       </div>
     );
@@ -153,7 +155,7 @@ export function ResourceKindPage({
       <nav className={SIDEBAR_RAIL} aria-label={title}>
         <div className="flex items-center justify-between gap-2 border-b p-3">
           <span className="text-sm font-semibold">{title}</span>
-          <Button size="sm" variant="outline" onClick={() => setCreating(true)} data-testid={`button-new-${kind}`}>
+          <Button size="sm" variant="outline" onClick={() => setCreating(true)} data-testid={`button-new-${kindName}`}>
             <Plus className="h-3.5 w-3.5 mr-1" />
             New
           </Button>
@@ -218,7 +220,7 @@ export function ResourceKindPage({
                   className="text-destructive hover:text-destructive shrink-0"
                   onClick={() => setDeleteTarget(selected)}
                   aria-label={`Delete ${resourceName(selected)}`}
-                  data-testid={`button-delete-${kind}`}
+                  data-testid={`button-delete-${kindName}`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -264,13 +266,13 @@ export function ResourceKindPage({
       {creating && (
         <CreateResourceDialog
           moduleId={kindDefinition.moduleName}
-          kind={{ kind, name: kindDefinition.name, schema: kindDefinition.schema }}
+          kind={{ kind: kindDefinition.kind, name: kindDefinition.name, schema: kindDefinition.schema }}
           onClose={() => setCreating(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
             await createInstance({
               instanceId,
               moduleName: kindDefinition.moduleName,
-              kind,
+              kind: kindDefinition.kind,
               resourceInstanceId,
               displayName,
               settings,

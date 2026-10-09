@@ -2,7 +2,9 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
+import { parseKindRef } from "./lib/resourceKinds";
 import { isInstanceMember } from "./lib/teamAccess";
+import { findResourceKind } from "./resourceKinds";
 
 const resourceInstanceValidator = v.object({
   id: v.string(),
@@ -46,16 +48,32 @@ export const listByModule = query({
   },
 });
 
+/**
+ * The instances of one kind: `module:kind`, or a bare kind. A qualified kind is
+ * matched on the canonical id alone, so it does not wait on the module's manifest
+ * reaching the mirror. A bare kind keeps to the one module declaring it, or lists
+ * every module's when that cannot be told.
+ */
 export const listByKind = query({
   args: { instanceId: v.id("instances"), kind: v.string() },
   handler: async (ctx, { instanceId, kind }) => {
     if (!(await isInstanceMember(ctx, instanceId))) {
       return [];
     }
-    return ctx.db
+    const parsed = parseKindRef(kind);
+    if (!parsed) {
+      return [];
+    }
+    const rows = await ctx.db
       .query("moduleResourceInstances")
-      .withIndex("by_instance_kind", (q) => q.eq("instanceId", instanceId).eq("kind", kind))
+      .withIndex("by_instance_kind", (q) => q.eq("instanceId", instanceId).eq("kind", parsed.kind))
       .collect();
+    const owner = parsed.module ?? (await findResourceKind(ctx, instanceId, kind))?.moduleName;
+    if (owner === undefined) {
+      return rows;
+    }
+    const prefix = `${owner}:${parsed.kind}:`;
+    return rows.filter((row) => row.canonicalId.startsWith(prefix));
   },
 });
 

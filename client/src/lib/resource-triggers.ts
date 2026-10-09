@@ -1,3 +1,4 @@
+import { resourceKindMatches } from "@convex/lib/resourceKinds";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
 /** A trigger that can be narrowed to one instance of a resource kind, and the field that does it. */
@@ -23,7 +24,7 @@ export function resourceTriggers(triggerPresets: TriggerPreset[], kind: string):
       continue;
     }
     const field = preset.config?.fields.find(
-      (candidate) => candidate.type === "resource_ref" && candidate.resourceKind === kind
+      (candidate) => candidate.type === "resource_ref" && resourceKindMatches(candidate.resourceKind, kind)
     );
     if (field) {
       found.push({ preset, fieldId: field.id });
