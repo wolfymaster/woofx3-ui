@@ -86,6 +86,13 @@ describe("resourceKindItemCommands", () => {
     expect(commands[0].isOpenAt?.("/stream/resources/wheel_spin/wheel/games")).toBe(false);
   });
 
+  test("reads the part of a value its kind's summary names", () => {
+    const { commands } = build([{ ...wheelKind(), summaryPath: "items" }], [row("wheel_spin:wheel:giveaway")], {
+      "wheel_spin:wheel:giveaway": { items: ["a", "b"], spin: null },
+    });
+    expect(commands[0].meta).toBe("2");
+  });
+
   test("leaves out another module's kind of the same name, and the first-party kinds", () => {
     const counters: PaletteResourceKind = { moduleName: "woofx3", kind: "counter", name: "Counter", icon, actions: [] };
     const { commands } = build(

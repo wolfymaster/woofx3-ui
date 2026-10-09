@@ -13,6 +13,11 @@ export interface ManifestResourceKind {
   /** A lucide icon name, when the module chose one. */
   icon?: string;
   schema: unknown[];
+  /**
+   * Where in an instance's value the reading shown beside its name is: object keys
+   * and list indexes joined by `.`. Absent means the whole value.
+   */
+  summaryPath?: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -32,12 +37,14 @@ export function parseManifestResourceKinds(manifest: unknown): ManifestResourceK
     .map((raw): ManifestResourceKind => {
       const entry = asRecord(raw);
       const icon = asString(entry.icon);
+      const summaryPath = asString(asRecord(entry.display).summary);
       return {
         kind: asString(entry.kind),
         name: asString(entry.name),
         description: asString(entry.description),
         ...(icon ? { icon } : {}),
         schema: Array.isArray(entry.schema) ? entry.schema : [],
+        ...(summaryPath ? { summaryPath } : {}),
       };
     })
     .filter((kind) => kind.kind);

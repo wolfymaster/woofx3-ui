@@ -13,6 +13,8 @@ export interface PaletteResourceKind {
   kind: string;
   name: string;
   icon: ComponentType<{ className?: string }>;
+  /** The kind's `display.summary`: where in a value the reading beside its name is. */
+  summaryPath?: string;
   /** Every action aimed at the kind, from whichever module declares one. */
   actions: ResourceAction[];
 }
@@ -55,7 +57,7 @@ export function resourceKindItemCommands(
         kind: "item",
         group: pluralKindName(noun),
         keywords: [noun.toLowerCase(), kind.kind],
-        meta: summarizeResourceValue(values[row.canonicalId]) || undefined,
+        meta: summarizeResourceValue(values[row.canonicalId], kind.summaryPath) || undefined,
         icon: kind.icon,
         action: { type: "navigate", href },
         isOpenAt: (path) => path === href || path.startsWith(`${href}/`),

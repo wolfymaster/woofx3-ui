@@ -38,7 +38,7 @@ export default function ResourceKind() {
       icon={definition?.icon ? dynamicLucideIcon(definition.icon) : Boxes}
       basePath={resourceKindPath(moduleName, kind)}
       unavailableDescription={`No installed module provides ${pluralKindName(name).toLowerCase()} called "${qualifiedKind}". Install the module that does, or check the address.`}
-      railValue={(props) => summarizeResourceValue(props.value)}
+      railValue={(props) => summarizeResourceValue(props.value, definition?.summaryPath)}
       detail={(props) => <GenericResourceDetail {...props} qualifiedKind={qualifiedKind} />}
     />
   );

@@ -12,6 +12,7 @@ import {
   timerProgressPercent,
   timerState,
   timerStatus,
+  valueAtPath,
 } from "@/lib/resource-values";
 
 describe("counterGoals", () => {
@@ -238,5 +239,29 @@ describe("summarizeResourceValue", () => {
   test("says nothing of an object or of nothing", () => {
     expect(summarizeResourceValue({ items: ["a"] })).toBe("");
     expect(summarizeResourceValue(null)).toBe("");
+  });
+
+  test("reads the part of an object its kind names", () => {
+    const wheel = { items: ["a", "b"], spin: { item: "b" } };
+    expect(summarizeResourceValue(wheel, "items")).toBe("2");
+    expect(summarizeResourceValue(wheel, "spin.item")).toBe("b");
+    expect(summarizeResourceValue(wheel, "spin.missing")).toBe("");
+    expect(summarizeResourceValue(null, "items")).toBe("");
+  });
+});
+
+describe("valueAtPath", () => {
+  test("follows keys and list indexes", () => {
+    expect(valueAtPath({ entries: [{ name: "x" }] }, "entries.0.name")).toBe("x");
+  });
+
+  test("finds nothing past a dead end, an index on an object or a key on a list", () => {
+    expect(valueAtPath({ a: 1 }, "a.b")).toBeUndefined();
+    expect(valueAtPath({ a: { 0: "x" } }, "a.1")).toBeUndefined();
+    expect(valueAtPath({ a: ["x"] }, "a.length")).toBeUndefined();
+  });
+
+  test("never reads what the object inherits", () => {
+    expect(valueAtPath({}, "constructor")).toBeUndefined();
   });
 });

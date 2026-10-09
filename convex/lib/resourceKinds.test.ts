@@ -4,6 +4,7 @@ import {
   type KindDeclarer,
   type ManifestResourceKind,
   parseKindRef,
+  parseManifestResourceKinds,
   resolveResourceKind,
   resourceKindMatches,
 } from "./resourceKinds";
@@ -70,5 +71,18 @@ describe("resolveResourceKind", () => {
 
   it("finds nothing for a kind nobody declares", () => {
     expect(resolveResourceKind([woofx3], "wheel")).toBeNull();
+  });
+});
+
+describe("parseManifestResourceKinds", () => {
+  it("reads where a kind's summary is, and leaves it out when the kind names none", () => {
+    const [wheel, counter] = parseManifestResourceKinds({
+      resources: [
+        { kind: "wheel", name: "Wheel", display: { summary: "items" } },
+        { kind: "counter", name: "Counter", display: null },
+      ],
+    });
+    expect(wheel.summaryPath).toBe("items");
+    expect(counter).not.toHaveProperty("summaryPath");
   });
 });
