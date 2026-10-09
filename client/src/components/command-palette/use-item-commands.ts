@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
 import { useAction, useQuery } from "convex/react";
 import {
   Bell,
@@ -83,13 +84,22 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const presets = useQuery(api.streamInfo.listPresets, args);
   const counters = useQuery(
     api.moduleResourceInstances.listByKind,
-    instanceId ? { instanceId, kind: "counter" } : "skip"
+    instanceId ? { instanceId, kind: COUNTER_KIND } : "skip"
   );
-  const timers = useQuery(api.moduleResourceInstances.listByKind, instanceId ? { instanceId, kind: "timer" } : "skip");
-  const queues = useQuery(api.moduleResourceInstances.listByKind, instanceId ? { instanceId, kind: "queue" } : "skip");
-  const counterKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: "counter" } : "skip");
-  const timerKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: "timer" } : "skip");
-  const queueKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: "queue" } : "skip");
+  const timers = useQuery(
+    api.moduleResourceInstances.listByKind,
+    instanceId ? { instanceId, kind: TIMER_KIND } : "skip"
+  );
+  const queues = useQuery(
+    api.moduleResourceInstances.listByKind,
+    instanceId ? { instanceId, kind: QUEUE_KIND } : "skip"
+  );
+  const counterKind = useQuery(
+    api.resourceKinds.getForInstance,
+    instanceId ? { instanceId, kind: COUNTER_KIND } : "skip"
+  );
+  const timerKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: TIMER_KIND } : "skip");
+  const queueKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: QUEUE_KIND } : "skip");
   const values = useQuery(api.resourceValues.listForInstance, args);
   const { triggerPresets } = useWorkflowCatalog();
 

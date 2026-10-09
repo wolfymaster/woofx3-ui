@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import { bareKind } from "@convex/lib/resourceKinds";
 import { useAction, useQuery } from "convex/react";
 import { Loader2, Plus } from "lucide-react";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
@@ -153,12 +154,12 @@ export function ResourceActionEditors({ kind, instance }: { kind: string; instan
 
   const label = instance.displayName || instance.resourceInstanceId;
   return (
-    <section className="flex flex-col gap-4 pt-4" data-testid={`resource-actions-${kind}`}>
+    <section className="flex flex-col gap-4 pt-4" data-testid={`resource-actions-${bareKind(kind)}`}>
       <div className="flex flex-col gap-2.5">
         <h2 className="text-2xl font-semibold leading-tight tracking-[-0.02em]">What changes {label}</h2>
         <p className="text-sm text-muted-foreground">
-          Every trigger that runs one of these actions on it. The {kind} is already chosen, so a step here only asks for
-          the rest.
+          Every trigger that runs one of these actions on it. The {bareKind(kind)} is already chosen, so a step here
+          only asks for the rest.
         </p>
       </div>
 

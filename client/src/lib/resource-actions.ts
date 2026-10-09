@@ -1,4 +1,5 @@
 import type { Doc } from "@convex/_generated/dataModel";
+import { resourceKindMatches } from "@convex/lib/resourceKinds";
 import type { ActionStep } from "@woofx3/api";
 import { type ProjectedAction, projectWorkflow } from "@/lib/trigger-projection";
 import type { ActionPreset } from "@/lib/workflow-presets";
@@ -48,7 +49,7 @@ export function resourceActions(actionPresets: ActionPreset[], kind: string): Re
   const found: ResourceAction[] = [];
   for (const preset of actionPresets) {
     const field = preset.config?.fields.find(
-      (candidate) => candidate.type === "resource_ref" && candidate.resourceKind === kind
+      (candidate) => candidate.type === "resource_ref" && resourceKindMatches(candidate.resourceKind, kind)
     );
     if (field) {
       found.push({ preset, fieldId: field.id });

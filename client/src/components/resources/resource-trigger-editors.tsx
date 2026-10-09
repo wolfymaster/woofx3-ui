@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
+import { bareKind } from "@convex/lib/resourceKinds";
 import { useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
@@ -43,7 +44,7 @@ export function ResourceTriggerEditors({
 
   const label = instance.displayName || instance.resourceInstanceId;
   return (
-    <div className="flex flex-col gap-12 pt-4" data-testid={`resource-triggers-${kind}`}>
+    <div className="flex flex-col gap-12 pt-4" data-testid={`resource-triggers-${bareKind(kind)}`}>
       {triggers.map(({ preset, fieldId }) => (
         <EventWorkflowEditor
           key={preset.id}

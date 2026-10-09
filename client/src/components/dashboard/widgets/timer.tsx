@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { TIMER_KIND } from "@convex/lib/resourceKinds";
 import { useAction, useQuery } from "convex/react";
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -19,8 +20,6 @@ import {
   timerProgressPercent,
   timerStatus,
 } from "@/lib/resource-values";
-
-const TIMER_KIND = "timer";
 
 const TIMERS_PATH = "/stream/timers";
 

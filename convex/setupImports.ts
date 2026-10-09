@@ -16,6 +16,7 @@ import { addGroupMemberInEngine, createCommandInEngine, createGroupInEngine } fr
 import { escapeDollarKeys, unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRole, requireInstanceRoleInAction } from "./lib/instanceAccess";
+import { COUNTER_KIND } from "./lib/resourceKinds";
 import { flattenSteps } from "./lib/setupImport/build";
 import { compileCommandActions, compileWorkflow, missingRequirementMessage } from "./lib/setupImport/compile";
 import { convertFirebot } from "./lib/setupImport/firebot";
@@ -577,7 +578,7 @@ export const existing = internalQuery({
 export const counterKind = internalQuery({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }) => {
-    const kind = await findResourceKind(ctx, instanceId, "counter");
+    const kind = await findResourceKind(ctx, instanceId, COUNTER_KIND);
     return kind ? { moduleName: kind.moduleName } : null;
   },
 });

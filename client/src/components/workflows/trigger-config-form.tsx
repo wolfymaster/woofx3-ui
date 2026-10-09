@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { bareKind, parseKindRef } from "@convex/lib/resourceKinds";
 import { THEME_FIELD_TYPE } from "@convex/lib/widgetThemes";
 import { useAction, useQuery } from "convex/react";
 import { FileAudio, FileImage, FileVideo, Link2, Plus, Upload, X } from "lucide-react";
@@ -117,12 +118,17 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
     instanceId && resourceKind ? { instanceId, kind: resourceKind } : "skip"
   );
   const createAction = useAction(api.moduleResourceActions.createResourceInstance);
-  // The kind's create form, so an instance made from here is configured the same
-  // way as one made on the kind's own page.
+  // The kind's declaration: the module an instance made from here belongs to,
+  // and its create form, so it is configured the same way as one made on the
+  // kind's own page.
   const kindDefinition = useQuery(
     api.resourceKinds.getForInstance,
-    instanceId && resourceKind && createOpen ? { instanceId, kind: resourceKind } : "skip"
+    instanceId && resourceKind ? { instanceId, kind: resourceKind } : "skip"
   );
+  // Until the kind's declaration is known, a qualified kind still names its
+  // module, and a bare one is taken to be the field's own module's.
+  const owner =
+    kindDefinition?.moduleName ?? (resourceKind ? parseKindRef(resourceKind)?.module : undefined) ?? moduleName;
 
   const options = instances ?? [];
   const loading = !!instanceId && !!resourceKind && instances === undefined;
@@ -167,7 +173,7 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
           variant="outline"
           size="sm"
           className="gap-1.5 shrink-0"
-          disabled={!instanceId || !resourceKind || !moduleName}
+          disabled={!instanceId || !resourceKind || !owner}
           onClick={() => setCreateOpen(true)}
           data-testid={`button-new-${field.id}`}
         >
@@ -177,17 +183,17 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
       </div>
       {field.hint && <p className="text-xs text-muted-foreground">{field.hint as string}</p>}
 
-      {createOpen && instanceId && resourceKind && moduleName && (
+      {createOpen && instanceId && resourceKind && owner && (
         <CreateResourceDialog
           key={kindDefinition ? "with-schema" : "without-schema"}
-          moduleId={moduleName}
-          kind={{ kind: resourceKind, name: field.label, schema: kindDefinition?.schema }}
+          moduleId={owner}
+          kind={{ kind: bareKind(resourceKind), name: field.label, schema: kindDefinition?.schema }}
           onClose={() => setCreateOpen(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
             const created = await createAction({
               instanceId,
-              moduleName,
-              kind: resourceKind,
+              moduleName: owner,
+              kind: bareKind(resourceKind),
               resourceInstanceId,
               displayName,
               settings,

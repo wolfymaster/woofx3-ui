@@ -1,3 +1,4 @@
+import { QUEUE_KIND } from "@convex/lib/resourceKinds";
 import { ChevronsRight, ListOrdered, Plus, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
@@ -18,7 +19,7 @@ const BASE_PATH = "/stream/queues";
 export default function Queues() {
   return (
     <ResourceKindPage
-      kind="queue"
+      kind={QUEUE_KIND}
       title="Queues"
       description="Lines your viewers join: games with viewers, song requests, shoutouts. Work through them here, from a chat command, or from any workflow."
       icon={ListOrdered}

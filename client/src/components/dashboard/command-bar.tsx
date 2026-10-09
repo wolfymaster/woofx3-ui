@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { COUNTER_KIND } from "@convex/lib/resourceKinds";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { Check, Clapperboard, Loader2, Maximize2, Plus, Radio, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -17,7 +18,6 @@ import { counterGoals, counterValue, goalProgress } from "@/lib/resource-values"
 import { cn } from "@/lib/utils";
 
 /** The resource kind the bar's cards are drawn from; must match the woofx3 module's counter kind. */
-const COUNTER_KIND = "counter";
 
 const COUNTERS_PATH = "/stream/counters";
 

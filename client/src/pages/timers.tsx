@@ -1,3 +1,4 @@
+import { TIMER_KIND } from "@convex/lib/resourceKinds";
 import { Pause, Play, RotateCcw, Timer } from "lucide-react";
 import { useState } from "react";
 import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
@@ -20,7 +21,7 @@ const BASE_PATH = "/stream/timers";
 export default function Timers() {
   return (
     <ResourceKindPage
-      kind="timer"
+      kind={TIMER_KIND}
       title="Timers"
       description="Countdowns your stream shows: break timers, subathons, giveaways. Start, pause and add time here, from a chat command, or from any workflow."
       icon={Timer}
