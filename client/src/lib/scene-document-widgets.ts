@@ -48,6 +48,16 @@ export function documentOfCanvas(canvas: SceneCanvas, base: SceneDocument | null
   };
 }
 
+/**
+ * A change to the editor's canvas as an edit of a scene document, for
+ * `SceneSyncClient.edit`. `update` is handed the canvas of the document the
+ * client holds when the edit is made, never a copy the editor kept, so an edit
+ * made just after another editor's change cannot put that change back.
+ */
+export function canvasEdit(update: (canvas: SceneCanvas) => SceneCanvas): (doc: SceneDocument) => SceneDocument {
+  return (doc) => documentOfCanvas(update(canvasOfDocument(doc)), doc);
+}
+
 function numberOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }

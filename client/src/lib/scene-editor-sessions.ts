@@ -1,28 +1,31 @@
 /**
- * Every scene editor session open in this tab, and the checks the tab makes
- * before it closes.
+ * The scene sync clients open in this tab, one per scene, and the checks the
+ * tab makes before it closes.
  *
- * A session outlives its editor: closing the editor leaves it delivering what
- * it has pending (see `SceneEditorClient.stop`). So a scene's sessions are
- * found here rather than through the mounted editor, to close them when the
- * scene is deleted, and closing the tab asks first while any of them, or any
- * mounted editor's own unsaved fields, has work not yet through. A Publish or
- * Discard one of them waits on locks the scene's draft in every editor of
- * the scene, including one opened after the editor that asked for it closed.
+ * A client outlives its editor: closing the editor stops it, and a stopped
+ * client keeps delivering what it has pending until it is through or its
+ * deadline passes (`SceneSyncClient.stop`). Opening the scene again
+ * meanwhile takes the same client back (`resume`) rather than starting a
+ * second one beside it, so the scene's edits stay in one queue. A client is
+ * forgotten once it has ended and no editor holds it. Closing the tab asks
+ * first while any client has something pending, or a mounted editor has
+ * fields of its own unsaved.
  */
 
-import type { DraftCommand } from "@/lib/scene-editor-client";
+import type { ConnState, SceneSyncClient } from "@woofx3/api/scene-editor/client";
 
-/** The slice of `SceneEditorClient` this needs. */
-export interface TrackedSession {
-  /** Send what the editor changed now, rather than at the next tick. */
-  flush(): void;
-  /** Whether anything asked of the session is not through yet. */
-  hasPending(): boolean;
-  /** Close at once, sending nothing more. */
+/** The slice of `SceneSyncClient` the registry needs. */
+export interface TrackedClient {
+  start(): void;
+  /** Finish delivering what is pending, then close. */
+  stop(): void;
+  /** Cancel `stop()`. False when the client already ended. */
+  resume(): boolean;
+  /** Close now, delivering nothing more. */
   abandon(): void;
-  /** The Publish or Discard waiting for the engine's answer. */
-  pendingCommand(): DraftCommand | null;
+  hasPending(): boolean;
+  subscribe(listener: () => void): () => void;
+  getState(): { conn: ConnState };
 }
 
 /** The slice of `window` this needs (injectable for tests). */
@@ -31,27 +34,31 @@ export interface UnloadTarget {
   removeEventListener(type: "beforeunload", listener: (event: BeforeUnloadEvent) => void): void;
 }
 
-export interface SceneEditorSessions {
-  /** Track an open session of a scene until the returned function is called. */
-  register(session: TrackedSession, sceneKey: string): () => void;
+export interface SceneEditorSessions<C extends TrackedClient> {
   /**
-   * Track a check for unsaved changes no session carries (an editor's scene
+   * The scene's client, for an editor that has just mounted: the one still
+   * open from an editor that closed, resumed, or else a new one from
+   * `factory`, started. Hand it back with `release` when the editor unmounts.
+   */
+  acquire(sceneKey: string, factory: () => C): C;
+  /** An editor that acquired `client` unmounted. The last one out stops it. */
+  release(sceneKey: string, client: C): void;
+  /**
+   * Track a check for unsaved changes no client carries (an editor's scene
    * name and description) until the returned function is called.
    */
   registerUnsavedCheck(check: () => boolean): () => void;
-  /** Abandon every session of a scene, including one still draining after its editor closed. */
+  /** Close the scene's client at once, including one still delivering after its editor closed. */
   abandonScene(sceneKey: string): void;
-  /** The Publish or Discard any session of the scene waits on, or null. */
-  commandOf(sceneKey: string): DraftCommand | null;
-  /** A session's pending command changed; tells the listeners. */
-  commandChanged(): void;
-  /** Call `listener` whenever `commandOf` may have changed, until the returned function is called. */
-  subscribe(listener: () => void): () => void;
-  /**
-   * Whether closing the tab now would lose work. Flushes each session first:
-   * closing the tab skips React's cleanup, so this is the last chance to send.
-   */
+  /** Whether closing the tab now would lose work. */
   hasUnsentWork(): boolean;
+}
+
+interface Entry<C> {
+  client: C;
+  /** Mounted editors holding the client. */
+  holders: number;
+  unsubscribe: () => void;
 }
 
 const UNSAVED_PROMPT = "Changes to this scene are still being saved.";
@@ -60,36 +67,31 @@ export function sceneKeyOf(instanceId: string, engineSceneId: string): string {
   return `${instanceId}:${engineSceneId}`;
 }
 
-/**
- * One `beforeunload` listener is on `target` while anything is tracked, and
- * asks before the tab closes on unsent work of any of it.
- */
-export function createSceneEditorSessions(target: UnloadTarget | null): SceneEditorSessions {
-  const sessions = new Map<TrackedSession, string>();
+function hasEnded(client: TrackedClient): boolean {
+  const { conn } = client.getState();
+  return conn === "closed" || conn === "gone";
+}
+
+/** One `beforeunload` listener is on `target` while any client or unsaved check is tracked. */
+export function createSceneEditorSessions<C extends TrackedClient>(
+  target: UnloadTarget | null
+): SceneEditorSessions<C> {
+  const entries = new Map<string, Entry<C>>();
   const unsavedChecks = new Set<() => boolean>();
-  const commandListeners = new Set<() => void>();
   let listening = false;
 
-  const commandChanged = (): void => {
-    for (const listener of [...commandListeners]) {
-      listener();
-    }
-  };
-
   const hasUnsentWork = (): boolean => {
-    let unsent = false;
-    for (const session of sessions.keys()) {
-      session.flush();
-      if (session.hasPending()) {
-        unsent = true;
+    for (const { client } of entries.values()) {
+      if (client.hasPending()) {
+        return true;
       }
     }
     for (const check of unsavedChecks) {
       if (check()) {
-        unsent = true;
+        return true;
       }
     }
-    return unsent;
+    return false;
   };
 
   const askBeforeUnload = (event: BeforeUnloadEvent): void => {
@@ -101,7 +103,7 @@ export function createSceneEditorSessions(target: UnloadTarget | null): SceneEdi
   };
 
   const syncListener = (): void => {
-    const needed = sessions.size > 0 || unsavedChecks.size > 0;
+    const needed = entries.size > 0 || unsavedChecks.size > 0;
     if (needed && !listening) {
       target?.addEventListener("beforeunload", askBeforeUnload);
     } else if (!needed && listening) {
@@ -110,17 +112,49 @@ export function createSceneEditorSessions(target: UnloadTarget | null): SceneEdi
     listening = needed;
   };
 
+  const forget = (sceneKey: string, entry: Entry<C>): void => {
+    entry.unsubscribe();
+    entries.delete(sceneKey);
+    syncListener();
+  };
+
+  /** Drop the scene's entry once no editor holds its client and the client has ended. */
+  const forgetIfDone = (sceneKey: string, entry: Entry<C>): void => {
+    if (entry.holders === 0 && hasEnded(entry.client) && entries.get(sceneKey) === entry) {
+      forget(sceneKey, entry);
+    }
+  };
+
   return {
-    register(session, sceneKey) {
-      sessions.set(session, sceneKey);
-      syncListener();
-      commandChanged();
-      return () => {
-        if (sessions.delete(session)) {
-          syncListener();
-          commandChanged();
+    acquire(sceneKey, factory) {
+      const existing = entries.get(sceneKey);
+      if (existing !== undefined) {
+        if (existing.client.resume()) {
+          existing.holders++;
+          return existing.client;
         }
-      };
+        // Ended while an editor still held it (the scene is gone, or the
+        // engine ended the session for good): this editor starts over.
+        forget(sceneKey, existing);
+      }
+      const client = factory();
+      const entry: Entry<C> = { client, holders: 1, unsubscribe: () => {} };
+      entry.unsubscribe = client.subscribe(() => forgetIfDone(sceneKey, entry));
+      entries.set(sceneKey, entry);
+      syncListener();
+      client.start();
+      return client;
+    },
+    release(sceneKey, client) {
+      const entry = entries.get(sceneKey);
+      if (entry === undefined || entry.client !== client || entry.holders === 0) {
+        return;
+      }
+      entry.holders--;
+      if (entry.holders === 0) {
+        client.stop();
+      }
+      forgetIfDone(sceneKey, entry);
     },
     registerUnsavedCheck(check) {
       unsavedChecks.add(check);
@@ -132,31 +166,13 @@ export function createSceneEditorSessions(target: UnloadTarget | null): SceneEdi
       };
     },
     abandonScene(sceneKey) {
-      for (const [session, key] of [...sessions]) {
-        if (key === sceneKey) {
-          session.abandon();
-        }
-      }
-    },
-    commandOf(sceneKey) {
-      for (const [session, key] of sessions) {
-        const command = key === sceneKey ? session.pendingCommand() : null;
-        if (command !== null) {
-          return command;
-        }
-      }
-      return null;
-    },
-    commandChanged,
-    subscribe(listener) {
-      commandListeners.add(listener);
-      return () => {
-        commandListeners.delete(listener);
-      };
+      entries.get(sceneKey)?.client.abandon();
     },
     hasUnsentWork,
   };
 }
 
-/** The tab's sessions. */
-export const sceneEditorSessions = createSceneEditorSessions(typeof window === "undefined" ? null : window);
+/** The tab's clients. */
+export const sceneEditorSessions = createSceneEditorSessions<SceneSyncClient>(
+  typeof window === "undefined" ? null : window
+);
