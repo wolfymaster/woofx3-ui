@@ -25,6 +25,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ListField } from "@/components/common/list-field";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
 import { LocalEndpointPanel } from "@/components/modules/local-endpoint-panel";
 import { ModuleFileContentView, ModuleFilesTab } from "@/components/modules/module-files";
@@ -49,6 +50,7 @@ import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
 import { actionErrorMessage } from "@/lib/action-error";
 import { settingFieldOptionsReference } from "@/lib/field-options-reference";
+import { listSettingText, listSettingValue } from "@/lib/list-setting-value";
 import { matchFunctionFile } from "@/lib/module-files";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 import { OBS_MODULE_ID } from "@/lib/obs-status";
@@ -1050,6 +1052,22 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
               />
             );
           }
+          if (field.type === "list" && field.itemFields) {
+            const savedText = loadedValues?.[field.id] ?? field.defaultValue ?? "[]";
+            const text = values[field.id] ?? savedText;
+            return (
+              <ListSettingRow
+                key={field.id}
+                field={field}
+                text={text}
+                dirty={text !== savedText}
+                busy={saving === field.id}
+                saved={saveSuccess === field.id}
+                onChange={(next) => setValues((prev) => ({ ...prev, [field.id]: next }))}
+                onSave={() => void saveSetting(field.id, text, false)}
+              />
+            );
+          }
           const currentValue = values[field.id] ?? loadedValues?.[field.id] ?? field.defaultValue ?? "";
           const isDirty = currentValue !== (loadedValues?.[field.id] ?? field.defaultValue ?? "");
           const source = settingSources.get(field.id);
@@ -1177,6 +1195,49 @@ interface SecretSettingRowProps {
  * A `secret` setting. The stored value never comes back from the engine, so
  * the field always starts empty and shows only whether a value is set.
  */
+interface ListSettingRowProps {
+  field: ManifestSettingField;
+  /** The setting as stored: a JSON array of rows (see list-setting-value). */
+  text: string;
+  dirty: boolean;
+  busy: boolean;
+  saved: boolean;
+  onChange: (text: string) => void;
+  onSave: () => void;
+}
+
+/**
+ * A `list` module setting: rows added and removed in the same editor every
+ * other `list` control uses, saved together with one Save.
+ */
+function ListSettingRow({ field, text, dirty, busy, saved, onChange, onSave }: ListSettingRowProps) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <ListField field={field} value={listSettingValue(text)} onChange={(rows) => onChange(listSettingText(rows))} />
+      </div>
+      <Button
+        size="sm"
+        variant={saved ? "secondary" : "outline"}
+        className="h-7 px-3 text-xs"
+        disabled={!dirty || busy}
+        onClick={onSave}
+      >
+        {busy ? (
+          <Loader2 className="h-3 w-3 animate-spin" />
+        ) : saved ? (
+          <>
+            <Check className="h-3 w-3 mr-1" />
+            Saved
+          </>
+        ) : (
+          "Save"
+        )}
+      </Button>
+    </div>
+  );
+}
+
 function SecretSettingRow({
   field,
   isSet,
