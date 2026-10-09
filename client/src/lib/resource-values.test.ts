@@ -8,6 +8,7 @@ import {
   queueAddRefusal,
   queueCapacity,
   queueEntries,
+  summarizeResourceValue,
   timerProgressPercent,
   timerState,
   timerStatus,
@@ -219,5 +220,23 @@ describe("counterValue", () => {
   test("falls back to zero when the starting value is unusable", () => {
     expect(counterValue(null, {})).toBe(0);
     expect(counterValue(null, { initialValue: "lots" })).toBe(0);
+  });
+});
+
+describe("summarizeResourceValue", () => {
+  test("reads a single value", () => {
+    expect(summarizeResourceValue(1200)).toBe((1200).toLocaleString());
+    expect(summarizeResourceValue(true)).toBe("On");
+    expect(summarizeResourceValue("short")).toBe("short");
+    expect(summarizeResourceValue("a value far too long to sit beside a name")).toHaveLength(24);
+  });
+
+  test("counts a list", () => {
+    expect(summarizeResourceValue(["a", "b", "c"])).toBe("3");
+  });
+
+  test("says nothing of an object or of nothing", () => {
+    expect(summarizeResourceValue({ items: ["a"] })).toBe("");
+    expect(summarizeResourceValue(null)).toBe("");
   });
 });

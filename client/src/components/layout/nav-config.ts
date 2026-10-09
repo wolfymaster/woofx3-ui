@@ -155,6 +155,26 @@ export function isNavItemActive(item: NavItem, location: string): boolean {
   return [item.href, ...(item.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
 }
 
+/**
+ * `items` with `extra` nested under Alerts, ahead of Workflows: the resource kinds
+ * installed modules declare, beside the built-in counters, timers and queues.
+ * `items` comes back unchanged when it has no Alerts entry.
+ */
+export function withAlertsChildren(items: NavItem[], extra: NavItem[]): NavItem[] {
+  if (extra.length === 0) {
+    return items;
+  }
+  return items.map((item) => {
+    if (item.id !== "alerts") {
+      return item;
+    }
+    const children = item.children ?? [];
+    const workflows = children.findIndex((child) => child.id === "workflows");
+    const at = workflows === -1 ? children.length : workflows;
+    return { ...item, children: [...children.slice(0, at), ...extra, ...children.slice(at)] };
+  });
+}
+
 /** Whether an entry's nested entries show: while it, or one of them, is the page on show. */
 export function isNavGroupOpen(item: NavItem, location: string): boolean {
   if (!item.children) {

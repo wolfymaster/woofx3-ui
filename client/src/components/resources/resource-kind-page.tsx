@@ -54,6 +54,8 @@ interface ResourceKindPageProps {
   icon: LucideIcon;
   /** Where this page is routed; an instance lives at `<basePath>/<its id>`. */
   basePath: string;
+  /** What to say when no installed module provides the kind. */
+  unavailableDescription?: string;
   /** The value beside an instance's name in the rail. */
   railValue: (props: ResourceDetailProps) => ReactNode;
   /** What the kind shows and lets you do, above its settings. */
@@ -82,6 +84,7 @@ export function ResourceKindPage({
   description,
   icon,
   basePath,
+  unavailableDescription,
   railValue,
   detail,
   triggerDetail,
@@ -144,7 +147,10 @@ export function ResourceKindPage({
         <EmptyState
           icon={icon}
           title={`${title} aren't available yet`}
-          description={`No installed module provides ${kindName}s. They come with the woofx3 module — restart the engine to install its latest version.`}
+          description={
+            unavailableDescription ??
+            `No installed module provides ${kindName}s. They come with the woofx3 module — restart the engine to install its latest version.`
+          }
         />
       </div>
     );
