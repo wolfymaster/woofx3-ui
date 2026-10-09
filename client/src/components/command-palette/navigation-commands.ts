@@ -8,6 +8,7 @@ import {
   STREAM_ITEMS,
   sectionsFor,
   UTILITY_SECTIONS,
+  withAlertsChildren,
 } from "@/components/layout/nav-config";
 import { COMMAND_GROUP_NEW_ROUTE, COMMAND_GROUPS_PATH, COMMAND_NEW_ROUTE } from "@/lib/command-editor-route";
 import type { PaletteCommand } from "./types";
@@ -61,8 +62,14 @@ function pageCommand(item: NavItem, section?: string): PaletteCommand {
 /**
  * Every destination in the menu for an instance hosted this way, in menu order, plus the
  * pages it only reaches by a link. Instance settings are left out for a non-admin.
+ * `resourceKindItems` are the pages of the kinds installed modules declare, which the
+ * menu lists under Alerts.
  */
-export function navigationCommands(hosting: InstanceHosting, isAdmin: boolean): PaletteCommand[] {
+export function navigationCommands(
+  hosting: InstanceHosting,
+  isAdmin: boolean,
+  resourceKindItems: NavItem[] = []
+): PaletteCommand[] {
   const sections = sectionsFor([...MAIN_NAV_SECTIONS, ...UTILITY_SECTIONS], isAdmin);
   const pages: PaletteCommand[] = [];
   for (const section of sections) {
@@ -70,7 +77,8 @@ export function navigationCommands(hosting: InstanceHosting, isAdmin: boolean): 
       pages.push(pageCommand(section));
       continue;
     }
-    for (const child of flattenNavItems(navItemsFor(section.children, hosting))) {
+    const children = withAlertsChildren(section.children, resourceKindItems);
+    for (const child of flattenNavItems(navItemsFor(children, hosting))) {
       pages.push(pageCommand(child, section.label));
     }
   }
