@@ -15,9 +15,11 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
+import { Eye, EyeOff, GripVertical, Layers, Trash2 } from "lucide-react";
 import { widgetIconFor } from "@/components/overlay-editor/widget-icon";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { coveredNotice } from "@/lib/layer-coverage";
 import { cn } from "@/lib/utils";
 import type { Widget } from "@/types";
 
@@ -38,6 +40,8 @@ interface LayersListProps {
   onDelete?: (widgetId: string) => void;
   /** Gives each layer a show/hide button; a hidden layer is struck through. */
   onToggleVisible?: (widgetId: string) => void;
+  /** Layers fully covered by the ones above them, by id, with those covering layers. See coveringLayers. */
+  coveredBy?: ReadonlyMap<string, readonly Widget[]>;
   /** The phone layout lays the layers out as one sideways-scrolling row. */
   horizontal?: boolean;
   emptyMessage: string;
@@ -47,6 +51,7 @@ function LayerRow({
   widget,
   label,
   note,
+  coveredNote,
   icon: Icon,
   isSelected,
   horizontal,
@@ -58,6 +63,7 @@ function LayerRow({
   widget: Widget;
   label: string;
   note: string | undefined;
+  coveredNote: string | undefined;
   icon: ReturnType<typeof widgetIconFor>;
   isSelected: boolean;
   horizontal: boolean;
@@ -104,6 +110,21 @@ function LayerRow({
       >
         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <span className={cn("min-w-0 flex-1 truncate", hidden && "text-muted-foreground line-through")}>{label}</span>
+        {coveredNote ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                role="img"
+                aria-label={coveredNote}
+                className="shrink-0 text-amber-500"
+                data-testid={`layer-covered-${widget.id}`}
+              >
+                <Layers className="h-3.5 w-3.5" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{coveredNote}</TooltipContent>
+          </Tooltip>
+        ) : null}
         {note ? <span className="shrink-0 font-mono text-xs text-muted-foreground">{note}</span> : null}
       </button>
       {onToggleVisible && (
@@ -138,6 +159,13 @@ function LayerRow({
   );
 }
 
+function coveredNoteFor(
+  coverers: readonly Widget[] | undefined,
+  label: (widget: Widget) => string
+): string | undefined {
+  return coverers && coverers.length > 0 ? coveredNotice(coverers.map(label)) : undefined;
+}
+
 /**
  * The layers on the canvas, topmost first; picking one selects it on the
  * canvas, and dragging one by its grip moves it up or down the stack. Arrow
@@ -157,6 +185,7 @@ export function LayersList({
   onMove,
   onDelete,
   onToggleVisible,
+  coveredBy,
   horizontal = false,
   emptyMessage,
 }: LayersListProps) {
@@ -197,6 +226,7 @@ export function LayersList({
                   widget={widget}
                   label={label(widget)}
                   note={meta?.(widget)}
+                  coveredNote={coveredNoteFor(coveredBy?.get(widget.id), label)}
                   icon={widgetIconFor(taxonomyOf(widget))}
                   isSelected={widget.id === selectedId}
                   horizontal={horizontal}

@@ -6,6 +6,7 @@ import type { CustomFieldRenderer } from "@/components/common/configuration-form
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
+import { coveringLayers } from "@/lib/layer-coverage";
 import { layersTopFirst, moveLayer, nextLayerZIndex } from "@/lib/layer-order";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
@@ -181,6 +182,11 @@ export function WidgetLayoutCanvas({
   const selectedWidgetFields = (selectedWidget ? (catalogRowFor(selectedWidget)?.settings ?? []) : []) as ConfigField[];
 
   const layers = layersTopFirst(widgets);
+  // An alert widget shows only while an alert plays, so whatever it covers is in sight the rest of the time.
+  const coveredBy = useMemo(
+    () => coveringLayers(widgets, { canCover: (above) => !isAlertWidget(above) }),
+    [widgets, isAlertWidget]
+  );
   const moveLayerTo = useCallback((widgetId: string, toIndex: number) => {
     onChangeRef.current((prev) => moveLayer(prev, widgetId, toIndex));
   }, []);
@@ -212,6 +218,7 @@ export function WidgetLayoutCanvas({
           onMove={moveLayerTo}
           onDelete={deleteWidget}
           onToggleVisible={canHide ? toggleVisible : undefined}
+          coveredBy={coveredBy}
           emptyMessage="Nothing on the canvas yet. Add a widget to start."
         />
       }
