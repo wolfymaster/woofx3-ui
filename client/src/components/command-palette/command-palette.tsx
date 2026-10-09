@@ -14,6 +14,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
+import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useToast } from "@/hooks/use-toast";
 import {
   inlineArgument,
@@ -101,7 +102,11 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
 
   const hosting = instance?.hosting;
   const isAdmin = useIsInstanceAdmin() ?? false;
-  const navigation = useMemo(() => navigationCommands(hosting, isAdmin), [hosting, isAdmin]);
+  const resourceKindItems = useResourceKindNavItems();
+  const navigation = useMemo(
+    () => navigationCommands(hosting, isAdmin, resourceKindItems),
+    [hosting, isAdmin, resourceKindItems]
+  );
   const items = useItemCommands(instance);
   const actions = useActionCommands(instance, instances, setInstance);
 

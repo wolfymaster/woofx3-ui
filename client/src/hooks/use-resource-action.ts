@@ -83,6 +83,23 @@ export function useResourceActionRunner() {
   };
 }
 
+/**
+ * Runs any action aimed at a kind against `instance`, through the parameter that action
+ * picks an instance with: `useResourceAction`'s `runAction` for callers that act on many
+ * instances, such as the quick actions palette. Throws what the engine refused.
+ */
+export function useAimedResourceActionRunner() {
+  const sendStep = useResourceActionSender();
+
+  return function runAimedAction(
+    instance: ResourceInstanceDoc,
+    action: ResourceAction,
+    parameters: Record<string, unknown> = {}
+  ): Promise<boolean> {
+    return sendStep(instance, resourceActionStepFor(action, instance.canonicalId, parameters));
+  };
+}
+
 /** Sends one action step about `instance` to the engine; false when no engine instance is selected. */
 function useResourceActionSender() {
   const { instance: engineInstance } = useInstance();

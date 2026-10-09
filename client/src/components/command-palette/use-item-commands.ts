@@ -4,6 +4,7 @@ import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds"
 import { useAction, useQuery } from "convex/react";
 import {
   Bell,
+  Boxes,
   FlaskConical,
   FolderTree,
   History,
@@ -28,19 +29,22 @@ import {
   Zap,
 } from "lucide-react";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
-import { useResourceActionRunner } from "@/hooks/use-resource-action";
+import { useAimedResourceActionRunner, useResourceActionRunner } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { buildAlertTree, flattenAlertTree } from "@/lib/alert-groups";
 import { commandEditorPath, commandGroupEditorPath } from "@/lib/command-editor-route";
+import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { groupLabel } from "@/lib/group-display";
 import { applyMacroVariables, hasMacroVariables } from "@/lib/macro-pad";
 import { bareModuleKey } from "@/lib/module-key";
+import { resourceActions } from "@/lib/resource-actions";
 import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
 import { counterValue, formatDuration, parseDuration, queueEntries, timerState } from "@/lib/resource-values";
 import { streamRecapPath } from "@/lib/stream-recap-route";
 import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
 import { workflowDescription, workflowName } from "@/lib/workflow-display";
 import { workflowRunsPath } from "@/lib/workflow-run-route";
+import { type PaletteResourceKind, resourceKindItemCommands } from "./resource-kind-commands";
 import type { PaletteCommand } from "./types";
 
 /** Whether `path` is `base` or somewhere below it. */
@@ -101,7 +105,9 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const timerKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: TIMER_KIND } : "skip");
   const queueKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: QUEUE_KIND } : "skip");
   const values = useQuery(api.resourceValues.listForInstance, args);
-  const { triggerPresets } = useWorkflowCatalog();
+  const resourceInstances = useQuery(api.moduleResourceInstances.listForInstance, args);
+  const declaredKinds = useQuery(api.resourceKinds.listForInstance, args);
+  const { triggerPresets, actionPresets } = useWorkflowCatalog();
 
   const setWorkflowEnabled = useAction(api.workflowActions.setEnabled);
   const updateCommand = useAction(api.chatCommandActions.updateCommand);
@@ -109,6 +115,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
   const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
   const runResourceAction = useResourceActionRunner();
+  const runAimedAction = useAimedResourceActionRunner();
   const fireTestEvent = useFireTestEvent();
 
   if (!instanceId) {
@@ -442,6 +449,17 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
     ];
     result.push(item);
   }
+
+  const kinds = (declaredKinds ?? []).map(
+    (declared): PaletteResourceKind => ({
+      moduleName: declared.moduleName,
+      kind: declared.kind,
+      name: declared.name,
+      icon: declared.icon ? dynamicLucideIcon(declared.icon) : Boxes,
+      actions: resourceActions(actionPresets, `${declared.moduleName}:${declared.kind}`),
+    })
+  );
+  result.push(...resourceKindItemCommands(kinds, resourceInstances ?? [], values ?? {}, runAimedAction));
 
   for (const scene of scenes ?? []) {
     if (!scene.engineSceneId) {
