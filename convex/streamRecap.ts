@@ -14,15 +14,30 @@ import {
   sortClipsByViews,
   toRecapClip,
 } from "./lib/recapClips";
+import {
+  type HelixMarker,
+  type HelixVideo,
+  MARKER_READ_SCOPES,
+  markersFromHelix,
+  RECAP_MARKER_MAX_PAGES,
+  RECAP_MARKER_VIDEO_LOOKBACK,
+  type RecapMarker,
+  toRecapMarkers,
+  videosInWindow,
+} from "./lib/recapMarkers";
 import { sessionSnapshotPayload } from "./lib/sessionSummary";
 import {
   classifyEngineCallError,
   type EngineCallFailure,
+  RECAP_EVENT_LIMIT,
   RECAP_LEADERBOARD_LIMIT,
+  type RecapTimelineEvents,
   type StreamRecapEngineApi,
   type StreamRecapEngineDetail,
   toRecapEngineDetail,
+  toRecapTimelineEvents,
 } from "./lib/streamRecap";
+import { type AuthorizedTwitchCall, freshTwitchCredentials } from "./lib/twitchAuth";
 import { logger } from "./logger";
 
 /**
@@ -64,6 +79,50 @@ export const loadEngineDetail = action({
     } catch (error) {
       const failure = classifyEngineCallError(error);
       logger.warn("stream recap: engine call failed", {
+        instanceId,
+        sessionId,
+        status: failure.status,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return failure;
+    }
+  },
+});
+
+/**
+ * The session's counted events in time order, for the recap timeline. Kept
+ * apart from `loadEngineDetail` because it needs a newer engine
+ * (`analytics.sessionEvents`): the page calls it only when the engine lists
+ * that capability, and the rest of the recap does not wait on it.
+ */
+export const loadTimelineEvents = action({
+  args: {
+    instanceId: v.id("instances"),
+    sessionId: v.string(),
+  },
+  handler: async (ctx, { instanceId, sessionId }): Promise<RecapTimelineEvents> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    const membership = await ctx.runQuery(internal.instances.getMembership, { instanceId, userId });
+    if (!membership) {
+      throw new Error("Not authorized");
+    }
+    const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+    if (!instance?.clientId || !instance.clientSecret) {
+      return { status: "unregistered" };
+    }
+    try {
+      const answer = await createEngineRpcSession<StreamRecapEngineApi>(
+        instance.url,
+        instance.clientId,
+        instance.clientSecret
+      ).getStreamSessionEvents({ sessionId, limit: RECAP_EVENT_LIMIT });
+      return toRecapTimelineEvents(answer);
+    } catch (error) {
+      const failure = classifyEngineCallError(error);
+      logger.warn("stream recap: engine events call failed", {
         instanceId,
         sessionId,
         status: failure.status,
@@ -276,5 +335,120 @@ export const loadClips = action({
       window
     );
     return { status: "ok", clips: sortClipsByViews(clips.map((clip) => toRecapClip(clip, window))) };
+  },
+});
+
+const TWITCH_VIDEOS_URL = "https://api.twitch.tv/helix/videos";
+const TWITCH_MARKERS_URL = "https://api.twitch.tv/helix/streams/markers";
+
+export type RecapMarkersResult =
+  | { status: "ok"; markers: RecapMarker[] }
+  | { status: "never_live" }
+  | { status: "missing_scope" }
+  /** The channel kept no VOD of this session, which is where Twitch keeps markers. */
+  | { status: "no_vod" };
+
+async function helixGet(twitch: AuthorizedTwitchCall, url: string, what: string): Promise<unknown> {
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${twitch.accessToken}`, "Client-Id": twitch.clientId },
+  });
+  if (response.status === 401) {
+    throw new ConvexError("Twitch rejected this channel's connection. Reconnect Twitch in Settings, Integrations.");
+  }
+  if (response.status === 429) {
+    throw new ConvexError("Twitch is rate-limiting requests right now. Try again in a minute.");
+  }
+  if (!response.ok) {
+    throw new ConvexError(`Twitch couldn't list ${what} (${response.status}).`);
+  }
+  return response.json();
+}
+
+async function fetchVideoMarkers(twitch: AuthorizedTwitchCall, video: HelixVideo): Promise<HelixMarker[]> {
+  const markers: HelixMarker[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < RECAP_MARKER_MAX_PAGES; page++) {
+    const params = new URLSearchParams({ video_id: video.id, first: "100" });
+    if (cursor) {
+      params.set("after", cursor);
+    }
+    const body = await helixGet(twitch, `${TWITCH_MARKERS_URL}?${params}`, "stream markers");
+    const found = markersFromHelix(body);
+    markers.push(...found);
+    cursor = (body as { pagination?: { cursor?: string } }).pagination?.cursor;
+    if (!cursor || found.length === 0) {
+      break;
+    }
+  }
+  return markers;
+}
+
+/**
+ * The stream markers placed while a recapped session was live. Twitch keeps
+ * markers on a broadcast's VOD, so this finds the channel's archives that
+ * overlap the session and reads each one's markers. Fetched on every call and
+ * never stored, like clips. Needs a scope that can read markers, which an
+ * older Twitch link may lack; that is an answer, not an error, so the rest of
+ * the timeline still loads.
+ */
+export const loadMarkers = action({
+  args: {
+    instanceId: v.id("instances"),
+    sessionId: v.string(),
+  },
+  handler: async (ctx, { instanceId, sessionId }): Promise<RecapMarkersResult> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new ConvexError("Not authenticated");
+    }
+    const { isMember, link } = await ctx.runQuery(internal.lib.twitchAuth.twitchAuthContext, { instanceId, userId });
+    if (!isMember) {
+      throw new ConvexError("Not authorized");
+    }
+    const row = await ctx.runQuery(internal.streamSessionSummaries.getInternal, { instanceId, sessionId });
+    if (!row) {
+      throw new ConvexError("There's no recap for this stream.");
+    }
+    const window = clipWindow(row.session?.segments ?? [], Date.now());
+    if (window === null) {
+      return { status: "never_live" };
+    }
+    if (!link) {
+      throw new ConvexError("Twitch isn't connected for this instance. Connect it in Settings, Integrations.");
+    }
+    if (!MARKER_READ_SCOPES.some((scope) => link.scopes.includes(scope))) {
+      return { status: "missing_scope" };
+    }
+
+    let twitch: AuthorizedTwitchCall;
+    try {
+      twitch = await freshTwitchCredentials(ctx, instanceId);
+    } catch (error) {
+      logger.warn("stream recap: twitch token refresh failed", {
+        instanceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new ConvexError("Couldn't refresh the Twitch connection. Reconnect Twitch in Settings, Integrations.");
+    }
+
+    const params = new URLSearchParams({
+      user_id: twitch.broadcasterUserId,
+      type: "archive",
+      first: String(RECAP_MARKER_VIDEO_LOOKBACK),
+    });
+    const body = (await helixGet(twitch, `${TWITCH_VIDEOS_URL}?${params}`, "past broadcasts")) as {
+      data?: HelixVideo[];
+    };
+    if (!Array.isArray(body?.data)) {
+      throw new ConvexError("Twitch answered the past broadcast list in an unexpected shape.");
+    }
+    const videos = videosInWindow(body.data, window);
+    if (videos.length === 0) {
+      return { status: "no_vod" };
+    }
+    const perVideo = await Promise.all(
+      videos.map(async (video) => (await fetchVideoMarkers(twitch, video)).map((marker) => ({ video, marker })))
+    );
+    return { status: "ok", markers: toRecapMarkers(perVideo.flat(), window) };
   },
 });

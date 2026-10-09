@@ -41,6 +41,9 @@ export const SUPPORTER_CAPABILITIES: readonly EngineCapability[] = ["analytics.s
 /** Per-minute viewer samples and a session's leaderboards, which a stream recap reads together. */
 export const RECAP_ENGINE_CAPABILITIES: readonly EngineCapability[] = ["analytics.gauges", "analytics.aggregates"];
 
+/** A session's events in time order, which the recap timeline draws as lanes. */
+export const RECAP_EVENT_CAPABILITIES: readonly EngineCapability[] = ["analytics.sessionEvents"];
+
 type TestRunState = OptionsSupport | "checking";
 
 export interface TestRunSupport {
