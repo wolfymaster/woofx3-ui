@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ArrowLeft, Link, MoreVertical, Save, Settings, Trash2, Undo2, Upload } from "lucide-react";
+import { ArrowLeft, Link, Loader2, MoreVertical, Save, Settings, Trash2, Undo2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import type { SceneVersion } from "@/lib/scene-document";
 import { canvasOfDocument, documentOfCanvas } from "@/lib/scene-document-widgets";
-import type { EditorState } from "@/lib/scene-editor-client";
+import type { DraftCommand, DroppedWork, EditorState } from "@/lib/scene-editor-client";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { Scene, Widget } from "@/types";
 import { LiveScenePreview } from "./live-scene-preview";
@@ -66,23 +66,29 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // An engine with editor sessions edits the scene live through sceneManager:
   // every change is sent as it is made and saved for you, into a draft OBS
   // does not show until it is published. Older engines save with the button.
-  // Once seen, the capability holds for as long as the editor is open on
-  // that instance: the capabilities reload after an engine reconnect, and
-  // dropping to the Save-button editor meanwhile would swap the published
-  // scene from the cache in for the draft on the canvas. Another instance is
-  // another engine, which has to show the capability itself.
+  // Once seen, the capability holds for as long as the editor is open: the
+  // capabilities reload after an engine reconnect, and dropping to the
+  // Save-button editor meanwhile would swap the published scene from the
+  // cache in for the draft on the canvas. The editor is keyed by instance
+  // (see pages/scenes.tsx), so another instance starts over and has to show
+  // the capability itself.
   const sessionSupported = useEngineCapabilities(instanceId).support("scenes.editorSessions") === "supported";
-  const [sessionInstance, setSessionInstance] = useState<Id<"instances"> | null>(sessionSupported ? instanceId : null);
-  if (sessionSupported && sessionInstance !== instanceId) {
-    setSessionInstance(instanceId);
+  const [sessionMode, setSessionMode] = useState(sessionSupported);
+  if (sessionSupported && !sessionMode) {
+    setSessionMode(true);
   }
-  const sessionMode = sessionInstance === instanceId;
 
   // Live editing: this editor's changes go straight to what OBS shows, and
   // are copied into the draft so a later publish cannot undo them. Each open
   // editor chooses for itself, and every one starts on the draft.
   const [live, setLive] = useState(false);
   const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
+  const handleDropped = useCallback(
+    (dropped: DroppedWork, sceneName: string | undefined) => {
+      toast({ ...droppedWorkMessage(dropped, sceneName), variant: "destructive" });
+    },
+    [toast]
+  );
   const session = useSceneEditorSession({
     instanceId,
     engineSceneId,
@@ -90,9 +96,24 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     enabled: sessionMode,
     version: live ? "published" : "draft",
     unsavedOutsideSession: sessionMode && isDirty,
+    sceneName: scene?.name,
+    onDropped: handleDropped,
   });
   const sessionDoc = session.state.doc;
   const sessionVersion = session.state.version;
+  // From a Publish or Discard until the engine answers it, the draft is
+  // read-only: the session drops draft edits meanwhile, so the canvas takes
+  // none. Live editing goes on, as it edits the published scene. The command
+  // may be another session's, left draining by an editor of this scene that
+  // closed: this session would take the edits, so the canvas refuses them.
+  const pendingCommand = session.state.command;
+  const draftLocked = sessionMode && !live && pendingCommand !== null;
+  // Read by mutateScene, and set at the click too, before the render that shows the command.
+  const pendingCommandRef = useRef(pendingCommand);
+  pendingCommandRef.current = pendingCommand;
+  const sceneGone = sessionMode && session.state.status === "gone";
+  // A session that cannot carry a Publish or Discard: the engine would not open one, or the scene is gone.
+  const sessionDown = sessionMode && (session.state.status === "unavailable" || sceneGone);
 
   // Who else is editing, and where: other editors' selections, in a colour
   // each keeps for as long as it is connected.
@@ -144,9 +165,10 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const sceneLoaded = fetchedScene !== undefined && fetchedScene !== null;
   useEffect(() => {
     if (!sessionDoc) {
-      // No session document: the session is (re)connecting, and the canvas
-      // shown is not one it has read. Edits to it are not sent until the next
-      // snapshot replaces it.
+      // No session document: the session has no snapshot of the version it
+      // edits yet (it is new, or was just made again), and the canvas shown
+      // is not one it has read. Edits to it are not sent until the snapshot
+      // replaces it. A reconnect keeps the document, so this is not that.
       canvasVersionRef.current = null;
     }
     const fetched = fetchedSceneRef.current;
@@ -172,18 +194,30 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       if (!prev) {
         return;
       }
-      const next = updater(prev);
-      sceneRef.current = next;
-      setScene(next);
+      let next = updater(prev);
+      if (sessionMode && pendingCommandRef.current !== null && canvasVersionRef.current === "draft") {
+        // The draft is locked (see `draftLocked`); the name and description are not part of it.
+        next = { ...prev, name: next.name, description: next.description };
+        if (next.name === prev.name && next.description === prev.description) {
+          return;
+        }
+      }
       if (sessionMode) {
         // Straight to the session, never from an effect on the scene: a
         // render that follows another editor's change must not send the
         // canvas it replaced. A canvas not yet read from the session (the
-        // cached scene shown while it connects) is never sent.
+        // cached scene shown while it connects) is never sent. One the
+        // session does not take shows the session's document instead, so
+        // the canvas never keeps an edit that went nowhere.
         const canvasVersion = canvasVersionRef.current;
-        if (canvasVersion !== null) {
-          sessionEdit(documentOfCanvas(next, sessionDocRef.current), canvasVersion);
+        const sessionDoc = sessionDocRef.current;
+        if (canvasVersion !== null && !sessionEdit(documentOfCanvas(next, sessionDoc), canvasVersion) && sessionDoc) {
+          next = { ...next, ...canvasOfDocument(sessionDoc) };
         }
+      }
+      sceneRef.current = next;
+      setScene(next);
+      if (sessionMode) {
         if (next.name !== prev.name || next.description !== prev.description) {
           setIsDirty(true);
         }
@@ -213,11 +247,33 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   );
   const unsavedNameRef = useRef<{ name: string; description: string | undefined } | null>(null);
   // While the scene is being deleted its name is not saved: that would only
-  // fail, or race the delete. The state holds the debounce back and, when a
-  // delete fails, schedules a name still unsaved again; the ref is what a
-  // timer already running and the save on close read, as they see no render.
+  // fail, or race the delete. The delete owns the unsaved name meanwhile: it
+  // drops it when the delete succeeds and saves it when the delete fails,
+  // whether or not the editor is still open. `deletingRef` is what the save
+  // on close reads, as it sees no render.
   const [deleting, setDeleting] = useState(false);
   const deletingRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  const saveNameRef = useRef(saveNameAndDescription);
+  saveNameRef.current = saveNameAndDescription;
+  // Read from refs, so it saves the latest name even once the editor has closed.
+  const saveUnsavedName = useCallback(() => {
+    const unsaved = unsavedNameRef.current;
+    if (!unsaved) {
+      return;
+    }
+    unsavedNameRef.current = null;
+    if (mountedRef.current) {
+      setIsDirty(false);
+    }
+    saveNameRef.current(unsaved.name, unsaved.description);
+  }, []);
   useEffect(() => {
     if (!sessionMode || !isDirty || sceneName === undefined) {
       unsavedNameRef.current = null;
@@ -227,26 +283,16 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     if (deleting) {
       return;
     }
-    const timer = setTimeout(() => {
-      if (deletingRef.current) {
-        return;
-      }
-      unsavedNameRef.current = null;
-      setIsDirty(false);
-      saveNameAndDescription(sceneName, sceneDescription);
-    }, 800);
+    const timer = setTimeout(saveUnsavedName, 800);
     return () => clearTimeout(timer);
-  }, [sessionMode, isDirty, sceneName, sceneDescription, saveNameAndDescription, deleting]);
-  const saveNameRef = useRef(saveNameAndDescription);
-  saveNameRef.current = saveNameAndDescription;
+  }, [sessionMode, isDirty, sceneName, sceneDescription, deleting, saveUnsavedName]);
   useEffect(() => {
     return () => {
-      const unsaved = unsavedNameRef.current;
-      if (unsaved && !deletingRef.current) {
-        saveNameRef.current(unsaved.name, unsaved.description);
+      if (!deletingRef.current) {
+        saveUnsavedName();
       }
     };
-  }, []);
+  }, [saveUnsavedName]);
 
   const copyKeyToClipboard = useCallback(async (key: string) => {
     const browserSourceUrl = browserSourceUrlForKey(key);
@@ -328,20 +374,27 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     setDeleting(true);
     try {
       await deleteSceneAction({ instanceId, engineSceneId });
-      // Edits still on their way would only be resent to a scene that is gone.
+      unsavedNameRef.current = null;
+      // Edits still on their way would only be resent to a scene that is gone,
+      // including by a session left draining if the editor closed meanwhile.
       abandonSession();
       toast({ title: "Scene deleted" });
       navigate("/stream/scenes");
     } catch (err) {
       deletingRef.current = false;
-      setDeleting(false);
+      if (mountedRef.current) {
+        setDeleting(false);
+      }
+      // The name typed before or during the delete, which neither its pause
+      // nor the editor closing saved.
+      saveUnsavedName();
       toast({
         title: "Delete failed",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
     }
-  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession]);
+  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession, saveUnsavedName]);
 
   const handleDuplicateScene = useCallback(async () => {
     if (!scene) {
@@ -369,6 +422,32 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       });
     }
   }, [scene, createSceneAction, instanceId, navigate, toast]);
+
+  const sessionPublish = session.publish;
+  const sessionDiscard = session.discard;
+  const sessionStatus = session.state.status;
+  const runDraftCommand = useCallback(
+    (command: DraftCommand) => {
+      // Locks the canvas now rather than at the next render: an edit made in
+      // between (a drag still moving) would be dropped by the session.
+      const previous = pendingCommandRef.current;
+      pendingCommandRef.current = command;
+      const taken = command === "publish" ? sessionPublish() : sessionDiscard();
+      if (taken) {
+        return;
+      }
+      pendingCommandRef.current = previous;
+      toast({
+        title: `${COMMAND_LABEL[command].name} wasn't sent`,
+        description:
+          sessionStatus === "gone"
+            ? "This scene no longer exists on the scene manager."
+            : "The editor isn't connected to the scene manager.",
+        variant: "destructive",
+      });
+    },
+    [sessionPublish, sessionDiscard, sessionStatus, toast]
+  );
 
   const handleWidgetsChange = useCallback(
     (update: WidgetsUpdate) => mutateScene((prev) => ({ ...prev, widgets: update(prev.widgets) })),
@@ -534,12 +613,16 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={session.discard}
-                      disabled={!session.state.hasDraft}
+                      onClick={() => runDraftCommand("discard")}
+                      disabled={!session.state.hasDraft || pendingCommand !== null || sessionDown}
                       aria-label="Discard draft"
                       data-testid="button-discard-draft"
                     >
-                      <Undo2 className="h-4 w-4" />
+                      {pendingCommand === "discard" ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Undo2 className="h-4 w-4" />
+                      )}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Discard draft</TooltipContent>
@@ -547,12 +630,16 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      onClick={session.publish}
-                      disabled={!session.state.hasDraft}
+                      onClick={() => runDraftCommand("publish")}
+                      disabled={!session.state.hasDraft || pendingCommand !== null || sessionDown}
                       data-testid="button-publish-scene"
                     >
-                      <Upload className="h-4 w-4 mr-2" />
-                      Publish
+                      {pendingCommand === "publish" ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      {pendingCommand === "publish" ? "Publishing…" : "Publish"}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Put the draft on stream</TooltipContent>
@@ -603,6 +690,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       onChange={handleWidgetsChange}
       onSelectionChange={setSelection}
       canHide
+      readOnly={draftLocked || sceneGone}
       remoteSelections={sessionMode ? remoteSelections : undefined}
       preview={
         <LiveScenePreview
@@ -624,6 +712,15 @@ function sessionStatusText(state: EditorState, live: boolean): string {
   }
   if (state.status === "unavailable") {
     return "Can't reach the scene manager";
+  }
+  if (state.status === "gone") {
+    return "This scene no longer exists";
+  }
+  if (!live && state.command === "publish") {
+    return "Publishing…";
+  }
+  if (!live && state.command === "discard") {
+    return "Discarding draft…";
   }
   if (state.unsaved) {
     return live ? "Saving · going to stream…" : "Saving draft…";
@@ -658,4 +755,58 @@ function editorColor(editorId: string): string {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   }
   return `hsl(${hash % 360} 75% 45%)`;
+}
+
+const COMMAND_LABEL: Record<DraftCommand, { name: string; verb: string }> = {
+  publish: { name: "Publish", verb: "publish" },
+  discard: { name: "Discard", verb: "discard" },
+};
+
+/** What a toast says about work the editor session gave up on, naming the scene: it may no longer be open. */
+function droppedWorkMessage(
+  dropped: DroppedWork,
+  sceneName: string | undefined
+): { title: string; description: string } {
+  const scene = sceneName ? `"${sceneName}"` : "the scene";
+  if (dropped.reason === "gone") {
+    const command = dropped.command === null ? null : COMMAND_LABEL[dropped.command].name;
+    const lost = [dropped.edits ? "your last changes weren't saved" : null, command ? `${command} wasn't sent` : null]
+      .filter((part) => part !== null)
+      .join(", and ");
+    return {
+      title: `${scene.charAt(0).toUpperCase()}${scene.slice(1)} no longer exists`,
+      description: `The scene manager doesn't have it any more, so ${lost}.`,
+    };
+  }
+  if (dropped.reason !== "undelivered") {
+    const { name, verb } = COMMAND_LABEL[dropped.command];
+    if (dropped.reason === "failed") {
+      return {
+        title: `${name} failed`,
+        description: `The scene manager couldn't ${verb} the draft of ${scene}. Check the scene and try again.`,
+      };
+    }
+    if (dropped.reason === "refused") {
+      return {
+        title: `${name} didn't go through`,
+        description: `The scene manager refused a change to the draft of ${scene} made before it, so it wasn't sent. Check the scene and try again.`,
+      };
+    }
+    return {
+      title: `${name} may not have gone through`,
+      description: `The connection dropped before the scene manager answered. Check ${scene}, and ${verb} again if it didn't.`,
+    };
+  }
+  const closed = `The editor for ${scene} closed before the scene manager confirmed them. Open the scene to check it.`;
+  const command = dropped.command === null ? null : COMMAND_LABEL[dropped.command].name;
+  if (command === null) {
+    return { title: "Your last changes may not have been saved", description: closed };
+  }
+  if (dropped.edits) {
+    return { title: `Your last changes may not have been saved, and ${command} wasn't sent`, description: closed };
+  }
+  return {
+    title: `${command} wasn't sent`,
+    description: `The editor for ${scene} closed before it could reach the scene manager. Open the scene and try again.`,
+  };
 }
