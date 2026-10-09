@@ -54,7 +54,15 @@ export default function Scenes() {
   }
 
   // The editor brings its own rail — the widget catalog for the selected scene.
-  return <SceneCanvasEditor key={engineSceneId} instanceId={instance._id} engineSceneId={engineSceneId} />;
+  // Keyed by instance too: another instance is another engine, and none of
+  // the editor's state (its session, the capability it saw) carries over.
+  return (
+    <SceneCanvasEditor
+      key={`${instance._id}:${engineSceneId}`}
+      instanceId={instance._id}
+      engineSceneId={engineSceneId}
+    />
+  );
 }
 
 function SceneTableSkeleton() {

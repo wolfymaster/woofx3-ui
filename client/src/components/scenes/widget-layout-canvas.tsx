@@ -43,6 +43,8 @@ interface WidgetLayoutCanvasProps {
   remoteSelections?: Record<string, RemoteSelection[]>;
   /** Widgets can be hidden from the layers list: on a scene, where a hidden widget keeps running out of sight. */
   canHide?: boolean;
+  /** See OverlayEditorShell.readOnly. */
+  readOnly?: boolean;
 }
 
 /**
@@ -66,6 +68,7 @@ export function WidgetLayoutCanvas({
   onSelectionChange,
   remoteSelections,
   canHide = false,
+  readOnly = false,
 }: WidgetLayoutCanvasProps) {
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
   useEffect(() => {
@@ -187,6 +190,7 @@ export function WidgetLayoutCanvas({
     <OverlayEditorShell
       canvas={canvasSize}
       className={className}
+      readOnly={readOnly}
       header={header}
       palette={
         <WidgetPalette
