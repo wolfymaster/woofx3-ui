@@ -50,7 +50,7 @@ env:
   BUN_VERSION: "1.3.14"
   # Must match ci.yml: `@woofx3/api` resolves to a sibling engine checkout.
   ENGINE_REPOSITORY: wolfymaster/woofx3
-  ENGINE_REF: master
+  ENGINE_REF: integration/2026-10-09
   ENGINE_API_DIR: woofx3/shared/clients/typescript/api
   PR_NUMBER: ${{ github.event.pull_request.number }}
   HEAD_SHA: ${{ github.event.pull_request.head.sha }}

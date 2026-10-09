@@ -16,7 +16,7 @@ env:
   # The engine's shared type package (`@woofx3/api`) is consumed from a sibling
   # checkout, so CI clones wolfymaster/woofx3 next to this repo. See below.
   ENGINE_REPOSITORY: wolfymaster/woofx3
-  ENGINE_REF: master
+  ENGINE_REF: integration/2026-10-09
   ENGINE_API_DIR: woofx3/shared/clients/typescript/api
 
 jobs:
