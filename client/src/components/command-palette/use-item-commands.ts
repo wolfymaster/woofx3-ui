@@ -456,6 +456,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
       kind: declared.kind,
       name: declared.name,
       icon: declared.icon ? dynamicLucideIcon(declared.icon) : Boxes,
+      summaryPath: declared.summaryPath,
       actions: resourceActions(actionPresets, `${declared.moduleName}:${declared.kind}`),
     })
   );
