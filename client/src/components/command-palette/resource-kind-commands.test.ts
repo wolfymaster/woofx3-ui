@@ -93,7 +93,7 @@ describe("resourceKindItemCommands", () => {
     expect(commands[0].meta).toBe("2");
   });
 
-  test("leaves out another module's kind of the same name, and the first-party kinds", () => {
+  test("leaves out another module's kind of the same name, and the built-in kinds", () => {
     const counters: PaletteResourceKind = { moduleName: "woofx3", kind: "counter", name: "Counter", icon, actions: [] };
     const { commands } = build(
       [wheelKind(), counters],

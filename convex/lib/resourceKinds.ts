@@ -60,6 +60,7 @@ export function manifestModuleName(manifest: unknown, fallback: string): string 
  * Timers and Queues pages show. A kind is identified by its module and its name,
  * `{module}:{kind}`, because two modules may each declare a kind of the same name.
  */
+export const WOOFX3_MODULE = "woofx3";
 export const COUNTER_KIND = "woofx3:counter";
 export const TIMER_KIND = "woofx3:timer";
 export const QUEUE_KIND = "woofx3:queue";

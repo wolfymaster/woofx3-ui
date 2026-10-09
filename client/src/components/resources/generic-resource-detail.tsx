@@ -14,7 +14,7 @@ import { getDefaultConfigValues } from "@/lib/workflow-presets";
 const MAX_LIST_ENTRIES = 100;
 
 /**
- * What a kind without a first-party page shows of an instance: what it holds,
+ * What a kind the dashboard has no view made for shows of an instance: what it holds,
  * and every action aimed at its kind, from whichever module declares one. Built
  * from the declarations alone, so a module's kind gets a working page without
  * the dashboard knowing what the kind means.

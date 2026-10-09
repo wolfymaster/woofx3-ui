@@ -3,7 +3,7 @@ import { Play } from "lucide-react";
 import type { ComponentType } from "react";
 import type { ResourceAction } from "@/lib/resource-actions";
 import { type ResourceInstanceDoc, resourceName } from "@/lib/resource-instance";
-import { hasFirstPartyPage, pluralKindName, resourceKindPath } from "@/lib/resource-kind-route";
+import { isBuiltInKind, pluralKindName, resourceKindPath } from "@/lib/resource-kind-route";
 import { summarizeResourceValue } from "@/lib/resource-values";
 import type { PaletteCommand } from "./types";
 
@@ -26,10 +26,10 @@ export type RunKindAction = (
 ) => Promise<boolean>;
 
 /**
- * An item for every instance of a kind without a first-party page, such as each
+ * An item for every instance of a kind other than the built-in ones, such as each
  * wheel, with every action aimed at its kind as a child. Built from declarations
  * alone, like the kind's page, so a module's kind is reachable here without the
- * palette knowing what the kind means. The first-party kinds have hand-made
+ * palette knowing what the kind means. The built-in kinds have hand-made
  * items with richer actions, so they are left out.
  */
 export function resourceKindItemCommands(
@@ -40,7 +40,7 @@ export function resourceKindItemCommands(
 ): PaletteCommand[] {
   const result: PaletteCommand[] = [];
   for (const kind of kinds) {
-    if (hasFirstPartyPage(kind.moduleName, kind.kind)) {
+    if (isBuiltInKind(kind.moduleName, kind.kind)) {
       continue;
     }
     const prefix = `${kind.moduleName}:${kind.kind}:`;

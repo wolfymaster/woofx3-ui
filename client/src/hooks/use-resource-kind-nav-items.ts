@@ -5,11 +5,11 @@ import { useMemo } from "react";
 import type { NavItem } from "@/components/layout/nav-config";
 import { useInstance } from "@/hooks/use-instance";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
-import { hasFirstPartyPage, pluralKindName, resourceKindPath } from "@/lib/resource-kind-route";
+import { isBuiltInKind, pluralKindName, resourceKindPath } from "@/lib/resource-kind-route";
 
 /**
  * A menu entry for every resource kind an installed module declares, other than
- * those with a first-party page, which the menu lists already. Empty until the
+ * the built-in ones, which the menu lists already. Empty until the
  * kinds have loaded.
  */
 export function useResourceKindNavItems(): NavItem[] {
@@ -19,7 +19,7 @@ export function useResourceKindNavItems(): NavItem[] {
   return useMemo(
     () =>
       (kinds ?? [])
-        .filter((kind) => !hasFirstPartyPage(kind.moduleName, kind.kind))
+        .filter((kind) => !isBuiltInKind(kind.moduleName, kind.kind))
         .map(
           (kind): NavItem => ({
             id: `resource-kind:${kind.moduleName}:${kind.kind}`,
