@@ -67,6 +67,8 @@ and schedules nothing.
 | Date, time live, segment timeline | Stored summary (`streamSessionSummaries.get`) | Shown |
 | Totals: viewers, follows, subs, bits, raids | Stored summary | Shown |
 | Viewers per minute | Engine `getStreamSessionGauges`, through `streamRecap.loadEngineDetail` | Notice (retry when it can help) |
+| Timeline events (follows, subs, gifts, cheers, raids) | Engine `getStreamSessionEvents`, through `streamRecap.loadTimelineEvents` | Layer unavailable, with the reason |
+| Timeline markers | Twitch Helix `GET /videos` and `GET /streams/markers`, through `streamRecap.loadMarkers` | Shown (Twitch, not the engine) |
 | Top gifters and cheerers | Engine `getLeaderboard` (`giftedSubs`, `bits`) for the session, same action | Hidden |
 | Clips and the "Top clip" tile | Twitch Helix `GET /clips`, through `streamRecap.loadClips` | Shown (Twitch, not the engine) |
 
@@ -87,14 +89,55 @@ themselves and excludes gifts, which are only in `giftedSubs`. The recap shows
 them as separate tiles and the list as "12 subs · 5 gifted"
 (`formatSubsBreakdown`), never one as part of the other.
 
-## Viewer chart
+## Timeline
 
-The engine samples viewers once a minute while live. A minute with no sample,
-or whose read failed, is not zero viewers, so the chart draws it as a gap
-(`buildViewerSeries` in `client/src/lib/stream-recap.ts`). A lone sampled
-minute between gaps gets a marker, since a line has nothing to join it to. The
-x axis spans the live segments, so unsampled time at either end shows as empty
-space. "Show as table" lists every sampled minute.
+The timeline puts the stream on one time axis in layers
+(`client/src/components/stream-recap/recap-timeline.tsx`). Viewers per minute
+is a line; under it is a lane each for follows, subs, gifted subs, cheers,
+raids, clips and markers. Clips and markers also cross the viewer plot as
+dashed guides, so a spike can be matched to what caused it. A row of toggles
+above the chart turns each layer on and off; the hidden layers are kept per
+browser in `$recapHiddenLayers` (`client/src/lib/stores.ts`), the same on every
+recap. A layer that cannot be shown is a disabled toggle, and a line under the
+toggles says why.
+
+**Viewers.** The engine samples viewers once a minute while live. A minute
+with no sample, or whose read failed, is not zero viewers, so the line has a
+gap there (`buildViewerSeries` in `client/src/lib/stream-recap.ts`). A lone
+sampled minute between gaps gets a marker, since a line has nothing to join it
+to.
+
+**Lanes.** `buildLanePoints` (`client/src/lib/recap-timeline.ts`) groups each
+lane's moments into one point per minute, with the count, the summed amount
+(bits, subs gifted, raiders) and the names, so a gift bomb or a raid's follows
+read as one mark that draws a little larger rather than a pile of overlapping
+ones. Hovering a point lists who and how much. The x axis spans the live
+segments, widened to every sample and lane point, so a clip made just after
+the stream ended is still on it. "Show as table" lists every sampled minute
+and every point of the layers that are on.
+
+**Events** come from the engine's `getStreamSessionEvents`: the events the
+session totals count, oldest first, so the lanes and the totals agree on what
+happened. `streamRecap.loadTimelineEvents` asks for up to 1,000
+(`RECAP_EVENT_LIMIT`); past that the chart says how many it left out. The page
+calls it only when the engine lists `analytics.sessionEvents`, so against an
+older engine the five event lanes say the engine needs updating and the rest of
+the timeline still works. A session in progress loads them again with each new
+snapshot, like the viewer line. Kinds the engine sends that this page does not
+know are left out (`toRecapTimelineEvents`).
+
+**Clips** are the ones the Clips section lists, placed at the time each was
+made.
+
+**Markers** live on Twitch, on the broadcast's VOD rather than the stream.
+`streamRecap.loadMarkers` lists the channel's 20 most recent archives, keeps
+the ones that overlap the session's clip window (`videosInWindow` in
+`convex/lib/recapMarkers.ts`, at most five), and reads each one's markers,
+keeping those placed inside the window. Reading markers needs
+`user:read:broadcast` or `channel:manage:broadcast` on the Twitch link; a link
+without either, or a stream with no VOD (past broadcasts turned off, or the VOD
+expired), is reported as such, not as an error. Like clips, markers are never
+stored.
 
 ## Thank-you message
 

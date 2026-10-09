@@ -47,10 +47,40 @@ export interface StreamGaugeSample {
   subscriberPoints: number | null;
 }
 
+/** Must match `StreamSessionEventKind` in woofx3 shared/clients/typescript/api/api.ts. */
+export const RECAP_EVENT_KINDS = ["follow", "sub", "giftedSubs", "cheer", "raid"] as const;
+
+export type RecapEventKind = (typeof RECAP_EVENT_KINDS)[number];
+
+const KNOWN_EVENT_KINDS: ReadonlySet<string> = new Set(RECAP_EVENT_KINDS);
+
+/** One counted event of a session, as the engine serves it. */
+export interface StreamSessionEvent {
+  occurredAt: string;
+  kind: string;
+  userName: string | null;
+  amount: number | null;
+}
+
+export interface StreamSessionEventsQuery {
+  sessionId: string;
+  limit?: number;
+}
+
+export interface StreamSessionEvents {
+  sessionId: string;
+  events: StreamSessionEvent[];
+  total: number;
+}
+
 export interface StreamRecapEngineApi extends EngineApi {
   getLeaderboard(query: LeaderboardQuery): Promise<Leaderboard | null>;
   getStreamSessionGauges(sessionId: string): Promise<StreamGaugeSample[] | null>;
+  getStreamSessionEvents(query: StreamSessionEventsQuery): Promise<StreamSessionEvents | null>;
 }
+
+/** Most events a recap asks for: the engine's own cap, so one call carries the whole timeline when it fits. */
+export const RECAP_EVENT_LIMIT = 1000;
 
 /** Supporters shown per leaderboard on a recap. */
 export const RECAP_LEADERBOARD_LIMIT = 5;
@@ -89,6 +119,24 @@ export type StreamRecapEngineDetail =
   | { status: "failed"; message: string };
 
 export type EngineCallFailure = Extract<StreamRecapEngineDetail, { status: "rejected" | "unreachable" | "failed" }>;
+
+export interface RecapEvent {
+  occurredAt: string;
+  kind: RecapEventKind;
+  userName: string | null;
+  amount: number | null;
+}
+
+/**
+ * A session's events for the recap timeline. `total` counts every event the
+ * engine has for the session, so the page can say how many `events` leaves
+ * out when it hit `RECAP_EVENT_LIMIT`.
+ */
+export type RecapTimelineEvents =
+  | { status: "ok"; events: RecapEvent[]; total: number }
+  | { status: "unregistered" }
+  | { status: "unknown_session" }
+  | EngineCallFailure;
 
 /** Longest engine error text passed on to the page. */
 export const MAX_ENGINE_ERROR_LENGTH = 200;
@@ -150,4 +198,29 @@ export function toRecapEngineDetail(
     topCheerers: cheerers.entries.slice(0, RECAP_LEADERBOARD_LIMIT).map(toSupporter),
     topGifters: gifters.entries.slice(0, RECAP_LEADERBOARD_LIMIT).map(toSupporter),
   };
+}
+
+/**
+ * Builds the timeline payload from the engine's answer, copying only the
+ * fields the page shows. A kind this dashboard does not know is left out
+ * rather than refused: a newer engine may count more kinds than this page can
+ * draw, and the rest of the timeline is still right without them.
+ */
+export function toRecapTimelineEvents(answer: StreamSessionEvents | null): RecapTimelineEvents {
+  if (answer === null) {
+    return { status: "unknown_session" };
+  }
+  const events: RecapEvent[] = [];
+  for (const event of answer.events) {
+    if (!KNOWN_EVENT_KINDS.has(event.kind) || !Number.isFinite(Date.parse(event.occurredAt))) {
+      continue;
+    }
+    events.push({
+      occurredAt: event.occurredAt,
+      kind: event.kind as RecapEventKind,
+      userName: event.userName,
+      amount: event.amount,
+    });
+  }
+  return { status: "ok", events, total: Math.max(answer.total, answer.events.length) };
 }

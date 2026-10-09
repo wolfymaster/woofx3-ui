@@ -5,6 +5,7 @@ import {
   MAX_ENGINE_ERROR_LENGTH,
   RECAP_LEADERBOARD_LIMIT,
   toRecapEngineDetail,
+  toRecapTimelineEvents,
 } from "./streamRecap";
 
 function leaderboard(metric: Leaderboard["metric"], count: number): Leaderboard {
@@ -89,5 +90,32 @@ describe("classifyEngineCallError", () => {
 
   it("handles a thrown non-Error", () => {
     expect(classifyEngineCallError("boom")).toEqual({ status: "failed", message: "boom" });
+  });
+});
+
+describe("toRecapTimelineEvents", () => {
+  it("reports an unknown session for a null answer", () => {
+    expect(toRecapTimelineEvents(null)).toEqual({ status: "unknown_session" });
+  });
+
+  it("keeps the kinds it knows and leaves out the rest", () => {
+    const result = toRecapTimelineEvents({
+      sessionId: "s1",
+      total: 1200,
+      events: [
+        { occurredAt: "2026-09-20T00:01:00.000Z", kind: "cheer", userName: "Alice", amount: 100 },
+        { occurredAt: "2026-09-20T00:02:00.000Z", kind: "hypeTrain", userName: null, amount: null },
+        { occurredAt: "not a time", kind: "follow", userName: "Bob", amount: null },
+        { occurredAt: "2026-09-20T00:03:00.000Z", kind: "follow", userName: "Cara", amount: null },
+      ],
+    });
+    expect(result).toEqual({
+      status: "ok",
+      total: 1200,
+      events: [
+        { occurredAt: "2026-09-20T00:01:00.000Z", kind: "cheer", userName: "Alice", amount: 100 },
+        { occurredAt: "2026-09-20T00:03:00.000Z", kind: "follow", userName: "Cara", amount: null },
+      ],
+    });
   });
 });
