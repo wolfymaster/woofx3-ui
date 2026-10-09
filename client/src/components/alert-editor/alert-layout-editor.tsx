@@ -33,6 +33,7 @@ import {
   withCenter,
 } from "@/lib/alert-editor";
 import { type AlertLayout, readAlertLayout, writeAlertLayout } from "@/lib/alert-layout";
+import { coveringLayers } from "@/lib/layer-coverage";
 import { layersTopFirst, moveLayer } from "@/lib/layer-order";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import { placeableOn } from "@/lib/widget-surfaces";
@@ -206,6 +207,7 @@ export function AlertLayoutEditor({
     ? (catalog.find((row) => row.widgetId === selected.widgetCanonicalId)?.settings ?? [])
     : []) as unknown as ConfigField[];
   const layers = layersTopFirst(layout.widgets);
+  const coveredBy = coveringLayers(layout.widgets, { canCover: coversForItsWholeLength });
   const readout = `${layout.width} × ${layout.height}`;
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
 
@@ -240,6 +242,7 @@ export function AlertLayoutEditor({
       onSelect={setSelectedId}
       onMove={moveLayerTo}
       onDelete={deleteLayer}
+      coveredBy={coveredBy}
       horizontal={horizontal}
       emptyMessage="No layers yet. Add a widget to start."
     />
@@ -414,4 +417,17 @@ function fileName(src: unknown): string {
     return src.split("/").pop() ?? src;
   }
   return "";
+}
+
+/**
+ * Whether `above` hides `below` for as long as `below` plays. Every layer starts with
+ * the alert, so that takes a length at least as long; a layer of no set length plays
+ * for as long as its media runs, which the editor cannot know. Audio draws nothing.
+ */
+function coversForItsWholeLength(above: Widget, below: Widget): boolean {
+  if (layerKind(above) === "audio" || layerKind(below) === "audio") {
+    return false;
+  }
+  const belowLength = durationOf(below);
+  return belowLength > 0 && durationOf(above) >= belowLength;
 }
