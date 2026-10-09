@@ -1,6 +1,8 @@
 # Pull request previews
 
-Every pull request from a branch in this repository gets its own running copy of the UI, built from the branch, with its own Convex backend and optionally its own engine. `.github/workflows/preview.yml` runs it; nothing needs to be run by hand.
+A pull request from a branch in this repository labelled `preview` gets its own running copy of the UI, built from the branch, with its own Convex backend and optionally its own engine. `.github/workflows/preview.yml` runs it; nothing needs to be run by hand. Pull requests without the label get no preview.
+
+To review several pull requests in one preview, merge their branches into an integration branch, open a draft pull request for it, and label that one.
 
 | What | Where |
 |------|-------|
@@ -10,7 +12,7 @@ Every pull request from a branch in this repository gets its own running copy of
 
 ## What happens
 
-On every push (and when the description changes):
+When the `preview` label is added, and on every later push (and when the description changes):
 
 1. **Convex**: `bunx convex deploy --preview-create pr-<n>` pushes the branch's functions and schema to the pull request's preview deployment, creating it on the first push, then seeds it (see [Seeding](#seeding)). `SITE_URL` on that deployment is set to the preview's address. Convex replaces the deployment on every push, so its `*.convex.site` address changes each time; OAuth callbacks go through production instead (see [OAuth in a preview](#oauth-in-a-preview)).
 2. **Image**: the `Dockerfile` is built against that deployment's URLs and pushed as `ghcr.io/wolfymaster/woofx3-ui:pr-<n>-<sha7>`. The production deploy uses the bare commit SHA, so the two never share a tag.
@@ -18,7 +20,7 @@ On every push (and when the description changes):
 4. **Engine**: if the preview names an engine release, the maintenance API pairs it with the preview engine running that release, creating the engine in the same staging environment when there is none. The workflow then sets `PREVIEW_ENGINE_URL`, `PREVIEW_ENGINE_VERSION` and `PREVIEW_ENGINE_REGISTRATION_TOKEN` on the Convex preview deployment.
 5. A sticky comment on the pull request says where the preview is, or where it failed.
 
-When the pull request closes, merged or not, `scripts/preview-ui.sh down` removes the UI preview and its DNS records. The Convex preview deployment is left for Convex to clean up, which it does for preview deployments on its own.
+Removing the label stops further deploys but leaves the preview running. When the pull request closes, merged or not, `scripts/preview-ui.sh down` removes the UI preview and its DNS records. The Convex preview deployment is left for Convex to clean up, which it does for preview deployments on its own.
 
 ## Seeding
 
