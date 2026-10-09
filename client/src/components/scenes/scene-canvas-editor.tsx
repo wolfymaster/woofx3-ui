@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import type { SceneVersion } from "@/lib/scene-document";
 import { canvasOfDocument, documentOfCanvas } from "@/lib/scene-document-widgets";
-import type { DraftCommand, DraftCommandDropReason, EditorState } from "@/lib/scene-editor-client";
+import type { DraftCommand, DroppedWork, EditorState } from "@/lib/scene-editor-client";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { Scene, Widget } from "@/types";
 import { LiveScenePreview } from "./live-scene-preview";
@@ -83,16 +83,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // editor chooses for itself, and every one starts on the draft.
   const [live, setLive] = useState(false);
   const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
-  const handleDraftCommandsDropped = useCallback(
-    (commands: DraftCommand[], reason: DraftCommandDropReason) => {
-      toast({
-        title: `${namesOfDraftCommands(commands)} didn't go through`,
-        description:
-          reason === "refused"
-            ? "The engine refused a change to the draft made before it. Check the scene and try again."
-            : "The editor closed before it could reach the engine. Open the scene and try again.",
-        variant: "destructive",
-      });
+  const handleDropped = useCallback(
+    (dropped: DroppedWork) => {
+      toast({ ...droppedWorkMessage(dropped), variant: "destructive" });
     },
     [toast]
   );
@@ -103,7 +96,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     enabled: sessionMode,
     version: live ? "published" : "draft",
     unsavedOutsideSession: sessionMode && isDirty,
-    onDraftCommandsDropped: handleDraftCommandsDropped,
+    onDropped: handleDropped,
   });
   const sessionDoc = session.state.doc;
   const sessionVersion = session.state.version;
@@ -682,4 +675,29 @@ function editorColor(editorId: string): string {
 function namesOfDraftCommands(commands: DraftCommand[]): string {
   const names = [...new Set(commands)].map((command) => (command === "publish" ? "Publish" : "Discard"));
   return names.join(" and ");
+}
+
+/** What a toast says about work the editor session gave up on. */
+function droppedWorkMessage(dropped: DroppedWork): { title: string; description: string } {
+  if (dropped.reason === "refused") {
+    return {
+      title: `${namesOfDraftCommands(dropped.commands)} didn't go through`,
+      description: "The engine refused a change to the draft made before it. Check the scene and try again.",
+    };
+  }
+  const closed = "The editor closed before the engine confirmed them. Open the scene to check it and try again.";
+  if (dropped.commands.length === 0) {
+    return { title: "Your last changes may not have been saved", description: closed };
+  }
+  const commands = namesOfDraftCommands(dropped.commands);
+  if (dropped.edits) {
+    return {
+      title: `Your last changes may not have been saved, and ${commands} didn't go through`,
+      description: closed,
+    };
+  }
+  return {
+    title: `${commands} didn't go through`,
+    description: "The editor closed before it could reach the engine. Open the scene and try again.",
+  };
 }

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import {
   applyOps,
+  diffDocuments,
   type Json0Component,
   type SceneDocument,
   type SceneSnapshot,
   transformOps,
 } from "@/lib/scene-document";
 import {
+  type DroppedWork,
   type EditorSocket,
   type EditorState,
   SceneEditorClient,
@@ -34,13 +36,17 @@ function placement(text: string) {
 /** The engine's sequencing, in memory: transform late ops, dedupe resubmits. */
 class FakeServer {
   doc: SceneDocument;
+  published: SceneDocument;
   seq = 0;
   log: Array<{ seq: number; ops: Json0Component[]; opId: string }> = [];
   sockets = new Set<FakeSocket>();
-  /** Drop acks and ops events to this socket, as a dying connection would. */
+  /** Drop acks, answers and ops events to this socket, as a dying connection would. */
   deaf: FakeSocket | null = null;
   /** Every submit, publish and discard, in the order they arrived. */
   received: string[] = [];
+  /** Hold the answer to the next publish until `releaseAnswer`, as a slow engine would. */
+  holdAnswer = false;
+  private heldAnswer: (() => void) | null = null;
   /** Refuse the next submit as invalid, as the engine does an op it cannot apply. */
   refuseNext = false;
   /** Refuse the submit with this number (counting from 1) as invalid. */
@@ -49,6 +55,7 @@ class FakeServer {
 
   constructor(doc: SceneDocument) {
     this.doc = doc;
+    this.published = structuredClone(doc);
   }
 
   connect(): FakeSocket {
@@ -57,7 +64,12 @@ class FakeServer {
     queueMicrotask(() => {
       socket.onopen?.();
       const snapshot = (): SceneSnapshot => ({ sceneId: "s1", name: "Main", seq: this.seq, doc: this.doc, meta: {} });
-      socket.deliver({ type: "snapshot", version: "published", snapshot: { ...snapshot(), seq: 0 }, hasDraft: false });
+      socket.deliver({
+        type: "snapshot",
+        version: "published",
+        snapshot: { ...snapshot(), seq: 0, doc: this.published },
+        hasDraft: false,
+      });
       socket.deliver({ type: "snapshot", version: "draft", snapshot: snapshot(), hasDraft: this.seq > 0 });
     });
     return socket;
@@ -68,6 +80,40 @@ class FakeServer {
       if (socket !== from) {
         socket.deliver({ type: "presence", editorId: from.id, name: message.name, selection: message.selection });
       }
+    }
+  }
+
+  publish(from: FakeSocket): void {
+    this.published = structuredClone(this.doc);
+    const answer = () => from.deliver({ type: "published", hasDraft: false });
+    if (this.holdAnswer) {
+      this.holdAnswer = false;
+      this.heldAnswer = answer;
+    } else if (from !== this.deaf) {
+      answer();
+    }
+  }
+
+  releaseAnswer(): void {
+    this.heldAnswer?.();
+    this.heldAnswer = null;
+  }
+
+  /** Resets the draft to what is published, as one op from no editor, before answering. */
+  discard(from: FakeSocket): void {
+    const ops = diffDocuments(this.doc, this.published);
+    if (ops.length > 0) {
+      this.doc = structuredClone(this.published);
+      this.seq += 1;
+      this.log.push({ seq: this.seq, ops, opId: `discard-${this.seq}` });
+      for (const socket of this.sockets) {
+        if (socket !== this.deaf) {
+          socket.deliver({ type: "ops", version: "draft", seq: this.seq, ops, meta: {}, opId: null, hasDraft: false });
+        }
+      }
+    }
+    if (from !== this.deaf) {
+      from.deliver({ type: "discarded", hasDraft: false });
     }
   }
 
@@ -132,6 +178,12 @@ class FakeSocket implements EditorSocket {
       if (!this.closed && message.type === "submit") {
         this.server.submit(this, message);
       }
+      if (!this.closed && message.type === "publish") {
+        this.server.publish(this);
+      }
+      if (!this.closed && message.type === "discard") {
+        this.server.discard(this);
+      }
       if (!this.closed && message.type === "presence") {
         this.sent.push(message);
         this.server.presence(this, message);
@@ -163,6 +215,7 @@ function editor(server: FakeServer, overrides: Partial<SceneEditorClientOptions>
     unsaved: false,
   };
   const sockets: FakeSocket[] = [];
+  let closed = false;
   const client = new SceneEditorClient({
     open: async () => "ws://fake",
     createSocket: () => {
@@ -176,6 +229,10 @@ function editor(server: FakeServer, overrides: Partial<SceneEditorClientOptions>
     flushMs: 1,
     retryDelayMs: () => 1,
     ...overrides,
+    onClose: () => {
+      closed = true;
+      overrides.onClose?.();
+    },
   });
   client.start();
   const text = () => state.doc?.widgets.a?.settings.text;
@@ -185,7 +242,7 @@ function editor(server: FakeServer, overrides: Partial<SceneEditorClientOptions>
     client.edit(doc, state.version);
     client.flush();
   };
-  return { client, state: () => state, text, type, sockets };
+  return { client, state: () => state, text, type, sockets, closed: () => closed };
 }
 
 describe("SceneEditorClient", () => {
@@ -580,7 +637,7 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     e.client.stop();
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(server.doc.widgets.a!.settings.text).toBe("hello");
-    expect(e.client.isDraining()).toBe(false);
+    expect(e.closed()).toBe(true);
   });
 
   it("closes at once on stop when the engine will not open a session", async () => {
@@ -603,7 +660,7 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     e.type("hello");
     e.client.stop();
     expect(closed).toBe(true);
-    expect(e.client.isDraining()).toBe(false);
+    expect(e.closed()).toBe(true);
   });
 
   it("holds a publish until the edit before it is acknowledged", async () => {
@@ -622,9 +679,9 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     let dropped: string[] = [];
     let reason = "";
     const e = editor(server, {
-      onDraftCommandsDropped: (commands, why) => {
-        dropped = commands;
-        reason = why;
+      onDropped: (work) => {
+        dropped = work.commands;
+        reason = work.reason;
       },
     });
     await settle();
@@ -668,8 +725,8 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
     let dropped: string[] = [];
     const e = editor(server, {
-      onDraftCommandsDropped: (commands) => {
-        dropped = commands;
+      onDropped: (work) => {
+        dropped = work.commands;
       },
     });
     await settle();
@@ -686,8 +743,8 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
     let dropped: string[] = [];
     const e = editor(server, {
-      onDraftCommandsDropped: (commands) => {
-        dropped = commands;
+      onDropped: (work) => {
+        dropped = work.commands;
       },
     });
     await settle();
@@ -706,9 +763,9 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     let reason = "";
     const e = editor(server, {
       drainMs: 30,
-      onDraftCommandsDropped: (commands, why) => {
-        dropped = commands;
-        reason = why;
+      onDropped: (work) => {
+        dropped = work.commands;
+        reason = work.reason;
       },
     });
     await settle();
@@ -717,7 +774,7 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     e.client.publish();
     e.client.stop();
     await new Promise((resolve) => setTimeout(resolve, 60));
-    expect(e.client.isDraining()).toBe(false);
+    expect(e.closed()).toBe(true);
     expect(dropped).toEqual(["publish"]);
     expect(reason).toBe("undelivered");
   });
@@ -741,7 +798,7 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     e.client.stop();
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(opens).toBeLessThanOrEqual(8);
-    expect(e.client.isDraining()).toBe(false);
+    expect(e.closed()).toBe(true);
   });
 
   it("counts a queued publish as pending work", async () => {
@@ -753,5 +810,162 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     e.client.publish();
     await settle();
     expect(e.client.hasPending()).toBe(true);
+  });
+});
+
+describe("SceneEditorClient — edits made behind a Publish or Discard", () => {
+  it("keeps showing and then sends edits made behind a publish across a reconnect", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    // The engine takes the edit but its ack is lost, so the publish waits.
+    server.deaf = e.sockets[0]!;
+    e.type("h");
+    e.client.publish();
+    e.type("hello");
+    await settle();
+    server.deaf = null;
+    e.sockets[0]!.close();
+    await settle();
+    expect(e.text()).toBe("hello");
+    await settle();
+    await settle();
+    expect(server.received.filter((entry) => entry === "publish")).toEqual(["publish"]);
+    expect(server.doc.widgets.a!.settings.text).toBe("hello");
+    expect(server.published.widgets.a!.settings.text).toBe("h");
+    expect(e.text()).toBe("hello");
+    expect(e.state().unsaved).toBe(false);
+  });
+
+  it("does not move edits made behind a publish by a resent edit's echo", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("abcd") } });
+    const e = editor(server);
+    await settle();
+    // Nothing reaches the engine until the socket drops and reconnects.
+    e.sockets[0]!.closed = true;
+    e.type("abXcd");
+    e.client.publish();
+    e.type("abXcYd");
+    e.sockets[0]!.closed = false;
+    e.sockets[0]!.close();
+    await settle();
+    await settle();
+    await settle();
+    expect(server.doc.widgets.a!.settings.text).toBe("abXcYd");
+    expect(server.published.widgets.a!.settings.text).toBe("abXcd");
+    expect(e.text()).toBe("abXcYd");
+  });
+
+  it("keeps edits made behind a discard on the discarded draft", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("ab") } });
+    const e = editor(server);
+    await settle();
+    e.type("abc");
+    e.client.discard();
+    e.type("abcZ");
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "discard", "submit:draft"]);
+    expect(server.doc.widgets.a!.settings.text).toBe("abZ");
+    expect(e.text()).toBe("abZ");
+  });
+
+  it("sends edits made behind a discard whose answer was lost against the draft before it", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("ab") } });
+    const e = editor(server);
+    await settle();
+    e.type("abc");
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.client.discard();
+    e.type("abcZ");
+    await settle();
+    server.deaf = null;
+    e.sockets[0]!.close();
+    await settle();
+    await settle();
+    expect(server.doc.widgets.a!.settings.text).toBe("abZ");
+    expect(e.text()).toBe("abZ");
+  });
+
+  it("carries another editor's change into edits held behind a publish", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("hi"), b: placement("x") } });
+    const one = editor(server);
+    const two = editor(server);
+    await settle();
+    server.holdAnswer = true;
+    one.type("hi!");
+    one.client.publish();
+    one.type("hi!!");
+    await settle();
+    const doc = structuredClone(two.state().doc!);
+    doc.widgets.b!.settings.text = "moved";
+    two.client.edit(doc, "draft");
+    two.client.flush();
+    await settle();
+    expect(one.state().doc!.widgets.b!.settings.text).toBe("moved");
+    expect(one.text()).toBe("hi!!");
+    server.releaseAnswer();
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "publish", "submit:draft", "submit:draft"]);
+    expect(server.doc.widgets.a!.settings.text).toBe("hi!!");
+    expect(server.doc.widgets.b!.settings.text).toBe("moved");
+  });
+});
+
+describe("SceneEditorClient — what a drain that runs out reports", () => {
+  it("reports edits still unconfirmed when the drain runs out", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { drainMs: 30, onDropped: (work) => reports.push(work) });
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.type("hello");
+    e.client.stop();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(e.closed()).toBe(true);
+    expect(reports).toEqual([{ reason: "undelivered", commands: [], edits: true }]);
+  });
+
+  it("reports nothing when a drain delivers everything", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const reports: DroppedWork[] = [];
+    const e = editor(server, { onDropped: (work) => reports.push(work) });
+    await settle();
+    e.type("hello");
+    e.client.publish();
+    e.client.stop();
+    await settle();
+    expect(e.closed()).toBe(true);
+    expect(reports).toEqual([]);
+  });
+
+  it("lets a reconnect begun before the drain's deadline finish delivering", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const reports: DroppedWork[] = [];
+    let opens = 0;
+    const e = editor(server, {
+      drainMs: 100,
+      onDropped: (work) => reports.push(work),
+      // Each reconnect's session takes a while to open; the first fails.
+      open: async () => {
+        opens += 1;
+        if (opens === 1) {
+          return "ws://fake";
+        }
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        if (opens === 2) {
+          throw new Error("engine briefly unreachable");
+        }
+        return "ws://fake";
+      },
+    });
+    await settle();
+    e.sockets[0]!.close();
+    e.type("hello");
+    e.client.stop();
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(server.doc.widgets.a!.settings.text).toBe("hello");
+    expect(reports).toEqual([]);
+    expect(e.closed()).toBe(true);
   });
 });
