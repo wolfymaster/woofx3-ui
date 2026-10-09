@@ -5,7 +5,12 @@ import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "@/hooks/use-toast";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
-import { browserClock, connectBrowserSocket, editorSocketUrl } from "@/lib/scene-sync-browser";
+import {
+  browserClock,
+  connectBrowserSocket,
+  SceneSocketOpener,
+  type SceneSocketSource,
+} from "@/lib/scene-sync-browser";
 import { syncReportToast } from "@/lib/scene-sync-report";
 
 interface UseSceneEditorSessionArgs {
@@ -38,6 +43,8 @@ export interface SceneEditorSession {
 }
 
 const noClient = (): (() => void) => () => {};
+/** Each client's `open`, which every editor taking the client points at itself. */
+const openers = new WeakMap<SceneSyncClient, SceneSocketOpener>();
 const noState = (): null => null;
 
 /**
@@ -46,6 +53,9 @@ const noState = (): null => null;
  * the scene's preview overlay is served from. The tab keeps one client per
  * scene (`sceneEditorSessions`): an editor that mounts while the scene's
  * client still drains after the last one closed takes that client back.
+ *
+ * A client reconnects with the arguments of the editor that took it last,
+ * not the one that made it (`SceneSocketOpener`).
  *
  * Reports go to a toast naming the scene as the client last had it, since
  * a client that drains after its editor closed may report when another scene
@@ -68,26 +78,28 @@ export function useSceneEditorSession({
   const editorNameRef = useRef(editorName);
   editorNameRef.current = editorName;
   const hasName = editorName !== undefined;
+  // Kept from the last render that had a scene: a client draining after its
+  // editor lost the scene's row still reconnects with the row it had.
+  const socketSourceRef = useRef<SceneSocketSource | null>(null);
+  if (sceneId) {
+    socketSourceRef.current = {
+      getGrant: () => getSession({ instanceId, engineSceneId }),
+      getPreviewUrl: () => getPreviewUrl({ sceneId }),
+    };
+  }
+  const hasScene = sceneId !== undefined;
 
   // The editor saves its own unsaved fields as it unmounts.
   useEffect(() => sceneEditorSessions.registerUnsavedCheck(() => unsavedOutsideSessionRef.current), []);
 
   useEffect(() => {
-    if (!enabled || !sceneId || !hasName) {
+    if (!enabled || !hasScene || !hasName) {
       return;
     }
     const acquired = sceneEditorSessions.acquire(sceneKey, () => {
+      const opener = new SceneSocketOpener(socketSourceRef);
       const made: SceneSyncClient = new SceneSyncClient({
-        open: async () => {
-          const [grant, previewUrl] = await Promise.all([
-            getSession({ instanceId, engineSceneId }),
-            getPreviewUrl({ sceneId }),
-          ]);
-          if (!grant || !previewUrl) {
-            return null;
-          }
-          return editorSocketUrl(grant, previewUrl);
-        },
+        open: opener.open,
         connect: connectBrowserSocket,
         clock: browserClock,
         newClientId: () => crypto.randomUUID(),
@@ -96,14 +108,20 @@ export function useSceneEditorSession({
           toast({ ...syncReportToast(report, made.getState().name || undefined), variant: "destructive" }),
         log: (event, detail) => console.warn(`[scene editor] ${event}`, detail ?? {}),
       });
+      openers.set(made, opener);
       return made;
     });
+    const opener = openers.get(acquired);
+    if (!opener) {
+      throw new Error("useSceneEditorSession: a scene client without its opener");
+    }
+    opener.follow(socketSourceRef);
     setClient(acquired);
     return () => {
       sceneEditorSessions.release(sceneKey, acquired);
       setClient(null);
     };
-  }, [enabled, sceneId, hasName, sceneKey, instanceId, engineSceneId, getSession, getPreviewUrl]);
+  }, [enabled, hasScene, hasName, sceneKey]);
 
   const state = useSyncExternalStore(client?.subscribe ?? noClient, client?.getState ?? noState);
 
