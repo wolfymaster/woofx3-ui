@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { $sidebarCollapsed } from "@/lib/stores";
 import { cn } from "@/lib/utils";
-import { isNavItemActive, type NavItem } from "./nav-config";
+import { isNavGroupOpen, isNavItemActive, type NavItem } from "./nav-config";
 import { SIDEBAR_RAIL } from "./sidebar-rail";
 
 interface SectionSidebarProps {
@@ -26,36 +26,18 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
         )}
 
         <div className={cn("px-2 pb-2 space-y-0.5", collapsed && "pt-3")}>
-          {items.map((item) => {
-            const isActive = isNavItemActive(item, location);
-            const row = (
-              <span
-                className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[15px] cursor-pointer hover:bg-accent",
-                  collapsed && "justify-center px-0",
-                  isActive && "bg-accent font-medium"
-                )}
-                aria-current={isActive ? "page" : undefined}
-                data-testid={`subnav-${item.id}`}
-              >
-                <item.icon className="h-5 w-5 shrink-0 text-muted-foreground" />
-                {!collapsed && <span className="truncate">{item.label}</span>}
-              </span>
-            );
-
-            return (
-              <Link key={item.id} href={item.href} className="block">
-                {collapsed ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>{row}</TooltipTrigger>
-                    <TooltipContent side="right">{item.label}</TooltipContent>
-                  </Tooltip>
-                ) : (
-                  row
-                )}
-              </Link>
-            );
-          })}
+          {items.map((item) => (
+            <div key={item.id} className="space-y-0.5">
+              <NavRow item={item} location={location} collapsed={collapsed} nested={false} />
+              {item.children && isNavGroupOpen(item, location) && (
+                <div className="space-y-0.5" data-testid={`subnav-group-${item.id}`}>
+                  {item.children.map((child) => (
+                    <NavRow key={child.id} item={child} location={location} collapsed={collapsed} nested />
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
@@ -77,5 +59,48 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
         </button>
       </div>
     </nav>
+  );
+}
+
+function NavRow({
+  item,
+  location,
+  collapsed,
+  nested,
+}: {
+  item: NavItem;
+  location: string;
+  collapsed: boolean;
+  /** Sits under a parent entry, so it is indented when the sidebar has room to show it. */
+  nested: boolean;
+}) {
+  const isActive = isNavItemActive(item, location);
+  const row = (
+    <span
+      className={cn(
+        "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-[15px] cursor-pointer hover:bg-accent",
+        nested && !collapsed && "pl-8 py-1.5 text-sm",
+        collapsed && "justify-center px-0",
+        isActive && "bg-accent font-medium"
+      )}
+      aria-current={isActive ? "page" : undefined}
+      data-testid={`subnav-${item.id}`}
+    >
+      <item.icon className={cn("shrink-0 text-muted-foreground", nested ? "h-4 w-4" : "h-5 w-5")} />
+      {!collapsed && <span className="truncate">{item.label}</span>}
+    </span>
+  );
+
+  return (
+    <Link href={item.href} className="block">
+      {collapsed ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{row}</TooltipTrigger>
+          <TooltipContent side="right">{item.label}</TooltipContent>
+        </Tooltip>
+      ) : (
+        row
+      )}
+    </Link>
   );
 }

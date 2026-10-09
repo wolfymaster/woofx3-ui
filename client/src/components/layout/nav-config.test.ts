@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { ADMIN_ITEMS, isNavItemActive, navItemsFor, STREAM_ITEMS } from "@/components/layout/nav-config";
+import {
+  ADMIN_ITEMS,
+  flattenNavItems,
+  isNavGroupOpen,
+  isNavItemActive,
+  navItemsFor,
+  STREAM_ITEMS,
+} from "@/components/layout/nav-config";
 import { alertEditorPath } from "@/lib/alert-editor-route";
 import { alertRunPath } from "@/lib/alert-run-route";
 
@@ -52,5 +59,41 @@ describe("navItemsFor", () => {
 
   test("an instance with no recorded hosting keeps every entry", () => {
     expect(ids(undefined)).toEqual(ADMIN_ITEMS.map((item) => item.id));
+  });
+});
+
+describe("isNavGroupOpen", () => {
+  test("its own page opens it", () => {
+    expect(isNavGroupOpen(alerts, "/stream/alerts")).toBe(true);
+  });
+
+  test("a nested entry's page keeps it open", () => {
+    expect(isNavGroupOpen(alerts, "/stream/counters/death_count")).toBe(true);
+    expect(isNavGroupOpen(alerts, "/stream/workflows")).toBe(true);
+  });
+
+  test("an unrelated page leaves it closed", () => {
+    expect(isNavGroupOpen(alerts, "/stream/scenes")).toBe(false);
+  });
+
+  test("an entry with nothing nested never opens", () => {
+    const commands = STREAM_ITEMS.find((item) => item.id === "commands");
+    if (!commands) {
+      throw new Error("the Commands entry is missing from STREAM_ITEMS");
+    }
+    expect(isNavGroupOpen(commands, "/stream/commands")).toBe(false);
+  });
+});
+
+describe("flattenNavItems", () => {
+  test("nested entries follow their parent", () => {
+    const ids = flattenNavItems(STREAM_ITEMS).map((item) => item.id);
+    expect(ids.slice(ids.indexOf("alerts"), ids.indexOf("alerts") + 5)).toEqual([
+      "alerts",
+      "counters",
+      "timers",
+      "queues",
+      "workflows",
+    ]);
   });
 });
