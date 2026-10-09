@@ -7,7 +7,7 @@ import { httpAction } from "./_generated/server";
 import { auth } from "./auth";
 import { buildBrowserSourcePlaceholderHtml, buildBrowserSourceRedirect } from "./lib/browserSourceHtml";
 import { escapeDollarKeys } from "./lib/dollarKeys";
-import { ALERT_DISPATCHED_EVENT_TYPE, ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "./lib/engineAlertLifecycle";
+import { ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "./lib/engineAlertLifecycle";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
 import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "./lib/engineTestRun";
@@ -59,6 +59,17 @@ const CORS_HEADERS: Record<string, string> =
         "Access-Control-Allow-Headers": "Content-Type, Authorization",
       }
     : {};
+
+/** Callbacks that carry an engine alert snapshot to merge into `engineAlerts`. */
+const ALERT_SNAPSHOT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  EngineEventType.ALERT_RECORDED,
+  ALERT_PLAYING_EVENT_TYPE,
+  EngineEventType.ALERT_REPLAYED,
+  EngineEventType.ALERT_COMPLETED,
+  EngineEventType.ALERT_FAILED,
+  EngineEventType.ALERT_TIMED_OUT,
+  EngineEventType.ALERT_SKIPPED,
+]);
 
 function corsJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -567,16 +578,34 @@ http.route({
       return corsJson({ success: true, type: eventType });
     }
 
-    // Ahead of the switch for the same reason as SESSION_SUMMARY. Merged like
-    // the other alert lifecycle callbacks, so the row's progress advances as
-    // the alert leaves for the overlay and starts playing.
-    if (eventType === ALERT_DISPATCHED_EVENT_TYPE || eventType === ALERT_PLAYING_EVENT_TYPE) {
-      const snapshot = readAlertSnapshot((event as unknown as { alert?: unknown }).alert);
+    // Every alert callback carries a whole snapshot and merges the same way.
+    // Handled ahead of the switch because `alert.playing` is missing from the
+    // engine types this repo may build against (as with SESSION_SUMMARY), and
+    // read through readAlertSnapshot so a field a newer engine adds does not
+    // fail the mutation's validator.
+    if (ALERT_SNAPSHOT_EVENT_TYPES.has(eventType)) {
+      // A snapshot without an id or status can never be merged, so it is
+      // answered 4xx, which the engine does not retry. A field read as absent
+      // is only logged. A failure while merging answers 5xx, which the engine
+      // retries.
+      const { snapshot, problems } = readAlertSnapshot((event as unknown as { alert?: unknown }).alert);
       if (!snapshot) {
-        logger.warn("webhook: alert lifecycle callback without a valid alert", { instanceId: instance._id, eventType });
-        return corsJson({ error: "Alert lifecycle callback needs an alert snapshot" }, 400);
+        logger.warn("webhook: alert callback without a usable alert", {
+          instanceId: instance._id,
+          eventType,
+          problems,
+        });
+        return corsJson({ error: "Alert callback needs an alert with an id and a status" }, 400);
       }
-      await ctx.runMutation(internal.engineAlerts.updateFromWebhook, { instanceId: instance._id, snapshot });
+      if (problems.length > 0) {
+        logger.warn("webhook: alert callback with unusable fields", {
+          instanceId: instance._id,
+          eventType,
+          alertId: snapshot.id,
+          problems,
+        });
+      }
+      await ctx.runMutation(internal.engineAlerts.mergeFromWebhook, { instanceId: instance._id, snapshot });
       return corsJson({ success: true, type: eventType });
     }
 
@@ -1021,26 +1050,6 @@ http.route({
         await ctx.runMutation(internal.workflowRuns.recordStepFromWebhook, {
           instanceId: instance._id,
           step: event.step,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.ALERT_RECORDED: {
-        await ctx.runMutation(internal.engineAlerts.recordFromWebhook, {
-          instanceId: instance._id,
-          snapshot: event.alert,
-        });
-        return corsJson({ success: true, type: event.type });
-      }
-
-      case EngineEventType.ALERT_REPLAYED:
-      case EngineEventType.ALERT_COMPLETED:
-      case EngineEventType.ALERT_FAILED:
-      case EngineEventType.ALERT_TIMED_OUT:
-      case EngineEventType.ALERT_SKIPPED: {
-        await ctx.runMutation(internal.engineAlerts.updateFromWebhook, {
-          instanceId: instance._id,
-          snapshot: event.alert,
         });
         return corsJson({ success: true, type: event.type });
       }

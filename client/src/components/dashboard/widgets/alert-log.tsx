@@ -20,8 +20,8 @@ interface AlertRow {
   unconfirmedAt?: number;
   status: string;
   error?: string;
-  payload: string;
-  engineCreatedAt: string;
+  payload?: string;
+  engineCreatedAt?: string;
 }
 
 function AlertLogItem({ alert }: { alert: AlertRow }) {

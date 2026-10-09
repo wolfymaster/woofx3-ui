@@ -152,7 +152,7 @@ function StepDetails({ step }: { step: TimelineStep }) {
 }
 
 function AlertDetails({ alert }: { alert: RunAlertRecord }) {
-  const envelope = parsePayload(alert.payload);
+  const envelope = alert.payload === undefined ? undefined : parsePayload(alert.payload);
   const parameters =
     envelope && typeof envelope === "object" ? (envelope as { parameters?: unknown }).parameters : undefined;
   const dispatched = parseEngineTime(alert.dispatchedAt);
@@ -184,7 +184,11 @@ function AlertDetails({ alert }: { alert: RunAlertRecord }) {
           testId="alert-run-alert-parameters"
         />
       )}
-      <PayloadPanel title="Envelope" value={envelope} raw={alert.payload} testId="alert-run-alert-envelope" />
+      {alert.payload === undefined ? (
+        <p className="text-xs text-muted-foreground">The engine has not sent this alert's envelope.</p>
+      ) : (
+        <PayloadPanel title="Envelope" value={envelope} raw={alert.payload} testId="alert-run-alert-envelope" />
+      )}
     </>
   );
 }

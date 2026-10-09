@@ -42,12 +42,13 @@ export interface TraceSpan {
 export interface RunAlertRecord {
   engineAlertId: string;
   status: string;
-  payload: string;
+  /** Absent until the engine sent the alert's envelope. */
+  payload?: string;
   error?: string;
   dispatchedAt?: string;
   playedAt?: string;
   completedAt?: string;
-  engineCreatedAt: string;
+  engineCreatedAt?: string;
   /** Set once the server's staleness sweep gave up on the alert; see engineAlertLifecycle.ts. */
   unconfirmedAt?: number;
 }
