@@ -6,7 +6,9 @@ import {
   clampCenter,
   fitZoom,
   longestLayerId,
+  MIN_LAYER_SIDE,
   newLayer,
+  resizedBy,
   snapToCenter,
   withCenter,
   zoomIn,
@@ -31,6 +33,19 @@ function widget(id: string, extra: Partial<Widget> = {}): Widget {
     ...extra,
   };
 }
+
+describe("resizedBy", () => {
+  test("moves the bottom-right corner, on whole pixels", () => {
+    expect(resizedBy({ width: 200, height: 100 }, { x: 40.4, y: -20.6 })).toEqual({ width: 240, height: 79 });
+  });
+
+  test("keeps each side at least MIN_LAYER_SIDE", () => {
+    expect(resizedBy({ width: 200, height: 100 }, { x: -500, y: -500 })).toEqual({
+      width: MIN_LAYER_SIDE,
+      height: MIN_LAYER_SIDE,
+    });
+  });
+});
 
 describe("centers", () => {
   test("round-trip between a center and the stored top-left", () => {

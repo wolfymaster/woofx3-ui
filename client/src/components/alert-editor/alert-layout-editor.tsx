@@ -254,6 +254,7 @@ export function AlertLayoutEditor({
       displayText={displayText}
       onSelect={setSelectedId}
       onMove={(widgetId, center) => editLayer(widgetId, (w) => withCenter(w, center))}
+      onResize={(widgetId, size) => editLayer(widgetId, (w) => ({ ...w, size }))}
       onKeyDown={handleStageKeyDown}
     />
   );
@@ -306,7 +307,7 @@ export function AlertLayoutEditor({
             </header>
             <PhoneStageArea canvas={layout}>{stage}</PhoneStageArea>
             <div className="flex justify-between px-4 pb-2 font-mono text-xs text-muted-foreground">
-              <span>{readout} · drag to move</span>
+              <span>{readout} · drag to move, corner to resize</span>
               <span>{lengthLabel}</span>
             </div>
           </div>

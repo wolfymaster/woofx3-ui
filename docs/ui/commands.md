@@ -61,6 +61,8 @@ A step is addressed by `commandStepId` (its `id`, or its position for a step wri
 
 Two thin pages supply that. `pages/alert-editor.tsx` finds the step in an event's workflow draft; `pages/command-step-alert-editor.tsx` finds it in a command's draft. Each navigates back to its own screen.
 
+Layers are placed on the canvas itself: drag a layer to move its center, and drag the selected layer's bottom-right corner to resize it, as on the scene canvas. The size lands in the layer's `size` in the stored layout, which is what the scene manager frames; the inspector holds the layer's content, position and duration but no size field.
+
 The same canvas still opens in a dialog from the workflow builder and anywhere else a module declares a `layout` field, through `configFieldRenderers` in `components/workflows/trigger-config-form.tsx`. That path has not been converted.
 
 ## Groups

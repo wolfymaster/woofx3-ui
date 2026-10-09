@@ -7,6 +7,7 @@ import {
   type LayerKind,
   layerKind,
   type Point,
+  resizedBy,
   SNAP_DISTANCE,
   SNAP_DISTANCE_TOUCH,
   snapToCenter,
@@ -25,21 +26,30 @@ interface AlertStageProps {
   displayText: (text: string) => string;
   onSelect: (widgetId: string | null) => void;
   onMove: (widgetId: string, center: Point) => void;
+  /** The layer's new size, its top-left corner where it was. */
+  onResize: (widgetId: string, size: Widget["size"]) => void;
   /** Arrow keys and Delete, from the stage or a focused layer; see AlertEditorPage. */
   onKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
 }
 
+/** On-screen size of the selected layer's corner handle, and of the press area around it. */
+const HANDLE_DOT = 12;
+const HANDLE_HIT = 32;
+
 interface Drag {
+  mode: "move" | "resize";
   widgetId: string;
   pointerId: number;
   startPointer: Point;
   startCenter: Point;
+  startSize: Widget["size"];
   /** Screen pixels per canvas pixel, measured when the drag started. */
   scale: number;
 }
 
 /**
- * The alert's canvas at `zoom`, where layers are selected and dragged.
+ * The alert's canvas at `zoom`, where layers are selected, dragged, and resized by the
+ * selected layer's bottom-right corner, as on the scene canvas.
  *
  * The canvas is laid out at full size and scaled as one piece, so each layer renders
  * at its real pixel sizes. A drag measures the stage's on-screen width rather than
@@ -54,6 +64,7 @@ export function AlertStage({
   displayText,
   onSelect,
   onMove,
+  onResize,
   onKeyDown,
 }: AlertStageProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -61,7 +72,7 @@ export function AlertStage({
   const [guides, setGuides] = useState({ vertical: false, horizontal: false });
   const layers = [...layout.widgets].filter((widget) => widget.visible).sort((a, b) => a.zIndex - b.zIndex);
 
-  const beginDrag = (widget: Widget) => (event: PointerEvent<HTMLButtonElement>) => {
+  const beginDrag = (widget: Widget, mode: Drag["mode"]) => (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0 || !stageRef.current) {
       return;
     }
@@ -69,32 +80,37 @@ export function AlertStage({
     event.currentTarget.setPointerCapture(event.pointerId);
     onSelect(widget.id);
     drag.current = {
+      mode,
       widgetId: widget.id,
       pointerId: event.pointerId,
       startPointer: { x: event.clientX, y: event.clientY },
       startCenter: centerOf(widget),
+      startSize: widget.size,
       scale: stageRef.current.getBoundingClientRect().width / layout.width,
     };
   };
 
-  const continueDrag = (event: PointerEvent<HTMLButtonElement>) => {
+  // Pointer events from the corner handle bubble here too, so one handler serves both gestures.
+  const continueDrag = (event: PointerEvent<HTMLElement>) => {
     const current = drag.current;
     if (!current || current.pointerId !== event.pointerId || current.scale <= 0) {
       return;
     }
-    const moved = clampCenter(
-      {
-        x: current.startCenter.x + (event.clientX - current.startPointer.x) / current.scale,
-        y: current.startCenter.y + (event.clientY - current.startPointer.y) / current.scale,
-      },
-      layout
-    );
+    const delta = {
+      x: (event.clientX - current.startPointer.x) / current.scale,
+      y: (event.clientY - current.startPointer.y) / current.scale,
+    };
+    if (current.mode === "resize") {
+      onResize(current.widgetId, resizedBy(current.startSize, delta));
+      return;
+    }
+    const moved = clampCenter({ x: current.startCenter.x + delta.x, y: current.startCenter.y + delta.y }, layout);
     const snapped = snapToCenter(moved, layout, event.pointerType === "touch" ? SNAP_DISTANCE_TOUCH : SNAP_DISTANCE);
     setGuides({ vertical: snapped.onVertical, horizontal: snapped.onHorizontal });
     onMove(current.widgetId, snapped.center);
   };
 
-  const endDrag = (event: PointerEvent<HTMLButtonElement>) => {
+  const endDrag = (event: PointerEvent<HTMLElement>) => {
     if (drag.current?.pointerId === event.pointerId) {
       drag.current = null;
       setGuides({ vertical: false, horizontal: false });
@@ -136,7 +152,7 @@ export function AlertStage({
                 width: widget.size.width,
                 height: widget.size.height,
               }}
-              onPointerDown={beginDrag(widget)}
+              onPointerDown={beginDrag(widget, "move")}
               onPointerMove={continueDrag}
               onPointerUp={endDrag}
               onPointerCancel={endDrag}
@@ -154,6 +170,24 @@ export function AlertStage({
                 )}
                 style={{ outlineWidth: 2 / zoom }}
               />
+              {isSelected && (
+                <span
+                  className="absolute flex cursor-se-resize items-center justify-center"
+                  style={{
+                    right: -HANDLE_HIT / 2 / zoom,
+                    bottom: -HANDLE_HIT / 2 / zoom,
+                    width: HANDLE_HIT / zoom,
+                    height: HANDLE_HIT / zoom,
+                  }}
+                  onPointerDown={beginDrag(widget, "resize")}
+                  data-testid={`stage-layer-${widget.id}-resize`}
+                >
+                  <span
+                    className="rounded-full bg-primary"
+                    style={{ width: HANDLE_DOT / zoom, height: HANDLE_DOT / zoom }}
+                  />
+                </span>
+              )}
             </button>
           );
         })}
