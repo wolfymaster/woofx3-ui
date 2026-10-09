@@ -205,9 +205,19 @@ export function mergeLifecycle(current: AlertLifecyclePoint, incoming: AlertLife
  * it holds, so a verdict is never replaced by one that cannot be ordered after
  * it.
  *
- * A row that holds a version takes an unversioned snapshot only when the
- * snapshot's `updatedAt` is usable and newer than the row's, and storing it
- * drops the version, which no longer describes the lifecycle the row holds. A
+ * One exception: a versioned snapshot reaching an unversioned row that has no
+ * usable `updatedAt` applies within the row's stage too. Nothing could ever be
+ * ordered after such a row, so without it the row would refuse every
+ * same-stage correction and never adopt a version. The versioned snapshot is
+ * the one to trust: the engine published it only after its own forward-only
+ * rule accepted the write, and once the row holds its version every later
+ * snapshot is ordered by version. The trade-off is that a straggling versioned
+ * verdict can replace an unversioned one written after it, which needs an
+ * engine upgrade between the two writes of one alert.
+ *
+ * A row that holds a version takes an unversioned snapshot only when both
+ * carry a usable `updatedAt` and the snapshot's is newer, and storing it drops
+ * the version, which no longer describes the lifecycle the row holds. A
  * snapshot that cannot be ordered after the row therefore never discards its
  * version.
  */
@@ -227,8 +237,14 @@ function mergeWithoutVersions(current: AlertLifecyclePoint, incoming: AlertLifec
   if (incomingStage > currentStage || order === 1) {
     return PROGRESS;
   }
-  if (order === 0 && incoming.engineVersion !== undefined && incoming.status === current.status) {
+  if (incoming.engineVersion === undefined) {
+    return KEEP;
+  }
+  if (order === 0 && incoming.status === current.status) {
     return { kind: "apply", progressed: false };
+  }
+  if (order === null && parseUpdatedAt(current) === null) {
+    return incoming.status === current.status ? { kind: "apply", progressed: false } : PROGRESS;
   }
   return KEEP;
 }
@@ -239,8 +255,8 @@ function mergeWithoutVersions(current: AlertLifecyclePoint, incoming: AlertLifec
  * full precision.
  */
 function compareUpdatedAt(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): -1 | 0 | 1 | null {
-  const currentAt = current.engineUpdatedAt === undefined ? null : parseEngineTimestamp(current.engineUpdatedAt);
-  const incomingAt = incoming.engineUpdatedAt === undefined ? null : parseEngineTimestamp(incoming.engineUpdatedAt);
+  const currentAt = parseUpdatedAt(current);
+  const incomingAt = parseUpdatedAt(incoming);
   if (currentAt === null || incomingAt === null) {
     return null;
   }
@@ -251,6 +267,10 @@ function compareUpdatedAt(current: AlertLifecyclePoint, incoming: AlertLifecycle
     return -1;
   }
   return 0;
+}
+
+function parseUpdatedAt(point: AlertLifecyclePoint): bigint | null {
+  return point.engineUpdatedAt === undefined ? null : parseEngineTimestamp(point.engineUpdatedAt);
 }
 
 /**
@@ -388,7 +408,18 @@ export interface AlertSnapshotReading {
  * type, or a timestamp that does not parse is left out, named in `unreadable`
  * and reported in `problems`, rather than refusing the callback: a refused
  * callback is lost, while one missing an optional field still settles its
- * alert. A `version` that is not a positive integer is treated the same way.
+ * alert.
+ *
+ * `error: null` is the exception: it says the alert has no error, exactly as
+ * leaving `error` out does, so it reads as absent and clears a stored error.
+ *
+ * `version` is a positive safe integer, as a JSON number or as its decimal
+ * string, the form protobuf's JSON mapping gives an int64. Any other value is
+ * unreadable.
+ *
+ * A problem names the field and the type of its value, never the value: a
+ * snapshot carries the alert's payload and error text, which can hold viewer
+ * names and chat messages, and problems are logged.
  */
 export function readAlertSnapshot(value: unknown): AlertSnapshotReading {
   if (typeof value !== "object" || value === null) {
@@ -415,7 +446,7 @@ export function readAlertSnapshot(value: unknown): AlertSnapshotReading {
   };
   for (const key of SNAPSHOT_TEXT) {
     const field = source[key];
-    if (field === undefined) {
+    if (field === undefined || (key === "error" && field === null)) {
       continue;
     }
     if (typeof field !== "string") {
@@ -435,11 +466,11 @@ export function readAlertSnapshot(value: unknown): AlertSnapshotReading {
     }
     snapshot[key] = field;
   }
-  const version = source.version;
-  if (typeof version === "number" && Number.isSafeInteger(version) && version >= 1) {
+  const version = readVersion(source.version);
+  if (version !== null) {
     snapshot.version = version;
-  } else if (version !== undefined) {
-    skip("version", version);
+  } else if (source.version !== undefined) {
+    skip("version", source.version);
   }
   if (unreadable.length > 0) {
     snapshot.unreadable = unreadable;
@@ -447,18 +478,32 @@ export function readAlertSnapshot(value: unknown): AlertSnapshotReading {
   return { snapshot: snapshot as unknown as EngineAlertSnapshot, problems };
 }
 
+const DECIMAL_INTEGER = /^[1-9][0-9]*$/;
+
+/** A snapshot's `version` as a positive safe integer, or null when it is not one. */
+function readVersion(value: unknown): number | null {
+  const parsed = typeof value === "string" && DECIMAL_INTEGER.test(value) ? Number(value) : value;
+  if (typeof parsed !== "number" || !Number.isSafeInteger(parsed) || parsed < 1) {
+    return null;
+  }
+  return parsed;
+}
+
 function describe(value: unknown): string {
   if (value === undefined) {
     return "missing";
   }
-  return `malformed (${JSON.stringify(value) ?? typeof value})`;
+  if (value === null) {
+    return "malformed (null)";
+  }
+  return `malformed (${Array.isArray(value) ? "array" : typeof value})`;
 }
 
 /** The fields of an `engineAlerts` row that mirror the engine's alert. */
 export interface EngineAlertMirror {
   status: EngineAlertStatus;
   engineStatus?: string;
-  payload: string;
+  payload?: string;
   workflowId?: string;
   sourceEventId?: string;
   envelopeId?: string;
@@ -477,7 +522,7 @@ export function mirrorOf(snapshot: EngineAlertSnapshot): EngineAlertMirror {
   return {
     status,
     engineStatus: status === "unknown" ? snapshot.status : undefined,
-    payload: snapshot.payload ?? "",
+    payload: snapshot.payload || undefined,
     workflowId: snapshot.workflowId || undefined,
     sourceEventId: snapshot.sourceEventId || undefined,
     envelopeId: snapshot.envelopeId || undefined,
@@ -511,10 +556,14 @@ export interface MirrorUpdate {
  *   row lacks it, even one whose lifecycle is older than the row's.
  * - The lifecycle is replaced as a whole when `mergeLifecycle` applies the
  *   snapshot. The engine never unsets a lifecycle timestamp, so one the
- *   snapshot lacks keeps the row's, and so does `updatedAt`. `error` is the
- *   exception: the engine leaves it out when a verdict cleared it, so an
- *   absent error clears the row's; one the snapshot carried unreadably keeps
- *   it.
+ *   snapshot lacks keeps the row's. `error` is different: the engine leaves it
+ *   out when a verdict cleared it, so an absent error clears the row's; one
+ *   the snapshot carried unreadably keeps it.
+ * - `updatedAt` is what later snapshots without a version are ordered against,
+ *   so it must be the time of the lifecycle the row holds. It is taken from the
+ *   applied snapshot, and cleared when that snapshot has none: the row's older
+ *   time no longer describes its lifecycle, and a straggler newer than that
+ *   time could otherwise overwrite it.
  *
  * No field is ever overwritten with a value the snapshot did not carry in a
  * usable form.
@@ -554,7 +603,7 @@ export function updateMirror(row: EngineAlertMirror, snapshot: EngineAlertSnapsh
     status,
     engineStatus: status === "unknown" ? snapshot.status : undefined,
     engineVersion: snapshot.version,
-    engineUpdatedAt: snapshot.updatedAt ?? row.engineUpdatedAt,
+    engineUpdatedAt: snapshot.updatedAt,
     dispatchedAt: snapshot.dispatchedAt ?? row.dispatchedAt,
     playedAt: snapshot.playedAt ?? row.playedAt,
     completedAt: snapshot.completedAt ?? row.completedAt,

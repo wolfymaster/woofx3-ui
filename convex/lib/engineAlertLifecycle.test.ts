@@ -151,7 +151,23 @@ describe("mergeLifecycle across versioned and unversioned snapshots", () => {
   test("adopts the version of the write the row already holds, without counting progress", () => {
     expect(mergeLifecycle(at("playing", T1), v("playing", 3, T1))).toEqual({ kind: "apply", progressed: false });
   });
+
+  // Nothing can be ordered after an unversioned row without a usable
+  // timestamp, so a versioned snapshot is what lets it move within its stage.
+  test("lets a versioned snapshot correct or version an unversioned row without a usable timestamp", () => {
+    expect(mergeLifecycle(untimed("failed"), v("completed", 4, T2))).toEqual(PROGRESS);
+    expect(mergeLifecycle(untimed("failed"), { status: "completed", engineVersion: 4 })).toEqual(PROGRESS);
+    expect(mergeLifecycle(at("failed", "not a time"), v("completed", 4, T2))).toEqual(PROGRESS);
+    expect(mergeLifecycle(untimed("completed"), v("completed", 4, T2))).toEqual({ kind: "apply", progressed: false });
+    expect(mergeLifecycle(untimed("completed"), v("playing", 3, T2)).kind).toBe("keep");
+  });
+
+  test("keeps a same-stage versioned snapshot without a usable timestamp off a timed unversioned row", () => {
+    expect(mergeLifecycle(at("failed", T1), { status: "completed", engineVersion: 4 }).kind).toBe("keep");
+  });
 });
+
+const PROGRESS = { kind: "apply", progressed: true };
 
 function snap(fields: Partial<EngineAlertSnapshot> & { status: string }): EngineAlertSnapshot {
   return { id: "a1", ...fields };
@@ -191,19 +207,35 @@ describe("updateMirror", () => {
   });
 
   // The engine leaves `error` out once a verdict cleared it, but never unsets
-  // a lifecycle timestamp, payload or attribution.
-  test("never overwrites a stored value with one the snapshot lacks, except a cleared error", () => {
+  // a lifecycle timestamp, payload or attribution. `updatedAt` must describe
+  // the lifecycle the row holds, so the applied snapshot's absence clears it.
+  test("never overwrites a stored value with one the snapshot lacks, except the error and updatedAt", () => {
     const update = updateMirror(ROW, snap({ status: "completed", version: 4 }));
     expect(update.patch).toEqual({
       status: "completed",
       engineStatus: undefined,
       engineVersion: 4,
-      engineUpdatedAt: T1,
+      engineUpdatedAt: undefined,
       dispatchedAt: T0,
       playedAt: T1,
       completedAt: T1,
       error: undefined,
     });
+  });
+
+  test("clears the stored error when the snapshot's is null", () => {
+    const { snapshot, problems } = readAlertSnapshot({ id: "a1", status: "completed", version: 4, error: null });
+    expect(problems).toEqual([]);
+    const update = updateMirror(ROW, snapshot as EngineAlertSnapshot);
+    expect("error" in update.patch && update.patch.error === undefined).toBe(true);
+  });
+
+  // A versioned write without a time leaves the row nothing to order an
+  // unversioned straggler against, so the straggler cannot overwrite it.
+  test("keeps an unversioned straggler off a versioned row whose last write carried no time", () => {
+    const row = { ...ROW, ...updateMirror(ROW, snap({ status: "completed", version: 4 })).patch };
+    expect(row.engineUpdatedAt).toBeUndefined();
+    expect(updateMirror(row, snap({ status: "failed", updatedAt: T2 }))).toEqual({ patch: {}, progressed: false });
   });
 
   test("keeps the stored error when the snapshot's is unreadable", () => {
@@ -226,7 +258,7 @@ describe("updateMirror", () => {
   });
 
   test("fills in what the row was created without, even from an older write", () => {
-    const row: EngineAlertMirror = { ...ROW, payload: "", workflowId: undefined, engineCreatedAt: undefined };
+    const row: EngineAlertMirror = { ...ROW, payload: undefined, workflowId: undefined, engineCreatedAt: undefined };
     const update = updateMirror(
       row,
       snap({ status: "sent", version: 1, payload: "{}", workflowId: "wf2", createdAt: T0, updatedAt: T0 })
@@ -261,7 +293,7 @@ describe("mirrorOf", () => {
     expect(mirrorOf(snap({ status: "playing", version: 2 }))).toEqual({
       status: "playing",
       engineStatus: undefined,
-      payload: "",
+      payload: undefined,
       workflowId: undefined,
       sourceEventId: undefined,
       envelopeId: undefined,
@@ -341,12 +373,17 @@ describe("readAlertSnapshot", () => {
     expect(readAlertSnapshot({ ...snapshot, addedLater: "x" })).toEqual({ snapshot, problems: [] });
   });
 
-  test("copies the version", () => {
+  test("copies the version, as a number or as its decimal string", () => {
     expect(readAlertSnapshot({ ...snapshot, version: 3 }).snapshot).toEqual({ ...snapshot, version: 3 });
+    expect(readAlertSnapshot({ ...snapshot, version: "3" })).toEqual({
+      snapshot: { ...snapshot, version: 3 },
+      problems: [],
+    });
   });
 
   test("reads a version that is not a positive integer as absent, and reports it", () => {
-    for (const version of [0, -1, 1.5, "3", Number.NaN, null]) {
+    const unsafe = "9007199254740993";
+    for (const version of [0, -1, 1.5, "0", "03", "-3", "1.5", " 3", "", unsafe, Number.NaN, null, true]) {
       const reading = readAlertSnapshot({ ...snapshot, version });
       expect(reading.snapshot).toEqual({ ...snapshot, unreadable: ["version"] });
       expect(reading.problems).toHaveLength(1);
@@ -354,10 +391,29 @@ describe("readAlertSnapshot", () => {
   });
 
   test("reads a null or mistyped optional field as absent, and reports it", () => {
-    const reading = readAlertSnapshot({ ...snapshot, error: null, playedAt: 5 });
+    const reading = readAlertSnapshot({ ...snapshot, workflowId: null, error: 7, playedAt: 5 });
     const { playedAt: _playedAt, ...withoutPlayedAt } = snapshot;
-    expect(reading.snapshot).toEqual({ ...withoutPlayedAt, unreadable: ["error", "playedAt"] });
-    expect(reading.problems).toHaveLength(2);
+    expect(reading.snapshot).toEqual({ ...withoutPlayedAt, unreadable: ["workflowId", "error", "playedAt"] });
+    expect(reading.problems).toHaveLength(3);
+  });
+
+  test("reads a null error as no error, without a problem", () => {
+    expect(readAlertSnapshot({ ...snapshot, error: null })).toEqual({ snapshot, problems: [] });
+  });
+
+  // Problems are logged, and a snapshot's text can hold viewer data.
+  test("names a malformed field's type, never its value", () => {
+    const reading = readAlertSnapshot({
+      ...snapshot,
+      error: { viewer: "secret" },
+      payload: ["secret"],
+      playedAt: "secret",
+    });
+    expect(reading.problems).toEqual([
+      "payload is malformed (array); read as absent",
+      "error is malformed (object); read as absent",
+      "playedAt is malformed (string); read as absent",
+    ]);
   });
 
   test("reads a timestamp that does not parse as absent, and reports it", () => {
@@ -377,7 +433,7 @@ describe("readAlertSnapshot", () => {
   test("refuses a snapshot without an id or a status", () => {
     expect(readAlertSnapshot({ ...snapshot, id: undefined }).snapshot).toBeNull();
     expect(readAlertSnapshot({ ...snapshot, id: "" }).snapshot).toBeNull();
-    expect(readAlertSnapshot({ ...snapshot, status: 3 }).problems).toEqual(["status is malformed (3)"]);
+    expect(readAlertSnapshot({ ...snapshot, status: 3 }).problems).toEqual(["status is malformed (number)"]);
     expect(readAlertSnapshot(null).snapshot).toBeNull();
     expect(readAlertSnapshot("alert").snapshot).toBeNull();
   });

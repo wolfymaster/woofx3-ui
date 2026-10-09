@@ -1513,7 +1513,8 @@ export default defineSchema({
   engineAlerts: defineTable({
     instanceId: v.id("instances"),
     engineAlertId: v.string(), // AlertSnapshot.id
-    payload: v.string(), // JSON AlertPayload envelope
+    // JSON AlertPayload envelope; absent until a snapshot carries one.
+    payload: v.optional(v.string()),
     workflowId: v.optional(v.string()),
     sourceEventId: v.optional(v.string()),
     status: v.union(

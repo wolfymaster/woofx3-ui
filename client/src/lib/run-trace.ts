@@ -42,7 +42,8 @@ export interface TraceSpan {
 export interface RunAlertRecord {
   engineAlertId: string;
   status: string;
-  payload: string;
+  /** Absent until the engine sent the alert's envelope. */
+  payload?: string;
   error?: string;
   dispatchedAt?: string;
   playedAt?: string;

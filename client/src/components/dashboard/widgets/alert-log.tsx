@@ -20,7 +20,7 @@ interface AlertRow {
   unconfirmedAt?: number;
   status: string;
   error?: string;
-  payload: string;
+  payload?: string;
   engineCreatedAt?: string;
 }
 
