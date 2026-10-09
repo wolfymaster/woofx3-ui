@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { bareKind, parseKindRef, WOOFX3_MODULE } from "@convex/lib/resourceKinds";
 import { useAction, useQuery } from "convex/react";
 import { Boxes, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
 import { EmptyState } from "@/components/common/empty-state";
@@ -393,7 +393,7 @@ function SettingsCard({
             return (
               <div key={field.id} className="contents">
                 <dt className="text-muted-foreground">{field.label}</dt>
-                <dd>{option?.label ?? (raw === undefined || raw === "" ? "—" : String(raw))}</dd>
+                <dd className="min-w-0 break-words">{option?.label ?? settingText(field, raw)}</dd>
               </div>
             );
           })}
@@ -429,6 +429,55 @@ function declaredKindView(kind: string, summaryPath: string | undefined): KindVi
     railValue: (props) => summarizeResourceValue(props.value, summaryPath),
     detail: (props) => <GenericResourceDetail {...props} qualifiedKind={kind} />,
   };
+}
+
+/**
+ * A setting's value as read in the card. A list shows its rows, one per line,
+ * each as its fields' values: a wheel's entries, a counter's goals.
+ */
+export function settingText(field: { itemFields?: { id: string }[] }, raw: unknown): ReactNode {
+  if (raw === undefined || raw === null || raw === "") {
+    return "—";
+  }
+  const rows = field.itemFields ? listRows(raw) : null;
+  if (rows === null) {
+    return String(raw);
+  }
+  if (rows.length === 0) {
+    return "—";
+  }
+  const itemFields = field.itemFields ?? [];
+  return (
+    <ul className="space-y-0.5">
+      {rows.map((row, index) => (
+        // Rows may repeat, so their place is part of what tells them apart.
+        // biome-ignore lint/suspicious/noArrayIndexKey: list rows have no ids
+        <li key={index}>
+          {itemFields
+            .map((item) => row[item.id])
+            .filter((value) => value !== undefined && value !== null && value !== "")
+            .map(String)
+            .join(" · ") || "—"}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A list setting's rows, whether stored as an array or as its JSON text; null when it is neither. */
+function listRows(raw: unknown): Record<string, unknown>[] | null {
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  return value.filter((row): row is Record<string, unknown> => row !== null && typeof row === "object");
 }
 
 function capitalize(text: string): string {
