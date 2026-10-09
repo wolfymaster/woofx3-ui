@@ -57,7 +57,7 @@ const KNOWN_EVENT_KINDS: ReadonlySet<string> = new Set(RECAP_EVENT_KINDS);
 /** One counted event of a session, as the engine serves it. */
 export interface StreamSessionEvent {
   occurredAt: string;
-  kind: string;
+  kind: RecapEventKind;
   userName: string | null;
   amount: number | null;
 }
