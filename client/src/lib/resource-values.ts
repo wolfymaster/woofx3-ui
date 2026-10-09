@@ -238,3 +238,20 @@ export function queueAddRefusal(
   }
   return null;
 }
+
+/** A short reading of a value for the instance list: a number, some text, or how many entries. */
+export function summarizeResourceValue(value: unknown): string {
+  if (typeof value === "number") {
+    return value.toLocaleString();
+  }
+  if (typeof value === "string") {
+    return value.length > 24 ? `${value.slice(0, 23)}…` : value;
+  }
+  if (typeof value === "boolean") {
+    return value ? "On" : "Off";
+  }
+  if (Array.isArray(value)) {
+    return value.length.toLocaleString();
+  }
+  return "";
+}

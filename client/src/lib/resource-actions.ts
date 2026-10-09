@@ -29,6 +29,16 @@ export function resourceActionStep(
   return { ...step, parameters: { ...step.parameters, ...parameters } };
 }
 
+/** A step running `action` on the instance `canonicalId`, with `parameters` for its other fields. */
+export function resourceActionStepFor(
+  action: ResourceAction,
+  canonicalId: string,
+  parameters: Record<string, unknown>
+): ActionStep {
+  const step = presetToActionStep(action.preset, "action-1");
+  return { ...step, parameters: { ...step.parameters, ...parameters, [action.fieldId]: canonicalId } };
+}
+
 /** An action that can be aimed at one instance of a resource kind, and the field that aims it. */
 export interface ResourceAction {
   preset: ActionPreset;

@@ -28,6 +28,7 @@ import { useEngineVersion } from "@/hooks/use-engine-version";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useLiveState } from "@/hooks/use-live-state";
+import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { formatEngineVersion } from "@/lib/engine-version";
@@ -41,6 +42,7 @@ import {
   navItemsFor,
   sectionsFor,
   UTILITY_SECTIONS,
+  withAlertsChildren,
 } from "./nav-config";
 import { SectionSidebar } from "./section-sidebar";
 import { SetupInstallBanner } from "./setup-install-banner";
@@ -338,6 +340,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const [location] = useLocation();
   const activeSection = findActiveSection(location);
   const { instance } = useInstance();
+  const resourceKindItems = useResourceKindNavItems();
   useSyncEngineTransport();
   useReconnectAfterUpgrade();
   useWorkflowHealthResyncOnReconnect();
@@ -367,7 +370,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
           {activeSection?.children && (
             <SectionSidebar
               title={activeSection.label}
-              items={navItemsFor(activeSection.children, instance?.hosting)}
+              items={navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting)}
               location={location}
             />
           )}

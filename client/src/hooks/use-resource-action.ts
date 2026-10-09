@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import type { ActionStep } from "@woofx3/api";
 import { useAction } from "convex/react";
 import { useState } from "react";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
@@ -6,7 +7,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
-import { resourceActionStep } from "@/lib/resource-actions";
+import { type ResourceAction, resourceActionStep, resourceActionStepFor } from "@/lib/resource-actions";
 import type { ResourceInstanceDoc } from "@/lib/resource-instance";
 
 /**
@@ -21,13 +22,14 @@ import type { ResourceInstanceDoc } from "@/lib/resource-instance";
  */
 export function useResourceAction({ instance, moduleName }: Pick<ResourceDetailProps, "instance" | "moduleName">) {
   const runResourceAction = useResourceActionRunner();
+  const sendStep = useResourceActionSender();
   const { toast } = useToast();
   const [pending, setPending] = useState<string | null>(null);
 
-  async function run(actionId: string, parameters: Record<string, unknown> = {}): Promise<boolean> {
-    setPending(actionId);
+  async function attempt(key: string, send: () => Promise<boolean>): Promise<boolean> {
+    setPending(key);
     try {
-      return await runResourceAction(instance, moduleName, actionId, parameters);
+      return await send();
     } catch (err) {
       toast({
         title: "That didn't work",
@@ -40,7 +42,22 @@ export function useResourceAction({ instance, moduleName }: Pick<ResourceDetailP
     }
   }
 
-  return { run, pending };
+  /** Runs the kind's module's action `actionId`, aimed at the instance through its `target` parameter. */
+  function run(actionId: string, parameters: Record<string, unknown> = {}): Promise<boolean> {
+    return attempt(actionId, () => runResourceAction(instance, moduleName, actionId, parameters));
+  }
+
+  /**
+   * Runs any action aimed at the kind, from whichever module declares it, through
+   * the parameter that action picks an instance with. `pending` holds its preset id.
+   */
+  function runAction(action: ResourceAction, parameters: Record<string, unknown> = {}): Promise<boolean> {
+    return attempt(action.preset.id, () =>
+      sendStep(instance, resourceActionStepFor(action, instance.canonicalId, parameters))
+    );
+  }
+
+  return { run, runAction, pending };
 }
 
 /**
@@ -49,9 +66,8 @@ export function useResourceAction({ instance, moduleName }: Pick<ResourceDetailP
  * selected, and throws what the engine or the catalog refused.
  */
 export function useResourceActionRunner() {
-  const { instance: engineInstance } = useInstance();
   const { actionPresets } = useWorkflowCatalog();
-  const runActions = useAction(api.moduleResourceActions.runActions);
+  const sendStep = useResourceActionSender();
 
   return async function runResourceAction(
     instance: ResourceInstanceDoc,
@@ -59,17 +75,27 @@ export function useResourceActionRunner() {
     actionId: string,
     parameters: Record<string, unknown> = {}
   ): Promise<boolean> {
-    if (!engineInstance) {
-      return false;
-    }
     const action = resourceActionStep(actionPresets, moduleName, actionId, {
       target: instance.canonicalId,
       ...parameters,
     });
+    return sendStep(instance, action);
+  };
+}
+
+/** Sends one action step about `instance` to the engine; false when no engine instance is selected. */
+function useResourceActionSender() {
+  const { instance: engineInstance } = useInstance();
+  const runActions = useAction(api.moduleResourceActions.runActions);
+
+  return async function sendStep(instance: ResourceInstanceDoc, step: ActionStep): Promise<boolean> {
+    if (!engineInstance) {
+      return false;
+    }
     await runActions({
       instanceId: engineInstance._id,
       label: `dashboard:${instance.canonicalId}`,
-      actions: escapeDollarKeys([action]) as unknown[],
+      actions: escapeDollarKeys([step]) as unknown[],
     });
     return true;
   };

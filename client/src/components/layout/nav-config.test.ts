@@ -6,6 +6,7 @@ import {
   isNavItemActive,
   navItemsFor,
   STREAM_ITEMS,
+  withAlertsChildren,
 } from "@/components/layout/nav-config";
 import { alertEditorPath } from "@/lib/alert-editor-route";
 import { alertRunPath } from "@/lib/alert-run-route";
@@ -95,5 +96,34 @@ describe("flattenNavItems", () => {
       "queues",
       "workflows",
     ]);
+  });
+});
+
+describe("withAlertsChildren", () => {
+  const wheels = {
+    id: "resource-kind:wheel_spin:wheel",
+    label: "Wheels",
+    icon: alerts.icon,
+    href: "/stream/resources/wheel_spin/wheel",
+  };
+
+  test("nests the extra entries under Alerts, ahead of Workflows", () => {
+    const merged = withAlertsChildren(STREAM_ITEMS, [wheels]);
+    const ids = merged.find((item) => item.id === "alerts")?.children?.map((child) => child.id);
+    expect(ids).toEqual(["counters", "timers", "queues", "resource-kind:wheel_spin:wheel", "workflows"]);
+  });
+
+  test("leaves a menu without Alerts as it is", () => {
+    const helpOnly = [{ id: "learning", label: "Learning", icon: alerts.icon, href: "/help/learning" }];
+    expect(withAlertsChildren(helpOnly, [wheels])).toEqual(helpOnly);
+  });
+
+  test("a page for an extra entry keeps Alerts open", () => {
+    const merged = withAlertsChildren(STREAM_ITEMS, [wheels]);
+    const mergedAlerts = merged.find((item) => item.id === "alerts");
+    if (!mergedAlerts) {
+      throw new Error("the Alerts entry is missing");
+    }
+    expect(isNavGroupOpen(mergedAlerts, "/stream/resources/wheel_spin/wheel/prizes")).toBe(true);
   });
 });

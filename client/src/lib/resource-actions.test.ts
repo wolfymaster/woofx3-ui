@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { Doc } from "@convex/_generated/dataModel";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
-import { eventsChangingResource, resourceActionStep, resourceActions } from "@/lib/resource-actions";
+import {
+  eventsChangingResource,
+  resourceActionStep,
+  resourceActionStepFor,
+  resourceActions,
+} from "@/lib/resource-actions";
 import type { ActionPreset } from "@/lib/workflow-presets";
 
 const icon = (() => null) as unknown as ActionPreset["icon"];
@@ -38,6 +43,30 @@ describe("resourceActionStep", () => {
 
   test("says which module to update when the action is missing", () => {
     expect(() => resourceActionStep([], "woofx3", "counter.increment", {})).toThrow("update the woofx3 module");
+  });
+});
+
+describe("resourceActionStepFor", () => {
+  test("aims the action through its own instance field, whatever the field is called", () => {
+    const spin = preset({
+      canonicalRef: "woofx3_wheel_spin:action:wheel.spin",
+      handlerType: "function",
+      functionCall: "woofx3_wheel_spin:function:wheel.spin",
+      config: {
+        fields: [
+          { id: "wheel", label: "Wheel", type: "resource_ref", resourceKind: "woofx3_wheel_spin:wheel" },
+          { id: "seconds", label: "Seconds", type: "number" },
+        ],
+      },
+    });
+    const step = resourceActionStepFor({ preset: spin, fieldId: "wheel" }, "woofx3_wheel_spin:wheel:prizes", {
+      seconds: 5,
+      wheel: "someone-elses",
+    });
+    expect(step).toMatchObject({
+      $ref: "woofx3_wheel_spin:action:wheel.spin",
+      parameters: { wheel: "woofx3_wheel_spin:wheel:prizes", seconds: 5 },
+    });
   });
 });
 

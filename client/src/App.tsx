@@ -44,6 +44,7 @@ const CommandStepAlertEditor = lazy(() => import("@/pages/command-step-alert-edi
 const Commands = lazy(() => import("@/pages/commands"));
 const CompanionPair = lazy(() => import("@/pages/companion-pair"));
 const Counters = lazy(() => import("@/pages/counters"));
+const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const Feedback = lazy(() => import("@/pages/feedback"));
 const FeedbackNew = lazy(() => import("@/pages/feedback-new"));
@@ -189,6 +190,8 @@ function AppRoutes() {
                   <Route path="/stream/timers/*" component={Timers} />
                   <Route path="/stream/queues" component={Queues} />
                   <Route path="/stream/queues/*" component={Queues} />
+                  <Route path="/stream/resources/:module/:kind" component={ResourceKind} />
+                  <Route path="/stream/resources/:module/:kind/*" component={ResourceKind} />
                   <Route path={STREAM_RECAPS_PATH} component={StreamRecaps} />
                   <Route path={STREAM_RECAP_ROUTE} component={StreamRecap} />
                   <Route path="/stream/scenes" component={Scenes} />
