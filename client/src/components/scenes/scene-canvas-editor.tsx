@@ -80,12 +80,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // (see pages/scenes.tsx), so another instance starts over and has to show
   // the capability itself.
   const capabilities = useEngineCapabilities(instanceId);
-  const syncSupported = capabilities.support("scenes.editorSync") === "supported";
+  const syncSupport = capabilities.support("scenes.editorSync");
+  const syncSupported = syncSupport === "supported";
   const needsEngineUpgrade = !syncSupported && capabilities.support("scenes.editorSessions") === "supported";
   const [sessionMode, setSessionMode] = useState(syncSupported);
   if (syncSupported && !sessionMode) {
     setSessionMode(true);
   }
+  // Until the capabilities have answered, the editor is read-only and Save is
+  // off: the Save-button editor shows the published scene from the cache, and
+  // a save from it on an engine with editor sync would overwrite what is on
+  // stream without a publish. A failed check stays read-only for the same
+  // reason, with a way to ask again.
+  const editorModeKnown = sessionMode || syncSupport === "unsupported";
 
   // Live editing: this editor's changes go straight to what OBS shows, and
   // are copied into the draft so a later publish cannot undo them. Each open
@@ -110,8 +117,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const sessionCanvas = useMemo(() => (sessionDoc === null ? null : canvasOfDocument(sessionDoc)), [sessionDoc]);
   const conn = syncState?.conn ?? null;
   const sessionEnded = sessionMode && (conn === "gone" || conn === "closed");
-  // The canvas takes edits only once the session has the scene, and not after it ended.
-  const canvasReadOnly = sessionMode && (sessionCanvas === null || sessionEnded);
+  // The canvas takes edits only once the editor knows where they go: in
+  // session mode, once the session has the scene, and not after it ended.
+  const canvasReadOnly = !editorModeKnown || (sessionMode && (sessionCanvas === null || sessionEnded));
   const pendingCommand = syncState?.pendingCommand ?? null;
   // One Publish or Discard at a time; editing goes on while one is queued,
   // and edits made after it are transformed against its result.
@@ -176,6 +184,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // it replaced, and the canvas shows the client's document, edit included.
   const mutateCanvas = useCallback(
     (update: (canvas: SceneCanvas) => SceneCanvas) => {
+      if (!editorModeKnown) {
+        return;
+      }
       if (!sessionMode) {
         setScene((prev) => (prev === null ? prev : { ...prev, ...update(prev) }));
         setIsDirty(true);
@@ -189,13 +200,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         toast({ title: "This change couldn't be made", description: result.detail, variant: "destructive" });
       }
     },
-    [sessionMode, client, uiVersion, toast]
+    [editorModeKnown, sessionMode, client, uiVersion, toast]
   );
 
-  const updateDetails = useCallback((details: Partial<Pick<Scene, "name" | "description">>) => {
-    setScene((prev) => (prev === null ? prev : { ...prev, ...details }));
-    setIsDirty(true);
-  }, []);
+  const updateDetails = useCallback(
+    (details: Partial<Pick<Scene, "name" | "description">>) => {
+      if (!editorModeKnown) {
+        return;
+      }
+      setScene((prev) => (prev === null ? prev : { ...prev, ...details }));
+      setIsDirty(true);
+    },
+    [editorModeKnown]
+  );
 
   // In session mode the name and description, which are not part of the
   // document, save themselves a moment after typing stops, or at once when
@@ -304,7 +321,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   }, [convexSceneId, rotateBrowserSourceKey, copyKeyToClipboard, toast]);
 
   const handleSave = useCallback(async () => {
-    if (!scene) {
+    if (!scene || sessionMode || !editorModeKnown) {
       return;
     }
     setIsSaving(true);
@@ -335,7 +352,16 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     } finally {
       setIsSaving(false);
     }
-  }, [scene, instanceId, engineSceneId, updateSceneAction, toast, fetchedScene?.updatedAt]);
+  }, [
+    scene,
+    sessionMode,
+    editorModeKnown,
+    instanceId,
+    engineSceneId,
+    updateSceneAction,
+    toast,
+    fetchedScene?.updatedAt,
+  ]);
 
   const abandonSession = session.abandon;
   const handleDeleteScene = useCallback(async () => {
@@ -446,6 +472,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         <Input
           value={scene.name}
           onChange={(e) => updateDetails({ name: e.target.value })}
+          disabled={!editorModeKnown}
           className="font-semibold border-none bg-transparent focus-visible:ring-0 w-56"
           data-testid="input-scene-name"
         />
@@ -469,6 +496,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
               <Input
                 value={scene.description}
                 onChange={(e) => updateDetails({ description: e.target.value })}
+                disabled={!editorModeKnown}
                 placeholder="Optional"
                 data-testid="input-scene-description"
               />
@@ -614,6 +642,26 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
           </>
         ) : (
           <>
+            {syncSupport === "checking" && (
+              <span className="text-xs text-muted-foreground" data-testid="text-scene-checking-engine">
+                Checking the engine…
+              </span>
+            )}
+            {syncSupport === "unknown" && (
+              <>
+                <span className="text-xs text-muted-foreground" data-testid="text-scene-engine-check-failed">
+                  Couldn't check the engine's features
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={capabilities.refresh}
+                  data-testid="button-retry-engine-check"
+                >
+                  Retry
+                </Button>
+              </>
+            )}
             {needsEngineUpgrade && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -627,7 +675,11 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 </TooltipContent>
               </Tooltip>
             )}
-            <Button onClick={handleSave} disabled={isSaving || !isDirty} data-testid="button-save-scene">
+            <Button
+              onClick={handleSave}
+              disabled={!editorModeKnown || isSaving || !isDirty}
+              data-testid="button-save-scene"
+            >
               <Save className="h-4 w-4 mr-2" />
               {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
             </Button>
