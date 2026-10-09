@@ -1,5 +1,6 @@
 "use node";
 
+import { type ConfigField, LIST_ITEM_FIELD_TYPES, parseFieldList } from "@woofx3/api/ui-schema";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
@@ -46,6 +47,11 @@ export interface ManifestSettingField {
   action?: ManifestSettingAction;
   /** Present only when `type === "resource_ref"`: the kind of instance it links. */
   resourceKind?: string;
+  /**
+   * Present only when `type === "list"`: the fields of one row. The value is
+   * stored as a JSON array of objects keyed by these fields' ids.
+   */
+  itemFields?: ConfigField[];
 }
 
 export type { ManifestResourceKind, ModuleFunctionSummary };
@@ -208,6 +214,19 @@ function parseManifestSettingAction(value: unknown, oauthIntegrations: string[])
   return undefined;
 }
 
+/**
+ * A `list` setting's row fields, through the same parser every other `list`
+ * control's go through, so the settings pane and the engine agree on which
+ * row types render. `undefined` when none do: a list whose rows hold nothing
+ * renderable is a half-built control and is left out.
+ */
+function parseSettingItemFields(raw: unknown): ConfigField[] | undefined {
+  const fields = parseFieldList(JSON.stringify(Array.isArray(raw) ? raw : [])).filter((item) =>
+    (LIST_ITEM_FIELD_TYPES as readonly string[]).includes(item.type)
+  );
+  return fields.length > 0 ? fields : undefined;
+}
+
 export function parseManifestSettings(manifest: unknown): ManifestSettingField[] {
   const raw = manifest && typeof manifest === "object" ? (manifest as Record<string, unknown>) : {};
   const oauthIntegrations = moduleOAuthIntegrationIds(manifest);
@@ -215,6 +234,7 @@ export function parseManifestSettings(manifest: unknown): ManifestSettingField[]
     .map((s) => {
       const o = s && typeof s === "object" ? (s as Record<string, unknown>) : {};
       const action = parseManifestSettingAction(o.action, oauthIntegrations);
+      const itemFields = o.type === "list" ? parseSettingItemFields(o.itemFields) : undefined;
       return {
         id: asStr(o.id),
         label: asStr(o.label),
@@ -224,9 +244,10 @@ export function parseManifestSettings(manifest: unknown): ManifestSettingField[]
         ...(o.defaultValue !== undefined ? { defaultValue: String(o.defaultValue) } : {}),
         ...(action ? { action } : {}),
         ...(typeof o.resourceKind === "string" && o.resourceKind !== "" ? { resourceKind: o.resourceKind } : {}),
+        ...(itemFields ? { itemFields } : {}),
       };
     })
-    .filter((s) => s.id);
+    .filter((s) => s.id && (s.type !== "list" || s.itemFields));
 }
 
 function formatInstalledDetail(
