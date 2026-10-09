@@ -1,5 +1,6 @@
 import { FilePlus2, FolderTree, MessageSquarePlus, PackageOpen, Plus, UserPlus } from "lucide-react";
 import {
+  flattenNavItems,
   type InstanceHosting,
   MAIN_NAV_SECTIONS,
   type NavItem,
@@ -69,7 +70,7 @@ export function navigationCommands(hosting: InstanceHosting, isAdmin: boolean): 
       pages.push(pageCommand(section));
       continue;
     }
-    for (const child of navItemsFor(section.children, hosting)) {
+    for (const child of flattenNavItems(navItemsFor(section.children, hosting))) {
       pages.push(pageCommand(child, section.label));
     }
   }

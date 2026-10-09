@@ -50,6 +50,11 @@ export interface NavItem {
    * of the menu while the selected instance is managed.
    */
   selfHostedOnly?: boolean;
+  /**
+   * Entries nested under this one. A section's make up its sidebar; a sidebar entry's
+   * open beneath it while it or one of them is the page on show.
+   */
+  children?: NavItem[];
 }
 
 /** How the selected instance's engine is run; absent until an instance is known. */
@@ -60,12 +65,17 @@ export function navItemsFor(items: NavItem[], hosting: InstanceHosting): NavItem
   if (hosting !== "managed") {
     return items;
   }
-  return items.filter((item) => !item.selfHostedOnly);
+  return items
+    .filter((item) => !item.selfHostedOnly)
+    .map((item) => (item.children ? { ...item, children: navItemsFor(item.children, hosting) } : item));
+}
+
+/** Every entry in `items`, each followed by the entries nested under it. */
+export function flattenNavItems(items: NavItem[]): NavItem[] {
+  return items.flatMap((item) => [item, ...flattenNavItems(item.children ?? [])]);
 }
 
 export interface NavSection extends NavItem {
-  /** Sub-navigation rendered in the section sidebar. Absent for single-page sections. */
-  children?: NavItem[];
   /** Instance settings, shown only to the instance's owners and admins. */
   adminOnly?: boolean;
 }
@@ -77,16 +87,24 @@ export function sectionsFor(sections: NavSection[], isAdmin: boolean): NavSectio
 
 export const STREAM_ITEMS: NavItem[] = [
   { id: "go-live", label: "Go live", icon: Rocket, href: "/stream/go-live" },
-  { id: "alerts", label: "Alerts", icon: Bell, href: "/stream/alerts", owns: [ALERT_EDITOR_BASE, ALERT_RUN_BASE] },
+  {
+    id: "alerts",
+    label: "Alerts",
+    icon: Bell,
+    href: "/stream/alerts",
+    owns: [ALERT_EDITOR_BASE, ALERT_RUN_BASE],
+    children: [
+      { id: "counters", label: "Counters", icon: Tally5, href: "/stream/counters" },
+      { id: "timers", label: "Timers", icon: Timer, href: "/stream/timers" },
+      { id: "queues", label: "Queues", icon: ListOrdered, href: "/stream/queues" },
+      { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
+    ],
+  },
   { id: "commands", label: "Commands", icon: MessageSquare, href: "/stream/commands" },
-  { id: "counters", label: "Counters", icon: Tally5, href: "/stream/counters" },
   { id: "scenes", label: "Scenes", icon: Layers, href: "/stream/scenes" },
-  { id: "timers", label: "Timers", icon: Timer, href: "/stream/timers" },
-  { id: "queues", label: "Queues", icon: ListOrdered, href: "/stream/queues" },
   { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
   { id: "supporters", label: "Supporters", icon: HandHeart, href: "/stream/supporters" },
   { id: "assets", label: "Assets", icon: FolderOpen, href: "/stream/assets" },
-  { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
   { id: "starter-packs", label: "Starter Packs", icon: PackagePlus, href: STARTER_PACKS_PATH },
 ];
 
@@ -135,6 +153,14 @@ export function isSectionActive(section: NavSection, location: string): boolean 
 
 export function isNavItemActive(item: NavItem, location: string): boolean {
   return [item.href, ...(item.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
+}
+
+/** Whether an entry's nested entries show: while it, or one of them, is the page on show. */
+export function isNavGroupOpen(item: NavItem, location: string): boolean {
+  if (!item.children) {
+    return false;
+  }
+  return isNavItemActive(item, location) || item.children.some((child) => isNavItemActive(child, location));
 }
 
 export function findActiveSection(location: string): NavSection | null {
