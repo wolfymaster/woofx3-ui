@@ -26,7 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import type { SceneVersion } from "@/lib/scene-document";
 import { canvasOfDocument, documentOfCanvas } from "@/lib/scene-document-widgets";
-import type { EditorState } from "@/lib/scene-editor-client";
+import type { DraftCommand, DraftCommandDropReason, EditorState } from "@/lib/scene-editor-client";
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { Scene, Widget } from "@/types";
 import { LiveScenePreview } from "./live-scene-preview";
@@ -84,11 +84,13 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const [live, setLive] = useState(false);
   const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
   const handleDraftCommandsDropped = useCallback(
-    (commands: Array<"publish" | "discard">) => {
-      const what = commands.includes("publish") ? "Publish" : "Discard";
+    (commands: DraftCommand[], reason: DraftCommandDropReason) => {
       toast({
-        title: `${what} didn't go through`,
-        description: "The engine refused a change to the draft made before it. Check the scene and try again.",
+        title: `${namesOfDraftCommands(commands)} didn't go through`,
+        description:
+          reason === "refused"
+            ? "The engine refused a change to the draft made before it. Check the scene and try again."
+            : "The editor closed before it could reach the engine. Open the scene and try again.",
         variant: "destructive",
       });
     },
@@ -229,6 +231,18 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // fail, or race the delete. The delete owns the unsaved name meanwhile and
   // saves it if the delete fails, whether or not the editor is still open.
   const deletingRef = useRef(false);
+  const saveNameRef = useRef(saveNameAndDescription);
+  saveNameRef.current = saveNameAndDescription;
+  // Read from refs, so it saves the latest name even once the editor has closed.
+  const flushUnsavedName = useCallback(() => {
+    const unsaved = unsavedNameRef.current;
+    if (!unsaved) {
+      return;
+    }
+    unsavedNameRef.current = null;
+    setIsDirty(false);
+    saveNameRef.current(unsaved.name, unsaved.description);
+  }, []);
   useEffect(() => {
     if (!sessionMode || !isDirty || sceneName === undefined) {
       unsavedNameRef.current = null;
@@ -236,25 +250,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     }
     unsavedNameRef.current = { name: sceneName, description: sceneDescription };
     const timer = setTimeout(() => {
-      if (deletingRef.current) {
-        return;
+      if (!deletingRef.current) {
+        flushUnsavedName();
       }
-      unsavedNameRef.current = null;
-      setIsDirty(false);
-      saveNameAndDescription(sceneName, sceneDescription);
     }, 800);
     return () => clearTimeout(timer);
-  }, [sessionMode, isDirty, sceneName, sceneDescription, saveNameAndDescription]);
-  const saveNameRef = useRef(saveNameAndDescription);
-  saveNameRef.current = saveNameAndDescription;
+  }, [sessionMode, isDirty, sceneName, sceneDescription, flushUnsavedName]);
   useEffect(() => {
     return () => {
-      const unsaved = unsavedNameRef.current;
-      if (unsaved && !deletingRef.current) {
-        saveNameRef.current(unsaved.name, unsaved.description);
+      if (!deletingRef.current) {
+        flushUnsavedName();
       }
     };
-  }, []);
+  }, [flushUnsavedName]);
 
   const copyKeyToClipboard = useCallback(async (key: string) => {
     const browserSourceUrl = browserSourceUrlForKey(key);
@@ -335,28 +343,23 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     deletingRef.current = true;
     try {
       await deleteSceneAction({ instanceId, engineSceneId });
-      // Edits still on their way would only be resent to a scene that is gone.
+      // Edits still on their way would only be resent to a scene that is gone,
+      // including by a session left draining if the editor closed meanwhile.
       abandonSession();
       toast({ title: "Scene deleted" });
       navigate("/stream/scenes");
     } catch (err) {
       deletingRef.current = false;
       // The name typed before or during the delete, which neither its pause
-      // nor the editor closing saved. Read from the ref, it is the latest
-      // even when the editor has closed since.
-      const unsaved = unsavedNameRef.current;
-      if (unsaved) {
-        unsavedNameRef.current = null;
-        setIsDirty(false);
-        saveNameAndDescription(unsaved.name, unsaved.description);
-      }
+      // nor the editor closing saved.
+      flushUnsavedName();
       toast({
         title: "Delete failed",
         description: err instanceof Error ? err.message : String(err),
         variant: "destructive",
       });
     }
-  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession, saveNameAndDescription]);
+  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession, flushUnsavedName]);
 
   const handleDuplicateScene = useCallback(async () => {
     if (!scene) {
@@ -673,4 +676,10 @@ function editorColor(editorId: string): string {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   }
   return `hsl(${hash % 360} 75% 45%)`;
+}
+
+/** "Publish", "Discard", or "Discard and Publish": each command named once, in the order first asked for. */
+function namesOfDraftCommands(commands: DraftCommand[]): string {
+  const names = [...new Set(commands)].map((command) => (command === "publish" ? "Publish" : "Discard"));
+  return names.join(" and ");
 }

@@ -3,7 +3,13 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SceneDocument, SceneVersion } from "@/lib/scene-document";
-import { type EditorPresence, type EditorState, SceneEditorClient } from "@/lib/scene-editor-client";
+import {
+  type DraftCommand,
+  type DraftCommandDropReason,
+  type EditorPresence,
+  type EditorState,
+  SceneEditorClient,
+} from "@/lib/scene-editor-client";
 
 interface UseSceneEditorSessionArgs {
   instanceId: Id<"instances">;
@@ -21,11 +27,11 @@ interface UseSceneEditorSessionArgs {
    */
   unsavedOutsideSession: boolean;
   /**
-   * A Publish or Discard was not sent because the engine refused an edit to
-   * the draft made before it. Called after the editor unmounts too, while the
-   * session drains.
+   * A Publish or Discard will never be sent: the engine refused an edit to the
+   * draft made before it, or the session closed first. Called after the editor
+   * unmounts too, while the session drains.
    */
-  onDraftCommandsDropped: (commands: Array<"publish" | "discard">) => void;
+  onDraftCommandsDropped: (commands: DraftCommand[], reason: DraftCommandDropReason) => void;
 }
 
 export interface SceneEditorSessionHandle {
@@ -39,45 +45,73 @@ export interface SceneEditorSessionHandle {
   discard: () => void;
   /** Tell the scene's other editors who this is and what it has selected. */
   setPresence: (presence: EditorPresence) => void;
-  /** Close the session at once, sending nothing more: for a scene that was deleted. */
+  /**
+   * Close this scene's sessions at once, sending nothing more: for a scene
+   * that was deleted. Reaches a session still draining after its editor
+   * closed, so it is safe to call after the editor unmounts.
+   */
   abandon: () => void;
 }
 
 const UNSAVED_PROMPT = "Changes to this scene are still being saved.";
 
-/**
- * Clients still delivering edits after their editor unmounted. Their hook's
- * own beforeunload listener went with the editor, so this one listener, kept
- * on the window while any client is here, asks before the tab closes on them.
- */
-const drainingClients = new Set<SceneEditorClient>();
+interface OpenSession {
+  /** `${instanceId}:${engineSceneId}`, to find a scene's sessions when it is deleted. */
+  sceneKey: string;
+  /** Whether the editor holds unsaved changes the session does not carry; false once it unmounts. */
+  unsavedOutsideSession: () => boolean;
+}
 
-function askWhileDraining(event: BeforeUnloadEvent): void {
-  for (const client of drainingClients) {
-    if (client.isDraining()) {
-      event.preventDefault();
-      event.returnValue = UNSAVED_PROMPT;
-      return;
+/**
+ * Every session that is open: a mounted editor's, and one still draining
+ * after its editor unmounted. A single beforeunload listener, on the window
+ * while any is here, asks before the tab closes on unsent work of any of
+ * them. Closing the tab skips React's cleanup, so it also sends what each
+ * mounted editor has waiting.
+ */
+const openSessions = new Map<SceneEditorClient, OpenSession>();
+
+function sceneKeyOf(instanceId: string, engineSceneId: string): string {
+  return `${instanceId}:${engineSceneId}`;
+}
+
+function askBeforeUnload(event: BeforeUnloadEvent): void {
+  let unsent = false;
+  for (const [client, session] of openSessions) {
+    client.flush();
+    if (client.hasPending() || client.isDraining() || session.unsavedOutsideSession()) {
+      unsent = true;
     }
   }
+  if (unsent) {
+    event.preventDefault();
+    // Browsers that predate preventDefault here prompt only for a non-empty returnValue.
+    event.returnValue = UNSAVED_PROMPT;
+  }
 }
 
-function trackDrain(client: SceneEditorClient): void {
-  if (!client.isDraining()) {
-    return;
+function registerSession(client: SceneEditorClient, session: OpenSession): void {
+  if (openSessions.size === 0) {
+    window.addEventListener("beforeunload", askBeforeUnload);
   }
-  if (drainingClients.size === 0) {
-    window.addEventListener("beforeunload", askWhileDraining);
-  }
-  drainingClients.add(client);
+  openSessions.set(client, session);
 }
 
-function untrackDrain(client: SceneEditorClient): void {
-  if (!drainingClients.delete(client)) {
+function unregisterSession(client: SceneEditorClient): void {
+  if (!openSessions.delete(client)) {
     return;
   }
-  if (drainingClients.size === 0) {
-    window.removeEventListener("beforeunload", askWhileDraining);
+  if (openSessions.size === 0) {
+    window.removeEventListener("beforeunload", askBeforeUnload);
+  }
+}
+
+function abandonScene(sceneKey: string): void {
+  for (const [client, session] of [...openSessions]) {
+    if (session.sceneKey === sceneKey) {
+      // Its onClose unregisters it.
+      client.abandon();
+    }
   }
 }
 
@@ -139,15 +173,22 @@ export function useSceneEditorSession({
         return url.toString();
       },
       onChange: setState,
-      onClose: () => untrackDrain(client),
-      onDraftCommandsDropped: (commands) => onDraftCommandsDroppedRef.current(commands),
+      onClose: () => unregisterSession(client),
+      onDraftCommandsDropped: (commands, reason) => onDraftCommandsDroppedRef.current(commands, reason),
       version: versionRef.current,
     });
+    const sceneKey = sceneKeyOf(instanceId, engineSceneId);
+    registerSession(client, { sceneKey, unsavedOutsideSession: () => unsavedOutsideSessionRef.current });
     clientRef.current = client;
     client.start();
     return () => {
       client.stop();
-      trackDrain(client);
+      if (client.isDraining()) {
+        // The editor saves its own unsaved changes as it unmounts.
+        registerSession(client, { sceneKey, unsavedOutsideSession: () => false });
+      } else {
+        unregisterSession(client);
+      }
       clientRef.current = null;
       setState(IDLE);
     };
@@ -157,25 +198,6 @@ export function useSceneEditorSession({
     clientRef.current?.setVersion(version);
   }, [version]);
 
-  // Closing the tab skips React's cleanup: send what is waiting, and ask the
-  // browser to hold the page while edits are still on their way.
-  useEffect(() => {
-    if (!enabled) {
-      return;
-    }
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      const client = clientRef.current;
-      client?.flush();
-      if (client?.hasUnconfirmed() || unsavedOutsideSessionRef.current) {
-        event.preventDefault();
-        // Browsers that predate preventDefault here prompt only for a non-empty returnValue.
-        event.returnValue = UNSAVED_PROMPT;
-      }
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
-  }, [enabled]);
-
   const edit = useCallback(
     (doc: SceneDocument, docVersion: SceneVersion) => clientRef.current?.edit(doc, docVersion),
     []
@@ -183,7 +205,7 @@ export function useSceneEditorSession({
   const publish = useCallback(() => clientRef.current?.publish(), []);
   const discard = useCallback(() => clientRef.current?.discard(), []);
   const setPresence = useCallback((presence: EditorPresence) => clientRef.current?.setPresence(presence), []);
-  const abandon = useCallback(() => clientRef.current?.abandon(), []);
+  const abandon = useCallback(() => abandonScene(sceneKeyOf(instanceId, engineSceneId)), [instanceId, engineSceneId]);
 
   return { state, edit, publish, discard, setPresence, abandon };
 }

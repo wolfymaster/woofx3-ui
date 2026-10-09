@@ -43,6 +43,9 @@ class FakeServer {
   received: string[] = [];
   /** Refuse the next submit as invalid, as the engine does an op it cannot apply. */
   refuseNext = false;
+  /** Refuse the submit with this number (counting from 1) as invalid. */
+  refuseSubmit: number | null = null;
+  private submits = 0;
 
   constructor(doc: SceneDocument) {
     this.doc = doc;
@@ -69,7 +72,8 @@ class FakeServer {
   }
 
   submit(from: FakeSocket, message: any): void {
-    if (this.refuseNext) {
+    this.submits += 1;
+    if (this.refuseNext || this.refuseSubmit === this.submits) {
       this.refuseNext = false;
       from.deliver({ type: "reject", opId: message.opId, version: "draft", error: "invalid" });
       return;
@@ -616,9 +620,11 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
   it("drops and reports a publish waiting behind an edit the engine refused", async () => {
     const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
     let dropped: string[] = [];
+    let reason = "";
     const e = editor(server, {
-      onDraftCommandsDropped: (commands) => {
+      onDraftCommandsDropped: (commands, why) => {
         dropped = commands;
+        reason = why;
       },
     });
     await settle();
@@ -628,5 +634,124 @@ describe("SceneEditorClient — draining after stop, and commands behind refused
     await settle();
     expect(server.received).toEqual(["submit:draft"]);
     expect(dropped).toEqual(["publish"]);
+    expect(reason).toBe("refused");
+  });
+
+  it("sends a publish once the edits before it are acknowledged, ahead of edits made after it", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.type("h");
+    e.client.publish();
+    // Still typing after the click, faster than the acks come back.
+    e.type("he");
+    e.type("hel");
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "publish", "submit:draft"]);
+    expect(server.doc.widgets.a!.settings.text).toBe("hel");
+  });
+
+  it("keeps an edit buffered before the click ahead of the publish, and later edits behind it", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    e.type("h");
+    // Buffered behind the first, which has no ack yet: made before the click.
+    e.type("he");
+    e.client.publish();
+    e.type("hey");
+    await settle();
+    expect(server.received).toEqual(["submit:draft", "submit:draft", "publish", "submit:draft"]);
+  });
+
+  it("still sends a publish when an edit made after it is refused", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    let dropped: string[] = [];
+    const e = editor(server, {
+      onDraftCommandsDropped: (commands) => {
+        dropped = commands;
+      },
+    });
+    await settle();
+    server.refuseSubmit = 2;
+    e.type("h");
+    e.client.publish();
+    e.type("hello");
+    await settle();
+    expect(server.received.slice(0, 3)).toEqual(["submit:draft", "publish", "submit:draft"]);
+    expect(dropped).toEqual([]);
+  });
+
+  it("drops a publish when an edit before it is refused, even with edits made after it", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    let dropped: string[] = [];
+    const e = editor(server, {
+      onDraftCommandsDropped: (commands) => {
+        dropped = commands;
+      },
+    });
+    await settle();
+    server.refuseSubmit = 1;
+    e.type("h");
+    e.client.publish();
+    e.type("hello");
+    await settle();
+    expect(server.received).not.toContain("publish");
+    expect(dropped).toEqual(["publish"]);
+  });
+
+  it("reports a publish still waiting when the drain runs out", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    let dropped: string[] = [];
+    let reason = "";
+    const e = editor(server, {
+      drainMs: 30,
+      onDraftCommandsDropped: (commands, why) => {
+        dropped = commands;
+        reason = why;
+      },
+    });
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.type("hello");
+    e.client.publish();
+    e.client.stop();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(e.client.isDraining()).toBe(false);
+    expect(dropped).toEqual(["publish"]);
+    expect(reason).toBe("undelivered");
+  });
+
+  it("gives up reconnecting while it drains after a few attempts", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    let opens = 0;
+    const e = editor(server, {
+      drainMs: 5_000,
+      open: async () => {
+        opens += 1;
+        if (opens > 1) {
+          throw new Error("engine unreachable");
+        }
+        return "ws://fake";
+      },
+    });
+    await settle();
+    e.sockets[0]!.close();
+    e.type("hello");
+    e.client.stop();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(opens).toBeLessThanOrEqual(8);
+    expect(e.client.isDraining()).toBe(false);
+  });
+
+  it("counts a queued publish as pending work", async () => {
+    const server = new FakeServer({ layout: {}, widgets: { a: placement("") } });
+    const e = editor(server);
+    await settle();
+    server.deaf = e.sockets[0]!;
+    e.type("hello");
+    e.client.publish();
+    await settle();
+    expect(e.client.hasPending()).toBe(true);
   });
 });
