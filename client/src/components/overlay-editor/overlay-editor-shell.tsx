@@ -22,6 +22,11 @@ interface OverlayEditorShellProps {
    * flex child that sits below a sibling header (the alert-layout dialog).
    */
   className?: string;
+  /**
+   * Shown but not editable, while what it edits waits on something else (a
+   * scene's draft while a Publish or Discard is answered). The header stays live.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -51,11 +56,20 @@ export function OverlayEditorShell({
   inspector,
   inspectorFallback,
   className = "h-full",
+  readOnly = false,
 }: OverlayEditorShellProps) {
   return (
     <div className={cn("flex min-h-0 flex-col overflow-hidden", className)}>
       {header}
-      <div className="grid min-h-0 flex-1 grid-cols-[216px_minmax(0,1fr)_320px]">
+      <div
+        className={cn(
+          "grid min-h-0 flex-1 grid-cols-[216px_minmax(0,1fr)_320px] transition-opacity",
+          readOnly && "pointer-events-none select-none opacity-60"
+        )}
+        aria-busy={readOnly}
+        aria-disabled={readOnly}
+        data-testid="overlay-editor-body"
+      >
         <aside className="flex min-h-0 flex-col overflow-y-auto border-r p-4">{palette}</aside>
         <StageArea canvas={canvas}>{stage}</StageArea>
         <aside className="flex min-h-0 flex-col border-l">

@@ -4,6 +4,7 @@ import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SceneDocument, SceneVersion } from "@/lib/scene-document";
 import { type DroppedWork, type EditorPresence, type EditorState, SceneEditorClient } from "@/lib/scene-editor-client";
+import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
 
 interface UseSceneEditorSessionArgs {
   instanceId: Id<"instances">;
@@ -21,22 +22,28 @@ interface UseSceneEditorSessionArgs {
    * session is open.
    */
   unsavedOutsideSession: boolean;
+  /** The scene's name as the editor shows it, handed to `onDropped`. */
+  sceneName: string | undefined;
   /**
-   * Edits, or a Publish or Discard, that will never reach the engine: it
-   * refused an edit to the draft made before the command, or the session
-   * closed first. Called after the editor unmounts too, while the session drains.
+   * A Publish or Discard, or edits, that did not go through or may not have
+   * (see `DroppedWork`), with the scene's name as it last was: called after
+   * the editor unmounts too, while the session drains, when another scene
+   * may be open.
    */
-  onDropped: (dropped: DroppedWork) => void;
+  onDropped: (dropped: DroppedWork, sceneName: string | undefined) => void;
 }
 
 export interface SceneEditorSessionHandle {
   state: EditorState;
   /**
    * The editor changed its canvas, read from `version`; sent within a fifth of
-   * a second. A canvas read from the version the session is not editing is dropped.
+   * a second. A canvas read from the version the session is not editing is
+   * dropped, as is a draft canvas while a Publish or Discard waits (`state.command`).
    */
   edit: (doc: SceneDocument, version: SceneVersion) => void;
+  /** Does nothing while a Publish or Discard already waits. */
   publish: () => void;
+  /** Does nothing while a Publish or Discard already waits. */
   discard: () => void;
   /** Tell the scene's other editors who this is and what it has selected. */
   setPresence: (presence: EditorPresence) => void;
@@ -48,79 +55,6 @@ export interface SceneEditorSessionHandle {
   abandon: () => void;
 }
 
-const UNSAVED_PROMPT = "Changes to this scene are still being saved.";
-
-/**
- * Every session that is open, by its scene's `${instanceId}:${engineSceneId}`
- * (to find a scene's sessions when it is deleted): a mounted editor's, and one
- * still draining after its editor unmounted.
- */
-const openSessions = new Map<SceneEditorClient, string>();
-
-/** Each mounted editor's: whether it holds unsaved changes no session carries. */
-const unsavedOutsideSessions = new Set<() => boolean>();
-
-/**
- * A single beforeunload listener, on the window while either set above has
- * anything, asks before the tab closes on unsent work of any of them. Closing
- * the tab skips React's cleanup, so it also sends what each session has waiting.
- */
-let askingBeforeUnload = false;
-
-function sceneKeyOf(instanceId: string, engineSceneId: string): string {
-  return `${instanceId}:${engineSceneId}`;
-}
-
-function askBeforeUnload(event: BeforeUnloadEvent): void {
-  let unsent = false;
-  for (const client of openSessions.keys()) {
-    client.flush();
-    if (client.hasPending()) {
-      unsent = true;
-    }
-  }
-  for (const unsaved of unsavedOutsideSessions) {
-    if (unsaved()) {
-      unsent = true;
-    }
-  }
-  if (unsent) {
-    event.preventDefault();
-    // Browsers that predate preventDefault here prompt only for a non-empty returnValue.
-    event.returnValue = UNSAVED_PROMPT;
-  }
-}
-
-function syncBeforeUnload(): void {
-  const needed = openSessions.size > 0 || unsavedOutsideSessions.size > 0;
-  if (needed && !askingBeforeUnload) {
-    window.addEventListener("beforeunload", askBeforeUnload);
-  } else if (!needed && askingBeforeUnload) {
-    window.removeEventListener("beforeunload", askBeforeUnload);
-  }
-  askingBeforeUnload = needed;
-}
-
-function registerSession(client: SceneEditorClient, sceneKey: string): void {
-  openSessions.set(client, sceneKey);
-  syncBeforeUnload();
-}
-
-function unregisterSession(client: SceneEditorClient): void {
-  if (openSessions.delete(client)) {
-    syncBeforeUnload();
-  }
-}
-
-function abandonScene(sceneKey: string): void {
-  for (const [client, clientSceneKey] of [...openSessions]) {
-    if (clientSceneKey === sceneKey) {
-      // Its onClose unregisters it.
-      client.abandon();
-    }
-  }
-}
-
 const IDLE: EditorState = {
   status: "connecting",
   version: "draft",
@@ -129,6 +63,7 @@ const IDLE: EditorState = {
   meta: {},
   hasDraft: false,
   unsaved: false,
+  command: null,
 };
 
 /**
@@ -147,6 +82,7 @@ export function useSceneEditorSession({
   enabled,
   version,
   unsavedOutsideSession,
+  sceneName,
   onDropped,
 }: UseSceneEditorSessionArgs): SceneEditorSessionHandle {
   const getSession = useAction(api.sceneActions.getSceneEditorSession);
@@ -159,17 +95,11 @@ export function useSceneEditorSession({
   unsavedOutsideSessionRef.current = unsavedOutsideSession;
   const onDroppedRef = useRef(onDropped);
   onDroppedRef.current = onDropped;
+  const sceneNameRef = useRef(sceneName);
+  sceneNameRef.current = sceneName;
 
-  useEffect(() => {
-    const unsaved = () => unsavedOutsideSessionRef.current;
-    unsavedOutsideSessions.add(unsaved);
-    syncBeforeUnload();
-    return () => {
-      // The editor saves its own unsaved changes as it unmounts.
-      unsavedOutsideSessions.delete(unsaved);
-      syncBeforeUnload();
-    };
-  }, []);
+  // The editor saves its own unsaved changes as it unmounts.
+  useEffect(() => sceneEditorSessions.registerUnsavedCheck(() => unsavedOutsideSessionRef.current), []);
 
   useEffect(() => {
     if (!enabled || !sceneId) {
@@ -190,11 +120,11 @@ export function useSceneEditorSession({
         return url.toString();
       },
       onChange: setState,
-      onClose: () => unregisterSession(client),
-      onDropped: (dropped) => onDroppedRef.current(dropped),
+      onClose: () => unregister(),
+      onDropped: (dropped) => onDroppedRef.current(dropped, sceneNameRef.current),
       version: versionRef.current,
     });
-    registerSession(client, sceneKeyOf(instanceId, engineSceneId));
+    const unregister = sceneEditorSessions.register(client, sceneKeyOf(instanceId, engineSceneId));
     clientRef.current = client;
     client.start();
     return () => {
@@ -217,7 +147,10 @@ export function useSceneEditorSession({
   const publish = useCallback(() => clientRef.current?.publish(), []);
   const discard = useCallback(() => clientRef.current?.discard(), []);
   const setPresence = useCallback((presence: EditorPresence) => clientRef.current?.setPresence(presence), []);
-  const abandon = useCallback(() => abandonScene(sceneKeyOf(instanceId, engineSceneId)), [instanceId, engineSceneId]);
+  const abandon = useCallback(
+    () => sceneEditorSessions.abandonScene(sceneKeyOf(instanceId, engineSceneId)),
+    [instanceId, engineSceneId]
+  );
 
   return { state, edit, publish, discard, setPresence, abandon };
 }
