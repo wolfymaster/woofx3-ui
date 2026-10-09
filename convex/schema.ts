@@ -1536,11 +1536,13 @@ export default defineSchema({
     playedAt: v.optional(v.string()),
     completedAt: v.optional(v.string()),
     error: v.optional(v.string()),
-    engineCreatedAt: v.string(),
-    engineUpdatedAt: v.string(),
-    // The engine row's write counter, which orders its snapshots; absent for
-    // engines that do not send one, and after a snapshot without one was
-    // stored. See mergeLifecycle in lib/engineAlertLifecycle.ts.
+    // The engine row's `created_at` and `updated_at`, when a snapshot carried
+    // ones that parse. A later snapshot fills in a missing `created_at`.
+    engineCreatedAt: v.optional(v.string()),
+    engineUpdatedAt: v.optional(v.string()),
+    // The engine row's write counter, which orders its snapshots; absent when
+    // the lifecycle the row holds came from a snapshot without one. See
+    // mergeLifecycle in lib/engineAlertLifecycle.ts.
     engineVersion: v.optional(v.number()),
     createdAt: v.number(), // Convex-side ingest time
     // When the mirror last saw the status or the engine's snapshot change, on

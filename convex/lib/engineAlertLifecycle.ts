@@ -63,15 +63,15 @@ export function normaliseStatus(raw: string): EngineAlertStatus {
 }
 
 /**
- * How far along an alert a status is. See `mergeLifecycle` for which moves
- * between stages the mirror takes.
+ * How far along an alert a status is. Orders snapshots that carry no version;
+ * see `mergeLifecycle`.
  *
  * Callbacks are projected from two outbox subjects (`created` and `updated`)
  * and retried independently, so `alert.recorded` can land after the alert has
  * already finished. Ranking keeps that late snapshot from reviving a settled
- * alert. Verdicts share a stage; `mergeLifecycle` says which may replace
- * which. `replayed` sits above them: the operator superseded the row, and a straggling verdict for
- * the original play does not undo that.
+ * alert. Verdicts share a stage. `replayed` sits above them: the operator
+ * superseded the row, and a straggling verdict for the original play does not
+ * undo that.
  *
  * `unknown` ranks with the initial statuses. The engine picks a lifecycle
  * callback's subject by the status it carries, so only `alert.recorded` -- the
@@ -134,172 +134,123 @@ export function parseEngineTimestamp(raw: string): bigint | null {
   return BigInt(epochMs) * 1_000_000n + BigInt(fraction.padEnd(9, "0"));
 }
 
-/** One snapshot of an alert: its status and the engine's last write to the row. */
+/** One snapshot of an alert's lifecycle, as far as ordering it goes. */
 export interface AlertLifecyclePoint {
   status: EngineAlertStatus;
-  /** The engine row's `version`, when the engine sends one. */
+  /** The engine row's `version`, when the snapshot carries one. */
   engineVersion?: number;
-  /** The engine row's `updated_at`, an RFC 3339 string. */
-  engineUpdatedAt: string;
-  error?: string;
-  dispatchedAt?: string;
-  playedAt?: string;
-  completedAt?: string;
+  /** The engine row's `updated_at`, an RFC 3339 string, when it carries one that parses. */
+  engineUpdatedAt?: string;
 }
 
 /**
- * Whether `incoming` is a later engine write than `current` (1), an earlier
- * one (-1), the same write (0), or cannot be ordered (null).
+ * What merging a callback's lifecycle into a row does:
  *
- * By version when both carry one: the engine increments it on every write it
- * publishes. Otherwise by `updatedAt`, at full precision, so the same instant
- * written at different precisions is the same write; null when either
- * timestamp does not parse.
+ * - `apply`: store the snapshot's lifecycle. `progressed` is whether the alert
+ *   moved, which is every applied snapshot but one that only gives the row the
+ *   version of the write it already holds. Counting that as progress would
+ *   keep an alert the engine lost track of in flight indefinitely.
+ * - `keep`: the row keeps its lifecycle, because the snapshot is the write it
+ *   holds, an earlier one, or one that cannot be ordered after it. Expected
+ *   under retries; nothing to report.
+ * - `diverged`: the row keeps its lifecycle although the snapshot carries the
+ *   version it holds with a different status. The engine never sends one, so
+ *   the caller logs it.
  */
-export function compareEngineWrites(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): -1 | 0 | 1 | null {
-  if (current.engineVersion !== undefined && incoming.engineVersion !== undefined) {
-    return orderOf(incoming.engineVersion, current.engineVersion);
-  }
-  const currentAt = parseEngineTimestamp(current.engineUpdatedAt);
-  const incomingAt = parseEngineTimestamp(incoming.engineUpdatedAt);
-  if (currentAt === null || incomingAt === null) {
-    return null;
-  }
-  return orderOf(incomingAt, currentAt);
-}
-
-function orderOf<N extends number | bigint>(a: N, b: N): -1 | 0 | 1 {
-  if (a > b) {
-    return 1;
-  }
-  if (a < b) {
-    return -1;
-  }
-  return 0;
-}
-
-const VERDICT_STAGE = stageOf("completed");
-
-/**
- * Whether the engine's lifecycle lets a row at `from` move to `to`. Must match
- * `transitionUpdateSQL` in woofx3 `db/database/repository/alert_repository.go`.
- *
- * A row moves only to a later stage, so the first verdict wins, with two
- * exceptions: `completed` replaces any other verdict (one widget playing an
- * alert to the end means viewers saw it), and `failed` or `skipped` replace
- * `timed_out` (the timeout is the engine giving up on hearing back). `replayed`
- * follows anything but itself.
- *
- * Applied only to snapshots that carry a version: an engine that sends one
- * enforces this rule and publishes only the writes it applies.
- */
-function engineRuleAllows(from: EngineAlertStatus, to: EngineAlertStatus): boolean {
-  const fromStage = stageOf(from);
-  const toStage = stageOf(to);
-  if (toStage > fromStage) {
-    return true;
-  }
-  if (fromStage !== VERDICT_STAGE || toStage !== VERDICT_STAGE || from === to) {
-    return false;
-  }
-  return to === "completed" || from === "timed_out";
-}
-
-/**
- * Whether `incoming` holds the same lifecycle as `current`: the same write
- * delivered again, as far as the mirror stores it.
- */
-function sameLifecycle(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): boolean {
-  return (
-    current.status === incoming.status &&
-    current.engineUpdatedAt === incoming.engineUpdatedAt &&
-    (current.error || undefined) === (incoming.error || undefined) &&
-    current.dispatchedAt === incoming.dispatchedAt &&
-    current.playedAt === incoming.playedAt &&
-    current.completedAt === incoming.completedAt
-  );
-}
-
-/**
- * What merging a callback's snapshot into a row does:
- *
- * - `apply`: store `merged`. `progressed` is whether the alert moved -- its
- *   status changed, or this is a later engine write. A redelivery is not
- *   progress; counting it would keep an alert the engine lost track of in
- *   flight indefinitely.
- * - `keep`: the row keeps what it has, because the snapshot is the write it
- *   holds or an earlier one. Expected under retries; nothing to report.
- * - `diverged`: the row keeps what it has although the snapshot claims to be a
- *   later write, or the same version with different contents. The engine
- *   should never send one, so the caller logs it.
- */
-export type LifecycleMerge<T> =
-  | { kind: "apply"; merged: T; progressed: boolean }
+export type LifecycleMerge =
+  | { kind: "apply"; progressed: boolean }
   | { kind: "keep" }
   | { kind: "diverged"; reason: string };
 
+const KEEP: LifecycleMerge = { kind: "keep" };
+const PROGRESS: LifecycleMerge = { kind: "apply", progressed: true };
+
 /**
- * Merge a callback's `incoming` snapshot into a row holding `current`.
+ * Whether a callback's `incoming` lifecycle replaces the row's `current` one.
  *
  * Callbacks are projected from two outbox subjects and retried independently,
- * so they arrive late, twice, and out of order. An earlier write than the row
- * holds is always kept out: it would move the row back and unset lifecycle
- * timestamps it already holds.
+ * so they arrive late, twice, and out of order.
  *
- * A snapshot with a version comes from an engine that enforces the lifecycle
- * rule (see `engineRuleAllows`), so the mirror applies that rule too, and an
- * equal version must be the identical snapshot.
+ * When both carry a version, the higher version wins: the engine increments it
+ * with every write it publishes, and it alone decides which transitions apply,
+ * publishing only those. An equal version is the same write delivered again,
+ * and a lower one a write the row has moved past.
  *
- * A snapshot without one comes from an engine that predates the rule, or an
- * outbox row written before the upgrade. Such an engine let a later verdict
- * correct an earlier one, so the mirror keeps its order: anything but a move
- * to an earlier stage applies, last write wins. Storing it drops the row's
- * version, which no longer describes the data it holds: a later redelivery of
- * that version is then ordered by `updatedAt` against the newer data.
+ * Otherwise see `mergeWithoutVersions`.
  */
-export function mergeLifecycle<T extends AlertLifecyclePoint>(
-  current: AlertLifecyclePoint,
-  incoming: T
-): LifecycleMerge<T> {
-  const order = compareEngineWrites(current, incoming);
-  if (order === -1) {
-    return { kind: "keep" };
+export function mergeLifecycle(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): LifecycleMerge {
+  if (current.engineVersion === undefined || incoming.engineVersion === undefined) {
+    return mergeWithoutVersions(current, incoming);
   }
-  const merged = { ...incoming, engineVersion: incoming.engineVersion };
-  const progressed =
-    current.status !== incoming.status ||
-    order === 1 ||
-    (order === null && current.engineUpdatedAt !== incoming.engineUpdatedAt);
-
-  if (incoming.engineVersion === undefined) {
-    if (stageOf(incoming.status) < stageOf(current.status)) {
-      return refused(order, `${current.status} cannot move back to ${incoming.status}`);
-    }
-    return { kind: "apply", merged, progressed };
+  if (incoming.engineVersion > current.engineVersion) {
+    return PROGRESS;
   }
-
-  if (order === 0 && sameLifecycle(current, incoming)) {
-    if (current.engineVersion === incoming.engineVersion) {
-      return { kind: "keep" };
-    }
-    return { kind: "apply", merged, progressed: false };
+  if (incoming.engineVersion === current.engineVersion && incoming.status !== current.status) {
+    return {
+      kind: "diverged",
+      reason: `version ${incoming.engineVersion} arrived as ${incoming.status} but is held as ${current.status}`,
+    };
   }
-  if (order === 0 && current.engineVersion !== undefined) {
-    return { kind: "diverged", reason: `version ${incoming.engineVersion} arrived with different contents` };
-  }
-  if (!engineRuleAllows(current.status, incoming.status)) {
-    return refused(order, `the lifecycle rule refuses ${current.status} to ${incoming.status}`);
-  }
-  return { kind: "apply", merged, progressed };
+  return KEEP;
 }
 
 /**
- * A refused snapshot: a divergence when it is a later write than the row's,
- * since the engine would not have published it; otherwise one the row may
- * well have moved past.
+ * Order two snapshots when at least one carries no version, by lifecycle stage
+ * and then by `updatedAt`.
+ *
+ * A snapshot never moves the row to an earlier stage, nor applies when its
+ * `updatedAt` is older than the row's. A later stage applies otherwise. Within
+ * one stage, a newer `updatedAt` wins, so a later verdict can replace an
+ * earlier one; when either side has no usable `updatedAt` the row keeps what
+ * it holds, so a verdict is never replaced by one that cannot be ordered after
+ * it.
+ *
+ * A row that holds a version takes an unversioned snapshot only when the
+ * snapshot's `updatedAt` is usable and newer than the row's, and storing it
+ * drops the version, which no longer describes the lifecycle the row holds. A
+ * snapshot that cannot be ordered after the row therefore never discards its
+ * version.
  */
-function refused<T>(order: 0 | 1 | null, reason: string): LifecycleMerge<T> {
-  return order === 1 ? { kind: "diverged", reason } : { kind: "keep" };
+function mergeWithoutVersions(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): LifecycleMerge {
+  const currentStage = stageOf(current.status);
+  const incomingStage = stageOf(incoming.status);
+  if (incomingStage < currentStage) {
+    return KEEP;
+  }
+  const order = compareUpdatedAt(current, incoming);
+  if (current.engineVersion !== undefined) {
+    return order === 1 ? PROGRESS : KEEP;
+  }
+  if (order === -1) {
+    return KEEP;
+  }
+  if (incomingStage > currentStage || order === 1) {
+    return PROGRESS;
+  }
+  if (order === 0 && incoming.engineVersion !== undefined && incoming.status === current.status) {
+    return { kind: "apply", progressed: false };
+  }
+  return KEEP;
+}
+
+/**
+ * Whether `incoming` was written after `current` (1), before it (-1), at the
+ * same instant (0), or cannot be ordered against it (null), by `updatedAt` at
+ * full precision.
+ */
+function compareUpdatedAt(current: AlertLifecyclePoint, incoming: AlertLifecyclePoint): -1 | 0 | 1 | null {
+  const currentAt = current.engineUpdatedAt === undefined ? null : parseEngineTimestamp(current.engineUpdatedAt);
+  const incomingAt = incoming.engineUpdatedAt === undefined ? null : parseEngineTimestamp(incoming.engineUpdatedAt);
+  if (currentAt === null || incomingAt === null) {
+    return null;
+  }
+  if (incomingAt > currentAt) {
+    return 1;
+  }
+  if (incomingAt < currentAt) {
+    return -1;
+  }
+  return 0;
 }
 
 /**
@@ -388,37 +339,33 @@ export function outcomeOf(alert: { status: EngineAlertStatus; unconfirmedAt?: nu
   return alert.unconfirmedAt === undefined ? "inFlight" : "unconfirmed";
 }
 
-/** The engine's `AlertSnapshot`, in the shape `engineAlerts` stores it from. */
+/**
+ * The engine's `AlertSnapshot`, as `readAlertSnapshot` reads it: only the
+ * fields a callback carried in a usable form.
+ */
 export interface EngineAlertSnapshot {
   id: string;
-  payload: string;
+  status: string;
+  payload?: string;
   workflowId?: string;
   sourceEventId?: string;
-  status: string;
   envelopeId?: string;
   dispatchedAt?: string;
   playedAt?: string;
   completedAt?: string;
   error?: string;
-  /** Counts the engine's writes to the row; absent from older engines. */
+  /** Counts the engine's writes to the row. */
   version?: number;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
+  /** Fields the callback carried in a form that could not be read. */
+  unreadable?: string[];
 }
 
 /** Fields a snapshot is useless without: the row it describes and where it is. */
 const SNAPSHOT_REQUIRED = ["id", "status"] as const;
-/** Fields stored as given, or as "" when absent or unusable. */
-const SNAPSHOT_DEFAULTED = ["payload", "updatedAt"] as const;
-const SNAPSHOT_OPTIONAL = [
-  "workflowId",
-  "sourceEventId",
-  "envelopeId",
-  "dispatchedAt",
-  "playedAt",
-  "completedAt",
-  "error",
-] as const;
+const SNAPSHOT_TEXT = ["payload", "workflowId", "sourceEventId", "envelopeId", "error"] as const;
+const SNAPSHOT_TIMESTAMPS = ["dispatchedAt", "playedAt", "completedAt", "createdAt", "updatedAt"] as const;
 
 /**
  * A callback's alert snapshot as read, with what was wrong with it.
@@ -437,13 +384,11 @@ export interface AlertSnapshotReading {
  * validator.
  *
  * Only `id` and `status` are required: without them there is no row to merge
- * into and no lifecycle to merge. Any other field that is absent, null or of
- * the wrong type is read as absent, and reported in `problems`, rather than
- * refusing the callback: a refused callback is lost, while one missing an
- * optional field still settles its alert. A missing `updatedAt` reads as "",
- * which orders the snapshot by the lifecycle rule alone, and a missing
- * `createdAt` takes `updatedAt`. A `version` that is not a positive integer is
- * left out, so the snapshot merges as one from an engine that sends none.
+ * into and no lifecycle to merge. Any other field that is null, of the wrong
+ * type, or a timestamp that does not parse is left out, named in `unreadable`
+ * and reported in `problems`, rather than refusing the callback: a refused
+ * callback is lost, while one missing an optional field still settles its
+ * alert. A `version` that is not a positive integer is treated the same way.
  */
 export function readAlertSnapshot(value: unknown): AlertSnapshotReading {
   if (typeof value !== "object" || value === null) {
@@ -451,7 +396,7 @@ export function readAlertSnapshot(value: unknown): AlertSnapshotReading {
   }
   const source = value as Record<string, unknown>;
   const problems: string[] = [];
-  const snapshot: Record<string, string | number> = {};
+  const snapshot: Record<string, string | number | string[]> = {};
   for (const key of SNAPSHOT_REQUIRED) {
     const field = source[key];
     if (typeof field !== "string" || field === "") {
@@ -463,29 +408,29 @@ export function readAlertSnapshot(value: unknown): AlertSnapshotReading {
   if (problems.length > 0) {
     return { snapshot: null, problems };
   }
-  for (const key of SNAPSHOT_DEFAULTED) {
-    const field = source[key];
-    if (typeof field === "string") {
-      snapshot[key] = field;
-    } else {
-      problems.push(`${key} is ${describe(field)}; read as ""`);
-      snapshot[key] = "";
-    }
-  }
-  const createdAt = source.createdAt;
-  if (typeof createdAt === "string") {
-    snapshot.createdAt = createdAt;
-  } else {
-    problems.push(`createdAt is ${describe(createdAt)}; read as updatedAt`);
-    snapshot.createdAt = snapshot.updatedAt;
-  }
-  for (const key of SNAPSHOT_OPTIONAL) {
+  const unreadable: string[] = [];
+  const skip = (key: string, field: unknown) => {
+    unreadable.push(key);
+    problems.push(`${key} is ${describe(field)}; read as absent`);
+  };
+  for (const key of SNAPSHOT_TEXT) {
     const field = source[key];
     if (field === undefined) {
       continue;
     }
     if (typeof field !== "string") {
-      problems.push(`${key} is ${describe(field)}; read as absent`);
+      skip(key, field);
+      continue;
+    }
+    snapshot[key] = field;
+  }
+  for (const key of SNAPSHOT_TIMESTAMPS) {
+    const field = source[key];
+    if (field === undefined) {
+      continue;
+    }
+    if (typeof field !== "string" || parseEngineTimestamp(field) === null) {
+      skip(key, field);
       continue;
     }
     snapshot[key] = field;
@@ -494,7 +439,10 @@ export function readAlertSnapshot(value: unknown): AlertSnapshotReading {
   if (typeof version === "number" && Number.isSafeInteger(version) && version >= 1) {
     snapshot.version = version;
   } else if (version !== undefined) {
-    problems.push(`version is ${describe(version)}; read as absent`);
+    skip("version", version);
+  }
+  if (unreadable.length > 0) {
+    snapshot.unreadable = unreadable;
   }
   return { snapshot: snapshot as unknown as EngineAlertSnapshot, problems };
 }
@@ -504,4 +452,113 @@ function describe(value: unknown): string {
     return "missing";
   }
   return `malformed (${JSON.stringify(value) ?? typeof value})`;
+}
+
+/** The fields of an `engineAlerts` row that mirror the engine's alert. */
+export interface EngineAlertMirror {
+  status: EngineAlertStatus;
+  engineStatus?: string;
+  payload: string;
+  workflowId?: string;
+  sourceEventId?: string;
+  envelopeId?: string;
+  dispatchedAt?: string;
+  playedAt?: string;
+  completedAt?: string;
+  error?: string;
+  engineVersion?: number;
+  engineCreatedAt?: string;
+  engineUpdatedAt?: string;
+}
+
+/** The mirror of an alert first heard of through `snapshot`. */
+export function mirrorOf(snapshot: EngineAlertSnapshot): EngineAlertMirror {
+  const status = normaliseStatus(snapshot.status);
+  return {
+    status,
+    engineStatus: status === "unknown" ? snapshot.status : undefined,
+    payload: snapshot.payload ?? "",
+    workflowId: snapshot.workflowId || undefined,
+    sourceEventId: snapshot.sourceEventId || undefined,
+    envelopeId: snapshot.envelopeId || undefined,
+    dispatchedAt: snapshot.dispatchedAt,
+    playedAt: snapshot.playedAt,
+    completedAt: snapshot.completedAt,
+    error: snapshot.error || undefined,
+    engineVersion: snapshot.version,
+    engineCreatedAt: snapshot.createdAt,
+    engineUpdatedAt: snapshot.updatedAt,
+  };
+}
+
+/**
+ * How a row changes for a callback's snapshot: the fields to patch, whether
+ * the alert progressed, and a divergence to log.
+ */
+export interface MirrorUpdate {
+  patch: Partial<EngineAlertMirror>;
+  progressed: boolean;
+  divergence?: string;
+}
+
+/**
+ * The update a callback's `snapshot` makes to a row holding `row`.
+ *
+ * Two kinds of field, merged differently:
+ *
+ * - What the engine's row was created with (payload, workflow, source event,
+ *   envelope, `createdAt`) never changes, so any snapshot fills it in where the
+ *   row lacks it, even one whose lifecycle is older than the row's.
+ * - The lifecycle is replaced as a whole when `mergeLifecycle` applies the
+ *   snapshot. The engine never unsets a lifecycle timestamp, so one the
+ *   snapshot lacks keeps the row's, and so does `updatedAt`. `error` is the
+ *   exception: the engine leaves it out when a verdict cleared it, so an
+ *   absent error clears the row's; one the snapshot carried unreadably keeps
+ *   it.
+ *
+ * No field is ever overwritten with a value the snapshot did not carry in a
+ * usable form.
+ */
+export function updateMirror(row: EngineAlertMirror, snapshot: EngineAlertSnapshot): MirrorUpdate {
+  const patch: Partial<EngineAlertMirror> = {};
+  if (!row.payload && snapshot.payload) {
+    patch.payload = snapshot.payload;
+  }
+  if (!row.workflowId && snapshot.workflowId) {
+    patch.workflowId = snapshot.workflowId;
+  }
+  if (!row.sourceEventId && snapshot.sourceEventId) {
+    patch.sourceEventId = snapshot.sourceEventId;
+  }
+  if (!row.envelopeId && snapshot.envelopeId) {
+    patch.envelopeId = snapshot.envelopeId;
+  }
+  if (!row.engineCreatedAt && snapshot.createdAt) {
+    patch.engineCreatedAt = snapshot.createdAt;
+  }
+
+  const status = normaliseStatus(snapshot.status);
+  const merge = mergeLifecycle(row, {
+    status,
+    engineVersion: snapshot.version,
+    engineUpdatedAt: snapshot.updatedAt,
+  });
+  if (merge.kind === "diverged") {
+    return { patch, progressed: false, divergence: merge.reason };
+  }
+  if (merge.kind === "keep") {
+    return { patch, progressed: false };
+  }
+  const errorUnreadable = snapshot.unreadable?.includes("error") ?? false;
+  Object.assign(patch, {
+    status,
+    engineStatus: status === "unknown" ? snapshot.status : undefined,
+    engineVersion: snapshot.version,
+    engineUpdatedAt: snapshot.updatedAt ?? row.engineUpdatedAt,
+    dispatchedAt: snapshot.dispatchedAt ?? row.dispatchedAt,
+    playedAt: snapshot.playedAt ?? row.playedAt,
+    completedAt: snapshot.completedAt ?? row.completedAt,
+    error: errorUnreadable ? row.error : snapshot.error || undefined,
+  } satisfies Partial<EngineAlertMirror>);
+  return { patch, progressed: merge.progressed };
 }

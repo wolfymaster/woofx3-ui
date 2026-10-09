@@ -5,10 +5,10 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
   ALERT_IN_FLIGHT_STALE_MS,
-  mergeLifecycle,
-  normaliseStatus,
+  mirrorOf,
   outcomeOf,
   UNSETTLED_STATUSES,
+  updateMirror,
 } from "./lib/engineAlertLifecycle";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { logger } from "./logger";
@@ -26,9 +26,10 @@ const STATUS_VALIDATOR = v.union(
   v.literal("unknown")
 );
 
+// Must match EngineAlertSnapshot in lib/engineAlertLifecycle.ts.
 const snapshotValidator = v.object({
   id: v.string(),
-  payload: v.string(),
+  payload: v.optional(v.string()),
   workflowId: v.optional(v.string()),
   sourceEventId: v.optional(v.string()),
   status: v.string(),
@@ -38,8 +39,9 @@ const snapshotValidator = v.object({
   completedAt: v.optional(v.string()),
   error: v.optional(v.string()),
   version: v.optional(v.number()),
-  createdAt: v.string(),
-  updatedAt: v.string(),
+  createdAt: v.optional(v.string()),
+  updatedAt: v.optional(v.string()),
+  unreadable: v.optional(v.array(v.string())),
 });
 
 type AlertSnapshot = Infer<typeof snapshotValidator>;
@@ -190,33 +192,19 @@ export const overview = query({
  * engine can only ever touch its own rows, and a row never changes instance.
  * `alert.recorded` and the lifecycle callbacks are retried independently and
  * may arrive in any order, so either one may be the first to create the row,
- * and `mergeLifecycle` decides whether a later one changes it. A snapshot it
- * refuses although it claims to be newer is logged as a divergence; one the
- * row already holds or has moved past is dropped silently.
+ * and `updateMirror` decides what a later one changes. A snapshot carrying the
+ * version the row holds with a different status is logged as a divergence;
+ * one the row already holds or has moved past is dropped silently.
  */
 async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snapshot: AlertSnapshot): Promise<void> {
-  const status = normaliseStatus(snapshot.status);
-  if (status === "unknown") {
+  const mirror = mirrorOf(snapshot);
+  if (mirror.status === "unknown") {
     logger.warn("engineAlerts: alert has an unrecognised status", {
       instanceId,
       alertId: snapshot.id,
       status: snapshot.status,
     });
   }
-  const lifecycle = {
-    status,
-    engineStatus: status === "unknown" ? snapshot.status : undefined,
-    payload: snapshot.payload,
-    workflowId: snapshot.workflowId || undefined,
-    sourceEventId: snapshot.sourceEventId || undefined,
-    envelopeId: snapshot.envelopeId || undefined,
-    dispatchedAt: snapshot.dispatchedAt,
-    playedAt: snapshot.playedAt,
-    completedAt: snapshot.completedAt,
-    error: snapshot.error,
-    engineUpdatedAt: snapshot.updatedAt,
-    engineVersion: snapshot.version,
-  };
   const now = Date.now();
 
   // Nothing should write a second row for one alert, but if one exists the
@@ -235,35 +223,30 @@ async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snap
     await ctx.db.insert("engineAlerts", {
       instanceId,
       engineAlertId: snapshot.id,
-      engineCreatedAt: snapshot.createdAt,
       createdAt: now,
       progressedAt: now,
-      ...lifecycle,
+      ...mirror,
     });
     return;
   }
-  const merge = mergeLifecycle(existing, lifecycle);
-  if (merge.kind === "diverged") {
-    logger.warn("engineAlerts: refused an alert snapshot the engine sent as newer", {
+  const update = updateMirror(existing, snapshot);
+  if (update.divergence !== undefined) {
+    logger.warn("engineAlerts: an alert snapshot disagrees with the version the row holds", {
       instanceId,
       alertId: snapshot.id,
-      reason: merge.reason,
+      reason: update.divergence,
       storedStatus: existing.status,
       storedVersion: existing.engineVersion,
-      storedUpdatedAt: existing.engineUpdatedAt,
-      incomingStatus: lifecycle.status,
-      incomingVersion: lifecycle.engineVersion,
-      incomingUpdatedAt: lifecycle.engineUpdatedAt,
+      incomingStatus: snapshot.status,
+      incomingVersion: snapshot.version,
     });
-    return;
   }
-  if (merge.kind === "keep") {
-    return;
+  // Real progress clears the sweep's unconfirmed mark, so an alert the sweep
+  // gave up on still lands when the engine does report it.
+  const patch = update.progressed ? { ...update.patch, progressedAt: now, unconfirmedAt: undefined } : update.patch;
+  if (Object.keys(patch).length > 0) {
+    await ctx.db.patch(existing._id, patch);
   }
-  await ctx.db.patch(
-    existing._id,
-    merge.progressed ? { ...merge.merged, progressedAt: now, unconfirmedAt: undefined } : merge.merged
-  );
 }
 
 /** Merge the snapshot any alert callback carries; see `mergeSnapshot`. */

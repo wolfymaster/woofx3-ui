@@ -47,7 +47,7 @@ export interface RunAlertRecord {
   dispatchedAt?: string;
   playedAt?: string;
   completedAt?: string;
-  engineCreatedAt: string;
+  engineCreatedAt?: string;
   /** Set once the server's staleness sweep gave up on the alert; see engineAlertLifecycle.ts. */
   unconfirmedAt?: number;
 }

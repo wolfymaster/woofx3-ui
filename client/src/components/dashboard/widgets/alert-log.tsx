@@ -21,7 +21,7 @@ interface AlertRow {
   status: string;
   error?: string;
   payload: string;
-  engineCreatedAt: string;
+  engineCreatedAt?: string;
 }
 
 function AlertLogItem({ alert }: { alert: AlertRow }) {
