@@ -12,6 +12,7 @@ import { commandStepId, NEW_COMMAND_KEY, updateCommandDraft } from "@/lib/comman
 import { COMMAND_LIST_PATH, COMMAND_NEW_ROUTE, commandEditorPath } from "@/lib/command-editor-route";
 import { splitCommandInput } from "@/lib/command-input";
 import { commandStepVariables } from "@/lib/command-variables";
+import { commandAlertKey } from "@/lib/existing-alerts";
 import { resolveActionStepPreset } from "@/lib/workflow-presets-json";
 
 /**
@@ -104,6 +105,7 @@ export default function CommandStepAlertEditor() {
       }
       backLabel={commandWord ? `!${commandWord}` : "the command"}
       availableVariables={availableVariables}
+      sourceKey={isNew ? undefined : commandAlertKey(engineCommandId, actionId)}
       onDone={(stored) => {
         if (stored !== null) {
           keepLayout(stored);
