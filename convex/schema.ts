@@ -50,7 +50,8 @@ export const macroActionTypeValidator = v.union(
   v.literal("send-message"),
   v.literal("chat-command"),
   v.literal("trigger-workflow"),
-  v.literal("http-request")
+  v.literal("http-request"),
+  v.literal("run-action")
 );
 
 // Mirrors MacroConfig in convex/lib/macroVariables.ts. Free-text fields may
@@ -64,6 +65,15 @@ export const macroConfigValidator = v.object({
   method: v.optional(v.union(v.literal("GET"), v.literal("POST"), v.literal("PUT"), v.literal("DELETE"))),
   headers: v.optional(v.record(v.string(), v.string())),
   body: v.optional(v.string()),
+  actionStep: v.optional(
+    v.object({
+      action: v.string(),
+      function: v.optional(v.string()),
+      ref: v.optional(v.string()),
+      // An action's settings are whatever its catalog entry declares.
+      parameters: v.optional(v.record(v.string(), v.any())),
+    })
+  ),
 });
 
 // Pages that show a first-visit intro. Must match PAGE_INTROS in

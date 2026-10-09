@@ -1,7 +1,12 @@
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
-import { engineRefusalReason, isEngineTransportFailure, type MacroRunPlan } from "./macroTrigger";
+import {
+  engineRefusalReason,
+  isEngineTransportFailure,
+  type MacroRunPlan,
+  macroActionToEngineStep,
+} from "./macroTrigger";
 
 export interface MacroEngineContext {
   url: string;
@@ -41,6 +46,17 @@ export async function executeMacroPlan(
     const triggerId = crypto.randomUUID();
     await rpc.triggerWorkflowByName(plan.workflowNameOrId, {}, undefined, triggerId, triggeredBy);
     return { triggerId };
+  }
+
+  if (plan.kind === "run-action") {
+    // No triggerId comes back: the engine records no run and reports no
+    // lifecycle for actions outside a workflow, so there is no outcome to watch.
+    await rpc.runActions({
+      label: `macro:${triggeredBy}`,
+      actions: [macroActionToEngineStep(plan.step)],
+      event: { type: "macro.run", source: triggeredBy, data: {} },
+    });
+    return {};
   }
 
   if (!engine.broadcasterLogin) {

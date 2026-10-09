@@ -7,6 +7,7 @@ export {
   applyMacroVariables,
   extractMacroVariables,
   hasMacroVariables,
+  type MacroActionStep,
   type MacroActionType,
   type MacroConfig,
   type MacroHttpMethod,

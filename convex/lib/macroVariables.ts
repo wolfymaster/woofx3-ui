@@ -14,9 +14,24 @@
 // trigger and for macros it runs against the engine, the browser for an HTTP
 // request button.
 
-export type MacroActionType = "send-message" | "chat-command" | "trigger-workflow" | "http-request";
+export type MacroActionType = "send-message" | "chat-command" | "trigger-workflow" | "http-request" | "run-action";
 
 export type MacroHttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+/**
+ * The catalog action a "run-action" button runs: the engine's ActionStep, with
+ * `$ref` stored as `ref` because Convex rejects field names starting with `$`.
+ * `parameters` is stored with its own `$` keys escaped (see dollarKeys.ts).
+ */
+export interface MacroActionStep {
+  /** The engine handler, e.g. `function` or `alert`. */
+  action: string;
+  /** The canonical function id when `action` is `function`. */
+  function?: string;
+  /** The catalog entry the step was picked from, for finding its settings again. */
+  ref?: string;
+  parameters?: Record<string, unknown>;
+}
 
 export interface MacroConfig {
   /** Sent to chat verbatim by a "send-message" button. */
@@ -34,6 +49,7 @@ export interface MacroConfig {
   method?: MacroHttpMethod;
   headers?: Record<string, string>;
   body?: string;
+  actionStep?: MacroActionStep;
 }
 
 // Names are restricted to word characters partly for readability and partly
@@ -49,7 +65,8 @@ export function isMacroVariableName(name: string): boolean {
 /**
  * Free-text fields a variable may appear in, in the order the prompt should ask
  * for them. `workflowId` and `method` are chosen from pickers rather than typed,
- * so they are deliberately not scanned. `command` is scanned because an older
+ * so they are deliberately not scanned; an action's settings are scanned after
+ * these, in templateStrings. `command` is scanned because an older
  * button can hold a whole typed `!word rest` line there.
  */
 const TEMPLATE_FIELDS: ReadonlyArray<"message" | "command" | "commandText" | "url" | "body"> = [
@@ -73,7 +90,43 @@ function templateStrings(config: MacroConfig): string[] {
       out.push(value);
     }
   }
+  collectStrings(config.actionStep?.parameters, out);
   return out;
+}
+
+/**
+ * Every string inside an action's settings, however deeply nested: a setting
+ * may be a list or an object (an alert layout) whose text carries a variable.
+ */
+function collectStrings(value: unknown, out: string[]): void {
+  if (typeof value === "string") {
+    out.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStrings(item, out);
+    }
+  } else if (value !== null && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      collectStrings(item, out);
+    }
+  }
+}
+
+function substituteDeep(value: unknown, values: Readonly<Record<string, string>>): unknown {
+  if (typeof value === "string") {
+    return substitute(value, values);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => substituteDeep(item, values));
+  }
+  if (value !== null && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      out[key] = substituteDeep(item, values);
+    }
+    return out;
+  }
+  return value;
 }
 
 /**
@@ -129,6 +182,12 @@ export function applyMacroVariables(config: MacroConfig, values: Readonly<Record
       headers[key] = substitute(value, values);
     }
     next.headers = headers;
+  }
+  if (config.actionStep?.parameters) {
+    next.actionStep = {
+      ...config.actionStep,
+      parameters: substituteDeep(config.actionStep.parameters, values) as Record<string, unknown>,
+    };
   }
   return next;
 }
