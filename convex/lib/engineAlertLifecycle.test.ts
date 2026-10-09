@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
-  acceptsTransition,
+  type AlertLifecyclePoint,
+  compareEngineWrites,
   type EngineAlertStatus,
   isFailureStatus,
-  isNewerEngineWrite,
   mergeLifecycle,
   normaliseStatus,
   outcomeOf,
@@ -14,176 +14,199 @@ import {
 
 const T0 = "2026-09-17T08:49:58.000Z";
 const T1 = "2026-09-17T08:50:03.000Z";
+const T2 = "2026-09-17T08:50:09.000Z";
 
-function at(status: EngineAlertStatus, engineUpdatedAt = T0) {
+/** A snapshot from an engine that sends no version. */
+function at(status: EngineAlertStatus, engineUpdatedAt = T0): AlertLifecyclePoint {
   return { status, engineUpdatedAt };
 }
 
-describe("acceptsTransition", () => {
-  test("moves an alert forward through its lifecycle", () => {
-    expect(acceptsTransition(at("sent"), at("dispatched", T1))).toBe(true);
-    expect(acceptsTransition(at("dispatched"), at("playing", T1))).toBe(true);
-    expect(acceptsTransition(at("playing"), at("completed", T1))).toBe(true);
-    expect(acceptsTransition(at("sent"), at("failed", T1))).toBe(true);
+/** A snapshot from an engine that versions its writes. */
+function v(status: EngineAlertStatus, engineVersion: number, engineUpdatedAt = T0): AlertLifecyclePoint {
+  return { status, engineVersion, engineUpdatedAt };
+}
+
+const VERDICTS = ["completed", "failed", "skipped", "timed_out"] as const;
+
+/** Whether the engine lets verdict `second` replace verdict `first`. */
+function engineReplaces(first: EngineAlertStatus, second: EngineAlertStatus): boolean {
+  if (second === "completed") {
+    return first !== "completed";
+  }
+  return first === "timed_out" && (second === "failed" || second === "skipped");
+}
+
+describe("compareEngineWrites", () => {
+  test("compares versions when both snapshots carry one", () => {
+    expect(compareEngineWrites(v("playing", 2, T1), v("playing", 3, T0))).toBe(1);
+    expect(compareEngineWrites(v("playing", 3, T0), v("playing", 2, T1))).toBe(-1);
+    expect(compareEngineWrites(v("playing", 2, T0), v("playing", 2, T1))).toBe(0);
   });
 
-  // `alert.recorded` and the lifecycle callbacks are delivered independently,
-  // so the recorded snapshot can arrive after the alert finished.
-  test("does not let a late recorded snapshot revive a settled alert", () => {
-    expect(acceptsTransition(at("completed", T1), at("sent"))).toBe(false);
-    expect(acceptsTransition(at("skipped", T1), at("pending"))).toBe(false);
-    expect(acceptsTransition(at("failed", T1), at("playing"))).toBe(false);
-  });
-
-  test("lets a real verdict replace a timeout, as the engine does", () => {
-    for (const verdict of ["completed", "failed", "skipped"] as const) {
-      expect(acceptsTransition(at("timed_out", T0), at(verdict, T1))).toBe(true);
-    }
-  });
-
-  test("keeps the first verdict otherwise, as the engine does", () => {
-    const verdicts = ["completed", "failed", "skipped", "timed_out"] as const;
-    for (const first of verdicts) {
-      for (const second of verdicts) {
-        if (first === second || first === "timed_out") {
-          continue;
-        }
-        expect(acceptsTransition(at(first, T0), at(second, T1))).toBe(false);
-      }
-    }
-  });
-
-  test("rejects any snapshot older than the one stored", () => {
-    expect(acceptsTransition(at("sent", T1), at("sent", T0))).toBe(false);
-  });
-
-  test("falls back to the lifecycle rule when a timestamp does not parse", () => {
-    expect(acceptsTransition(at("timed_out", "not a time"), at("completed", T0))).toBe(true);
-    expect(acceptsTransition(at("completed", "not a time"), at("timed_out", T1))).toBe(false);
-    expect(acceptsTransition(at("completed", "not a time"), at("sent", T1))).toBe(false);
-  });
-
-  test("keeps a replayed row replayed", () => {
-    expect(acceptsTransition(at("completed"), at("replayed", T1))).toBe(true);
-    expect(acceptsTransition(at("playing"), at("replayed", T1))).toBe(true);
-    expect(acceptsTransition(at("replayed"), at("completed", T1))).toBe(false);
-  });
-
-  test("accepts a redelivered callback", () => {
-    expect(acceptsTransition(at("sent"), at("sent"))).toBe(true);
-    expect(acceptsTransition(at("completed"), at("completed"))).toBe(true);
+  test("compares timestamps otherwise, whatever their precision", () => {
+    expect(compareEngineWrites(at("playing", T0), at("playing", T1))).toBe(1);
+    expect(compareEngineWrites(v("playing", 4, T1), at("playing", T0))).toBe(-1);
+    expect(
+      compareEngineWrites(at("playing", "2026-09-17T08:50:03.120Z"), at("playing", "2026-09-17T08:50:03.12Z"))
+    ).toBe(0);
   });
 
   // Engine rows carry microseconds; two writes in one millisecond must still
   // be told apart.
-  test("orders snapshots below the millisecond", () => {
-    const earlier = "2026-09-17T08:50:03.123400Z";
-    const later = "2026-09-17T08:50:03.123456789Z";
-    expect(acceptsTransition(at("completed", later), at("timed_out", earlier))).toBe(false);
-    expect(acceptsTransition(at("timed_out", earlier), at("completed", later))).toBe(true);
-  });
-
-  test("accepts the same engine write written at different precisions", () => {
+  test("orders timestamps below the millisecond", () => {
     expect(
-      acceptsTransition(at("completed", "2026-09-17T08:50:03.120Z"), at("completed", "2026-09-17T08:50:03.12Z"))
-    ).toBe(true);
+      compareEngineWrites(at("playing", "2026-09-17T08:50:03.123400Z"), at("playing", "2026-09-17T08:50:03.123456789Z"))
+    ).toBe(1);
   });
 
-  test("orders allowed moves by version when both snapshots carry one", () => {
-    const stored = { status: "timed_out" as const, engineVersion: 4, engineUpdatedAt: T1 };
-    expect(acceptsTransition(stored, { status: "completed", engineVersion: 5, engineUpdatedAt: T0 })).toBe(true);
-    expect(acceptsTransition(stored, { status: "completed", engineVersion: 3, engineUpdatedAt: T1 })).toBe(false);
-    const playing = { status: "playing" as const, engineVersion: 3, engineUpdatedAt: T1 };
-    expect(acceptsTransition(playing, { status: "completed", engineVersion: 2, engineUpdatedAt: T1 })).toBe(false);
+  test("cannot order a timestamp that does not parse", () => {
+    expect(compareEngineWrites(at("playing", "a"), at("playing", T0))).toBeNull();
+  });
+});
+
+describe("mergeLifecycle with versioned snapshots", () => {
+  test("moves an alert forward through its lifecycle", () => {
+    expect(mergeLifecycle(v("sent", 1), v("dispatched", 2)).kind).toBe("apply");
+    expect(mergeLifecycle(v("dispatched", 2), v("playing", 3)).kind).toBe("apply");
+    expect(mergeLifecycle(v("playing", 3), v("completed", 4)).kind).toBe("apply");
+    expect(mergeLifecycle(v("sent", 1), v("failed", 5)).kind).toBe("apply");
   });
 
-  // The engine never publishes a move its rule refuses, so a higher version
-  // does not license one.
-  test("refuses a move the lifecycle rule forbids, even with a higher version", () => {
-    const completed = { status: "completed" as const, engineVersion: 4, engineUpdatedAt: T1 };
-    expect(acceptsTransition(completed, { status: "failed", engineVersion: 5, engineUpdatedAt: T1 })).toBe(false);
-    expect(acceptsTransition(completed, { status: "playing", engineVersion: 9, engineUpdatedAt: T1 })).toBe(false);
-    const replayed = { status: "replayed" as const, engineVersion: 3, engineUpdatedAt: T1 };
-    expect(acceptsTransition(replayed, { status: "completed", engineVersion: 4, engineUpdatedAt: T1 })).toBe(false);
+  test("applies the engine's verdict rule", () => {
+    for (const first of VERDICTS) {
+      for (const second of VERDICTS) {
+        const merge = mergeLifecycle(v(first, 2), v(second, 3));
+        expect([first, second, merge.kind]).toEqual([
+          first,
+          second,
+          engineReplaces(first, second) ? "apply" : "diverged",
+        ]);
+      }
+    }
   });
 
-  test("accepts the same version delivered again", () => {
-    const stored = { status: "playing" as const, engineVersion: 2, engineUpdatedAt: T1 };
-    expect(acceptsTransition(stored, { ...stored })).toBe(true);
+  // An alert fans out to two widgets; the queue is cleared while the second
+  // plays it, then that widget finishes it.
+  test("lets completed replace a skip from a queue clear", () => {
+    const merge = mergeLifecycle({ ...v("skipped", 3) }, { ...v("completed", 4, T1), completedAt: T0 });
+    expect(merge.kind).toBe("apply");
   });
 
-  test("falls back to the rule and timestamp when either snapshot has no version", () => {
-    const versioned = { status: "playing" as const, engineVersion: 3, engineUpdatedAt: T1 };
-    expect(acceptsTransition(at("completed", T1), { ...at("timed_out", T0), engineVersion: 9 })).toBe(false);
-    expect(acceptsTransition(versioned, at("completed", T0))).toBe(false);
-    expect(acceptsTransition(versioned, at("completed", T1))).toBe(true);
-    expect(acceptsTransition(at("timed_out", T0), { ...at("completed", T1), engineVersion: 1 })).toBe(true);
+  test("keeps an older write out silently, whatever its status", () => {
+    expect(mergeLifecycle(v("completed", 4), v("sent", 1)).kind).toBe("keep");
+    expect(mergeLifecycle(v("failed", 3), v("completed", 2)).kind).toBe("keep");
+    expect(mergeLifecycle(v("playing", 3, T0), v("completed", 2, T1)).kind).toBe("keep");
+  });
+
+  test("orders by version even when the timestamps disagree", () => {
+    expect(mergeLifecycle(v("timed_out", 4, T1), v("completed", 5, T0)).kind).toBe("apply");
+  });
+
+  test("reports a newer version the rule refuses as a divergence", () => {
+    expect(mergeLifecycle(v("completed", 4), v("playing", 9)).kind).toBe("diverged");
+    expect(mergeLifecycle(v("replayed", 3), v("completed", 4)).kind).toBe("diverged");
+    expect(mergeLifecycle(v("replayed", 3), v("replayed", 4)).kind).toBe("diverged");
+  });
+
+  test("keeps a redelivery of the version held without changing anything", () => {
+    const stored = { ...v("completed", 3, T1), playedAt: T0, completedAt: T1 };
+    expect(mergeLifecycle(stored, { ...stored }).kind).toBe("keep");
+    expect(mergeLifecycle({ ...stored, error: undefined }, { ...stored, error: "" }).kind).toBe("keep");
+  });
+
+  test("reports the same version with different contents as a divergence", () => {
+    const stored = { ...v("completed", 3, T1), completedAt: T1 };
+    expect(mergeLifecycle(stored, { ...stored, status: "failed", error: "x" }).kind).toBe("diverged");
+    expect(mergeLifecycle(stored, { ...stored, completedAt: T2 }).kind).toBe("diverged");
+  });
+
+  test("counts only a status change or a later write as progress", () => {
+    const merge = mergeLifecycle(v("playing", 2), v("completed", 3, T1));
+    expect(merge.kind === "apply" && merge.progressed).toBe(true);
   });
 
   // Only `alert.recorded` can carry a status this build does not know, so it
   // is the alert's starting point, not an ending.
   test("treats an unknown status as a starting point", () => {
-    expect(acceptsTransition(at("unknown"), at("dispatched", T1))).toBe(true);
-    expect(acceptsTransition(at("unknown"), at("playing", T1))).toBe(true);
-    expect(acceptsTransition(at("unknown"), at("completed", T1))).toBe(true);
-    expect(acceptsTransition(at("sent"), at("unknown", T1))).toBe(true);
-    expect(acceptsTransition(at("playing"), at("unknown", T1))).toBe(false);
-    expect(acceptsTransition(at("completed"), at("unknown", T1))).toBe(false);
+    expect(mergeLifecycle(v("unknown", 1), v("dispatched", 2)).kind).toBe("apply");
+    expect(mergeLifecycle(v("unknown", 1), v("completed", 3)).kind).toBe("apply");
+    expect(mergeLifecycle(v("playing", 3), v("unknown", 1)).kind).toBe("keep");
   });
 });
 
-describe("isNewerEngineWrite", () => {
-  test("compares versions when both snapshots carry one", () => {
-    const stored = { status: "playing" as const, engineVersion: 2, engineUpdatedAt: T1 };
-    expect(isNewerEngineWrite(stored, { ...stored, engineVersion: 3, engineUpdatedAt: T0 })).toBe(true);
-    expect(isNewerEngineWrite(stored, { ...stored, engineUpdatedAt: "2026-09-17T08:50:04Z" })).toBe(false);
+describe("mergeLifecycle with a versioned snapshot and an unversioned row", () => {
+  test("orders by timestamp and applies the engine's rule", () => {
+    expect(mergeLifecycle(at("playing", T0), v("completed", 4, T1)).kind).toBe("apply");
+    expect(mergeLifecycle(at("completed", T1), v("timed_out", 9, T0)).kind).toBe("keep");
+    expect(mergeLifecycle(at("completed", T0), v("failed", 5, T1)).kind).toBe("diverged");
   });
 
-  test("compares timestamps otherwise, whatever their precision", () => {
-    expect(isNewerEngineWrite(at("playing", T0), at("playing", T1))).toBe(true);
-    expect(isNewerEngineWrite(at("playing", T1), { ...at("playing", T1), engineVersion: 2 })).toBe(false);
-    expect(
-      isNewerEngineWrite(at("playing", "2026-09-17T08:50:03.120Z"), at("playing", "2026-09-17T08:50:03.12Z"))
-    ).toBe(false);
+  test("adopts the version of the write the row already holds, without counting progress", () => {
+    const merge = mergeLifecycle(at("playing", T0), v("playing", 3, T0));
+    expect(merge.kind).toBe("apply");
+    expect(merge.kind === "apply" && merge.merged.engineVersion).toBe(3);
+    expect(merge.kind === "apply" && merge.progressed).toBe(false);
   });
 
-  test("counts differing timestamps that do not parse as different writes", () => {
-    expect(isNewerEngineWrite(at("playing", "a"), at("playing", "b"))).toBe(true);
-    expect(isNewerEngineWrite(at("playing", "a"), at("playing", "a"))).toBe(false);
+  test("lets the rule decide when the timestamps cannot be ordered", () => {
+    expect(mergeLifecycle(at("timed_out", "not a time"), v("completed", 2, T0)).kind).toBe("apply");
+    expect(mergeLifecycle(at("completed", "not a time"), v("timed_out", 2, T1)).kind).toBe("keep");
   });
 });
 
-describe("mergeLifecycle", () => {
-  test("refuses what acceptsTransition refuses", () => {
-    expect(mergeLifecycle(at("completed", T0), at("failed", T1))).toBeNull();
+describe("mergeLifecycle with unversioned snapshots", () => {
+  test("moves an alert forward and keeps it from moving back", () => {
+    expect(mergeLifecycle(at("sent"), at("playing", T1)).kind).toBe("apply");
+    expect(mergeLifecycle(at("completed", T1), at("sent")).kind).toBe("keep");
+    expect(mergeLifecycle(at("failed", T1), at("playing")).kind).toBe("keep");
   });
 
-  test("keeps the stored version when the snapshot has none", () => {
-    const stored = { status: "playing" as const, engineVersion: 3, engineUpdatedAt: T0 };
-    const merge = mergeLifecycle(stored, at("completed", T1));
-    expect(merge?.merged.engineVersion).toBe(3);
-    expect(merge?.merged.status).toBe("completed");
+  // An engine that predates versions let a later verdict correct an earlier
+  // one; its corrections must still land.
+  test("lets a later verdict replace an earlier one, last write wins", () => {
+    for (const first of VERDICTS) {
+      for (const second of VERDICTS) {
+        expect(mergeLifecycle(at(first, T0), at(second, T1)).kind).toBe("apply");
+        if (first !== second) {
+          expect(mergeLifecycle(at(first, T1), at(second, T0)).kind).toBe("keep");
+        }
+      }
+    }
   });
 
-  test("takes the snapshot's version when it has one", () => {
-    const stored = { status: "playing" as const, engineVersion: 3, engineUpdatedAt: T0 };
-    expect(mergeLifecycle(stored, { ...at("completed", T1), engineVersion: 4 })?.merged.engineVersion).toBe(4);
+  test("reports a newer snapshot that would move the row back as a divergence", () => {
+    expect(mergeLifecycle(at("completed", T0), at("playing", T1)).kind).toBe("diverged");
   });
 
-  test("counts a status change or a later engine write as progress", () => {
-    expect(mergeLifecycle(at("sent", T0), at("playing", T0))?.progressed).toBe(true);
-    expect(mergeLifecycle(at("sent", T0), at("sent", T1))?.progressed).toBe(true);
-    const stored = { status: "playing" as const, engineVersion: 3, engineUpdatedAt: T0 };
-    expect(mergeLifecycle(stored, { ...stored, engineVersion: 4, engineUpdatedAt: T1 })?.progressed).toBe(true);
+  test("accepts a redelivered callback without counting progress", () => {
+    const merge = mergeLifecycle(at("playing", T0), at("playing", T0));
+    expect(merge.kind === "apply" && merge.progressed).toBe(false);
   });
 
-  test("does not count a redelivery as progress, version or not", () => {
-    expect(mergeLifecycle(at("playing", T0), at("playing", T0))?.progressed).toBe(false);
-    const stored = { status: "playing" as const, engineVersion: 3, engineUpdatedAt: T0 };
-    expect(mergeLifecycle(stored, { ...stored })?.progressed).toBe(false);
-    // A versioned redelivery of a write the row holds from an unversioned
-    // snapshot gains a version but is the same write.
-    expect(mergeLifecycle(at("playing", T0), { ...at("playing", T0), engineVersion: 3 })?.progressed).toBe(false);
+  test("counts a status change or a later write as progress", () => {
+    const later = mergeLifecycle(at("sent", T0), at("sent", T1));
+    expect(later.kind === "apply" && later.progressed).toBe(true);
+    const moved = mergeLifecycle(at("sent", T0), at("playing", T0));
+    expect(moved.kind === "apply" && moved.progressed).toBe(true);
+    const unordered = mergeLifecycle(at("playing", "a"), at("playing", "b"));
+    expect(unordered.kind === "apply" && unordered.progressed).toBe(true);
+  });
+
+  test("drops the row's version, which no longer describes what it holds", () => {
+    const merge = mergeLifecycle(v("playing", 3, T0), at("completed", T1));
+    expect(merge.kind).toBe("apply");
+    expect(merge.kind === "apply" && "engineVersion" in merge.merged && merge.merged.engineVersion).toBeUndefined();
+  });
+
+  // A versioned write stored, then corrected by an unversioned snapshot: a
+  // redelivery of the old version must not bring the old data back.
+  test("keeps a later redelivery of the dropped version out", () => {
+    const original = { ...v("completed", 2, T1), playedAt: T0 };
+    const corrected = mergeLifecycle(original, { ...at("completed", T2), playedAt: T1 });
+    if (corrected.kind !== "apply") {
+      throw new Error("the correction was refused");
+    }
+    expect(mergeLifecycle(corrected.merged, original).kind).toBe("keep");
   });
 });
 
@@ -244,24 +267,42 @@ describe("readAlertSnapshot", () => {
   };
 
   test("reads a snapshot and keeps only the fields it knows", () => {
-    expect(readAlertSnapshot({ ...snapshot, addedLater: "x" })).toEqual(snapshot);
+    expect(readAlertSnapshot({ ...snapshot, addedLater: "x" })).toEqual({ snapshot, problems: [] });
   });
 
   test("copies the version", () => {
-    expect(readAlertSnapshot({ ...snapshot, version: 3 })).toEqual({ ...snapshot, version: 3 });
+    expect(readAlertSnapshot({ ...snapshot, version: 3 }).snapshot).toEqual({ ...snapshot, version: 3 });
   });
 
-  test("leaves out a version that is not a positive integer and still reads the snapshot", () => {
+  test("reads a version that is not a positive integer as absent, and reports it", () => {
     for (const version of [0, -1, 1.5, "3", Number.NaN, null]) {
-      expect(readAlertSnapshot({ ...snapshot, version })).toEqual(snapshot);
+      const reading = readAlertSnapshot({ ...snapshot, version });
+      expect(reading.snapshot).toEqual(snapshot);
+      expect(reading.problems).toHaveLength(1);
     }
   });
 
-  test("refuses a snapshot missing a required field or with a mistyped one", () => {
-    expect(readAlertSnapshot({ ...snapshot, id: undefined })).toBeNull();
-    expect(readAlertSnapshot({ ...snapshot, playedAt: 5 })).toBeNull();
-    expect(readAlertSnapshot(null)).toBeNull();
-    expect(readAlertSnapshot("alert")).toBeNull();
+  test("reads a null or mistyped optional field as absent, and reports it", () => {
+    const reading = readAlertSnapshot({ ...snapshot, error: null, playedAt: 5 });
+    const { playedAt: _playedAt, ...withoutPlayedAt } = snapshot;
+    expect(reading.snapshot).toEqual(withoutPlayedAt);
+    expect(reading.problems).toHaveLength(2);
+  });
+
+  test("defaults a missing payload and timestamps, and reports them", () => {
+    const reading = readAlertSnapshot({ id: "a1", status: "playing" });
+    expect(reading.snapshot).toEqual({ id: "a1", status: "playing", payload: "", updatedAt: "", createdAt: "" });
+    expect(reading.problems).toHaveLength(3);
+    const { createdAt: _createdAt, ...withoutCreatedAt } = snapshot;
+    expect(readAlertSnapshot(withoutCreatedAt).snapshot?.createdAt).toBe(T1);
+  });
+
+  test("refuses a snapshot without an id or a status", () => {
+    expect(readAlertSnapshot({ ...snapshot, id: undefined }).snapshot).toBeNull();
+    expect(readAlertSnapshot({ ...snapshot, id: "" }).snapshot).toBeNull();
+    expect(readAlertSnapshot({ ...snapshot, status: 3 }).problems).toEqual(["status is malformed (3)"]);
+    expect(readAlertSnapshot(null).snapshot).toBeNull();
+    expect(readAlertSnapshot("alert").snapshot).toBeNull();
   });
 });
 

@@ -584,10 +584,26 @@ http.route({
     // read through readAlertSnapshot so a field a newer engine adds does not
     // fail the mutation's validator.
     if (ALERT_SNAPSHOT_EVENT_TYPES.has(eventType)) {
-      const snapshot = readAlertSnapshot((event as unknown as { alert?: unknown }).alert);
+      // A snapshot without an id or status can never be merged, so it is
+      // answered 4xx, which the engine does not retry. A field read as absent
+      // is only logged. A failure while merging answers 5xx, which the engine
+      // retries.
+      const { snapshot, problems } = readAlertSnapshot((event as unknown as { alert?: unknown }).alert);
       if (!snapshot) {
-        logger.warn("webhook: alert callback without a valid alert", { instanceId: instance._id, eventType });
-        return corsJson({ error: "Alert callback needs an alert snapshot" }, 400);
+        logger.warn("webhook: alert callback without a usable alert", {
+          instanceId: instance._id,
+          eventType,
+          problems,
+        });
+        return corsJson({ error: "Alert callback needs an alert with an id and a status" }, 400);
+      }
+      if (problems.length > 0) {
+        logger.warn("webhook: alert callback with unusable fields", {
+          instanceId: instance._id,
+          eventType,
+          alertId: snapshot.id,
+          problems,
+        });
       }
       await ctx.runMutation(internal.engineAlerts.mergeFromWebhook, { instanceId: instance._id, snapshot });
       return corsJson({ success: true, type: eventType });

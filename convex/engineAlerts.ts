@@ -11,6 +11,7 @@ import {
   UNSETTLED_STATUSES,
 } from "./lib/engineAlertLifecycle";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { logger } from "./logger";
 
 const STATUS_VALIDATOR = v.union(
   v.literal("sent"),
@@ -189,13 +190,18 @@ export const overview = query({
  * engine can only ever touch its own rows, and a row never changes instance.
  * `alert.recorded` and the lifecycle callbacks are retried independently and
  * may arrive in any order, so either one may be the first to create the row,
- * and `mergeLifecycle` drops a snapshot older than the row: it would also
- * unset lifecycle timestamps the row already holds.
+ * and `mergeLifecycle` decides whether a later one changes it. A snapshot it
+ * refuses although it claims to be newer is logged as a divergence; one the
+ * row already holds or has moved past is dropped silently.
  */
 async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snapshot: AlertSnapshot): Promise<void> {
   const status = normaliseStatus(snapshot.status);
   if (status === "unknown") {
-    console.warn(`engineAlerts: alert ${snapshot.id} has unrecognised status "${snapshot.status}"`);
+    logger.warn("engineAlerts: alert has an unrecognised status", {
+      instanceId,
+      alertId: snapshot.id,
+      status: snapshot.status,
+    });
   }
   const lifecycle = {
     status,
@@ -222,7 +228,7 @@ async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snap
     .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineAlertId", snapshot.id))
     .take(2);
   if (matches.length > 1) {
-    console.warn(`engineAlerts: instance ${instanceId} has more than one row for alert ${snapshot.id}`);
+    logger.warn("engineAlerts: more than one row for an alert", { instanceId, alertId: snapshot.id });
   }
   const existing = matches[0];
   if (!existing) {
@@ -237,7 +243,21 @@ async function mergeSnapshot(ctx: MutationCtx, instanceId: Id<"instances">, snap
     return;
   }
   const merge = mergeLifecycle(existing, lifecycle);
-  if (merge === null) {
+  if (merge.kind === "diverged") {
+    logger.warn("engineAlerts: refused an alert snapshot the engine sent as newer", {
+      instanceId,
+      alertId: snapshot.id,
+      reason: merge.reason,
+      storedStatus: existing.status,
+      storedVersion: existing.engineVersion,
+      storedUpdatedAt: existing.engineUpdatedAt,
+      incomingStatus: lifecycle.status,
+      incomingVersion: lifecycle.engineVersion,
+      incomingUpdatedAt: lifecycle.engineUpdatedAt,
+    });
+    return;
+  }
+  if (merge.kind === "keep") {
     return;
   }
   await ctx.db.patch(

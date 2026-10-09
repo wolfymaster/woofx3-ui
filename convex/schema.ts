@@ -1539,8 +1539,8 @@ export default defineSchema({
     engineCreatedAt: v.string(),
     engineUpdatedAt: v.string(),
     // The engine row's write counter, which orders its snapshots; absent for
-    // engines that do not send one. See acceptsTransition in
-    // lib/engineAlertLifecycle.ts.
+    // engines that do not send one, and after a snapshot without one was
+    // stored. See mergeLifecycle in lib/engineAlertLifecycle.ts.
     engineVersion: v.optional(v.number()),
     createdAt: v.number(), // Convex-side ingest time
     // When the mirror last saw the status or the engine's snapshot change, on
