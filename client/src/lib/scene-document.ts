@@ -1,3 +1,4 @@
+import type { PlacementTransition } from "@convex/lib/widgetTransitions";
 import json0Module from "ot-json0";
 
 /**
@@ -25,6 +26,9 @@ export interface PlacementDocument {
   opacity: number;
   locked: boolean;
   extra: Record<string, unknown>;
+  /** Absent means none; the engine refuses a placement whose transition it cannot play. */
+  transitionIn?: PlacementTransition;
+  transitionOut?: PlacementTransition;
 }
 
 export interface SceneDocument {

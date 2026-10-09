@@ -164,6 +164,7 @@ import type * as lib_twitchUsers from "../lib/twitchUsers.js";
 import type * as lib_webhookEndpointKey from "../lib/webhookEndpointKey.js";
 import type * as lib_widgetKey from "../lib/widgetKey.js";
 import type * as lib_widgetThemes from "../lib/widgetThemes.js";
+import type * as lib_widgetTransitions from "../lib/widgetTransitions.js";
 import type * as lib_workflowHealth from "../lib/workflowHealth.js";
 import type * as logger from "../logger.js";
 import type * as macroTriggers from "../macroTriggers.js";
@@ -399,6 +400,7 @@ declare const fullApi: ApiFromModules<{
   "lib/webhookEndpointKey": typeof lib_webhookEndpointKey;
   "lib/widgetKey": typeof lib_widgetKey;
   "lib/widgetThemes": typeof lib_widgetThemes;
+  "lib/widgetTransitions": typeof lib_widgetTransitions;
   "lib/workflowHealth": typeof lib_workflowHealth;
   logger: typeof logger;
   macroTriggers: typeof macroTriggers;

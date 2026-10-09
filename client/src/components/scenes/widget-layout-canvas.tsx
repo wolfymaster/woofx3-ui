@@ -1,4 +1,5 @@
 import { alertWidgetName, nextAlertWidgetName } from "@convex/lib/alertWidgets";
+import type { PlacementTransition } from "@convex/lib/widgetTransitions";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +14,7 @@ import type { Widget } from "@/types";
 import { CanvasWidgetHandle, type RemoteSelection } from "./canvas-widget-handle";
 import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
+import { WidgetTransitionsSection } from "./widget-transitions-section";
 
 export type WidgetsUpdate = (widgets: Widget[]) => Widget[];
 
@@ -270,12 +272,30 @@ export function WidgetLayoutCanvas({
             onChangeSetting={(key, value) =>
               editWidget(selectedWidget.id, (w) => ({ ...w, settings: { ...w.settings, [key]: value } }))
             }
-          />
+          >
+            <WidgetTransitionsSection
+              widget={selectedWidget}
+              declared={catalogRowFor(selectedWidget)?.transitions ?? []}
+              onChange={(field, transition) =>
+                editWidget(selectedWidget.id, (w) => withTransition(w, field, transition))
+              }
+            />
+          </WidgetSettingsPanel>
         ) : null
       }
       inspectorFallback={<CanvasSummary width={width} height={height} count={widgets.length} />}
     />
   );
+}
+
+/** `widget` entering or leaving with `transition`, or with none when it is undefined. */
+function withTransition(
+  widget: Widget,
+  field: "transitionIn" | "transitionOut",
+  transition: PlacementTransition | undefined
+): Widget {
+  const { [field]: _previous, ...rest } = widget;
+  return transition ? { ...rest, [field]: transition } : rest;
 }
 
 /** What the right rail shows with nothing selected, so the rail is never blank. */
