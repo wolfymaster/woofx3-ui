@@ -2,10 +2,21 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ArrowLeft, Link, Loader2, MoreVertical, Save, Settings, Trash2, Undo2, Upload } from "lucide-react";
+import {
+  ArrowLeft,
+  ChevronDown,
+  Link,
+  Loader2,
+  MoreVertical,
+  RefreshCw,
+  Save,
+  Settings,
+  Trash2,
+  Undo2,
+  Upload,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,7 +28,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
@@ -471,8 +483,10 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     );
   }
 
+  const publishBlocked = !session.state.hasDraft || pendingCommand !== null || sessionDown;
+
   const header = (
-    <div className="h-14 border-b border-border bg-background flex items-center justify-between px-4 shrink-0">
+    <div className="h-14 border-b border-border bg-background flex items-center justify-between gap-4 px-4 shrink-0">
       <div className="flex items-center gap-3 min-w-0">
         <Tooltip>
           <TooltipTrigger asChild>
@@ -488,8 +502,146 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
           className="font-semibold border-none bg-transparent focus-visible:ring-0 w-56"
           data-testid="input-scene-name"
         />
+        {/* On the left so its changing length never moves the controls on the right. */}
+        {sessionMode && (
+          <span className="text-xs text-muted-foreground truncate" data-testid="text-scene-sync">
+            {sessionStatusText(session.state, live)}
+          </span>
+        )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
+        {/* Browser source: copying the URL is the common action, rotating it the rare one. */}
+        <div className="flex items-center">
+          <Button
+            variant="outline"
+            className="rounded-r-none"
+            onClick={handleCopyBrowserSource}
+            disabled={!convexSceneId}
+            data-testid="button-copy-browser-source"
+          >
+            <Link className="h-4 w-4 mr-2" />
+            Copy OBS URL
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-l-none border-l-0"
+                disabled={!convexSceneId}
+                aria-label="More browser source options"
+                data-testid="button-browser-source-menu"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleRotateBrowserSource} data-testid="menu-rotate-browser-source">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Rotate URL (revoke old)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        {sessionMode ? (
+          <>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={live ? "live" : "draft"}
+              onValueChange={(value) => {
+                // Radix lets a single toggle group be emptied by clicking the selected item; one mode always holds.
+                if (value) {
+                  setLive(value === "live");
+                }
+              }}
+              aria-label="Editing mode"
+              data-testid="toggle-scene-mode"
+            >
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ToggleGroupItem value="draft" data-testid="toggle-scene-draft">
+                    Draft
+                  </ToggleGroupItem>
+                </TooltipTrigger>
+                <TooltipContent>Edit a draft that reaches OBS when you publish it</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ToggleGroupItem
+                    value="live"
+                    className="data-[state=on]:bg-red-600 data-[state=on]:text-white data-[state=on]:border-red-600"
+                    data-testid="toggle-scene-live"
+                  >
+                    Live
+                  </ToggleGroupItem>
+                </TooltipTrigger>
+                <TooltipContent>Edit what's on stream right now, without publishing</TooltipContent>
+              </Tooltip>
+            </ToggleGroup>
+            {/* Disabled rather than hidden in live mode, so switching modes never moves the header's controls.
+                The spans carry the tooltips, which a disabled button cannot. */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={live || publishBlocked ? 0 : undefined} className="inline-flex">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => runDraftCommand("discard")}
+                    disabled={live || publishBlocked}
+                    aria-label="Discard draft"
+                    data-testid="button-discard-draft"
+                  >
+                    {pendingCommand === "discard" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Undo2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{live ? "Live edits are already on stream" : "Discard draft"}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span tabIndex={live || publishBlocked ? 0 : undefined} className="inline-flex">
+                  <Button
+                    onClick={() => runDraftCommand("publish")}
+                    disabled={live || publishBlocked}
+                    className="w-32"
+                    data-testid="button-publish-scene"
+                  >
+                    {pendingCommand === "publish" ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    {pendingCommand === "publish" ? "Publishing…" : "Publish"}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {live
+                  ? "Live edits are already on stream"
+                  : session.state.hasDraft
+                    ? "Put the draft on stream"
+                    : "Nothing to publish"}
+              </TooltipContent>
+            </Tooltip>
+          </>
+        ) : (
+          <Button onClick={handleSave} disabled={isSaving || !isDirty} data-testid="button-save-scene">
+            <Save className="h-4 w-4 mr-2" />
+            {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
+          </Button>
+        )}
+
+        <Separator orientation="vertical" className="h-6" />
+
         {/* Scene settings */}
         <Popover>
           <Tooltip>
@@ -551,108 +703,6 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             </div>
           </PopoverContent>
         </Popover>
-
-        {/* Browser source */}
-        <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" disabled={!convexSceneId} data-testid="button-browser-source">
-                  <Link className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            <TooltipContent>Browser Source URL</TooltipContent>
-          </Tooltip>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={handleCopyBrowserSource} data-testid="menu-copy-browser-source">
-              <Link className="h-4 w-4 mr-2" />
-              Copy URL
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleRotateBrowserSource} data-testid="menu-rotate-browser-source">
-              <Settings className="h-4 w-4 mr-2" />
-              Rotate URL (revoke old)
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-
-        {sessionMode ? (
-          <>
-            {live && (
-              <Badge className="bg-red-600 text-white hover:bg-red-600" data-testid="badge-live">
-                LIVE
-              </Badge>
-            )}
-            <span className="text-xs text-muted-foreground" data-testid="text-scene-sync">
-              {sessionStatusText(session.state, live)}
-            </span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="flex items-center gap-1.5">
-                  <Switch
-                    id="scene-live"
-                    checked={live}
-                    onCheckedChange={setLive}
-                    aria-label="Edit live"
-                    data-testid="switch-scene-live"
-                  />
-                  <Label htmlFor="scene-live" className="text-xs">
-                    Live
-                  </Label>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent>
-                {live ? "Back to editing the draft" : "Edit what's on stream right now, without publishing"}
-              </TooltipContent>
-            </Tooltip>
-            {/* Live edits are already on stream, so there is no draft to publish or discard. */}
-            {!live && (
-              <>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => runDraftCommand("discard")}
-                      disabled={!session.state.hasDraft || pendingCommand !== null || sessionDown}
-                      aria-label="Discard draft"
-                      data-testid="button-discard-draft"
-                    >
-                      {pendingCommand === "discard" ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Undo2 className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Discard draft</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      onClick={() => runDraftCommand("publish")}
-                      disabled={!session.state.hasDraft || pendingCommand !== null || sessionDown}
-                      data-testid="button-publish-scene"
-                    >
-                      {pendingCommand === "publish" ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Upload className="h-4 w-4 mr-2" />
-                      )}
-                      {pendingCommand === "publish" ? "Publishing…" : "Publish"}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Put the draft on stream</TooltipContent>
-                </Tooltip>
-              </>
-            )}
-          </>
-        ) : (
-          <Button onClick={handleSave} disabled={isSaving || !isDirty} data-testid="button-save-scene">
-            <Save className="h-4 w-4 mr-2" />
-            {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
-          </Button>
-        )}
 
         {/* Scene actions */}
         <DropdownMenu>
