@@ -13,7 +13,6 @@ import {
   durationOf,
   type LayerKind,
   layerKind,
-  MEDIA_ASPECT,
   textBoxHeight,
   withCenter,
 } from "@/lib/alert-editor";
@@ -71,9 +70,6 @@ export function LayerInspector({
 
   const setSettings = (settings: Record<string, unknown>) => {
     onChange({ ...widget, settings: { ...widget.settings, ...settings } });
-  };
-  const resize = (size: Widget["size"]) => {
-    onChange(withCenter({ ...widget, size }, center));
   };
 
   const fontSize = typeof widget.settings.fontSize === "number" ? widget.settings.fontSize : 48;
@@ -159,25 +155,6 @@ export function LayerInspector({
             availableVariables,
           })}
         </div>
-      )}
-
-      {kind !== "audio" && (
-        <Stepper
-          id={`${idPrefix}-width`}
-          label="Width"
-          value={widget.size.width}
-          step={80}
-          min={80}
-          max={canvas.width}
-          unit="px"
-          onChange={(width) =>
-            resize(
-              kind === "text" || kind === "other"
-                ? { ...widget.size, width }
-                : { width, height: Math.round(width * MEDIA_ASPECT) }
-            )
-          }
-        />
       )}
 
       <fieldset className="flex flex-col gap-2">

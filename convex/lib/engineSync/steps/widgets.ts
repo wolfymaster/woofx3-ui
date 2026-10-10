@@ -1,6 +1,7 @@
 import { parseFieldList } from "@woofx3/api/ui-schema";
 import { internal } from "../../../_generated/api";
 import { widgetCanonicalKey } from "../../widgetKey";
+import { readWidgetTransitions } from "../../widgetTransitions";
 import type { SyncStep, SyncStepContext } from "../steps";
 
 /**
@@ -33,6 +34,7 @@ export const widgetsStep: SyncStep = {
       surfaces: w.surfaces,
       hostsSurface: w.hostsSurface || undefined,
       taxonomy: w.taxonomy,
+      transitions: readWidgetTransitions(w),
       createdByType: w.createdByType,
       createdByRef: w.createdByRef,
     }));

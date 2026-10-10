@@ -35,7 +35,7 @@ The editor has three regions:
 1. **Header** — back to the listing, editable name, a **scene-settings popover** (gear: description, width/height, background), the **browser-source dropdown** (Copy / Rotate), Save (dirty-gated) or, on an engine with editor sessions, the sync status, the **Live** switch, and **Discard** and **Publish** while editing the draft (see [Editor sessions](#editor-sessions)), and a `⋮` menu (Duplicate / Delete scene, via `sceneActions`).
 2. **Widget catalog rail** — installed widgets from `useQuery(api.sceneWidgets.listForInstance)`; clicking one adds it to the canvas.
 3. **Canvas** — `flex-1` zoomable surface with absolute-positioned placeholder boxes (the engine renders real widgets in the overlay; this is a layout surface). Drag to move, corner handle to resize; clicking the background deselects. Zoom in/out and fit sit in the bottom-left corner (the canvas has no grid overlay — the width and height live in the scene-settings popover). Selecting a widget opens its settings panel on the right; each row of the layers list carries the widget's delete button.
-4. **Right rail** — **Layers** on top (each with a show/hide eye: a hidden widget keeps running on stream, out of sight, and is struck through here and hatched on the canvas so it can still be placed), then the selected widget's settings (or a canvas summary when nothing is selected). Layers are listed topmost first; clicking one selects it, and dragging one by its grip (or arrow keys on a focused grip) moves it up or down the stack. A move renumbers every widget's `zIndex` from 1 at the bottom and stores the widgets bottom first, because the editor stacks by `zIndex` while the engine's Scene Manager stacks by array order (`moveLayer` in `client/src/lib/layer-order.ts`). The scene saves straight away after a move, as it does after adding a widget: the draft layout posted to the preview carries position and size but not order, so only a save restacks the real widgets. The Alert action's layout editor shares this rail (`OverlayEditorShell`, `LayersList`), with the same reordering.
+4. **Right rail** — **Layers** on top (each with a show/hide eye: a hidden widget keeps running on stream, out of sight, and is struck through here and hatched on the canvas so it can still be placed), then the selected widget's settings (or a canvas summary when nothing is selected). Layers are listed topmost first; clicking one selects it, and dragging one by its grip (or arrow keys on a focused grip) moves it up or down the stack. A move renumbers every widget's `zIndex` from 1 at the bottom and stores the widgets bottom first, because the editor stacks by `zIndex` while the engine's Scene Manager stacks by array order (`moveLayer` in `client/src/lib/layer-order.ts`). The scene saves straight away after a move, as it does after adding a widget: the draft layout posted to the preview carries position and size but not order, so only a save restacks the real widgets. The Alert action's layout editor shares this rail (`OverlayEditorShell`, `LayersList`), with the same reordering. A layer whose box lies entirely under the shown layers above it gets an amber layers icon whose tooltip names them: "Fully covered by …, so it may not be visible". It hedges because coverage is worked out from boxes, and a covering layer's transparent pixels (a PNG's alpha, the space around text) still let the one beneath show. Only coverage the boxes prove is claimed: hidden, rotated and partly transparent layers cover nothing, and an alert widget on a scene covers nothing because it shows only while an alert plays. In an alert layout a layer covers another only if it plays at least as long, and audio covers nothing (`coveringLayers` in `client/src/lib/layer-coverage.ts`).
 
 ### Preview vs. browser source
 
@@ -88,7 +88,7 @@ Widgets are **engine-registered module widgets only** — no arbitrary/custom wi
 
 - **Themes:** a widget that declares a theme contract gets a `theme` settings field from the engine (manifests cannot declare it). The settings panel renders it as a picker (`components/scenes/theme-field.tsx`) offering **Default** plus the installed themes that fit the widget's contract, fetched with `sceneActions.listWidgetThemes` → engine `listWidgetThemes(widgetCanonicalId)`. The stored value is the theme's canonical id (`{moduleId}:theme:{id}`) in `settings.theme`; Default leaves it unset. A stored theme that is no longer installed or no longer compatible gets a notice, because the overlay renders the widget's defaults for it. Themes come and go only with module installs, so the picker refetches when `moduleRepository.installedRevision` changes (the `module.installed` and `module.deleted` webhooks move it).
 
-The canvas itself — palette, drag/resize handles, placeholders and the settings panel — is `WidgetLayoutCanvas`, shared by the scene editor and the Alert action's layout editor (`alert-layout-field.tsx`). It edits whatever widgets it is handed and saves nothing.
+The canvas itself — palette, drag/resize handles, placeholders and the settings panel with its transitions — is `WidgetLayoutCanvas`, shared by the scene editor and the Alert action's layout editor (`alert-layout-field.tsx`). It edits whatever widgets it is handed and saves nothing.
 
 ## Browser source
 
@@ -140,8 +140,25 @@ interface Widget {
   locked: boolean;
   visible: boolean;
   settings: Record<string, unknown>;  // per-instance widget configuration
+  transitionIn?: PlacementTransition;  // how it enters; absent means none
+  transitionOut?: PlacementTransition; // how it leaves; absent means none
 }
 ```
+
+### Transitions
+
+Below a selected widget's settings, the panel has **Enter** and **Exit** pickers
+(`components/scenes/widget-transitions-section.tsx`), on a scene and in an alert
+layout alike. Each picks a type, a duration in milliseconds, an easing and, for
+a slide, a direction, stored on the placement as `{ type, durationMs, easing?,
+direction? }`. The types are the generic ones every widget gets (fade, slide,
+zoom, bounce, spin, pop, blur), which the overlay plays on the widget's box,
+then any the widget declares for its own content (the Text widget's typewriter,
+letters and wave), which come from the catalog row's `transitions`. **Preview**
+plays a generic type on a stand-in box with the overlay's keyframes; a widget's
+own type plays only in the overlay. The shape and the generic list live in
+`convex/lib/widgetTransitions.ts` and must match the engine's module SDK, which
+refuses anything else (woofx3 `docs/services/widget-transitions.md`).
 
 ### Showing and hiding from a workflow
 

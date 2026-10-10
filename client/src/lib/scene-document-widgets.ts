@@ -1,3 +1,4 @@
+import { placementTransitions } from "@convex/lib/widgetTransitions";
 import { type PlacementDocument, type SceneDocument, stackOrder, zKey } from "@/lib/scene-document";
 import type { Widget } from "@/types";
 
@@ -35,6 +36,7 @@ export function documentOfCanvas(canvas: SceneCanvas, base: SceneDocument | null
       opacity: widget.opacity,
       locked: widget.locked,
       extra: base?.widgets[widget.id]?.extra ?? {},
+      ...placementTransitions(widget),
     };
   });
   return {
@@ -72,6 +74,7 @@ export function canvasOfDocument(doc: SceneDocument): SceneCanvas {
         locked: p.locked,
         visible: p.visible,
         settings: p.settings,
+        ...placementTransitions(p),
       };
     }),
   };

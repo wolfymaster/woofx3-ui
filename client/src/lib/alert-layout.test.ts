@@ -58,6 +58,26 @@ describe("readAlertLayout", () => {
   });
 });
 
+describe("readAlertLayout — transitions", () => {
+  it("keeps a widget's transitions and drops one the engine would refuse", () => {
+    const layout = readAlertLayout(
+      {
+        widgets: [
+          {
+            id: "message",
+            widgetCanonicalId: "woofx3:widget:text",
+            transitionIn: { type: "wave", durationMs: 900 },
+            transitionOut: { type: "fade", durationMs: 1 },
+          },
+        ],
+      },
+      nameOf
+    );
+    expect(layout.widgets[0]!.transitionIn).toEqual({ type: "wave", durationMs: 900 });
+    expect(layout.widgets[0]).not.toHaveProperty("transitionOut");
+  });
+});
+
 describe("writeAlertLayout", () => {
   it("stores widgets in stacking order", () => {
     const layout = readAlertLayout(

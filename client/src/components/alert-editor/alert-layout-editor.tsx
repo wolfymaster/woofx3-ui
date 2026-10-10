@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { LayerInspector } from "@/components/alert-editor/layer-inspector";
+import { StartFromAlertDialog } from "@/components/alert-editor/start-from-alert-dialog";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
@@ -33,6 +34,8 @@ import {
   withCenter,
 } from "@/lib/alert-editor";
 import { type AlertLayout, readAlertLayout, writeAlertLayout } from "@/lib/alert-layout";
+import { copyAlertLayout, type ExistingAlert } from "@/lib/existing-alerts";
+import { coveringLayers } from "@/lib/layer-coverage";
 import { layersTopFirst, moveLayer } from "@/lib/layer-order";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import { placeableOn } from "@/lib/widget-surfaces";
@@ -51,6 +54,8 @@ interface AlertLayoutEditorProps {
   backLabel: string;
   /** Offered in the layers' text settings; whatever the step that owns this layout can reference. */
   availableVariables: VariableOption[];
+  /** This alert's own key (lib/existing-alerts.ts), so it is not offered as a start for itself. */
+  sourceKey?: string;
   /**
    * Hands the edited layout back in stored form, or `null` when nothing changed. Either
    * way the caller then leaves — the editor does no navigating of its own.
@@ -74,6 +79,7 @@ export function AlertLayoutEditor({
   context,
   backLabel,
   availableVariables,
+  sourceKey,
   onDone,
   onCancel,
 }: AlertLayoutEditorProps) {
@@ -103,6 +109,7 @@ export function AlertLayoutEditor({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const [choosingStart, setChoosingStart] = useState(false);
 
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
   const isDirty = layout !== null && openedAs !== null && JSON.stringify(writeAlertLayout(layout)) !== openedAs;
@@ -139,6 +146,14 @@ export function AlertLayoutEditor({
     );
     setSelectedId((current) => (current === widgetId ? null : current));
   }, []);
+
+  // Replaces the canvas rather than merging into it: two alerts' layers rarely fit
+  // together, and the layers it replaces come back with Cancel.
+  const startFrom = (alert: ExistingAlert) => {
+    setLayout(copyAlertLayout(readAlertLayout(alert.layout, nameOf)));
+    setSelectedId(null);
+    setChoosingStart(false);
+  };
 
   const addLayer = (row: CatalogWidget) => {
     if (!layout) {
@@ -206,6 +221,7 @@ export function AlertLayoutEditor({
     ? (catalog.find((row) => row.widgetId === selected.widgetCanonicalId)?.settings ?? [])
     : []) as unknown as ConfigField[];
   const layers = layersTopFirst(layout.widgets);
+  const coveredBy = coveringLayers(layout.widgets, { canCover: coversForItsWholeLength });
   const readout = `${layout.width} × ${layout.height}`;
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
 
@@ -240,6 +256,7 @@ export function AlertLayoutEditor({
       onSelect={setSelectedId}
       onMove={moveLayerTo}
       onDelete={deleteLayer}
+      coveredBy={coveredBy}
       horizontal={horizontal}
       emptyMessage="No layers yet. Add a widget to start."
     />
@@ -254,6 +271,7 @@ export function AlertLayoutEditor({
       displayText={displayText}
       onSelect={setSelectedId}
       onMove={(widgetId, center) => editLayer(widgetId, (w) => withCenter(w, center))}
+      onResize={(widgetId, size) => editLayer(widgetId, (w) => ({ ...w, size }))}
       onKeyDown={handleStageKeyDown}
     />
   );
@@ -274,6 +292,9 @@ export function AlertLayoutEditor({
               <code className="rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground">
                 {readout} | {lengthLabel}
               </code>
+              <Button variant="outline" onClick={() => setChoosingStart(true)} data-testid="button-start-from">
+                Start from…
+              </Button>
               <Button variant="ghost" onClick={leave}>
                 Cancel
               </Button>
@@ -306,11 +327,19 @@ export function AlertLayoutEditor({
             </header>
             <PhoneStageArea canvas={layout}>{stage}</PhoneStageArea>
             <div className="flex justify-between px-4 pb-2 font-mono text-xs text-muted-foreground">
-              <span>{readout} · drag to move</span>
+              <span>{readout} · drag to move, corner to resize</span>
               <span>{lengthLabel}</span>
             </div>
           </div>
           <div className="flex flex-col gap-6 px-4 py-5">
+            <Button
+              variant="outline"
+              className="h-11"
+              onClick={() => setChoosingStart(true)}
+              data-testid="button-start-from"
+            >
+              Start from an existing alert
+            </Button>
             {palette("row")}
             {layerList(true)}
             {inspector ? (
@@ -323,6 +352,14 @@ export function AlertLayoutEditor({
           </div>
         </div>
       )}
+
+      <StartFromAlertDialog
+        open={choosingStart}
+        onOpenChange={setChoosingStart}
+        currentKey={sourceKey}
+        replacesLayers={layout.widgets.length}
+        onPick={startFrom}
+      />
 
       <AlertDialog open={confirmingLeave} onOpenChange={setConfirmingLeave}>
         <AlertDialogContent>
@@ -414,4 +451,17 @@ function fileName(src: unknown): string {
     return src.split("/").pop() ?? src;
   }
   return "";
+}
+
+/**
+ * Whether `above` hides `below` for as long as `below` plays. Every layer starts with
+ * the alert, so that takes a length at least as long; a layer of no set length plays
+ * for as long as its media runs, which the editor cannot know. Audio draws nothing.
+ */
+function coversForItsWholeLength(above: Widget, below: Widget): boolean {
+  if (layerKind(above) === "audio" || layerKind(below) === "audio") {
+    return false;
+  }
+  const belowLength = durationOf(below);
+  return belowLength > 0 && durationOf(above) >= belowLength;
 }

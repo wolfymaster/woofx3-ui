@@ -61,6 +61,10 @@ A step is addressed by `commandStepId` (its `id`, or its position for a step wri
 
 Two thin pages supply that. `pages/alert-editor.tsx` finds the step in an event's workflow draft; `pages/command-step-alert-editor.tsx` finds it in a command's draft. Each navigates back to its own screen.
 
+Layers are placed on the canvas itself: drag a layer to move its center, and drag the selected layer's bottom-right corner to resize it, as on the scene canvas. The size lands in the layer's `size` in the stored layout, which is what the scene manager frames; the inspector holds the layer's content, position and duration but no size field.
+
+**Start from…** in the editor copies another alert's layout onto the canvas, so a new alert can begin as a variant of one that already works. `components/alert-editor/start-from-alert-dialog.tsx` lists every saved alert with a non-empty layout: trigger steps from the event workflows the Alerts screen can project, then chat command steps (`lib/existing-alerts.ts`). Each page passes its own step's key, so an alert is not offered as a start for itself. Picking one replaces the canvas with a copy whose layers get fresh ids and cloned settings (`copyAlertLayout`); the step's other parameters, such as its alert widget, stay as they were. The copy is an ordinary edit: Cancel brings the old layers back, and nothing is stored until Done and the owning screen's Save. The list reads what Convex mirrors from the engine, so an alert edited elsewhere but not yet saved is offered as it was last saved.
+
 The same canvas still opens in a dialog from the workflow builder and anywhere else a module declares a `layout` field, through `configFieldRenderers` in `components/workflows/trigger-config-form.tsx`. That path has not been converted.
 
 ## Groups

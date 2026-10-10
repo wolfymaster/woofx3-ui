@@ -10,6 +10,7 @@ import { Braces } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ConfigFieldDescription, ConfigFieldLabel } from "@/components/common/config-field-label";
 import { InternalSelectField, InternalSuggestField } from "@/components/common/field-options-picker";
+import { FontField } from "@/components/common/font-field";
 import { ListField } from "@/components/common/list-field";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Button } from "@/components/ui/button";
@@ -414,6 +415,7 @@ const builtinRenderers: Record<string, React.ComponentType<FieldRendererProps>> 
   select: SelectFieldRenderer,
   toggle: ToggleFieldRenderer,
   color: ColorFieldRenderer,
+  font: FontField,
 };
 
 // ---------------------------------------------------------------------------

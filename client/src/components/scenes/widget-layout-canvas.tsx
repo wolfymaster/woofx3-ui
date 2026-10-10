@@ -1,4 +1,5 @@
 import { alertWidgetName, nextAlertWidgetName } from "@convex/lib/alertWidgets";
+import type { PlacementTransition } from "@convex/lib/widgetTransitions";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -6,12 +7,14 @@ import type { CustomFieldRenderer } from "@/components/common/configuration-form
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
+import { coveringLayers } from "@/lib/layer-coverage";
 import { layersTopFirst, moveLayer, nextLayerZIndex } from "@/lib/layer-order";
 import type { VariableOption } from "@/lib/workflow-variables";
 import type { Widget } from "@/types";
 import { CanvasWidgetHandle, type RemoteSelection } from "./canvas-widget-handle";
 import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
+import { WidgetTransitionsSection } from "./widget-transitions-section";
 
 export type WidgetsUpdate = (widgets: Widget[]) => Widget[];
 
@@ -181,6 +184,11 @@ export function WidgetLayoutCanvas({
   const selectedWidgetFields = (selectedWidget ? (catalogRowFor(selectedWidget)?.settings ?? []) : []) as ConfigField[];
 
   const layers = layersTopFirst(widgets);
+  // An alert widget shows only while an alert plays, so whatever it covers is in sight the rest of the time.
+  const coveredBy = useMemo(
+    () => coveringLayers(widgets, { canCover: (above) => !isAlertWidget(above) }),
+    [widgets, isAlertWidget]
+  );
   const moveLayerTo = useCallback((widgetId: string, toIndex: number) => {
     onChangeRef.current((prev) => moveLayer(prev, widgetId, toIndex));
   }, []);
@@ -212,6 +220,7 @@ export function WidgetLayoutCanvas({
           onMove={moveLayerTo}
           onDelete={deleteWidget}
           onToggleVisible={canHide ? toggleVisible : undefined}
+          coveredBy={coveredBy}
           emptyMessage="Nothing on the canvas yet. Add a widget to start."
         />
       }
@@ -263,12 +272,30 @@ export function WidgetLayoutCanvas({
             onChangeSetting={(key, value) =>
               editWidget(selectedWidget.id, (w) => ({ ...w, settings: { ...w.settings, [key]: value } }))
             }
-          />
+          >
+            <WidgetTransitionsSection
+              widget={selectedWidget}
+              declared={catalogRowFor(selectedWidget)?.transitions ?? []}
+              onChange={(field, transition) =>
+                editWidget(selectedWidget.id, (w) => withTransition(w, field, transition))
+              }
+            />
+          </WidgetSettingsPanel>
         ) : null
       }
       inspectorFallback={<CanvasSummary width={width} height={height} count={widgets.length} />}
     />
   );
+}
+
+/** `widget` entering or leaving with `transition`, or with none when it is undefined. */
+function withTransition(
+  widget: Widget,
+  field: "transitionIn" | "transitionOut",
+  transition: PlacementTransition | undefined
+): Widget {
+  const { [field]: _previous, ...rest } = widget;
+  return transition ? { ...rest, [field]: transition } : rest;
 }
 
 /** What the right rail shows with nothing selected, so the rail is never blank. */

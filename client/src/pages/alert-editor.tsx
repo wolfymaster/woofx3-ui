@@ -14,6 +14,7 @@ import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { alertMenuPath } from "@/lib/alert-groups";
 import { sentenceParts } from "@/lib/condition-sentence";
 import { updateDraftValue } from "@/lib/event-drafts";
+import { triggerAlertKey } from "@/lib/existing-alerts";
 import { isCommandsSource, isInternalSource } from "@/lib/parse-config-fields";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import { projectedActionVariables } from "@/lib/workflow-variables";
@@ -147,6 +148,7 @@ export default function AlertEditorPage() {
         context={context}
         backLabel={triggerPreset.name}
         availableVariables={availableVariables}
+        sourceKey={draft?.value.engineWorkflowId ? triggerAlertKey(draft.value.engineWorkflowId, actionId) : undefined}
         onDone={(stored) => {
           if (stored !== null) {
             keepLayout(stored);

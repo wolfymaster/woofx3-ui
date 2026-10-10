@@ -53,8 +53,11 @@ const DEFAULT_DURATION: Record<LayerKind, number> = {
   other: 5,
 };
 
-/** Media layers keep a 16:9 box; the Width field sets both sides. */
-export const MEDIA_ASPECT = 9 / 16;
+/** A new media layer starts as a 16:9 box. */
+const MEDIA_ASPECT = 9 / 16;
+
+/** The smallest side a corner drag leaves a layer, the same floor the scene canvas keeps. */
+export const MIN_LAYER_SIDE = 50;
 
 /** Audio has nothing to draw, so it sits out of the way in the top right as a small marker. */
 const AUDIO_CENTER: Point = { x: 1780, y: 60 };
@@ -79,6 +82,18 @@ export function withCenter<T extends Pick<Widget, "position" | "size">>(widget: 
       x: Math.round(center.x - widget.size.width / 2),
       y: Math.round(center.y - widget.size.height / 2),
     },
+  };
+}
+
+/**
+ * A layer's size after its bottom-right corner moved by `delta` canvas pixels. The
+ * top-left corner stays put, as it does on the scene canvas, and each side keeps to
+ * whole pixels and to MIN_LAYER_SIDE.
+ */
+export function resizedBy(size: CanvasSize, delta: Point): CanvasSize {
+  return {
+    width: Math.max(MIN_LAYER_SIDE, Math.round(size.width + delta.x)),
+    height: Math.max(MIN_LAYER_SIDE, Math.round(size.height + delta.y)),
   };
 }
 
@@ -144,8 +159,8 @@ export function longestLayerId(widgets: readonly Pick<Widget, "id" | "settings">
 
 /**
  * The Text widget draws in a box the scene manager frames, so a box too short clips
- * the text. The box grows with the font size and the line count; its width is the
- * user's to set, and wrapping inside it is not predicted.
+ * the text. Editing the text or its font size refits the box to the line count; the
+ * corner handle sets its size otherwise, and wrapping inside it is not predicted.
  */
 export function textBoxHeight(fontSize: number, text: string): number {
   const lines = Math.max(1, text.split("\n").length);

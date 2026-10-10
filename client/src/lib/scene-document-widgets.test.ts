@@ -34,6 +34,18 @@ describe("documentOfCanvas + canvasOfDocument", () => {
     expect(diffDocuments(doc, restacked).every((op) => op.p[2] === "z")).toBe(true);
   });
 
+  it("round-trips a widget's transitions, and a widget without any carries none", () => {
+    const transitions = {
+      transitionIn: { type: "typewriter", durationMs: 1200 },
+      transitionOut: { type: "slide", durationMs: 400, direction: "down" as const },
+    };
+    const withTransitions = { ...canvas, widgets: [widget("a", 0, transitions), widget("b", 1)] };
+    const doc = documentOfCanvas(withTransitions, null);
+    expect(doc.widgets.a).toMatchObject(transitions);
+    expect(doc.widgets.b).not.toHaveProperty("transitionIn");
+    expect(canvasOfDocument(doc)).toEqual(withTransitions);
+  });
+
   it("keeps what the editor does not show from the document it read", () => {
     const doc = documentOfCanvas(canvas, null);
     doc.widgets.a!.extra = { futureField: 1 };
