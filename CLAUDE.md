@@ -128,6 +128,12 @@ bunx biome check --write .  # Auto-fix lint/format issues
 
 Always use `bun`/`bunx`, never `npm`/`npx`/`node`.
 
+### Worktrees and verification
+
+Toolchains are pinned in `mise.toml`. Create worktrees with the engine repo's `scripts/worktree.sh new <branch>`, which puts this repo and a matching engine worktree side by side under `~/code/wt/<branch>/`, so `../woofx3` resolves to the same branch. Start the dev server on the task's port from `../ports.env` (`bun run dev -- --port $WOOFX3_UI_PORT --strictPort`).
+
+Verify changes with `scripts/check.sh`. It runs CI's lint, type checks, tests and build for what changed against `master`, plus `companion/core` when that changed. It prints one PASS/FAIL line per check with a log path. `--quick` skips tests and the build; `--all` checks everything.
+
 ## Convex Guidelines
 
 **Always read `convex/_generated/ai/guidelines.md` first** when working on Convex code. Key rules:
