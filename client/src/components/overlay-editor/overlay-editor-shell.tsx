@@ -23,8 +23,8 @@ interface OverlayEditorShellProps {
    */
   className?: string;
   /**
-   * Shown but not editable, while what it edits waits on something else (a
-   * scene's draft while a Publish or Discard is answered). The header stays live.
+   * Shown but not editable: a scene the editor's session has not loaded yet,
+   * or one that no longer exists. The header stays live.
    */
   readOnly?: boolean;
 }
@@ -66,7 +66,6 @@ export function OverlayEditorShell({
           "grid min-h-0 flex-1 grid-cols-[216px_minmax(0,1fr)_320px] transition-opacity",
           readOnly && "pointer-events-none select-none opacity-60"
         )}
-        aria-busy={readOnly}
         aria-disabled={readOnly}
         data-testid="overlay-editor-body"
       >

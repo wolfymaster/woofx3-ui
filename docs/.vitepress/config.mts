@@ -44,6 +44,7 @@ export default defineConfig({
             { text: "configSchema contract", link: "/patterns/config-schema" },
             { text: "In-app help", link: "/patterns/in-app-help" },
             { text: "Dashboard widgets", link: "/patterns/dashboard-widgets" },
+            { text: "Scene editor sync", link: "/patterns/scene-editor-sync" },
           ],
         },
       ],

@@ -4,7 +4,7 @@
  * Declared here rather than imported because `@woofx3/api` does not export
  * them until the engine ships scene editor sessions. They must match
  * `SceneEditorSession` / `getSceneEditorSession` in the engine's
- * `shared/clients/typescript/api/api.ts` (capability `scenes.editorSessions`).
+ * `shared/clients/typescript/api/api.ts` (capability `scenes.editorSync`).
  * Once `@woofx3/api` exports them, import them from there and delete these.
  */
 
