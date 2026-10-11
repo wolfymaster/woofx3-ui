@@ -15,10 +15,11 @@ import type { StageZoom } from "@/components/common/stage-area";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
-import { canvasSettingsOf, type RemoteSelection } from "@/lib/scene-composition";
+import { canvasSettingsOf, catalogWidgetOf, type RemoteSelection } from "@/lib/scene-composition";
 import type { VariableOption } from "@/lib/workflow-variables";
 import { CanvasSummary } from "./canvas-summary";
 import { CanvasWidgetHandle } from "./canvas-widget-handle";
+import { WidgetBehaviorsSection } from "./widget-behaviors-section";
 import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
 
@@ -164,7 +165,8 @@ export function WidgetLayoutCanvas({
   );
 
   const selected = nodes.find((node) => node.id === state.selection.primary) ?? null;
-  const selectedFields = (selected ? (rowFor(selected.placement.widget)?.settings ?? []) : []) as ConfigField[];
+  const selectedRow = selected ? rowFor(selected.placement.widget) : undefined;
+  const selectedFields = (selectedRow?.settings ?? []) as ConfigField[];
 
   return (
     <OverlayEditorShell
@@ -250,7 +252,19 @@ export function WidgetLayoutCanvas({
             renderers={renderers}
             availableVariables={availableVariables}
             onChangeSetting={(key, value) => report(editor.nodes.patch(selected.id, { settings: { [key]: value } }))}
-          />
+          >
+            {state.doc !== null && (
+              <WidgetBehaviorsSection
+                editor={editor}
+                behaviors={state.doc.behaviors}
+                nodeId={selected.id}
+                row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
+                anchors={state.capabilities.anchors}
+                disabled={readOnly || state.capabilities.readOnly}
+                onRefused={onRefused}
+              />
+            )}
+          </WidgetSettingsPanel>
         ) : null
       }
       inspectorFallback={<CanvasSummary width={width} height={height} count={nodes.length} />}

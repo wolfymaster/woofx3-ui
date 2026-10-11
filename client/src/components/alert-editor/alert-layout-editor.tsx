@@ -11,6 +11,7 @@ import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
+import { WidgetBehaviorsSection } from "@/components/scenes/widget-behaviors-section";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,16 @@ import { useAlertLibrary } from "@/hooks/use-alert-library";
 import { useToast } from "@/hooks/use-toast";
 import { alertLengthSeconds, durationOf, formatSeconds, layerLabel, longestLayerId } from "@/lib/alert-editor";
 import { inlineCopyOfLibraryAlert } from "@/lib/alert-library";
+import {
+  activityEditFor,
+  activityOf,
+  hasActivities,
+  type LayerWindow,
+  layerWindowOf,
+  trackedLength,
+  trackWindowLabel,
+} from "@/lib/behavior-editor";
+import { catalogWidgetOf } from "@/lib/scene-composition";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -403,9 +414,14 @@ export function useAlertEditorView(
   const rowFor = (widgetId: string) => catalogRows.find((row) => row.widgetId === widgetId);
   const labelOf = (node: NodeView) =>
     layerLabel({ kind: node.kind, name: node.placement.name, settings: node.placement.settings }, displayText);
+  const doc = state.doc;
+  // Once a layer has a window of its own, a layer's duration alone no longer says when the alert ends:
+  // the editor's resolved tracks do.
+  const tracks = hasActivities(doc.behaviors) ? state.timeline.tracks : null;
+  const tracked = tracks === null ? null : trackedLength(tracks);
   const timed = nodes.map((node) => ({ id: node.id, settings: node.placement.settings }));
-  const length = alertLengthSeconds(timed);
-  const longestId = nodes.length > 1 ? longestLayerId(timed) : undefined;
+  const length = tracked === null ? alertLengthSeconds(timed) : tracked.endMs / 1000;
+  const longestId = nodes.length > 1 ? (tracked === null ? longestLayerId(timed) : tracked.longestId) : undefined;
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
   const placeable = new Set(state.palette.map((row) => row.widgetId));
   const paletteRows = catalogRows.filter((row) => placeable.has(row.widgetId));
@@ -414,18 +430,47 @@ export function useAlertEditorView(
     .map((node) => ({ id: node.id, visible: node.placement.visible, node }));
 
   const selected = nodes.find((node) => node.id === state.selection.primary) ?? null;
+  const changeWindow = (id: string, window: LayerWindow) => {
+    const edit = activityEditFor(activityOf(doc.behaviors, id), window);
+    switch (edit.op) {
+      case "none":
+        return;
+      case "add":
+        report(session.editor.behaviors.add(id, "activity", "window", edit.timing));
+        return;
+      case "patch":
+        report(session.editor.behaviors.patch(edit.id, { timing: edit.timing }));
+        return;
+      case "remove":
+        report(session.editor.behaviors.remove(edit.id));
+        return;
+    }
+  };
+  const selectedRow = selected ? rowFor(selected.placement.widget) : undefined;
   const inspector = selected ? (
     <LayerInspector
       key={selected.id}
       node={selected}
-      fields={(rowFor(selected.placement.widget)?.settings ?? []) as unknown as ConfigField[]}
+      fields={(selectedRow?.settings ?? []) as unknown as ConfigField[]}
       canvas={canvas}
       isLongest={selected.id === longestId}
       availableVariables={availableVariables}
       onChangeSettings={(settings) => report(session.editor.nodes.patch(selected.id, { settings }))}
       onResize={(width) => report(session.editor.nodes.resize(selected.id, { width }))}
       onMoveCenter={(center) => report(session.editor.nodes.moveCenter(selected.id, center))}
-    />
+      window={layerWindowOf(activityOf(doc.behaviors, selected.id)?.behavior ?? null)}
+      onChangeWindow={(window) => changeWindow(selected.id, window)}
+    >
+      <WidgetBehaviorsSection
+        editor={session.editor}
+        behaviors={doc.behaviors}
+        nodeId={selected.id}
+        row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
+        anchors={state.capabilities.anchors}
+        disabled={state.capabilities.readOnly}
+        onRefused={report}
+      />
+    </LayerInspector>
   ) : null;
 
   return {
@@ -448,6 +493,10 @@ export function useAlertEditorView(
         label={(layer) => labelOf(layer.node)}
         taxonomyOf={(layer) => rowFor(layer.node.placement.widget)?.taxonomy}
         meta={(layer) => {
+          const window = tracks === null ? null : trackWindowLabel(tracks, layer.id);
+          if (window !== null) {
+            return window;
+          }
           const duration = durationOf(layer.node.placement);
           return duration > 0 ? formatSeconds(duration) : "auto";
         }}
