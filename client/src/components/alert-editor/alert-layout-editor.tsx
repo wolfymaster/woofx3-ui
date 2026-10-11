@@ -30,7 +30,12 @@ import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { durationOf, formatSeconds, layerLabel, longestLayerId, playedLengthSeconds } from "@/lib/alert-editor";
-import { inlineCopyOfLibraryAlert, inputVariableOptions, unfilledInputsText } from "@/lib/alert-library";
+import {
+  initialLinkedInputs,
+  inlineCopyOfLibraryAlert,
+  inputVariableOptions,
+  unfilledInputsText,
+} from "@/lib/alert-library";
 import {
   activityEditFor,
   activityOf,
@@ -126,7 +131,7 @@ export function AlertLayoutEditor({
   };
   const use = (alert: LibraryAlert) => {
     setChoosingStart(false);
-    onLink?.(alert.engineCompositionId, {});
+    onLink?.(alert.engineCompositionId, initialLinkedInputs(alert, availableVariables));
   };
 
   return (
