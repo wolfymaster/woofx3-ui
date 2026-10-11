@@ -3,7 +3,7 @@ import type { WorkflowDefinition } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { type ActionCtx, action } from "./_generated/server";
+import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { CORRELATION_TIMEOUT_MS, nextPollDelayMs } from "./lib/completionPolling";
 import { unescapeDollarKeys } from "./lib/dollarKeys";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
@@ -18,6 +18,7 @@ import {
   type UnmetTriggerCondition,
 } from "./lib/engineTestRun";
 import { manualRunOrigin, UNRECORDED_ORIGIN } from "./lib/manualRunOrigin";
+import { logger } from "./logger";
 
 /**
  * The engine accepted a change but its webhook echo did not arrive in time.
@@ -387,6 +388,37 @@ export async function setWorkflowEnabledInEngine(
 
   await waitForCompletion(ctx, correlationKey);
 }
+
+/**
+ * Give a workflow that a starter pack or an import just created the enabled
+ * state it should have. The engine creates every workflow off, so this runs
+ * from the ledger that records the create's echo (lib/starterPackLedger.ts,
+ * lib/setupImportLedger.ts), once per create whether the echo came in time or
+ * late. A late confirmation is not a failure: the engine accepted the change,
+ * and its echo updates the mirror when it lands.
+ */
+export const applyEnabledAfterCreate = internalAction({
+  args: { instanceId: v.id("instances"), engineWorkflowId: v.string(), isEnabled: v.boolean() },
+  handler: async (ctx, { instanceId, engineWorkflowId, isEnabled }): Promise<void> => {
+    const bundle = await ctx.runQuery(internal.engineSyncInternal.getInstanceBundle, { instanceId });
+    if (!bundle) {
+      throw new Error(`Instance ${instanceId} is not registered with an engine`);
+    }
+    try {
+      await setWorkflowEnabledInEngine(ctx, instanceId, bundle, engineWorkflowId, isEnabled);
+    } catch (err) {
+      if (err instanceof EngineConfirmationTimeout) {
+        logger.warn("workflowActions: a created workflow's enabled state was not confirmed in time", {
+          instanceId,
+          engineWorkflowId,
+          isEnabled,
+        });
+        return;
+      }
+      throw err;
+    }
+  },
+});
 
 export const setEnabled = action({
   args: {
