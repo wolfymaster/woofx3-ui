@@ -3,7 +3,15 @@ import type { WorkflowDefinition } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { type ActionCtx, action, internalMutation, internalQuery, type QueryCtx, query } from "./_generated/server";
+import {
+  type ActionCtx,
+  action,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  type QueryCtx,
+  query,
+} from "./_generated/server";
 import { createCommandInEngine } from "./chatCommandActions";
 import { canonicalRefFromProjectionKey } from "./lib/canonicalRef";
 import { fetchEngineCapabilities } from "./lib/engineCapabilities";
@@ -23,7 +31,8 @@ import {
   validateStarterValues,
 } from "./lib/starterPacks";
 import { getInstanceMembership } from "./lib/teamAccess";
-import { createWorkflowInEngine, EngineConfirmationTimeout } from "./workflowActions";
+import { logger } from "./logger";
+import { createWorkflowInEngine, EngineConfirmationTimeout, setWorkflowEnabledInEngine } from "./workflowActions";
 import type { CatalogBundle } from "./workflowCatalogContext";
 
 /**
@@ -201,6 +210,30 @@ export const releaseItem = internalMutation({
       return;
     }
     await ctx.db.delete(rowId);
+  },
+});
+
+/**
+ * Switch on a workflow a starter pack created (see
+ * completeStarterItemByCorrelation). A late confirmation is not a failure: the
+ * engine accepted the change and its echo updates the mirror when it lands.
+ */
+export const enableWorkflow = internalAction({
+  args: { instanceId: v.id("instances"), engineWorkflowId: v.string() },
+  handler: async (ctx, { instanceId, engineWorkflowId }): Promise<void> => {
+    const bundle = await ctx.runQuery(internal.engineSyncInternal.getInstanceBundle, { instanceId });
+    if (!bundle) {
+      throw new Error(`Instance ${instanceId} is not registered with an engine`);
+    }
+    try {
+      await setWorkflowEnabledInEngine(ctx, instanceId, bundle, engineWorkflowId, true);
+    } catch (err) {
+      if (err instanceof EngineConfirmationTimeout) {
+        logger.warn("starterPacks: enabling a workflow was not confirmed in time", { instanceId, engineWorkflowId });
+        return;
+      }
+      throw err;
+    }
   },
 });
 

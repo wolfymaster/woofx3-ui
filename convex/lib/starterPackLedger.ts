@@ -1,3 +1,4 @@
+import { internal } from "../_generated/api";
 import type { MutationCtx } from "../_generated/server";
 
 /**
@@ -7,6 +8,11 @@ import type { MutationCtx } from "../_generated/server";
  * waiting, which would otherwise leave an engine workflow the ledger does not
  * know about and let a second install duplicate it. A no-op for every create
  * that was not a starter pack item.
+ *
+ * It also switches the workflow on. The engine creates every workflow off,
+ * but a starter pack is installed to work, not to be reviewed first. Doing it
+ * here rather than in the install action covers both a timely and a late echo
+ * with one engine call, since this runs exactly once per create.
  */
 export async function completeStarterItemByCorrelation(
   ctx: MutationCtx,
@@ -21,4 +27,8 @@ export async function completeStarterItemByCorrelation(
     return;
   }
   await ctx.db.patch(row._id, { status: "installed", engineId: engineWorkflowId });
+  await ctx.scheduler.runAfter(0, internal.starterPacks.enableWorkflow, {
+    instanceId: row.instanceId,
+    engineWorkflowId,
+  });
 }

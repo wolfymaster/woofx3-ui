@@ -25,6 +25,7 @@ export const workflowsStep: SyncStep = {
   name: "workflows",
   run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
     type WfPage = Awaited<ReturnType<EngineApi["getWorkflows"]>>;
+    const snapshotStartedAt = Date.now();
     const all: WfPage["workflows"] = [];
     let page = 1;
     while (true) {
@@ -57,6 +58,7 @@ export const workflowsStep: SyncStep = {
 
     return await ctx.runMutation(internal.engineSyncInternal.reconcileWorkflows, {
       instanceId,
+      snapshotStartedAt,
       engineIds,
       upserts,
     });
