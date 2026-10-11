@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
-import { compositionOfLibraryAlert, inputVariableOptions } from "@/lib/alert-library";
+import { compositionOfLibraryAlert, inputVariableOptions, libraryPreviewInputs } from "@/lib/alert-library";
 import { catalogOfRows } from "@/lib/scene-composition";
 
 interface LibraryAlertEditorProps {
@@ -98,7 +98,9 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   const inputKey = JSON.stringify(declaredInputs ?? []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputKey stands for the declared inputs' content
   const inputOptions = useMemo(() => inputVariableOptions(declaredInputs ?? []), [inputKey]);
-  const view = useAlertEditorView(handle, inputOptions);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: inputKey stands for the declared inputs' content
+  const previewInputs = useMemo(() => libraryPreviewInputs(declaredInputs ?? []), [inputKey]);
+  const view = useAlertEditorView(handle, inputOptions, previewInputs);
 
   const runDraftCommand = (command: DraftCommand) => {
     const taken = client !== null && (command === "publish" ? client.publish() : client.discard());

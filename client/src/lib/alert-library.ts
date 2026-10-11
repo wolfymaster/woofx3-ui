@@ -224,3 +224,14 @@ export function inputVariableOptions(inputs: readonly InputField[]): VariableOpt
     };
   });
 }
+
+/**
+ * What a library alert's editor previews its inputs with: each input's
+ * default, or its `{id}` as text where it has none, so the preview shows
+ * where the value goes rather than refusing to play.
+ */
+export function libraryPreviewInputs(inputs: readonly InputField[]): Record<string, unknown> {
+  return Object.fromEntries(
+    inputs.map((input) => [input.id, input.defaultValue !== undefined ? input.defaultValue : `{${input.id}}`])
+  );
+}
