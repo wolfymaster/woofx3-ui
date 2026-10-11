@@ -45,6 +45,8 @@ bunx biome check .
 bunx biome check --write .
 ```
 
+Verify with **`scripts/check.sh`**: it runs CI's checks for what changed and prints one PASS/FAIL line each (`--quick` skips tests and the build). Create worktrees with `../woofx3/scripts/worktree.sh new <branch>` so the engine checkout sits beside this one; see `CLAUDE.md`.
+
 ## Convex
 
 <!-- convex-ai-start -->
