@@ -1,13 +1,16 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type CanvasSize, centerOf, type NodeView, type Point, type WidgetKind } from "@woofx3/scene/editor";
 import { Minus, Plus } from "lucide-react";
+import type { ReactNode } from "react";
 import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { durationOf } from "@/lib/alert-editor";
+import { type LayerWindow, layerWindowLabel } from "@/lib/behavior-editor";
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
 import { cn } from "@/lib/utils";
@@ -50,6 +53,11 @@ interface LayerInspectorProps {
   onResize: (width: number) => void;
   /** Move the layer's centre, kept on the canvas. */
   onMoveCenter: (center: Point) => void;
+  /** When the layer plays within the alert. */
+  window: LayerWindow;
+  onChangeWindow: (window: LayerWindow) => void;
+  /** Shown below the layer's settings: its transitions and effects. */
+  children?: ReactNode;
 }
 
 /**
@@ -66,6 +74,9 @@ export function LayerInspector({
   onChangeSettings,
   onResize,
   onMoveCenter,
+  window,
+  onChangeWindow,
+  children,
 }: LayerInspectorProps) {
   const { kind, placement } = node;
   const center = centerOf(placement);
@@ -204,6 +215,8 @@ export function LayerInspector({
         </p>
       </div>
 
+      <LayerWindowFields idPrefix={idPrefix} window={window} onChange={onChangeWindow} />
+
       {moreFields.length > 0 && (
         <details className="group" open={kind === "other"}>
           <summary className="cursor-pointer text-sm font-medium text-muted-foreground">More settings</summary>
@@ -223,7 +236,72 @@ export function LayerInspector({
           </div>
         </details>
       )}
+
+      {children}
     </div>
+  );
+}
+
+/** Longest a layer's start or stay may be set to here, in seconds: an alert is cut off at five minutes. */
+const MAX_WINDOW_SECONDS = 300;
+const STAYS_UNTIL_COMPLETE = "complete";
+const STAYS_FOR = "for";
+
+/** When the layer enters after the alert starts, and whether it stays until it completes or for a set time. */
+function LayerWindowFields({
+  idPrefix,
+  window,
+  onChange,
+}: {
+  idPrefix: string;
+  window: LayerWindow;
+  onChange: (window: LayerWindow) => void;
+}) {
+  const toMs = (seconds: number) => Math.round(seconds * 1000);
+  return (
+    <fieldset className="flex flex-col gap-3">
+      <legend className="mb-2 text-sm font-medium">Timing</legend>
+      <Stepper
+        id={`${idPrefix}-starts-after`}
+        label="Starts after"
+        value={window.startMs / 1000}
+        step={0.5}
+        min={0}
+        max={MAX_WINDOW_SECONDS}
+        unit="s"
+        onChange={(seconds) => onChange({ ...window, startMs: toMs(seconds) })}
+      />
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${idPrefix}-stays`}>Stays</Label>
+        <Select
+          value={window.stayMs === null ? STAYS_UNTIL_COMPLETE : STAYS_FOR}
+          onValueChange={(next) =>
+            onChange({ ...window, stayMs: next === STAYS_UNTIL_COMPLETE ? null : (window.stayMs ?? 5_000) })
+          }
+        >
+          <SelectTrigger id={`${idPrefix}-stays`} className="h-11 lg:h-9" data-testid={`select-${idPrefix}-stays`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={STAYS_UNTIL_COMPLETE}>Until it completes</SelectItem>
+            <SelectItem value={STAYS_FOR}>For a set time</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {window.stayMs !== null && (
+        <Stepper
+          id={`${idPrefix}-stays-for`}
+          label="Stays for"
+          value={window.stayMs / 1000}
+          step={0.5}
+          min={0.5}
+          max={MAX_WINDOW_SECONDS}
+          unit="s"
+          onChange={(seconds) => onChange({ ...window, stayMs: toMs(seconds) })}
+        />
+      )}
+      <p className="text-xs text-muted-foreground">{layerWindowLabel(window)}.</p>
+    </fieldset>
   );
 }
 
