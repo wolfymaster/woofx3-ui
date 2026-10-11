@@ -193,6 +193,7 @@ export function AlertLayoutEditor({
             onOpenChange={setSavingToLibrary}
             doc={session.state.doc}
             availableVariables={availableVariables}
+            takenNames={library.alerts?.map((alert) => alert.name)}
             onSaved={() => setSavingToLibrary(false)}
           />
         </>
