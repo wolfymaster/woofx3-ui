@@ -23,7 +23,10 @@ FROM oven/bun:${BUN_VERSION} AS build
 WORKDIR /src/woofx3/shared/clients/typescript/api
 COPY --from=engine-api package.json bun.lock ./
 RUN bun install --frozen-lockfile
-COPY --from=engine-api *.ts ./
+# The whole package, subdirectories included (the client imports
+# `@woofx3/api/scene-editor/*`), minus tests and any node_modules the host
+# installed into the context: the dependencies come from the install above.
+COPY --from=engine-api --exclude=**/node_modules --exclude=**/*.test.ts . ./
 
 WORKDIR /src/woofx3-ui
 # postinstall runs ensure-engine-path.mjs, which checks ../woofx3 is in place.
