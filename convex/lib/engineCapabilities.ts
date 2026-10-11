@@ -16,7 +16,6 @@ import { createEngineRpcSession } from "./engineInstanceUrl";
 /** The ids this UI gates on. Ids an engine lists beyond these are ignored. */
 export const ENGINE_CAPABILITY_IDS = [
   "alerts.compositionLayout",
-  "alerts.compositions",
   "alerts.queueControls",
   "analytics.aggregates",
   "analytics.gauges",

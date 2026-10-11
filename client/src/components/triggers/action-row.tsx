@@ -3,12 +3,10 @@ import { ArrowDown, ArrowRight, ArrowUp, Bell, type LucideIcon, Trash2 } from "l
 import { Link } from "wouter";
 import { AlertLayoutPreview } from "@/components/alerts/alert-layout-preview";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
-import { LinkedAlertStepForm } from "@/components/triggers/linked-alert-step-form";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TriggerConfigForm } from "@/components/workflows/trigger-config-form";
-import { linkedCompositionId } from "@/lib/alert-library";
 import { cn } from "@/lib/utils";
 import type { ActionPreset, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -80,8 +78,6 @@ export function ActionRow({
   const isFirst = stepNumber === 1;
   const Icon = stepIcon(action, preset);
   const concurrentId = `step-concurrent-${action.id}`;
-  // A step that plays a library alert has no layout of its own; see lib/alert-library.ts.
-  const linkedId = action.handlerType === "alert" ? linkedCompositionId(action.parameters) : null;
 
   return (
     <div className={cn("rounded-[10px] border", isExpanded ? "bg-muted/50" : "bg-muted/30")}>
@@ -153,15 +149,6 @@ export function ActionRow({
               This action isn't in the catalog — its settings are kept as they are. Reinstall the module that provides
               it, or edit the workflow in the builder.
             </p>
-          ) : alertEditorHref && linkedId !== null ? (
-            <LinkedAlertStepForm
-              compositionId={linkedId}
-              fields={fields}
-              values={action.parameters}
-              onChange={onChangeParameters}
-              availableVariables={availableVariables}
-              alertEditorHref={alertEditorHref}
-            />
           ) : fields.length === 0 ? (
             <p className="text-xs text-muted-foreground">This step has no settings.</p>
           ) : (

@@ -192,12 +192,4 @@ describe("alert step summary", () => {
       ["Alert: Empty"]
     );
   });
-
-  test("names a linked library alert", () => {
-    const params = { composition: "comp-1", inputs: {} };
-    expect(actionNodeSummary(alertNode(params), [alertAction], new Map([["comp-1", "Follower thanks"]]))).toEqual([
-      "Alert: Follower thanks",
-    ]);
-    expect(actionNodeSummary(alertNode(params), [alertAction])).toEqual(["Alert: Library alert"]);
-  });
 });

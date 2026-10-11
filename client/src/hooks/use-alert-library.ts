@@ -7,7 +7,7 @@ import { useInstance } from "@/hooks/use-instance";
 import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
 
 export interface AlertLibrary {
-  /** The engine stores alerts and plays steps that link one. Everything below is offered only then. */
+  /** The engine stores an alert library. Everything below is offered only then. */
   enabled: boolean;
   /** The library by name, undefined while loading or while not enabled. */
   alerts: Doc<"alertCompositions">[] | undefined;

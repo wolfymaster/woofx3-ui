@@ -2,7 +2,6 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import { stackOrder } from "@woofx3/scene/model";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { alertCompositionOf } from "@/lib/alert-layout";
-import { linkedCompositionId } from "@/lib/alert-library";
 import { toMediaValue } from "@/lib/media-value";
 import { isCommandsSource, parseConfigFields } from "@/lib/parse-config-fields";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
@@ -99,10 +98,7 @@ export function triggerNodeSummary(
   return parts;
 }
 
-/**
- * Configured-value summary lines for an action step, for display without opening its settings.
- * `resourceLabels` names what a step refers to by id: module resource instances and library alerts.
- */
+/** Configured-value summary lines for an action step, for display without opening its settings. */
 export function actionNodeSummary(
   node: ActionNode,
   catalog: CatalogActionRow[],
@@ -114,12 +110,7 @@ export function actionNodeSummary(
     return [];
   }
   const parts: string[] = [];
-  const linkedAlert = linkedCompositionId(node.parameters);
   for (const field of fields) {
-    if (field.type === "layout" && linkedAlert !== null) {
-      parts.push(`${field.label}: ${resourceLabels?.get(linkedAlert) ?? "Library alert"}`);
-      continue;
-    }
     const formatted = formatFieldSummaryValue(field, node.parameters[field.id], resourceLabels);
     if (formatted) {
       parts.push(`${field.label}: ${formatted}`);

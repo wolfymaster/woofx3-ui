@@ -43,13 +43,6 @@ export function playedLengthSeconds(
   return alertLengthSeconds(layers);
 }
 
-/** The one layer that sets the alert's length, when there is exactly one longest. */
-export function longestLayerId(layers: readonly TimedLayer[]): string | undefined {
-  const length = alertLengthSeconds(layers);
-  const longest = layers.filter((layer) => length > 0 && durationOf(layer) === length);
-  return longest.length === 1 ? longest[0].id : undefined;
-}
-
 /** Seconds as the editor's readouts show them: whole seconds bare, anything else to a tenth. */
 export function formatSeconds(seconds: number): string {
   return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;

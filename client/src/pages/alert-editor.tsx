@@ -5,7 +5,6 @@ import { Bell, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { AlertLayoutEditor } from "@/components/alert-editor/alert-layout-editor";
-import { LinkedAlertEditor } from "@/components/alert-editor/linked-alert-editor";
 import { EmptyState } from "@/components/common/empty-state";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
@@ -13,13 +12,6 @@ import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { alertMenuPath } from "@/lib/alert-groups";
-import {
-  type AlertStepParams,
-  inlineAlertParams,
-  linkedAlertParams,
-  linkedCompositionId,
-  linkedInputValues,
-} from "@/lib/alert-library";
 import { sentenceParts } from "@/lib/condition-sentence";
 import { updateDraftValue } from "@/lib/event-drafts";
 import { isCommandsSource, isInternalSource } from "@/lib/parse-config-fields";
@@ -80,7 +72,7 @@ export default function AlertEditorPage() {
   const menuPath = triggerPreset ? alertMenuPath(triggerPreset) : undefined;
   const backHref = menuPath ? `/stream/alerts/${menuPath.map(encodeURIComponent).join("/")}` : "/stream/alerts";
 
-  const updateParams = (change: (params: AlertStepParams) => AlertStepParams) => {
+  const keepLayout = (stored: unknown) => {
     updateDraftValue(event, (current) => ({
       ...current,
       triggers: current.triggers.map((t) =>
@@ -88,14 +80,13 @@ export default function AlertEditorPage() {
           ? {
               ...t,
               actions: t.actions.map((a) =>
-                a.id === actionId ? { ...a, parameters: change(a.parameters) as typeof a.parameters } : a
+                a.id === actionId ? { ...a, parameters: { ...a.parameters, layout: stored as never } } : a
               ),
             }
           : t
       ),
     }));
   };
-  const keepLayout = (stored: unknown) => updateParams((params) => ({ ...params, layout: stored }));
 
   if (catalogLoading || workflows === undefined) {
     return (
@@ -153,44 +144,25 @@ export default function AlertEditorPage() {
     </>
   );
 
-  const stepParams = action.parameters as AlertStepParams;
-  const linkedId = linkedCompositionId(stepParams);
-
   return (
     <>
       {conditionFields.filter(isInternalSource).map((field) => (
         <FieldOptionsLoader key={field.id} field={field} onLoaded={handleOptionsLoaded} />
       ))}
-      {linkedId !== null && instance ? (
-        <LinkedAlertEditor
-          instanceId={instance._id}
-          compositionId={linkedId}
-          inputValues={linkedInputValues(stepParams)}
-          context={context}
-          backLabel={triggerPreset.name}
-          availableVariables={availableVariables}
-          owner="trigger"
-          onBack={() => navigate(backHref)}
-          onDuplicateHere={(layout) => updateParams((current) => inlineAlertParams(current, layout))}
-        />
-      ) : (
-        <AlertLayoutEditor
-          value={action.parameters.layout}
-          context={context}
-          backLabel={triggerPreset.name}
-          availableVariables={availableVariables}
-          onDone={(stored) => {
-            if (stored !== null) {
-              keepLayout(stored);
-            }
-            navigate(backHref);
-          }}
-          onCancel={() => navigate(backHref)}
-          onLink={(compositionId, inputs) =>
-            updateParams((current) => linkedAlertParams(current, compositionId, inputs))
+      <AlertLayoutEditor
+        value={action.parameters.layout}
+        context={context}
+        backLabel={triggerPreset.name}
+        availableVariables={availableVariables}
+        onDone={(stored) => {
+          if (stored !== null) {
+            keepLayout(stored);
           }
-        />
-      )}
+          navigate(backHref);
+        }}
+        onCancel={() => navigate(backHref)}
+        offerLibrary
+      />
     </>
   );
 }

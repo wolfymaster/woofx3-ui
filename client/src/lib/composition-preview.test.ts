@@ -5,7 +5,6 @@ import {
   formatPlayhead,
   overridesOf,
   previewDocumentOf,
-  previewInputsOf,
   problemText,
   sampleEventOf,
   undrawnIds,
@@ -65,15 +64,6 @@ describe("previewDocumentOf", () => {
       behaviors: {},
     };
     expect(previewDocumentOf(doc, NAMES).widgets.a.settings.text).toBe("${gone.value}");
-  });
-});
-
-describe("previewInputsOf", () => {
-  it("shortens references inside a linked alert's input values", () => {
-    expect(previewInputsOf({ title: "${trigger.data.amount} bits", count: 3 }, NAMES)).toEqual({
-      title: "{amount} bits",
-      count: 3,
-    });
   });
 });
 

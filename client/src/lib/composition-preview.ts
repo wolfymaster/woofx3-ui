@@ -38,11 +38,6 @@ export function previewDocumentOf(doc: CompositionDocument, names: VariableNames
   return { ...doc, widgets };
 }
 
-/** Step input values as the page binds them, references shortened the same way. */
-export function previewInputsOf(inputs: Record<string, unknown>, names: VariableNames): Record<string, unknown> {
-  return displayValuesOf(inputs, names) as Record<string, unknown>;
-}
-
 function displayValuesOf(value: unknown, names: VariableNames): unknown {
   if (typeof value === "string") {
     return toDisplayText(value, names);

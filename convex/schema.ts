@@ -1314,7 +1314,7 @@ export default defineSchema({
     .index("by_instance", ["instanceId"])
     .index("by_engine_scene_id", ["instanceId", "engineSceneId"]),
 
-  // alertCompositions: alerts stored in the engine for steps to link by id.
+  // alertCompositions: alerts stored in the engine as starting points for steps.
   // The engine keeps them in its scenes table (`kind: "alert"`) and reports
   // them with the scene webhooks; they are cached apart from `scenes` so no
   // scene listing, browser source or scene child table can ever reach one.
@@ -1330,7 +1330,7 @@ export default defineSchema({
     layout: v.any(),
     /** The published behaviors, keyed by behavior id. */
     behaviors: v.any(),
-    /** The inputs a linking step fills in: ConfigField-shaped objects, each with a unique `id`. */
+    /** The `{{id}}` placeholders a copy fills in from its step: ConfigField-shaped objects, each with a unique `id`. */
     inputs: v.array(v.any()),
     createdByType: v.optional(v.string()),
     createdByRef: v.optional(v.string()),

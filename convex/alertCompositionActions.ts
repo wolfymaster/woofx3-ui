@@ -1,4 +1,3 @@
-import type { CompositionLinkInfo, DeleteAlertCompositionResult } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -8,7 +7,8 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import { type InstanceContext, requireInstanceContext } from "./sceneActions";
 
 // The engine's alert library (capability `compositions.alerts`): alerts
-// stored in the engine that workflow and command steps link by id. Every
+// stored in the engine as starting points. A step never plays one by id: the
+// alert editor copies one into the step, which keeps the copy. Every
 // write reaches the cache through the engine's `scene.*` webhooks, which
 // carry `kind: "alert"`; `refresh` catches the cache up by listing them. The
 // document itself is edited through the scene editor socket
@@ -110,22 +110,14 @@ export const update = action({
 });
 
 /**
- * Deletes an alert. The engine refuses while steps still link it and names
- * them in `links`, so the dashboard can say where it is used.
+ * Deletes an alert. Steps hold copies of library alerts, never references,
+ * so nothing that plays depends on it.
  */
 export const remove = action({
   args: { instanceId: v.id("instances"), engineCompositionId: v.string() },
-  handler: async (ctx, args): Promise<DeleteAlertCompositionResult> => {
+  handler: async (ctx, args): Promise<{ success: boolean }> => {
     const engine = await requireAlertLibrary(ctx, args.instanceId);
-    return await session(engine).deleteAlertComposition(args.engineCompositionId, crypto.randomUUID());
-  },
-});
-
-/** The workflow and command steps that play an alert. */
-export const listLinks = action({
-  args: { instanceId: v.id("instances"), engineCompositionId: v.string() },
-  handler: async (ctx, args): Promise<CompositionLinkInfo[]> => {
-    const engine = await requireAlertLibrary(ctx, args.instanceId);
-    return await session(engine).listCompositionLinks(args.engineCompositionId);
+    const result = await session(engine).deleteAlertComposition(args.engineCompositionId, crypto.randomUUID());
+    return { success: result.success };
   },
 });

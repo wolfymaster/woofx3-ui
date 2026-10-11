@@ -1,26 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import type { Doc } from "@convex/_generated/dataModel";
-import type { ActionStep } from "@woofx3/api";
 import { bindInputs, stackOrder } from "@woofx3/scene/model";
 import {
-  commandStepNumbers,
   compositionOfLibraryAlert,
-  describeLinks,
-  initialLinkedInputs,
-  inlineAlertParams,
   inlineCopyOfLibraryAlert,
-  inputFieldsOf,
   inputVariableOptions,
-  inputVariableWarnings,
   type LibraryAlertDocument,
   libraryAlertOfStep,
   libraryJsonOf,
-  linkedAlertParams,
-  linkedCompositionId,
-  linkedInputValues,
-  linkOwnerKey,
-  unprovidedVariables,
-  workflowStepNumbers,
+  libraryPreviewInputs,
 } from "@/lib/alert-library";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -56,104 +43,6 @@ function libraryRow(overrides: Partial<LibraryAlertDocument> = {}): LibraryAlert
     ...overrides,
   };
 }
-
-describe("step parameters", () => {
-  test("a step with its own layout links nothing", () => {
-    expect(linkedCompositionId({ target: "default", layout: {} })).toBeNull();
-    expect(linkedCompositionId({ composition: "" })).toBeNull();
-    expect(linkedCompositionId(undefined)).toBeNull();
-  });
-
-  test("linking replaces the layout with the alert's id and the inputs, keeping the target", () => {
-    const linked = linkedAlertParams({ target: "main", layout: { widgets: [] } }, "c-1", {
-      name: "${trigger.data.user}",
-    });
-    expect(linked).toEqual({ target: "main", composition: "c-1", inputs: { name: "${trigger.data.user}" } });
-    expect(linkedCompositionId(linked)).toBe("c-1");
-    expect(linkedInputValues(linked)).toEqual({ name: "${trigger.data.user}" });
-  });
-
-  test("linking starts with no input values", () => {
-    expect(linkedAlertParams({ target: "default" }, "c-1")).toEqual({
-      target: "default",
-      composition: "c-1",
-      inputs: {},
-    });
-  });
-
-  test("a step holds exactly one of layout and composition", () => {
-    const inline = inlineAlertParams({ target: "main", composition: "c-1", inputs: { a: 1 } }, { widgets: [] });
-    expect(inline).toEqual({ target: "main", layout: { widgets: [] } });
-    const relinked = linkedAlertParams(inline, "c-2");
-    expect(relinked).not.toHaveProperty("layout");
-  });
-
-  test("linking refuses an empty id", () => {
-    expect(() => linkedAlertParams({}, "")).toThrow();
-  });
-
-  test("input values that are not an object read as none", () => {
-    expect(linkedInputValues({ inputs: "nope" })).toEqual({});
-  });
-});
-
-describe("inputFieldsOf", () => {
-  test("keeps an input's field definition for the form", () => {
-    const fields = inputFieldsOf([
-      { id: "amount", label: "Amount", type: "number", min: 0 },
-      { id: "sound", label: "Sound", type: "media", mediaType: "audio" },
-    ]);
-    expect(fields).toEqual([
-      { id: "amount", label: "Amount", type: "number", min: 0 },
-      { id: "sound", label: "Sound", type: "media", mediaType: "audio" },
-    ]);
-  });
-
-  test("labels an input by its id and draws an unknown type as text", () => {
-    expect(inputFieldsOf([{ id: "name", type: "fancy" }])).toEqual([{ id: "name", label: "name", type: "text" }]);
-  });
-
-  test("leaves out what cannot be an input", () => {
-    expect(
-      inputFieldsOf([{ id: "inner", type: "layout" }, { id: "go", type: "button" }, { label: "no id" }, "x", null])
-    ).toEqual([]);
-  });
-});
-
-describe("variable warnings", () => {
-  const available = [variable("${trigger.data.user.name}"), variable("${trigger.data.amount}")];
-
-  test("a variable the trigger provides is fine, as is the object above one", () => {
-    expect(unprovidedVariables("${trigger.data.user.name} gave ${trigger.data.amount}", available)).toEqual([]);
-    expect(unprovidedVariables("${trigger.data.user}", available)).toEqual([]);
-  });
-
-  test("a variable the trigger does not provide is named", () => {
-    expect(unprovidedVariables("Hi ${trigger.data.viewers}", available)).toEqual(["${trigger.data.viewers}"]);
-  });
-
-  test("assets and expressions are not judged", () => {
-    expect(unprovidedVariables("${asset:pleasure}", available)).toEqual([]);
-    expect(unprovidedVariables("${trigger.data.amount * 2}", available)).toEqual([]);
-  });
-
-  test("values inside objects and lists are searched", () => {
-    expect(unprovidedVariables({ a: ["${steps.x.out}"] }, available)).toEqual(["${steps.x.out}"]);
-  });
-
-  test("each input with a missing variable gets one warning", () => {
-    const fields = inputFieldsOf([
-      { id: "name", label: "Name", type: "text" },
-      { id: "count", label: "Count", type: "number" },
-    ]);
-    const warnings = inputVariableWarnings(
-      fields,
-      { name: "${trigger.data.user.name}", count: "${trigger.data.months}" },
-      available
-    );
-    expect(warnings).toEqual([{ inputId: "count", label: "Count", references: ["${trigger.data.months}"] }]);
-  });
-});
 
 describe("compositionOfLibraryAlert", () => {
   test("reads the engine's stored placement list in stacking order, with its canvas", () => {
@@ -196,63 +85,35 @@ describe("compositionOfLibraryAlert inputs", () => {
   });
 });
 
-describe("initialLinkedInputs", () => {
-  test("fills an input with no default from the variable it is named after", () => {
-    const row = { inputs: [{ id: "userName", label: "User", type: "text" }] };
-    const available = [variable("${trigger.data.userId}"), variable("${trigger.data.userName}")];
-    expect(initialLinkedInputs(row, available)).toEqual({ userName: "${trigger.data.userName}" });
-  });
-
-  test("leaves an input with a default, or with no such variable, to the step", () => {
-    const row = {
-      inputs: [
-        { id: "name", label: "Name", type: "text", defaultValue: "friend" },
-        { id: "amount", label: "Amount", type: "number" },
-      ],
-    };
-    expect(initialLinkedInputs(row, [variable("${trigger.data.name}")])).toEqual({});
-  });
-});
-
 describe("inlineCopyOfLibraryAlert", () => {
-  test("fills inputs in from the step's values", () => {
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(libraryRow(), { name: "${trigger.data.user}" });
+  const userName = variable("${trigger.data.user.name}");
+
+  test("fills an input with the step's variable it is named after", () => {
+    const available = [variable("${trigger.data.amount}"), userName];
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(libraryRow(), available);
     expect(unfilled).toEqual([]);
-    expect(doc.widgets.top?.settings).toEqual({ text: "Thanks ${trigger.data.user}!" });
+    expect(doc.widgets.top?.settings).toEqual({ text: "Thanks ${trigger.data.user.name}!" });
     expect(doc).not.toHaveProperty("inputs");
   });
 
-  test("an input with no value takes its default", () => {
-    const { doc } = inlineCopyOfLibraryAlert(libraryRow());
+  test("an input the step has no variable for takes its default", () => {
+    const { doc } = inlineCopyOfLibraryAlert(libraryRow(), [variable("${trigger.data.amount}")]);
     expect(doc.widgets.top?.settings).toEqual({ text: "Thanks friend!" });
-  });
-
-  test("an input with no value or default takes the variable it is named after", () => {
-    const row = libraryRow({ inputs: [{ id: "name", label: "Name", type: "text" }] });
-    const available = [variable("${trigger.data.amount}"), variable("${trigger.data.user.name}")];
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(row, {}, available);
-    expect(unfilled).toEqual([]);
-    expect(doc.widgets.top?.settings).toEqual({ text: "Thanks ${trigger.data.user.name}!" });
   });
 
   test("an input with nothing to fill it is kept visible as {id} and named", () => {
     const row = libraryRow({ inputs: [{ id: "name", label: "Name", type: "text" }] });
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(row, {}, [variable("${trigger.data.amount}")]);
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(row, [variable("${trigger.data.amount}")]);
     expect(unfilled).toEqual(["name"]);
-    expect(doc.widgets.top?.settings).toEqual({ text: "Thanks {name}!" });
-  });
-
-  test("an empty step value does not erase the text", () => {
-    const row = libraryRow({ inputs: [{ id: "name", label: "Name", type: "text" }] });
-    const { doc } = inlineCopyOfLibraryAlert(row, { name: "" });
     expect(doc.widgets.top?.settings).toEqual({ text: "Thanks {name}!" });
   });
 
   test("fills a reference to an input the alert does not declare", () => {
     const row = libraryRow({ inputs: [] });
-    const bound = inlineCopyOfLibraryAlert(row, { name: "${trigger.data.userName}" });
-    expect(bound.doc.widgets.top?.settings).toEqual({ text: "Thanks ${trigger.data.userName}!" });
-    const unbound = inlineCopyOfLibraryAlert(row);
+    expect(inlineCopyOfLibraryAlert(row, [userName]).doc.widgets.top?.settings).toEqual({
+      text: "Thanks ${trigger.data.user.name}!",
+    });
+    const unbound = inlineCopyOfLibraryAlert(row, []);
     expect(unbound.unfilled).toEqual(["name"]);
     expect(unbound.doc.widgets.top?.settings).toEqual({ text: "Thanks {name}!" });
   });
@@ -263,18 +124,17 @@ describe("inputVariableOptions", () => {
     expect(
       inputVariableOptions([
         { id: "userName", label: "User name", type: "text" },
-        { id: "amount", label: "Bits", type: "number" },
-        { label: "no id" },
+        { id: "amount", label: "", type: "number" },
       ])
     ).toEqual([
       { value: "{{userName}}", label: "User name", group: "Alert inputs", type: "string", description: undefined },
-      { value: "{{amount}}", label: "Bits", group: "Alert inputs", type: "number", description: undefined },
+      { value: "{{amount}}", label: "amount", group: "Alert inputs", type: "number", description: undefined },
     ]);
   });
 });
 
 describe("libraryAlertOfStep", () => {
-  test("turns each variable into an input the step fills in with that variable", () => {
+  test("turns each variable into an input named after it", () => {
     const step = compositionOfLibraryAlert(
       libraryRow({
         widgets: [
@@ -285,25 +145,29 @@ describe("libraryAlertOfStep", () => {
       })
     );
     const available = [variable("${trigger.data.user}", "User"), variable("${trigger.data.amount}", "Bits", "number")];
-    const { doc, values } = libraryAlertOfStep(step, available);
+    const doc = libraryAlertOfStep(step, available);
     expect(doc.inputs).toEqual([
       { id: "user", label: "User", type: "text" },
       { id: "amount", label: "Bits", type: "number" },
     ]);
-    expect(values).toEqual({ user: "${trigger.data.user}", amount: "${trigger.data.amount}" });
     expect(doc.widgets.text?.settings).toEqual({ text: "{{user}} cheered {{amount}} \\{{bits}}" });
     expect(doc.widgets.count?.settings).toEqual({ value: { $input: "amount" } });
   });
 
-  test("a library copy bound with those values plays what the step played", () => {
+  test("a copy started from it in a step with the same variables shows what the step showed", () => {
     const step = compositionOfLibraryAlert(
       libraryRow({ widgets: [entry("t", 0, { text: "Hi ${trigger.data.user}" })], inputs: [] })
     );
-    const { doc, values } = libraryAlertOfStep(step, []);
-    const stored = JSON.parse(libraryJsonOf(doc).inputsJson);
+    const available = [variable("${trigger.data.user}")];
+    const json = libraryJsonOf(libraryAlertOfStep(step, available));
     const copy = inlineCopyOfLibraryAlert(
-      { widgets: JSON.parse(libraryJsonOf(doc).widgetsJson), layout: doc.layout, behaviors: {}, inputs: stored },
-      values
+      {
+        widgets: JSON.parse(json.widgetsJson),
+        layout: JSON.parse(json.layoutJson),
+        behaviors: {},
+        inputs: JSON.parse(json.inputsJson),
+      },
+      available
     );
     expect(copy.doc.widgets.t?.settings).toEqual({ text: "Hi ${trigger.data.user}" });
   });
@@ -315,75 +179,17 @@ describe("libraryAlertOfStep", () => {
         inputs: [],
       })
     );
-    expect(libraryAlertOfStep(step, []).doc.inputs?.map((input) => input.id)).toEqual(["name", "name_2"]);
+    expect(libraryAlertOfStep(step, []).inputs?.map((input) => input.id)).toEqual(["name", "name_2"]);
   });
 });
 
-describe("describeLinks", () => {
-  const link = (ownerKind: "workflow" | "command", ownerId: string, stepId: string) => ({
-    ownerKind,
-    ownerId,
-    stepId,
-    createdAt: "",
-    updatedAt: "",
-  });
-
-  test("names each step by its owner and the number its editor shows", () => {
-    const names = {
-      workflows: new Map([["wf-1", "Follow alerts"]]),
-      commands: new Map([["cmd-1", "hype"]]),
-      stepNumbers: new Map([
-        [linkOwnerKey("workflow", "wf-1"), new Map([["act_1", 4]])],
-        [linkOwnerKey("command", "cmd-1"), new Map([["action-2", 2]])],
-      ]),
-    };
-    const lines = describeLinks(
-      [link("workflow", "wf-1", "act_1"), link("command", "cmd-1", "action-2"), link("command", "gone", "s")],
-      names
-    );
-    expect(lines).toEqual(["Follow alerts · step 4", "!hype · step 2", "A chat command"]);
-  });
-
-  test("never shows the engine's step id", () => {
-    const names = { workflows: new Map([["wf-1", "Raid welcome"]]), commands: new Map(), stepNumbers: new Map() };
-    expect(describeLinks([link("workflow", "wf-1", "act_1")], names)).toEqual(["Raid welcome"]);
-  });
-});
-
-describe("step numbers", () => {
-  const workflowRow = (definition: unknown) =>
-    ({ engineWorkflowId: "wf-1", isEnabled: true, definition }) as unknown as Doc<"workflows">;
-
-  test("numbers a workflow's actions by their place in their trigger, as the Alerts screen does", () => {
-    const row = workflowRow({
-      name: "Raid welcome",
-      trigger: { type: "event", event: "channel.raid" },
-      tasks: [
-        { id: "cond_1", type: "condition", conditions: [], onTrue: ["act_1", "act_2"] },
-        { id: "act_1", type: "action", function: "chat" },
-        { id: "act_2", type: "action", function: "alert" },
-      ],
-    });
-    const numbers = workflowStepNumbers(row);
-    expect(numbers.get("act_1")).toBe(1);
-    expect(numbers.get("act_2")).toBe(2);
-  });
-
-  test("numbers any other workflow by its place in the tasks", () => {
-    const row = workflowRow({
-      name: "Built",
-      trigger: { type: "event", event: "channel.raid" },
-      tasks: [
-        { id: "wait_1", type: "wait" },
-        { id: "act_1", type: "action", function: "alert" },
-      ],
-    });
-    expect(workflowStepNumbers(row).get("act_1")).toBe(2);
-  });
-
-  test("numbers a command's steps in order", () => {
-    const numbers = commandStepNumbers([{ id: "s1" }, {}] as ActionStep[]);
-    expect(numbers.get("s1")).toBe(1);
-    expect(numbers.get("action-2")).toBe(2);
+describe("libraryPreviewInputs", () => {
+  test("previews each input with its default, or its {id} where it has none", () => {
+    expect(
+      libraryPreviewInputs([
+        { id: "name", label: "Name", type: "text", defaultValue: "friend" },
+        { id: "amount", label: "Bits", type: "number" },
+      ])
+    ).toEqual({ name: "friend", amount: "{amount}" });
   });
 });

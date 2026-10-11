@@ -2,6 +2,7 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type CanvasSize, type CommandResult, canvasOf, type NodeView } from "@woofx3/scene/editor";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { AlertLibraryDialog, type LibraryAlert } from "@/components/alert-editor/alert-library-dialog";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { PreviewScrub, PreviewTransport } from "@/components/alert-editor/composition-preview-frame";
@@ -29,24 +30,19 @@ import { useAlertLibrary } from "@/hooks/use-alert-library";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { durationOf, formatSeconds, layerLabel, longestLayerId, playedLengthSeconds } from "@/lib/alert-editor";
-import {
-  initialLinkedInputs,
-  inlineCopyOfLibraryAlert,
-  inputVariableOptions,
-  unfilledInputsText,
-} from "@/lib/alert-library";
+import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
+import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
+import { inlineCopyOfLibraryAlert, unfilledInputsText } from "@/lib/alert-library";
 import {
   activityEditFor,
   activityOf,
   hasActivities,
   type LayerWindow,
   layerWindowOf,
-  trackedLength,
   trackWindowLabel,
 } from "@/lib/behavior-editor";
-import { previewDocumentOf, previewInputsOf, sampleEventOf } from "@/lib/composition-preview";
-import { catalogWidgetOf } from "@/lib/scene-composition";
+import { previewDocumentOf, sampleEventOf } from "@/lib/composition-preview";
+import { canvasBackgroundOf, catalogWidgetOf } from "@/lib/scene-composition";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -70,11 +66,10 @@ interface AlertLayoutEditorProps {
   /** Leaving without keeping the edits; already confirmed when there were any. */
   onCancel: () => void;
   /**
-   * Links the step to a library alert in place of its own layout. Given, and on an
-   * engine with an alert library, the editor offers Start from… (use or copy a
-   * library alert) and Save to library; the caller then shows the linked alert.
+   * On an engine with an alert library, offer Start from… (copy a library alert onto
+   * the canvas) and Save to library (store a copy of this alert there).
    */
-  onLink?: (compositionId: string, inputs: Record<string, unknown>) => void;
+  offerLibrary?: boolean;
 }
 
 /**
@@ -94,10 +89,12 @@ export function AlertLayoutEditor({
   availableVariables,
   onDone,
   onCancel,
-  onLink,
+  offerLibrary = false,
 }: AlertLayoutEditorProps) {
   const session = useAlertLayoutEditor(value);
-  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  // Where to go once the edits are confirmed discarded: back out, or to a library alert.
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  const [, navigate] = useLocation();
   const [choosingStart, setChoosingStart] = useState(false);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
   const view = useAlertEditorView(session, availableVariables);
@@ -108,30 +105,28 @@ export function AlertLayoutEditor({
     return <EditorLoading />;
   }
 
-  const libraryOffered = onLink !== undefined && library.enabled;
-  const leave = () => {
+  const libraryOffered = offerLibrary && library.enabled;
+  const leaveTo = (go: () => void) => {
     if (session.isDirty) {
-      setConfirmingLeave(true);
+      setPendingLeave(() => go);
       return;
     }
-    onCancel();
+    go();
+  };
+  const leave = () => leaveTo(onCancel);
+  const editLibraryAlert = (alert: LibraryAlert) => {
+    setChoosingStart(false);
+    leaveTo(() => navigate(libraryAlertEditorPath(alert.engineCompositionId)));
   };
   const done = () => onDone(session.changedLayout());
-  const duplicate = (alert: LibraryAlert) => {
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(alert, {}, availableVariables);
+  const startFrom = (alert: LibraryAlert) => {
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(alert, availableVariables);
     session.replace(doc);
     session.editor.dispatch("selection.clear");
     setChoosingStart(false);
     if (unfilled.length > 0) {
-      toast({
-        title: "Some of its inputs had no value",
-        description: unfilledInputsText(unfilled),
-      });
+      toast({ title: "Some of its inputs had no value", description: unfilledInputsText(unfilled) });
     }
-  };
-  const use = (alert: LibraryAlert) => {
-    setChoosingStart(false);
-    onLink?.(alert.engineCompositionId, initialLinkedInputs(alert, availableVariables));
   };
 
   return (
@@ -189,8 +184,8 @@ export function AlertLayoutEditor({
             onOpenChange={setChoosingStart}
             alerts={library.alerts}
             replacesLayers={view.layerCount}
-            onUse={use}
-            onDuplicate={duplicate}
+            onUse={startFrom}
+            onEdit={editLibraryAlert}
           />
           <SaveToLibraryDialog
             open={savingToLibrary}
@@ -198,15 +193,16 @@ export function AlertLayoutEditor({
             doc={session.state.doc}
             availableVariables={availableVariables}
             takenNames={library.alerts?.map((alert) => alert.name)}
-            onSaved={(compositionId, inputs) => {
-              setSavingToLibrary(false);
-              onLink?.(compositionId, inputs);
-            }}
+            onSaved={() => setSavingToLibrary(false)}
           />
         </>
       )}
 
-      <DiscardAlertChangesDialog open={confirmingLeave} onOpenChange={setConfirmingLeave} onDiscard={onCancel} />
+      <DiscardAlertChangesDialog
+        open={pendingLeave !== null}
+        onOpenChange={(open) => (open ? undefined : setPendingLeave(null))}
+        onDiscard={() => pendingLeave?.()}
+      />
     </>
   );
 }
@@ -241,7 +237,7 @@ interface AlertEditorFrameProps {
 /**
  * The alert editor's page: a header over the stage, palette, layers and inspector on a
  * desktop, and a stacked column on a phone. Shared by an alert written into a step and
- * one linked from the library, which differ only in the header's controls.
+ * one edited in the library, which differ only in the header's controls.
  */
 export function AlertEditorFrame({
   session,
@@ -397,12 +393,7 @@ interface NodeLayer {
 export function useAlertEditorView(
   session: AlertEditorHandle | null,
   availableVariables: VariableOption[],
-  /**
-   * A linked library alert's input values from the step, which the live preview binds.
-   * Given, the alert is a library alert, whose text refers to its own inputs rather than
-   * to the step's variables, so the text fields offer its inputs, and
-   * `availableVariables` only shortens the step's values and fills the sample event.
-   */
+  /** A library alert's values for its own inputs, which the live preview binds. */
   previewInputs?: Record<string, unknown>
 ): AlertEditorView | null {
   const { toast } = useToast();
@@ -411,16 +402,7 @@ export function useAlertEditorView(
   const variablesKey = JSON.stringify(availableVariables.map((variable) => variable.value));
   // biome-ignore lint/correctness/useExhaustiveDependencies: variablesKey stands for availableVariables' content
   const names = useMemo(() => variableNames(availableVariables), [variablesKey]);
-  const linked = previewInputs !== undefined;
-  const declaredInputs = session?.state?.doc?.inputs;
-  const fieldVariablesKey = linked ? JSON.stringify(declaredInputs ?? []) : variablesKey;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: fieldVariablesKey stands for the offered variables' content
-  const fieldVariables = useMemo(
-    () => (linked ? inputVariableOptions(declaredInputs ?? []) : availableVariables),
-    [fieldVariablesKey, linked]
-  );
-  const fieldNames = useMemo(() => variableNames(fieldVariables), [fieldVariables]);
-  const displayText = useCallback((text: string) => toDisplayText(text, fieldNames), [fieldNames]);
+  const displayText = useCallback((text: string) => toDisplayText(text, names), [names]);
   const report = useCallback(
     (result: CommandResult) => {
       if (!result.ok) {
@@ -444,10 +426,7 @@ export function useAlertEditorView(
   // Keyed by content, as the variables are.
   const inputsKey = previewInputs === undefined ? null : JSON.stringify(previewInputs);
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputsKey stands for previewInputs' content
-  const boundInputs = useMemo(
-    () => (previewInputs === undefined ? undefined : previewInputsOf(previewInputs, names)),
-    [inputsKey, names]
-  );
+  const boundInputs = useMemo(() => previewInputs, [inputsKey]);
   const preview = useCompositionPreview({
     instanceId: instance?._id,
     editor,
@@ -493,13 +472,11 @@ export function useAlertEditorView(
   const labelOf = (node: NodeView) =>
     layerLabel({ kind: node.kind, name: node.placement.name, settings: node.placement.settings }, displayText);
   const doc = state.doc;
-  // Once a layer has a window of its own, a layer's duration alone no longer says which layer ends the
-  // alert: the editor's resolved tracks do.
+  // Once a layer has a window of its own, its duration alone no longer says when it plays: the
+  // editor's resolved tracks do.
   const tracks = hasActivities(doc.behaviors) ? state.timeline.tracks : null;
-  const tracked = tracks === null ? null : trackedLength(tracks);
   const timed = nodes.map((node) => ({ id: node.id, settings: node.placement.settings }));
   const length = playedLengthSeconds(state.timeline.tracks, timed);
-  const longestId = nodes.length > 1 ? (tracked === null ? longestLayerId(timed) : tracked.longestId) : undefined;
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
   const placeable = new Set(state.palette.map((row) => row.widgetId));
   const paletteRows = catalogRows.filter((row) => placeable.has(row.widgetId));
@@ -530,12 +507,8 @@ export function useAlertEditorView(
       key={selected.id}
       node={selected}
       fields={(selectedRow?.settings ?? []) as unknown as ConfigField[]}
-      canvas={canvas}
-      isLongest={selected.id === longestId}
-      availableVariables={fieldVariables}
+      availableVariables={availableVariables}
       onChangeSettings={(settings) => report(session.editor.nodes.patch(selected.id, { settings }))}
-      onResize={(width) => report(session.editor.nodes.resize(selected.id, { width }))}
-      onMoveCenter={(center) => report(session.editor.nodes.moveCenter(selected.id, center))}
       window={layerWindowOf(activityOf(doc.behaviors, selected.id)?.behavior ?? null)}
       onChangeWindow={(window) => changeWindow(selected.id, window)}
     >
@@ -589,6 +562,7 @@ export function useAlertEditorView(
       <AlertStage
         editor={session.editor}
         canvas={canvas}
+        background={canvasBackgroundOf(doc.layout)}
         nodes={nodes}
         guides={state.guides}
         zoom={stageZoom}

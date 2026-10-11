@@ -6,7 +6,6 @@ import {
   fileName,
   formatSeconds,
   layerLabel,
-  longestLayerId,
   playedLengthSeconds,
 } from "./alert-editor";
 
@@ -18,17 +17,10 @@ describe("alert length", () => {
   test("is the longest layer's duration", () => {
     const layers = [layer("a", 5), layer("b", 8)];
     expect(alertLengthSeconds(layers)).toBe(8);
-    expect(longestLayerId(layers)).toBe("b");
   });
 
-  test("names no longest layer on a tie", () => {
-    expect(longestLayerId([layer("a", 5), layer("b", 5)])).toBeUndefined();
-  });
-
-  test("is zero, with no longest layer, when no layer has a length", () => {
-    const layers = [layer("a"), layer("b", 0)];
-    expect(alertLengthSeconds(layers)).toBe(0);
-    expect(longestLayerId(layers)).toBeUndefined();
+  test("is zero when no layer has a length", () => {
+    expect(alertLengthSeconds([layer("a"), layer("b", 0)])).toBe(0);
   });
 
   test("reads a missing, negative or non-number duration as none", () => {

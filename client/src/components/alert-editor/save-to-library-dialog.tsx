@@ -27,16 +27,14 @@ interface SaveToLibraryDialogProps {
   availableVariables: VariableOption[];
   /** The library's alert names, which the engine keeps unique; undefined while they load. */
   takenNames: readonly string[] | undefined;
-  /** The new library alert's id, which the step then links, with the values for its inputs. */
-  onSaved: (compositionId: string, inputs: Record<string, string>) => void;
+  onSaved: () => void;
 }
 
 /**
- * Stores the alert on the canvas in the engine's library under a name. The step then
- * plays the library alert, so other steps can use the same one and an edit published to
- * it changes all of them. A stored alert refers to no event data of its own, so each
- * variable the alert uses becomes one of its inputs, filled in by this step with the
- * same variable (`libraryAlertOfStep`).
+ * Stores a copy of the alert on the canvas in the engine's library under a name, as a
+ * starting point for other alerts. The step keeps its own alert. A stored alert refers
+ * to no event data of its own, so each variable the alert uses becomes one of its inputs
+ * (`libraryAlertOfStep`), which a copy started from it fills in again.
  */
 export function SaveToLibraryDialog({
   open,
@@ -59,14 +57,15 @@ export function SaveToLibraryDialog({
     }
     setPending(true);
     try {
-      const library = libraryAlertOfStep(doc, availableVariables);
-      const { engineCompositionId } = await create({
+      const savedName = name.trim();
+      await create({
         instanceId: instance._id,
-        name: name.trim(),
-        ...libraryJsonOf(library.doc),
+        name: savedName,
+        ...libraryJsonOf(libraryAlertOfStep(doc, availableVariables)),
       });
       setName("");
-      onSaved(engineCompositionId, library.values);
+      toast({ title: `Saved ${savedName} to the library` });
+      onSaved();
     } catch (error) {
       toast({
         title: "The alert wasn't saved to the library",
@@ -84,8 +83,8 @@ export function SaveToLibraryDialog({
         <DialogHeader>
           <DialogTitle>Save to library</DialogTitle>
           <DialogDescription>
-            This step then plays the library alert. Other alerts can use it too, and what you publish to it changes
-            every one of them.
+            Saves a copy other alerts can start from. This step keeps its own alert, and the variables it shows become
+            the copy's inputs.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
