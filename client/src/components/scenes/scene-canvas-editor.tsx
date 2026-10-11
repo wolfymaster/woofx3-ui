@@ -797,6 +797,8 @@ const SCENE_DRAFT_COPY: DraftLiveCopy = {
   live: "Edit what's on stream right now, without publishing",
   liveDisabled: "Live edits are already on stream",
   publish: "Put the draft on stream",
+  discardTitle: "Discard your draft of this scene?",
+  discardDescription: "Every change since the last publish is thrown away. What's on stream stays as it is.",
 };
 
 const SCENE_DRAFT_TEST_IDS: DraftLiveTestIds = {
@@ -804,6 +806,7 @@ const SCENE_DRAFT_TEST_IDS: DraftLiveTestIds = {
   draft: "toggle-scene-draft",
   live: "toggle-scene-live",
   discard: "button-discard-draft",
+  confirmDiscard: "button-confirm-discard-draft",
   publish: "button-publish-scene",
 };
 
