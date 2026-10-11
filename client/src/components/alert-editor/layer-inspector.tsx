@@ -1,4 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import { type CanvasSize, centerOf, type NodeView, type Point, type WidgetKind } from "@woofx3/scene/editor";
 import { Minus, Plus } from "lucide-react";
 import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
@@ -6,22 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
-import {
-  type CanvasSize,
-  centerOf,
-  clampCenter,
-  durationOf,
-  type LayerKind,
-  layerKind,
-  MEDIA_ASPECT,
-  textBoxHeight,
-  withCenter,
-} from "@/lib/alert-editor";
+import { durationOf } from "@/lib/alert-editor";
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
 import { cn } from "@/lib/utils";
 import type { VariableOption } from "@/lib/workflow-variables";
-import type { Widget } from "@/types";
 
 /** The swatches offered for text. A color set some other way shows beside them, selected. */
 const TEXT_COLORS = [
@@ -36,7 +26,7 @@ const TEXT_COLORS = [
  * Settings each bundled widget's inspector shows as dedicated controls; the rest of its
  * schema follows under More settings. A widget from a module gets its whole schema.
  */
-const DEDICATED_SETTINGS: Record<LayerKind, readonly string[]> = {
+const DEDICATED_SETTINGS: Record<WidgetKind, readonly string[]> = {
   text: ["text", "fontSize", "color", "duration"],
   image: ["src", "duration"],
   video: ["src", "duration"],
@@ -46,39 +36,44 @@ const DEDICATED_SETTINGS: Record<LayerKind, readonly string[]> = {
 };
 
 interface LayerInspectorProps {
-  widget: Widget;
+  /** The selected layer, as the composition editor shows it. */
+  node: NodeView;
   /** The widget's settings schema, from the catalog. */
   fields: ConfigField[];
   canvas: CanvasSize;
   /** True when this layer alone sets the alert's length. */
   isLongest: boolean;
   availableVariables: VariableOption[];
-  onChange: (widget: Widget) => void;
+  /** Merge settings into the layer's. A Text layer's box follows its text and size by itself. */
+  onChangeSettings: (settings: Record<string, unknown>) => void;
+  /** Set the layer's width about its centre; a layer that keeps its aspect takes its height from it. */
+  onResize: (width: number) => void;
+  /** Move the layer's centre, kept on the canvas. */
+  onMoveCenter: (center: Point) => void;
 }
 
-/** Edits the selected layer. Every change keeps the layer's center where it was. */
+/**
+ * Edits the selected layer through the composition editor. Every change keeps the
+ * layer's centre where it was; the rules for how a box follows (a Text box's height,
+ * a media layer's aspect) are the widget's traits, applied by the editor.
+ */
 export function LayerInspector({
-  widget,
+  node,
   fields,
   canvas,
   isLongest,
   availableVariables,
-  onChange,
+  onChangeSettings,
+  onResize,
+  onMoveCenter,
 }: LayerInspectorProps) {
-  const kind = layerKind(widget);
-  const center = centerOf(widget);
-  const idPrefix = `layer-${widget.id}`;
+  const { kind, placement } = node;
+  const center = centerOf(placement);
+  const idPrefix = `layer-${node.id}`;
 
-  const setSettings = (settings: Record<string, unknown>) => {
-    onChange({ ...widget, settings: { ...widget.settings, ...settings } });
-  };
-  const resize = (size: Widget["size"]) => {
-    onChange(withCenter({ ...widget, size }, center));
-  };
-
-  const fontSize = typeof widget.settings.fontSize === "number" ? widget.settings.fontSize : 48;
-  const text = typeof widget.settings.text === "string" ? widget.settings.text : "";
-  const color = typeof widget.settings.color === "string" ? widget.settings.color : "#ffffff";
+  const fontSize = typeof placement.settings.fontSize === "number" ? placement.settings.fontSize : 48;
+  const text = typeof placement.settings.text === "string" ? placement.settings.text : "";
+  const color = typeof placement.settings.color === "string" ? placement.settings.color : "#ffffff";
   const srcField = fields.find((field) => field.id === "src");
   const moreFields = fields.filter((field) => !DEDICATED_SETTINGS[kind].includes(field.id));
 
@@ -93,18 +88,7 @@ export function LayerInspector({
               multiline
               rows={3}
               value={text}
-              onChange={(next) =>
-                onChange(
-                  withCenter(
-                    {
-                      ...widget,
-                      settings: { ...widget.settings, text: next },
-                      size: { ...widget.size, height: textBoxHeight(fontSize, next) },
-                    },
-                    center
-                  )
-                )
-              }
+              onChange={(next) => onChangeSettings({ text: next })}
               availableVariables={availableVariables}
               className="text-base lg:text-sm"
             />
@@ -117,18 +101,7 @@ export function LayerInspector({
             min={12}
             max={240}
             unit="px"
-            onChange={(next) =>
-              onChange(
-                withCenter(
-                  {
-                    ...widget,
-                    settings: { ...widget.settings, fontSize: next },
-                    size: { ...widget.size, height: textBoxHeight(next, text) },
-                  },
-                  center
-                )
-              )
-            }
+            onChange={(next) => onChangeSettings({ fontSize: next })}
           />
           <fieldset className="flex flex-col gap-2">
             <legend className="mb-2 text-sm font-medium">Color</legend>
@@ -139,7 +112,7 @@ export function LayerInspector({
                   label={swatch.label}
                   color={swatch.value}
                   isPressed={color.toLowerCase() === swatch.value}
-                  onClick={() => setSettings({ color: swatch.value })}
+                  onClick={() => onChangeSettings({ color: swatch.value })}
                 />
               ))}
               {!TEXT_COLORS.some((swatch) => swatch.value === color.toLowerCase()) && (
@@ -154,8 +127,8 @@ export function LayerInspector({
         <div>
           {configFieldRenderers.media({
             field: srcField as unknown as FieldDescriptor,
-            value: widget.settings.src,
-            onChange: (value) => setSettings({ src: value }),
+            value: placement.settings.src,
+            onChange: (value) => onChangeSettings({ src: value }),
             availableVariables,
           })}
         </div>
@@ -165,18 +138,12 @@ export function LayerInspector({
         <Stepper
           id={`${idPrefix}-width`}
           label="Width"
-          value={widget.size.width}
+          value={placement.width}
           step={80}
           min={80}
           max={canvas.width}
           unit="px"
-          onChange={(width) =>
-            resize(
-              kind === "text" || kind === "other"
-                ? { ...widget.size, width }
-                : { width, height: Math.round(width * MEDIA_ASPECT) }
-            )
-          }
+          onChange={onResize}
         />
       )}
 
@@ -186,7 +153,7 @@ export function LayerInspector({
           <button
             type="button"
             className="text-xs text-primary-text hover:underline"
-            onClick={() => onChange(withCenter(widget, { x: canvas.width / 2, y: canvas.height / 2 }))}
+            onClick={() => onMoveCenter({ x: canvas.width / 2, y: canvas.height / 2 })}
           >
             Center
           </button>
@@ -205,7 +172,7 @@ export function LayerInspector({
                 onChange={(event) => {
                   const next = Number(event.target.value);
                   if (Number.isFinite(next)) {
-                    onChange(withCenter(widget, clampCenter({ ...center, [axis]: next }, canvas)));
+                    onMoveCenter({ ...center, [axis]: next });
                   }
                 }}
                 className="h-11 font-mono text-base lg:h-9 lg:text-sm"
@@ -219,15 +186,15 @@ export function LayerInspector({
         <Stepper
           id={`${idPrefix}-duration`}
           label="Duration"
-          value={durationOf(widget)}
+          value={durationOf(placement)}
           step={0.5}
           min={0}
           max={60}
           unit="s"
-          onChange={(duration) => setSettings({ duration })}
+          onChange={(duration) => onChangeSettings({ duration })}
         />
         <p className="text-xs text-muted-foreground">
-          {durationOf(widget) === 0
+          {durationOf(placement) === 0
             ? kind === "video" || kind === "audio" || kind === "lottie"
               ? "0 plays the file through once."
               : "0 keeps it up for as long as the alert plays."
@@ -244,12 +211,12 @@ export function LayerInspector({
             <ConfigurationForm
               fields={
                 withFieldOptionsOwner(
-                  withWidgetCanonicalId(moreFields, widget.widgetCanonicalId),
-                  fieldOptionsOwnerFromCanonicalId(widget.widgetCanonicalId)
+                  withWidgetCanonicalId(moreFields, placement.widget),
+                  fieldOptionsOwnerFromCanonicalId(placement.widget)
                 ) as unknown as FieldDescriptor[]
               }
-              values={widget.settings}
-              onChange={(next) => setSettings(next)}
+              values={placement.settings}
+              onChange={(next) => onChangeSettings(next)}
               customRenderers={configFieldRenderers}
               availableVariables={availableVariables}
             />

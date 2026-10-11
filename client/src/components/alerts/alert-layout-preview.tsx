@@ -1,13 +1,17 @@
+import { canvasOf } from "@woofx3/scene/editor";
+import { type PlacementDocument, stackOrder } from "@woofx3/scene/model";
 import { Volume2 } from "lucide-react";
+import { useMemo } from "react";
 import { alertWidgetPreview } from "@/components/scenes/alert-widget-previews";
-import type { AlertLayout } from "@/lib/alert-layout";
+import { readAlertComposition } from "@/lib/alert-layout";
 import { cn } from "@/lib/utils";
 
 /** The bundled Audio widget, which has nothing to draw and so shows as a small marker. */
 export const AUDIO_WIDGET_ID = "woofx3:widget:audio";
 
 interface AlertLayoutPreviewProps {
-  layout: AlertLayout;
+  /** A step's stored `layout`, in either shape it is stored in (see lib/alert-layout.ts). */
+  layout: unknown;
   className?: string;
 }
 
@@ -18,33 +22,31 @@ interface AlertLayoutPreviewProps {
  * scaling, with no measuring.
  */
 export function AlertLayoutPreview({ layout, className }: AlertLayoutPreviewProps) {
-  const visible = layout.widgets.filter((widget) => widget.visible);
+  const doc = useMemo(() => readAlertComposition(layout, (widgetCanonicalId) => widgetCanonicalId), [layout]);
+  const canvas = canvasOf(doc);
+  const visible = stackOrder(doc)
+    .map((id) => ({ id, placement: doc.widgets[id] as PlacementDocument }))
+    .filter(({ placement }) => placement.visible);
   return (
     <svg
-      viewBox={`0 0 ${layout.width} ${layout.height}`}
+      viewBox={`0 0 ${canvas.width} ${canvas.height}`}
       className={cn("block aspect-video w-full rounded-md bg-black", className)}
       role="img"
       aria-label={visible.length === 0 ? "Empty alert" : `Alert with ${visible.length} widgets`}
     >
-      {visible.map((widget) => (
-        <foreignObject
-          key={widget.id}
-          x={widget.position.x}
-          y={widget.position.y}
-          width={widget.size.width}
-          height={widget.size.height}
-        >
-          {widget.widgetCanonicalId === AUDIO_WIDGET_ID ? (
+      {visible.map(({ id, placement }) => (
+        <foreignObject key={id} x={placement.x} y={placement.y} width={placement.width} height={placement.height}>
+          {placement.widget === AUDIO_WIDGET_ID ? (
             <div className="flex h-full w-full items-center justify-center text-white/70">
-              <Volume2 style={{ width: widget.size.height * 0.6, height: widget.size.height * 0.6 }} />
+              <Volume2 style={{ width: placement.height * 0.6, height: placement.height * 0.6 }} />
             </div>
           ) : (
-            (alertWidgetPreview(widget) ?? (
+            (alertWidgetPreview(placement.widget, placement.settings) ?? (
               <div
                 className="flex h-full w-full items-center justify-center border-4 border-dashed border-white/30 text-white/60"
-                style={{ fontSize: Math.max(24, widget.size.height / 6) }}
+                style={{ fontSize: Math.max(24, placement.height / 6) }}
               >
-                {widget.name}
+                {placement.name}
               </div>
             ))
           )}
