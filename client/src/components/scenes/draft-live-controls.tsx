@@ -1,4 +1,15 @@
 import { Loader2, Undo2, Upload } from "lucide-react";
+import { useState } from "react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -12,6 +23,9 @@ export interface DraftLiveCopy {
   /** Why Discard and Publish are off in live mode. */
   liveDisabled: string;
   publish: string;
+  /** The question Discard asks before throwing the draft away. */
+  discardTitle: string;
+  discardDescription: string;
 }
 
 export interface DraftLiveTestIds {
@@ -19,6 +33,8 @@ export interface DraftLiveTestIds {
   draft: string;
   live: string;
   discard: string;
+  /** The confirmation's Discard button. */
+  confirmDiscard: string;
   publish: string;
 }
 
@@ -37,7 +53,8 @@ interface DraftLiveControlsProps {
 /**
  * A sync editor's Draft / Live toggle with its Discard and Publish buttons. Every control
  * is always rendered and Publish has a fixed width, so switching modes or starting a
- * command never moves anything in the header.
+ * command never moves anything in the header. A draft cannot be brought back once
+ * discarded, so Discard asks first.
  */
 export function DraftLiveControls({
   live,
@@ -50,6 +67,7 @@ export function DraftLiveControls({
   testIds,
 }: DraftLiveControlsProps) {
   const disabled = live || !commandsEnabled;
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   return (
     <>
       <ToggleGroup
@@ -94,7 +112,7 @@ export function DraftLiveControls({
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onCommand("discard")}
+              onClick={() => setConfirmingDiscard(true)}
               disabled={disabled}
               aria-label="Discard draft"
               data-testid={testIds.discard}
@@ -129,6 +147,20 @@ export function DraftLiveControls({
         </TooltipTrigger>
         <TooltipContent>{live ? copy.liveDisabled : hasDraft ? copy.publish : "Nothing to publish"}</TooltipContent>
       </Tooltip>
+      <AlertDialog open={confirmingDiscard} onOpenChange={setConfirmingDiscard}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{copy.discardTitle}</AlertDialogTitle>
+            <AlertDialogDescription>{copy.discardDescription}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep editing</AlertDialogCancel>
+            <AlertDialogAction onClick={() => onCommand("discard")} data-testid={testIds.confirmDiscard}>
+              Discard draft
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
+import type { ActionStep } from "@woofx3/api";
 import { useAction, useQuery } from "convex/react";
 import { Loader2, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -18,7 +19,14 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { compositionOfLibraryAlert, describeLinks, type LinkOwnerNames } from "@/lib/alert-library";
+import {
+  commandStepNumbers,
+  compositionOfLibraryAlert,
+  describeLinks,
+  type LinkOwnerNames,
+  linkOwnerKey,
+  workflowStepNumbers,
+} from "@/lib/alert-library";
 
 export type LibraryAlert = Doc<"alertCompositions">;
 
@@ -227,6 +235,16 @@ export function useLinkOwnerNames(active: boolean): LinkOwnerNames {
         (workflows ?? []).map((row) => [row.engineWorkflowId, workflowName(row.definition) ?? "A trigger"])
       ),
       commands: new Map((commands ?? []).map((row) => [row.engineCommandId, row.command])),
+      stepNumbers: new Map([
+        ...(workflows ?? []).map((row): [string, Map<string, number>] => [
+          linkOwnerKey("workflow", row.engineWorkflowId),
+          workflowStepNumbers(row),
+        ]),
+        ...(commands ?? []).map((row): [string, Map<string, number>] => [
+          linkOwnerKey("command", row.engineCommandId),
+          commandStepNumbers(row.actions as ActionStep[]),
+        ]),
+      ]),
     }),
     [workflows, commands]
   );

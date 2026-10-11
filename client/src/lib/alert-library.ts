@@ -1,15 +1,18 @@
 import type { Doc } from "@convex/_generated/dataModel";
-import type { CompositionLinkInfo } from "@woofx3/api";
+import type { ActionStep, CompositionLinkInfo } from "@woofx3/api";
 import { CONFIG_FIELD_TYPES, type ConfigField, type ConfigFieldType } from "@woofx3/api/ui-schema";
 import {
   bindInputs,
   type CompositionDocument,
   type InputField,
+  inputReferences,
   isPlainObject,
   normalizeComposition,
 } from "@woofx3/scene/model";
 import { compositionOfLegacyAlert, DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
+import { commandStepId } from "@/lib/command-drafts";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
+import { projectWorkflow } from "@/lib/trigger-projection";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 /**
@@ -92,27 +95,68 @@ export function compositionOfLibraryAlert(row: LibraryAlertDocument): Compositio
 
 /**
  * A library alert copied into one step: its published document with every
- * input filled in from `values`, or the input's default, so the copy refers
- * to no inputs and declares none. A value may itself hold `${...}`, which
- * the workflow resolves in a step's layout as it does in inputs. An input
- * with neither becomes empty text, and is named in `unfilled`; a document
- * whose references cannot be bound at all is copied as it is.
+ * input reference filled in, so the copy refers to no inputs and declares
+ * none. Each input takes, in order:
+ *
+ * - the step's value for it (`values`), which may itself hold `${...}`: the
+ *   workflow resolves that in a step's layout as it does in inputs;
+ * - the input's declared default;
+ * - the variable in `available` the input is named after, which is the one it
+ *   replaced when the alert was saved from a step (see libraryAlertOfStep);
+ * - otherwise `{id}` as plain text, so the place the value went stays visible
+ *   and the text field offers to fill it. Those inputs are named in `unfilled`.
+ *
+ * A reference to an input the alert does not declare is filled the same way,
+ * since the copy cannot keep a reference nothing fills. A document holding a
+ * malformed reference is copied as it is.
  */
 export function inlineCopyOfLibraryAlert(
   row: LibraryAlertDocument,
-  values: Readonly<Record<string, unknown>> = {}
+  values: Readonly<Record<string, unknown>> = {},
+  available: readonly VariableOption[] = []
 ): { doc: CompositionDocument; unfilled: string[] } {
   const published = compositionOfLibraryAlert(row);
-  const inputs = libraryAlertInputs(row).filter(isPlainObject) as CompositionDocument["inputs"];
-  const declared: CompositionDocument = { ...published, inputs };
-  const first = bindInputs(declared, values);
-  if (first.ok) {
-    return { doc: withoutInputs(first.document), unfilled: [] };
+  const declared = new Map<string, Record<string, unknown>>();
+  for (const input of libraryAlertInputs(row)) {
+    if (isPlainObject(input) && typeof input.id === "string" && input.id !== "" && !declared.has(input.id)) {
+      declared.set(input.id, input);
+    }
   }
-  const unfilled = first.report.missing;
-  const filled = { ...values, ...Object.fromEntries(unfilled.map((id) => [id, ""])) };
-  const second = bindInputs(declared, filled);
-  return { doc: withoutInputs(second.ok ? second.document : published), unfilled };
+  const referenced = inputReferences({ ...published, inputs: [] }).map((usage) => usage.input);
+  const ids = Array.from(new Set([...declared.keys(), ...referenced]));
+
+  const filled: Record<string, unknown> = {};
+  const unfilled: string[] = [];
+  for (const id of ids) {
+    const value = values[id];
+    const defaultValue = declared.get(id)?.defaultValue;
+    const named = variableNamedAfter(id, available);
+    if (value !== undefined && value !== "") {
+      filled[id] = value;
+    } else if (defaultValue !== undefined) {
+      filled[id] = defaultValue;
+    } else if (named !== undefined) {
+      filled[id] = named;
+    } else {
+      filled[id] = `{${id}}`;
+      unfilled.push(id);
+    }
+  }
+  const inputs = ids.map((id) => ({ id, label: id, type: "text" }));
+  const bound = bindInputs({ ...published, inputs }, filled);
+  return { doc: withoutInputs(bound.ok ? bound.document : published), unfilled: bound.ok ? unfilled : [] };
+}
+
+/** What a copy says about the inputs it left as `{id}` placeholders. */
+export function unfilledInputsText(unfilled: readonly string[]): string {
+  const names = unfilled.map((id) => `{${id}}`).join(", ");
+  const verb = unfilled.length === 1 ? "is" : "are";
+  return `${names} ${verb} left in this copy where the value goes. Insert a variable there, or type the text.`;
+}
+
+/** The reference of the first variable whose path ends in `id`, as libraryAlertOfStep names an input. */
+function variableNamedAfter(id: string, available: readonly VariableOption[]): string | undefined {
+  return available.find((option) => option.value.slice(2, -1).trim().split(/[.:]/).pop() === id)?.value;
 }
 
 function withoutInputs(doc: CompositionDocument): CompositionDocument {
@@ -234,6 +278,20 @@ export function inputFieldsOf(inputs: readonly unknown[]): ConfigField[] {
   return fields;
 }
 
+/**
+ * A library alert's inputs as the variables its text fields offer: each is
+ * referred to inside text as `{{id}}` (see variable-display.ts).
+ */
+export function inputVariableOptions(inputs: readonly unknown[]): VariableOption[] {
+  return inputFieldsOf(inputs).map((field) => ({
+    value: `{{${field.id}}}`,
+    label: field.label,
+    group: "Alert inputs",
+    type: field.type === "number" ? "number" : "string",
+    description: field.description,
+  }));
+}
+
 const REFERENCE = /\$\{([^{}]*)\}/g;
 /** A plain path: what the workflow reads from its own data, as opposed to an expression or an asset. */
 const VARIABLE_PATH = /^[A-Za-z_][\w-]*(\.[\w-]+)+$/;
@@ -302,16 +360,63 @@ export function inputVariableWarnings(
 export interface LinkOwnerNames {
   workflows: ReadonlyMap<string, string>;
   commands: ReadonlyMap<string, string>;
+  /** Each owner's step numbers as its editor shows them, by `linkOwnerKey` and then step id. */
+  stepNumbers: ReadonlyMap<string, ReadonlyMap<string, number>>;
+}
+
+/** The key `LinkOwnerNames.stepNumbers` holds an owner's steps under. */
+export function linkOwnerKey(kind: CompositionLinkInfo["ownerKind"], ownerId: string): string {
+  return `${kind}:${ownerId}`;
+}
+
+/**
+ * A workflow's step numbers as the editors show them: on the Alerts screen an
+ * action is numbered by its place among its trigger's actions ("Step 2"), so a
+ * workflow that screen can show is numbered that way. Any other workflow, or
+ * an action shared by several triggers, is numbered by its place in the
+ * workflow's tasks.
+ */
+export function workflowStepNumbers(row: Doc<"workflows">): Map<string, number> {
+  const numbers = new Map<string, number>();
+  const tasks = (row.definition as { tasks?: unknown } | undefined)?.tasks;
+  if (Array.isArray(tasks)) {
+    tasks.forEach((task, index) => {
+      if (isPlainObject(task) && typeof task.id === "string") {
+        numbers.set(task.id, index + 1);
+      }
+    });
+  }
+  const projected = projectWorkflow(row);
+  if (projected.ok) {
+    for (const trigger of projected.projection.triggers) {
+      trigger.actions.forEach((action, index) => {
+        numbers.set(action.id, index + 1);
+      });
+    }
+  }
+  return numbers;
+}
+
+/** A command's step numbers, as its editor shows them ("Step 2"). */
+export function commandStepNumbers(actions: readonly ActionStep[]): Map<string, number> {
+  return new Map(actions.map((action, index) => [commandStepId(action, index), index + 1]));
+}
+
+function linkOwnerName(link: CompositionLinkInfo, names: LinkOwnerNames): string {
+  if (link.ownerKind === "command") {
+    const command = names.commands.get(link.ownerId);
+    return command ? `!${command}` : "A chat command";
+  }
+  return names.workflows.get(link.ownerId) ?? "A trigger";
 }
 
 /** One line per step that links an alert, for saying where it is used. */
 export function describeLinks(links: readonly CompositionLinkInfo[], names: LinkOwnerNames): string[] {
   return links.map((link) => {
-    if (link.ownerKind === "command") {
-      const command = names.commands.get(link.ownerId);
-      return `${command ? `!${command}` : "A chat command"} · step ${link.stepId}`;
-    }
-    const workflow = names.workflows.get(link.ownerId);
-    return `${workflow ?? "A trigger"} · step ${link.stepId}`;
+    const owner = linkOwnerName(link, names);
+    // A step id is the engine's own (`act_1`), which no screen shows, so a step the
+    // dashboard cannot number is named by its owner alone.
+    const number = names.stepNumbers.get(linkOwnerKey(link.ownerKind, link.ownerId))?.get(link.stepId);
+    return number === undefined ? owner : `${owner} · step ${number}`;
   });
 }

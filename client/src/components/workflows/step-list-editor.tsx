@@ -201,19 +201,24 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
     instanceId && engineWorkflowId ? { instanceId: instanceId as never, engineWorkflowId } : "skip"
   );
 
-  // Backs the step-list summary line for resource_ref fields (e.g. Increment
-  // Counter's "Counter" picker) — resolves the stored canonical id to the
-  // module resource instance's friendly display name.
+  // Backs the step-list summary lines that name what a step refers to by id:
+  // a resource_ref field (e.g. Increment Counter's "Counter" picker) by the
+  // module resource instance's display name, and an alert step linked to the
+  // library by the alert's name.
   const resourceInstances = useQuery(
     api.moduleResourceInstances.listForInstance,
     instanceId ? { instanceId: instanceId as never } : "skip"
   );
+  const libraryAlerts = useQuery(api.alertCompositions.list, instanceId ? { instanceId: instanceId as never } : "skip");
   const resourceLabels = useMemo(() => {
     if (!resourceInstances) {
       return undefined;
     }
-    return new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName]));
-  }, [resourceInstances]);
+    return new Map([
+      ...resourceInstances.map((inst): [string, string] => [inst.canonicalId, inst.displayName]),
+      ...(libraryAlerts ?? []).map((alert): [string, string] => [alert.engineCompositionId, alert.name]),
+    ]);
+  }, [resourceInstances, libraryAlerts]);
 
   const [tree, setTree] = useState<WorkflowTree | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);

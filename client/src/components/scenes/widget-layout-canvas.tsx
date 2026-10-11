@@ -226,6 +226,7 @@ export function WidgetLayoutCanvas({
                 key={node.id}
                 node={node}
                 editor={editor}
+                zoom={stageZoom}
                 rank={rank}
                 remote={remoteSelections?.[node.id]}
                 canvasOrigin={canvasOrigin}

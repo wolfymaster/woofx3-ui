@@ -17,7 +17,8 @@ export type TestEventOutcome =
   | { kind: "running" }
   | { kind: "succeeded" }
   | { kind: "nothingMatched" }
-  | { kind: "failed"; title: string; detail: string };
+  | { kind: "failed"; title: string; detail: string }
+  | { kind: "unsettled" };
 
 /** The fields of a `transientEvents` row this cares about. */
 export interface RunRecord {
@@ -57,4 +58,40 @@ export function describeTestEventOutcome(record: RunRecord | null | undefined, w
       };
     }
   }
+}
+
+/**
+ * How long a test waits for any answer at all before it stops saying it is
+ * waiting. A run can legitimately take longer (a workflow with a wait step),
+ * so this does not call the run failed: it says no result arrived and where
+ * the run can still be followed. Without a bound, a run whose last lifecycle
+ * event never reaches the dashboard leaves the form spinning forever.
+ */
+export const TEST_EVENT_SETTLE_TIMEOUT_MS = 60_000;
+
+/** `outcome`, settled once the caller has waited `TEST_EVENT_SETTLE_TIMEOUT_MS` without an answer. */
+export function settleTestEventOutcome(outcome: TestEventOutcome, gaveUp: boolean): TestEventOutcome {
+  if (gaveUp && (outcome.kind === "waiting" || outcome.kind === "running")) {
+    return { kind: "unsettled" };
+  }
+  return outcome;
+}
+
+/**
+ * How long firing a test event may take before the form stops waiting on it.
+ * Publishing is one round trip to the engine; past this the engine is not
+ * answering, and the form says so rather than staying on "Triggering…".
+ */
+export const TEST_EVENT_PUBLISH_TIMEOUT_MS = 20_000;
+
+/** Thrown by `withinTimeout` when the work did not settle in time. */
+export class TestEventTimeoutError extends Error {}
+
+/** `work`, or a `TestEventTimeoutError` with `message` once `ms` pass without it settling. */
+export function withinTimeout<T>(work: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new TestEventTimeoutError(message)), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }

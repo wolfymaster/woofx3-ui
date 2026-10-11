@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import { TONE_STYLE } from "@/components/alert-run/tone-style";
 import { testEventFormFor } from "@/components/test-events/registry";
-import { TEST_EVENT_OUTCOME_TIMEOUT_MS, type TestEventRunner } from "@/components/test-events/test-event-form";
+import { type TestEventRunner, useTestEventWaits } from "@/components/test-events/test-event-form";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -35,7 +35,12 @@ import {
   useTestRunSupport,
 } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
-import type { TestEventOutcome } from "@/lib/test-event-outcome";
+import {
+  settleTestEventOutcome,
+  TEST_EVENT_PUBLISH_TIMEOUT_MS,
+  type TestEventOutcome,
+  withinTimeout,
+} from "@/lib/test-event-outcome";
 import { cn } from "@/lib/utils";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import { workflowRunPath } from "@/lib/workflow-run-route";
@@ -203,7 +208,15 @@ function SampleEventTest({
     }
     const { preset: target, payload, resolve } = pending;
     setPending(null);
-    resolve(confirmed ? await fireTestEvent(target, payload, TEST_RUN_ORIGIN) : null);
+    // The form stays busy until this resolves, so it resolves however firing ends.
+    let triggerId: string | null = null;
+    try {
+      if (confirmed) {
+        triggerId = await fireTestEvent(target, payload, TEST_RUN_ORIGIN);
+      }
+    } finally {
+      resolve(triggerId);
+    }
   };
 
   return (
@@ -323,19 +336,23 @@ function DirectTest({
     setBusy(true);
     setAttempt(null);
     try {
-      const result = await trigger({
-        instanceId: instance._id,
-        workflowNameOrId: engineWorkflowId,
-        origin: TEST_RUN_ORIGIN,
-        options: takesOptions
-          ? {
-              triggerData,
-              platform: triggerData && preset ? presetPlatform(preset) : undefined,
-              skipConditions: triggerData ? skipConditions : undefined,
-              dryRun: dryRun || undefined,
-            }
-          : undefined,
-      });
+      const result = await withinTimeout(
+        trigger({
+          instanceId: instance._id,
+          workflowNameOrId: engineWorkflowId,
+          origin: TEST_RUN_ORIGIN,
+          options: takesOptions
+            ? {
+                triggerData,
+                platform: triggerData && preset ? presetPlatform(preset) : undefined,
+                skipConditions: triggerData ? skipConditions : undefined,
+                dryRun: dryRun || undefined,
+              }
+            : undefined,
+        }),
+        TEST_EVENT_PUBLISH_TIMEOUT_MS,
+        "The engine didn't answer. Check that it is running, then try again."
+      );
       if (result.optionsIgnored) {
         rememberOptionsUnsupported(instance._id);
       }
@@ -539,7 +556,7 @@ function TestRunOutcome({
   dryRun?: boolean;
 }) {
   const { instance } = useInstance();
-  const [waitElapsed, setWaitElapsed] = useState(false);
+  const { waitElapsed, gaveUp } = useTestEventWaits();
   const [executionId, setExecutionId] = useState<string | null>(knownExecutionId);
   const [sticky, setSticky] = useState<TestEventOutcome | null>(null);
   const rows = useQuery(
@@ -550,11 +567,6 @@ function TestRunOutcome({
     api.workflowRuns.runWithSteps,
     instance && executionId ? { instanceId: instance._id, engineRunId: executionId } : "skip"
   );
-
-  useEffect(() => {
-    const timer = setTimeout(() => setWaitElapsed(true), TEST_EVENT_OUTCOME_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, []);
 
   const progress = testRunProgress(rows, engineWorkflowId, waitElapsed);
   const liveOutcome = progress.outcome;
@@ -571,7 +583,7 @@ function TestRunOutcome({
     }
   }, [liveOutcome]);
 
-  const outcome = resolveTestRunOutcome(liveOutcome, sticky, recorded?.run ?? null);
+  const outcome = settleTestEventOutcome(resolveTestRunOutcome(liveOutcome, sticky, recorded?.run ?? null), gaveUp);
   const isDryRun = dryRun || recorded?.run.dryRun === true;
 
   return (
@@ -604,6 +616,11 @@ function TestRunOutcome({
           {mode === "event"
             ? "This workflow did not run. Its trigger conditions may have filtered out the sample event."
             : "The engine did not start the run. Check that the workflow service is running."}
+        </p>
+      )}
+      {outcome.kind === "unsettled" && (
+        <p className="text-xs text-muted-foreground" data-testid="test-run-unsettled">
+          No result after a minute. The run may still be going: follow it in this workflow's Runs panel.
         </p>
       )}
       {outcome.kind === "failed" && (

@@ -29,8 +29,8 @@ import { useAlertLibrary } from "@/hooks/use-alert-library";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { alertLengthSeconds, durationOf, formatSeconds, layerLabel, longestLayerId } from "@/lib/alert-editor";
-import { inlineCopyOfLibraryAlert } from "@/lib/alert-library";
+import { durationOf, formatSeconds, layerLabel, longestLayerId, playedLengthSeconds } from "@/lib/alert-editor";
+import { inlineCopyOfLibraryAlert, inputVariableOptions, unfilledInputsText } from "@/lib/alert-library";
 import {
   activityEditFor,
   activityOf,
@@ -113,14 +113,14 @@ export function AlertLayoutEditor({
   };
   const done = () => onDone(session.changedLayout());
   const duplicate = (alert: LibraryAlert) => {
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(alert);
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(alert, {}, availableVariables);
     session.replace(doc);
     session.editor.dispatch("selection.clear");
     setChoosingStart(false);
     if (unfilled.length > 0) {
       toast({
         title: "Some of its inputs had no value",
-        description: `${unfilled.join(", ")} ${unfilled.length === 1 ? "is" : "are"} left empty in this copy.`,
+        description: unfilledInputsText(unfilled),
       });
     }
   };
@@ -391,7 +391,12 @@ interface NodeLayer {
 export function useAlertEditorView(
   session: AlertEditorHandle | null,
   availableVariables: VariableOption[],
-  /** A linked alert's input values from the step, which the live preview binds. */
+  /**
+   * A linked library alert's input values from the step, which the live preview binds.
+   * Given, the alert is a library alert, whose text refers to its own inputs rather than
+   * to the step's variables, so the text fields offer its inputs, and
+   * `availableVariables` only shortens the step's values and fills the sample event.
+   */
   previewInputs?: Record<string, unknown>
 ): AlertEditorView | null {
   const { toast } = useToast();
@@ -400,7 +405,16 @@ export function useAlertEditorView(
   const variablesKey = JSON.stringify(availableVariables.map((variable) => variable.value));
   // biome-ignore lint/correctness/useExhaustiveDependencies: variablesKey stands for availableVariables' content
   const names = useMemo(() => variableNames(availableVariables), [variablesKey]);
-  const displayText = useCallback((text: string) => toDisplayText(text, names), [names]);
+  const linked = previewInputs !== undefined;
+  const declaredInputs = session?.state?.doc?.inputs;
+  const fieldVariablesKey = linked ? JSON.stringify(declaredInputs ?? []) : variablesKey;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fieldVariablesKey stands for the offered variables' content
+  const fieldVariables = useMemo(
+    () => (linked ? inputVariableOptions(declaredInputs ?? []) : availableVariables),
+    [fieldVariablesKey, linked]
+  );
+  const fieldNames = useMemo(() => variableNames(fieldVariables), [fieldVariables]);
+  const displayText = useCallback((text: string) => toDisplayText(text, fieldNames), [fieldNames]);
   const report = useCallback(
     (result: CommandResult) => {
       if (!result.ok) {
@@ -473,12 +487,12 @@ export function useAlertEditorView(
   const labelOf = (node: NodeView) =>
     layerLabel({ kind: node.kind, name: node.placement.name, settings: node.placement.settings }, displayText);
   const doc = state.doc;
-  // Once a layer has a window of its own, a layer's duration alone no longer says when the alert ends:
-  // the editor's resolved tracks do.
+  // Once a layer has a window of its own, a layer's duration alone no longer says which layer ends the
+  // alert: the editor's resolved tracks do.
   const tracks = hasActivities(doc.behaviors) ? state.timeline.tracks : null;
   const tracked = tracks === null ? null : trackedLength(tracks);
   const timed = nodes.map((node) => ({ id: node.id, settings: node.placement.settings }));
-  const length = tracked === null ? alertLengthSeconds(timed) : tracked.endMs / 1000;
+  const length = playedLengthSeconds(state.timeline.tracks, timed);
   const longestId = nodes.length > 1 ? (tracked === null ? longestLayerId(timed) : tracked.longestId) : undefined;
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
   const placeable = new Set(state.palette.map((row) => row.widgetId));
@@ -512,7 +526,7 @@ export function useAlertEditorView(
       fields={(selectedRow?.settings ?? []) as unknown as ConfigField[]}
       canvas={canvas}
       isLongest={selected.id === longestId}
-      availableVariables={availableVariables}
+      availableVariables={fieldVariables}
       onChangeSettings={(settings) => report(session.editor.nodes.patch(selected.id, { settings }))}
       onResize={(width) => report(session.editor.nodes.resize(selected.id, { width }))}
       onMoveCenter={(center) => report(session.editor.nodes.moveCenter(selected.id, center))}
@@ -666,7 +680,7 @@ function AlertSummary({ view }: { view: AlertEditorView }) {
           {view.canvas.width} × {view.canvas.height}
         </dd>
         <dt className="text-muted-foreground">Length</dt>
-        <dd className="text-xs leading-5">{view.lengthLabel} (longest layer)</dd>
+        <dd className="text-xs leading-5">{view.lengthLabel}, exits included</dd>
         <dt className="text-muted-foreground">Layers</dt>
         <dd className="font-mono text-xs leading-5">{view.layerCount}</dd>
       </dl>

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { describeTestEventOutcome } from "./test-event-outcome";
+import {
+  describeTestEventOutcome,
+  settleTestEventOutcome,
+  TestEventTimeoutError,
+  withinTimeout,
+} from "./test-event-outcome";
 
 describe("describeTestEventOutcome", () => {
   test("waits while the subscription is still loading", () => {
@@ -52,5 +57,39 @@ describe("describeTestEventOutcome", () => {
   test("still reports a failure the engine could not explain", () => {
     const outcome = describeTestEventOutcome({ status: "error" }, false);
     expect(outcome).toMatchObject({ kind: "failed", detail: "No reason was reported." });
+  });
+});
+
+describe("settleTestEventOutcome", () => {
+  test("leaves an outcome alone until the caller gives up", () => {
+    expect(settleTestEventOutcome({ kind: "running" }, false)).toEqual({ kind: "running" });
+    expect(settleTestEventOutcome({ kind: "waiting" }, false)).toEqual({ kind: "waiting" });
+  });
+
+  test("settles a wait or a run with no answer once the caller gives up", () => {
+    expect(settleTestEventOutcome({ kind: "running" }, true)).toEqual({ kind: "unsettled" });
+    expect(settleTestEventOutcome({ kind: "waiting" }, true)).toEqual({ kind: "unsettled" });
+  });
+
+  test("keeps an answer however long it took", () => {
+    const failed = { kind: "failed" as const, title: "t", detail: "d" };
+    expect(settleTestEventOutcome(failed, true)).toEqual(failed);
+    expect(settleTestEventOutcome({ kind: "succeeded" }, true)).toEqual({ kind: "succeeded" });
+    expect(settleTestEventOutcome({ kind: "nothingMatched" }, true)).toEqual({ kind: "nothingMatched" });
+  });
+});
+
+describe("withinTimeout", () => {
+  test("passes the work's result through", async () => {
+    expect(await withinTimeout(Promise.resolve("done"), 1000, "late")).toBe("done");
+  });
+
+  test("passes the work's failure through", async () => {
+    await expect(withinTimeout(Promise.reject(new Error("refused")), 1000, "late")).rejects.toThrow("refused");
+  });
+
+  test("fails with the message when the work never settles", async () => {
+    const never = new Promise<string>(() => {});
+    await expect(withinTimeout(never, 5, "late")).rejects.toBeInstanceOf(TestEventTimeoutError);
   });
 });
