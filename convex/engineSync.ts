@@ -5,6 +5,7 @@ import { action, internalAction, internalMutation, query } from "./_generated/se
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { SYNC_STEPS } from "./lib/engineSync/steps";
+import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { isInstanceMember } from "./lib/teamAccess";
 
@@ -18,7 +19,7 @@ import { isInstanceMember } from "./lib/teamAccess";
 export const runSync = internalAction({
   args: {
     instanceId: v.id("instances"),
-    trigger: v.union(v.literal("scheduled"), v.literal("manual")),
+    trigger: syncTriggerValidator,
   },
   handler: async (ctx, { instanceId, trigger }) => {
     const bundle = await ctx.runQuery(internal.engineSyncInternal.getInstanceBundle, { instanceId });

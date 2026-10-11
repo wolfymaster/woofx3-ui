@@ -1,6 +1,7 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 
 // Must match SessionSummarySession and SessionSummaryTotals in
@@ -1777,7 +1778,7 @@ export default defineSchema({
   // live-progress feed when status="running".
   syncRuns: defineTable({
     instanceId: v.id("instances"),
-    trigger: v.union(v.literal("scheduled"), v.literal("manual")),
+    trigger: syncTriggerValidator,
     status: v.union(v.literal("running"), v.literal("success"), v.literal("error")),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),

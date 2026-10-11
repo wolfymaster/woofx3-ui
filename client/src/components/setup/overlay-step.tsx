@@ -3,12 +3,18 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { SetupStatus } from "@convex/setup";
 import { useAction, useQuery } from "convex/react";
 import { Copy, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
-import { findAlertWidget, SETUP_OVERLAY_NAME, SETUP_OVERLAY_SIZE, setupOverlayWidgets } from "@/lib/setup-overlay";
+import {
+  findAlertWidget,
+  overlayCatalogState,
+  SETUP_OVERLAY_NAME,
+  SETUP_OVERLAY_SIZE,
+  setupOverlayWidgets,
+} from "@/lib/setup-overlay";
 
 interface OverlayStepProps {
   instanceId: Id<"instances">;
@@ -34,21 +40,49 @@ function Actions({ onContinue, continueLabel }: { onContinue: () => void; contin
  * to OBS. Uses the instance's first scene, or creates one with a full-screen
  * alert widget when there is none. Scenes live on the engine, so before the
  * engine is ready this only says where the URL will be.
+ *
+ * The alert widget comes from the widget catalog the engine sync mirrors, so
+ * creating waits until a sync has read the engine's widgets, and asks for one
+ * if none has run, rather than making an overlay with nothing on it.
  */
 export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps) {
   const scenes = useQuery(api.scenes.list, status.engineRegistered ? { instanceId } : "skip");
   const catalog = useQuery(api.sceneWidgets.listForInstance, status.engineRegistered ? { instanceId } : "skip");
+  const syncState = useQuery(api.engineSync.getSyncState, status.engineRegistered ? { instanceId } : "skip");
+  const syncNow = useAction(api.engineSync.syncNow);
   const createScene = useAction(api.sceneActions.createScene);
   const getOrCreateKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The newest sync run's id when this page asked for a sync; undefined until it asks.
+  const [syncRequestedAfter, setSyncRequestedAfter] = useState<string | null | undefined>(undefined);
 
   // The engine announces a new scene by webhook, so a created scene shows up
   // in `scenes` a moment after createScene returns.
   const scene = scenes ? [...scenes].sort((a, b) => a._creationTime - b._creationTime)[0] : undefined;
   const sceneId = scene?.engineSceneId ? scene._id : null;
+
+  const alertWidget = catalog ? findAlertWidget(catalog) : undefined;
+  const syncRuns = syncState?.recentRuns ?? [];
+  const latestRunId = syncRuns[0]?._id ?? null;
+  const catalogState = overlayCatalogState(alertWidget !== undefined, syncRuns, syncRequestedAfter);
+  const needsScene = scenes !== undefined && !scene;
+
+  const requestSync = useCallback(() => {
+    setError(null);
+    setSyncRequestedAfter(latestRunId);
+    syncNow({ instanceId }).catch((err: unknown) => {
+      setError(err instanceof Error ? err.message : String(err));
+    });
+  }, [instanceId, latestRunId, syncNow]);
+
+  useEffect(() => {
+    if (needsScene && syncState !== undefined && catalogState === "unsynced" && syncRequestedAfter === undefined) {
+      requestSync();
+    }
+  }, [needsScene, syncState, catalogState, syncRequestedAfter, requestSync]);
 
   useEffect(() => {
     if (!sceneId || url) {
@@ -90,7 +124,7 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
       await createScene({
         instanceId,
         name: SETUP_OVERLAY_NAME,
-        widgetsJson: JSON.stringify(setupOverlayWidgets(findAlertWidget(catalog ?? []))),
+        widgetsJson: JSON.stringify(setupOverlayWidgets(alertWidget)),
         layoutJson: JSON.stringify({ ...SETUP_OVERLAY_SIZE, backgroundColor: "transparent" }),
       });
     } catch (err) {
@@ -107,7 +141,7 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
   }
 
   let body: React.ReactNode;
-  if (scenes === undefined || catalog === undefined) {
+  if (scenes === undefined || catalog === undefined || syncState === undefined) {
     body = <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
   } else if (!scene) {
     body = (
@@ -115,10 +149,23 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
         <p className="text-sm text-muted-foreground">
           We&apos;ll make a full-screen overlay where your alerts play. You can add more to it in Scenes later.
         </p>
-        <Button onClick={() => void handleCreate()} disabled={creating} data-testid="button-create-overlay">
-          {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-          Create my overlay
-        </Button>
+        {catalogState === "failed" ? (
+          <div className="space-y-2">
+            <p className="text-sm text-destructive">Couldn&apos;t load your widgets from your engine.</p>
+            <Button variant="outline" onClick={requestSync} data-testid="button-overlay-retry-sync">
+              Try again
+            </Button>
+          </div>
+        ) : (
+          <Button
+            onClick={() => void handleCreate()}
+            disabled={creating || catalogState !== "ready"}
+            data-testid="button-create-overlay"
+          >
+            {creating || catalogState !== "ready" ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Create my overlay
+          </Button>
+        )}
       </div>
     );
   } else if (!url) {

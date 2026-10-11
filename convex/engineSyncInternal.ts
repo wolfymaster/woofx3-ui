@@ -5,6 +5,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { reconcileEndpoints } from "./inboundWebhooks";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
+import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
@@ -951,7 +952,7 @@ export const ensureInstanceSyncRow = internalMutation({
 export const startRun = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    trigger: v.union(v.literal("scheduled"), v.literal("manual")),
+    trigger: syncTriggerValidator,
   },
   handler: async (ctx, { instanceId, trigger }): Promise<Id<"syncRuns">> => {
     const now = Date.now();
