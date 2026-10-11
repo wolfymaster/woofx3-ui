@@ -30,7 +30,7 @@ import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { alertLengthSeconds, durationOf, formatSeconds, layerLabel, longestLayerId } from "@/lib/alert-editor";
-import { inlineCopyOfLibraryAlert } from "@/lib/alert-library";
+import { inlineCopyOfLibraryAlert, inputVariableOptions, unfilledInputsText } from "@/lib/alert-library";
 import {
   activityEditFor,
   activityOf,
@@ -113,14 +113,14 @@ export function AlertLayoutEditor({
   };
   const done = () => onDone(session.changedLayout());
   const duplicate = (alert: LibraryAlert) => {
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(alert);
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(alert, {}, availableVariables);
     session.replace(doc);
     session.editor.dispatch("selection.clear");
     setChoosingStart(false);
     if (unfilled.length > 0) {
       toast({
         title: "Some of its inputs had no value",
-        description: `${unfilled.join(", ")} ${unfilled.length === 1 ? "is" : "are"} left empty in this copy.`,
+        description: unfilledInputsText(unfilled),
       });
     }
   };
@@ -391,7 +391,12 @@ interface NodeLayer {
 export function useAlertEditorView(
   session: AlertEditorHandle | null,
   availableVariables: VariableOption[],
-  /** A linked alert's input values from the step, which the live preview binds. */
+  /**
+   * A linked library alert's input values from the step, which the live preview binds.
+   * Given, the alert is a library alert, whose text refers to its own inputs rather than
+   * to the step's variables, so the text fields offer its inputs, and
+   * `availableVariables` only shortens the step's values and fills the sample event.
+   */
   previewInputs?: Record<string, unknown>
 ): AlertEditorView | null {
   const { toast } = useToast();
@@ -400,7 +405,16 @@ export function useAlertEditorView(
   const variablesKey = JSON.stringify(availableVariables.map((variable) => variable.value));
   // biome-ignore lint/correctness/useExhaustiveDependencies: variablesKey stands for availableVariables' content
   const names = useMemo(() => variableNames(availableVariables), [variablesKey]);
-  const displayText = useCallback((text: string) => toDisplayText(text, names), [names]);
+  const linked = previewInputs !== undefined;
+  const declaredInputs = session?.state?.doc?.inputs;
+  const fieldVariablesKey = linked ? JSON.stringify(declaredInputs ?? []) : variablesKey;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fieldVariablesKey stands for the offered variables' content
+  const fieldVariables = useMemo(
+    () => (linked ? inputVariableOptions(declaredInputs ?? []) : availableVariables),
+    [fieldVariablesKey, linked]
+  );
+  const fieldNames = useMemo(() => variableNames(fieldVariables), [fieldVariables]);
+  const displayText = useCallback((text: string) => toDisplayText(text, fieldNames), [fieldNames]);
   const report = useCallback(
     (result: CommandResult) => {
       if (!result.ok) {
@@ -512,7 +526,7 @@ export function useAlertEditorView(
       fields={(selectedRow?.settings ?? []) as unknown as ConfigField[]}
       canvas={canvas}
       isLongest={selected.id === longestId}
-      availableVariables={availableVariables}
+      availableVariables={fieldVariables}
       onChangeSettings={(settings) => report(session.editor.nodes.patch(selected.id, { settings }))}
       onResize={(width) => report(session.editor.nodes.resize(selected.id, { width }))}
       onMoveCenter={(center) => report(session.editor.nodes.moveCenter(selected.id, center))}

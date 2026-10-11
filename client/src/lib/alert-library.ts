@@ -5,6 +5,7 @@ import {
   bindInputs,
   type CompositionDocument,
   type InputField,
+  inputReferences,
   isPlainObject,
   normalizeComposition,
 } from "@woofx3/scene/model";
@@ -92,27 +93,68 @@ export function compositionOfLibraryAlert(row: LibraryAlertDocument): Compositio
 
 /**
  * A library alert copied into one step: its published document with every
- * input filled in from `values`, or the input's default, so the copy refers
- * to no inputs and declares none. A value may itself hold `${...}`, which
- * the workflow resolves in a step's layout as it does in inputs. An input
- * with neither becomes empty text, and is named in `unfilled`; a document
- * whose references cannot be bound at all is copied as it is.
+ * input reference filled in, so the copy refers to no inputs and declares
+ * none. Each input takes, in order:
+ *
+ * - the step's value for it (`values`), which may itself hold `${...}`: the
+ *   workflow resolves that in a step's layout as it does in inputs;
+ * - the input's declared default;
+ * - the variable in `available` the input is named after, which is the one it
+ *   replaced when the alert was saved from a step (see libraryAlertOfStep);
+ * - otherwise `{id}` as plain text, so the place the value went stays visible
+ *   and the text field offers to fill it. Those inputs are named in `unfilled`.
+ *
+ * A reference to an input the alert does not declare is filled the same way,
+ * since the copy cannot keep a reference nothing fills. A document holding a
+ * malformed reference is copied as it is.
  */
 export function inlineCopyOfLibraryAlert(
   row: LibraryAlertDocument,
-  values: Readonly<Record<string, unknown>> = {}
+  values: Readonly<Record<string, unknown>> = {},
+  available: readonly VariableOption[] = []
 ): { doc: CompositionDocument; unfilled: string[] } {
   const published = compositionOfLibraryAlert(row);
-  const inputs = libraryAlertInputs(row).filter(isPlainObject) as CompositionDocument["inputs"];
-  const declared: CompositionDocument = { ...published, inputs };
-  const first = bindInputs(declared, values);
-  if (first.ok) {
-    return { doc: withoutInputs(first.document), unfilled: [] };
+  const declared = new Map<string, Record<string, unknown>>();
+  for (const input of libraryAlertInputs(row)) {
+    if (isPlainObject(input) && typeof input.id === "string" && input.id !== "" && !declared.has(input.id)) {
+      declared.set(input.id, input);
+    }
   }
-  const unfilled = first.report.missing;
-  const filled = { ...values, ...Object.fromEntries(unfilled.map((id) => [id, ""])) };
-  const second = bindInputs(declared, filled);
-  return { doc: withoutInputs(second.ok ? second.document : published), unfilled };
+  const referenced = inputReferences({ ...published, inputs: [] }).map((usage) => usage.input);
+  const ids = Array.from(new Set([...declared.keys(), ...referenced]));
+
+  const filled: Record<string, unknown> = {};
+  const unfilled: string[] = [];
+  for (const id of ids) {
+    const value = values[id];
+    const defaultValue = declared.get(id)?.defaultValue;
+    const named = variableNamedAfter(id, available);
+    if (value !== undefined && value !== "") {
+      filled[id] = value;
+    } else if (defaultValue !== undefined) {
+      filled[id] = defaultValue;
+    } else if (named !== undefined) {
+      filled[id] = named;
+    } else {
+      filled[id] = `{${id}}`;
+      unfilled.push(id);
+    }
+  }
+  const inputs = ids.map((id) => ({ id, label: id, type: "text" }));
+  const bound = bindInputs({ ...published, inputs }, filled);
+  return { doc: withoutInputs(bound.ok ? bound.document : published), unfilled: bound.ok ? unfilled : [] };
+}
+
+/** What a copy says about the inputs it left as `{id}` placeholders. */
+export function unfilledInputsText(unfilled: readonly string[]): string {
+  const names = unfilled.map((id) => `{${id}}`).join(", ");
+  const verb = unfilled.length === 1 ? "is" : "are";
+  return `${names} ${verb} left in this copy where the value goes. Insert a variable there, or type the text.`;
+}
+
+/** The reference of the first variable whose path ends in `id`, as libraryAlertOfStep names an input. */
+function variableNamedAfter(id: string, available: readonly VariableOption[]): string | undefined {
+  return available.find((option) => option.value.slice(2, -1).trim().split(/[.:]/).pop() === id)?.value;
 }
 
 function withoutInputs(doc: CompositionDocument): CompositionDocument {
@@ -232,6 +274,20 @@ export function inputFieldsOf(inputs: readonly unknown[]): ConfigField[] {
     fields.push({ ...(raw as unknown as ConfigField), id: raw.id, label, type });
   }
   return fields;
+}
+
+/**
+ * A library alert's inputs as the variables its text fields offer: each is
+ * referred to inside text as `{{id}}` (see variable-display.ts).
+ */
+export function inputVariableOptions(inputs: readonly unknown[]): VariableOption[] {
+  return inputFieldsOf(inputs).map((field) => ({
+    value: `{{${field.id}}}`,
+    label: field.label,
+    group: "Alert inputs",
+    type: field.type === "number" ? "number" : "string",
+    description: field.description,
+  }));
 }
 
 const REFERENCE = /\$\{([^{}]*)\}/g;

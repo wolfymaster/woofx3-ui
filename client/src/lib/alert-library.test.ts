@@ -6,6 +6,7 @@ import {
   inlineAlertParams,
   inlineCopyOfLibraryAlert,
   inputFieldsOf,
+  inputVariableOptions,
   inputVariableWarnings,
   type LibraryAlertDocument,
   libraryAlertOfStep,
@@ -185,11 +186,49 @@ describe("inlineCopyOfLibraryAlert", () => {
     expect(doc.widgets.top?.settings).toEqual({ text: "Thanks friend!" });
   });
 
-  test("an input with neither is left empty and named", () => {
+  test("an input with no value or default takes the variable it is named after", () => {
     const row = libraryRow({ inputs: [{ id: "name", label: "Name", type: "text" }] });
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(row);
+    const available = [variable("${trigger.data.amount}"), variable("${trigger.data.user.name}")];
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(row, {}, available);
+    expect(unfilled).toEqual([]);
+    expect(doc.widgets.top?.settings).toEqual({ text: "Thanks ${trigger.data.user.name}!" });
+  });
+
+  test("an input with nothing to fill it is kept visible as {id} and named", () => {
+    const row = libraryRow({ inputs: [{ id: "name", label: "Name", type: "text" }] });
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(row, {}, [variable("${trigger.data.amount}")]);
     expect(unfilled).toEqual(["name"]);
-    expect(doc.widgets.top?.settings).toEqual({ text: "Thanks !" });
+    expect(doc.widgets.top?.settings).toEqual({ text: "Thanks {name}!" });
+  });
+
+  test("an empty step value does not erase the text", () => {
+    const row = libraryRow({ inputs: [{ id: "name", label: "Name", type: "text" }] });
+    const { doc } = inlineCopyOfLibraryAlert(row, { name: "" });
+    expect(doc.widgets.top?.settings).toEqual({ text: "Thanks {name}!" });
+  });
+
+  test("fills a reference to an input the alert does not declare", () => {
+    const row = libraryRow({ inputs: [] });
+    const bound = inlineCopyOfLibraryAlert(row, { name: "${trigger.data.userName}" });
+    expect(bound.doc.widgets.top?.settings).toEqual({ text: "Thanks ${trigger.data.userName}!" });
+    const unbound = inlineCopyOfLibraryAlert(row);
+    expect(unbound.unfilled).toEqual(["name"]);
+    expect(unbound.doc.widgets.top?.settings).toEqual({ text: "Thanks {name}!" });
+  });
+});
+
+describe("inputVariableOptions", () => {
+  test("offers each input as a {{id}} reference", () => {
+    expect(
+      inputVariableOptions([
+        { id: "userName", label: "User name", type: "text" },
+        { id: "amount", label: "Bits", type: "number" },
+        { label: "no id" },
+      ])
+    ).toEqual([
+      { value: "{{userName}}", label: "User name", group: "Alert inputs", type: "string", description: undefined },
+      { value: "{{amount}}", label: "Bits", group: "Alert inputs", type: "number", description: undefined },
+    ]);
   });
 });
 

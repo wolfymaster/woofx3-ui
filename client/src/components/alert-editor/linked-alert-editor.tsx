@@ -26,7 +26,7 @@ import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { ALERT_COMPOSITION_CAPABILITY, alertLayoutShapeFor, storedAlertLayout } from "@/lib/alert-layout";
-import { compositionOfLibraryAlert, inlineCopyOfLibraryAlert } from "@/lib/alert-library";
+import { compositionOfLibraryAlert, inlineCopyOfLibraryAlert, unfilledInputsText } from "@/lib/alert-library";
 import { catalogOfRows } from "@/lib/scene-composition";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -40,7 +40,10 @@ interface LinkedAlertEditorProps {
   context: ReactNode;
   /** Named in the back arrow's label: "Back to {backLabel}". */
   backLabel: string;
-  /** Offered in the layers' text settings. A library alert's own text should use its inputs instead. */
+  /**
+   * What the step can reference, which its input values use. The alert's own text
+   * fields offer the alert's inputs instead: a library alert is played by many steps.
+   */
   availableVariables: VariableOption[];
   /** What the step belongs to, for "Duplicate for this {owner} only". */
   owner: "trigger" | "command";
@@ -159,11 +162,11 @@ export function LinkedAlertEditor({
     if (!row) {
       return;
     }
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(row, inputValues);
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(row, inputValues, availableVariables);
     if (unfilled.length > 0) {
       toast({
         title: "Some of its inputs had no value",
-        description: `${unfilled.join(", ")} ${unfilled.length === 1 ? "is" : "are"} left empty in this copy.`,
+        description: unfilledInputsText(unfilled),
       });
     }
     onDuplicateHere(storedAlertLayout(doc, shape));
