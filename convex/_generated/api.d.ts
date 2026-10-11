@@ -14,6 +14,8 @@ import type * as actionDefinitions from "../actionDefinitions.js";
 import type * as activityPanel from "../activityPanel.js";
 import type * as adBreaks from "../adBreaks.js";
 import type * as alertActions from "../alertActions.js";
+import type * as alertCompositionActions from "../alertCompositionActions.js";
+import type * as alertCompositions from "../alertCompositions.js";
 import type * as alertLog from "../alertLog.js";
 import type * as auth from "../auth.js";
 import type * as browserSource from "../browserSource.js";
@@ -249,6 +251,8 @@ declare const fullApi: ApiFromModules<{
   activityPanel: typeof activityPanel;
   adBreaks: typeof adBreaks;
   alertActions: typeof alertActions;
+  alertCompositionActions: typeof alertCompositionActions;
+  alertCompositions: typeof alertCompositions;
   alertLog: typeof alertLog;
   auth: typeof auth;
   browserSource: typeof browserSource;

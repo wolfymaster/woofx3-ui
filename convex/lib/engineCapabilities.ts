@@ -20,6 +20,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "analytics.aggregates",
   "analytics.gauges",
   "analytics.sessions",
+  "compositions.alerts",
   "config.bundles",
   "modules.files",
   "modules.localEndpoints",
