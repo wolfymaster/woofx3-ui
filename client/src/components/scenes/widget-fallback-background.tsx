@@ -1,11 +1,12 @@
 import { ImageOff } from "lucide-react";
 import type { ReactNode } from "react";
-import type { Widget } from "@/types";
 
 interface WidgetFallbackBackgroundProps {
-  widget: Widget;
-  /** Shown instead of the widget's name. */
-  label?: string;
+  /** The widget's box on the canvas, rotated about its centre. */
+  box: { x: number; y: number; width: number; height: number; rotation: number };
+  opacity: number;
+  /** What the generic placeholder calls the widget. */
+  label: string;
   /** A widget-specific stand-in, drawn instead of the generic placeholder. */
   children?: ReactNode;
 }
@@ -18,13 +19,14 @@ interface WidgetFallbackBackgroundProps {
  * empty canvas. Widgets that render fine paint over it, since the iframe sits
  * above this layer.
  */
-export function WidgetFallbackBackground({ widget, label, children }: WidgetFallbackBackgroundProps) {
+export function WidgetFallbackBackground({ box: placed, opacity, label, children }: WidgetFallbackBackgroundProps) {
   const box = {
-    left: widget.position.x,
-    top: widget.position.y,
-    width: widget.size.width,
-    height: widget.size.height,
-    opacity: widget.opacity,
+    left: placed.x,
+    top: placed.y,
+    width: placed.width,
+    height: placed.height,
+    opacity,
+    transform: placed.rotation === 0 ? undefined : `rotate(${placed.rotation}deg)`,
   };
   if (children) {
     return (
@@ -43,7 +45,7 @@ export function WidgetFallbackBackground({ widget, label, children }: WidgetFall
       }}
     >
       <ImageOff className="h-5 w-5 opacity-60" />
-      <span className="text-[10px] opacity-70 px-2 truncate max-w-full">{label ?? widget.name}</span>
+      <span className="text-[10px] opacity-70 px-2 truncate max-w-full">{label}</span>
     </div>
   );
 }

@@ -7,10 +7,11 @@ import {
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
 import type { VariableOption } from "@/lib/workflow-variables";
-import type { Widget } from "@/types";
 
 interface WidgetSettingsPanelProps {
-  widget: Widget;
+  /** The widget's canonical id, `{moduleId}:widget:{manifestId}`. */
+  widgetCanonicalId: string;
+  settings: Record<string, unknown>;
   fields: ConfigField[];
   renderers: Record<string, CustomFieldRenderer>;
   availableVariables?: VariableOption[];
@@ -19,7 +20,8 @@ interface WidgetSettingsPanelProps {
 
 /** Right-side settings pane for the currently-selected canvas widget. */
 export function WidgetSettingsPanel({
-  widget,
+  widgetCanonicalId,
+  settings,
   fields,
   renderers,
   availableVariables,
@@ -39,14 +41,14 @@ export function WidgetSettingsPanel({
             // `description` and hints for free.
             fields={
               withFieldOptionsOwner(
-                withWidgetCanonicalId(fields, widget.widgetCanonicalId),
-                fieldOptionsOwnerFromCanonicalId(widget.widgetCanonicalId)
+                withWidgetCanonicalId(fields, widgetCanonicalId),
+                fieldOptionsOwnerFromCanonicalId(widgetCanonicalId)
               ) as unknown as FieldDescriptor[]
             }
-            values={widget.settings}
+            values={settings}
             onChange={(next) => {
               for (const field of fields) {
-                if (next[field.id] !== widget.settings[field.id]) {
+                if (next[field.id] !== settings[field.id]) {
                   onChangeSetting(field.id, next[field.id]);
                 }
               }
