@@ -30,7 +30,7 @@ import { useAlertLibrary } from "@/hooks/use-alert-library";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { alertLengthSeconds, durationOf, formatSeconds, layerLabel, longestLayerId } from "@/lib/alert-editor";
+import { durationOf, formatSeconds, layerLabel, longestLayerId, playedLengthSeconds } from "@/lib/alert-editor";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
 import { inlineCopyOfLibraryAlert, unfilledInputsText } from "@/lib/alert-library";
 import {
@@ -472,12 +472,12 @@ export function useAlertEditorView(
   const labelOf = (node: NodeView) =>
     layerLabel({ kind: node.kind, name: node.placement.name, settings: node.placement.settings }, displayText);
   const doc = state.doc;
-  // Once a layer has a window of its own, a layer's duration alone no longer says when the alert ends:
-  // the editor's resolved tracks do.
+  // Once a layer has a window of its own, a layer's duration alone no longer says which layer ends the
+  // alert: the editor's resolved tracks do.
   const tracks = hasActivities(doc.behaviors) ? state.timeline.tracks : null;
   const tracked = tracks === null ? null : trackedLength(tracks);
   const timed = nodes.map((node) => ({ id: node.id, settings: node.placement.settings }));
-  const length = tracked === null ? alertLengthSeconds(timed) : tracked.endMs / 1000;
+  const length = playedLengthSeconds(state.timeline.tracks, timed);
   const longestId = nodes.length > 1 ? (tracked === null ? longestLayerId(timed) : tracked.longestId) : undefined;
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
   const placeable = new Set(state.palette.map((row) => row.widgetId));
@@ -665,7 +665,7 @@ function AlertSummary({ view }: { view: AlertEditorView }) {
           {view.canvas.width} × {view.canvas.height}
         </dd>
         <dt className="text-muted-foreground">Length</dt>
-        <dd className="text-xs leading-5">{view.lengthLabel} (longest layer)</dd>
+        <dd className="text-xs leading-5">{view.lengthLabel}, exits included</dd>
         <dt className="text-muted-foreground">Layers</dt>
         <dd className="font-mono text-xs leading-5">{view.layerCount}</dd>
       </dl>

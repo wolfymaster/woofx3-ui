@@ -1,4 +1,5 @@
 import type { WidgetKind } from "@woofx3/scene/editor";
+import type { ResolvedTimeline } from "@woofx3/scene/model";
 
 /**
  * What the alert editor shows about its layers: their lengths, the alert's
@@ -23,6 +24,23 @@ export function durationOf(layer: Pick<TimedLayer, "settings">): number {
 /** How long the alert plays: until its longest layer ends. Zero when no layer has a length. */
 export function alertLengthSeconds(layers: readonly Pick<TimedLayer, "settings">[]): number {
   return layers.reduce((longest, layer) => Math.max(longest, durationOf(layer)), 0);
+}
+
+/**
+ * How long the alert plays, in seconds, as the overlay plays it: until every
+ * layer has left, exit transitions included, which is the editor's estimated
+ * tracks' `finishMs` and the length the live preview reports. An alert whose
+ * layers have no length holds UNTIMED_ALERT_MS rather than ending at once.
+ * Without tracks (nothing resolved yet) it falls back to the longest layer.
+ */
+export function playedLengthSeconds(
+  tracks: Pick<ResolvedTimeline, "finishMs"> | null,
+  layers: readonly Pick<TimedLayer, "settings">[]
+): number {
+  if (tracks !== null && tracks.finishMs !== null) {
+    return tracks.finishMs / 1000;
+  }
+  return alertLengthSeconds(layers);
 }
 
 /** The one layer that sets the alert's length, when there is exactly one longest. */
