@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import type { Doc } from "@convex/_generated/dataModel";
+import type { ActionStep } from "@woofx3/api";
 import { stackOrder } from "@woofx3/scene/model";
 import {
+  commandStepNumbers,
   compositionOfLibraryAlert,
   describeLinks,
   inlineAlertParams,
@@ -14,7 +17,9 @@ import {
   linkedAlertParams,
   linkedCompositionId,
   linkedInputValues,
+  linkOwnerKey,
   unprovidedVariables,
+  workflowStepNumbers,
 } from "@/lib/alert-library";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -279,16 +284,70 @@ describe("libraryAlertOfStep", () => {
 });
 
 describe("describeLinks", () => {
-  test("names each step by its owner", () => {
-    const names = { workflows: new Map([["wf-1", "Follow alerts"]]), commands: new Map([["cmd-1", "hype"]]) };
+  const link = (ownerKind: "workflow" | "command", ownerId: string, stepId: string) => ({
+    ownerKind,
+    ownerId,
+    stepId,
+    createdAt: "",
+    updatedAt: "",
+  });
+
+  test("names each step by its owner and the number its editor shows", () => {
+    const names = {
+      workflows: new Map([["wf-1", "Follow alerts"]]),
+      commands: new Map([["cmd-1", "hype"]]),
+      stepNumbers: new Map([
+        [linkOwnerKey("workflow", "wf-1"), new Map([["act_1", 4]])],
+        [linkOwnerKey("command", "cmd-1"), new Map([["action-2", 2]])],
+      ]),
+    };
     const lines = describeLinks(
-      [
-        { ownerKind: "workflow", ownerId: "wf-1", stepId: "alert-1", createdAt: "", updatedAt: "" },
-        { ownerKind: "command", ownerId: "cmd-1", stepId: "action-2", createdAt: "", updatedAt: "" },
-        { ownerKind: "command", ownerId: "gone", stepId: "s", createdAt: "", updatedAt: "" },
-      ],
+      [link("workflow", "wf-1", "act_1"), link("command", "cmd-1", "action-2"), link("command", "gone", "s")],
       names
     );
-    expect(lines).toEqual(["Follow alerts · step alert-1", "!hype · step action-2", "A chat command · step s"]);
+    expect(lines).toEqual(["Follow alerts · step 4", "!hype · step 2", "A chat command"]);
+  });
+
+  test("never shows the engine's step id", () => {
+    const names = { workflows: new Map([["wf-1", "Raid welcome"]]), commands: new Map(), stepNumbers: new Map() };
+    expect(describeLinks([link("workflow", "wf-1", "act_1")], names)).toEqual(["Raid welcome"]);
+  });
+});
+
+describe("step numbers", () => {
+  const workflowRow = (definition: unknown) =>
+    ({ engineWorkflowId: "wf-1", isEnabled: true, definition }) as unknown as Doc<"workflows">;
+
+  test("numbers a workflow's actions by their place in their trigger, as the Alerts screen does", () => {
+    const row = workflowRow({
+      name: "Raid welcome",
+      trigger: { type: "event", event: "channel.raid" },
+      tasks: [
+        { id: "cond_1", type: "condition", conditions: [], onTrue: ["act_1", "act_2"] },
+        { id: "act_1", type: "action", function: "chat" },
+        { id: "act_2", type: "action", function: "alert" },
+      ],
+    });
+    const numbers = workflowStepNumbers(row);
+    expect(numbers.get("act_1")).toBe(1);
+    expect(numbers.get("act_2")).toBe(2);
+  });
+
+  test("numbers any other workflow by its place in the tasks", () => {
+    const row = workflowRow({
+      name: "Built",
+      trigger: { type: "event", event: "channel.raid" },
+      tasks: [
+        { id: "wait_1", type: "wait" },
+        { id: "act_1", type: "action", function: "alert" },
+      ],
+    });
+    expect(workflowStepNumbers(row).get("act_1")).toBe(2);
+  });
+
+  test("numbers a command's steps in order", () => {
+    const numbers = commandStepNumbers([{ id: "s1" }, {}] as ActionStep[]);
+    expect(numbers.get("s1")).toBe(1);
+    expect(numbers.get("action-2")).toBe(2);
   });
 });

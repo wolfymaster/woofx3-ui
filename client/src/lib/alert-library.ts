@@ -1,5 +1,5 @@
 import type { Doc } from "@convex/_generated/dataModel";
-import type { CompositionLinkInfo } from "@woofx3/api";
+import type { ActionStep, CompositionLinkInfo } from "@woofx3/api";
 import { CONFIG_FIELD_TYPES, type ConfigField, type ConfigFieldType } from "@woofx3/api/ui-schema";
 import {
   bindInputs,
@@ -10,7 +10,9 @@ import {
   normalizeComposition,
 } from "@woofx3/scene/model";
 import { compositionOfLegacyAlert, DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
+import { commandStepId } from "@/lib/command-drafts";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
+import { projectWorkflow } from "@/lib/trigger-projection";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 /**
@@ -358,16 +360,63 @@ export function inputVariableWarnings(
 export interface LinkOwnerNames {
   workflows: ReadonlyMap<string, string>;
   commands: ReadonlyMap<string, string>;
+  /** Each owner's step numbers as its editor shows them, by `linkOwnerKey` and then step id. */
+  stepNumbers: ReadonlyMap<string, ReadonlyMap<string, number>>;
+}
+
+/** The key `LinkOwnerNames.stepNumbers` holds an owner's steps under. */
+export function linkOwnerKey(kind: CompositionLinkInfo["ownerKind"], ownerId: string): string {
+  return `${kind}:${ownerId}`;
+}
+
+/**
+ * A workflow's step numbers as the editors show them: on the Alerts screen an
+ * action is numbered by its place among its trigger's actions ("Step 2"), so a
+ * workflow that screen can show is numbered that way. Any other workflow, or
+ * an action shared by several triggers, is numbered by its place in the
+ * workflow's tasks.
+ */
+export function workflowStepNumbers(row: Doc<"workflows">): Map<string, number> {
+  const numbers = new Map<string, number>();
+  const tasks = (row.definition as { tasks?: unknown } | undefined)?.tasks;
+  if (Array.isArray(tasks)) {
+    tasks.forEach((task, index) => {
+      if (isPlainObject(task) && typeof task.id === "string") {
+        numbers.set(task.id, index + 1);
+      }
+    });
+  }
+  const projected = projectWorkflow(row);
+  if (projected.ok) {
+    for (const trigger of projected.projection.triggers) {
+      trigger.actions.forEach((action, index) => {
+        numbers.set(action.id, index + 1);
+      });
+    }
+  }
+  return numbers;
+}
+
+/** A command's step numbers, as its editor shows them ("Step 2"). */
+export function commandStepNumbers(actions: readonly ActionStep[]): Map<string, number> {
+  return new Map(actions.map((action, index) => [commandStepId(action, index), index + 1]));
+}
+
+function linkOwnerName(link: CompositionLinkInfo, names: LinkOwnerNames): string {
+  if (link.ownerKind === "command") {
+    const command = names.commands.get(link.ownerId);
+    return command ? `!${command}` : "A chat command";
+  }
+  return names.workflows.get(link.ownerId) ?? "A trigger";
 }
 
 /** One line per step that links an alert, for saying where it is used. */
 export function describeLinks(links: readonly CompositionLinkInfo[], names: LinkOwnerNames): string[] {
   return links.map((link) => {
-    if (link.ownerKind === "command") {
-      const command = names.commands.get(link.ownerId);
-      return `${command ? `!${command}` : "A chat command"} · step ${link.stepId}`;
-    }
-    const workflow = names.workflows.get(link.ownerId);
-    return `${workflow ?? "A trigger"} · step ${link.stepId}`;
+    const owner = linkOwnerName(link, names);
+    // A step id is the engine's own (`act_1`), which no screen shows, so a step the
+    // dashboard cannot number is named by its owner alone.
+    const number = names.stepNumbers.get(linkOwnerKey(link.ownerKind, link.ownerId))?.get(link.stepId);
+    return number === undefined ? owner : `${owner} · step ${number}`;
   });
 }
