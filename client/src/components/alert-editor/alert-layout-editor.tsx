@@ -42,7 +42,7 @@ import {
   trackWindowLabel,
 } from "@/lib/behavior-editor";
 import { previewDocumentOf, sampleEventOf } from "@/lib/composition-preview";
-import { catalogWidgetOf } from "@/lib/scene-composition";
+import { canvasBackgroundOf, catalogWidgetOf } from "@/lib/scene-composition";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -562,6 +562,7 @@ export function useAlertEditorView(
       <AlertStage
         editor={session.editor}
         canvas={canvas}
+        background={canvasBackgroundOf(doc.layout)}
         nodes={nodes}
         guides={state.guides}
         zoom={stageZoom}

@@ -12,6 +12,9 @@ const ZOOM_CONTROL_ROOM = 56;
  * A zoom kept by someone else (the composition editor, whose gestures and
  * shortcuts need it), in place of the area's own.
  */
+/** The canvas a stage draws a composition on: the scene editor's and the alert editor's alike. */
+export const CANVAS_STAGE_CLASS = "relative shrink-0 overflow-hidden shadow-lg ring-1 ring-border";
+
 export interface StageZoom {
   zoom: number;
   /** Zoom follows the area's size rather than a level the user picked. */

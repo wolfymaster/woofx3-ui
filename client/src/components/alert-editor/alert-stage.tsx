@@ -10,6 +10,7 @@ import type {
 import { Film, Sparkles, Square, Volume2 } from "lucide-react";
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from "react";
 import { CompositionPreviewFrame } from "@/components/alert-editor/composition-preview-frame";
+import { CANVAS_STAGE_CLASS } from "@/components/common/stage-area";
 import { alertWidgetPreview, TextWidgetPreview } from "@/components/scenes/alert-widget-previews";
 import type { CompositionPreviewController } from "@/hooks/use-composition-preview";
 import { createFrameCoalescer } from "@/lib/frame-coalescer";
@@ -18,6 +19,8 @@ import { cn } from "@/lib/utils";
 interface AlertStageProps {
   editor: CompositionEditor;
   canvas: CanvasSize;
+  /** What the canvas draws behind the layers (canvasBackgroundOf). */
+  background: string;
   /** The editor's nodes, bottom of the stack first. */
   nodes: readonly NodeView[];
   /** The lines a gesture snapped to. */
@@ -72,6 +75,7 @@ interface PointerUpdate {
 export function AlertStage({
   editor,
   canvas,
+  background,
   nodes,
   guides,
   zoom,
@@ -166,8 +170,8 @@ export function AlertStage({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the canvas background deselects, and its focused layers send keys to the editor
     <div
-      className="relative shrink-0 overflow-hidden bg-[#050507] shadow-lg"
-      style={{ width: canvas.width * zoom, height: canvas.height * zoom }}
+      className={CANVAS_STAGE_CLASS}
+      style={{ width: canvas.width * zoom, height: canvas.height * zoom, background }}
       onPointerDown={deselectOnBackground}
       onKeyDown={sendKey}
     >
