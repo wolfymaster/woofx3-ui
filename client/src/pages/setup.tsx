@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { useMutation, useQuery } from "convex/react";
 import { Check, Loader2, MonitorPlay } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useParams } from "wouter";
 import { DashboardStep } from "@/components/setup/dashboard-step";
 import { FinishStep } from "@/components/setup/finish-step";
@@ -16,10 +16,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useInstance } from "@/hooks/use-instance";
 import {
   allowedSetupStep,
-  firstIncompleteStep,
   isSetupStepId,
   SETUP_STEPS,
   type SetupStepId,
+  setupRedirect,
   setupStepIndex,
   setupStepPath,
 } from "@/lib/setup-steps";
@@ -78,7 +78,9 @@ function SetupShell({ activeStep, workspaceName, children }: SetupShellProps) {
  * The setup wizard, one route per step (/setup/:step). It runs while a
  * managed engine is still being built, with the build's progress above it.
  * Steps that must be done in order are enforced here: a later step's URL
- * opened early lands on the first one still to do.
+ * opened early lands on the first one still to do. A finished step asks to go
+ * on through `goTo`, which waits for the setup status to record it (see
+ * setupRedirect).
  */
 export default function Setup() {
   const params = useParams<{ step?: string }>();
@@ -87,6 +89,7 @@ export default function Setup() {
   const status = useQuery(api.setup.status, instance ? { instanceId: instance._id } : "skip");
   const markSeen = useMutation(api.setup.markSeen);
   const markedSeen = useRef(false);
+  const [advancingTo, setAdvancingTo] = useState<SetupStepId | null>(null);
 
   const requestedStep = isSetupStepId(params.step) ? params.step : null;
   const step = status && requestedStep ? allowedSetupStep(requestedStep, status) : null;
@@ -109,11 +112,15 @@ export default function Setup() {
     if (!status) {
       return;
     }
-    const target = step ?? firstIncompleteStep(status);
-    if (target !== requestedStep) {
-      navigate(setupStepPath(target), { replace: true });
+    if (advancingTo !== null && advancingTo === requestedStep) {
+      setAdvancingTo(null);
+      return;
     }
-  }, [status, step, requestedStep, navigate]);
+    const redirect = setupRedirect(requestedStep, advancingTo, status);
+    if (redirect) {
+      navigate(setupStepPath(redirect.step), { replace: redirect.replace });
+    }
+  }, [status, requestedStep, advancingTo, navigate]);
 
   if (!instance || !status || !step) {
     return (
@@ -126,7 +133,7 @@ export default function Setup() {
   }
 
   const instanceId = instance._id;
-  const goTo = (next: SetupStepId) => navigate(setupStepPath(next));
+  const goTo = (next: SetupStepId) => setAdvancingTo(next);
 
   if (!status.canManageSetup) {
     return (
