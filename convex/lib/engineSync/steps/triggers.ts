@@ -1,3 +1,4 @@
+import type { TriggerDefinition } from "@woofx3/api/webhooks";
 import { internal } from "../../../_generated/api";
 import type { SyncStep, SyncStepContext } from "../steps";
 
@@ -17,22 +18,37 @@ export const triggersStep: SyncStep = {
   run: async ({ ctx, newApi, instanceId }: SyncStepContext) => {
     const api = newApi();
     const raw = await api.getTriggers();
-    const snapshots = (raw ?? []).map((t) => ({
-      id: t.id,
-      name: t.name,
-      description: t.description,
-      event: t.event,
-      configSchema: t.configSchema,
-      allowVariants: t.allowVariants,
-      projectionKey: t.projectionKey,
-      taxonomy: t.taxonomy,
-      createdByType: t.createdByType,
-      createdByRef: t.createdByRef,
-      transport: t.transport,
-    }));
+    const snapshots = (raw ?? []).map(triggerSnapshot);
     return await ctx.runMutation(internal.engineSyncInternal.reconcileTriggers, {
       instanceId,
       snapshots,
     });
   },
 };
+
+/**
+ * The fields of an engine trigger that `reconcileTriggers` accepts.
+ *
+ * Every field the catalog row is built from has to be carried here: the sync
+ * patches the row the registration webhook wrote, so a field dropped here is
+ * erased from it. A bundled module installs when the engine boots, before the
+ * UI has registered for webhooks, so the sync is the only writer its triggers
+ * may ever get.
+ */
+export function triggerSnapshot(t: TriggerDefinition) {
+  return {
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    event: t.event,
+    configSchema: t.configSchema,
+    emits: t.emits,
+    sentence: t.sentence,
+    allowVariants: t.allowVariants,
+    projectionKey: t.projectionKey,
+    taxonomy: t.taxonomy,
+    createdByType: t.createdByType,
+    createdByRef: t.createdByRef,
+    transport: t.transport,
+  };
+}

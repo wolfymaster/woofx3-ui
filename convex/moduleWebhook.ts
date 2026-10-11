@@ -12,6 +12,7 @@ import {
   uniqueIds,
 } from "./lib/definitionCatalog";
 import { bareModuleKey } from "./lib/moduleKey";
+import { triggerDefinitionRow } from "./lib/triggerDefinitionRow";
 import { webhookEndpointKey } from "./lib/webhookEndpointKey";
 
 // Provenance from the engine: createdByRef == the module's composite moduleKey
@@ -140,23 +141,14 @@ const actionValidator = v.object({
 });
 
 /*
- * Presentation fields the UI needs to render a trigger / action. The engine
- * doesn't model these — it forwards an opaque configSchema / paramsSchema
- * string. Whatever the module author put in that string is parsed best-
+ * Presentation fields the UI needs to render an action. The engine
+ * doesn't model these — it forwards an opaque paramsSchema string. Whatever the module author put in that string is parsed best-
  * effort here; anything the parser can't extract falls back to the defaults
  * below so the workflow builder always has something to render.
  */
 const DEFAULT_UI_COLOR = "#888888";
-const DEFAULT_TRIGGER_ICON = "Zap";
 const DEFAULT_ACTION_ICON = "ArrowRight";
 const DEFAULT_ACTION_CATEGORY = "General";
-
-type TriggerUiFields = {
-  color: string;
-  icon: string;
-  configFields?: unknown[];
-  emits?: unknown[];
-};
 
 type ActionUiFields = {
   color: string;
@@ -164,35 +156,6 @@ type ActionUiFields = {
   configFields?: unknown[];
   returns?: unknown[];
 };
-
-function parseJsonSafe(raw: string | undefined): unknown {
-  if (!raw) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Pick presentation fields from a trigger's configSchema / emits.
- *
- * `color` and `icon` used to be read out of the schema container; nothing has
- * ever set them, and the container they lived in no longer exists, so every
- * trigger takes the defaults.
- */
-function triggerUi(configSchema: string | undefined, emits: string | undefined): TriggerUiFields {
-  const fields = parseFieldList(configSchema);
-  const shape = parseDataShape(emits);
-  return {
-    color: DEFAULT_UI_COLOR,
-    icon: DEFAULT_TRIGGER_ICON,
-    configFields: fields.length > 0 ? fields : undefined,
-    emits: shape ? shape.fields : undefined,
-  };
-}
 
 function actionUi(paramsSchema: string | undefined, returns: string | undefined): ActionUiFields {
   const fields = parseFieldList(paramsSchema);
@@ -207,21 +170,6 @@ function actionUi(paramsSchema: string | undefined, returns: string | undefined)
   };
 }
 
-type EngineTrigger = {
-  id: string;
-  category?: string;
-  name?: string;
-  description?: string;
-  event?: string;
-  configSchema?: string;
-  emits?: string;
-  sentence?: string;
-  allowVariants?: boolean;
-  projectionKey?: string;
-  taxonomy?: string[];
-  transport?: string;
-};
-
 type EngineAction = {
   id: string;
   name?: string;
@@ -233,27 +181,6 @@ type EngineAction = {
   projectionKey?: string;
   taxonomy?: string[];
 };
-
-function translateTrigger(t: EngineTrigger, moduleId: Id<"moduleRepository"> | undefined) {
-  const ui = triggerUi(t.configSchema, t.emits);
-  return {
-    slug: t.id,
-    name: t.name ?? t.id,
-    description: t.description ?? "",
-    category: t.category ?? "General",
-    event: t.event || undefined,
-    color: ui.color,
-    icon: ui.icon,
-    configFields: ui.configFields,
-    emits: ui.emits,
-    sentence: t.sentence?.trim() || undefined,
-    allowVariants: t.allowVariants,
-    projectionKey: t.projectionKey,
-    taxonomy: t.taxonomy,
-    transport: t.transport,
-    moduleId,
-  };
-}
 
 function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | undefined) {
   const ui = actionUi(a.paramsSchema, a.returns);
@@ -383,7 +310,7 @@ export const processModuleInstalled = internalMutation({
     });
 
     for (const trigger of triggers) {
-      const row = translateTrigger(trigger, moduleId);
+      const row = triggerDefinitionRow(trigger, moduleId);
       const existing = await ctx.db
         .query("triggerDefinitions")
         .withIndex("by_slug", (q) => q.eq("slug", row.slug))
@@ -482,7 +409,7 @@ export const processRegisteredDefinitions = internalMutation({
     const moduleId = record?._id;
 
     for (const trigger of triggers) {
-      const row = translateTrigger(trigger, moduleId);
+      const row = triggerDefinitionRow(trigger, moduleId);
       const existing = await ctx.db
         .query("triggerDefinitions")
         .withIndex("by_slug", (q) => q.eq("slug", row.slug))
