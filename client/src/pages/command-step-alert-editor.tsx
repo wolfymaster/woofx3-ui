@@ -4,10 +4,18 @@ import { Loader2, MessageSquare } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { AlertLayoutEditor } from "@/components/alert-editor/alert-layout-editor";
+import { LinkedAlertEditor } from "@/components/alert-editor/linked-alert-editor";
 import { EmptyState } from "@/components/common/empty-state";
 import { useOpenCommandDraft } from "@/hooks/use-command-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import {
+  type AlertStepParams,
+  inlineAlertParams,
+  linkedAlertParams,
+  linkedCompositionId,
+  linkedInputValues,
+} from "@/lib/alert-library";
 import { commandStepId, NEW_COMMAND_KEY, updateCommandDraft } from "@/lib/command-drafts";
 import { COMMAND_LIST_PATH, COMMAND_NEW_ROUTE, commandEditorPath } from "@/lib/command-editor-route";
 import { splitCommandInput } from "@/lib/command-input";
@@ -54,16 +62,17 @@ export default function CommandStepAlertEditor() {
 
   const backHref = isNew ? COMMAND_NEW_ROUTE : commandEditorPath(engineCommandId);
 
-  const keepLayout = (stored: unknown) => {
+  const updateParams = (change: (params: AlertStepParams) => AlertStepParams) => {
     updateCommandDraft(engineCommandId, (current) => ({
       ...current,
       actions: current.actions.map((candidate, index) =>
         commandStepId(candidate, index) === actionId
-          ? { ...candidate, parameters: { ...(candidate.parameters ?? {}), layout: stored } }
+          ? { ...candidate, parameters: change(candidate.parameters ?? {}) }
           : candidate
       ),
     }));
   };
+  const keepLayout = (stored: unknown) => updateParams((params) => ({ ...params, layout: stored }));
 
   if (commandsRaw === undefined || catalogLoading) {
     return (
@@ -94,15 +103,36 @@ export default function CommandStepAlertEditor() {
 
   const commandWord = splitCommandInput(draft.value.command).command;
 
+  const context = (
+    <>
+      {commandWord ? `!${commandWord}` : "New command"} · Step {stepIndex + 1}
+    </>
+  );
+  const backLabel = commandWord ? `!${commandWord}` : "the command";
+  const stepParams = (step.parameters ?? {}) as AlertStepParams;
+  const linkedId = linkedCompositionId(stepParams);
+
+  if (linkedId !== null && instance) {
+    return (
+      <LinkedAlertEditor
+        instanceId={instance._id}
+        compositionId={linkedId}
+        inputValues={linkedInputValues(stepParams)}
+        context={context}
+        backLabel={backLabel}
+        availableVariables={availableVariables}
+        owner="command"
+        onBack={() => navigate(backHref)}
+        onDuplicateHere={(layout) => updateParams((current) => inlineAlertParams(current, layout))}
+      />
+    );
+  }
+
   return (
     <AlertLayoutEditor
       value={step.parameters?.layout}
-      context={
-        <>
-          {commandWord ? `!${commandWord}` : "New command"} · Step {stepIndex + 1}
-        </>
-      }
-      backLabel={commandWord ? `!${commandWord}` : "the command"}
+      context={context}
+      backLabel={backLabel}
       availableVariables={availableVariables}
       onDone={(stored) => {
         if (stored !== null) {
@@ -111,6 +141,7 @@ export default function CommandStepAlertEditor() {
         navigate(backHref);
       }}
       onCancel={() => navigate(backHref)}
+      onLink={(compositionId, inputs) => updateParams((current) => linkedAlertParams(current, compositionId, inputs))}
     />
   );
 }

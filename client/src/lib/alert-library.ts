@@ -1,0 +1,317 @@
+import type { Doc } from "@convex/_generated/dataModel";
+import type { CompositionLinkInfo } from "@woofx3/api";
+import { CONFIG_FIELD_TYPES, type ConfigField, type ConfigFieldType } from "@woofx3/api/ui-schema";
+import {
+  bindInputs,
+  type CompositionDocument,
+  type InputField,
+  isPlainObject,
+  normalizeComposition,
+} from "@woofx3/scene/model";
+import { compositionOfLegacyAlert, DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
+import { unescapeDollarKeys } from "@/lib/dollar-keys";
+import type { VariableOption } from "@/lib/workflow-variables";
+
+/**
+ * The alert library: alerts the engine stores (capability
+ * `compositions.alerts`) that an alert step plays by id (capability
+ * `alerts.compositions`) instead of carrying a layout of its own.
+ *
+ * A step holds exactly one of the two (woofx3 docs/workflow/tasks.md, alert):
+ * `{ target, layout }` for an alert written into the step, or
+ * `{ target, composition, inputs }` for one linked from the library. A linked
+ * step always plays the alert's latest published version, with `inputs`
+ * filling in what the alert declares; `${...}` in an input is resolved by the
+ * workflow before the alert is played.
+ */
+
+/** An alert step's parameters, as both surfaces that own one store them. */
+export type AlertStepParams = Record<string, unknown>;
+
+/** The library alert a step links, or null for a step with its own layout. */
+export function linkedCompositionId(params: AlertStepParams | undefined): string | null {
+  const composition = params?.composition;
+  return typeof composition === "string" && composition !== "" ? composition : null;
+}
+
+/** A linked step's input values, by input id. */
+export function linkedInputValues(params: AlertStepParams | undefined): Record<string, unknown> {
+  return isPlainObject(params?.inputs) ? params.inputs : {};
+}
+
+/**
+ * The step linked to a library alert: its layout gives way to the alert's
+ * id and the values for its inputs. Every other parameter (the target) stays.
+ */
+export function linkedAlertParams(
+  params: AlertStepParams,
+  compositionId: string,
+  inputs: Record<string, unknown> = {}
+): AlertStepParams {
+  if (compositionId === "") {
+    throw new Error("linkedAlertParams: no composition id");
+  }
+  const { layout: _layout, composition: _composition, inputs: _inputs, ...rest } = params;
+  return { ...rest, composition: compositionId, inputs };
+}
+
+/** The step holding `layout` itself, with no link to the library. Every other parameter stays. */
+export function inlineAlertParams(params: AlertStepParams, layout: unknown): AlertStepParams {
+  const { layout: _layout, composition: _composition, inputs: _inputs, ...rest } = params;
+  return { ...rest, layout };
+}
+
+/**
+ * The cached parts of a library alert that make up its document. Convex
+ * stores them with `$`-prefixed keys (an input reference's `$input`)
+ * escaped; see lib/dollar-keys.ts.
+ */
+export type LibraryAlertDocument = Pick<Doc<"alertCompositions">, "widgets" | "layout" | "behaviors" | "inputs">;
+
+/** A library alert's declared inputs as the engine holds them. */
+export function libraryAlertInputs(row: Pick<LibraryAlertDocument, "inputs">): unknown[] {
+  return unescapeDollarKeys(row.inputs) as unknown[];
+}
+
+/**
+ * A library alert's published document. The engine stores placements as a
+ * list, bottom of the stack first, exactly as a list-shaped step layout holds
+ * them, so the same conversion reads both.
+ */
+export function compositionOfLibraryAlert(row: LibraryAlertDocument): CompositionDocument {
+  const layout = unescapeDollarKeys(isPlainObject(row.layout) ? row.layout : {}) as Record<string, unknown>;
+  const { doc } = compositionOfLegacyAlert({
+    width: DEFAULT_ALERT_CANVAS.width,
+    height: DEFAULT_ALERT_CANVAS.height,
+    ...layout,
+    widgets: unescapeDollarKeys(row.widgets) as unknown[],
+  });
+  const behaviors = normalizeComposition({ ...doc, behaviors: unescapeDollarKeys(row.behaviors) })?.behaviors ?? {};
+  return { ...doc, behaviors };
+}
+
+/**
+ * A library alert copied into one step: its published document with every
+ * input filled in from `values`, or the input's default, so the copy refers
+ * to no inputs and declares none. A value may itself hold `${...}`, which
+ * the workflow resolves in a step's layout as it does in inputs. An input
+ * with neither becomes empty text, and is named in `unfilled`; a document
+ * whose references cannot be bound at all is copied as it is.
+ */
+export function inlineCopyOfLibraryAlert(
+  row: LibraryAlertDocument,
+  values: Readonly<Record<string, unknown>> = {}
+): { doc: CompositionDocument; unfilled: string[] } {
+  const published = compositionOfLibraryAlert(row);
+  const inputs = libraryAlertInputs(row).filter(isPlainObject) as CompositionDocument["inputs"];
+  const declared: CompositionDocument = { ...published, inputs };
+  const first = bindInputs(declared, values);
+  if (first.ok) {
+    return { doc: withoutInputs(first.document), unfilled: [] };
+  }
+  const unfilled = first.report.missing;
+  const filled = { ...values, ...Object.fromEntries(unfilled.map((id) => [id, ""])) };
+  const second = bindInputs(declared, filled);
+  return { doc: withoutInputs(second.ok ? second.document : published), unfilled };
+}
+
+function withoutInputs(doc: CompositionDocument): CompositionDocument {
+  const { inputs: _inputs, base: _base, ...rest } = doc;
+  return rest;
+}
+
+/**
+ * What `alertCompositionActions.create` takes for a document: the shapes the
+ * engine stores (see `storedSceneOf` in woofx3 sceneManager scene-documents.ts).
+ */
+export function libraryJsonOf(doc: CompositionDocument): {
+  widgetsJson: string;
+  layoutJson: string;
+  behaviorsJson: string;
+  inputsJson: string;
+} {
+  return {
+    widgetsJson: JSON.stringify(legacyAlertLayoutOf(doc).widgets),
+    layoutJson: JSON.stringify(doc.layout),
+    behaviorsJson: JSON.stringify(doc.behaviors),
+    inputsJson: JSON.stringify(doc.inputs ?? []),
+  };
+}
+
+/**
+ * A step's own alert made ready for the library, which plays a document
+ * that refers only to its inputs (the workflow resolves `${...}` in a step's
+ * parameters, never inside a stored alert). Each distinct `${...}` in the
+ * canvas, widget settings and behavior params becomes an input, and
+ * `values` fills each in with the reference it replaced, so the step that
+ * links the saved alert plays what it played before. A string that is one
+ * reference becomes `{ "$input": id }` and keeps the value's type; a
+ * reference inside text becomes `{{id}}`, and a literal `{{` already there
+ * is escaped as `\{{`.
+ */
+export function libraryAlertOfStep(
+  doc: CompositionDocument,
+  available: readonly VariableOption[]
+): { doc: CompositionDocument; values: Record<string, string> } {
+  const idByReference = new Map<string, string>();
+  const inputs: InputField[] = [];
+  const values: Record<string, string> = {};
+  const inputFor = (reference: string): string => {
+    const known = idByReference.get(reference);
+    if (known !== undefined) {
+      return known;
+    }
+    const inner = reference.slice(2, -1).trim();
+    const base = (inner.split(/[.:]/).pop() ?? "").replace(/[^A-Za-z0-9_-]/g, "_") || "input";
+    let id = base;
+    for (let n = 2; inputs.some((input) => input.id === id); n += 1) {
+      id = `${base}_${n}`;
+    }
+    const option = available.find((candidate) => candidate.value === reference);
+    inputs.push({ id, label: option?.label ?? id, type: option?.type === "number" ? "number" : "text" });
+    idByReference.set(reference, id);
+    values[id] = reference;
+    return id;
+  };
+  const rewrite = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      const whole = value.match(/^\$\{[^{}]*\}$/);
+      if (whole) {
+        return { $input: inputFor(value) };
+      }
+      return value
+        .split(/(\$\{[^{}]*\})/)
+        .map((part) => (/^\$\{[^{}]*\}$/.test(part) ? `{{${inputFor(part)}}}` : part.replaceAll("{{", "\\{{")))
+        .join("");
+    }
+    if (Array.isArray(value)) {
+      return value.map(rewrite);
+    }
+    if (isPlainObject(value)) {
+      return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, rewrite(entry)]));
+    }
+    return value;
+  };
+  const widgets: CompositionDocument["widgets"] = {};
+  for (const [id, placement] of Object.entries(doc.widgets)) {
+    widgets[id] = { ...placement, settings: rewrite(placement.settings) as Record<string, unknown> };
+  }
+  const behaviors: CompositionDocument["behaviors"] = {};
+  for (const [id, behavior] of Object.entries(doc.behaviors)) {
+    behaviors[id] = { ...behavior, params: rewrite(behavior.params) as typeof behavior.params };
+  }
+  const layout = rewrite(doc.layout) as Record<string, unknown>;
+  return { doc: { ...doc, layout, widgets, behaviors, inputs }, values };
+}
+
+/**
+ * Types an input cannot take: a layout would put an alert inside an alert,
+ * and a button collects no value.
+ */
+const NO_INPUT_TYPES: ReadonlySet<ConfigFieldType> = new Set(["layout", "button"]);
+
+/**
+ * The form a linked step fills in for an alert's inputs. An input is a
+ * ConfigField already; this only makes sure each can be drawn, giving a
+ * missing label the id and a type the form does not know `text`, which takes
+ * any value and a variable. An input whose type cannot be an input is left
+ * out; the engine plays it with its default.
+ */
+export function inputFieldsOf(inputs: readonly unknown[]): ConfigField[] {
+  const known: ReadonlySet<string> = new Set(CONFIG_FIELD_TYPES);
+  const fields: ConfigField[] = [];
+  for (const raw of inputs) {
+    if (!isPlainObject(raw) || typeof raw.id !== "string" || raw.id === "") {
+      continue;
+    }
+    const type = typeof raw.type === "string" && known.has(raw.type) ? (raw.type as ConfigFieldType) : "text";
+    if (NO_INPUT_TYPES.has(type)) {
+      continue;
+    }
+    const label = typeof raw.label === "string" && raw.label !== "" ? raw.label : raw.id;
+    fields.push({ ...(raw as unknown as ConfigField), id: raw.id, label, type });
+  }
+  return fields;
+}
+
+const REFERENCE = /\$\{([^{}]*)\}/g;
+/** A plain path: what the workflow reads from its own data, as opposed to an expression or an asset. */
+const VARIABLE_PATH = /^[A-Za-z_][\w-]*(\.[\w-]+)+$/;
+
+/**
+ * The `${...}` variable references in `value` (searched through objects and
+ * arrays) that none of `available` provides. A reference to an object above
+ * an available variable (`${trigger.data.user}` beside
+ * `${trigger.data.user.name}`) is provided. Anything that is not a plain
+ * path, such as `${asset:...}` or an expression, is not judged.
+ */
+export function unprovidedVariables(value: unknown, available: readonly VariableOption[]): string[] {
+  const paths = available.map((option) => option.value.slice(2, -1));
+  const provided = (path: string) => paths.some((candidate) => candidate === path || candidate.startsWith(`${path}.`));
+  const missing = new Set<string>();
+  const visit = (current: unknown) => {
+    if (typeof current === "string") {
+      for (const match of current.matchAll(REFERENCE)) {
+        const path = (match[1] ?? "").trim();
+        if (VARIABLE_PATH.test(path) && !provided(path)) {
+          missing.add(match[0]);
+        }
+      }
+      return;
+    }
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+    if (isPlainObject(current)) {
+      Object.values(current).forEach(visit);
+    }
+  };
+  visit(value);
+  return Array.from(missing);
+}
+
+export interface InputVariableWarning {
+  inputId: string;
+  label: string;
+  /** The references, as stored, that the step's trigger does not provide. */
+  references: string[];
+}
+
+/**
+ * The inputs of a linked step whose value refers to a variable the step's
+ * trigger (and the steps before it) does not provide. Such an input resolves
+ * to nothing when the alert plays.
+ */
+export function inputVariableWarnings(
+  fields: readonly ConfigField[],
+  values: Record<string, unknown>,
+  available: readonly VariableOption[]
+): InputVariableWarning[] {
+  const warnings: InputVariableWarning[] = [];
+  for (const field of fields) {
+    const references = unprovidedVariables(values[field.id], available);
+    if (references.length > 0) {
+      warnings.push({ inputId: field.id, label: field.label, references });
+    }
+  }
+  return warnings;
+}
+
+/** The names the dashboard knows a link's owner by: workflow names by engine id, command words by engine id. */
+export interface LinkOwnerNames {
+  workflows: ReadonlyMap<string, string>;
+  commands: ReadonlyMap<string, string>;
+}
+
+/** One line per step that links an alert, for saying where it is used. */
+export function describeLinks(links: readonly CompositionLinkInfo[], names: LinkOwnerNames): string[] {
+  return links.map((link) => {
+    if (link.ownerKind === "command") {
+      const command = names.commands.get(link.ownerId);
+      return `${command ? `!${command}` : "A chat command"} · step ${link.stepId}`;
+    }
+    const workflow = names.workflows.get(link.ownerId);
+    return `${workflow ?? "A trigger"} · step ${link.stepId}`;
+  });
+}
