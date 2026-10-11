@@ -36,8 +36,19 @@ function upgradingRow(overrides: Partial<UpgradeRow> = {}): UpgradeRow {
   };
 }
 
-function stepEvent(runId: string | undefined, reported: RunStep): RedeployEvent {
-  return { type: "engine.run.step", runId, step: reported };
+function stepEvent(
+  runId: string | undefined,
+  reported: RunStep,
+  overrides: { targetVersion?: string; rollbackOf?: string } = {}
+): RedeployEvent {
+  return {
+    type: "engine.run.step",
+    runId,
+    step: reported,
+    targetVersion: overrides.targetVersion,
+    rollbackOf: overrides.rollbackOf,
+    receivedAt: 5_000,
+  };
 }
 
 function failedEvent(overrides: Partial<Extract<RedeployEvent, { type: "engine.failed" }>> = {}): RedeployEvent {
@@ -87,10 +98,86 @@ describe("a step report", () => {
       steps: [step("resolve_release", "running")],
     });
   });
+});
 
-  it("is not adopted by a row that is not upgrading", () => {
-    const row = upgradingRow({ status: "registered", runId: undefined, steps: [] });
-    expect(decideRedeployEvent(row, stepEvent(UPGRADE_RUN, step("resolve_release", "running")))).toBeNull();
+describe("a step report from a run the row did not start", () => {
+  const OPERATOR_RUN = "run_by_operator";
+  const registered = (overrides: Partial<UpgradeRow> = {}) =>
+    upgradingRow({ status: "registered", runId: "run_provision", steps: [], upgrade: undefined, ...overrides });
+
+  it("puts a running engine into an upgrade to the run's release", () => {
+    const patch = decideRedeployEvent(
+      registered(),
+      stepEvent(OPERATOR_RUN, step("resolve_release", "running"), { targetVersion: "v0.3.0-rc.1" })
+    );
+    expect(patch).toEqual({
+      status: "upgrading",
+      runId: OPERATOR_RUN,
+      steps: [step("resolve_release", "running")],
+      error: undefined,
+      upgrade: { fromVersion: "v0.1.0", toVersion: "v0.3.0-rc.1", startedAt: 5_000, attempt: 0, rollingBack: false },
+    });
+  });
+
+  it("replaces the outcome of the row's last upgrade, keeping its attempt count", () => {
+    const row = registered({ upgrade: { ...upgrade, outcome: "succeeded", acknowledged: true } });
+    const patch = decideRedeployEvent(
+      row,
+      stepEvent(OPERATOR_RUN, step("resolve_release", "running"), { targetVersion: "v0.3.0" })
+    );
+    expect(patch?.upgrade).toEqual({
+      fromVersion: "v0.1.0",
+      toVersion: "v0.3.0",
+      startedAt: 5_000,
+      attempt: 1,
+      rollingBack: false,
+    });
+  });
+
+  it("is still shown as upgrading when the run does not name its release", () => {
+    const row = registered({ upgrade: { ...upgrade, outcome: "succeeded" } });
+    const patch = decideRedeployEvent(row, stepEvent(OPERATOR_RUN, step("resolve_release", "running")));
+    expect(patch).toMatchObject({ status: "upgrading", runId: OPERATOR_RUN });
+    expect(patch?.upgrade).toBeUndefined();
+  });
+
+  it("is shown as upgrading with no versions when it is a rollback", () => {
+    const patch = decideRedeployEvent(
+      registered(),
+      stepEvent(ROLLBACK_RUN, step("resolve_release", "running"), { targetVersion: "v0.1.0", rollbackOf: "run_x" })
+    );
+    expect(patch).toMatchObject({ status: "upgrading", runId: ROLLBACK_RUN });
+    expect(patch?.upgrade).toBeUndefined();
+  });
+
+  it("from a run that has already finished does not start one", () => {
+    expect(
+      decideRedeployEvent(
+        registered(),
+        stepEvent(OPERATOR_RUN, step("complete", "succeeded"), { targetVersion: "v0.3.0" })
+      )
+    ).toBeNull();
+  });
+
+  it("from the row's own run only updates its steps", () => {
+    const row = registered({ runId: UPGRADE_RUN });
+    expect(decideRedeployEvent(row, stepEvent(UPGRADE_RUN, step("complete", "running")))).toEqual({
+      runId: UPGRADE_RUN,
+      steps: [step("complete", "running")],
+    });
+  });
+
+  it("ends as an upgrade once the engine reports the run's release", () => {
+    const adopted = decideRedeployEvent(
+      registered(),
+      stepEvent(OPERATOR_RUN, step("resolve_release", "running"), { targetVersion: "v0.3.0" })
+    );
+    const row = registered({ ...adopted, status: "upgrading" } as Partial<UpgradeRow>);
+    expect(decideRedeployEvent(row, { type: "engine.ready", version: "v0.3.0" })).toMatchObject({
+      status: "registered",
+      reportedVersion: "v0.3.0",
+      upgrade: { toVersion: "v0.3.0", outcome: "succeeded" },
+    });
   });
 });
 

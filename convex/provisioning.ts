@@ -18,6 +18,7 @@ import {
   retryRun,
 } from "./lib/maintenanceClient";
 import { redeployRunFailed } from "./lib/maintenanceUpgrade";
+import { isUpgrade } from "./lib/releaseVersion";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 /**
@@ -149,7 +150,7 @@ export const upgradeInfo = action({
     const { version: offered } = await currentRelease();
     const current = row.reportedVersion ?? null;
     return {
-      available: row.status === "registered" && current !== offered,
+      available: row.status === "registered" && isUpgrade(offered, current),
       offered,
       current,
       releaseNotesUrl: releaseNotesUrl(offered),
@@ -188,6 +189,11 @@ export const upgradeManagedEngine = action({
     const fromVersion = row.reportedVersion ?? (await getEngine(engineId)).engine.image?.version;
     if (!fromVersion) {
       throw new Error("The engine's current release is unknown");
+    }
+    // The owner chooses when, never what, and never a step backwards from a
+    // release an operator put the engine on.
+    if (!isUpgrade(toVersion, fromVersion)) {
+      return { outcome: "already_current" };
     }
 
     const begun = await ctx.runMutation(internal.provisioningInternal.beginUpgrade, {

@@ -1198,6 +1198,8 @@ http.route({
       detail: maintenanceDetailText(event.detail),
       engineStatus: typeof event.engineStatus === "string" ? event.engineStatus : undefined,
       rollbackRunId: typeof event.rollbackRunId === "string" ? event.rollbackRunId : undefined,
+      targetVersion: typeof event.targetVersion === "string" ? event.targetVersion : undefined,
+      rollbackOf: typeof event.rollbackOf === "string" ? event.rollbackOf : undefined,
     });
     return corsJson({ success: true, type: eventType, ...result });
   }),
