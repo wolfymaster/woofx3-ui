@@ -69,3 +69,31 @@ export function allowedSetupStep(requested: SetupStepId, progress: SetupProgress
   const firstIncomplete = firstIncompleteStep(progress);
   return setupStepIndex(requested) <= setupStepIndex(firstIncomplete) ? requested : firstIncomplete;
 }
+
+/** A navigation the wizard should make: forward to the next step, or back to one the user may be on. */
+export interface SetupRedirect {
+  step: SetupStepId;
+  /** True when the requested step was not allowed, so it should not stay in the history. */
+  replace: boolean;
+}
+
+/**
+ * Where the wizard goes from `requested`, or null to stay.
+ *
+ * `advancingTo` is the step a finished step asked to go on to. It is followed
+ * only once `progress` allows it: a step saves its answer and then asks to go
+ * on, and the saved answer can reach `progress` a render after that. Going on
+ * at once would open the next step against the old progress, which sends the
+ * user straight back to the step they just finished.
+ */
+export function setupRedirect(
+  requested: SetupStepId | null,
+  advancingTo: SetupStepId | null,
+  progress: SetupProgress
+): SetupRedirect | null {
+  if (advancingTo !== null && advancingTo !== requested && allowedSetupStep(advancingTo, progress) === advancingTo) {
+    return { step: advancingTo, replace: false };
+  }
+  const allowed = requested === null ? firstIncompleteStep(progress) : allowedSetupStep(requested, progress);
+  return allowed === requested ? null : { step: allowed, replace: true };
+}

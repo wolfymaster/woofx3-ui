@@ -36,12 +36,7 @@ import type { StarterCatalog } from "./lib/starterPacks";
 import { isInstanceMember } from "./lib/teamAccess";
 import { findResourceKind } from "./resourceKinds";
 import { starterCatalog } from "./starterPacks";
-import {
-  createWorkflowInEngine,
-  EngineConfirmationTimeout,
-  type InstanceContext,
-  setWorkflowEnabledInEngine,
-} from "./workflowActions";
+import { createWorkflowInEngine, EngineConfirmationTimeout, type InstanceContext } from "./workflowActions";
 import type { CatalogBundle } from "./workflowCatalogContext";
 
 /**
@@ -816,19 +811,8 @@ async function applyWorkflow(
     }
     throw err;
   }
-  if (!spec.enabled) {
-    // The workflow exists from here on, so failing to turn it off must not
-    // report it as failed: a retry would create it a second time.
-    try {
-      await setWorkflowEnabledInEngine(ctx, instanceId, instance, engineId, false);
-    } catch {
-      return {
-        outcome: "created",
-        engineId,
-        message: "It was off in your old setup, but could not be turned off here; turn it off on the Workflows page.",
-      };
-    }
-  }
+  // Its enabled state is set by completeImportItemByCorrelation when the
+  // create's echo arrives.
   return { outcome: "created", engineId };
 }
 

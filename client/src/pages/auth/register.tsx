@@ -1,12 +1,13 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Loader2, MonitorPlay } from "lucide-react";
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { useNavigateAfterSignIn } from "@/hooks/use-navigate-after-sign-in";
 import { nextPathFromLocation, withNext } from "@/lib/auth-next-path";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
@@ -20,7 +21,7 @@ function afterRegisterPath(): string {
 }
 
 export default function Register() {
-  const [, navigate] = useLocation();
+  const navigateAfterSignIn = useNavigateAfterSignIn();
   const { signIn } = useAuthActions();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -45,9 +46,7 @@ export default function Register() {
     setIsLoading(true);
     try {
       await signIn("password", { name, email, password, flow: "signUp" });
-      // TODO: Show success notice on login form after account creation - when user is redirected
-      // to login, display notice telling them account was created and to login
-      navigate(afterRegisterPath());
+      navigateAfterSignIn(afterRegisterPath());
     } catch (err: any) {
       setError(err?.message || "Registration failed. Please try again.");
       setIsLoading(false);

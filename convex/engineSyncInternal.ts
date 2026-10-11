@@ -5,6 +5,7 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { reconcileEndpoints } from "./inboundWebhooks";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
+import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
@@ -220,10 +221,16 @@ export const reconcileGroups = internalMutation({
  * declare the full live set even when only a subset is being upserted.
  * In practice they match, but keeping the parameter explicit avoids
  * coupling the deletion check to upsert iteration.
+ *
+ * A row written after `snapshotStartedAt` is left alone: a webhook echo
+ * (a workflow created, or switched on, while the pages were being read) is
+ * newer than the snapshot, which would otherwise switch it back off or delete
+ * it until the next sync.
  */
 export const reconcileWorkflows = internalMutation({
   args: {
     instanceId: v.id("instances"),
+    snapshotStartedAt: v.number(),
     engineIds: v.array(v.string()),
     upserts: v.array(
       v.object({
@@ -233,7 +240,7 @@ export const reconcileWorkflows = internalMutation({
       })
     ),
   },
-  handler: async (ctx, { instanceId, engineIds, upserts }) => {
+  handler: async (ctx, { instanceId, snapshotStartedAt, engineIds, upserts }) => {
     const now = Date.now();
 
     for (const u of upserts) {
@@ -241,6 +248,9 @@ export const reconcileWorkflows = internalMutation({
         .query("workflows")
         .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", u.engineWorkflowId))
         .first();
+      if (existing && existing.updatedAt >= snapshotStartedAt) {
+        continue;
+      }
       if (existing) {
         await ctx.db.patch(existing._id, {
           definition: u.definition,
@@ -265,7 +275,7 @@ export const reconcileWorkflows = internalMutation({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
     for (const row of local) {
-      if (!liveIds.has(row.engineWorkflowId)) {
+      if (!liveIds.has(row.engineWorkflowId) && row.updatedAt < snapshotStartedAt) {
         await ctx.db.delete(row._id);
       }
     }
@@ -913,7 +923,7 @@ export const ensureInstanceSyncRow = internalMutation({
 export const startRun = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    trigger: v.union(v.literal("scheduled"), v.literal("manual")),
+    trigger: syncTriggerValidator,
   },
   handler: async (ctx, { instanceId, trigger }): Promise<Id<"syncRuns">> => {
     const now = Date.now();
