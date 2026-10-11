@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { Doc } from "@convex/_generated/dataModel";
 import type { ActionStep } from "@woofx3/api";
-import { stackOrder } from "@woofx3/scene/model";
+import { bindInputs, stackOrder } from "@woofx3/scene/model";
 import {
   commandStepNumbers,
   compositionOfLibraryAlert,
   describeLinks,
+  initialLinkedInputs,
   inlineAlertParams,
   inlineCopyOfLibraryAlert,
   inputFieldsOf,
@@ -175,6 +176,41 @@ describe("compositionOfLibraryAlert", () => {
     const behavior = { type: "transition", kind: "fade", target: "top", order: "a0", timing: {}, params: {} };
     expect(compositionOfLibraryAlert(libraryRow({ behaviors: { b1: behavior } })).behaviors).toEqual({ b1: behavior });
     expect(compositionOfLibraryAlert(libraryRow({ behaviors: [1] })).behaviors).toEqual({});
+  });
+});
+
+describe("compositionOfLibraryAlert inputs", () => {
+  test("declares the alert's inputs, so its own references bind", () => {
+    const doc = compositionOfLibraryAlert(libraryRow());
+    expect(doc.inputs).toEqual([{ id: "name", label: "Name", type: "text", defaultValue: "friend" }]);
+    expect(bindInputs(doc, {}).ok).toBe(true);
+  });
+
+  test("keeps the first declaration of an id and drops inputs with none", () => {
+    const doc = compositionOfLibraryAlert(
+      libraryRow({
+        inputs: [{ id: "name", label: "First" }, { id: "name", label: "Second" }, { label: "No id" }, "name"],
+      })
+    );
+    expect(doc.inputs).toEqual([{ id: "name", label: "First" }]);
+  });
+});
+
+describe("initialLinkedInputs", () => {
+  test("fills an input with no default from the variable it is named after", () => {
+    const row = { inputs: [{ id: "userName", label: "User", type: "text" }] };
+    const available = [variable("${trigger.data.userId}"), variable("${trigger.data.userName}")];
+    expect(initialLinkedInputs(row, available)).toEqual({ userName: "${trigger.data.userName}" });
+  });
+
+  test("leaves an input with a default, or with no such variable, to the step", () => {
+    const row = {
+      inputs: [
+        { id: "name", label: "Name", type: "text", defaultValue: "friend" },
+        { id: "amount", label: "Amount", type: "number" },
+      ],
+    };
+    expect(initialLinkedInputs(row, [variable("${trigger.data.name}")])).toEqual({});
   });
 });
 

@@ -90,7 +90,46 @@ export function compositionOfLibraryAlert(row: LibraryAlertDocument): Compositio
     widgets: unescapeDollarKeys(row.widgets) as unknown[],
   });
   const behaviors = normalizeComposition({ ...doc, behaviors: unescapeDollarKeys(row.behaviors) })?.behaviors ?? {};
-  return { ...doc, behaviors };
+  return { ...doc, behaviors, inputs: declaredInputsOf(row) };
+}
+
+/**
+ * A library alert's declared inputs, each id once and the first declaration
+ * of it kept. The cached row is whatever the engine reported, and binding
+ * refuses an input without an id or one declared twice.
+ */
+function declaredInputsOf(row: Pick<LibraryAlertDocument, "inputs">): InputField[] {
+  const declared = new Map<string, InputField>();
+  for (const input of libraryAlertInputs(row)) {
+    if (isPlainObject(input) && typeof input.id === "string" && input.id !== "" && !declared.has(input.id)) {
+      declared.set(input.id, input as unknown as InputField);
+    }
+  }
+  return Array.from(declared.values());
+}
+
+/**
+ * The input values a step starts with when it links a library alert: each
+ * input with no default takes the variable it is named after, as a copy of
+ * the alert does (see inlineCopyOfLibraryAlert), so linking from a trigger
+ * that has that variable plays without the step being filled in first. An
+ * input with a default, or with no such variable, is left for the step.
+ */
+export function initialLinkedInputs(
+  row: Pick<LibraryAlertDocument, "inputs">,
+  available: readonly VariableOption[]
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const input of declaredInputsOf(row)) {
+    if (input.defaultValue !== undefined) {
+      continue;
+    }
+    const named = variableNamedAfter(input.id, available);
+    if (named !== undefined) {
+      values[input.id] = named;
+    }
+  }
+  return values;
 }
 
 /**
@@ -116,12 +155,7 @@ export function inlineCopyOfLibraryAlert(
   available: readonly VariableOption[] = []
 ): { doc: CompositionDocument; unfilled: string[] } {
   const published = compositionOfLibraryAlert(row);
-  const declared = new Map<string, Record<string, unknown>>();
-  for (const input of libraryAlertInputs(row)) {
-    if (isPlainObject(input) && typeof input.id === "string" && input.id !== "" && !declared.has(input.id)) {
-      declared.set(input.id, input);
-    }
-  }
+  const declared = new Map(declaredInputsOf(row).map((input) => [input.id, input]));
   const referenced = inputReferences({ ...published, inputs: [] }).map((usage) => usage.input);
   const ids = Array.from(new Set([...declared.keys(), ...referenced]));
 
