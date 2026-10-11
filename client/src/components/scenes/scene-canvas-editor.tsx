@@ -734,16 +734,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   );
 }
 
-/** The session's state in a few words: where this editor's changes are, and whether they have arrived. */
-function sessionStatusText(state: SceneSyncState | null, live: boolean): string {
+/**
+ * The session's state in a few words: where this editor's changes are, and whether they
+ * have arrived. `noun` is what the session edits, a scene or an alert.
+ */
+export function sessionStatusText(state: SceneSyncState | null, live: boolean, noun = "scene"): string {
   if (state === null || (state.local === null && state.conn === "connecting")) {
     return "Connecting…";
   }
   switch (state.conn) {
     case "gone":
-      return "This scene no longer exists";
+      return `This ${noun} no longer exists`;
     case "closed":
-      return "Disconnected · open the scene again";
+      return `Disconnected · open the ${noun} again`;
     case "unavailable":
       return "Can't reach the scene manager";
     case "connecting":

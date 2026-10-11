@@ -9,7 +9,7 @@ import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ALERT_EDITOR_ROUTE } from "@/lib/alert-editor-route";
+import { ALERT_EDITOR_ROUTE, ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import {
   COMMAND_EDITOR_ROUTE,
@@ -31,6 +31,7 @@ const AdminEngine = lazy(() => import("@/pages/admin/engine"));
 const AdminIntegrations = lazy(() => import("@/pages/admin/integrations"));
 const AdminStorage = lazy(() => import("@/pages/admin/storage"));
 const AlertEditor = lazy(() => import("@/pages/alert-editor"));
+const LibraryAlertEditor = lazy(() => import("@/pages/library-alert-editor"));
 const AlertRun = lazy(() => import("@/pages/alert-run"));
 const Alerts = lazy(() => import("@/pages/alerts"));
 const Assets = lazy(() => import("@/pages/assets"));
@@ -173,6 +174,7 @@ function AppRoutes() {
                   <Route path="/stream/alerts" component={Alerts} />
                   <Route path="/stream/alerts/*" component={Alerts} />
                   <Route path={ALERT_EDITOR_ROUTE} component={AlertEditor} />
+                  <Route path={ALERT_LIBRARY_EDITOR_ROUTE} component={LibraryAlertEditor} />
                   <Route path={ALERT_RUN_ROUTE} component={AlertRun} />
                   {/* Order matters: the fixed segments must be matched before :engineCommandId. */}
                   <Route path={COMMAND_STEP_ALERT_ROUTE} component={CommandStepAlertEditor} />

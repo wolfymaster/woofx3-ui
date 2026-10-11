@@ -27,7 +27,7 @@ import {
   Users,
   Workflow,
 } from "lucide-react";
-import { ALERT_EDITOR_BASE } from "@/lib/alert-editor-route";
+import { ALERT_EDITOR_BASE, ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { FEEDBACK_PATH } from "@/lib/feedback";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
@@ -92,7 +92,7 @@ export const STREAM_ITEMS: NavItem[] = [
     label: "Alerts",
     icon: Bell,
     href: "/stream/alerts",
-    owns: [ALERT_EDITOR_BASE, ALERT_RUN_BASE],
+    owns: [ALERT_EDITOR_BASE, ALERT_LIBRARY_EDITOR_BASE, ALERT_RUN_BASE],
     children: [
       { id: "counters", label: "Counters", icon: Tally5, href: "/stream/counters" },
       { id: "timers", label: "Timers", icon: Timer, href: "/stream/timers" },
