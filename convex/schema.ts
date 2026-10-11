@@ -1312,6 +1312,32 @@ export default defineSchema({
     .index("by_instance", ["instanceId"])
     .index("by_engine_scene_id", ["instanceId", "engineSceneId"]),
 
+  // alertCompositions: alerts stored in the engine for steps to link by id.
+  // The engine keeps them in its scenes table (`kind: "alert"`) and reports
+  // them with the scene webhooks; they are cached apart from `scenes` so no
+  // scene listing, browser source or scene child table can ever reach one.
+  // Written only by those webhooks and `alertCompositionActions.refresh`.
+  alertCompositions: defineTable({
+    instanceId: v.id("instances"),
+    engineCompositionId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    /** The published placements as the engine stores them: a list, bottom of the stack first. */
+    widgets: v.array(v.any()),
+    /** The published canvas: `width`, `height`, `backgroundColor`, and any other keys. */
+    layout: v.any(),
+    /** The published behaviors, keyed by behavior id. */
+    behaviors: v.any(),
+    /** The inputs a linking step fills in: ConfigField-shaped objects, each with a unique `id`. */
+    inputs: v.array(v.any()),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_composition_id", ["instanceId", "engineCompositionId"]),
+
   // sceneSlots: named slots within a scene
   sceneSlots: defineTable({
     sceneId: v.id("scenes"),
