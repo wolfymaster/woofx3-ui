@@ -88,6 +88,13 @@ export function TriggerCard({
           })
           .join("  →  ");
 
+  // The same name the card shows: the unconditional trigger and one with no sentence have no sentence to read.
+  const triggerName = isUnconditional
+    ? `Every ${triggerPreset.name.toLowerCase()}`
+    : sentence.length === 0
+      ? triggerPreset.name
+      : sentenceText(sentence);
+
   return (
     <article
       className={cn("rounded-2xl border bg-card", isExpanded && "border-foreground/20")}
@@ -98,7 +105,7 @@ export function TriggerCard({
           type="button"
           onClick={onToggleExpanded}
           aria-expanded={isExpanded}
-          aria-label={`${sentenceText(sentence)}. ${isExpanded ? "Collapse" : "Expand"}`}
+          aria-label={`${triggerName}. ${isExpanded ? "Collapse" : "Expand"}`}
           className="flex h-[52px] w-9 shrink-0 items-center justify-center rounded-[10px] after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:bg-accent"
         >
           <ChevronRight
@@ -108,11 +115,11 @@ export function TriggerCard({
         </button>
         <div className="flex min-w-0 flex-1 flex-col gap-1 py-1.5">
           {isUnconditional ? (
-            <span className="text-base font-medium">Every {triggerPreset.name.toLowerCase()}</span>
+            <span className="text-base font-medium">{triggerName}</span>
           ) : sentence.length === 0 ? (
             // A trigger declaring no conditions and no sentence has nothing to read as one,
             // and a screen listing several events under one heading has no other label for it.
-            <span className="text-base font-medium">{triggerPreset.name}</span>
+            <span className="text-base font-medium">{triggerName}</span>
           ) : (
             <ConditionSentence
               parts={sentence}
