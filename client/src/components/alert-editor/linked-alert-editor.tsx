@@ -126,7 +126,7 @@ export function LinkedAlertEditor({
     () => (composition === null || catalogRows === undefined ? null : { ...composition, catalogRows }),
     [composition, catalogRows]
   );
-  const view = useAlertEditorView(handle, availableVariables);
+  const view = useAlertEditorView(handle, availableVariables, inputValues);
 
   const listLinks = useAction(api.alertCompositionActions.listLinks);
   const [usedBy, setUsedBy] = useState<number | null>(null);

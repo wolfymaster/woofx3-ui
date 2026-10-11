@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertLibraryDialog, type LibraryAlert } from "@/components/alert-editor/alert-library-dialog";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
+import { PreviewScrub, PreviewTransport } from "@/components/alert-editor/composition-preview-frame";
 import { LayerInspector } from "@/components/alert-editor/layer-inspector";
 import { SaveToLibraryDialog } from "@/components/alert-editor/save-to-library-dialog";
 import type { StageZoom } from "@/components/common/stage-area";
@@ -25,6 +26,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { type AlertEditorHandle, useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
 import { useAlertLibrary } from "@/hooks/use-alert-library";
+import { useCompositionPreview } from "@/hooks/use-composition-preview";
+import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { alertLengthSeconds, durationOf, formatSeconds, layerLabel, longestLayerId } from "@/lib/alert-editor";
 import { inlineCopyOfLibraryAlert } from "@/lib/alert-library";
@@ -37,6 +40,7 @@ import {
   trackedLength,
   trackWindowLabel,
 } from "@/lib/behavior-editor";
+import { previewDocumentOf, previewInputsOf, sampleEventOf } from "@/lib/composition-preview";
 import { catalogWidgetOf } from "@/lib/scene-composition";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -272,9 +276,16 @@ export function AlertEditorFrame({
               {status}
             </div>
             <div className="flex shrink-0 items-center gap-2">
-              <code className="rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground">
-                {readout} | {view.lengthLabel}
-              </code>
+              {view.transport === null ? (
+                <code className="rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground">
+                  {readout} | {view.lengthLabel}
+                </code>
+              ) : (
+                <div className="flex items-center gap-1 rounded-md border bg-muted/40 py-0.5 pl-2 pr-1 font-mono text-xs text-muted-foreground">
+                  <span>{readout} |</span>
+                  {view.transport(true)}
+                </div>
+              )}
               {actions}
             </div>
           </header>
@@ -294,9 +305,10 @@ export function AlertEditorFrame({
             <PhoneStageArea canvas={view.canvas} onZoom={(zoom) => session.editor.viewport.setZoom(zoom)}>
               {view.stage}
             </PhoneStageArea>
-            <div className="flex justify-between px-4 pb-2 font-mono text-xs text-muted-foreground">
+            {view.scrub !== null && <div className="px-4 pb-1">{view.scrub}</div>}
+            <div className="flex items-center justify-between px-4 pb-2 font-mono text-xs text-muted-foreground">
               <span>{phoneStatus ?? `${readout} · drag to move`}</span>
-              <span>{view.lengthLabel}</span>
+              {view.transport === null ? <span>{view.lengthLabel}</span> : view.transport(false)}
             </div>
           </div>
           <div className="flex flex-col gap-6 px-4 py-5">
@@ -356,6 +368,13 @@ export interface AlertEditorView {
   stage: (zoom: number) => ReactNode;
   /** The selected layer's settings, or null when nothing is selected. */
   inspector: ReactNode | null;
+  /**
+   * Play, restart and the playhead of the engine's live preview, in place of the
+   * length readout, with the scrub when `scrub`; null while the stand-ins draw.
+   */
+  transport: ((scrub: boolean) => ReactNode) | null;
+  /** The scrub alone, for a layout that puts it under the stage; null with no transport. */
+  scrub: ReactNode | null;
 }
 
 /** A layer as the layers list shows it. */
@@ -371,10 +390,16 @@ interface NodeLayer {
  */
 export function useAlertEditorView(
   session: AlertEditorHandle | null,
-  availableVariables: VariableOption[]
+  availableVariables: VariableOption[],
+  /** A linked alert's input values from the step, which the live preview binds. */
+  previewInputs?: Record<string, unknown>
 ): AlertEditorView | null {
   const { toast } = useToast();
-  const names = useMemo(() => variableNames(availableVariables), [availableVariables]);
+  // Keyed by content: a caller may hand the same variables in a new array on every render, and new
+  // names would reload the live preview.
+  const variablesKey = JSON.stringify(availableVariables.map((variable) => variable.value));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: variablesKey stands for availableVariables' content
+  const names = useMemo(() => variableNames(availableVariables), [variablesKey]);
   const displayText = useCallback((text: string) => toDisplayText(text, names), [names]);
   const report = useCallback(
     (result: CommandResult) => {
@@ -387,6 +412,39 @@ export function useAlertEditorView(
 
   const editor = session?.editor ?? null;
   const state = session?.state ?? null;
+
+  const { instance } = useInstance();
+  const committed = state?.doc ?? null;
+  const previewDocument = useMemo(
+    () => (committed === null ? null : previewDocumentOf(committed, names)),
+    [committed, names]
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: names changes exactly when the variables' content does
+  const sampleEvent = useMemo(() => sampleEventOf(availableVariables, names), [names]);
+  // Keyed by content, as the variables are.
+  const inputsKey = previewInputs === undefined ? null : JSON.stringify(previewInputs);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: inputsKey stands for previewInputs' content
+  const boundInputs = useMemo(
+    () => (previewInputs === undefined ? undefined : previewInputsOf(previewInputs, names)),
+    [inputsKey, names]
+  );
+  const preview = useCompositionPreview({
+    instanceId: instance?._id,
+    editor,
+    state,
+    document: previewDocument,
+    event: sampleEvent,
+    inputs: boundInputs,
+    labelOf: (id) => {
+      const doc = state?.doc;
+      const target = doc?.behaviors[id]?.target ?? id;
+      const node = state?.view.nodes.find((candidate) => candidate.id === target);
+      return node === undefined
+        ? undefined
+        : layerLabel({ kind: node.kind, name: node.placement.name, settings: node.placement.settings }, displayText);
+    },
+  });
+
   const zoom = state?.viewport.zoom ?? 1;
   const fit = state?.viewport.fit ?? true;
   const zoomControl: StageZoom | null = useMemo(
@@ -517,9 +575,21 @@ export function useAlertEditorView(
         layerLabel={labelOf}
         displayText={displayText}
         onRefused={report}
+        preview={preview}
       />
     ),
     inspector,
+    transport: preview.live
+      ? (scrub) => (
+          <PreviewTransport
+            preview={preview}
+            playheadMs={state.timeline.playheadMs}
+            playing={state.timeline.playing}
+            scrub={scrub}
+          />
+        )
+      : null,
+    scrub: preview.live ? <PreviewScrub preview={preview} playheadMs={state.timeline.playheadMs} /> : null,
   };
 }
 

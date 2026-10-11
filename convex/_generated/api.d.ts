@@ -28,6 +28,7 @@ import type * as companionPairing from "../companionPairing.js";
 import type * as companionRelay from "../companionRelay.js";
 import type * as companionRelayActions from "../companionRelayActions.js";
 import type * as companions from "../companions.js";
+import type * as compositionPreview from "../compositionPreview.js";
 import type * as configBackup from "../configBackup.js";
 import type * as crons from "../crons.js";
 import type * as dashboardCounters from "../dashboardCounters.js";
@@ -265,6 +266,7 @@ declare const fullApi: ApiFromModules<{
   companionRelay: typeof companionRelay;
   companionRelayActions: typeof companionRelayActions;
   companions: typeof companions;
+  compositionPreview: typeof compositionPreview;
   configBackup: typeof configBackup;
   crons: typeof crons;
   dashboardCounters: typeof dashboardCounters;
