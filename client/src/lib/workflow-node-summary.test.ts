@@ -192,5 +192,4 @@ describe("alert step summary", () => {
       ["Alert: Empty"]
     );
   });
-
 });

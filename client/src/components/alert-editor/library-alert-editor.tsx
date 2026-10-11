@@ -186,7 +186,8 @@ const ALERT_DRAFT_COPY: DraftLiveCopy = {
   liveDisabled: "Live edits are already what new copies start from",
   publish: "Make the draft what new copies start from",
   discardTitle: "Discard your draft of this alert?",
-  discardDescription: "Every change since the last publish is thrown away. New copies keep starting from the published alert.",
+  discardDescription:
+    "Every change since the last publish is thrown away. New copies keep starting from the published alert.",
 };
 
 const ALERT_DRAFT_TEST_IDS: DraftLiveTestIds = {

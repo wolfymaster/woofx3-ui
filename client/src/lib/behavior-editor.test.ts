@@ -22,7 +22,6 @@ import {
   paramValue,
   previewAnimation,
   timingMsOf,
-  trackedLength,
   trackWindowLabel,
   transitionDurationOf,
   transitionOf,
@@ -240,14 +239,13 @@ describe("a layer's window", () => {
     });
   });
 
-  it("reads the alert's length and longest layer from its resolved tracks", () => {
+  it("labels a layer's resolved window", () => {
     const doc = {
       layout: { width: 1920, height: 1080 },
       widgets: { a: placement(5), b: placement(3) },
       behaviors: { act: { ...activity(4000, "until-exit"), target: "b" } },
     };
     const tracks = resolveTimeline(doc, PROFILES.alert, { startedAtMs: 0 }, { estimate: {} });
-    expect(trackedLength(tracks)).toEqual({ endMs: 7000, longestId: "b" });
     expect(trackWindowLabel(tracks, "b")).toBe("4s–7s");
     expect(trackWindowLabel(tracks, "missing")).toBeNull();
   });

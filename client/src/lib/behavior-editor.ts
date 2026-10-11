@@ -326,25 +326,6 @@ export function hasActivities(behaviors: Readonly<Record<BehaviorId, BehaviorDoc
   return Object.values(behaviors).some((behavior) => behavior.type === "activity");
 }
 
-/** What the readouts show of an alert's length from its resolved tracks. */
-export interface TrackedLength {
-  /** When the alert ends, in ms. */
-  endMs: number;
-  /** The one layer whose leaving sets the end, when exactly one does. */
-  longestId: string | undefined;
-}
-
-export function trackedLength(tracks: ResolvedTimeline): TrackedLength | null {
-  if (tracks.endMs === null) {
-    return null;
-  }
-  const endMs = tracks.endMs;
-  const setting = Object.entries(tracks.widgets)
-    .filter(([, track]) => track.status === "timed" && track.leaveMs === endMs)
-    .map(([id]) => id);
-  return { endMs, longestId: setting.length === 1 ? setting[0] : undefined };
-}
-
 /** A layer's resolved window for the layers list: "2s–7s", or "from 2s" when it has no end of its own. */
 export function trackWindowLabel(tracks: ResolvedTimeline, id: NodeId): string | null {
   const track = tracks.widgets[id];

@@ -30,7 +30,7 @@ import { useAlertLibrary } from "@/hooks/use-alert-library";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { durationOf, formatSeconds, layerLabel, longestLayerId, playedLengthSeconds } from "@/lib/alert-editor";
+import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
 import { inlineCopyOfLibraryAlert, unfilledInputsText } from "@/lib/alert-library";
 import {
@@ -39,7 +39,6 @@ import {
   hasActivities,
   type LayerWindow,
   layerWindowOf,
-  trackedLength,
   trackWindowLabel,
 } from "@/lib/behavior-editor";
 import { previewDocumentOf, sampleEventOf } from "@/lib/composition-preview";
@@ -473,13 +472,11 @@ export function useAlertEditorView(
   const labelOf = (node: NodeView) =>
     layerLabel({ kind: node.kind, name: node.placement.name, settings: node.placement.settings }, displayText);
   const doc = state.doc;
-  // Once a layer has a window of its own, a layer's duration alone no longer says which layer ends the
-  // alert: the editor's resolved tracks do.
+  // Once a layer has a window of its own, its duration alone no longer says when it plays: the
+  // editor's resolved tracks do.
   const tracks = hasActivities(doc.behaviors) ? state.timeline.tracks : null;
-  const tracked = tracks === null ? null : trackedLength(tracks);
   const timed = nodes.map((node) => ({ id: node.id, settings: node.placement.settings }));
   const length = playedLengthSeconds(state.timeline.tracks, timed);
-  const longestId = nodes.length > 1 ? (tracked === null ? longestLayerId(timed) : tracked.longestId) : undefined;
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
   const placeable = new Set(state.palette.map((row) => row.widgetId));
   const paletteRows = catalogRows.filter((row) => placeable.has(row.widgetId));
@@ -510,12 +507,8 @@ export function useAlertEditorView(
       key={selected.id}
       node={selected}
       fields={(selectedRow?.settings ?? []) as unknown as ConfigField[]}
-      canvas={canvas}
-      isLongest={selected.id === longestId}
       availableVariables={availableVariables}
       onChangeSettings={(settings) => report(session.editor.nodes.patch(selected.id, { settings }))}
-      onResize={(width) => report(session.editor.nodes.resize(selected.id, { width }))}
-      onMoveCenter={(center) => report(session.editor.nodes.moveCenter(selected.id, center))}
       window={layerWindowOf(activityOf(doc.behaviors, selected.id)?.behavior ?? null)}
       onChangeWindow={(window) => changeWindow(selected.id, window)}
     >
