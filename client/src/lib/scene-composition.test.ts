@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import { SceneSyncClient } from "@woofx3/api/scene-editor/client";
 import { diffDocuments } from "@woofx3/api/scene-editor/document";
-import { createCompositionEditor, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
+import { createCompositionEditor, LocalDocumentSource, offeredKinds, SyncDocumentSource } from "@woofx3/scene/editor";
 import { PROFILES, stackOrder } from "@woofx3/scene/model";
 import {
   canvasSettingsOf,
@@ -115,6 +115,14 @@ describe("catalogOfRows", () => {
       hostsSurface: "alert",
     });
     expect(Object.hasOwn(catalog[0] as object, "surfaces")).toBe(false);
+  });
+
+  it("carries the behavior kinds a row declares, so the editor offers them", () => {
+    const behaviorKinds = { transitions: [{ id: "typewriter", label: "Typewriter" }], effects: [] };
+    const [text] = catalogOfRows([row("woofx3:widget:text", { behaviorKinds })]);
+    expect(text?.behaviorKinds).toEqual(behaviorKinds);
+    expect(offeredKinds(text, "transition").map((offered) => offered.kind)).toContain("typewriter");
+    expect(Object.hasOwn(catalog[0] as object, "behaviorKinds")).toBe(false);
   });
 });
 
