@@ -146,3 +146,58 @@ describe("actionNodeSummary", () => {
     expect(actionNodeSummary(node, catalog)).toEqual(["Counter: counters:counter:death_count"]);
   });
 });
+
+describe("alert step summary", () => {
+  const alertAction = catalogAction({
+    name: "Alert",
+    functionCall: "alert",
+    configFields: [{ id: "layout", label: "Alert", type: "layout", surface: "alert" }],
+  });
+  const alertNode = (parameters: Record<string, unknown>): ActionNode => ({
+    type: "action",
+    id: "act_1",
+    function: "alert",
+    parameters,
+  });
+  const entry = (id: string, zIndex: number, settings: Record<string, unknown>) => ({
+    id,
+    widgetCanonicalId: "woofx3:widget:text",
+    name: id,
+    position: { x: 0, y: 0 },
+    size: { width: 100, height: 100 },
+    rotation: 0,
+    opacity: 1,
+    zIndex,
+    locked: false,
+    visible: true,
+    settings,
+  });
+
+  test("describes a step's own layout by its top text and layer count", () => {
+    const layout = {
+      width: 1920,
+      height: 1080,
+      widgets: [
+        entry("image", 0, { src: "a.png" }),
+        entry("text", 1, { text: "${trigger.data.userName} just followed!" }),
+      ],
+    };
+    expect(actionNodeSummary(alertNode({ layout }), [alertAction])).toEqual([
+      "Alert: “{userName} just followed!” · 2 layers",
+    ]);
+  });
+
+  test("an empty layout reads as empty", () => {
+    expect(actionNodeSummary(alertNode({ layout: { width: 1920, height: 1080, widgets: [] } }), [alertAction])).toEqual(
+      ["Alert: Empty"]
+    );
+  });
+
+  test("names a linked library alert", () => {
+    const params = { composition: "comp-1", inputs: {} };
+    expect(actionNodeSummary(alertNode(params), [alertAction], new Map([["comp-1", "Follower thanks"]]))).toEqual([
+      "Alert: Follower thanks",
+    ]);
+    expect(actionNodeSummary(alertNode(params), [alertAction])).toEqual(["Alert: Library alert"]);
+  });
+});
