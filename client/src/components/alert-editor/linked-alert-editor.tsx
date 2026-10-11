@@ -268,6 +268,8 @@ const ALERT_DRAFT_COPY: DraftLiveCopy = {
   live: "Edit what every step plays right now, without publishing",
   liveDisabled: "Live edits are already what the steps play",
   publish: "Play the draft from every step that uses this alert",
+  discardTitle: "Discard your draft of this alert?",
+  discardDescription: "Every change since the last publish is thrown away. The steps keep playing the published alert.",
 };
 
 const ALERT_DRAFT_TEST_IDS: DraftLiveTestIds = {
@@ -275,5 +277,6 @@ const ALERT_DRAFT_TEST_IDS: DraftLiveTestIds = {
   draft: "toggle-alert-draft",
   live: "toggle-alert-live",
   discard: "button-discard-alert-draft",
+  confirmDiscard: "button-confirm-discard-alert-draft",
   publish: "button-publish-alert",
 };
