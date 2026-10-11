@@ -6,7 +6,12 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useInstance } from "@/hooks/use-instance";
-import { describeTestEventOutcome, type RunRecord } from "@/lib/test-event-outcome";
+import {
+  describeTestEventOutcome,
+  type RunRecord,
+  settleTestEventOutcome,
+  TEST_EVENT_SETTLE_TIMEOUT_MS,
+} from "@/lib/test-event-outcome";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
 /**
@@ -43,25 +48,48 @@ interface TestEventFormProps extends TestEventProps {
  */
 export const TEST_EVENT_OUTCOME_TIMEOUT_MS = 8000;
 
+/**
+ * The two waits behind every test outcome, from when the caller mounts: `waitElapsed`
+ * once silence means nothing matched (TEST_EVENT_OUTCOME_TIMEOUT_MS), and `gaveUp`
+ * once the outcome stops waiting for any answer (TEST_EVENT_SETTLE_TIMEOUT_MS).
+ * Mount it under a key per fire, so each fire starts both again.
+ */
+export function useTestEventWaits(): { waitElapsed: boolean; gaveUp: boolean } {
+  const [waitElapsed, setWaitElapsed] = useState(false);
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    const waitTimer = setTimeout(() => setWaitElapsed(true), TEST_EVENT_OUTCOME_TIMEOUT_MS);
+    const settleTimer = setTimeout(() => setGaveUp(true), TEST_EVENT_SETTLE_TIMEOUT_MS);
+    return () => {
+      clearTimeout(waitTimer);
+      clearTimeout(settleTimer);
+    };
+  }, []);
+  return { waitElapsed, gaveUp };
+}
+
 /** The latest run under `triggerId`. Keyed by it, so a new fire starts a new wait. */
 function DefaultTestEventOutcome({ triggerId }: { triggerId: string }) {
   const { instance } = useInstance();
-  const [waitElapsed, setWaitElapsed] = useState(false);
+  const { waitElapsed, gaveUp } = useTestEventWaits();
   const record = useQuery(
     api.transientEvents.get,
     instance ? { instanceId: instance._id, correlationKey: triggerId } : "skip"
   );
 
-  useEffect(() => {
-    const timer = setTimeout(() => setWaitElapsed(true), TEST_EVENT_OUTCOME_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, []);
-
-  return <TestEventOutcome record={record} waitElapsed={waitElapsed} />;
+  return <TestEventOutcome record={record} waitElapsed={waitElapsed} gaveUp={gaveUp} />;
 }
 
-function TestEventOutcome({ record, waitElapsed }: { record: RunRecord | null | undefined; waitElapsed: boolean }) {
-  const outcome = describeTestEventOutcome(record, waitElapsed);
+function TestEventOutcome({
+  record,
+  waitElapsed,
+  gaveUp,
+}: {
+  record: RunRecord | null | undefined;
+  waitElapsed: boolean;
+  gaveUp: boolean;
+}) {
+  const outcome = settleTestEventOutcome(describeTestEventOutcome(record, waitElapsed), gaveUp);
 
   switch (outcome.kind) {
     case "waiting":
@@ -90,7 +118,13 @@ function TestEventOutcome({ record, waitElapsed }: { record: RunRecord | null | 
           Published, but no workflow picked it up. Check that a workflow is enabled for this event.
         </p>
       );
-    default:
+    case "unsettled":
+      return (
+        <p className="text-xs text-muted-foreground" data-testid="test-event-outcome-unsettled">
+          No result after a minute. The workflow may still be running: its run history has the details.
+        </p>
+      );
+    case "failed":
       return (
         <div className="flex items-start gap-2 text-xs" data-testid="test-event-outcome-failed">
           <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-red-500" />
