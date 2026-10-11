@@ -239,8 +239,15 @@ export function queueAddRefusal(
   return null;
 }
 
-/** A short reading of a value for the instance list: a number, some text, or how many entries. */
-export function summarizeResourceValue(value: unknown): string {
+/**
+ * A short reading of a value for the instance list: a number, some text, or how many
+ * entries. `summaryPath` is the kind's `display.summary`, the part of the value to read
+ * when the whole of it is an object.
+ */
+export function summarizeResourceValue(value: unknown, summaryPath?: string): string {
+  if (summaryPath) {
+    return summarizeResourceValue(valueAtPath(value, summaryPath));
+  }
   if (typeof value === "number") {
     return value.toLocaleString();
   }
@@ -254,4 +261,22 @@ export function summarizeResourceValue(value: unknown): string {
     return value.length.toLocaleString();
   }
   return "";
+}
+
+/**
+ * What `path`, object keys and list indexes joined by `.`, leads to inside `value`;
+ * undefined where a step finds nothing.
+ */
+export function valueAtPath(value: unknown, path: string): unknown {
+  let at = value;
+  for (const step of path.split(".")) {
+    if (Array.isArray(at) && /^\d+$/.test(step)) {
+      at = at[Number(step)];
+    } else if (at && typeof at === "object" && !Array.isArray(at) && Object.hasOwn(at, step)) {
+      at = (at as Record<string, unknown>)[step];
+    } else {
+      return undefined;
+    }
+  }
+  return at;
 }

@@ -19,7 +19,17 @@ export type RedeployPatch = Partial<
 >;
 
 export type RedeployEvent =
-  | { type: "engine.run.step"; runId: string | undefined; step: RunStep }
+  | {
+      type: "engine.run.step";
+      runId: string | undefined;
+      step: RunStep;
+      /** The release the run moves the engine to. */
+      targetVersion: string | undefined;
+      /** Set when the run restores the release a failed upgrade replaced. */
+      rollbackOf: string | undefined;
+      /** When the event was received, which starts an upgrade this row learns of from its run. */
+      receivedAt: number;
+    }
   | { type: "engine.ready"; version: string }
   | {
       type: "engine.failed";
@@ -75,6 +85,9 @@ export function decideRedeployEvent(row: UpgradeRow, event: RedeployEvent): Rede
       if (event.runId === undefined) {
         return null;
       }
+      if (row.status === "registered" && event.runId !== row.runId && isUnderWay(event.step)) {
+        return adoptRun(row, { ...event, runId: event.runId });
+      }
       // An upgrade is recorded before the maintenance API is asked for it, so
       // its first reports can arrive before the row has been told the run's id.
       const awaitingRunId = row.status === "upgrading" && row.runId === undefined;
@@ -127,4 +140,41 @@ export function decideRedeployEvent(row: UpgradeRow, event: RedeployEvent): Rede
       return failed;
     }
   }
+}
+
+function isUnderWay(step: RunStep): boolean {
+  return step.status === "pending" || step.status === "running";
+}
+
+/**
+ * A redeploy this deployment did not ask for: an operator moved the engine to
+ * another release from the backoffice. The engine is just as offline as in an
+ * upgrade its owner started, so the row says so and follows the run from here.
+ *
+ * A rollback found this way has no upgrade on the row to restore from, so it
+ * is shown as upgrading with no versions rather than with guessed ones.
+ */
+function adoptRun(
+  row: UpgradeRow,
+  event: Extract<RedeployEvent, { type: "engine.run.step" }> & { runId: string }
+): RedeployPatch {
+  const fromVersion = row.reportedVersion;
+  const toVersion = event.rollbackOf === undefined ? event.targetVersion : undefined;
+  return {
+    status: "upgrading",
+    runId: event.runId,
+    steps: [event.step],
+    error: undefined,
+    upgrade:
+      fromVersion !== undefined && toVersion !== undefined
+        ? {
+            fromVersion,
+            toVersion,
+            startedAt: event.receivedAt,
+            // Counts upgrades this deployment asked for, which this one was not.
+            attempt: row.upgrade?.attempt ?? 0,
+            rollingBack: false,
+          }
+        : undefined,
+  };
 }

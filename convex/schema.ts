@@ -296,7 +296,8 @@ export default defineSchema({
       v.object({
         fromVersion: v.string(),
         toVersion: v.string(),
-        requestedBy: v.id("users"),
+        // Absent when an operator started the upgrade from the backoffice.
+        requestedBy: v.optional(v.id("users")),
         startedAt: v.number(),
         // Counts upgrades asked of this row and is part of each one's
         // Idempotency-Key. The maintenance API keeps keys for 7 days, so a

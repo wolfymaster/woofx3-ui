@@ -1,24 +1,35 @@
 import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
 
-/** Where a resource kind without a page of its own lives: `<base>/<module>/<kind>`. */
+/** Where a kind other than the built-in ones lives: `<base>/<module>/<kind>`. */
 export const RESOURCE_KINDS_BASE = "/stream/resources";
 
-/** The kinds with a first-party page, at the address each has always had. */
-const FIRST_PARTY_KIND_PATHS: Readonly<Record<string, string>> = {
+/**
+ * The woofx3 module's kinds, at the addresses they have always had, and listed
+ * in the menu and the palette by hand. Their pages are the same as any kind's.
+ */
+const BUILT_IN_KIND_PATHS: Readonly<Record<string, string>> = {
   [COUNTER_KIND]: "/stream/counters",
   [TIMER_KIND]: "/stream/timers",
   [QUEUE_KIND]: "/stream/queues",
 };
 
-/** Whether a kind has a first-party page, which the menu already lists. */
-export function hasFirstPartyPage(moduleName: string, kind: string): boolean {
-  return `${moduleName}:${kind}` in FIRST_PARTY_KIND_PATHS;
+/** Whether a kind is one of the built-in ones, which the menu and the palette list already. */
+export function isBuiltInKind(moduleName: string, kind: string): boolean {
+  return `${moduleName}:${kind}` in BUILT_IN_KIND_PATHS;
+}
+
+/** Each built-in kind and the address its page is routed at. */
+export function builtInKindRoutes(): { moduleName: string; kind: string; path: string }[] {
+  return Object.entries(BUILT_IN_KIND_PATHS).map(([qualified, path]) => {
+    const [moduleName, kind] = qualified.split(":");
+    return { moduleName, kind, path };
+  });
 }
 
 /** The page that lists a kind's instances; an instance lives one segment below it. */
 export function resourceKindPath(moduleName: string, kind: string): string {
   return (
-    FIRST_PARTY_KIND_PATHS[`${moduleName}:${kind}`] ??
+    BUILT_IN_KIND_PATHS[`${moduleName}:${kind}`] ??
     `${RESOURCE_KINDS_BASE}/${encodeURIComponent(moduleName)}/${encodeURIComponent(kind)}`
   );
 }

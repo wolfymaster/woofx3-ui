@@ -1,7 +1,7 @@
-import { TIMER_KIND } from "@convex/lib/resourceKinds";
 import { Pause, Play, RotateCcw, Timer } from "lucide-react";
 import { useState } from "react";
-import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
+import type { KindView } from "@/components/resources/kind-views";
+import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,21 +16,14 @@ import {
   timerStatus,
 } from "@/lib/resource-values";
 
-const BASE_PATH = "/stream/timers";
-
-export default function Timers() {
-  return (
-    <ResourceKindPage
-      kind={TIMER_KIND}
-      title="Timers"
-      description="Countdowns your stream shows: break timers, subathons, giveaways. Start, pause and add time here, from a chat command, or from any workflow."
-      icon={Timer}
-      basePath={BASE_PATH}
-      railValue={(props) => <TimerClock {...props} />}
-      detail={(props) => <TimerPanel {...props} />}
-    />
-  );
-}
+/** A woofx3 timer: its time left, started, paused and changed through the timer's own actions. */
+export const timerView: KindView = {
+  description:
+    "Countdowns your stream shows: break timers, subathons, giveaways. Start, pause and add time here, from a chat command, or from any workflow.",
+  icon: Timer,
+  railValue: (props) => <TimerClock {...props} />,
+  detail: (props) => <TimerPanel {...props} />,
+};
 
 function TimerClock({ value, settings }: ResourceDetailProps) {
   return <>{formatDuration(useTimerState(value, settings).remainingMs)}</>;

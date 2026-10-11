@@ -1,7 +1,7 @@
-import { COUNTER_KIND } from "@convex/lib/resourceKinds";
 import { Check, Circle, Minus, Plus, RotateCcw, Tally5 } from "lucide-react";
 import { useState } from "react";
-import { type ResourceDetailProps, ResourceKindPage } from "@/components/resources/resource-kind-page";
+import type { KindView } from "@/components/resources/kind-views";
+import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,25 +9,18 @@ import { useResourceAction } from "@/hooks/use-resource-action";
 import { type CounterGoal, counterGoals, counterValue, goalProgress } from "@/lib/resource-values";
 import { cn } from "@/lib/utils";
 
-const BASE_PATH = "/stream/counters";
-
 /** The event a counter fires on reaching one of its goals; must match `goal_reached` in the woofx3 module. */
 const GOAL_REACHED_EVENT = "goal.reached";
 
-export default function Counters() {
-  return (
-    <ResourceKindPage
-      kind={COUNTER_KIND}
-      title="Counters"
-      description="Numbers your stream keeps: deaths, wins, hugs given. Change them here, from a chat command, or from any workflow."
-      icon={Tally5}
-      basePath={BASE_PATH}
-      railValue={(props) => formatCount(counterValue(props.value, props.settings))}
-      detail={(props) => <CounterPanel {...props} />}
-      triggerDetail={(preset, props) => (preset.event === GOAL_REACHED_EVENT ? <CounterGoals {...props} /> : null)}
-    />
-  );
-}
+/** A woofx3 counter: its number and goals, stepped and set through the counter's own actions. */
+export const counterView: KindView = {
+  description:
+    "Numbers your stream keeps: deaths, wins, hugs given. Change them here, from a chat command, or from any workflow.",
+  icon: Tally5,
+  railValue: (props) => formatCount(counterValue(props.value, props.settings)),
+  detail: (props) => <CounterPanel {...props} />,
+  triggerDetail: (preset, props) => (preset.event === GOAL_REACHED_EVENT ? <CounterGoals {...props} /> : null),
+};
 
 function formatCount(value: number): string {
   return value.toLocaleString();

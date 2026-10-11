@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Boxes } from "lucide-react";
 import { type InstanceHosting, MAIN_NAV_SECTIONS, UTILITY_SECTIONS } from "@/components/layout/nav-config";
 import { navigationCommands } from "./navigation-commands";
 
@@ -27,6 +28,18 @@ describe("navigationCommands", () => {
     expect(hrefs("external", true)).toContain("/admin/engine");
     expect(hrefs("external", false).filter((href) => href.startsWith("/admin"))).toEqual([]);
     expect(hrefs("external", false)).toContain("/team");
+  });
+
+  test("reaches the page of each kind an installed module declares, under Stream", () => {
+    const wheels = {
+      id: "resource-kind:wheel_spin:wheel",
+      label: "Wheels",
+      icon: Boxes,
+      href: "/stream/resources/wheel_spin/wheel",
+    };
+    const command = navigationCommands("external", true, [wheels]).find((entry) => entry.id === `page:${wheels.id}`);
+    expect(command?.action).toEqual({ type: "navigate", href: wheels.href });
+    expect(command?.subtitle).toBe("Stream");
   });
 
   test("gives every entry a unique id", () => {

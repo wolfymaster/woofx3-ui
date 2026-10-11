@@ -20,6 +20,7 @@ import {
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
+import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
 import { convexClient as convex } from "./lib/convexClient";
@@ -43,7 +44,6 @@ const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
 const CommandStepAlertEditor = lazy(() => import("@/pages/command-step-alert-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
 const CompanionPair = lazy(() => import("@/pages/companion-pair"));
-const Counters = lazy(() => import("@/pages/counters"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
 const Feedback = lazy(() => import("@/pages/feedback"));
@@ -56,7 +56,6 @@ const Logs = lazy(() => import("@/pages/logs"));
 const ModuleInstall = lazy(() => import("@/pages/module-install"));
 const Modules = lazy(() => import("@/pages/modules"));
 const NotFound = lazy(() => import("@/pages/not-found"));
-const Queues = lazy(() => import("@/pages/queues"));
 const Scenes = lazy(() => import("@/pages/scenes"));
 const Setup = lazy(() => import("@/pages/setup"));
 const StarterPacks = lazy(() => import("@/pages/starter-packs"));
@@ -65,7 +64,6 @@ const StreamRecaps = lazy(() => import("@/pages/stream-recaps"));
 const Supporters = lazy(() => import("@/pages/supporters"));
 const Team = lazy(() => import("@/pages/team"));
 const TeamInvite = lazy(() => import("@/pages/team-invite"));
-const Timers = lazy(() => import("@/pages/timers"));
 const WorkflowRun = lazy(() => import("@/pages/workflow-run"));
 const Workflows = lazy(() => import("@/pages/workflows"));
 
@@ -184,14 +182,19 @@ function AppRoutes() {
                   <Route path={COMMAND_NEW_ROUTE} component={CommandEditor} />
                   <Route path={COMMAND_EDITOR_ROUTE} component={CommandEditor} />
                   <Route path="/stream/commands" component={Commands} />
-                  <Route path="/stream/counters" component={Counters} />
-                  <Route path="/stream/counters/*" component={Counters} />
-                  <Route path="/stream/timers" component={Timers} />
-                  <Route path="/stream/timers/*" component={Timers} />
-                  <Route path="/stream/queues" component={Queues} />
-                  <Route path="/stream/queues/*" component={Queues} />
-                  <Route path="/stream/resources/:module/:kind" component={ResourceKind} />
-                  <Route path="/stream/resources/:module/:kind/*" component={ResourceKind} />
+                  {builtInKindRoutes().flatMap(({ moduleName, kind, path }) =>
+                    [path, `${path}/*`].map((pattern) => (
+                      <Route key={pattern} path={pattern}>
+                        <ResourceKind moduleName={moduleName} kind={kind} />
+                      </Route>
+                    ))
+                  )}
+                  <Route path="/stream/resources/:module/:kind">
+                    {(params) => <ResourceKind moduleName={params.module} kind={params.kind} />}
+                  </Route>
+                  <Route path="/stream/resources/:module/:kind/*">
+                    {(params) => <ResourceKind moduleName={params.module} kind={params.kind} />}
+                  </Route>
                   <Route path={STREAM_RECAPS_PATH} component={StreamRecaps} />
                   <Route path={STREAM_RECAP_ROUTE} component={StreamRecap} />
                   <Route path="/stream/scenes" component={Scenes} />

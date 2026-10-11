@@ -409,6 +409,10 @@ export const applyCallbackEvent = internalMutation({
     // restoring the previous release when one was queued.
     engineStatus: v.optional(v.string()),
     rollbackRunId: v.optional(v.string()),
+    // On a redeploy's `engine.run.step`: the release it moves the engine to,
+    // and the failed upgrade it undoes when it is a rollback.
+    targetVersion: v.optional(v.string()),
+    rollbackOf: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ handled: boolean; duplicate: boolean }> => {
     const seen = await ctx.db
@@ -450,7 +454,14 @@ export const applyCallbackEvent = internalMutation({
           detail: args.detail,
         };
         if (args.runKind === "redeploy") {
-          await applyRedeployEvent(ctx, row, { type: "engine.run.step", runId: args.runId, step });
+          await applyRedeployEvent(ctx, row, {
+            type: "engine.run.step",
+            runId: args.runId,
+            step,
+            targetVersion: args.targetVersion,
+            rollbackOf: args.rollbackOf,
+            receivedAt: Date.now(),
+          });
         } else {
           await applyRunStep(ctx, row, step);
         }

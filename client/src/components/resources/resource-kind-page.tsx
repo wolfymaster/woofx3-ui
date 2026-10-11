@@ -1,13 +1,15 @@
 import { api } from "@convex/_generated/api";
-import { bareKind } from "@convex/lib/resourceKinds";
+import { bareKind, parseKindRef, WOOFX3_MODULE } from "@convex/lib/resourceKinds";
 import { useAction, useQuery } from "convex/react";
-import { Loader2, type LucideIcon, Pencil, Plus, Trash2 } from "lucide-react";
+import { Boxes, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
 import { EmptyState } from "@/components/common/empty-state";
 import { SIDEBAR_RAIL } from "@/components/layout/sidebar-rail";
 import { CreateResourceDialog } from "@/components/modules/create-resource-dialog";
+import { GenericResourceDetail } from "@/components/resources/generic-resource-detail";
+import { type KindView, kindViewFor } from "@/components/resources/kind-views";
 import { ResourceActionEditors } from "@/components/resources/resource-action-editors";
 import { ResourceTriggerEditors } from "@/components/resources/resource-trigger-editors";
 import {
@@ -28,12 +30,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
+import { pluralKindName } from "@/lib/resource-kind-route";
+import { summarizeResourceValue } from "@/lib/resource-values";
 import { subPathSegments } from "@/lib/route-subpath";
 import { cn } from "@/lib/utils";
-import type { TriggerPreset } from "@/lib/workflow-presets";
 
 export type { ResourceInstanceDoc };
 
@@ -49,46 +53,22 @@ export interface ResourceDetailProps {
 interface ResourceKindPageProps {
   /** The resource kind this page is for, as `module:kind`, e.g. `woofx3:counter`. */
   kind: string;
-  title: string;
-  description: string;
-  icon: LucideIcon;
   /** Where this page is routed; an instance lives at `<basePath>/<its id>`. */
   basePath: string;
-  /** What to say when no installed module provides the kind. */
-  unavailableDescription?: string;
-  /** The value beside an instance's name in the rail. */
-  railValue: (props: ResourceDetailProps) => ReactNode;
-  /** What the kind shows and lets you do, above its settings. */
-  detail: (props: ResourceDetailProps) => ReactNode;
-  /**
-   * What a trigger's section shows about the instance above its triggers, such
-   * as the goals a goal trigger fires on. Null for a trigger with nothing to add.
-   */
-  triggerDetail?: (preset: TriggerPreset, props: ResourceDetailProps) => ReactNode;
 }
 
 /**
- * A first-party page for one kind of module-provided resource: the instances on
- * the left, the chosen one on the right.
+ * The page for one kind of module-provided resource, whichever module declares
+ * it: the instances on the left, the chosen one on the right.
  *
  * Everything that is the same for every kind lives here — finding the module
  * that provides it, listing and creating instances with the kind's own settings
  * form, keeping values fresh, the triggers its events offer, showing settings
- * and deleting. A kind supplies
- * only its value display and controls, so counters, timers and queues read as
- * one product.
+ * and deleting. What an instance holds and the controls for it come from the
+ * kind's view (see `kindViewFor`), or, for a kind the dashboard has none made
+ * for, from its declarations alone.
  */
-export function ResourceKindPage({
-  kind,
-  title,
-  description,
-  icon,
-  basePath,
-  unavailableDescription,
-  railValue,
-  detail,
-  triggerDetail,
-}: ResourceKindPageProps) {
+export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   const [location, navigate] = useLocation();
   const { instance } = useInstance();
   const { toast } = useToast();
@@ -125,6 +105,10 @@ export function ResourceKindPage({
   const selected = sorted.find((row) => row.resourceInstanceId === selectedId);
   const kindName = bareKind(kind);
   const noun = kindDefinition?.name.toLowerCase() ?? kindName;
+  const view = kindViewFor(kind) ?? declaredKindView(kind, kindDefinition?.summaryPath);
+  const title = pluralKindName(capitalize(kindDefinition?.name || kindName));
+  const icon = kindDefinition?.icon ? dynamicLucideIcon(kindDefinition.icon) : (view.icon ?? Boxes);
+  const description = view.description ?? kindDefinition?.description ?? "";
 
   const detailProps = (row: ResourceInstanceDoc): ResourceDetailProps => ({
     instance: row,
@@ -148,8 +132,9 @@ export function ResourceKindPage({
           icon={icon}
           title={`${title} aren't available yet`}
           description={
-            unavailableDescription ??
-            `No installed module provides ${kindName}s. They come with the woofx3 module — restart the engine to install its latest version.`
+            parseKindRef(kind)?.module === WOOFX3_MODULE
+              ? `No installed module provides ${kindName}s. They come with the woofx3 module — restart the engine to install its latest version.`
+              : `No installed module provides ${title.toLowerCase()} called "${kind}". Install the module that does, or check the address.`
           }
         />
       </div>
@@ -185,7 +170,7 @@ export function ResourceKindPage({
                     >
                       <span className="truncate">{resourceName(row)}</span>
                       <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
-                        {railValue(detailProps(row))}
+                        {view.railValue(detailProps(row))}
                       </span>
                     </span>
                   </Link>
@@ -232,14 +217,14 @@ export function ResourceKindPage({
                 </Button>
               </div>
 
-              {detail(detailProps(selected))}
+              {view.detail(detailProps(selected))}
 
               <ResourceActionEditors key={selected.canonicalId} kind={kind} instance={selected} />
 
               <ResourceTriggerEditors
                 kind={kind}
                 instance={selected}
-                triggerDetail={triggerDetail && ((preset) => triggerDetail(preset, detailProps(selected)))}
+                triggerDetail={view.triggerDetail && ((preset) => view.triggerDetail?.(preset, detailProps(selected)))}
               />
 
               <SettingsCard
@@ -408,7 +393,7 @@ function SettingsCard({
             return (
               <div key={field.id} className="contents">
                 <dt className="text-muted-foreground">{field.label}</dt>
-                <dd>{option?.label ?? (raw === undefined || raw === "" ? "—" : String(raw))}</dd>
+                <dd className="min-w-0 break-words">{option?.label ?? settingText(field, raw)}</dd>
               </div>
             );
           })}
@@ -436,4 +421,65 @@ function SettingsCard({
       )}
     </Card>
   );
+}
+
+/** The view of a kind the dashboard has none made for, built from its declarations alone. */
+function declaredKindView(kind: string, summaryPath: string | undefined): KindView {
+  return {
+    railValue: (props) => summarizeResourceValue(props.value, summaryPath),
+    detail: (props) => <GenericResourceDetail {...props} qualifiedKind={kind} />,
+  };
+}
+
+/**
+ * A setting's value as read in the card. A list shows its rows, one per line,
+ * each as its fields' values: a wheel's entries, a counter's goals.
+ */
+export function settingText(field: { itemFields?: { id: string }[] }, raw: unknown): ReactNode {
+  if (raw === undefined || raw === null || raw === "") {
+    return "—";
+  }
+  const rows = field.itemFields ? listRows(raw) : null;
+  if (rows === null) {
+    return String(raw);
+  }
+  if (rows.length === 0) {
+    return "—";
+  }
+  const itemFields = field.itemFields ?? [];
+  return (
+    <ul className="space-y-0.5">
+      {rows.map((row, index) => (
+        // Rows may repeat, so their place is part of what tells them apart.
+        // biome-ignore lint/suspicious/noArrayIndexKey: list rows have no ids
+        <li key={index}>
+          {itemFields
+            .map((item) => row[item.id])
+            .filter((value) => value !== undefined && value !== null && value !== "")
+            .map(String)
+            .join(" · ") || "—"}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A list setting's rows, whether stored as an array or as its JSON text; null when it is neither. */
+function listRows(raw: unknown): Record<string, unknown>[] | null {
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  return value.filter((row): row is Record<string, unknown> => row !== null && typeof row === "object");
+}
+
+function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
