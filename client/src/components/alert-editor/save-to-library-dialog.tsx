@@ -25,6 +25,8 @@ interface SaveToLibraryDialogProps {
   doc: CompositionDocument | null;
   /** The step's variables, which name the inputs its `${...}` references become. */
   availableVariables: VariableOption[];
+  /** The library's alert names, which the engine keeps unique; undefined while they load. */
+  takenNames: readonly string[] | undefined;
   /** The new library alert's id, which the step then links, with the values for its inputs. */
   onSaved: (compositionId: string, inputs: Record<string, string>) => void;
 }
@@ -41,6 +43,7 @@ export function SaveToLibraryDialog({
   onOpenChange,
   doc,
   availableVariables,
+  takenNames,
   onSaved,
 }: SaveToLibraryDialogProps) {
   const { instance } = useInstance();
@@ -48,9 +51,10 @@ export function SaveToLibraryDialog({
   const create = useAction(api.alertCompositionActions.create);
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
+  const taken = takenNames?.includes(name.trim()) ?? false;
 
   const save = async () => {
-    if (!instance || !doc || name.trim() === "") {
+    if (!instance || !doc || name.trim() === "" || taken) {
       return;
     }
     setPending(true);
@@ -96,8 +100,15 @@ export function SaveToLibraryDialog({
               }
             }}
             placeholder="Follower alert"
+            aria-invalid={taken}
+            aria-describedby={taken ? "library-alert-name-taken" : undefined}
             data-testid="input-library-alert-name"
           />
+          {taken && (
+            <p id="library-alert-name-taken" className="text-sm text-destructive">
+              The library already has an alert with this name.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
@@ -105,7 +116,7 @@ export function SaveToLibraryDialog({
           </Button>
           <Button
             onClick={() => void save()}
-            disabled={pending || name.trim() === "" || doc === null}
+            disabled={pending || name.trim() === "" || taken || doc === null}
             data-testid="button-save-library-alert"
           >
             {pending ? "Saving…" : "Save"}
