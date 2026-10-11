@@ -7,9 +7,14 @@ import type { VariableOption } from "@/lib/workflow-variables";
  * as it takes to tell two variables apart (`{increment.next}` beside
  * `{increment-2.next}`).
  *
+ * A library alert's text refers to the alert's inputs instead, stored as `{{id}}`
+ * (see bind.ts in @woofx3/scene), and an option whose value is `{{id}}` is shown as
+ * `{id}` the same way. An input id is one name, never shortened.
+ *
  * Only a reference to a variable in `options` is shortened. Anything else inside
- * `${…}` (a compound expression, or a reference to a step that no longer runs first)
- * stays as typed, so a broken reference is visible rather than disguised.
+ * `${…}` or `{{…}}` (a compound expression, a reference to a step that no longer
+ * runs first, an input the alert does not declare) stays as typed, so a broken
+ * reference is visible rather than disguised.
  */
 export interface VariableNames {
   /** Stored token (`${trigger.data.firstName}`) to its short name (`firstName`). */
@@ -20,7 +25,7 @@ export interface VariableNames {
 
 export function variableNames(options: readonly VariableOption[]): VariableNames {
   const tokens = Array.from(new Set(options.map((option) => option.value)));
-  const segmentsByToken = new Map(tokens.map((token) => [token, referencePath(token).split(".")]));
+  const segmentsByToken = new Map(tokens.map((token) => [token, referenceSegments(token)]));
   const lengths = new Map(tokens.map((token) => [token, 1]));
   const nameOf = (token: string) => {
     const segments = segmentsByToken.get(token) ?? [];
@@ -66,15 +71,29 @@ export function variableNames(options: readonly VariableOption[]): VariableNames
   return { nameByToken, tokenByName };
 }
 
-const STORED_REFERENCE = /\$\{([^{}]*)\}/g;
-// A "{" right after "$" is the start of an expression the user typed out in full, not a short name.
-const DISPLAYED_REFERENCE = /(?<!\$)\{([^{}\s$]+)\}/g;
+const VARIABLE_TOKEN = /^\$\{([^{}]*)\}$/;
+const INPUT_TOKEN = /^\{\{([A-Za-z0-9_.-]+)\}\}$/;
+// A `{{` after a backslash is literal text in a composition, not an input reference.
+const STORED_REFERENCE = /\$\{[^{}]*\}|(?<!\\)\{\{[A-Za-z0-9_.-]+\}\}/g;
+// A short name is a lone `{name}`. One right after "$" starts an expression typed out in
+// full, and one with a brace on either side is the inside of an input reference, `{{name}}`.
+const DISPLAYED_REFERENCE = /(?<![${])\{([^{}\s$]+)\}(?!\})/g;
 
-/** The stored value as a field shows it: every known `${…}` reference as `{name}`. */
+/**
+ * The stored value as a field shows it: every known reference as `{name}`. A reference
+ * whose short form would sit right after a "$" or "{", or right before a "}", stays in
+ * full, since toStoredText would not read that short form back as the name and the
+ * field would lose the reference.
+ */
 export function toDisplayText(stored: string, names: VariableNames): string {
-  return stored.replace(STORED_REFERENCE, (match) => {
+  return stored.replace(STORED_REFERENCE, (match: string, offset: number) => {
     const name = names.nameByToken.get(match);
-    return name === undefined ? match : `{${name}}`;
+    const before = stored[offset - 1];
+    const after = stored[offset + match.length];
+    if (name === undefined || before === "$" || before === "{" || after === "}") {
+      return match;
+    }
+    return `{${name}}`;
   });
 }
 
@@ -83,9 +102,14 @@ export function toStoredText(display: string, names: VariableNames): string {
   return display.replace(DISPLAYED_REFERENCE, (match, name: string) => names.tokenByName.get(name) ?? match);
 }
 
-function referencePath(token: string): string {
-  if (!token.startsWith("${") || !token.endsWith("}")) {
-    throw new Error(`variable option value is not a \${…} reference: ${token}`);
+function referenceSegments(token: string): string[] {
+  const input = INPUT_TOKEN.exec(token);
+  if (input) {
+    return [input[1]];
   }
-  return token.slice(2, -1);
+  const variable = VARIABLE_TOKEN.exec(token);
+  if (!variable) {
+    throw new Error(`variable option value is not a \${…} or {{…}} reference: ${token}`);
+  }
+  return variable[1].split(".");
 }
