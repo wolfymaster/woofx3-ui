@@ -97,13 +97,19 @@ export function storedSceneJson(doc: CompositionDocument): { widgetsJson: string
 
 /** The installed widgets as the editor's catalog. */
 export function catalogOfRows(rows: readonly SceneWidgetCatalogRow[]): CatalogWidget[] {
-  return rows.map((row) => ({
+  return rows.map(catalogWidgetOf);
+}
+
+/** One installed widget as the editor's catalog lists it, with the behavior kinds it declares. */
+export function catalogWidgetOf(row: SceneWidgetCatalogRow): CatalogWidget {
+  return {
     widgetId: row.widgetId,
     name: row.name,
     settings: row.settings as CatalogWidget["settings"],
     ...(row.surfaces !== undefined ? { surfaces: row.surfaces } : {}),
     ...(row.hostsSurface !== undefined ? { hostsSurface: row.hostsSurface } : {}),
-  }));
+    ...(row.behaviorKinds !== undefined ? { behaviorKinds: row.behaviorKinds } : {}),
+  };
 }
 
 /** Another editor that has a widget selected. */
