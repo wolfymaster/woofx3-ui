@@ -1,6 +1,6 @@
+import type { CanvasSize } from "@woofx3/scene/editor";
 import type { ReactNode } from "react";
-import { StageArea } from "@/components/common/stage-area";
-import type { CanvasSize } from "@/lib/alert-editor";
+import { StageArea, type StageZoom } from "@/components/common/stage-area";
 import { cn } from "@/lib/utils";
 
 interface OverlayEditorShellProps {
@@ -13,6 +13,8 @@ interface OverlayEditorShellProps {
   layers: ReactNode;
   /** The canvas, drawn at the zoom the stage area settled on. */
   stage: (zoom: number) => ReactNode;
+  /** See StageArea.zoomControl. */
+  zoomControl?: StageZoom;
   /** The selected widget's settings, or null when nothing is selected. */
   inspector: ReactNode | null;
   /** What the right rail shows with nothing selected, so the rail is never empty. */
@@ -53,6 +55,7 @@ export function OverlayEditorShell({
   palette,
   layers,
   stage,
+  zoomControl,
   inspector,
   inspectorFallback,
   className = "h-full",
@@ -70,7 +73,9 @@ export function OverlayEditorShell({
         data-testid="overlay-editor-body"
       >
         <aside className="flex min-h-0 flex-col overflow-y-auto border-r p-4">{palette}</aside>
-        <StageArea canvas={canvas}>{stage}</StageArea>
+        <StageArea canvas={canvas} zoomControl={zoomControl}>
+          {stage}
+        </StageArea>
         <aside className="flex min-h-0 flex-col border-l">
           <div className="max-h-[40%] shrink-0 overflow-y-auto border-b p-4" data-testid="editor-layers">
             {layers}

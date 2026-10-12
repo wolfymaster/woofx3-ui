@@ -25,6 +25,11 @@ export default defineConfig({
         find: /^@woofx3\/api\/(.+)$/,
         replacement: path.resolve(import.meta.dirname, "../woofx3/shared/clients/typescript/api") + "/$1.ts",
       },
+      // `@woofx3/scene/<part>` → <part>/index.ts (model, editor, runtime)
+      {
+        find: /^@woofx3\/scene\/(.+)$/,
+        replacement: path.resolve(import.meta.dirname, "../woofx3/shared/clients/typescript/scene") + "/$1/index.ts",
+      },
       {
         find: /^@woofx3\/api$/,
         replacement: path.resolve(import.meta.dirname, "../woofx3/shared/clients/typescript/api/index.ts"),

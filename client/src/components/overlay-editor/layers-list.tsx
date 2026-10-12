@@ -19,20 +19,26 @@ import { Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
 import { widgetIconFor } from "@/components/overlay-editor/widget-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Widget } from "@/types";
 
-interface LayersListProps {
-  /** Topmost first; this does not sort. See layersTopFirst in lib/layer-order.ts. */
-  layers: readonly Widget[];
+/** What the list reads of a layer; each editor hands it its own layer type. */
+export interface Layer {
+  id: string;
+  /** False for a hidden layer; see `onToggleVisible`. */
+  visible: boolean;
+}
+
+interface LayersListProps<T extends Layer> {
+  /** Topmost first; this does not sort. */
+  layers: readonly T[];
   selectedId: string | null;
   /** The label a layer goes by, shared with the canvas so both name it the same. */
-  label: (widget: Widget) => string;
-  /** The widget's taxonomy, looked up from the editor's catalog, for the icon. */
-  taxonomyOf: (widget: Widget) => string[] | undefined;
+  label: (layer: T) => string;
+  /** The layer's widget's taxonomy, looked up from the editor's catalog, for the icon. */
+  taxonomyOf: (layer: T) => string[] | undefined;
   /** Trailing note, e.g. an alert layer's length. Omitted where a layer has no such axis. */
-  meta?: (widget: Widget) => string;
+  meta?: (layer: T) => string;
   onSelect: (widgetId: string) => void;
-  /** A layer dragged to `toIndex` of `layers`, topmost first. See moveLayer in lib/layer-order.ts. */
+  /** A layer dragged to `toIndex` of `layers`, topmost first. */
   onMove: (widgetId: string, toIndex: number) => void;
   /** Gives each layer a delete button. */
   onDelete?: (widgetId: string) => void;
@@ -44,7 +50,7 @@ interface LayersListProps {
 }
 
 function LayerRow({
-  widget,
+  layer,
   label,
   note,
   icon: Icon,
@@ -55,7 +61,7 @@ function LayerRow({
   onDelete,
   onToggleVisible,
 }: {
-  widget: Widget;
+  layer: Layer;
   label: string;
   note: string | undefined;
   icon: ReturnType<typeof widgetIconFor>;
@@ -66,9 +72,9 @@ function LayerRow({
   onDelete: ((widgetId: string) => void) | undefined;
   onToggleVisible: ((widgetId: string) => void) | undefined;
 }) {
-  const hidden = onToggleVisible !== undefined && widget.visible === false;
+  const hidden = onToggleVisible !== undefined && layer.visible === false;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: widget.id,
+    id: layer.id,
     disabled: !canDrag,
   });
 
@@ -82,7 +88,7 @@ function LayerRow({
         isSelected && "bg-accent ring-2 ring-inset ring-primary",
         isDragging && "relative z-10 bg-card opacity-80 shadow-md"
       )}
-      data-testid={`layer-${widget.id}`}
+      data-testid={`layer-${layer.id}`}
     >
       {canDrag && (
         <button
@@ -91,7 +97,7 @@ function LayerRow({
           {...listeners}
           className="flex h-9 w-6 shrink-0 cursor-grab touch-none items-center justify-center text-muted-foreground/60 hover:text-foreground active:cursor-grabbing"
           aria-label={`Move ${label} up or down the stack`}
-          data-testid={`layer-handle-${widget.id}`}
+          data-testid={`layer-handle-${layer.id}`}
         >
           <GripVertical className="h-3.5 w-3.5" />
         </button>
@@ -99,7 +105,7 @@ function LayerRow({
       <button
         type="button"
         aria-pressed={isSelected}
-        onClick={() => onSelect(widget.id)}
+        onClick={() => onSelect(layer.id)}
         className={cn("flex min-w-0 flex-1 items-center gap-2 py-1.5 text-left", !canDrag && "pl-2")}
       >
         <Icon className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -111,10 +117,10 @@ function LayerRow({
           variant="ghost"
           size="icon"
           className={cn("shrink-0 text-muted-foreground", horizontal ? "h-11 w-11 rounded-full" : "h-7 w-7")}
-          onClick={() => onToggleVisible(widget.id)}
+          onClick={() => onToggleVisible(layer.id)}
           aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
           aria-pressed={hidden}
-          data-testid={`button-visibility-layer-${widget.id}`}
+          data-testid={`button-visibility-layer-${layer.id}`}
         >
           {hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
         </Button>
@@ -127,9 +133,9 @@ function LayerRow({
             "shrink-0 text-muted-foreground hover:text-destructive",
             horizontal ? "-mr-3 h-11 w-11 rounded-full" : "h-7 w-7"
           )}
-          onClick={() => onDelete(widget.id)}
+          onClick={() => onDelete(layer.id)}
           aria-label={`Delete ${label}`}
-          data-testid={`button-delete-layer-${widget.id}`}
+          data-testid={`button-delete-layer-${layer.id}`}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
@@ -147,7 +153,7 @@ function LayerRow({
  * layer has a length, a scene widget does not — so it is a slot rather than a
  * flag, and a scene simply passes none.
  */
-export function LayersList({
+export function LayersList<T extends Layer>({
   layers,
   selectedId,
   label,
@@ -159,7 +165,7 @@ export function LayersList({
   onToggleVisible,
   horizontal = false,
   emptyMessage,
-}: LayersListProps) {
+}: LayersListProps<T>) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -191,14 +197,14 @@ export function LayersList({
             strategy={horizontal ? horizontalListSortingStrategy : verticalListSortingStrategy}
           >
             <div className={cn(horizontal ? "-mx-4 flex gap-2 overflow-x-auto px-4 pb-1" : "flex flex-col gap-1")}>
-              {layers.map((widget) => (
+              {layers.map((layer) => (
                 <LayerRow
-                  key={widget.id}
-                  widget={widget}
-                  label={label(widget)}
-                  note={meta?.(widget)}
-                  icon={widgetIconFor(taxonomyOf(widget))}
-                  isSelected={widget.id === selectedId}
+                  key={layer.id}
+                  layer={layer}
+                  label={label(layer)}
+                  note={meta?.(layer)}
+                  icon={widgetIconFor(taxonomyOf(layer))}
+                  isSelected={layer.id === selectedId}
                   horizontal={horizontal}
                   canDrag={canDrag}
                   onSelect={onSelect}

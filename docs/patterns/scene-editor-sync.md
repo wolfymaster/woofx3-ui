@@ -8,7 +8,7 @@ The sync code is shared with the engine and lives in the engine's api package, `
 
 | Module | What it holds |
 |---|---|
-| `document.ts` | The scene document, json0 ops, op validation, diff, size limits. `client/src/lib/scene-document.ts` re-exports it. |
+| `document.ts` | The scene document, json0 ops, op validation, diff, size limits. |
 | `protocol.ts` | Protocol 2 messages, close codes, nack codes. |
 | `sequencer.ts` | The server's pure decision step: transform, validate, commit. sceneManager runs it; UI tests run it too. |
 | `rebase.ts` | Moving pending edits onto a snapshot field by field. |
@@ -71,7 +71,7 @@ The editor socket is `GET /scene/{sceneId}/edit?token=…&protocol=2`, at sceneM
 
 - `client/src/lib/scene-editor-sessions.ts` keeps **one client per scene per tab**. `acquire(sceneKey, factory)` returns the scene's client, resuming one that is still draining after its editor closed; `release` stops it once no editor holds it. A client is forgotten once it has ended. The registry holds the tab's one `beforeunload` listener, which asks while any client `hasPending()` or an editor has its name or description unsaved. `abandonScene` closes a deleted scene's client.
 - `client/src/hooks/use-scene-editor-session.ts` acquires the client and reads it with `useSyncExternalStore(client.subscribe, client.getState)`. `client/src/lib/scene-sync-browser.ts` supplies the WebSocket, the clock and the socket URL. A client's `open` is a `SceneSocketOpener` that reads the session grant and preview URL from the editor that took the client last, through a ref that editor updates on every render: a client handed to a remounted editor (for a Convex scene row recreated under a new id, say) reconnects with that editor's arguments, not those of the editor that made it.
-- `SceneCanvasEditor` keeps no copy of the document. It renders `canvasOfDocument(state.local[version])` and sends every canvas change as `client.edit(version, canvasEdit(update))`. The Live switch only chooses which version the canvas shows and edits.
+- `SceneCanvasEditor` keeps no copy of the document. Its composition editor (`@woofx3/scene/editor`) works on a `SyncDocumentSource` around the client, which reads `state.local[version]` and sends every change as `client.edit(version, update)`. The Draft / Live toggle only chooses which version the source reads and edits.
 - Reports become toasts through `syncReportToast` (`client/src/lib/scene-sync-report.ts`), a pure function of the typed `SyncReport`.
 - The editor uses session mode only when the engine reports `scenes.editorSync`. Otherwise it is the Save-button editor, and an engine that reports only `scenes.editorSessions` (protocol 1, which this dashboard no longer speaks) gets a notice to upgrade. Until the capabilities have answered, or when asking for them failed, the editor is read-only and Save is off: the Save-button editor shows the published scene from the cache, and a save from it on an engine with editor sync would change what is on stream without a publish.
 

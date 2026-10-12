@@ -1,21 +1,21 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { PreviewLayoutMessage } from "@woofx3/scene/editor";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { buildPreviewLayoutMessage } from "@/lib/scene-preview-layout";
-import type { Widget } from "@/types";
 
 interface LiveScenePreviewProps {
   sceneId: Id<"scenes"> | undefined;
   width: number;
   height: number;
-  /** The editor's current widgets, saved or not; the overlay shows them. */
-  widgets: readonly Widget[];
   /**
-   * The overlay follows the scene's draft as sceneManager sequences it (an
-   * engine with editor sessions): it is told only where widgets are being
-   * dragged, for instant feedback, and gets everything else as ops.
+   * The editor's scene as the overlay should show it, saved or not
+   * (`editor.preview.layoutMessage()`). Without placements when the overlay
+   * follows the draft: it is told only where widgets are being dragged, for
+   * instant feedback, and gets everything else as ops.
    */
+  layoutMessage: PreviewLayoutMessage | null;
+  /** The overlay follows the scene's draft as sceneManager sequences it (an engine with editor sessions). */
   followDraft?: boolean;
 }
 
@@ -43,32 +43,38 @@ interface LiveScenePreviewProps {
  * follows a drag, and shows a new setting or appears when added, before it is
  * saved (see docs/ui/scenes.md).
  */
-export function LiveScenePreview({ sceneId, width, height, widgets, followDraft = false }: LiveScenePreviewProps) {
+export function LiveScenePreview({
+  sceneId,
+  width,
+  height,
+  layoutMessage,
+  followDraft = false,
+}: LiveScenePreviewProps) {
   const getOrCreatePreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
   // undefined = loading; null = not ready yet (scene not synced, or mint failed).
   const [overlayUrl, setOverlayUrl] = useState<string | null | undefined>(undefined);
   const frameRef = useRef<HTMLIFrameElement>(null);
   // Read by the frame's load handler, which must post the layout current at
   // load time rather than the one from the render that attached it.
-  const widgetsRef = useRef(widgets);
-  widgetsRef.current = widgets;
+  const messageRef = useRef(layoutMessage);
+  messageRef.current = layoutMessage;
 
   const postLayout = useCallback(
-    (current: readonly Widget[]) => {
+    (message: PreviewLayoutMessage | null) => {
       const frame = frameRef.current?.contentWindow;
-      if (!frame || !overlayUrl) {
+      if (!frame || !overlayUrl || message === null) {
         return;
       }
       // Addressed to the overlay's origin, so a frame that has navigated
       // somewhere else never receives it.
-      frame.postMessage(buildPreviewLayoutMessage(current, { placements: !followDraft }), new URL(overlayUrl).origin);
+      frame.postMessage(message, new URL(overlayUrl).origin);
     },
-    [overlayUrl, followDraft]
+    [overlayUrl]
   );
 
   useEffect(() => {
-    postLayout(widgets);
-  }, [widgets, postLayout]);
+    postLayout(layoutMessage);
+  }, [layoutMessage, postLayout]);
 
   useEffect(() => {
     if (!sceneId) {
@@ -103,16 +109,16 @@ export function LiveScenePreview({ sceneId, width, height, widgets, followDraft 
     // iframe per widget and needs its own origin preserved to reach them. It grants
     // no access to this page's origin — the engine is a different host.
     //
-    // pointer-events-none is required: an iframe swallows mousemove once the
-    // cursor enters it, which would otherwise break the window-level drag
-    // tracking CanvasWidgetHandle relies on for positioning widgets. This is a
-    // preview surface only — nothing in it needs to be directly interactive.
+    // pointer-events-none is required: an iframe swallows pointer events once
+    // the cursor enters it, so a press on the canvas background or between
+    // handles would never reach the canvas. This is a preview surface only —
+    // nothing in it needs to be directly interactive.
     <iframe
       ref={frameRef}
       // Fires again whenever the overlay reloads (a restarted engine, or a save
       // it could not apply in place); the reloaded page knows only the saved
       // scene, not the draft.
-      onLoad={() => postLayout(widgetsRef.current)}
+      onLoad={() => postLayout(messageRef.current)}
       src={followDraft ? withDraftView(overlayUrl) : overlayUrl}
       title="Scene preview"
       sandbox="allow-scripts allow-same-origin"

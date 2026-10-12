@@ -10,7 +10,7 @@ import { type AlertLayout, readAlertLayout, writeAlertLayout } from "@/lib/alert
 import { placeableOn } from "@/lib/widget-surfaces";
 import type { VariableOption } from "@/lib/workflow-variables";
 import { alertWidgetPreview } from "./alert-widget-previews";
-import { WidgetLayoutCanvas, type WidgetsUpdate } from "./widget-layout-canvas";
+import { WidgetListCanvas, type WidgetsUpdate } from "./widget-list-canvas";
 
 interface AlertLayoutFieldProps {
   field: FieldDescriptor;
@@ -100,7 +100,7 @@ export function AlertLayoutField({ field, value, onChange, renderers, availableV
             </div>
           </DialogHeader>
           {draft && (
-            <WidgetLayoutCanvas
+            <WidgetListCanvas
               className="flex-1"
               width={draft.width}
               height={draft.height}
