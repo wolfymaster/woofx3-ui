@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import type { Widget } from "@/types";
 
 // Stand-ins for the bundled Text and Image widgets on the alert layout canvas,
 // which draws placeholders rather than the widgets themselves, so a layout
@@ -9,16 +8,14 @@ import type { Widget } from "@/types";
 const FITS = ["contain", "cover", "fill"] as const;
 const ALIGNMENTS = ["left", "center", "right"] as const;
 
-/** The stand-in for a layout widget, or null for the generic placeholder. */
-export function alertWidgetPreview(widget: Widget): ReactNode {
-  switch (widget.widgetCanonicalId) {
+/** The stand-in for a placed widget, by its canonical id and settings, or null for the generic placeholder. */
+export function alertWidgetPreview(widgetId: string, settings: Record<string, unknown>): ReactNode {
+  switch (widgetId) {
     case "woofx3:widget:text":
-      return <TextWidgetPreview settings={widget.settings} />;
+      return <TextWidgetPreview settings={settings} />;
     case "woofx3:widget:image": {
-      const src = mediaUrl(widget.settings.src);
-      return src ? (
-        <img src={src} alt="" className="w-full h-full" style={{ objectFit: fitOf(widget.settings.fit) }} />
-      ) : null;
+      const src = mediaUrl(settings.src);
+      return src ? <img src={src} alt="" className="w-full h-full" style={{ objectFit: fitOf(settings.fit) }} /> : null;
     }
     default:
       return null;

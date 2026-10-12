@@ -1,165 +1,131 @@
-import { alertWidgetName, nextAlertWidgetName } from "@convex/lib/alertWidgets";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  alertWidgetName,
+  type CommandResult,
+  type CompositionEditor,
+  type EditorState,
+  type Guide,
+  type NodeView,
+  type Point,
+} from "@woofx3/scene/editor";
+import { type ReactNode, useCallback, useMemo, useRef } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
+import { CANVAS_STAGE_CLASS, type StageZoom } from "@/components/common/stage-area";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
-import { layersTopFirst, moveLayer, nextLayerZIndex } from "@/lib/layer-order";
+import { canvasSettingsOf, catalogWidgetOf, type RemoteSelection } from "@/lib/scene-composition";
 import type { VariableOption } from "@/lib/workflow-variables";
-import type { Widget } from "@/types";
-import { CanvasWidgetHandle, type RemoteSelection } from "./canvas-widget-handle";
+import { CanvasSummary } from "./canvas-summary";
+import { CanvasWidgetHandle } from "./canvas-widget-handle";
+import { WidgetBehaviorsSection } from "./widget-behaviors-section";
 import { WidgetFallbackBackground } from "./widget-fallback-background";
 import { WidgetSettingsPanel } from "./widget-settings-panel";
-
-export type WidgetsUpdate = (widgets: Widget[]) => Widget[];
 
 const ALERT_SURFACE = "alert";
 
 interface WidgetLayoutCanvasProps {
-  width: number;
-  height: number;
-  widgets: Widget[];
-  /** The widgets that may be placed here, already narrowed to this canvas's surface. */
-  catalog: SceneWidgetCatalogRow[];
+  editor: CompositionEditor;
+  /** The editor's state, as the caller subscribed to it. */
+  state: EditorState;
+  /** The installed widgets: their settings fields, icons and which host alerts. The editor decides which may be added. */
+  catalog: readonly SceneWidgetCatalogRow[];
   renderers: Record<string, CustomFieldRenderer>;
   /** What text in a widget's settings may reference. A scene has no workflow around it, so it passes none. */
   availableVariables?: VariableOption[];
-  onChange: (update: WidgetsUpdate) => void;
   /** Real widget pixels, drawn over the placeholders and under the handles. */
   preview?: ReactNode;
   /** Drawn in place of a widget's generic placeholder. */
-  placeholder?: (widget: Widget) => ReactNode;
+  placeholder?: (node: NodeView) => ReactNode;
   /** The editor's title bar. Omitted where this is embedded in a dialog that has its own. */
   header?: ReactNode;
   /** See OverlayEditorShell.className: how the editor claims its height. */
   className?: string;
-  /** Any CSS color. Transparent lets the stage's dot grid show through, as OBS shows the scene beneath. */
-  background?: string;
-  /** Told whenever the selected widget changes (null: none). */
-  onSelectionChange?: (widgetId: string | null) => void;
   /** Other editors working on this canvas, by the widget each has selected. */
   remoteSelections?: Record<string, RemoteSelection[]>;
-  /** Widgets can be hidden from the layers list: on a scene, where a hidden widget keeps running out of sight. */
-  canHide?: boolean;
   /** See OverlayEditorShell.readOnly. */
   readOnly?: boolean;
+  /** Told when the editor refused a change made here, with its reason. */
+  onRefused: (result: CommandResult) => void;
+}
+
+/** A layer as the layers list shows it. */
+interface NodeLayer {
+  id: string;
+  visible: boolean;
+  node: NodeView;
 }
 
 /**
- * A canvas for placing widgets: the widget palette, the scaled canvas with a
- * drag/resize handle per widget, and the selected widget's settings. It edits
- * what it is handed and saves nothing, so a scene and an alert layout share it.
+ * A canvas for placing widgets, drawn from a composition editor's state
+ * (`@woofx3/scene/editor`): the widget palette, the scaled canvas with a
+ * drag/resize handle per widget and the editor's snap guides, the layers,
+ * and the selected widget's settings. Every change goes to the editor, which
+ * decides what it does to the document; this saves nothing itself.
  */
 export function WidgetLayoutCanvas({
-  width,
-  height,
-  widgets,
+  editor,
+  state,
   catalog,
   renderers,
   availableVariables,
-  onChange,
   preview,
   placeholder,
   header,
   className,
-  background = "transparent",
-  onSelectionChange,
   remoteSelections,
-  canHide = false,
   readOnly = false,
+  onRefused,
 }: WidgetLayoutCanvasProps) {
-  const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null);
-  useEffect(() => {
-    onSelectionChange?.(selectedWidgetId);
-  }, [selectedWidgetId, onSelectionChange]);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const settings = useMemo(() => (state.doc === null ? null : canvasSettingsOf(state.doc)), [state.doc]);
+  const width = settings?.width ?? 1920;
+  const height = settings?.height ?? 1080;
+  const background = settings?.backgroundColor ?? "transparent";
   // StageArea re-observes whenever this identity changes, so it is not rebuilt per render.
   const canvasSize = useMemo(() => ({ width, height }), [width, height]);
+  const nodes = state.view.nodes;
+  const zoom = state.viewport.zoom;
 
-  const catalogRowFor = useCallback(
-    (widget: Widget) => catalog.find((row) => row.widgetId === widget.widgetCanonicalId),
-    [catalog]
+  const rowFor = useCallback((widgetId: string) => catalog.find((row) => row.widgetId === widgetId), [catalog]);
+  const labelOf = useCallback(
+    (node: NodeView) =>
+      rowFor(node.placement.widget)?.hostsSurface === ALERT_SURFACE
+        ? `${node.placement.name} · ${alertWidgetName(node.placement.settings)}`
+        : node.placement.name,
+    [rowFor]
   );
-  const isAlertWidget = useCallback(
-    (widget: Widget) => catalogRowFor(widget)?.hostsSurface === ALERT_SURFACE,
-    [catalogRowFor]
-  );
+  const paletteRows = useMemo(() => {
+    const placeable = new Set(state.palette.map((row) => row.widgetId));
+    return catalog.filter((row) => placeable.has(row.widgetId));
+  }, [catalog, state.palette]);
 
-  // Callers rebuild `onChange` whenever their state changes, which during a drag
-  // is every frame. Reading it through a ref keeps the per-widget callbacks
-  // below stable, so the memoized handles that didn't move skip re-rendering.
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-
-  const editWidget = useCallback((widgetId: string, change: (widget: Widget) => Widget) => {
-    onChangeRef.current((prev) => prev.map((w) => (w.id === widgetId ? change(w) : w)));
-  }, []);
-
-  const toggleVisible = useCallback(
-    (widgetId: string) => editWidget(widgetId, (w) => ({ ...w, visible: w.visible === false })),
-    [editWidget]
-  );
-
-  const moveWidget = useCallback(
-    (widgetId: string, x: number, y: number) => {
-      editWidget(widgetId, (w) => ({ ...w, position: { x: Math.max(0, x), y: Math.max(0, y) } }));
-    },
-    [editWidget]
-  );
-
-  const resizeWidget = useCallback(
-    (widgetId: string, width: number, height: number) => {
-      editWidget(widgetId, (w) => ({ ...w, size: { width, height } }));
-    },
-    [editWidget]
-  );
-
-  const addWidget = useCallback(
-    (canonicalId: string, displayName: string) => {
-      const row = catalog.find((r) => r.widgetId === canonicalId);
-      const defaults: Record<string, unknown> = {};
-      for (const field of (row?.settings ?? []) as ConfigField[]) {
-        if (field.defaultValue !== undefined) {
-          defaults[field.id] = field.defaultValue;
-        }
+  const report = useCallback(
+    (result: CommandResult) => {
+      if (!result.ok) {
+        onRefused(result);
       }
-      const id = `w-${Date.now()}`;
-      onChange((prev) => {
-        const settings =
-          row?.hostsSurface === ALERT_SURFACE
-            ? {
-                ...defaults,
-                name: nextAlertWidgetName(prev.filter(isAlertWidget).map((w) => alertWidgetName(w.settings))),
-              }
-            : defaults;
-        const widget: Widget = {
-          id,
-          widgetCanonicalId: canonicalId,
-          name: displayName,
-          position: { x: 100, y: 100 },
-          size: { width: 300, height: 200 },
-          rotation: 0,
-          opacity: 1,
-          zIndex: nextLayerZIndex(prev),
-          locked: false,
-          visible: true,
-          settings,
-        };
-        return [...prev, widget];
-      });
-      setSelectedWidgetId(id);
     },
-    [catalog, onChange, isAlertWidget]
+    [onRefused]
   );
 
-  const deleteWidget = useCallback(
-    (widgetId: string) => {
-      onChange((prev) => prev.filter((w) => w.id !== widgetId));
-      setSelectedWidgetId((id) => (id === widgetId ? null : id));
-    },
-    [onChange]
+  const zoomControl: StageZoom = useMemo(
+    () => ({
+      zoom,
+      fit: state.viewport.fit,
+      onMeasure: (size) => editor.viewport.setStage(size),
+      zoomIn: () => editor.dispatch("view.zoomIn"),
+      zoomOut: () => editor.dispatch("view.zoomOut"),
+      zoomToFit: () => editor.dispatch("view.zoomFit"),
+    }),
+    [editor, zoom, state.viewport.fit]
   );
+
+  const canvasOrigin = useCallback((): Point => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    return rect === undefined ? { x: 0, y: 0 } : { x: rect.left, y: rect.top };
+  }, []);
 
   // Deselects on mousedown, not click, and only when the press landed directly on
   // one of the canvas's own background layers.
@@ -171,20 +137,36 @@ export function WidgetLayoutCanvas({
   // layers. That made every press-and-twitch on a widget select it and immediately
   // deselect it: the settings panel flashed open and shut. Mousedown carries no
   // such ambiguity, and widget handles already stop it propagating.
-  const handleBackgroundMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      setSelectedWidgetId(null);
-    }
-  }, []);
+  const handleBackgroundMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) {
+        editor.dispatch("selection.clear");
+      }
+    },
+    [editor]
+  );
 
-  const selectedWidget = widgets.find((w) => w.id === selectedWidgetId) ?? null;
-  const selectedWidgetFields = (selectedWidget ? (catalogRowFor(selectedWidget)?.settings ?? []) : []) as ConfigField[];
+  const layers = useMemo(
+    (): NodeLayer[] => [...nodes].reverse().map((node) => ({ id: node.id, visible: node.placement.visible, node })),
+    [nodes]
+  );
+  const moveLayer = useCallback(
+    (id: string, toIndex: number) => report(editor.nodes.reorder(id, { index: nodes.length - 1 - toIndex })),
+    [editor, nodes.length, report]
+  );
+  const toggleVisible = useCallback(
+    (id: string) => {
+      const placement = editor.getState().doc?.widgets[id];
+      if (placement !== undefined) {
+        report(editor.nodes.patch(id, { visible: !placement.visible }));
+      }
+    },
+    [editor, report]
+  );
 
-  const layers = layersTopFirst(widgets);
-  const moveLayerTo = useCallback((widgetId: string, toIndex: number) => {
-    onChangeRef.current((prev) => moveLayer(prev, widgetId, toIndex));
-  }, []);
-  const taxonomyOf = useCallback((widget: Widget) => catalogRowFor(widget)?.taxonomy, [catalogRowFor]);
+  const selected = nodes.find((node) => node.id === state.selection.primary) ?? null;
+  const selectedRow = selected ? rowFor(selected.placement.widget) : undefined;
+  const selectedFields = (selectedRow?.settings ?? []) as ConfigField[];
 
   return (
     <OverlayEditorShell
@@ -192,10 +174,11 @@ export function WidgetLayoutCanvas({
       className={className}
       readOnly={readOnly}
       header={header}
+      zoomControl={zoomControl}
       palette={
         <WidgetPalette
-          widgets={catalog}
-          onAdd={(row) => addWidget(row.widgetId, row.name)}
+          widgets={paletteRows}
+          onAdd={(row) => report(editor.nodes.add(row.widgetId))}
           layout="grid"
           emptyMessage="No scene widgets are installed."
         />
@@ -203,90 +186,98 @@ export function WidgetLayoutCanvas({
       layers={
         <LayersList
           layers={layers}
-          selectedId={selectedWidgetId}
-          label={(widget) =>
-            isAlertWidget(widget) ? `${widget.name} · ${alertWidgetName(widget.settings)}` : widget.name
-          }
-          taxonomyOf={taxonomyOf}
-          onSelect={setSelectedWidgetId}
-          onMove={moveLayerTo}
-          onDelete={deleteWidget}
-          onToggleVisible={canHide ? toggleVisible : undefined}
+          selectedId={state.selection.primary}
+          label={(layer) => labelOf(layer.node)}
+          taxonomyOf={(layer) => rowFor(layer.node.placement.widget)?.taxonomy}
+          onSelect={(id) => editor.dispatch("selection.select", { id })}
+          onMove={moveLayer}
+          onDelete={(id) => report(editor.nodes.remove([id]))}
+          onToggleVisible={state.capabilities.canHide ? toggleVisible : undefined}
           emptyMessage="Nothing on the canvas yet. Add a widget to start."
         />
       }
-      stage={(zoom) => (
+      stage={(stageZoom) => (
         // biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets
         <div
-          className="relative shrink-0 overflow-hidden shadow-lg ring-1 ring-border"
-          style={{ width: width * zoom, height: height * zoom, background }}
+          className={CANVAS_STAGE_CLASS}
+          style={{ width: width * stageZoom, height: height * stageZoom, background }}
           onMouseDown={handleBackgroundMouseDown}
           data-testid="scene-canvas"
         >
           {/* biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets */}
           <div
-            style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width, height }}
+            ref={canvasRef}
+            style={{ transform: `scale(${stageZoom})`, transformOrigin: "top left", width, height }}
             onMouseDown={handleBackgroundMouseDown}
           >
-            {widgets.map((widget) => (
+            {nodes.map((node) => (
               <WidgetFallbackBackground
-                key={widget.id}
-                widget={widget}
-                label={isAlertWidget(widget) ? `${widget.name} · ${alertWidgetName(widget.settings)}` : undefined}
+                key={node.id}
+                box={node.box}
+                opacity={node.placement.opacity}
+                label={labelOf(node)}
               >
-                {placeholder?.(widget)}
+                {placeholder?.(node)}
               </WidgetFallbackBackground>
             ))}
             {preview}
-            {widgets.map((widget) => (
+            {nodes.map((node, rank) => (
               <CanvasWidgetHandle
-                key={widget.id}
-                widget={widget}
-                isSelected={selectedWidgetId === widget.id}
-                remote={remoteSelections?.[widget.id]}
-                scale={zoom}
-                onSelect={setSelectedWidgetId}
-                onMove={moveWidget}
-                onResize={resizeWidget}
+                key={node.id}
+                node={node}
+                editor={editor}
+                zoom={stageZoom}
+                rank={rank}
+                remote={remoteSelections?.[node.id]}
+                canvasOrigin={canvasOrigin}
+                onRefused={onRefused}
+              />
+            ))}
+            {state.guides.map((guide) => (
+              <SnapGuide
+                key={`${guide.axis}-${guide.position}-${guide.source}`}
+                guide={guide}
+                zoom={stageZoom}
+                above={nodes.length + 10}
               />
             ))}
           </div>
         </div>
       )}
       inspector={
-        selectedWidget ? (
+        selected ? (
           <WidgetSettingsPanel
-            widget={selectedWidget}
-            fields={selectedWidgetFields}
+            widgetCanonicalId={selected.placement.widget}
+            settings={selected.placement.settings}
+            fields={selectedFields}
             renderers={renderers}
             availableVariables={availableVariables}
-            onChangeSetting={(key, value) =>
-              editWidget(selectedWidget.id, (w) => ({ ...w, settings: { ...w.settings, [key]: value } }))
-            }
-          />
+            onChangeSetting={(key, value) => report(editor.nodes.patch(selected.id, { settings: { [key]: value } }))}
+          >
+            {state.doc !== null && (
+              <WidgetBehaviorsSection
+                editor={editor}
+                behaviors={state.doc.behaviors}
+                nodeId={selected.id}
+                row={selectedRow === undefined ? undefined : catalogWidgetOf(selectedRow)}
+                anchors={state.capabilities.anchors}
+                disabled={readOnly || state.capabilities.readOnly}
+                onRefused={onRefused}
+              />
+            )}
+          </WidgetSettingsPanel>
         ) : null
       }
-      inspectorFallback={<CanvasSummary width={width} height={height} count={widgets.length} />}
+      inspectorFallback={<CanvasSummary width={width} height={height} count={nodes.length} />}
     />
   );
 }
 
-/** What the right rail shows with nothing selected, so the rail is never blank. */
-function CanvasSummary({ width, height, count }: { width: number; height: number; count: number }) {
-  return (
-    <div className="flex flex-col gap-4 p-4">
-      <h2 className="text-sm font-semibold">Canvas</h2>
-      <p className="text-xs text-muted-foreground">
-        Select a widget on the canvas or in the layers above to edit it, or add one from the left.
-      </p>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-        <dt className="text-muted-foreground">Size</dt>
-        <dd className="font-mono text-xs leading-5">
-          {width} × {height}
-        </dd>
-        <dt className="text-muted-foreground">Widgets</dt>
-        <dd className="font-mono text-xs leading-5">{count}</dd>
-      </dl>
-    </div>
-  );
+/** A line a dragged widget snapped to, one screen pixel wide at any zoom. */
+function SnapGuide({ guide, zoom, above }: { guide: Guide; zoom: number; above: number }) {
+  const style =
+    guide.axis === "vertical"
+      ? { left: guide.position, top: 0, bottom: 0, width: 1 / zoom, zIndex: above }
+      : { top: guide.position, left: 0, right: 0, height: 1 / zoom, zIndex: above };
+  return <div className="pointer-events-none absolute bg-pink-400" style={style} data-testid="snap-guide" />;
 }

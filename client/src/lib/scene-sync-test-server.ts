@@ -1,5 +1,5 @@
 import type { SyncClock, SyncSocket, SyncSocketHandlers } from "@woofx3/api/scene-editor/client";
-import type { SceneDocument } from "@woofx3/api/scene-editor/document";
+import { normalizeComposition, type SceneDocument } from "@woofx3/api/scene-editor/document";
 import { decodeClientMessage, type ServerMessage } from "@woofx3/api/scene-editor/protocol";
 import {
   commit,
@@ -85,8 +85,13 @@ export class TestSceneServer {
     private readonly clock: SyncClock,
     doc: SceneDocument
   ) {
+    // Fixtures may predate `behaviors`; the sequencer holds only normalized documents.
+    const normalized = normalizeComposition(structuredClone(doc));
+    if (normalized === null) {
+      throw new Error("TestSceneServer: the starting document is not a composition");
+    }
     this.state = createSequencerState({
-      docs: { draft: structuredClone(doc), published: structuredClone(doc) },
+      docs: { draft: normalized, published: structuredClone(normalized) },
       hasDraft: false,
       editorState: { v: 0, headId: "", clients: {} },
       epoch: "test",

@@ -1,262 +1,121 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { NodeView } from "@woofx3/scene/editor";
 import { Minus, Plus } from "lucide-react";
-import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
-import { VariableAwareInput } from "@/components/common/variable-aware-input";
+import type { ReactNode } from "react";
+import { WidgetSettingsForm } from "@/components/scenes/widget-settings-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
-import {
-  type CanvasSize,
-  centerOf,
-  clampCenter,
-  durationOf,
-  type LayerKind,
-  layerKind,
-  MEDIA_ASPECT,
-  textBoxHeight,
-  withCenter,
-} from "@/lib/alert-editor";
-import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
-import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
-import { cn } from "@/lib/utils";
+import { type LayerWindow, layerWindowLabel } from "@/lib/behavior-editor";
 import type { VariableOption } from "@/lib/workflow-variables";
-import type { Widget } from "@/types";
-
-/** The swatches offered for text. A color set some other way shows beside them, selected. */
-const TEXT_COLORS = [
-  { label: "White", value: "#ffffff" },
-  { label: "Lavender", value: "#c9b8ff" },
-  { label: "Amber", value: "#f0b86e" },
-  { label: "Mint", value: "#7ee2a8" },
-  { label: "Pink", value: "#ff8fa3" },
-] as const;
-
-/**
- * Settings each bundled widget's inspector shows as dedicated controls; the rest of its
- * schema follows under More settings. A widget from a module gets its whole schema.
- */
-const DEDICATED_SETTINGS: Record<LayerKind, readonly string[]> = {
-  text: ["text", "fontSize", "color", "duration"],
-  image: ["src", "duration"],
-  video: ["src", "duration"],
-  audio: ["src", "duration"],
-  lottie: ["src", "duration"],
-  other: ["duration"],
-};
 
 interface LayerInspectorProps {
-  widget: Widget;
+  /** The selected layer, as the composition editor shows it. */
+  node: NodeView;
   /** The widget's settings schema, from the catalog. */
   fields: ConfigField[];
-  canvas: CanvasSize;
-  /** True when this layer alone sets the alert's length. */
-  isLongest: boolean;
   availableVariables: VariableOption[];
-  onChange: (widget: Widget) => void;
+  /** Merge settings into the layer's. A Text layer's box follows its text and size by itself. */
+  onChangeSettings: (settings: Record<string, unknown>) => void;
+  /** When the layer plays within the alert. */
+  window: LayerWindow;
+  onChangeWindow: (window: LayerWindow) => void;
+  /** Shown below the layer's settings: its transitions and effects. */
+  children?: ReactNode;
 }
 
-/** Edits the selected layer. Every change keeps the layer's center where it was. */
+/**
+ * Edits the selected layer through the composition editor: the widget's own settings,
+ * drawn from its schema exactly as the scene editor draws them, then when the layer
+ * plays within the alert. Size and place are set on the stage, as on a scene's canvas.
+ */
 export function LayerInspector({
-  widget,
+  node,
   fields,
-  canvas,
-  isLongest,
   availableVariables,
-  onChange,
+  onChangeSettings,
+  window,
+  onChangeWindow,
+  children,
 }: LayerInspectorProps) {
-  const kind = layerKind(widget);
-  const center = centerOf(widget);
-  const idPrefix = `layer-${widget.id}`;
-
-  const setSettings = (settings: Record<string, unknown>) => {
-    onChange({ ...widget, settings: { ...widget.settings, ...settings } });
-  };
-  const resize = (size: Widget["size"]) => {
-    onChange(withCenter({ ...widget, size }, center));
-  };
-
-  const fontSize = typeof widget.settings.fontSize === "number" ? widget.settings.fontSize : 48;
-  const text = typeof widget.settings.text === "string" ? widget.settings.text : "";
-  const color = typeof widget.settings.color === "string" ? widget.settings.color : "#ffffff";
-  const srcField = fields.find((field) => field.id === "src");
-  const moreFields = fields.filter((field) => !DEDICATED_SETTINGS[kind].includes(field.id));
-
   return (
     <div className="flex flex-col gap-6">
-      {kind === "text" && (
-        <>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor={`${idPrefix}-text`}>Text</Label>
-            <VariableAwareInput
-              id={`${idPrefix}-text`}
-              multiline
-              rows={3}
-              value={text}
-              onChange={(next) =>
-                onChange(
-                  withCenter(
-                    {
-                      ...widget,
-                      settings: { ...widget.settings, text: next },
-                      size: { ...widget.size, height: textBoxHeight(fontSize, next) },
-                    },
-                    center
-                  )
-                )
-              }
-              availableVariables={availableVariables}
-              className="text-base lg:text-sm"
-            />
-          </div>
-          <Stepper
-            id={`${idPrefix}-size`}
-            label="Size"
-            value={fontSize}
-            step={4}
-            min={12}
-            max={240}
-            unit="px"
-            onChange={(next) =>
-              onChange(
-                withCenter(
-                  {
-                    ...widget,
-                    settings: { ...widget.settings, fontSize: next },
-                    size: { ...widget.size, height: textBoxHeight(next, text) },
-                  },
-                  center
-                )
-              )
-            }
-          />
-          <fieldset className="flex flex-col gap-2">
-            <legend className="mb-2 text-sm font-medium">Color</legend>
-            <div className="flex flex-wrap gap-1">
-              {TEXT_COLORS.map((swatch) => (
-                <Swatch
-                  key={swatch.value}
-                  label={swatch.label}
-                  color={swatch.value}
-                  isPressed={color.toLowerCase() === swatch.value}
-                  onClick={() => setSettings({ color: swatch.value })}
-                />
-              ))}
-              {!TEXT_COLORS.some((swatch) => swatch.value === color.toLowerCase()) && (
-                <Swatch label={`Custom ${color}`} color={color} isPressed onClick={() => undefined} />
-              )}
-            </div>
-          </fieldset>
-        </>
-      )}
-
-      {kind !== "text" && kind !== "other" && srcField && (
-        <div>
-          {configFieldRenderers.media({
-            field: srcField as unknown as FieldDescriptor,
-            value: widget.settings.src,
-            onChange: (value) => setSettings({ src: value }),
-            availableVariables,
-          })}
-        </div>
-      )}
-
-      {kind !== "audio" && (
-        <Stepper
-          id={`${idPrefix}-width`}
-          label="Width"
-          value={widget.size.width}
-          step={80}
-          min={80}
-          max={canvas.width}
-          unit="px"
-          onChange={(width) =>
-            resize(
-              kind === "text" || kind === "other"
-                ? { ...widget.size, width }
-                : { width, height: Math.round(width * MEDIA_ASPECT) }
-            )
-          }
-        />
-      )}
-
-      <fieldset className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between">
-          <legend className="text-sm font-medium">Position</legend>
-          <button
-            type="button"
-            className="text-xs text-primary-text hover:underline"
-            onClick={() => onChange(withCenter(widget, { x: canvas.width / 2, y: canvas.height / 2 }))}
-          >
-            Center
-          </button>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          {(["x", "y"] as const).map((axis) => (
-            <div key={axis} className="flex items-center gap-2">
-              <Label htmlFor={`${idPrefix}-${axis}`} className="w-3 font-mono text-xs uppercase text-muted-foreground">
-                {axis}
-              </Label>
-              <Input
-                id={`${idPrefix}-${axis}`}
-                type="number"
-                inputMode="numeric"
-                value={Math.round(center[axis])}
-                onChange={(event) => {
-                  const next = Number(event.target.value);
-                  if (Number.isFinite(next)) {
-                    onChange(withCenter(widget, clampCenter({ ...center, [axis]: next }, canvas)));
-                  }
-                }}
-                className="h-11 font-mono text-base lg:h-9 lg:text-sm"
-              />
-            </div>
-          ))}
-        </div>
-      </fieldset>
-
-      <div className="flex flex-col gap-2">
-        <Stepper
-          id={`${idPrefix}-duration`}
-          label="Duration"
-          value={durationOf(widget)}
-          step={0.5}
-          min={0}
-          max={60}
-          unit="s"
-          onChange={(duration) => setSettings({ duration })}
-        />
-        <p className="text-xs text-muted-foreground">
-          {durationOf(widget) === 0
-            ? kind === "video" || kind === "audio" || kind === "lottie"
-              ? "0 plays the file through once."
-              : "0 keeps it up for as long as the alert plays."
-            : isLongest
-              ? "Longest layer, so it sets the alert length."
-              : null}
-        </p>
-      </div>
-
-      {moreFields.length > 0 && (
-        <details className="group" open={kind === "other"}>
-          <summary className="cursor-pointer text-sm font-medium text-muted-foreground">More settings</summary>
-          <div className="pt-4">
-            <ConfigurationForm
-              fields={
-                withFieldOptionsOwner(
-                  withWidgetCanonicalId(moreFields, widget.widgetCanonicalId),
-                  fieldOptionsOwnerFromCanonicalId(widget.widgetCanonicalId)
-                ) as unknown as FieldDescriptor[]
-              }
-              values={widget.settings}
-              onChange={(next) => setSettings(next)}
-              customRenderers={configFieldRenderers}
-              availableVariables={availableVariables}
-            />
-          </div>
-        </details>
-      )}
+      <WidgetSettingsForm
+        widgetCanonicalId={node.placement.widget}
+        settings={node.placement.settings}
+        fields={fields}
+        renderers={configFieldRenderers}
+        availableVariables={availableVariables}
+        onChangeSetting={(key, value) => onChangeSettings({ [key]: value })}
+      />
+      <LayerWindowFields idPrefix={`layer-${node.id}`} window={window} onChange={onChangeWindow} />
+      {children}
     </div>
+  );
+}
+
+/** Longest a layer's start or stay may be set to here, in seconds: an alert is cut off at five minutes. */
+const MAX_WINDOW_SECONDS = 300;
+const STAYS_UNTIL_COMPLETE = "complete";
+const STAYS_FOR = "for";
+
+/** When the layer enters after the alert starts, and whether it stays until it completes or for a set time. */
+function LayerWindowFields({
+  idPrefix,
+  window,
+  onChange,
+}: {
+  idPrefix: string;
+  window: LayerWindow;
+  onChange: (window: LayerWindow) => void;
+}) {
+  const toMs = (seconds: number) => Math.round(seconds * 1000);
+  return (
+    <fieldset className="flex flex-col gap-3">
+      <legend className="mb-2 text-sm font-medium">Timing</legend>
+      <Stepper
+        id={`${idPrefix}-starts-after`}
+        label="Starts after"
+        value={window.startMs / 1000}
+        step={0.5}
+        min={0}
+        max={MAX_WINDOW_SECONDS}
+        unit="s"
+        onChange={(seconds) => onChange({ ...window, startMs: toMs(seconds) })}
+      />
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${idPrefix}-stays`}>Stays</Label>
+        <Select
+          value={window.stayMs === null ? STAYS_UNTIL_COMPLETE : STAYS_FOR}
+          onValueChange={(next) =>
+            onChange({ ...window, stayMs: next === STAYS_UNTIL_COMPLETE ? null : (window.stayMs ?? 5_000) })
+          }
+        >
+          <SelectTrigger id={`${idPrefix}-stays`} className="h-11 lg:h-9" data-testid={`select-${idPrefix}-stays`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={STAYS_UNTIL_COMPLETE}>Until it completes</SelectItem>
+            <SelectItem value={STAYS_FOR}>For a set time</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {window.stayMs !== null && (
+        <Stepper
+          id={`${idPrefix}-stays-for`}
+          label="Stays for"
+          value={window.stayMs / 1000}
+          step={0.5}
+          min={0.5}
+          max={MAX_WINDOW_SECONDS}
+          unit="s"
+          onChange={(seconds) => onChange({ ...window, stayMs: toMs(seconds) })}
+        />
+      )}
+      <p className="text-xs text-muted-foreground">{layerWindowLabel(window)}.</p>
+    </fieldset>
   );
 }
 
@@ -320,35 +179,5 @@ function Stepper({ id, label, value, step, min, max, unit, onChange }: StepperPr
         </Button>
       </div>
     </div>
-  );
-}
-
-function Swatch({
-  label,
-  color,
-  isPressed,
-  onClick,
-}: {
-  label: string;
-  color: string;
-  isPressed: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={isPressed}
-      onClick={onClick}
-      className="flex h-11 w-11 items-center justify-center rounded-full lg:h-9 lg:w-9"
-    >
-      <span
-        className={cn(
-          "h-7 w-7 rounded-full border border-white/20",
-          isPressed && "ring-2 ring-primary ring-offset-2 ring-offset-background"
-        )}
-        style={{ backgroundColor: color }}
-      />
-    </button>
   );
 }

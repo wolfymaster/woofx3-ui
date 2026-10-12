@@ -154,6 +154,7 @@ Verify changes with `scripts/check.sh`. It runs CI's lint, type checks, tests an
 @convex/     → convex/
 @assets/     → attached_assets/
 @woofx3/api  → ../woofx3/shared/clients/typescript/api/api.ts
+@woofx3/scene/*  → ../woofx3/shared/clients/typescript/scene/*/index.ts  (model, editor)
 @woofx3/cloudevents/*  → ../woofx3/shared/common/typescript/cloudevents/*  (tsconfig.json only; tests)
 ```
 

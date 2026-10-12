@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { TriggerConfigForm } from "@/components/workflows/trigger-config-form";
-import { readAlertLayout } from "@/lib/alert-layout";
 import { cn } from "@/lib/utils";
 import type { ActionPreset, TriggerConfigValues } from "@/lib/workflow-presets";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -209,10 +208,7 @@ function alertContentRenderer(href: string): CustomFieldRenderer {
 function AlertContentCard({ layout, href }: { layout: unknown; href: string }) {
   return (
     <div className="flex flex-col gap-4 rounded-[10px] border bg-background/60 p-2.5 sm:flex-row sm:items-center">
-      <AlertLayoutPreview
-        layout={readAlertLayout(layout, (widgetCanonicalId) => widgetCanonicalId)}
-        className="h-[132px] shrink-0 sm:h-[63px] sm:w-[112px]"
-      />
+      <AlertLayoutPreview layout={layout} className="h-[132px] shrink-0 sm:h-[63px] sm:w-[112px]" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-sm font-medium">Alert content</span>
         <span className="text-xs text-muted-foreground">

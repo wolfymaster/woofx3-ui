@@ -2,6 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
+import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 // Must match SessionSummarySession and SessionSummaryTotals in
 // convex/lib/sessionSummary.ts, which validates the webhook body before it
@@ -1312,6 +1313,32 @@ export default defineSchema({
     .index("by_instance", ["instanceId"])
     .index("by_engine_scene_id", ["instanceId", "engineSceneId"]),
 
+  // alertCompositions: alerts stored in the engine as starting points for steps.
+  // The engine keeps them in its scenes table (`kind: "alert"`) and reports
+  // them with the scene webhooks; they are cached apart from `scenes` so no
+  // scene listing, browser source or scene child table can ever reach one.
+  // Written only by those webhooks and `alertCompositionActions.refresh`.
+  alertCompositions: defineTable({
+    instanceId: v.id("instances"),
+    engineCompositionId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    /** The published placements as the engine stores them: a list, bottom of the stack first. */
+    widgets: v.array(v.any()),
+    /** The published canvas: `width`, `height`, `backgroundColor`, and any other keys. */
+    layout: v.any(),
+    /** The published behaviors, keyed by behavior id. */
+    behaviors: v.any(),
+    /** The `{{id}}` placeholders a copy fills in from its step: ConfigField-shaped objects, each with a unique `id`. */
+    inputs: v.array(v.any()),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_composition_id", ["instanceId", "engineCompositionId"]),
+
   // sceneSlots: named slots within a scene
   sceneSlots: defineTable({
     sceneId: v.id("scenes"),
@@ -1482,6 +1509,10 @@ export default defineSchema({
     // Absent on rows registered before widgets declared it, and empty for a
     // widget whose author declared none.
     taxonomy: v.optional(v.array(v.string())),
+    // The transition and effect kinds the widget plays itself, which the
+    // scene and alert editors offer after the host's. Absent on rows
+    // registered before widgets declared them, which declare none.
+    behaviorKinds: v.optional(widgetBehaviorKindsValidator),
     createdAt: v.number(),
   })
     .index("by_module", ["moduleId"])

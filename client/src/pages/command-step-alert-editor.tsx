@@ -111,6 +111,7 @@ export default function CommandStepAlertEditor() {
         navigate(backHref);
       }}
       onCancel={() => navigate(backHref)}
+      offerLibrary
     />
   );
 }
