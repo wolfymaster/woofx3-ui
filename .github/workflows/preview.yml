@@ -24,9 +24,9 @@ name: Preview
 # registration token to the preview's Convex deployment, so onboarding in the
 # preview connects to it.
 #
-# Closing the pull request, merged or not, removes the preview. Removing the
-# label does not: the preview stays until the pull request closes or it
-# expires. Its engine goes
+# Closing the pull request, merged or not, removes the preview and deletes its
+# Convex preview deployment. Removing the label does not: the preview stays
+# until the pull request closes or it expires. Its engine goes
 # too unless another preview still uses it, or the pull request carries the
 # `keep-preview-engine` label.
 #
@@ -246,8 +246,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # The Convex preview deployment is left to Convex, which deletes preview
-      # deployments on its own after they go unused.
       - name: Remove the preview
         env:
           MAINTENANCE_API_URL: ${{ vars.MAINTENANCE_API_URL }}
@@ -255,3 +253,46 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           KEEP_ENGINE: ${{ contains(github.event.pull_request.labels.*.name, 'keep-preview-engine') }}
         run: scripts/preview-ui.sh down "$PR_NUMBER" "$KEEP_ENGINE"
+
+      - uses: oven-sh/setup-bun@v2
+        if: ${{ !cancelled() }}
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Install dependencies
+        if: ${{ !cancelled() }}
+        run: bun install --frozen-lockfile
+
+      # Runs even when removing the UI preview failed: the two are independent,
+      # and an idle Convex deployment still counts against the team's quota
+      # until Convex expires it.
+      #
+      # The Management API resolves a preview name to a deployment only for
+      # team tokens, so the name comes from the CLI's dashboard link instead,
+      # which the preview deploy key can resolve. Deleting accepts the preview
+      # deploy key for preview deployments in its project.
+      #
+      # A pull request can outlive its deployment (Convex expires idle
+      # previews, and one labelled but never deployed has none), so a name
+      # that does not resolve is a warning, not a failure.
+      - name: Delete the Convex preview deployment
+        if: ${{ !cancelled() }}
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_PREVIEW_DEPLOY_KEY }}
+          CONVEX_NAME: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          if ! dashboard_url="$(bunx convex dashboard --preview-name "$CONVEX_NAME" --no-open)"; then
+            echo "::warning::No Convex preview deployment named ${CONVEX_NAME}; nothing to delete"
+            exit 0
+          fi
+          deployment_name="${dashboard_url##*/d/}"
+          deployment_name="${deployment_name%%/*}"
+          if [[ ! "$deployment_name" =~ ^[a-z]+-[a-z]+-[0-9]+$ ]]; then
+            echo "::error::could not read a deployment name from '${dashboard_url}'"
+            exit 1
+          fi
+          echo "Deleting Convex preview deployment ${CONVEX_NAME} (${deployment_name})"
+          curl --silent --show-error --fail-with-body --request POST \
+            --header "Authorization: Bearer ${CONVEX_DEPLOY_KEY}" \
+            "https://api.convex.dev/v1/deployments/${deployment_name}/delete"
