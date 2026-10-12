@@ -8,6 +8,7 @@ import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { triggerDefinitionRow } from "./lib/triggerDefinitionRow";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
@@ -345,33 +346,6 @@ export const reconcileScenes = internalMutation({
 });
 
 const DEFAULT_UI_COLOR = "#888888";
-const DEFAULT_TRIGGER_ICON = "Zap";
-
-function parseJsonSafe(raw: string | undefined): unknown {
-  if (!raw) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
-function triggerUiFields(configSchema: string | undefined): {
-  color: string;
-  icon: string;
-  configFields?: unknown[];
-} {
-  // color / icon were read out of the schema container, which no longer
-  // exists and which nothing ever populated — every row takes the defaults.
-  const fields = parseFieldList(configSchema);
-  return {
-    color: DEFAULT_UI_COLOR,
-    icon: DEFAULT_TRIGGER_ICON,
-    configFields: fields.length > 0 ? fields : undefined,
-  };
-}
 
 /**
  * Reconcile `triggerDefinitions` (global UI catalog) and `instanceTriggers`
@@ -395,6 +369,7 @@ export const reconcileTriggers = internalMutation({
         category: v.optional(v.string()),
         event: v.optional(v.string()),
         configSchema: v.optional(v.string()),
+        emits: v.optional(v.string()),
         sentence: v.optional(v.string()),
         allowVariants: v.optional(v.boolean()),
         projectionKey: v.optional(v.string()),
@@ -414,23 +389,7 @@ export const reconcileTriggers = internalMutation({
       const moduleId =
         snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
-      const ui = triggerUiFields(snap.configSchema);
-      const defRow = {
-        slug: snap.id,
-        name: snap.name ?? snap.id,
-        description: snap.description ?? "",
-        category: snap.category ?? "General",
-        event: snap.event || undefined,
-        color: ui.color,
-        icon: ui.icon,
-        configFields: ui.configFields,
-        sentence: snap.sentence?.trim() || undefined,
-        allowVariants: snap.allowVariants,
-        projectionKey: snap.projectionKey,
-        taxonomy: snap.taxonomy,
-        transport: snap.transport,
-        moduleId,
-      };
+      const defRow = triggerDefinitionRow(snap, moduleId);
       const existingDef = await ctx.db
         .query("triggerDefinitions")
         .withIndex("by_slug", (q) => q.eq("slug", defRow.slug))
