@@ -15,3 +15,14 @@ export interface AlertEditorTarget {
 export function alertEditorPath({ event, triggerId, actionId }: AlertEditorTarget): string {
   return `${ALERT_EDITOR_BASE}/${encodeURIComponent(event)}/${encodeURIComponent(triggerId)}/${encodeURIComponent(actionId)}`;
 }
+
+/**
+ * A library alert's editor. Beside the Alerts route for the same reason as the
+ * alert editor; it edits the library alert itself, not a step's copy.
+ */
+export const ALERT_LIBRARY_EDITOR_BASE = "/stream/alert-library";
+export const ALERT_LIBRARY_EDITOR_ROUTE = `${ALERT_LIBRARY_EDITOR_BASE}/:compositionId`;
+
+export function libraryAlertEditorPath(engineCompositionId: string): string {
+  return `${ALERT_LIBRARY_EDITOR_BASE}/${encodeURIComponent(engineCompositionId)}`;
+}

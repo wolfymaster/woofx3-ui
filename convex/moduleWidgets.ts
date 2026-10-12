@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
 import { pruneWidgetDefinitions } from "./lib/definitionCatalog";
 import { resolveModuleIdByRef } from "./lib/moduleKey";
+import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 type WidgetProvenance = {
   createdByType?: string;
@@ -94,6 +95,7 @@ export const registerFromWebhook = internalMutation({
     surfaces: v.optional(v.array(v.string())),
     hostsSurface: v.optional(v.string()),
     taxonomy: v.optional(v.array(v.string())),
+    behaviorKinds: widgetBehaviorKindsValidator,
   },
   handler: async (ctx, args) => {
     // Resolve moduleId only for module-sourced widgets (built-ins have none).
@@ -113,6 +115,7 @@ export const registerFromWebhook = internalMutation({
       surfaces: args.surfaces,
       hostsSurface: args.hostsSurface,
       taxonomy: args.taxonomy,
+      behaviorKinds: args.behaviorKinds,
     };
 
     const existing = await ctx.db

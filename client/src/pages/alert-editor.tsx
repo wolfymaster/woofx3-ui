@@ -121,19 +121,26 @@ export default function AlertEditorPage() {
     )
   );
 
+  // A trigger with no conditions has no sentence, and an empty segment would read "Channel follow · · Step 2".
+  const hasSentence = parts.some((part) => part.text.trim() !== "");
   const context = (
     <>
       {triggerPreset.name} ·{" "}
-      {parts.map((part, index) => (
-        <span
-          // biome-ignore lint/suspicious/noArrayIndexKey: sentence parts are positional and never reorder
-          key={index}
-          className={part.kind === "field" ? "font-medium text-foreground" : undefined}
-        >
-          {part.text}
-        </span>
-      ))}{" "}
-      · Step {actionIndex + 1}
+      {hasSentence && (
+        <>
+          {parts.map((part, index) => (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: sentence parts are positional and never reorder
+              key={index}
+              className={part.kind === "field" ? "font-medium text-foreground" : undefined}
+            >
+              {part.text}
+            </span>
+          ))}{" "}
+          ·{" "}
+        </>
+      )}
+      Step {actionIndex + 1}
     </>
   );
 
@@ -154,6 +161,7 @@ export default function AlertEditorPage() {
           navigate(backHref);
         }}
         onCancel={() => navigate(backHref)}
+        offerLibrary
       />
     </>
   );

@@ -15,16 +15,20 @@ import { createEngineRpcSession } from "./engineInstanceUrl";
 
 /** The ids this UI gates on. Ids an engine lists beyond these are ignored. */
 export const ENGINE_CAPABILITY_IDS = [
+  "alerts.compositionLayout",
   "alerts.queueControls",
   "analytics.aggregates",
   "analytics.gauges",
   "analytics.sessions",
+  "compositions.alerts",
+  "compositions.preview",
   "config.bundles",
   "modules.files",
   "modules.localEndpoints",
   "modules.oauth",
   "obs.control",
   "obs.status",
+  "scenes.behaviors",
   "scenes.editorSessions",
   "scenes.editorSync",
   "twitch.dashboardTokens",

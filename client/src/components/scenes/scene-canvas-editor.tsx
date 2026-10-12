@@ -1,21 +1,13 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
+import type { Version } from "@woofx3/api/scene-editor/document";
+import { type CommandResult, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
+import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import {
-  ArrowLeft,
-  ChevronDown,
-  Link,
-  Loader2,
-  MoreVertical,
-  RefreshCw,
-  Save,
-  Settings,
-  Trash2,
-  Undo2,
-  Upload,
-} from "lucide-react";
+import { ArrowLeft, ChevronDown, Link, MoreVertical, RefreshCw, Save, Settings, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -30,26 +22,30 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
-import type { Version } from "@/lib/scene-document";
-import { canvasEdit, canvasOfDocument, type SceneCanvas } from "@/lib/scene-document-widgets";
-import { placeableOn } from "@/lib/widget-surfaces";
+import {
+  type CanvasSettings,
+  canvasSettingsOf,
+  catalogOfRows,
+  compositionOfStoredScene,
+  remoteSelectionsOf,
+  storedSceneJson,
+} from "@/lib/scene-composition";
 import type { Scene, Widget } from "@/types";
+import { type DraftCommand, DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "./draft-live-controls";
 import { LiveScenePreview } from "./live-scene-preview";
-import { WidgetLayoutCanvas, type WidgetsUpdate } from "./widget-layout-canvas";
+import { WidgetLayoutCanvas } from "./widget-layout-canvas";
 
 interface SceneCanvasEditorProps {
   instanceId: Id<"instances">;
   engineSceneId: string;
 }
-
-type DraftCommand = "publish" | "discard";
 
 export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEditorProps) {
   const [, navigate] = useLocation();
@@ -60,15 +56,15 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const isLoading = fetchedScene === undefined;
   const isAwaitingSync = fetchedScene === null;
 
-  const catalogWidgets = useQuery(api.sceneWidgets.listForInstance, { instanceId });
-  const sceneCatalog = useMemo(() => placeableOn(catalogWidgets ?? [], "scene"), [catalogWidgets]);
+  const catalogRows = useQuery(api.sceneWidgets.listForInstance, { instanceId });
+  const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
-  // With the Save button: the whole scene as edited. In session mode: the
-  // scene's name and description, which are not part of the scene document,
-  // and the cached canvas shown until the session has loaded the scene.
+  // The scene's name and description, which are not part of the scene
+  // document, and the cached scene the canvas starts from.
   const [scene, setScene] = useState<Scene | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  // Local edits must survive the SCENE_UPDATED webhook re-push after a save.
+  // Unsaved name or description. Local edits must survive the SCENE_UPDATED
+  // webhook re-push after a save.
   const [isDirty, setIsDirty] = useState(false);
   // `updatedAt` of the snapshot a save was made against. A save clears isDirty as
   // soon as the engine accepts it, but the engine's SCENE_UPDATED echo takes a
@@ -125,63 +121,95 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   });
   const client = session.client;
   const syncState = session.state;
-  const sessionDoc = syncState?.local?.[uiVersion] ?? null;
-  const sessionCanvas = useMemo(() => (sessionDoc === null ? null : canvasOfDocument(sessionDoc)), [sessionDoc]);
+  const sessionLoaded = syncState?.local != null;
   const conn = syncState?.conn ?? null;
   const sessionEnded = sessionMode && (conn === "gone" || conn === "closed");
   // The canvas takes edits only once the editor knows where they go: in
   // session mode, once the session has the scene, and not after it ended.
-  const canvasReadOnly = !editorModeKnown || (sessionMode && (sessionCanvas === null || sessionEnded));
+  const canvasReadOnly = !editorModeKnown || (sessionMode && (!sessionLoaded || sessionEnded));
   const pendingCommand = syncState?.pendingCommand ?? null;
-  // One Publish or Discard at a time; editing goes on while one is queued,
-  // and edits made after it are transformed against its result.
+  // One Publish or Discard at a time.
   const draftCommandsEnabled =
     syncState !== null &&
-    sessionDoc !== null &&
+    sessionLoaded &&
     !sessionEnded &&
     pendingCommand === null &&
     (syncState.hasDraft || syncState.pendingItems > 0);
 
-  // Who else is editing this version, and where: other editors' selections,
-  // in a colour each keeps for as long as it is connected.
-  const [selection, setSelection] = useState<string | null>(null);
-  useEffect(() => {
-    client?.setPresence(selection, uiVersion);
-  }, [client, selection, uiVersion]);
-  const peers = syncState?.peers;
-  const remoteSelections = useMemo(() => {
-    const byWidget: Record<string, { name: string; color: string }[]> = {};
-    for (const peer of peers ?? []) {
-      if (peer.selection !== null && peer.version === uiVersion) {
-        const editors = byWidget[peer.selection] ?? [];
-        editors.push({ name: peer.name, color: editorColor(peer.clientId) });
-        byWidget[peer.selection] = editors;
-      }
-    }
-    return byWidget;
-  }, [peers, uiVersion]);
+  // Where the canvas's document lives. In session mode, the version being
+  // edited as the sync client holds it (every pending edit applied), once the
+  // client has loaded the scene. Until then, and on an engine without editor
+  // sync, the cached scene in memory: there the Save button sends it whole.
+  const syncSource = useMemo(
+    () => (sessionMode && client !== null ? new SyncDocumentSource({ client, version: uiVersion }) : null),
+    [sessionMode, client, uiVersion]
+  );
+  const [cacheSource, setCacheSource] = useState<LocalDocumentSource | null>(null);
+  const source = syncSource !== null && sessionLoaded ? syncSource : cacheSource;
+  const composition = useCompositionEditor({ source, profile: PROFILES.scene, catalog });
+  const editor = composition?.editor ?? null;
+  const editorState = composition?.state ?? null;
+  useEditorKeys(editor);
+
+  // The cached document last taken into the Save-button editor, or saved
+  // from it: the canvas has unsaved changes while it shows anything else.
+  const [savedDoc, setSavedDoc] = useState<CompositionDocument | null>(null);
+  const canvasDirty = !sessionMode && editorState?.doc != null && savedDoc !== null && editorState.doc !== savedDoc;
+  const unsaved = isDirty || canvasDirty;
+  const adoptedFrom = useRef<FetchedScene | null>(null);
 
   useEffect(() => {
     if (!fetchedScene) {
       return;
     }
     if (sessionMode) {
-      // Only the starting name and description come from the cache: they
-      // are edited here and saved, and its later pushes would undo typing.
+      // Only the starting name and description, and the canvas shown until
+      // the session loads, come from the cache: its later pushes would undo
+      // typing.
       setScene((prev) => prev ?? sceneOf(fetchedScene));
+      setCacheSource(
+        (prev) => prev ?? new LocalDocumentSource(compositionOfStoredScene(sceneOf(fetchedScene)), { readOnly: true })
+      );
       return;
     }
-    if (!isDirty && fetchedScene.updatedAt > echoWatermark.current) {
-      setScene(sceneOf(fetchedScene));
+    if (unsaved || fetchedScene === adoptedFrom.current || fetchedScene.updatedAt <= echoWatermark.current) {
+      return;
     }
-  }, [fetchedScene, isDirty, sessionMode]);
+    adoptedFrom.current = fetchedScene;
+    const cached = sceneOf(fetchedScene);
+    setScene(cached);
+    const doc = compositionOfStoredScene(cached);
+    if (cacheSource === null) {
+      const made = new LocalDocumentSource(doc, { readOnly: true });
+      setCacheSource(made);
+      setSavedDoc(made.getDocument());
+    } else {
+      cacheSource.replace(doc);
+      setSavedDoc(cacheSource.getDocument());
+    }
+  }, [fetchedScene, unsaved, sessionMode, cacheSource]);
 
-  // The scene as the editor shows it: in session mode, the session's
-  // document of the version being edited, with the scene's own name and
-  // description.
-  const shownScene = useMemo(
-    () => (scene !== null && sessionMode && sessionCanvas !== null ? { ...scene, ...sessionCanvas } : scene),
-    [scene, sessionMode, sessionCanvas]
+  // The cache takes edits only in the Save-button editor, once the engine is
+  // known not to sync; in session mode it is only shown until the session loads.
+  useEffect(() => {
+    cacheSource?.setReadOnly(sessionMode || !editorModeKnown);
+  }, [cacheSource, sessionMode, editorModeKnown]);
+
+  const shownDoc = editorState?.doc ?? null;
+  const canvasSettings = useMemo(() => (shownDoc === null ? null : canvasSettingsOf(shownDoc)), [shownDoc]);
+
+  // Who else is editing this version, and where: other editors' selections,
+  // in a colour each keeps for as long as it is connected.
+  const peers = editorState?.peers;
+  const remoteSelections = useMemo(() => (peers === undefined ? {} : remoteSelectionsOf(peers)), [peers]);
+
+  // The overlay follows the draft from sceneManager in session mode, and is
+  // told only where widgets are being dragged; otherwise it gets the
+  // editor's widgets whole.
+  const followDraft = sessionMode && !live;
+  const previewMessage = useMemo(
+    () => (editorState === null || editor === null ? null : editor.preview.layoutMessage({ placements: !followDraft })),
+    [editor, editorState, followDraft]
   );
 
   const updateSceneAction = useAction(api.sceneActions.updateScene);
@@ -190,29 +218,35 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const getOrCreateBrowserSourceKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
   const rotateBrowserSourceKey = useAction(api.browserSource.rotateBrowserSourceKey);
 
-  // In session mode an edit goes straight to the client as a function of the
-  // document it holds (`canvasEdit`), never from an effect on the scene: a
-  // render that follows another editor's change cannot send back the canvas
-  // it replaced, and the canvas shows the client's document, edit included.
-  const mutateCanvas = useCallback(
-    (update: (canvas: SceneCanvas) => SceneCanvas) => {
-      if (!editorModeKnown) {
-        return;
-      }
-      if (!sessionMode) {
-        setScene((prev) => (prev === null ? prev : { ...prev, ...update(prev) }));
-        setIsDirty(true);
-        return;
-      }
-      if (client === null) {
-        return;
-      }
-      const result = client.edit(uiVersion, canvasEdit(update));
+  const reportRefused = useCallback(
+    (result: CommandResult) => {
       if (!result.ok) {
         toast({ title: "This change couldn't be made", description: result.detail, variant: "destructive" });
       }
     },
-    [editorModeKnown, sessionMode, client, uiVersion, toast]
+    [toast]
+  );
+
+  // The canvas's own settings are an editor change like any other: one
+  // undo, and refused with the editor's reason (a size that is not a
+  // positive number, a draft locked while a publish is pending).
+  const editCanvasSetting = useCallback(
+    <K extends keyof CanvasSettings>(key: K, value: CanvasSettings[K]) => {
+      if (editor === null || canvasReadOnly) {
+        return;
+      }
+      reportRefused(editor.canvas.patch({ [key]: value }));
+    },
+    [editor, canvasReadOnly, reportRefused]
+  );
+  // An emptied size field is a number being retyped, not a size to refuse.
+  const editCanvasSize = useCallback(
+    (key: "width" | "height", text: string) => {
+      if (text.trim() !== "") {
+        editCanvasSetting(key, Number(text));
+      }
+    },
+    [editCanvasSetting]
   );
 
   const updateDetails = useCallback(
@@ -333,7 +367,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   }, [convexSceneId, rotateBrowserSourceKey, copyKeyToClipboard, toast]);
 
   const handleSave = useCallback(async () => {
-    if (!scene || sessionMode || !editorModeKnown) {
+    if (!scene || !shownDoc || sessionMode || !editorModeKnown) {
       return;
     }
     setIsSaving(true);
@@ -346,14 +380,10 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         engineSceneId,
         name: scene.name,
         description: scene.description,
-        widgetsJson: JSON.stringify(scene.widgets),
-        layoutJson: JSON.stringify({
-          width: scene.width,
-          height: scene.height,
-          backgroundColor: scene.backgroundColor,
-        }),
+        ...storedSceneJson(shownDoc),
       });
       setIsDirty(false);
+      setSavedDoc(shownDoc);
       toast({ title: "Scene saved" });
     } catch (err) {
       toast({
@@ -366,6 +396,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     }
   }, [
     scene,
+    shownDoc,
     sessionMode,
     editorModeKnown,
     instanceId,
@@ -404,20 +435,15 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession, saveUnsavedName]);
 
   const handleDuplicateScene = useCallback(async () => {
-    if (!shownScene) {
+    if (!scene || !shownDoc) {
       return;
     }
     try {
       const { engineSceneId: newId } = await createSceneAction({
         instanceId,
-        name: `${shownScene.name} (Copy)`,
-        description: shownScene.description || undefined,
-        widgetsJson: JSON.stringify(shownScene.widgets),
-        layoutJson: JSON.stringify({
-          width: shownScene.width,
-          height: shownScene.height,
-          backgroundColor: shownScene.backgroundColor,
-        }),
+        name: `${scene.name} (Copy)`,
+        description: scene.description || undefined,
+        ...storedSceneJson(shownDoc),
       });
       toast({ title: "Scene duplicated" });
       navigate(`/stream/scenes/${newId}`);
@@ -428,7 +454,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [shownScene, createSceneAction, instanceId, navigate, toast]);
+  }, [scene, shownDoc, createSceneAction, instanceId, navigate, toast]);
 
   const runDraftCommand = useCallback(
     (command: DraftCommand) => {
@@ -448,11 +474,6 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     [client, conn, toast]
   );
 
-  const handleWidgetsChange = useCallback(
-    (update: WidgetsUpdate) => mutateCanvas((canvas) => ({ ...canvas, widgets: update(canvas.widgets) })),
-    [mutateCanvas]
-  );
-
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -461,11 +482,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     );
   }
 
-  if (isAwaitingSync || !scene || !shownScene) {
+  if (isAwaitingSync || !scene) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2 text-center">
         <p className="text-muted-foreground">Waiting for the engine to sync this scene…</p>
         <p className="text-xs text-muted-foreground">This usually takes a moment after creating a scene.</p>
+      </div>
+    );
+  }
+
+  if (!editor || !editorState || !canvasSettings) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <div className="text-muted-foreground">Loading scene…</div>
       </div>
     );
   }
@@ -533,92 +562,16 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         <Separator orientation="vertical" className="h-6" />
 
         {sessionMode ? (
-          <>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              size="sm"
-              value={live ? "live" : "draft"}
-              onValueChange={(value) => {
-                // Radix lets a single toggle group be emptied by clicking the selected item; one mode always holds.
-                if (value) {
-                  setLive(value === "live");
-                }
-              }}
-              aria-label="Editing mode"
-              data-testid="toggle-scene-mode"
-            >
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <ToggleGroupItem value="draft" data-testid="toggle-scene-draft">
-                    Draft
-                  </ToggleGroupItem>
-                </TooltipTrigger>
-                <TooltipContent>Edit a draft that reaches OBS when you publish it</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <ToggleGroupItem
-                    value="live"
-                    className="data-[state=on]:bg-red-600 data-[state=on]:text-white data-[state=on]:border-red-600"
-                    data-testid="toggle-scene-live"
-                  >
-                    Live
-                  </ToggleGroupItem>
-                </TooltipTrigger>
-                <TooltipContent>Edit what's on stream right now, without publishing</TooltipContent>
-              </Tooltip>
-            </ToggleGroup>
-            {/* Disabled rather than hidden in live mode, so switching modes never moves the header's controls.
-                The spans carry the tooltips, which a disabled button cannot. */}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={live || !draftCommandsEnabled ? 0 : undefined} className="inline-flex">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => runDraftCommand("discard")}
-                    disabled={live || !draftCommandsEnabled}
-                    aria-label="Discard draft"
-                    data-testid="button-discard-draft"
-                  >
-                    {pendingCommand === "discard" ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Undo2 className="h-4 w-4" />
-                    )}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{live ? "Live edits are already on stream" : "Discard draft"}</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={live || !draftCommandsEnabled ? 0 : undefined} className="inline-flex">
-                  <Button
-                    onClick={() => runDraftCommand("publish")}
-                    disabled={live || !draftCommandsEnabled}
-                    className="w-32"
-                    data-testid="button-publish-scene"
-                  >
-                    {pendingCommand === "publish" ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Upload className="h-4 w-4 mr-2" />
-                    )}
-                    {pendingCommand === "publish" ? "Publishing…" : "Publish"}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                {live
-                  ? "Live edits are already on stream"
-                  : syncState?.hasDraft
-                    ? "Put the draft on stream"
-                    : "Nothing to publish"}
-              </TooltipContent>
-            </Tooltip>
-          </>
+          <DraftLiveControls
+            live={live}
+            onLiveChange={setLive}
+            commandsEnabled={draftCommandsEnabled}
+            pendingCommand={pendingCommand}
+            onCommand={runDraftCommand}
+            hasDraft={syncState?.hasDraft ?? false}
+            copy={SCENE_DRAFT_COPY}
+            testIds={SCENE_DRAFT_TEST_IDS}
+          />
         ) : (
           <>
             {syncSupport === "checking" && (
@@ -656,11 +609,11 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             )}
             <Button
               onClick={handleSave}
-              disabled={!editorModeKnown || isSaving || !isDirty}
+              disabled={!editorModeKnown || isSaving || !unsaved}
               data-testid="button-save-scene"
             >
               <Save className="h-4 w-4 mr-2" />
-              {isSaving ? "Saving…" : isDirty ? "Save" : "Saved"}
+              {isSaving ? "Saving…" : unsaved ? "Save" : "Saved"}
             </Button>
           </>
         )}
@@ -695,8 +648,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 <Label className="text-xs">Width</Label>
                 <Input
                   type="number"
-                  value={shownScene.width}
-                  onChange={(e) => mutateCanvas((canvas) => ({ ...canvas, width: Number(e.target.value) || 0 }))}
+                  value={canvasSettings.width}
+                  onChange={(e) => editCanvasSize("width", e.target.value)}
                   disabled={canvasReadOnly}
                   data-testid="input-scene-width"
                 />
@@ -705,8 +658,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 <Label className="text-xs">Height</Label>
                 <Input
                   type="number"
-                  value={shownScene.height}
-                  onChange={(e) => mutateCanvas((canvas) => ({ ...canvas, height: Number(e.target.value) || 0 }))}
+                  value={canvasSettings.height}
+                  onChange={(e) => editCanvasSize("height", e.target.value)}
                   disabled={canvasReadOnly}
                   data-testid="input-scene-height"
                 />
@@ -717,15 +670,15 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
               <div className="flex items-center gap-2">
                 <Input
                   type="color"
-                  value={shownScene.backgroundColor === "transparent" ? "#000000" : shownScene.backgroundColor}
-                  onChange={(e) => mutateCanvas((canvas) => ({ ...canvas, backgroundColor: e.target.value }))}
+                  value={canvasSettings.backgroundColor === "transparent" ? "#000000" : canvasSettings.backgroundColor}
+                  onChange={(e) => editCanvasSetting("backgroundColor", e.target.value)}
                   disabled={canvasReadOnly}
                   className="h-9 w-12 p-1 shrink-0"
                   data-testid="input-scene-bg"
                 />
                 <Input
-                  value={shownScene.backgroundColor}
-                  onChange={(e) => mutateCanvas((canvas) => ({ ...canvas, backgroundColor: e.target.value }))}
+                  value={canvasSettings.backgroundColor}
+                  onChange={(e) => editCanvasSetting("backgroundColor", e.target.value)}
                   disabled={canvasReadOnly}
                   placeholder="transparent"
                 />
@@ -761,40 +714,39 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   return (
     <WidgetLayoutCanvas
       header={header}
-      width={shownScene.width}
-      height={shownScene.height}
-      background={shownScene.backgroundColor}
-      widgets={shownScene.widgets}
-      catalog={sceneCatalog}
+      editor={editor}
+      state={editorState}
+      catalog={catalogRows ?? NO_ROWS}
       renderers={configFieldRenderers}
-      onChange={handleWidgetsChange}
-      onSelectionChange={setSelection}
-      canHide
       readOnly={canvasReadOnly}
       remoteSelections={sessionMode ? remoteSelections : undefined}
+      onRefused={reportRefused}
       preview={
         <LiveScenePreview
           sceneId={convexSceneId}
-          width={shownScene.width}
-          height={shownScene.height}
-          widgets={shownScene.widgets}
-          followDraft={sessionMode && !live}
+          width={canvasSettings.width}
+          height={canvasSettings.height}
+          layoutMessage={previewMessage}
+          followDraft={followDraft}
         />
       }
     />
   );
 }
 
-/** The session's state in a few words: where this editor's changes are, and whether they have arrived. */
-function sessionStatusText(state: SceneSyncState | null, live: boolean): string {
+/**
+ * The session's state in a few words: where this editor's changes are, and whether they
+ * have arrived. `noun` is what the session edits, a scene or an alert.
+ */
+export function sessionStatusText(state: SceneSyncState | null, live: boolean, noun = "scene"): string {
   if (state === null || (state.local === null && state.conn === "connecting")) {
     return "Connecting…";
   }
   switch (state.conn) {
     case "gone":
-      return "This scene no longer exists";
+      return `This ${noun} no longer exists`;
     case "closed":
-      return "Disconnected · open the scene again";
+      return `Disconnected · open the ${noun} again`;
     case "unavailable":
       return "Can't reach the scene manager";
     case "connecting":
@@ -838,13 +790,24 @@ function sceneOf(fetchedScene: FetchedScene): Scene {
   };
 }
 
-/** A colour for another editor, the same for as long as it is connected. */
-function editorColor(editorId: string): string {
-  let hash = 0;
-  for (const char of editorId) {
-    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
-  }
-  return `hsl(${hash % 360} 75% 45%)`;
-}
-
 const COMMAND_NAME: Record<DraftCommand, string> = { publish: "Publish", discard: "Discard" };
+
+const SCENE_DRAFT_COPY: DraftLiveCopy = {
+  draft: "Edit a draft that reaches OBS when you publish it",
+  live: "Edit what's on stream right now, without publishing",
+  liveDisabled: "Live edits are already on stream",
+  publish: "Put the draft on stream",
+  discardTitle: "Discard your draft of this scene?",
+  discardDescription: "Every change since the last publish is thrown away. What's on stream stays as it is.",
+};
+
+const SCENE_DRAFT_TEST_IDS: DraftLiveTestIds = {
+  mode: "toggle-scene-mode",
+  draft: "toggle-scene-draft",
+  live: "toggle-scene-live",
+  discard: "button-discard-draft",
+  confirmDiscard: "button-confirm-discard-draft",
+  publish: "button-publish-scene",
+};
+
+const NO_ROWS: SceneWidgetCatalogRow[] = [];

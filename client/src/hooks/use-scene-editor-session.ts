@@ -18,6 +18,12 @@ interface UseSceneEditorSessionArgs {
   engineSceneId: string;
   /** The Convex scene, whose preview URL names sceneManager's public origin. */
   sceneId: Id<"scenes"> | undefined;
+  /**
+   * sceneManager's public URL for a composition with no preview page (an
+   * alert, which is never an overlay page). Used in place of `sceneId`'s
+   * preview URL when given.
+   */
+  publicUrl?: () => Promise<string | null>;
   /** False for an engine without `scenes.editorSync`: the hook stays idle. */
   enabled: boolean;
   /** Who this editor is, shown to the scene's other editors; the session waits for it. */
@@ -65,6 +71,7 @@ export function useSceneEditorSession({
   instanceId,
   engineSceneId,
   sceneId,
+  publicUrl,
   enabled,
   editorName,
   unsavedOutsideSession,
@@ -81,13 +88,15 @@ export function useSceneEditorSession({
   // Kept from the last render that had a scene: a client draining after its
   // editor lost the scene's row still reconnects with the row it had.
   const socketSourceRef = useRef<SceneSocketSource | null>(null);
-  if (sceneId) {
+  if (publicUrl) {
+    socketSourceRef.current = { getGrant: () => getSession({ instanceId, engineSceneId }), getPreviewUrl: publicUrl };
+  } else if (sceneId) {
     socketSourceRef.current = {
       getGrant: () => getSession({ instanceId, engineSceneId }),
       getPreviewUrl: () => getPreviewUrl({ sceneId }),
     };
   }
-  const hasScene = sceneId !== undefined;
+  const hasScene = sceneId !== undefined || publicUrl !== undefined;
 
   // The editor saves its own unsaved fields as it unmounts.
   useEffect(() => sceneEditorSessions.registerUnsavedCheck(() => unsavedOutsideSessionRef.current), []);

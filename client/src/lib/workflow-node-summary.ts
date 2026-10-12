@@ -1,5 +1,7 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import { stackOrder } from "@woofx3/scene/model";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import { alertCompositionOf } from "@/lib/alert-layout";
 import { toMediaValue } from "@/lib/media-value";
 import { isCommandsSource, parseConfigFields } from "@/lib/parse-config-fields";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
@@ -23,10 +25,40 @@ function formatFieldSummaryValue(field: ConfigField, raw: unknown, resourceLabel
       return match.label;
     }
   }
+  if (field.type === "layout") {
+    return alertLayoutSummary(raw);
+  }
   if (field.type === "resource_ref" && typeof raw === "string") {
     return resourceLabels?.get(raw) ?? raw;
   }
   return formatConfigValue(raw as Parameters<typeof formatConfigValue>[0], field.unit);
+}
+
+const SUMMARY_TEXT_LENGTH = 40;
+
+/**
+ * An alert layout in a few words: the topmost text, with its variables shown by
+ * their last segment as text fields show them, and how many layers it has.
+ */
+export function alertLayoutSummary(raw: unknown): string {
+  const doc = alertCompositionOf(raw);
+  if (doc === null) {
+    return "";
+  }
+  const order = stackOrder(doc).reverse();
+  if (order.length === 0) {
+    return "Empty";
+  }
+  const layers = `${order.length} ${order.length === 1 ? "layer" : "layers"}`;
+  const text = order
+    .map((id) => doc.widgets[id]?.settings.text)
+    .find((value): value is string => typeof value === "string" && value.trim() !== "");
+  if (text === undefined) {
+    return layers;
+  }
+  const shown = text.trim().replace(/\$\{([^{}]*)\}/g, (_match, path: string) => `{${path.split(".").pop()}}`);
+  const clipped = shown.length > SUMMARY_TEXT_LENGTH ? `${shown.slice(0, SUMMARY_TEXT_LENGTH - 1)}…` : shown;
+  return `“${clipped}” · ${layers}`;
 }
 
 /** Chat-command style triggers fold the picked command into the event suffix, not a condition. */

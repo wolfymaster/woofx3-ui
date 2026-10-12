@@ -1,12 +1,13 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { Loader2, MonitorPlay } from "lucide-react";
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { useNavigateAfterSignIn } from "@/hooks/use-navigate-after-sign-in";
 import { nextPathFromLocation, withNext } from "@/lib/auth-next-path";
 import { startTwitchSignIn, TWITCH_SIGN_IN_STORAGE_ERROR } from "@/lib/twitch-sign-in";
 
@@ -21,7 +22,7 @@ function nextParam(): string | null {
 }
 
 export default function Login() {
-  const [, navigate] = useLocation();
+  const navigateAfterSignIn = useNavigateAfterSignIn();
   const { signIn } = useAuthActions();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +46,7 @@ export default function Login() {
     setIsLoading(true);
     try {
       await signIn("password", { email, password, flow: "signIn" });
-      navigate(getLoginNextPath());
+      navigateAfterSignIn(getLoginNextPath());
     } catch (e) {
       setError("Invalid email or password.");
       setIsLoading(false);
