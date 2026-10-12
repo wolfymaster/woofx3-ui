@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { type ManualRunOrigin, UNRECORDED_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { type ManualRunOrigin, TEST_RUN_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { useAction } from "convex/react";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -21,8 +21,9 @@ const TWITCH_PLATFORM_AXIS = "platform.twitch";
  * cause is decided afterwards in another process and reaches the caller
  * through that key, so a toast cannot report it and deliberately does not try.
  *
- * `origin` decides whether the engine records the runs the event starts; see
- * convex/lib/manualRunOrigin.ts.
+ * `origin` is what the runs the event starts are tagged with, which decides
+ * whether the engine records them; see convex/lib/manualRunOrigin.ts. A test
+ * run is recorded, so the alert it plays links to a run that exists.
  *
  * Twitch triggers go through `simulateTwitchEvent`, which stamps
  * `platform: "twitch"` so the event is identical to a real one and passes
@@ -38,7 +39,7 @@ export function useFireTestEvent() {
   return async function fireTestEvent(
     preset: TriggerPreset,
     eventData: object,
-    origin: ManualRunOrigin = UNRECORDED_ORIGIN
+    origin: ManualRunOrigin = TEST_RUN_ORIGIN
   ): Promise<string | null> {
     if (!instance) {
       toast({
