@@ -301,7 +301,7 @@ describe("the alert editor over a stored layout", () => {
     expect((after?.y ?? 0) + (after?.height ?? 0) / 2).toBeCloseTo((before?.y ?? 0) + (before?.height ?? 0) / 2, 0);
   });
 
-  it("keeps a media layer's aspect when its width is set", () => {
+  it("keeps a media layer's height when only its width is set", () => {
     const { editor, doc } = open({
       width: 1920,
       height: 1080,
@@ -315,7 +315,7 @@ describe("the alert editor over a stored layout", () => {
       ],
     });
     editor.nodes.resize("v", { width: 1280 });
-    expect(doc().widgets.v).toMatchObject({ width: 1280, height: 720 });
+    expect(doc().widgets.v).toMatchObject({ width: 1280, height: 360 });
   });
 
   it("restacks by changing one layer, and writes the new order as the list", () => {
