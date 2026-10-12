@@ -3,14 +3,24 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, type QueryCtx, query } from "./_generated/server";
+import { deleteAlertCompositionRow, upsertAlertComposition } from "./alertCompositions";
 import { deleteSceneAndChildren, purgeSceneChildren } from "./lib/sceneCascade";
-import { parseSceneLayout, parseSceneWidgets } from "./lib/sceneSerialization";
+import {
+  parseCompositionKind,
+  parseSceneLayout,
+  parseSceneWidgets,
+  tablesForDeletedComposition,
+} from "./lib/sceneSerialization";
 
 // Scenes are engine-authoritative. The engine is the source of truth; this table
 // is a read cache populated exclusively by webhook callbacks (upsertFromWebhook /
 // deleteFromWebhook). All UI writes go through convex/sceneActions.ts → engine RPC.
 // There are intentionally NO public create/update/delete mutations here — adding
 // one would create a second write path that fights the webhook writer.
+//
+// The engine's scene webhooks also report alert compositions (`kind: "alert"`).
+// Those are routed to the `alertCompositions` table, so this table, and every
+// listing and getter below, holds scenes only.
 
 type SceneCache = Doc<"scenes"> & { id: Id<"scenes">; widgets: unknown[] };
 
@@ -101,29 +111,55 @@ export const getByEngineSceneId = query({
   },
 });
 
+async function findScene(ctx: QueryCtx, instanceId: Id<"instances">, engineSceneId: string) {
+  return await ctx.db
+    .query("scenes")
+    .withIndex("by_engine_scene_id", (q) => q.eq("instanceId", instanceId).eq("engineSceneId", engineSceneId))
+    .first();
+}
+
 // Populated by the engine SCENE_CREATED / SCENE_UPDATED webhook. Keyed on
 // engineSceneId (the engine's stable identity) via the by_engine_scene_id index,
-// so redelivery is idempotent and renames never create duplicates.
+// so redelivery is idempotent and renames never create duplicates. An alert
+// goes to `alertCompositions`; a scene row under its id (cached before alerts
+// were told apart) is removed, since a row's kind never changes.
 export const upsertFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
     engineSceneId: v.string(),
+    /** `scene` or `alert`; absent from an engine that predates alert compositions. */
+    kind: v.optional(v.string()),
     name: v.string(),
     description: v.string(),
     widgetsJson: v.string(),
     layoutJson: v.string(),
+    behaviorsJson: v.optional(v.string()),
+    inputsJson: v.optional(v.string()),
     createdByType: v.string(),
     createdByRef: v.string(),
     createdAt: v.string(),
     updatedAt: v.string(),
   },
   handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("scenes")
-      .withIndex("by_engine_scene_id", (q) =>
-        q.eq("instanceId", args.instanceId).eq("engineSceneId", args.engineSceneId)
-      )
-      .first();
+    const existing = await findScene(ctx, args.instanceId, args.engineSceneId);
+
+    if (parseCompositionKind(args.kind) === "alert") {
+      if (existing) {
+        await deleteSceneAndChildren(ctx, existing._id);
+      }
+      await upsertAlertComposition(ctx, args.instanceId, {
+        engineCompositionId: args.engineSceneId,
+        name: args.name,
+        description: args.description,
+        widgetsJson: args.widgetsJson,
+        layoutJson: args.layoutJson,
+        behaviorsJson: args.behaviorsJson,
+        inputsJson: args.inputsJson,
+        createdByType: args.createdByType,
+        createdByRef: args.createdByRef,
+      });
+      return;
+    }
 
     const widgets = parseSceneWidgets(args.widgetsJson);
     const layout = parseSceneLayout(args.layoutJson);
@@ -154,15 +190,17 @@ export const deleteFromWebhook = internalMutation({
   args: {
     instanceId: v.id("instances"),
     engineSceneId: v.string(),
+    kind: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const scene = await ctx.db
-      .query("scenes")
-      .withIndex("by_engine_scene_id", (q) =>
-        q.eq("instanceId", args.instanceId).eq("engineSceneId", args.engineSceneId)
-      )
-      .first();
-
+    const tables = tablesForDeletedComposition(args.kind);
+    if (tables.includes("alertCompositions")) {
+      await deleteAlertCompositionRow(ctx, args.instanceId, args.engineSceneId);
+    }
+    if (!tables.includes("scenes")) {
+      return;
+    }
+    const scene = await findScene(ctx, args.instanceId, args.engineSceneId);
     if (scene) {
       await deleteSceneAndChildren(ctx, scene._id);
     }

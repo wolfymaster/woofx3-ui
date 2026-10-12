@@ -2,8 +2,11 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type CanvasSize, type CommandResult, canvasOf, type NodeView } from "@woofx3/scene/editor";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "wouter";
+import { AlertLibraryDialog, type LibraryAlert } from "@/components/alert-editor/alert-library-dialog";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { LayerInspector } from "@/components/alert-editor/layer-inspector";
+import { SaveToLibraryDialog } from "@/components/alert-editor/save-to-library-dialog";
 import type { StageZoom } from "@/components/common/stage-area";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { LayersList } from "@/components/overlay-editor/layers-list";
@@ -20,9 +23,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { type AlertLayoutSession, useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
+import { type AlertEditorHandle, useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
+import { useAlertLibrary } from "@/hooks/use-alert-library";
 import { useToast } from "@/hooks/use-toast";
 import { alertLengthSeconds, durationOf, formatSeconds, layerLabel, longestLayerId } from "@/lib/alert-editor";
+import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
+import { inlineCopyOfLibraryAlert, unfilledInputsText } from "@/lib/alert-library";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -45,6 +51,11 @@ interface AlertLayoutEditorProps {
   onDone: (layout: unknown | null) => void;
   /** Leaving without keeping the edits; already confirmed when there were any. */
   onCancel: () => void;
+  /**
+   * On an engine with an alert library, offer Start from… (copy a library alert onto
+   * the canvas) and Save to library (store a copy of this alert there).
+   */
+  offerLibrary?: boolean;
 }
 
 /**
@@ -64,36 +75,178 @@ export function AlertLayoutEditor({
   availableVariables,
   onDone,
   onCancel,
+  offerLibrary = false,
 }: AlertLayoutEditorProps) {
   const session = useAlertLayoutEditor(value);
-  const [confirmingLeave, setConfirmingLeave] = useState(false);
-  const isDesktop = useMediaQuery(DESKTOP_QUERY);
+  // Where to go once the edits are confirmed discarded: back out, or to a library alert.
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  const [, navigate] = useLocation();
+  const [choosingStart, setChoosingStart] = useState(false);
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
   const view = useAlertEditorView(session, availableVariables);
+  const library = useAlertLibrary();
+  const { toast } = useToast();
+
+  if (session === null || view === null) {
+    return <EditorLoading />;
+  }
+
+  const libraryOffered = offerLibrary && library.enabled;
+  const leaveTo = (go: () => void) => {
+    if (session.isDirty) {
+      setPendingLeave(() => go);
+      return;
+    }
+    go();
+  };
+  const leave = () => leaveTo(onCancel);
+  const editLibraryAlert = (alert: LibraryAlert) => {
+    setChoosingStart(false);
+    leaveTo(() => navigate(libraryAlertEditorPath(alert.engineCompositionId)));
+  };
+  const done = () => onDone(session.changedLayout());
+  const startFrom = (alert: LibraryAlert) => {
+    const { doc, unfilled } = inlineCopyOfLibraryAlert(alert, availableVariables);
+    session.replace(doc);
+    session.editor.dispatch("selection.clear");
+    setChoosingStart(false);
+    if (unfilled.length > 0) {
+      toast({ title: "Some of its inputs had no value", description: unfilledInputsText(unfilled) });
+    }
+  };
+
+  return (
+    <>
+      <AlertEditorFrame
+        session={session}
+        view={view}
+        title="Edit alert"
+        context={context}
+        backLabel={backLabel}
+        onBack={leave}
+        actions={
+          <>
+            {libraryOffered && (
+              <>
+                <Button variant="outline" onClick={() => setChoosingStart(true)} data-testid="button-start-from">
+                  Start from…
+                </Button>
+                <Button variant="outline" onClick={() => setSavingToLibrary(true)} data-testid="button-save-to-library">
+                  Save to library
+                </Button>
+              </>
+            )}
+            <Button variant="ghost" onClick={leave}>
+              Cancel
+            </Button>
+            <Button onClick={done} data-testid="button-alert-done">
+              Done
+            </Button>
+          </>
+        }
+        phoneAction={
+          <Button className="h-11" onClick={done} data-testid="button-alert-done">
+            Done
+          </Button>
+        }
+        phoneExtras={
+          libraryOffered ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Button variant="outline" className="h-11" onClick={() => setChoosingStart(true)}>
+                Start from…
+              </Button>
+              <Button variant="outline" className="h-11" onClick={() => setSavingToLibrary(true)}>
+                Save to library
+              </Button>
+            </div>
+          ) : null
+        }
+      />
+
+      {libraryOffered && (
+        <>
+          <AlertLibraryDialog
+            open={choosingStart}
+            onOpenChange={setChoosingStart}
+            alerts={library.alerts}
+            replacesLayers={view.layerCount}
+            onUse={startFrom}
+            onEdit={editLibraryAlert}
+          />
+          <SaveToLibraryDialog
+            open={savingToLibrary}
+            onOpenChange={setSavingToLibrary}
+            doc={session.state.doc}
+            availableVariables={availableVariables}
+            onSaved={() => setSavingToLibrary(false)}
+          />
+        </>
+      )}
+
+      <DiscardAlertChangesDialog
+        open={pendingLeave !== null}
+        onOpenChange={(open) => (open ? undefined : setPendingLeave(null))}
+        onDiscard={() => pendingLeave?.()}
+      />
+    </>
+  );
+}
+
+function EditorLoading() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
+
+interface AlertEditorFrameProps {
+  session: AlertEditorHandle;
+  view: AlertEditorView;
+  title: ReactNode;
+  context: ReactNode;
+  backLabel: string;
+  onBack: () => void;
+  /** The desktop header's controls, after the canvas readout. */
+  actions: ReactNode;
+  /** Shown beside the desktop header's title, where its changing length never moves the controls. */
+  status?: ReactNode;
+  /** The phone header's one button. */
+  phoneAction: ReactNode;
+  /** Anything the phone layout shows above the palette. */
+  phoneExtras?: ReactNode;
+  /** Shown under the desktop header's controls on a phone, beside the canvas readout. */
+  phoneStatus?: ReactNode;
+}
+
+/**
+ * The alert editor's page: a header over the stage, palette, layers and inspector on a
+ * desktop, and a stacked column on a phone. Shared by an alert written into a step and
+ * one edited in the library, which differ only in the header's controls.
+ */
+export function AlertEditorFrame({
+  session,
+  view,
+  title,
+  context,
+  backLabel,
+  onBack,
+  actions,
+  status,
+  phoneAction,
+  phoneExtras,
+  phoneStatus,
+}: AlertEditorFrameProps) {
+  const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
   // The phone stage sets its own zoom; back on a desktop width the stage fits again.
-  const editor = session?.editor ?? null;
+  const editor = session.editor;
   useEffect(() => {
     if (isDesktop) {
-      editor?.dispatch("view.zoomFit");
+      editor.dispatch("view.zoomFit");
     }
   }, [isDesktop, editor]);
 
-  if (session === null || view === null) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  const leave = () => {
-    if (session.isDirty) {
-      setConfirmingLeave(true);
-      return;
-    }
-    onCancel();
-  };
-  const done = () => onDone(session.changedLayout());
   const readout = `${view.canvas.width} × ${view.canvas.height}`;
 
   return (
@@ -102,22 +255,18 @@ export function AlertLayoutEditor({
         <>
           <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b px-4">
             <div className="flex min-w-0 items-center gap-3">
-              <EditorBackLink label={backLabel} onClick={leave} />
+              <EditorBackLink label={backLabel} onClick={onBack} />
               <div className="min-w-0">
-                <h1 className="text-[17px] font-semibold leading-tight">Edit alert</h1>
+                <h1 className="truncate text-[17px] font-semibold leading-tight">{title}</h1>
                 <p className="truncate text-[13px] text-muted-foreground">{context}</p>
               </div>
+              {status}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <code className="rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground">
                 {readout} | {view.lengthLabel}
               </code>
-              <Button variant="ghost" onClick={leave}>
-                Cancel
-              </Button>
-              <Button onClick={done} data-testid="button-alert-done">
-                Done
-              </Button>
+              {actions}
             </div>
           </header>
           <AlertEditorShell view={view} />
@@ -126,24 +275,23 @@ export function AlertLayoutEditor({
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <div className="sticky top-0 z-20 border-b bg-background">
             <header className="flex items-center gap-2 px-2 py-2">
-              <EditorBackLink label={backLabel} onClick={leave} />
+              <EditorBackLink label={backLabel} onClick={onBack} />
               <div className="min-w-0 flex-1">
-                <h1 className="text-[17px] font-semibold leading-tight">Edit alert</h1>
+                <h1 className="truncate text-[17px] font-semibold leading-tight">{title}</h1>
                 <p className="truncate text-[13px] text-muted-foreground">{context}</p>
               </div>
-              <Button className="h-11" onClick={done} data-testid="button-alert-done">
-                Done
-              </Button>
+              {phoneAction}
             </header>
             <PhoneStageArea canvas={view.canvas} onZoom={(zoom) => session.editor.viewport.setZoom(zoom)}>
               {view.stage}
             </PhoneStageArea>
             <div className="flex justify-between px-4 pb-2 font-mono text-xs text-muted-foreground">
-              <span>{readout} · drag to move</span>
+              <span>{phoneStatus ?? `${readout} · drag to move`}</span>
               <span>{view.lengthLabel}</span>
             </div>
           </div>
           <div className="flex flex-col gap-6 px-4 py-5">
+            {phoneExtras}
             {view.palette("row")}
             {view.layerList(true)}
             {view.inspector ? (
@@ -156,8 +304,6 @@ export function AlertLayoutEditor({
           </div>
         </div>
       )}
-
-      <DiscardAlertChangesDialog open={confirmingLeave} onOpenChange={setConfirmingLeave} onDiscard={onCancel} />
     </div>
   );
 }
@@ -215,7 +361,7 @@ interface NodeLayer {
  * goes to the editor, which refuses what it cannot do with a reason shown as a toast.
  */
 export function useAlertEditorView(
-  session: AlertLayoutSession | null,
+  session: AlertEditorHandle | null,
   availableVariables: VariableOption[]
 ): AlertEditorView | null {
   const { toast } = useToast();

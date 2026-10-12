@@ -16,9 +16,18 @@ import {
 } from "@/lib/alert-layout";
 import { catalogOfRows } from "@/lib/scene-composition";
 
-export interface AlertLayoutSession extends CompositionEditorHandle {
+/** A composition editor over an alert, and the installed widgets it places. */
+export interface AlertEditorHandle extends CompositionEditorHandle {
   /** The installed widgets: names, settings fields and icons. The editor decides which may be added. */
   catalogRows: readonly SceneWidgetCatalogRow[];
+}
+
+export interface AlertLayoutSession extends AlertEditorHandle {
+  /**
+   * Replace the whole alert, as a change from elsewhere would: the copy the
+   * editor opened with stays what Cancel returns to and `isDirty` compares with.
+   */
+  replace: (doc: CompositionDocument) => void;
   /** The document differs from the one the editor opened with. */
   isDirty: boolean;
   /** The edited layout as a step stores it, in the shape the engine plays; null when nothing changed. */
@@ -60,8 +69,10 @@ export function useAlertLayoutEditor(value: unknown): AlertLayoutSession | null 
     [isDirty, doc, compositionSupport]
   );
 
+  const replace = useCallback((next: CompositionDocument) => source?.replace(next), [source]);
+
   if (composition === null || catalogRows === undefined) {
     return null;
   }
-  return { ...composition, catalogRows, isDirty, changedLayout };
+  return { ...composition, catalogRows, replace, isDirty, changedLayout };
 }

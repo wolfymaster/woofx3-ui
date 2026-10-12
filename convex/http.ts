@@ -776,10 +776,13 @@ http.route({
         await ctx.runMutation(internal.scenes.upsertFromWebhook, {
           instanceId: instance._id,
           engineSceneId: event.scene.id,
+          kind: optionalString(event.scene.kind),
           name: event.scene.name,
           description: event.scene.description,
           widgetsJson: event.scene.widgetsJson,
           layoutJson: event.scene.layoutJson,
+          behaviorsJson: optionalString(event.scene.behaviorsJson),
+          inputsJson: optionalString(event.scene.inputsJson),
           createdByType: event.scene.createdByType,
           createdByRef: event.scene.createdByRef,
           createdAt: event.scene.createdAt,
@@ -792,10 +795,13 @@ http.route({
         await ctx.runMutation(internal.scenes.upsertFromWebhook, {
           instanceId: instance._id,
           engineSceneId: event.scene.id,
+          kind: optionalString(event.scene.kind),
           name: event.scene.name,
           description: event.scene.description,
           widgetsJson: event.scene.widgetsJson,
           layoutJson: event.scene.layoutJson,
+          behaviorsJson: optionalString(event.scene.behaviorsJson),
+          inputsJson: optionalString(event.scene.inputsJson),
           createdByType: event.scene.createdByType,
           createdByRef: event.scene.createdByRef,
           createdAt: event.scene.createdAt,
@@ -808,6 +814,7 @@ http.route({
         await ctx.runMutation(internal.scenes.deleteFromWebhook, {
           instanceId: instance._id,
           engineSceneId: event.sceneId,
+          kind: optionalString(event.kind),
         });
         return corsJson({ success: true, type: event.type });
       }
@@ -1481,3 +1488,12 @@ http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "POST", handler: mac
 http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macroTriggerHandler });
 
 export default http;
+
+/**
+ * A webhook field newer engines send and older ones leave out. Typed as a
+ * string by the shared event types, but read defensively: the validator
+ * downstream takes a string or nothing, never null.
+ */
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}

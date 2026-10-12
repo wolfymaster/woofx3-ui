@@ -154,6 +154,7 @@ export default function AlertEditorPage() {
           navigate(backHref);
         }}
         onCancel={() => navigate(backHref)}
+        offerLibrary
       />
     </>
   );

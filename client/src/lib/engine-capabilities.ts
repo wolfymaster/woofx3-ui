@@ -35,6 +35,9 @@ export function capabilitySupport(
 /** The alert skip, clear and replay controls, with the result shapes the dashboard reads. */
 export const ALERT_QUEUE_CONTROL_CAPABILITIES: readonly EngineCapability[] = ["alerts.queueControls"];
 
+/** The alert library: alerts the engine stores as starting points for the alerts steps hold. */
+export const ALERT_LIBRARY_CAPABILITIES: readonly EngineCapability[] = ["compositions.alerts"];
+
 /** Stream session history plus leaderboards and viewer totals, which the supporters page reads together. */
 export const SUPPORTER_CAPABILITIES: readonly EngineCapability[] = ["analytics.sessions", "analytics.aggregates"];
 
