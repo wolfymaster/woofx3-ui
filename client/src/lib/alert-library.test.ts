@@ -7,6 +7,7 @@ import {
   type LibraryAlertDocument,
   libraryAlertOfStep,
   libraryJsonOf,
+  libraryPreviewInputs,
 } from "@/lib/alert-library";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -179,5 +180,16 @@ describe("libraryAlertOfStep", () => {
       })
     );
     expect(libraryAlertOfStep(step, []).inputs?.map((input) => input.id)).toEqual(["name", "name_2"]);
+  });
+});
+
+describe("libraryPreviewInputs", () => {
+  test("previews each input with its default, or its {id} where it has none", () => {
+    expect(
+      libraryPreviewInputs([
+        { id: "name", label: "Name", type: "text", defaultValue: "friend" },
+        { id: "amount", label: "Bits", type: "number" },
+      ])
+    ).toEqual({ name: "friend", amount: "{amount}" });
   });
 });

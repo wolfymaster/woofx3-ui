@@ -9,7 +9,9 @@ import type {
 } from "@woofx3/scene/editor";
 import { Film, Sparkles, Square, Volume2 } from "lucide-react";
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from "react";
+import { CompositionPreviewFrame } from "@/components/alert-editor/composition-preview-frame";
 import { alertWidgetPreview, TextWidgetPreview } from "@/components/scenes/alert-widget-previews";
+import type { CompositionPreviewController } from "@/hooks/use-composition-preview";
 import { createFrameCoalescer } from "@/lib/frame-coalescer";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +29,12 @@ interface AlertStageProps {
   displayText: (text: string) => string;
   /** Told when the editor refused a gesture's change, with its reason. */
   onRefused: (result: CommandResult) => void;
+  /**
+   * The engine's live preview, framed behind the layers. While it plays the
+   * alert, layers draw only their outlines and handles over it, except those
+   * it cannot draw; until then, and without one, the stand-ins draw.
+   */
+  preview?: CompositionPreviewController | null;
 }
 
 /** On-screen size of the selected layer's corner handle, and of the press area around it. */
@@ -52,6 +60,10 @@ interface PointerUpdate {
  * drag that leaves the layer keeps moving it, and pointer moves reach the
  * editor at most once per frame.
  *
+ * With the engine's preview, the real widgets play in a frame under the
+ * layers, at the same place and zoom, and each layer becomes a transparent
+ * press area with its outline and handle; the stand-ins are the fallback.
+ *
  * Key presses on the stage go straight to the editor as well as through the
  * page's window listener, because inside a dialog that listener leaves keys
  * to the dialog; a key the editor used here is marked handled, so the
@@ -66,6 +78,7 @@ export function AlertStage({
   layerLabel,
   displayText,
   onRefused,
+  preview = null,
 }: AlertStageProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const pointerId = useRef<number | null>(null);
@@ -158,6 +171,14 @@ export function AlertStage({
       onPointerDown={deselectOnBackground}
       onKeyDown={sendKey}
     >
+      {preview?.frame && (
+        <CompositionPreviewFrame
+          frame={preview.frame}
+          width={canvas.width * zoom}
+          height={canvas.height * zoom}
+          visible={preview.live}
+        />
+      )}
       <div
         ref={canvasRef}
         className="absolute left-0 top-0 origin-top-left"
@@ -192,7 +213,9 @@ export function AlertStage({
               data-testid={`stage-layer-${node.id}`}
             >
               <div className="pointer-events-none h-full w-full">
-                <LayerContent node={node} displayText={displayText} />
+                {(!preview?.live || preview.undrawn.has(node.id)) && (
+                  <LayerContent node={node} displayText={displayText} />
+                )}
               </div>
               <div
                 className={cn(

@@ -118,7 +118,12 @@ function AlertLayoutDialogBody({
               : "Loading the alert…"}
           </DialogDescription>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {view?.transport && (
+            <div className="rounded-md border bg-muted/40 py-0.5 pl-1 pr-2 font-mono text-xs text-muted-foreground">
+              {view.transport(true)}
+            </div>
+          )}
           <Button variant="ghost" onClick={leave}>
             Cancel
           </Button>
