@@ -1,4 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { ReactNode } from "react";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
@@ -16,6 +17,8 @@ interface WidgetSettingsPanelProps {
   renderers: Record<string, CustomFieldRenderer>;
   availableVariables?: VariableOption[];
   onChangeSetting: (key: string, value: unknown) => void;
+  /** Shown below the settings, in the same scrolling pane. */
+  children?: ReactNode;
 }
 
 /** Right-side settings pane for the currently-selected canvas widget. */
@@ -26,6 +29,7 @@ export function WidgetSettingsPanel({
   renderers,
   availableVariables,
   onChangeSetting,
+  children,
 }: WidgetSettingsPanelProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -57,6 +61,7 @@ export function WidgetSettingsPanel({
             availableVariables={availableVariables}
           />
         )}
+        {children}
       </div>
     </div>
   );

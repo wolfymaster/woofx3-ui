@@ -8,6 +8,7 @@ import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
 // pre-spec deployment. Safe to delete after the first prod deploy.
@@ -638,6 +639,7 @@ export const reconcileWidgets = internalMutation({
         surfaces: v.optional(v.array(v.string())),
         hostsSurface: v.optional(v.string()),
         taxonomy: v.optional(v.array(v.string())),
+        behaviorKinds: widgetBehaviorKindsValidator,
         createdByType: v.string(),
         createdByRef: v.string(),
       })
@@ -666,6 +668,7 @@ export const reconcileWidgets = internalMutation({
         surfaces: snap.surfaces,
         hostsSurface: snap.hostsSurface,
         taxonomy: snap.taxonomy,
+        behaviorKinds: snap.behaviorKinds,
       };
       const existingDef = await ctx.db
         .query("moduleWidgets")

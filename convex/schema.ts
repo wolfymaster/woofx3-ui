@@ -2,6 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
+import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 // Must match SessionSummarySession and SessionSummaryTotals in
 // convex/lib/sessionSummary.ts, which validates the webhook body before it
@@ -1508,6 +1509,10 @@ export default defineSchema({
     // Absent on rows registered before widgets declared it, and empty for a
     // widget whose author declared none.
     taxonomy: v.optional(v.array(v.string())),
+    // The transition and effect kinds the widget plays itself, which the
+    // scene and alert editors offer after the host's. Absent on rows
+    // registered before widgets declared them, which declare none.
+    behaviorKinds: v.optional(widgetBehaviorKindsValidator),
     createdAt: v.number(),
   })
     .index("by_module", ["moduleId"])
