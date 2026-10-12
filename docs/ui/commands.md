@@ -61,7 +61,16 @@ A step is addressed by `commandStepId` (its `id`, or its position for a step wri
 
 Two thin pages supply that. `pages/alert-editor.tsx` finds the step in an event's workflow draft; `pages/command-step-alert-editor.tsx` finds it in a command's draft. Each navigates back to its own screen.
 
-The same canvas still opens in a dialog from the workflow builder and anywhere else a module declares a `layout` field, through `configFieldRenderers` in `components/workflows/trigger-config-form.tsx`. That path has not been converted.
+Underneath, it is a view over the same headless composition editor as the scene editor (`createCompositionEditor` from `@woofx3/scene/editor`, see [Scenes: The editor](./scenes.md#the-editor)), made with `PROFILES.alert` over a `LocalDocumentSource` holding a copy of the step's layout (`hooks/use-alert-layout-editor.ts`). The editor does the geometry and every change: dragging, the corner resize handle, snapping (to the canvas centre and edges and to other layers, with guides), stacking, undo, and the shared keyboard shortcuts. The inspector's controls call `editor.nodes.patch` (text, size, colour, duration, More settings), `editor.nodes.resize` (Width) and `editor.nodes.moveCenter` (Center, X and Y). How a box follows its content is the widget's trait in the engine's type registry, applied by the editor: a Text layer's height grows with its text and font size, and an Image, Video or Lottie layer keeps its aspect. What the dashboard still computes is only read-outs: a layer's length, the alert's length (its longest layer) and the "longest layer" note, and layer labels (`lib/alert-editor.ts`).
+
+**Reading and writing the layout.** A step's `layout` is stored in one of two shapes, and `lib/alert-layout.ts` reads both into a composition:
+
+- the composition, `{ layout, widgets, behaviors }`, with widgets keyed by id and stacked by their fractional `z` keys;
+- the list every engine plays, `{ width, height, widgets: [{ id, widgetCanonicalId, position, size, settings, … }] }`, stacked in array order. Array order becomes `z` keys; a widget with no name takes its catalog name; rotation, opacity, visibility and lock default to 0, 1, shown and unlocked. An entry with no id, or a repeated one, is dropped, as the engine drops it.
+
+Done writes the composition when the engine lists the `alerts.compositionLayout` capability, and the list otherwise, so an engine that predates compositions keeps playing the alert. The list is lossy: behaviors have nowhere to go, and layers are written bottom first. Done hands back `null`, and Cancel or Back asks nothing, when the editor's document is still deeply equal to the one it opened with.
+
+The same editor also opens in a dialog from the workflow builder and anywhere else a module declares a `layout` field, through `configFieldRenderers` in `components/workflows/trigger-config-form.tsx` (`components/scenes/alert-layout-field.tsx`): the editor's stage, palette, layers and inspector, with the dialog's own Cancel and Done. Keys reach the editor from the stage itself there, since the page-wide shortcut listener leaves keys inside a dialog to the dialog.
 
 ## Groups
 

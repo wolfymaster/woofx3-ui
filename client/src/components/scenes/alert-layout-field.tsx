@@ -1,54 +1,35 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
-import { useCallback, useMemo, useState } from "react";
-import type { CustomFieldRenderer, FieldDescriptor } from "@/components/common/configuration-form";
+import { type PlacementDocument, stackOrder } from "@woofx3/scene/model";
+import { Loader2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  AlertEditorShell,
+  DiscardAlertChangesDialog,
+  useAlertEditorView,
+} from "@/components/alert-editor/alert-layout-editor";
+import type { FieldDescriptor } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { useInstance } from "@/hooks/use-instance";
-import { type AlertLayout, readAlertLayout, writeAlertLayout } from "@/lib/alert-layout";
-import { placeableOn } from "@/lib/widget-surfaces";
+import { useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
+import { readAlertComposition } from "@/lib/alert-layout";
 import type { VariableOption } from "@/lib/workflow-variables";
-import { alertWidgetPreview } from "./alert-widget-previews";
-import { WidgetListCanvas, type WidgetsUpdate } from "./widget-list-canvas";
 
 interface AlertLayoutFieldProps {
   field: FieldDescriptor;
   value: unknown;
   onChange: (value: unknown) => void;
-  /** The field renderers the layout's widget settings use. */
-  renderers: Record<string, CustomFieldRenderer>;
   /** What the layout's widget settings may reference: the variables of the step the layout belongs to. */
   availableVariables: VariableOption[];
 }
 
 /**
- * A `layout` field: a summary of the placed widgets, and a dialog that edits
- * them on the shared widget canvas. The dialog works on a draft, so closing it
+ * A `layout` field: a summary of the placed widgets, and a dialog with the alert
+ * editor's stage, layers and inspector. The dialog edits a copy, so closing it
  * without Done leaves the step as it was.
  */
-export function AlertLayoutField({ field, value, onChange, renderers, availableVariables }: AlertLayoutFieldProps) {
-  const { instance } = useInstance();
-  const catalogRows = useQuery(api.sceneWidgets.listForInstance, instance ? { instanceId: instance._id } : "skip");
-  const surface = typeof field.surface === "string" ? field.surface : "alert";
-  const catalog = useMemo(() => placeableOn(catalogRows ?? [], surface), [catalogRows, surface]);
-  const nameOf = useCallback(
-    (widgetCanonicalId: string) => catalog.find((row) => row.widgetId === widgetCanonicalId)?.name ?? widgetCanonicalId,
-    [catalog]
-  );
-  const stored = useMemo(() => readAlertLayout(value, nameOf), [value, nameOf]);
-  const [draft, setDraft] = useState<AlertLayout | null>(null);
-
-  const handleWidgetsChange = useCallback((update: WidgetsUpdate) => {
-    setDraft((prev) => (prev ? { ...prev, widgets: update(prev.widgets) } : prev));
-  }, []);
-
-  const handleDone = () => {
-    if (draft) {
-      onChange(writeAlertLayout(draft));
-    }
-    setDraft(null);
-  };
+export function AlertLayoutField({ field, value, onChange, availableVariables }: AlertLayoutFieldProps) {
+  const [open, setOpen] = useState(false);
+  const summary = useMemo(() => summarize(value), [value]);
 
   return (
     <div className="space-y-2">
@@ -57,12 +38,12 @@ export function AlertLayoutField({ field, value, onChange, renderers, availableV
         {field.required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
       <div className="flex items-center justify-between gap-2 rounded-md border p-3">
-        <span className="text-sm text-muted-foreground truncate">{summarize(stored)}</span>
+        <span className="text-sm text-muted-foreground truncate">{summary}</span>
         <Button
           variant="outline"
           size="sm"
           className="shrink-0"
-          onClick={() => setDraft(stored)}
+          onClick={() => setOpen(true)}
           data-testid={`button-edit-${field.id}`}
         >
           Edit alert
@@ -70,57 +51,100 @@ export function AlertLayoutField({ field, value, onChange, renderers, availableV
       </div>
       {typeof field.description === "string" && <p className="text-xs text-muted-foreground">{field.description}</p>}
 
-      <Dialog
-        open={draft !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDraft(null);
-          }
-        }}
-      >
-        <DialogContent
-          className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col gap-0 p-0"
-          // A stray click outside must not throw away a layout in progress.
-          onInteractOutside={(e) => e.preventDefault()}
-        >
-          <DialogHeader className="flex-row items-center justify-between space-y-0 border-b py-3 pl-4 pr-12">
-            <div>
-              <DialogTitle>{field.label}</DialogTitle>
-              <DialogDescription>
-                Place widgets on a {stored.width}×{stored.height} canvas; each alert widget scales it to fit.
-              </DialogDescription>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setDraft(null)}>
-                Cancel
-              </Button>
-              <Button onClick={handleDone} data-testid={`button-done-${field.id}`}>
-                Done
-              </Button>
-            </div>
-          </DialogHeader>
-          {draft && (
-            <WidgetListCanvas
-              className="flex-1"
-              width={draft.width}
-              height={draft.height}
-              widgets={draft.widgets}
-              catalog={catalog}
-              renderers={renderers}
-              availableVariables={availableVariables}
-              onChange={handleWidgetsChange}
-              placeholder={alertWidgetPreview}
-            />
-          )}
-        </DialogContent>
+      <Dialog open={open} onOpenChange={setOpen}>
+        {open && (
+          <AlertLayoutDialogBody
+            field={field}
+            value={value}
+            availableVariables={availableVariables}
+            onDone={(layout) => {
+              if (layout !== null) {
+                onChange(layout);
+              }
+              setOpen(false);
+            }}
+            onCancel={() => setOpen(false)}
+          />
+        )}
       </Dialog>
     </div>
   );
 }
 
-function summarize(layout: AlertLayout): string {
-  if (layout.widgets.length === 0) {
-    return "No widgets yet";
-  }
-  return layout.widgets.map((widget) => widget.name).join(", ");
+/** The dialog's content, mounted while it is open, so each opening edits a fresh copy of the step's layout. */
+function AlertLayoutDialogBody({
+  field,
+  value,
+  availableVariables,
+  onDone,
+  onCancel,
+}: {
+  field: FieldDescriptor;
+  value: unknown;
+  availableVariables: VariableOption[];
+  onDone: (layout: unknown | null) => void;
+  onCancel: () => void;
+}) {
+  const session = useAlertLayoutEditor(value);
+  const view = useAlertEditorView(session, availableVariables);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const isDirty = session?.isDirty === true;
+
+  const leave = () => {
+    if (isDirty) {
+      setConfirmingLeave(true);
+      return;
+    }
+    onCancel();
+  };
+
+  return (
+    <DialogContent
+      className="max-w-[95vw] w-[95vw] h-[90vh] flex flex-col gap-0 p-0"
+      // A stray click outside, or Escape meant for the canvas, must not throw away a layout in progress.
+      onInteractOutside={(e) => e.preventDefault()}
+      onEscapeKeyDown={(e) => {
+        if (isDirty) {
+          e.preventDefault();
+        }
+      }}
+    >
+      <DialogHeader className="flex-row items-center justify-between space-y-0 border-b py-3 pl-4 pr-12">
+        <div>
+          <DialogTitle>{field.label}</DialogTitle>
+          <DialogDescription>
+            {view
+              ? `Place widgets on a ${view.canvas.width}×${view.canvas.height} canvas; each alert widget scales it to fit. ${view.lengthLabel}.`
+              : "Loading the alert…"}
+          </DialogDescription>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={leave}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => onDone(session?.changedLayout() ?? null)}
+            disabled={session === null}
+            data-testid={`button-done-${field.id}`}
+          >
+            Done
+          </Button>
+        </div>
+      </DialogHeader>
+      {view ? (
+        <AlertEditorShell view={view} className="flex-1" />
+      ) : (
+        <div className="flex flex-1 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      <DiscardAlertChangesDialog open={confirmingLeave} onOpenChange={setConfirmingLeave} onDiscard={onCancel} />
+    </DialogContent>
+  );
+}
+
+function summarize(value: unknown): string {
+  const doc = readAlertComposition(value, (widgetCanonicalId) => widgetCanonicalId);
+  const names = stackOrder(doc).map((id) => (doc.widgets[id] as PlacementDocument).name);
+  return names.length === 0 ? "No widgets yet" : names.join(", ");
 }
