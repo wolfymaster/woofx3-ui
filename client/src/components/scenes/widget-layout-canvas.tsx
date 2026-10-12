@@ -11,7 +11,7 @@ import {
 } from "@woofx3/scene/editor";
 import { type ReactNode, useCallback, useMemo, useRef } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
-import type { StageZoom } from "@/components/common/stage-area";
+import { CANVAS_STAGE_CLASS, type StageZoom } from "@/components/common/stage-area";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
@@ -199,7 +199,7 @@ export function WidgetLayoutCanvas({
       stage={(stageZoom) => (
         // biome-ignore lint/a11y/noStaticElementInteractions: canvas background press deselects widgets
         <div
-          className="relative shrink-0 overflow-hidden shadow-lg ring-1 ring-border"
+          className={CANVAS_STAGE_CLASS}
           style={{ width: width * stageZoom, height: height * stageZoom, background }}
           onMouseDown={handleBackgroundMouseDown}
           data-testid="scene-canvas"
@@ -226,6 +226,7 @@ export function WidgetLayoutCanvas({
                 key={node.id}
                 node={node}
                 editor={editor}
+                zoom={stageZoom}
                 rank={rank}
                 remote={remoteSelections?.[node.id]}
                 canvasOrigin={canvasOrigin}

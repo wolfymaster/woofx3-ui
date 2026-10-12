@@ -4,6 +4,7 @@ import { Volume2 } from "lucide-react";
 import { useMemo } from "react";
 import { alertWidgetPreview } from "@/components/scenes/alert-widget-previews";
 import { readAlertComposition } from "@/lib/alert-layout";
+import { canvasBackgroundOf } from "@/lib/scene-composition";
 import { cn } from "@/lib/utils";
 
 /** The bundled Audio widget, which has nothing to draw and so shows as a small marker. */
@@ -30,7 +31,8 @@ export function AlertLayoutPreview({ layout, className }: AlertLayoutPreviewProp
   return (
     <svg
       viewBox={`0 0 ${canvas.width} ${canvas.height}`}
-      className={cn("block aspect-video w-full rounded-md bg-black", className)}
+      className={cn("block aspect-video w-full rounded-md ring-1 ring-border", className)}
+      style={{ background: canvasBackgroundOf(doc.layout) }}
       role="img"
       aria-label={visible.length === 0 ? "Empty alert" : `Alert with ${visible.length} widgets`}
     >

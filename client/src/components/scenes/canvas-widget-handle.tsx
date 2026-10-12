@@ -4,9 +4,19 @@ import { createFrameCoalescer } from "@/lib/frame-coalescer";
 import type { RemoteSelection } from "@/lib/scene-composition";
 import { cn } from "@/lib/utils";
 
+/**
+ * On-screen size of the selected widget's corner handle, and of the press area
+ * around it. The handle lives inside the scaled canvas, so both are divided by
+ * the zoom to stay this size at any zoom.
+ */
+const HANDLE_DOT = 12;
+const HANDLE_HIT = 24;
+
 interface CanvasWidgetHandleProps {
   node: NodeView;
   editor: CompositionEditor;
+  /** The canvas's scale on screen. */
+  zoom: number;
   /** The node's place in the stack, bottom first. */
   rank: number;
   /** Other editors that have this widget selected. */
@@ -45,6 +55,7 @@ interface PointerUpdate {
 export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
   node,
   editor,
+  zoom,
   rank,
   remote,
   canvasOrigin,
@@ -196,9 +207,18 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
 
       {node.selected && (
         <div
-          className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-full cursor-se-resize"
+          className="absolute flex cursor-se-resize items-center justify-center"
+          style={{
+            right: -HANDLE_HIT / 2 / zoom,
+            bottom: -HANDLE_HIT / 2 / zoom,
+            width: HANDLE_HIT / zoom,
+            height: HANDLE_HIT / zoom,
+          }}
           onPointerDown={handleResizePointerDown}
-        />
+          data-testid={`canvas-widget-${node.id}-resize`}
+        >
+          <span className="rounded-full bg-primary" style={{ width: HANDLE_DOT / zoom, height: HANDLE_DOT / zoom }} />
+        </div>
       )}
     </div>
   );

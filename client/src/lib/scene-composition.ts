@@ -83,8 +83,17 @@ export function canvasSettingsOf(doc: CompositionDocument): CanvasSettings {
   return {
     width: numberOr(doc.layout.width, 1920),
     height: numberOr(doc.layout.height, 1080),
-    backgroundColor: typeof doc.layout.backgroundColor === "string" ? doc.layout.backgroundColor : "transparent",
+    backgroundColor: canvasBackgroundOf(doc.layout),
   };
+}
+
+/**
+ * What an editor's stage or a thumbnail draws behind a composition's widgets: its
+ * canvas colour, or nothing, since an overlay is drawn over the stream. Scenes and
+ * alerts share it so the same composition looks the same wherever it is shown.
+ */
+export function canvasBackgroundOf(layout: Record<string, unknown>): string {
+  return typeof layout.backgroundColor === "string" ? layout.backgroundColor : "transparent";
 }
 
 /** What `updateScene` and `createScene` take for a composition. */

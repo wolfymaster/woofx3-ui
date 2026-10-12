@@ -30,7 +30,7 @@ import { useAlertLibrary } from "@/hooks/use-alert-library";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import { alertLengthSeconds, durationOf, formatSeconds, layerLabel, longestLayerId } from "@/lib/alert-editor";
+import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
 import { inlineCopyOfLibraryAlert, unfilledInputsText } from "@/lib/alert-library";
 import {
@@ -39,11 +39,10 @@ import {
   hasActivities,
   type LayerWindow,
   layerWindowOf,
-  trackedLength,
   trackWindowLabel,
 } from "@/lib/behavior-editor";
 import { previewDocumentOf, sampleEventOf } from "@/lib/composition-preview";
-import { catalogWidgetOf } from "@/lib/scene-composition";
+import { canvasBackgroundOf, catalogWidgetOf } from "@/lib/scene-composition";
 import { toDisplayText, variableNames } from "@/lib/variable-display";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -193,6 +192,7 @@ export function AlertLayoutEditor({
             onOpenChange={setSavingToLibrary}
             doc={session.state.doc}
             availableVariables={availableVariables}
+            takenNames={library.alerts?.map((alert) => alert.name)}
             onSaved={() => setSavingToLibrary(false)}
           />
         </>
@@ -472,13 +472,11 @@ export function useAlertEditorView(
   const labelOf = (node: NodeView) =>
     layerLabel({ kind: node.kind, name: node.placement.name, settings: node.placement.settings }, displayText);
   const doc = state.doc;
-  // Once a layer has a window of its own, a layer's duration alone no longer says when the alert ends:
-  // the editor's resolved tracks do.
+  // Once a layer has a window of its own, its duration alone no longer says when it plays: the
+  // editor's resolved tracks do.
   const tracks = hasActivities(doc.behaviors) ? state.timeline.tracks : null;
-  const tracked = tracks === null ? null : trackedLength(tracks);
   const timed = nodes.map((node) => ({ id: node.id, settings: node.placement.settings }));
-  const length = tracked === null ? alertLengthSeconds(timed) : tracked.endMs / 1000;
-  const longestId = nodes.length > 1 ? (tracked === null ? longestLayerId(timed) : tracked.longestId) : undefined;
+  const length = playedLengthSeconds(state.timeline.tracks, timed);
   const lengthLabel = length > 0 ? `Plays ${formatSeconds(length)}` : "Plays instantly";
   const placeable = new Set(state.palette.map((row) => row.widgetId));
   const paletteRows = catalogRows.filter((row) => placeable.has(row.widgetId));
@@ -509,12 +507,8 @@ export function useAlertEditorView(
       key={selected.id}
       node={selected}
       fields={(selectedRow?.settings ?? []) as unknown as ConfigField[]}
-      canvas={canvas}
-      isLongest={selected.id === longestId}
       availableVariables={availableVariables}
       onChangeSettings={(settings) => report(session.editor.nodes.patch(selected.id, { settings }))}
-      onResize={(width) => report(session.editor.nodes.resize(selected.id, { width }))}
-      onMoveCenter={(center) => report(session.editor.nodes.moveCenter(selected.id, center))}
       window={layerWindowOf(activityOf(doc.behaviors, selected.id)?.behavior ?? null)}
       onChangeWindow={(window) => changeWindow(selected.id, window)}
     >
@@ -568,6 +562,7 @@ export function useAlertEditorView(
       <AlertStage
         editor={session.editor}
         canvas={canvas}
+        background={canvasBackgroundOf(doc.layout)}
         nodes={nodes}
         guides={state.guides}
         zoom={stageZoom}
@@ -665,7 +660,7 @@ function AlertSummary({ view }: { view: AlertEditorView }) {
           {view.canvas.width} × {view.canvas.height}
         </dd>
         <dt className="text-muted-foreground">Length</dt>
-        <dd className="text-xs leading-5">{view.lengthLabel} (longest layer)</dd>
+        <dd className="text-xs leading-5">{view.lengthLabel}, exits included</dd>
         <dt className="text-muted-foreground">Layers</dt>
         <dd className="font-mono text-xs leading-5">{view.layerCount}</dd>
       </dl>
