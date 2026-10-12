@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { allowedSetupStep, firstIncompleteStep, isSetupStepId, type SetupProgress } from "./setup-steps";
+import { allowedSetupStep, firstIncompleteStep, isSetupStepId, type SetupProgress, setupRedirect } from "./setup-steps";
 
 const nothingDone: SetupProgress = {
   platformsChosenAt: null,
@@ -54,5 +54,35 @@ describe("isSetupStepId", () => {
     expect(isSetupStepId("twitch")).toBe(true);
     expect(isSetupStepId("nope")).toBe(false);
     expect(isSetupStepId(undefined)).toBe(false);
+  });
+});
+
+describe("setupRedirect", () => {
+  test("stays on an allowed step", () => {
+    expect(setupRedirect("interests", null, importChosen)).toBeNull();
+    expect(setupRedirect("platforms", null, completed)).toBeNull();
+  });
+
+  test("sends a missing or too-early step to the first one still to do, replacing it in the history", () => {
+    expect(setupRedirect(null, null, platformsChosen)).toEqual({ step: "twitch", replace: true });
+    expect(setupRedirect("finish", null, interestsChosen)).toEqual({ step: "dashboard", replace: true });
+  });
+
+  test("waits on the finished step until the progress records it", () => {
+    expect(setupRedirect("platforms", "twitch", nothingDone)).toBeNull();
+    expect(setupRedirect("interests", "dashboard", importChosen)).toBeNull();
+    expect(setupRedirect("dashboard", "overlay", interestsChosen)).toBeNull();
+  });
+
+  test("goes on, as a new history entry, once the progress records the finished step", () => {
+    expect(setupRedirect("platforms", "twitch", platformsChosen)).toEqual({ step: "twitch", replace: false });
+    expect(setupRedirect("import", "interests", importChosen)).toEqual({ step: "interests", replace: false });
+    expect(setupRedirect("interests", "dashboard", interestsChosen)).toEqual({ step: "dashboard", replace: false });
+    expect(setupRedirect("dashboard", "overlay", completed)).toEqual({ step: "overlay", replace: false });
+    expect(setupRedirect("overlay", "finish", completed)).toEqual({ step: "finish", replace: false });
+  });
+
+  test("stays once it has arrived", () => {
+    expect(setupRedirect("dashboard", "dashboard", interestsChosen)).toBeNull();
   });
 });

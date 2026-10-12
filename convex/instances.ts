@@ -330,6 +330,11 @@ export const applyRegistration = internalMutation({
 
     await ctx.db.patch(instanceId, { clientId, clientSecret, webhookSecret });
     await ensureSyncRow(ctx, instanceId);
+    // Setup and the scene editor read the catalogs a sync mirrors (widgets,
+    // triggers, actions, command groups). The sweep would not get to a new
+    // engine for a day, since it has reported no activity yet, so the first
+    // sync runs now.
+    await ctx.scheduler.runAfter(0, internal.engineSync.runSync, { instanceId, trigger: "registration" });
 
     // Twitch can be connected while the engine is still being built, before
     // there is an engine to hand the token to. Send it now that there is.

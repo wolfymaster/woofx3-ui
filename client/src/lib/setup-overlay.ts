@@ -61,3 +61,48 @@ export function setupOverlayWidgets(alertWidget: WidgetCatalogEntry | undefined)
     },
   ];
 }
+
+/** An engine sync run as the overlay step reads it; see engineSync.getSyncState. */
+export interface OverlaySyncRun {
+  _id: string;
+  status: "running" | "success" | "error";
+  steps: readonly { name: string; status: string }[];
+}
+
+/**
+ * Whether the widget catalog says what the setup overlay gets:
+ * - "ready": it has the alert widget, or a sync has read the engine's widgets
+ *   and the engine has none, so the overlay starts empty;
+ * - "syncing": a sync is running, or was asked for and has not started;
+ * - "unsynced": no sync has run yet;
+ * - "failed": the last sync could not read the engine's widgets.
+ *
+ * The catalog is mirrored from the engine by a sync, so until one has read the
+ * widgets, a catalog without an alert widget says nothing about the engine.
+ *
+ * `runs` is newest first. `requestedAfterRunId` is the newest run's id (null
+ * when there was none) when this page asked for a sync, so the page waits for
+ * the run it asked for rather than reading the one before it.
+ */
+export function overlayCatalogState(
+  hasAlertWidget: boolean,
+  runs: readonly OverlaySyncRun[],
+  requestedAfterRunId?: string | null
+): "ready" | "syncing" | "unsynced" | "failed" {
+  if (hasAlertWidget) {
+    return "ready";
+  }
+  const latest = runs[0];
+  const latestId = latest?._id ?? null;
+  if (requestedAfterRunId !== undefined && requestedAfterRunId === latestId) {
+    return "syncing";
+  }
+  if (!latest) {
+    return "unsynced";
+  }
+  if (latest.status === "running") {
+    return "syncing";
+  }
+  const widgetsStep = latest.steps.find((step) => step.name === "widgets");
+  return widgetsStep?.status === "success" ? "ready" : "failed";
+}
