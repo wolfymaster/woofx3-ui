@@ -128,6 +128,7 @@ import type * as lib_oauthState from "../lib/oauthState.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
 import type * as lib_placementOpacity from "../lib/placementOpacity.js";
+import type * as lib_plans from "../lib/plans.js";
 import type * as lib_previewEngine from "../lib/previewEngine.js";
 import type * as lib_recapClips from "../lib/recapClips.js";
 import type * as lib_relayCredential from "../lib/relayCredential.js";
@@ -182,6 +183,7 @@ import type * as migrations_backfillAccountMembers from "../migrations/backfillA
 import type * as migrations_backfillCommandActions from "../migrations/backfillCommandActions.js";
 import type * as migrations_backfillSharedMacros from "../migrations/backfillSharedMacros.js";
 import type * as migrations_backfillSharedNotes from "../migrations/backfillSharedNotes.js";
+import type * as migrations_dropLegacyLicenses from "../migrations/dropLegacyLicenses.js";
 import type * as migrations_opacityAsFraction from "../migrations/opacityAsFraction.js";
 import type * as moderation from "../moderation.js";
 import type * as moduleAssets from "../moduleAssets.js";
@@ -203,6 +205,7 @@ import type * as oauthConnectHandoff from "../oauthConnectHandoff.js";
 import type * as obsStatus from "../obsStatus.js";
 import type * as pageIntros from "../pageIntros.js";
 import type * as pins from "../pins.js";
+import type * as plans from "../plans.js";
 import type * as platformRealtime from "../platformRealtime.js";
 import type * as previewEngine from "../previewEngine.js";
 import type * as provisioning from "../provisioning.js";
@@ -372,6 +375,7 @@ declare const fullApi: ApiFromModules<{
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
   "lib/placementOpacity": typeof lib_placementOpacity;
+  "lib/plans": typeof lib_plans;
   "lib/previewEngine": typeof lib_previewEngine;
   "lib/recapClips": typeof lib_recapClips;
   "lib/relayCredential": typeof lib_relayCredential;
@@ -426,6 +430,7 @@ declare const fullApi: ApiFromModules<{
   "migrations/backfillCommandActions": typeof migrations_backfillCommandActions;
   "migrations/backfillSharedMacros": typeof migrations_backfillSharedMacros;
   "migrations/backfillSharedNotes": typeof migrations_backfillSharedNotes;
+  "migrations/dropLegacyLicenses": typeof migrations_dropLegacyLicenses;
   "migrations/opacityAsFraction": typeof migrations_opacityAsFraction;
   moderation: typeof moderation;
   moduleAssets: typeof moduleAssets;
@@ -447,6 +452,7 @@ declare const fullApi: ApiFromModules<{
   obsStatus: typeof obsStatus;
   pageIntros: typeof pageIntros;
   pins: typeof pins;
+  plans: typeof plans;
   platformRealtime: typeof platformRealtime;
   previewEngine: typeof previewEngine;
   provisioning: typeof provisioning;

@@ -2,6 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
+import { limitValuesValidator } from "./lib/entitlements";
 import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
@@ -1288,8 +1289,9 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
-  // licenses: an account's plan, at most one row per account; see
-  // lib/entitlements.ts for what each tier includes.
+  // licenses: written by account creation before plans existed, always
+  // free with no features, and read by nothing. Emptied by
+  // migrations/dropLegacyLicenses; the table goes once that has run.
   licenses: defineTable({
     accountId: v.id("accounts"),
     tier: v.union(v.literal("free"), v.literal("pro"), v.literal("enterprise")),
@@ -1297,6 +1299,42 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_account", ["accountId"]),
+
+  // plans: what each plan includes, edited by operators. Features and limit
+  // keys must be listed in lib/entitlements.ts. Exactly one plan may be the
+  // default, which applies to every account without an active assignment.
+  plans: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    features: v.array(v.string()),
+    limits: limitValuesValidator,
+    // Whether new accounts may choose or be sold it. An account already on a
+    // plan keeps it when it stops being offered.
+    offered: v.boolean(),
+    isDefault: v.boolean(),
+    updatedAt: v.number(),
+    // Who last changed it: an operator's email, or "cli".
+    updatedBy: v.string(),
+  })
+    .index("by_key", ["key"])
+    .index("by_default", ["isDefault"]),
+
+  // accountPlans: an account's plan, at most one row per account. No row, or
+  // an expired one, means the default plan with no overrides.
+  accountPlans: defineTable({
+    accountId: v.id("accounts"),
+    // Absent: the default plan, with this row's overrides.
+    planId: v.optional(v.id("plans")),
+    addFeatures: v.array(v.string()),
+    removeFeatures: v.array(v.string()),
+    limits: limitValuesValidator,
+    expiresAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_plan", ["planId"]),
 
   // featureFlags: an operator's targeting for a UI flag listed in
   // lib/featureFlags.ts. A flag with no row is off. Written only by the
