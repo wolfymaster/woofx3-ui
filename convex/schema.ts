@@ -2,6 +2,8 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
+import { limitValuesValidator } from "./lib/entitlements";
+import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
@@ -102,13 +104,17 @@ const dashboardPanelValidator = v.array(
 
 export default defineSchema({
   ...authTables,
+  // Ops search by name; the email index comes with authTables.
+  users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
   // accounts: tenant/organization level
   accounts: defineTable({
     name: v.string(),
     ownerId: v.id("users"),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+  })
+    .index("by_owner", ["ownerId"])
+    .searchIndex("search_name", { searchField: "name" }),
 
   // accountMembers: users with access to an account (team). Owner also has accounts.ownerId.
   accountMembers: defineTable({
@@ -298,8 +304,10 @@ export default defineSchema({
       v.object({
         fromVersion: v.string(),
         toVersion: v.string(),
-        // Absent when an operator started the upgrade from the backoffice.
-        requestedBy: v.optional(v.id("users")),
+        // The member who asked, or the operator (by email) who asked through
+        // the ops API. Absent on upgrades an operator started directly in the
+        // maintenance API.
+        requestedBy: v.optional(v.union(v.id("users"), v.object({ operator: v.string() }))),
         startedAt: v.number(),
         // Counts upgrades asked of this row and is part of each one's
         // Idempotency-Key. The maintenance API keeps keys for 7 days, so a
@@ -319,7 +327,8 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_account", ["accountId"])
-    .index("by_maintenance_engine", ["maintenanceEngineId"]),
+    .index("by_maintenance_engine", ["maintenanceEngineId"])
+    .index("by_status", ["status"]),
 
   // maintenanceEvents: delivered maintenance-API callback ids. The endpoint is
   // at-least-once, so this is the dedupe key: an id already present means the
@@ -1287,7 +1296,28 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
-  // licenses: entitlements per account
+  // opsAuditLog: every write through the ops API, and every read of a single
+  // user or account, by the operator the backoffice named. Written in the
+  // same mutation as the change it records.
+  opsAuditLog: defineTable({
+    actor: v.string(),
+    action: v.string(),
+    // The user, account, instance or maintenance engine id acted on.
+    target: v.string(),
+    reason: v.optional(v.string()),
+    // The request's arguments as JSON, never including secrets.
+    request: v.optional(v.string()),
+    // "ok", or the error code the request failed with.
+    result: v.string(),
+    at: v.number(),
+  })
+    .index("by_at", ["at"])
+    .index("by_actor", ["actor", "at"])
+    .index("by_target", ["target", "at"]),
+
+  // licenses: written by account creation before plans existed, always
+  // free with no features, and read by nothing. Emptied by
+  // migrations/dropLegacyLicenses; the table goes once that has run.
   licenses: defineTable({
     accountId: v.id("accounts"),
     tier: v.union(v.literal("free"), v.literal("pro"), v.literal("enterprise")),
@@ -1295,6 +1325,66 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_account", ["accountId"]),
+
+  // plans: what each plan includes, edited by operators. Features and limit
+  // keys must be listed in lib/entitlements.ts. Exactly one plan may be the
+  // default, which applies to every account without an active assignment.
+  plans: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    features: v.array(v.string()),
+    limits: limitValuesValidator,
+    // Whether new accounts may choose or be sold it. An account already on a
+    // plan keeps it when it stops being offered.
+    offered: v.boolean(),
+    isDefault: v.boolean(),
+    updatedAt: v.number(),
+    // Who last changed it: an operator's email, or "cli".
+    updatedBy: v.string(),
+  })
+    .index("by_key", ["key"])
+    .index("by_default", ["isDefault"]),
+
+  // accountPlans: an account's plan, at most one row per account. No row, or
+  // an expired one, means the default plan with no overrides.
+  accountPlans: defineTable({
+    accountId: v.id("accounts"),
+    // Absent: the default plan, with this row's overrides.
+    planId: v.optional(v.id("plans")),
+    addFeatures: v.array(v.string()),
+    removeFeatures: v.array(v.string()),
+    limits: limitValuesValidator,
+    expiresAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_plan", ["planId"]),
+
+  // hostedStorageReservations: bytes promised to an upload grant on hosted
+  // storage, held while the grant is issued so concurrent uploads cannot each
+  // pass the plan limit against the same usage. See convex/hostedStorage.ts.
+  hostedStorageReservations: defineTable({
+    instanceId: v.id("instances"),
+    bytes: v.number(),
+    createdAt: v.number(),
+    // Set once the engine's resource row for the grant exists (or the grant
+    // failed), from which point the engine's own usage includes it.
+    releasedAt: v.optional(v.number()),
+  })
+    .index("by_instance_released", ["instanceId", "releasedAt"])
+    .index("by_released_created", ["releasedAt", "createdAt"]),
+
+  // featureFlags: an operator's targeting for a UI flag listed in
+  // lib/featureFlags.ts. A flag with no row is off. Written only by the
+  // internal featureFlags.set, never from the dashboard.
+  featureFlags: defineTable({
+    key: v.string(),
+    state: featureFlagStateValidator,
+    rules: v.optional(featureFlagRulesValidator),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 
   // scenes: scene configurations for browser sources
   scenes: defineTable({

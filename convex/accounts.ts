@@ -90,13 +90,6 @@ export const createAccount = mutation({
       createdAt: now,
     });
 
-    await ctx.db.insert("licenses", {
-      accountId,
-      tier: "free",
-      features: [],
-      createdAt: now,
-    });
-
     return accountId;
   },
 });
@@ -163,6 +156,14 @@ export const deleteAccountData = internalMutation({
       .collect();
     for (const license of licenses) {
       await ctx.db.delete(license._id);
+    }
+
+    const assignment = await ctx.db
+      .query("accountPlans")
+      .withIndex("by_account", (q) => q.eq("accountId", accountId))
+      .unique();
+    if (assignment) {
+      await ctx.db.delete(assignment._id);
     }
 
     const accountMembers = await ctx.db

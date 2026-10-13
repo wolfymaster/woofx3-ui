@@ -36,6 +36,7 @@ import { OAUTH_CALLBACK_PATHS, oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { forwardedCallbackUrl, mintOAuthState, oauthStateConfigFromEnv, routeOAuthState } from "./lib/oauthState";
+import { OPS_PATH_PREFIX } from "./lib/ops/routes";
 import { withQuery } from "./lib/safeRedirect";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
@@ -46,6 +47,7 @@ import { readWidgetBehaviorKinds } from "./lib/widgetBehaviorKinds";
 import { widgetCanonicalKey } from "./lib/widgetKey";
 import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
 import { logger } from "./logger";
+import { opsHandler } from "./ops/http";
 import { canonicalIdForStorageKey } from "./resourceValues";
 import "./browserSource";
 import "./moduleWebhook";
@@ -1387,6 +1389,10 @@ const inboundWebhookHandler = httpAction(async (ctx, request) => {
   );
   return response;
 });
+
+// The backoffice's ops API; see ops/http.ts.
+http.route({ pathPrefix: OPS_PATH_PREFIX, method: "GET", handler: opsHandler });
+http.route({ pathPrefix: OPS_PATH_PREFIX, method: "POST", handler: opsHandler });
 
 http.route({ pathPrefix: "/api/webhooks/", method: "POST", handler: inboundWebhookHandler });
 http.route({ pathPrefix: "/api/webhooks/", method: "GET", handler: inboundWebhookHandler });
