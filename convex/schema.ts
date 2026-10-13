@@ -104,13 +104,17 @@ const dashboardPanelValidator = v.array(
 
 export default defineSchema({
   ...authTables,
+  // Ops search by name; the email index comes with authTables.
+  users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
   // accounts: tenant/organization level
   accounts: defineTable({
     name: v.string(),
     ownerId: v.id("users"),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+  })
+    .index("by_owner", ["ownerId"])
+    .searchIndex("search_name", { searchField: "name" }),
 
   // accountMembers: users with access to an account (team). Owner also has accounts.ownerId.
   accountMembers: defineTable({
@@ -321,7 +325,8 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_account", ["accountId"])
-    .index("by_maintenance_engine", ["maintenanceEngineId"]),
+    .index("by_maintenance_engine", ["maintenanceEngineId"])
+    .index("by_status", ["status"]),
 
   // maintenanceEvents: delivered maintenance-API callback ids. The endpoint is
   // at-least-once, so this is the dedupe key: an id already present means the
@@ -1288,6 +1293,25 @@ export default defineSchema({
     data: v.any(),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
+
+  // opsAuditLog: every write through the ops API, and every read of a single
+  // user or account, by the operator the backoffice named. Written in the
+  // same mutation as the change it records.
+  opsAuditLog: defineTable({
+    actor: v.string(),
+    action: v.string(),
+    // The user, account, instance or maintenance engine id acted on.
+    target: v.string(),
+    reason: v.optional(v.string()),
+    // The request's arguments as JSON, never including secrets.
+    request: v.optional(v.string()),
+    // "ok", or the error code the request failed with.
+    result: v.string(),
+    at: v.number(),
+  })
+    .index("by_at", ["at"])
+    .index("by_actor", ["actor", "at"])
+    .index("by_target", ["target", "at"]),
 
   // licenses: written by account creation before plans existed, always
   // free with no features, and read by nothing. Emptied by
