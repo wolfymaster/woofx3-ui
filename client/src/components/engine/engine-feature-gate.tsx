@@ -1,4 +1,5 @@
-import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
+import type { WithheldReason } from "@convex/lib/engineCapabilities";
+import { AlertTriangle, Loader2, Lock, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,8 @@ interface EngineFeatureGateProps {
   /** What the gated section does, in a phrase: "Backups", "Supporter stats". */
   feature: string;
   onRetry: () => void;
+  /** Why a `withheld` feature is withheld; see `withheldReason`. Defaults to a rollout. */
+  withheldReason?: WithheldReason;
   children: ReactNode;
 }
 
@@ -17,9 +20,29 @@ interface EngineFeatureGateProps {
  * Renders `children` only when the engine supports the feature, and otherwise
  * says why not: an engine too old for it, or one that could not be asked.
  */
-export function EngineFeatureGate({ support, state, feature, onRetry, children }: EngineFeatureGateProps) {
+export function EngineFeatureGate({
+  support,
+  state,
+  feature,
+  onRetry,
+  withheldReason = "rollout",
+  children,
+}: EngineFeatureGateProps) {
   if (support === "supported") {
     return <>{children}</>;
+  }
+  if (support === "withheld") {
+    // A feature still rolling out is not announced to engines outside the rollout.
+    if (withheldReason === "rollout") {
+      return null;
+    }
+    return (
+      <Alert data-testid="engine-feature-not-on-plan">
+        <Lock className="h-4 w-4" />
+        <AlertTitle>Not included in your plan</AlertTitle>
+        <AlertDescription>{feature} isn't included in this instance's plan.</AlertDescription>
+      </Alert>
+    );
   }
   if (support === "checking") {
     return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;

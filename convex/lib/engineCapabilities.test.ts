@@ -12,7 +12,7 @@ describe("parseEngineCapabilities", () => {
       schema: 1,
       capabilities: ["workflow.health", "obs.control", "workflow.health"],
     });
-    expect(report).toEqual({ legacy: false, capabilities: ["obs.control", "workflow.health"] });
+    expect(report).toEqual({ legacy: false, capabilities: ["obs.control", "workflow.health"], withheld: [] });
     expect(hasEngineCapability(report, "workflow.health")).toBe(true);
     expect(hasEngineCapability(report, "config.bundles")).toBe(false);
   });
@@ -22,7 +22,20 @@ describe("parseEngineCapabilities", () => {
     expect(report.capabilities).toEqual(["config.bundles"]);
   });
 
+  test("reads withheld ids it knows, as rollouts until Convex says otherwise", () => {
+    const report = parseEngineCapabilities({
+      schema: 1,
+      capabilities: ["config.bundles"],
+      withheld: ["obs.control", "future.feature", "obs.control"],
+    });
+    expect(report.withheld).toEqual([{ id: "obs.control", reason: "rollout" }]);
+    expect(hasEngineCapability(report, "obs.control")).toBe(false);
+  });
+
   test("refuses a response shape it cannot read", () => {
+    expect(() => parseEngineCapabilities({ schema: 1, capabilities: [], withheld: "obs.control" })).toThrow(
+      "withheld list"
+    );
     expect(() => parseEngineCapabilities({ schema: 2, capabilities: [] })).toThrow("schema 2");
     expect(() => parseEngineCapabilities({ schema: 1 })).toThrow("without a capabilities list");
     expect(() => parseEngineCapabilities(null)).toThrow();

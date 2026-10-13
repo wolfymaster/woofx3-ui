@@ -23,5 +23,5 @@ bunx convex run engineEntitlements:set '{"capability": "obs.control", "state": "
 ## Consequences
 
 - Granting a capability before any engine release has it is safe: an engine ignores ids it does not know, and the feature turns on when the engine is upgraded.
-- A rule with `licenseFeature` reads as a plan to the dashboard (`withheldReason`); any other withheld capability reads as a rollout.
+- The engine reports withheld ids in `getEngineCapabilities().withheld`, and `engineCapabilities.get` labels each one from its targeting: a rule with `licenseFeature` is a plan, anything else a rollout. `capabilitySupport` answers `withheld`, and `EngineFeatureGate` shows a plan-withheld feature as not included in the plan and hides a rollout-withheld one entirely.
 - Rotating the signing key means adding the new public key to every managed engine before Convex signs with it.

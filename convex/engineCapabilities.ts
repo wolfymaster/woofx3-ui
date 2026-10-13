@@ -24,8 +24,9 @@ export const get = action({
     if (!instance?.clientId || !instance.clientSecret) {
       throw new ConvexError("This instance is not registered with an engine");
     }
+    let report: EngineCapabilityReport;
     try {
-      return await fetchEngineCapabilities({
+      report = await fetchEngineCapabilities({
         url: instance.url,
         clientId: instance.clientId,
         clientSecret: instance.clientSecret,
@@ -35,5 +36,15 @@ export const get = action({
         `Couldn't ask the engine what it supports: ${error instanceof Error ? error.message : String(error)}`
       );
     }
+    if (report.withheld.length === 0) {
+      return report;
+    }
+    const reasons = await ctx.runQuery(internal.engineEntitlements.withheldReasons, {
+      capabilities: report.withheld.map((entry) => entry.id),
+    });
+    return {
+      ...report,
+      withheld: report.withheld.map((entry) => ({ id: entry.id, reason: reasons[entry.id] ?? "rollout" })),
+    };
   },
 });

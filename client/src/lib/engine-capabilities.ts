@@ -1,4 +1,4 @@
-import type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
+import type { EngineCapability, EngineCapabilityReport, WithheldReason } from "@convex/lib/engineCapabilities";
 import type { OptionsSupport } from "@convex/lib/engineTestRun";
 
 /** What the browser knows about an instance's engine features; see useEngineCapabilities. */
@@ -10,9 +10,11 @@ export type EngineCapabilitiesState =
 /**
  * Whether a feature can be offered. `unknown` is an engine that could not be
  * asked; a feature gated on it stays hidden, like `unsupported`, but a page may
- * word it as "couldn't check" rather than "update your engine".
+ * word it as "couldn't check" rather than "update your engine". `withheld` is a
+ * managed engine whose build has the feature but which is not entitled to it;
+ * `withheldReason` says whether that is the plan or a rollout.
  */
-export type CapabilitySupport = "checking" | "supported" | "unsupported" | "unknown";
+export type CapabilitySupport = "checking" | "supported" | "unsupported" | "unknown" | "withheld";
 
 /** Support for a feature that needs every id in `required`. A legacy engine supports none. */
 export function capabilitySupport(
@@ -28,8 +30,24 @@ export function capabilitySupport(
   if (state.status === "error") {
     return "unknown";
   }
-  const supported = required.every((id) => state.report.capabilities.includes(id));
-  return supported ? "supported" : "unsupported";
+  const { capabilities, withheld } = state.report;
+  if (required.every((id) => capabilities.includes(id))) {
+    return "supported";
+  }
+  const inBuild = required.every((id) => capabilities.includes(id) || withheld.some((entry) => entry.id === id));
+  return inBuild ? "withheld" : "unsupported";
+}
+
+/**
+ * Why a `withheld` feature is withheld. A plan outranks a rollout: if any
+ * required id needs a plan, offering the upgrade is the useful answer.
+ */
+export function withheldReason(state: EngineCapabilitiesState, required: readonly EngineCapability[]): WithheldReason {
+  if (state.status !== "ready") {
+    return "rollout";
+  }
+  const plan = state.report.withheld.some((entry) => required.includes(entry.id) && entry.reason === "plan");
+  return plan ? "plan" : "rollout";
 }
 
 /** The alert skip, clear and replay controls, with the result shapes the dashboard reads. */
@@ -66,12 +84,18 @@ export function testRunSupport(state: EngineCapabilitiesState, legacyProbe: Test
   if (state.status === "ready" && state.report.legacy) {
     return { options: legacyProbe, dryRun: legacyProbe, realCancel: legacyProbe };
   }
-  const options = capabilitySupport(state, ["workflow.testRunOptions"]);
+  const options = testRunState(state, "workflow.testRunOptions");
   return {
     options,
-    dryRun: options === "supported" ? capabilitySupport(state, ["workflow.dryRun"]) : options,
-    realCancel: capabilitySupport(state, ["workflow.realCancel"]),
+    dryRun: options === "supported" ? testRunState(state, "workflow.dryRun") : options,
+    realCancel: testRunState(state, "workflow.realCancel"),
   };
+}
+
+/** Test-run features are not gateable, so an engine withholding one is treated as lacking it. */
+function testRunState(state: EngineCapabilitiesState, id: EngineCapability): TestRunState {
+  const support = capabilitySupport(state, [id]);
+  return support === "withheld" ? "unsupported" : support;
 }
 
 /**

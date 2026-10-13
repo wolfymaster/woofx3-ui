@@ -51,7 +51,12 @@ export const ENGINE_CAPABILITIES_SCHEMA = 1;
 export interface EngineCapabilitiesResponse {
   schema: typeof ENGINE_CAPABILITIES_SCHEMA;
   capabilities: string[];
+  /** Supported by the build but not entitled on this managed engine. Absent from older engines. */
+  withheld?: string[];
 }
+
+/** Why a managed engine withholds a feature: a plan the account lacks, or a rollout it is not in yet. */
+export type WithheldReason = "plan" | "rollout";
 
 export interface EngineCapabilitiesApi extends RpcTarget {
   getEngineCapabilities(): Promise<EngineCapabilitiesResponse>;
@@ -65,9 +70,11 @@ export interface EngineCapabilityReport {
   legacy: boolean;
   /** Known ids only, sorted and unique. */
   capabilities: EngineCapability[];
+  /** Known ids the build supports but this engine may not use, sorted. */
+  withheld: { id: EngineCapability; reason: WithheldReason }[];
 }
 
-export const LEGACY_ENGINE_REPORT: EngineCapabilityReport = { legacy: true, capabilities: [] };
+export const LEGACY_ENGINE_REPORT: EngineCapabilityReport = { legacy: true, capabilities: [], withheld: [] };
 
 const CAPABILITIES_METHOD = "getEngineCapabilities";
 
@@ -90,7 +97,7 @@ export function parseEngineCapabilities(raw: unknown): EngineCapabilityReport {
   if (typeof raw !== "object" || raw === null) {
     throw new Error(`Engine answered ${CAPABILITIES_METHOD} with ${JSON.stringify(raw)}`);
   }
-  const body = raw as { schema?: unknown; capabilities?: unknown };
+  const body = raw as { schema?: unknown; capabilities?: unknown; withheld?: unknown };
   if (body.schema !== ENGINE_CAPABILITIES_SCHEMA) {
     throw new Error(
       `Engine answered ${CAPABILITIES_METHOD} with schema ${String(body.schema)}; this dashboard reads schema ${ENGINE_CAPABILITIES_SCHEMA}`
@@ -99,13 +106,21 @@ export function parseEngineCapabilities(raw: unknown): EngineCapabilityReport {
   if (!Array.isArray(body.capabilities)) {
     throw new Error(`Engine answered ${CAPABILITIES_METHOD} without a capabilities list`);
   }
+  if (body.withheld !== undefined && !Array.isArray(body.withheld)) {
+    throw new Error(`Engine answered ${CAPABILITIES_METHOD} with a withheld list that is not a list`);
+  }
+  const withheld = knownIds(body.withheld ?? []).map((id) => ({ id, reason: "rollout" as const }));
+  return { legacy: false, capabilities: knownIds(body.capabilities), withheld };
+}
+
+function knownIds(ids: unknown[]): EngineCapability[] {
   const known = new Set<EngineCapability>();
-  for (const id of body.capabilities) {
+  for (const id of ids) {
     if (typeof id === "string" && KNOWN_IDS.has(id)) {
       known.add(id as EngineCapability);
     }
   }
-  return { legacy: false, capabilities: Array.from(known).sort() };
+  return Array.from(known).sort();
 }
 
 export function hasEngineCapability(report: EngineCapabilityReport, id: EngineCapability): boolean {
