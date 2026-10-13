@@ -32,7 +32,20 @@ export interface EntitlementLimitDefinition {
 export const ENTITLEMENT_FEATURES = {} as const satisfies Record<string, EntitlementFeatureDefinition>;
 
 /** Every limit a plan or an account override can set. */
-export const ENTITLEMENT_LIMITS = {} as const satisfies Record<string, EntitlementLimitDefinition>;
+export const ENTITLEMENT_LIMITS = {
+  // Both apply only to a managed engine still on the bucket maintenance
+  // provisioned for it; see lib/hostedStorage.ts.
+  "storage.hostedAssetBytes": {
+    description: "Uploaded asset storage on hosted storage",
+    unit: "bytes",
+    default: 50 * 1024 * 1024,
+  },
+  "storage.hostedFileBytes": {
+    description: "Largest single upload to hosted storage",
+    unit: "bytes",
+    default: 10 * 1024 * 1024,
+  },
+} as const satisfies Record<string, EntitlementLimitDefinition>;
 
 export type EntitlementFeatureKey = keyof typeof ENTITLEMENT_FEATURES;
 export type EntitlementLimitKey = keyof typeof ENTITLEMENT_LIMITS;

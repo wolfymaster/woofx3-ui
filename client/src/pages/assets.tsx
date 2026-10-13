@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import type { HostedStorageUsage } from "@convex/resources";
 import { useAction } from "convex/react";
 import {
   ChevronRight,
@@ -54,10 +55,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toggle } from "@/components/ui/toggle";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useHostedStorageUsage } from "@/hooks/use-hosted-storage-usage";
 import { useInstance } from "@/hooks/use-instance";
 import { useResourceUpload } from "@/hooks/use-resource-upload";
 import { type Resource, useResources } from "@/hooks/use-resources";
@@ -104,6 +107,31 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+/**
+ * The plan's hosted asset storage, shown only when a limit applies. Uploads
+ * are checked on the server; this is so the refusal is not a surprise.
+ */
+function HostedStorageMeter({ usage }: { usage: HostedStorageUsage }) {
+  if (usage.limitBytes === null) {
+    return null;
+  }
+  const percent = Math.min(100, (usage.usedBytes / usage.limitBytes) * 100);
+  return (
+    <div className="mb-4 max-w-sm" data-testid="hosted-storage-meter">
+      <div className="flex justify-between text-sm mb-1.5">
+        <span className="text-muted-foreground">Storage</span>
+        <span>
+          {formatFileSize(usage.usedBytes)} of {formatFileSize(usage.limitBytes)}
+        </span>
+      </div>
+      <Progress value={percent} aria-label="Asset storage used" />
+      {usage.fileLimitBytes !== null && (
+        <p className="text-xs text-muted-foreground mt-1.5">Files up to {formatFileSize(usage.fileLimitBytes)} each.</p>
+      )}
+    </div>
+  );
 }
 
 function formatDate(iso: string): string {
@@ -366,13 +394,25 @@ export default function Assets() {
 
   // The engine filters, searches and pages; nothing here narrows a local array,
   // so search reaches past the current page.
-  const { resources, total, isLoading, error, refetch } = useResources(instance?._id, {
+  const {
+    resources,
+    total,
+    isLoading,
+    error,
+    refetch: refetchResources,
+  } = useResources(instance?._id, {
     folderId: currentFolderId,
     kind: kindFilter.length === 1 ? kindFilter[0] : undefined,
     search: searchQuery || undefined,
     page,
     pageSize: PAGE_SIZE,
   });
+  const { usage: storageUsage, refresh: refreshStorageUsage } = useHostedStorageUsage(instance?._id);
+  // Anything that changes the listing can change how much storage is used.
+  const refetch = useCallback(() => {
+    refetchResources();
+    refreshStorageUsage();
+  }, [refetchResources, refreshStorageUsage]);
 
   // The engine takes one kind; more than one is narrowed here as a fallback so
   // the multi-select still behaves.
@@ -544,6 +584,8 @@ export default function Assets() {
           </div>
         }
       />
+
+      {storageUsage && <HostedStorageMeter usage={storageUsage} />}
 
       {/* Breadcrumbs: accumulated while descending, since the engine lists a
           folder's direct children and never its ancestry. */}

@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import { useCallback, useState } from "react";
 import type { Resource } from "@/hooks/use-resources";
+import { actionErrorMessage } from "@/lib/action-error";
 
 /**
  * A PUT that never reached storage throws a bare TypeError: a refused CORS
@@ -58,16 +59,30 @@ export function useResourceUpload(instanceId: Id<"instances"> | undefined) {
           const file = list[i];
           setProgress(`Uploading ${file.name} (${i + 1}/${list.length})…`);
 
-          const grant = await requestUpload({
-            instanceId,
-            name: file.name,
-            contentType: file.type || "application/octet-stream",
-            parentId,
-            size: file.size,
-          });
+          let grant: Awaited<ReturnType<typeof requestUpload>>;
+          try {
+            grant = await requestUpload({
+              instanceId,
+              name: file.name,
+              contentType: file.type || "application/octet-stream",
+              parentId,
+              size: file.size,
+            });
+          } catch (err) {
+            // A plan limit refuses here, with a sentence meant for the person.
+            throw Object.assign(new Error(`${file.name}: ${actionErrorMessage(err)}`, { cause: err }), {
+              uploaded: done,
+            });
+          }
 
           const headers = new Headers();
           for (const header of grant.headers) {
+            // The grant is bound to the file's exact length, but browsers
+            // forbid page code from setting Content-Length: fetch sends it
+            // from the File body, which is the size the grant was issued for.
+            if (header.name.toLowerCase() === "content-length") {
+              continue;
+            }
             headers.set(header.name, header.value);
           }
 
@@ -86,7 +101,7 @@ export function useResourceUpload(instanceId: Id<"instances"> | undefined) {
             throw Object.assign(new Error(`${file.name}: upload failed (${response.status})`), { uploaded: done });
           }
 
-          const resource = await completeUpload({ instanceId, resourceId: grant.resource.id, size: file.size });
+          const resource = await completeUpload({ instanceId, resourceId: grant.resource.id });
           done.push(resource);
 
           // Fire-and-forget: thumbnailing is asynchronous, and a resource the

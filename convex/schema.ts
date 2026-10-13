@@ -1362,6 +1362,20 @@ export default defineSchema({
     .index("by_account", ["accountId"])
     .index("by_plan", ["planId"]),
 
+  // hostedStorageReservations: bytes promised to an upload grant on hosted
+  // storage, held while the grant is issued so concurrent uploads cannot each
+  // pass the plan limit against the same usage. See convex/hostedStorage.ts.
+  hostedStorageReservations: defineTable({
+    instanceId: v.id("instances"),
+    bytes: v.number(),
+    createdAt: v.number(),
+    // Set once the engine's resource row for the grant exists (or the grant
+    // failed), from which point the engine's own usage includes it.
+    releasedAt: v.optional(v.number()),
+  })
+    .index("by_instance_released", ["instanceId", "releasedAt"])
+    .index("by_released_created", ["releasedAt", "createdAt"]),
+
   // featureFlags: an operator's targeting for a UI flag listed in
   // lib/featureFlags.ts. A flag with no row is off. Written only by the
   // internal featureFlags.set, never from the dashboard.
