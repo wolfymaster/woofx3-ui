@@ -63,6 +63,13 @@ export interface TriggerPreset {
   sentence?: string;
   /** What `trigger.data` carries when this fires; seeds the Alerts test sheet's payload. */
   emits?: DataShapeField[];
+  /**
+   * How a fired event reads in the alert feed, e.g. `"{userName} redeemed {rewardTitle}"`,
+   * with `{path}` naming a field of `emits`. Declared by the module; see lib/alert-summary.ts.
+   */
+  summary?: string;
+  /** Short secondary lines under the summary, e.g. `"{streakMonths}-month streak"`; same placeholders. */
+  summaryDetails?: string[];
 }
 
 export interface ActionPreset {

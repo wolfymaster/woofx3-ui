@@ -920,6 +920,11 @@ export default defineSchema({
     // How a configured trigger reads, e.g. "{reward} is redeemed": the module's
     // wording, with a {fieldId} placeholder for each condition value.
     sentence: v.optional(v.string()),
+    // How a fired event reads in the alert feed, e.g. "{userName} redeemed
+    // {rewardTitle}", and its secondary lines: the module's `emits.summary` and
+    // `emits.details`, each {path} naming a field of `emits`.
+    summary: v.optional(v.string()),
+    summaryDetails: v.optional(v.array(v.string())),
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
     projectionKey: v.optional(v.string()),

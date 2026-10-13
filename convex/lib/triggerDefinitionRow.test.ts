@@ -40,9 +40,25 @@ describe("triggerDefinitionRow", () => {
     expect(row.sentence).toBe("a viewer enters {segment}");
   });
 
+  test("keeps how a synced trigger's event reads in the alert feed", () => {
+    const emits = JSON.parse(segmentEntered.emits);
+    const row = triggerDefinitionRow(
+      triggerSnapshot({
+        ...segmentEntered,
+        emits: JSON.stringify({ ...emits, summary: "{viewerName} joined {segmentId}", details: ["{segmentId}"] }),
+      }),
+      undefined
+    );
+    expect(row.summary).toBe("{viewerName} joined {segmentId}");
+    expect(row.summaryDetails).toEqual(["{segmentId}"]);
+  });
+
   test("clears emits for a trigger that declares nothing", () => {
     const row = triggerDefinitionRow({ id: "counter_goal", emits: "{}" }, undefined);
     expect(row.emits).toBeUndefined();
     expect(row).toHaveProperty("emits");
+    // Present though undefined, so a patch clears a summary the module dropped.
+    expect(row).toHaveProperty("summary");
+    expect(row).toHaveProperty("summaryDetails");
   });
 });

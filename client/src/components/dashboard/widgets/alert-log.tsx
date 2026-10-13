@@ -5,10 +5,12 @@ import { BellRing, Loader2 } from "lucide-react";
 import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useDescribeAlert } from "@/hooks/use-describe-alert";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { engineAlertStyle } from "@/lib/alert-status";
+import type { AlertSummary } from "@/lib/alert-summary";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +26,7 @@ interface AlertRow {
   engineCreatedAt?: string;
 }
 
-function AlertLogItem({ alert }: { alert: AlertRow }) {
+function AlertLogItem({ alert, summary }: { alert: AlertRow; summary: AlertSummary }) {
   const config = engineAlertStyle(alert);
   const StatusIcon = config.icon;
   const target = alertTarget(alert.payload);
@@ -39,9 +41,22 @@ function AlertLogItem({ alert }: { alert: AlertRow }) {
         <StatusIcon className={cn("h-4 w-4", config.color)} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{target ? `Alert → ${target}` : "Alert"}</p>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <p className="text-sm font-medium truncate" title={summary.title}>
+          {summary.title}
+        </p>
+        {summary.details.length > 0 && (
+          <p className="text-xs text-foreground/80 truncate" title={summary.details.join("\n")}>
+            {summary.details.join(" · ")}
+          </p>
+        )}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <span>{formatTimeAgo(alert.engineCreatedAt)}</span>
+          {target && (
+            <>
+              <span>·</span>
+              <span className="truncate">→ {target}</span>
+            </>
+          )}
         </div>
         {/* The readable title on the row; the advice and the original
             technical reason both on hover. Keeps the row one line without
@@ -66,6 +81,7 @@ function AlertLogItem({ alert }: { alert: AlertRow }) {
 export function AlertLogWidget() {
   const { instance } = useInstance();
   const instanceId = instance?._id;
+  const describe = useDescribeAlert();
   const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: ALERT_LIMIT } : "skip");
 
   const failures = alerts?.filter((alert) => isFailureStatus(alert.status)).length ?? 0;
@@ -100,7 +116,7 @@ export function AlertLogWidget() {
               </p>
             </div>
           ) : (
-            alerts.map((alert) => <AlertLogItem key={alert._id} alert={alert} />)
+            alerts.map((alert) => <AlertLogItem key={alert._id} alert={alert} summary={describe(alert.payload)} />)
           )}
         </div>
       </ScrollArea>

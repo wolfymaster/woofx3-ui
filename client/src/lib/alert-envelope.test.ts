@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { alertEventType, alertTarget } from "./alert-envelope";
+import { alertEventData, alertEventType, alertTarget } from "./alert-envelope";
 
 const envelope = JSON.stringify({
   id: "env-1",
@@ -40,5 +40,22 @@ describe("alertEventType", () => {
   test("survives a payload that is not an envelope", () => {
     expect(alertEventType("{")).toBeNull();
     expect(alertEventType(JSON.stringify({ event: { type: "" } }))).toBeNull();
+  });
+});
+
+describe("alertEventData", () => {
+  test("reads the originating event's data", () => {
+    const payload = JSON.stringify({
+      parameters: {},
+      event: { type: "channel.follow", data: { userName: "wolfy_fan" } },
+    });
+    expect(alertEventData(payload)).toEqual({ userName: "wolfy_fan" });
+  });
+
+  test("is null without an event, or with data that is not an object", () => {
+    expect(alertEventData(envelope)).toBeNull();
+    expect(alertEventData(JSON.stringify({ parameters: {}, event: null }))).toBeNull();
+    expect(alertEventData(JSON.stringify({ event: { data: ["a"] } }))).toBeNull();
+    expect(alertEventData("not json")).toBeNull();
   });
 });

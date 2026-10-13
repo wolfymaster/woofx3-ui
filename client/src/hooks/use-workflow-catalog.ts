@@ -23,6 +23,9 @@ export type CatalogTriggerRow = {
   emits?: unknown;
   /** The module's condition sentence template; see TriggerPreset.sentence. */
   sentence?: string;
+  /** How a fired event reads in the alert feed; see TriggerPreset.summary. */
+  summary?: string;
+  summaryDetails?: string[];
   /** Engine classification, e.g. ["platform.twitch"] — groups entries by source. */
   taxonomy?: string[];
   moduleId?: string;
@@ -76,6 +79,8 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
     config,
     emits: parseDataShapeFields(row.emits),
     sentence: typeof row.sentence === "string" && row.sentence.trim() !== "" ? row.sentence : undefined,
+    summary: row.summary?.trim() || undefined,
+    summaryDetails: row.summaryDetails?.length ? row.summaryDetails : undefined,
   };
 }
 

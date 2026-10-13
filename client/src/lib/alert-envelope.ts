@@ -57,3 +57,19 @@ export function alertEventType(payload: string | undefined): string | null {
   }
   return nonEmptyString((event as { type?: unknown }).type);
 }
+
+/**
+ * The originating event's `data`, or null.
+ *
+ * Who followed, which reward, how many months: what makes an alert worth a
+ * glance. Null for an alert with no originating event, and for an envelope
+ * whose event carries no object `data`.
+ */
+export function alertEventData(payload: string | undefined): Record<string, unknown> | null {
+  const event = parseEnvelope(payload)?.event;
+  if (!event || typeof event !== "object") {
+    return null;
+  }
+  const data = (event as { data?: unknown }).data;
+  return data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
+}
