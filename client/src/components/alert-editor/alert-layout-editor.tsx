@@ -1,9 +1,13 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type CanvasSize, type CommandResult, canvasOf, type NodeView } from "@woofx3/scene/editor";
-import { Loader2 } from "lucide-react";
+import { BookmarkPlus, ChevronDown, Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { AlertLibraryDialog, type LibraryAlert } from "@/components/alert-editor/alert-library-dialog";
+import {
+  AddLibraryAlertDialog,
+  type LibraryAlert,
+  LibraryAlertList,
+} from "@/components/alert-editor/alert-library-panel";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { PreviewScrub, PreviewTransport } from "@/components/alert-editor/composition-preview-frame";
 import { LayerInspector } from "@/components/alert-editor/layer-inspector";
@@ -13,6 +17,7 @@ import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
+import { StatusIndicator } from "@/components/scenes/draft-live-controls";
 import { WidgetBehaviorsSection } from "@/components/scenes/widget-behaviors-section";
 import {
   AlertDialog,
@@ -25,14 +30,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type AlertEditorHandle, useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
 import { useAlertLibrary } from "@/hooks/use-alert-library";
+import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
-import { inlineCopyOfLibraryAlert, unfilledInputsText } from "@/lib/alert-library";
+import { inlineCopyOfLibraryAlert, unfilledInputsText, withLayersOf } from "@/lib/alert-library";
 import {
   activityEditFor,
   activityOf,
@@ -66,8 +79,8 @@ interface AlertLayoutEditorProps {
   /** Leaving without keeping the edits; already confirmed when there were any. */
   onCancel: () => void;
   /**
-   * On an engine with an alert library, offer Start from… (copy a library alert onto
-   * the canvas) and Save to library (store a copy of this alert there).
+   * On an engine with an alert library, offer the Library tab (copy a library alert's
+   * layers onto the canvas) and Save to library (store a copy of this alert there).
    */
   offerLibrary?: boolean;
 }
@@ -95,17 +108,18 @@ export function AlertLayoutEditor({
   // Where to go once the edits are confirmed discarded: back out, or to a library alert.
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
   const [, navigate] = useLocation();
-  const [choosingStart, setChoosingStart] = useState(false);
+  const [addingFromLibrary, setAddingFromLibrary] = useState<LibraryAlert | null>(null);
   const [savingToLibrary, setSavingToLibrary] = useState(false);
+  useCollapsedSidebar();
   const view = useAlertEditorView(session, availableVariables);
-  const library = useAlertLibrary();
+  const libraryAlerts = useAlertLibrary();
   const { toast } = useToast();
 
   if (session === null || view === null) {
     return <EditorLoading />;
   }
 
-  const libraryOffered = offerLibrary && library.enabled;
+  const libraryOffered = offerLibrary && libraryAlerts.enabled;
   const leaveTo = (go: () => void) => {
     if (session.isDirty) {
       setPendingLeave(() => go);
@@ -115,19 +129,32 @@ export function AlertLayoutEditor({
   };
   const leave = () => leaveTo(onCancel);
   const editLibraryAlert = (alert: LibraryAlert) => {
-    setChoosingStart(false);
     leaveTo(() => navigate(libraryAlertEditorPath(alert.engineCompositionId)));
   };
   const done = () => onDone(session.changedLayout());
-  const startFrom = (alert: LibraryAlert) => {
-    const { doc, unfilled } = inlineCopyOfLibraryAlert(alert, availableVariables);
-    session.replace(doc);
+  const addFromLibrary = (alert: LibraryAlert) => {
+    setAddingFromLibrary(null);
+    const current = session.state.doc;
+    if (current === null) {
+      return;
+    }
+    const { doc: copy, unfilled } = inlineCopyOfLibraryAlert(alert, availableVariables);
+    session.replace(withLayersOf(current, copy));
     session.editor.dispatch("selection.clear");
-    setChoosingStart(false);
     if (unfilled.length > 0) {
       toast({ title: "Some of its inputs had no value", description: unfilledInputsText(unfilled) });
     }
   };
+  const library = libraryOffered
+    ? (layout: "grid" | "row") => (
+        <LibraryAlertList
+          alerts={libraryAlerts.alerts}
+          layout={layout}
+          onPick={setAddingFromLibrary}
+          onEdit={editLibraryAlert}
+        />
+      )
+    : undefined;
 
   return (
     <>
@@ -138,24 +165,44 @@ export function AlertLayoutEditor({
         context={context}
         backLabel={backLabel}
         onBack={leave}
+        library={library}
         actions={
           <>
-            {libraryOffered && (
-              <>
-                <Button variant="outline" onClick={() => setChoosingStart(true)} data-testid="button-start-from">
-                  Start from…
-                </Button>
-                <Button variant="outline" onClick={() => setSavingToLibrary(true)} data-testid="button-save-to-library">
-                  Save to library
-                </Button>
-              </>
-            )}
+            <StatusIndicator ok={!session.isDirty} testId="status-saved">
+              {session.isDirty ? "Unsaved changes" : "All changes saved"}
+            </StatusIndicator>
             <Button variant="ghost" onClick={leave}>
               Cancel
             </Button>
-            <Button onClick={done} data-testid="button-alert-done">
-              Done
-            </Button>
+            <div className="flex items-center">
+              <Button
+                onClick={done}
+                className={libraryOffered ? "rounded-r-none" : undefined}
+                data-testid="button-alert-done"
+              >
+                Done
+              </Button>
+              {libraryOffered && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      size="icon"
+                      className="rounded-l-none border-l border-primary-foreground/25"
+                      aria-label="More options"
+                      data-testid="button-alert-done-menu"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setSavingToLibrary(true)} data-testid="button-save-to-library">
+                      <BookmarkPlus className="h-4 w-4 mr-2" />
+                      Save to Library
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
           </>
         }
         phoneAction={
@@ -165,34 +212,26 @@ export function AlertLayoutEditor({
         }
         phoneExtras={
           libraryOffered ? (
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" className="h-11" onClick={() => setChoosingStart(true)}>
-                Start from…
-              </Button>
-              <Button variant="outline" className="h-11" onClick={() => setSavingToLibrary(true)}>
-                Save to library
-              </Button>
-            </div>
+            <Button variant="outline" className="h-11" onClick={() => setSavingToLibrary(true)}>
+              Save to Library
+            </Button>
           ) : null
         }
       />
 
       {libraryOffered && (
         <>
-          <AlertLibraryDialog
-            open={choosingStart}
-            onOpenChange={setChoosingStart}
-            alerts={library.alerts}
-            replacesLayers={view.layerCount}
-            onUse={startFrom}
-            onEdit={editLibraryAlert}
+          <AddLibraryAlertDialog
+            alert={addingFromLibrary}
+            onClose={() => setAddingFromLibrary(null)}
+            onConfirm={addFromLibrary}
           />
           <SaveToLibraryDialog
             open={savingToLibrary}
             onOpenChange={setSavingToLibrary}
             doc={session.state.doc}
             availableVariables={availableVariables}
-            takenNames={library.alerts?.map((alert) => alert.name)}
+            takenNames={libraryAlerts.alerts?.map((alert) => alert.name)}
             onSaved={() => setSavingToLibrary(false)}
           />
         </>
@@ -222,7 +261,7 @@ interface AlertEditorFrameProps {
   context: ReactNode;
   backLabel: string;
   onBack: () => void;
-  /** The desktop header's controls, after the canvas readout. */
+  /** The desktop header's controls. */
   actions: ReactNode;
   /** Shown beside the desktop header's title, where its changing length never moves the controls. */
   status?: ReactNode;
@@ -232,6 +271,8 @@ interface AlertEditorFrameProps {
   phoneExtras?: ReactNode;
   /** Shown under the desktop header's controls on a phone, beside the canvas readout. */
   phoneStatus?: ReactNode;
+  /** The alert library, listed in the palette's Library tab; omitted, the palette has only widgets. */
+  library?: (layout: "grid" | "row") => ReactNode;
 }
 
 /**
@@ -251,6 +292,7 @@ export function AlertEditorFrame({
   phoneAction,
   phoneExtras,
   phoneStatus,
+  library,
 }: AlertEditorFrameProps) {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
@@ -277,21 +319,9 @@ export function AlertEditorFrame({
               </div>
               {status}
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {view.transport === null ? (
-                <code className="rounded-md border bg-muted/40 px-2 py-1 font-mono text-xs text-muted-foreground">
-                  {readout} | {view.lengthLabel}
-                </code>
-              ) : (
-                <div className="flex items-center gap-1 rounded-md border bg-muted/40 py-0.5 pl-2 pr-1 font-mono text-xs text-muted-foreground">
-                  <span>{readout} |</span>
-                  {view.transport(true)}
-                </div>
-              )}
-              {actions}
-            </div>
+            <div className="flex shrink-0 items-center gap-2">{actions}</div>
           </header>
-          <AlertEditorShell view={view} />
+          <AlertEditorShell view={view} library={library} />
         </>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -316,6 +346,14 @@ export function AlertEditorFrame({
           <div className="flex flex-col gap-6 px-4 py-5">
             {phoneExtras}
             {view.palette("row")}
+            {library && (
+              <section className="flex min-w-0 flex-col gap-3">
+                <h2 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                  From library
+                </h2>
+                {library("row")}
+              </section>
+            )}
             {view.layerList(true)}
             {view.inspector ? (
               <div className="rounded-2xl border bg-card p-4">{view.inspector}</div>
@@ -377,6 +415,8 @@ export interface AlertEditorView {
   transport: ((scrub: boolean) => ReactNode) | null;
   /** The scrub alone, for a layout that puts it under the stage; null with no transport. */
   scrub: ReactNode | null;
+  /** Clears the selection, as a press outside the canvas does. */
+  deselect: () => void;
 }
 
 /** A layer as the layers list shows it. */
@@ -584,17 +624,61 @@ export function useAlertEditorView(
         )
       : null,
     scrub: preview.live ? <PreviewScrub preview={preview} playheadMs={state.timeline.playheadMs} /> : null,
+    deselect: () => session.editor.dispatch("selection.clear"),
   };
 }
 
-/** The desktop arrangement: palette, stage and layers with the inspector, in the shared overlay editor frame. */
-export function AlertEditorShell({ view, className }: { view: AlertEditorView; className?: string }) {
+/**
+ * The desktop arrangement: palette, stage and layers with the inspector, in the shared
+ * overlay editor frame. The stage's bottom bar carries the canvas readout and the
+ * timeline; with a library, the palette rail has a Library tab beside its widgets.
+ */
+export function AlertEditorShell({
+  view,
+  library,
+  className,
+}: {
+  view: AlertEditorView;
+  library?: (layout: "grid" | "row") => ReactNode;
+  className?: string;
+}) {
+  const readout = `${view.canvas.width} × ${view.canvas.height}`;
+  const palette = view.palette("grid");
   return (
     <OverlayEditorShell
       canvas={view.canvas}
       className={className}
       zoomControl={view.zoomControl}
-      palette={view.palette("grid")}
+      stageToolbar={
+        <>
+          <span className="shrink-0">{readout}</span>
+          <span className="shrink-0 text-border">|</span>
+          {view.transport === null ? <span className="truncate">{view.lengthLabel}</span> : view.transport(true)}
+        </>
+      }
+      onDeselect={view.deselect}
+      palette={
+        library === undefined ? (
+          palette
+        ) : (
+          <Tabs defaultValue="widgets" className="flex min-w-0 flex-col gap-4">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="widgets" data-testid="tab-palette-widgets">
+                Widgets
+              </TabsTrigger>
+              <TabsTrigger value="library" data-testid="tab-palette-library">
+                Library
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="widgets" className="mt-0">
+              {palette}
+            </TabsContent>
+            <TabsContent value="library" className="mt-0">
+              {library("grid")}
+            </TabsContent>
+          </Tabs>
+        )
+      }
       layers={view.layerList()}
       stage={view.stage}
       inspector={view.inspector ? <div className="p-4">{view.inspector}</div> : null}
@@ -648,7 +732,7 @@ function PhoneStageArea({
 /** What the inspector shows with no layer selected. */
 function AlertSummary({ view }: { view: AlertEditorView }) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 p-4">
       <h2 className="text-sm font-semibold">Alert</h2>
       <p className="text-xs text-muted-foreground">
         Select a layer to edit it, or add a widget from the left. The alert is scaled to fit whichever alert widget
