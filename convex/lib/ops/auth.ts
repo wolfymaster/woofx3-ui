@@ -14,6 +14,7 @@ export const REASON_HEADER = "X-Woofx3-Reason";
 /** 32 random bytes, base64url, is 43 characters. */
 const MIN_SECRET_LENGTH = 43;
 const MAX_HEADER_LENGTH = 320;
+const MAX_REASON_LENGTH = 500;
 
 export type OpsAuthResult =
   | { ok: true; actor: string; reason: string | null }
@@ -47,8 +48,20 @@ export async function authenticateOps(
   if (actor === "" || actor.length > MAX_HEADER_LENGTH) {
     return { ok: false, status: 400, code: "actor_required", message: `${ACTOR_HEADER} must name the operator` };
   }
-  const reason = headers.get(REASON_HEADER)?.trim() ?? "";
-  if (reason.length > MAX_HEADER_LENGTH) {
+  // Header values are Latin-1, so a reason arrives as percent-encoded UTF-8,
+  // as the maintenance API also expects it.
+  let reason: string;
+  try {
+    reason = decodeURIComponent(headers.get(REASON_HEADER) ?? "").trim();
+  } catch {
+    return {
+      ok: false,
+      status: 400,
+      code: "invalid_reason",
+      message: `${REASON_HEADER} must be percent-encoded UTF-8`,
+    };
+  }
+  if (reason.length > MAX_REASON_LENGTH) {
     return { ok: false, status: 400, code: "reason_too_long", message: `${REASON_HEADER} is too long` };
   }
   if (options.requireReason && reason === "") {

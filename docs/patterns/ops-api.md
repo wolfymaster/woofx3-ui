@@ -19,7 +19,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only t
     - Routes authenticate before anything else, so an unauthenticated caller cannot tell which routes exist.
 - **Who is acting:**
     - Every request names the operator in `X-Woofx3-Actor`, or gets `400`.
-    - Every write also says why in `X-Woofx3-Reason`.
+    - Every write also says why in `X-Woofx3-Reason`, percent-encoded UTF-8 (`encodeURIComponent`), as the maintenance API expects it too.
     - Convex records both as given; the backoffice has already authenticated the operator.
 - **Responses:**
     - Responses are `{ data }` or `{ error: { code, message } }`, with no CORS headers.

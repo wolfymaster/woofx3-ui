@@ -68,10 +68,17 @@ describe("authenticateOps", () => {
     ).toMatchObject({ status: 400, code: "reason_required" });
     expect(
       await authenticateOps(
-        headers({ ...auth, [ACTOR_HEADER]: "ops@example.com", [REASON_HEADER]: "ticket 12" }),
+        headers({ ...auth, [ACTOR_HEADER]: "ops@example.com", [REASON_HEADER]: encodeURIComponent("ticket 12 — ü") }),
         [SECRET, undefined],
         write
       )
-    ).toEqual({ ok: true, actor: "ops@example.com", reason: "ticket 12" });
+    ).toEqual({ ok: true, actor: "ops@example.com", reason: "ticket 12 — ü" });
+    expect(
+      await authenticateOps(
+        headers({ ...auth, [ACTOR_HEADER]: "ops@example.com", [REASON_HEADER]: "%E0%A4%A" }),
+        [SECRET, undefined],
+        write
+      )
+    ).toMatchObject({ status: 400, code: "invalid_reason" });
   });
 });
