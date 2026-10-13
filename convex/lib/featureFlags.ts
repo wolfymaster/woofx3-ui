@@ -1,10 +1,12 @@
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
+import { isEntitlementFeatureKey } from "./entitlements";
 
 /**
  * UI feature flags: who sees a UI feature while it rolls out. A flag is
  * temporary; once its feature is on for everyone the flag and its row are
- * deleted. Whether an engine may use a feature is an entitlement, not a flag.
+ * deleted. Whether an account's plan includes a feature is an entitlement,
+ * not a flag.
  */
 export interface FeatureFlagDefinition {
   description: string;
@@ -35,7 +37,7 @@ export const featureFlagRulesValidator = v.object({
   instances: v.optional(v.array(v.id("instances"))),
   percent: v.optional(v.number()),
   hosting: v.optional(v.union(v.literal("managed"), v.literal("external"))),
-  licenseFeature: v.optional(v.string()),
+  entitlement: v.optional(v.string()),
 });
 
 export const featureFlagStateValidator = v.union(v.literal("off"), v.literal("on"), v.literal("rules"));
@@ -47,8 +49,8 @@ export interface FeatureFlagRules {
   /** Share of the audience, 0 to 100, bucketed by account (by user when there is no account). */
   percent?: number;
   hosting?: "managed" | "external";
-  /** A feature id the account's license must list. */
-  licenseFeature?: string;
+  /** An entitlement feature the account's plan must include. */
+  entitlement?: string;
 }
 
 export interface FeatureFlagRow {
@@ -63,7 +65,8 @@ export interface FeatureFlagSubject {
   accountId?: Id<"accounts">;
   instanceId?: Id<"instances">;
   hosting?: "managed" | "external";
-  licenseFeatures: readonly string[];
+  /** The account's entitlement features; empty without an account. */
+  entitlements: readonly string[];
 }
 
 /**
@@ -84,14 +87,14 @@ export function isFlagOn(row: FeatureFlagRow | null, subject: FeatureFlagSubject
   if (isAllowlisted(rules, subject)) {
     return true;
   }
-  const hasCondition = rules.hosting !== undefined || rules.licenseFeature !== undefined || rules.percent !== undefined;
+  const hasCondition = rules.hosting !== undefined || rules.entitlement !== undefined || rules.percent !== undefined;
   if (!hasCondition) {
     return false;
   }
   if (rules.hosting !== undefined && subject.hosting !== rules.hosting) {
     return false;
   }
-  if (rules.licenseFeature !== undefined && !subject.licenseFeatures.includes(rules.licenseFeature)) {
+  if (rules.entitlement !== undefined && !subject.entitlements.includes(rules.entitlement)) {
     return false;
   }
   if (rules.percent !== undefined) {
@@ -131,7 +134,7 @@ export function validateFeatureFlagRules(rules: FeatureFlagRules): void {
   if (rules.percent !== undefined && !(Number.isInteger(rules.percent) && rules.percent >= 0 && rules.percent <= 100)) {
     throw new Error(`percent must be an integer from 0 to 100, got ${rules.percent}`);
   }
-  if (rules.licenseFeature !== undefined && rules.licenseFeature.trim() === "") {
-    throw new Error("licenseFeature must not be blank");
+  if (rules.entitlement !== undefined && !isEntitlementFeatureKey(rules.entitlement)) {
+    throw new Error(`Unknown entitlement "${rules.entitlement}"; add it to ENTITLEMENT_FEATURES first`);
   }
 }

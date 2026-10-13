@@ -46,6 +46,7 @@ export default defineConfig({
             { text: "Dashboard widgets", link: "/patterns/dashboard-widgets" },
             { text: "Scene editor sync", link: "/patterns/scene-editor-sync" },
             { text: "Feature flags", link: "/patterns/feature-flags" },
+            { text: "Entitlements", link: "/patterns/entitlements" },
           ],
         },
       ],

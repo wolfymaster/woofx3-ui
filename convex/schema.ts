@@ -1288,7 +1288,8 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
-  // licenses: entitlements per account
+  // licenses: an account's plan, at most one row per account; see
+  // lib/entitlements.ts for what each tier includes.
   licenses: defineTable({
     accountId: v.id("accounts"),
     tier: v.union(v.literal("free"), v.literal("pro"), v.literal("enterprise")),
