@@ -10,7 +10,13 @@ export type OpsRoute =
   | { method: "GET"; name: "engines.list" }
   | { method: "GET"; name: "engines.byMaintenanceId"; engineId: string }
   | { method: "GET"; name: "instances.health"; instanceId: string }
-  | { method: "GET"; name: "audit.list" };
+  | { method: "GET"; name: "audit.list" }
+  | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction };
+
+/** What an operator can do to a customer's managed engine, exactly as the customer could. */
+export type EngineAction = "upgrade" | "retry" | "delete";
+
+const ENGINE_ACTIONS: ReadonlySet<string> = new Set<EngineAction>(["upgrade", "retry", "delete"]);
 
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -23,10 +29,16 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
   if (!segments.every((segment) => SEGMENT.test(segment))) {
     return null;
   }
+  const [first, second, third] = segments;
+  if (method === "POST") {
+    if (segments.length === 3 && first === "engines" && second && third && ENGINE_ACTIONS.has(third)) {
+      return { method, name: "engines.act", instanceId: second, action: third as EngineAction };
+    }
+    return null;
+  }
   if (method !== "GET") {
     return null;
   }
-  const [first, second, third] = segments;
   switch (segments.length) {
     case 1:
       if (first === "users") {

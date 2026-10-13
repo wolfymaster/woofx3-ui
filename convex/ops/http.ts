@@ -76,6 +76,16 @@ export const opsHandler = httpAction(async (ctx, request) => {
       const health = await ctx.runQuery(internal.ops.reads.instanceHealth, { instanceId: route.instanceId });
       return health === null ? error(404, "not_found", "No such instance") : ok(health);
     }
+    case "engines.act": {
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runAction(internal.ops.engines.act, {
+        instanceId: route.instanceId,
+        action: route.action,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
     case "audit.list": {
       const actor = url.searchParams.get("actor") ?? undefined;
       const target = url.searchParams.get("target") ?? undefined;
