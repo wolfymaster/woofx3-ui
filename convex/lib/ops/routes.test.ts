@@ -27,6 +27,7 @@ describe("matchOpsRoute", () => {
       instanceId: "i1",
     });
     expect(matchOpsRoute("GET", "/api/ops/audit")).toEqual({ method: "GET", name: "audit.list" });
+    expect(matchOpsRoute("GET", "/api/ops/plans")).toEqual({ method: "GET", name: "plans.list" });
   });
 
   it("names each engine action", () => {
