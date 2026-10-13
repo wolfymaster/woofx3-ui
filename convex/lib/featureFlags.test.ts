@@ -17,7 +17,7 @@ const subject: FeatureFlagSubject = {
   accountId: account,
   instanceId: instance,
   hosting: "external",
-  licenseFeatures: [],
+  entitlements: [],
 };
 
 function rules(r: FeatureFlagRow["rules"]): FeatureFlagRow {
@@ -37,7 +37,7 @@ describe("isFlagOn", () => {
   });
 
   it("lets an allowlisted user, account or instance in past every condition", () => {
-    const managedOnly = { hosting: "managed" as const, licenseFeature: "early_access", percent: 0 };
+    const managedOnly = { hosting: "managed" as const, entitlement: "early_access", percent: 0 };
     expect(isFlagOn(rules({ ...managedOnly, users: [user] }), subject)).toBe(true);
     expect(isFlagOn(rules({ ...managedOnly, accounts: [account] }), subject)).toBe(true);
     expect(isFlagOn(rules({ ...managedOnly, instances: [instance] }), subject)).toBe(true);
@@ -47,14 +47,12 @@ describe("isFlagOn", () => {
   it("requires every condition that is set", () => {
     expect(isFlagOn(rules({ hosting: "external" }), subject)).toBe(true);
     expect(isFlagOn(rules({ hosting: "managed" }), subject)).toBe(false);
-    expect(isFlagOn(rules({ licenseFeature: "early_access" }), subject)).toBe(false);
-    expect(isFlagOn(rules({ licenseFeature: "early_access" }), { ...subject, licenseFeatures: ["early_access"] })).toBe(
-      true
-    );
+    expect(isFlagOn(rules({ entitlement: "early_access" }), subject)).toBe(false);
+    expect(isFlagOn(rules({ entitlement: "early_access" }), { ...subject, entitlements: ["early_access"] })).toBe(true);
     expect(
-      isFlagOn(rules({ hosting: "external", licenseFeature: "early_access" }), {
+      isFlagOn(rules({ hosting: "external", entitlement: "early_access" }), {
         ...subject,
-        licenseFeatures: ["early_access"],
+        entitlements: ["early_access"],
         hosting: "managed",
       })
     ).toBe(false);
@@ -69,10 +67,10 @@ describe("isFlagOn", () => {
   });
 
   it("buckets by user when there is no account, and refuses a subject with neither", () => {
-    const signedInOnly: FeatureFlagSubject = { userId: user, licenseFeatures: [] };
+    const signedInOnly: FeatureFlagSubject = { userId: user, entitlements: [] };
     const bucket = rolloutBucket("demo", user);
     expect(isFlagOn(rules({ percent: bucket + 1 }), signedInOnly)).toBe(true);
-    expect(isFlagOn(rules({ percent: 100 }), { licenseFeatures: [] })).toBe(false);
+    expect(isFlagOn(rules({ percent: 100 }), { entitlements: [] })).toBe(false);
   });
 });
 
@@ -104,6 +102,6 @@ describe("validateFeatureFlagRules", () => {
   });
 
   it("rejects a blank license feature", () => {
-    expect(() => validateFeatureFlagRules({ licenseFeature: " " })).toThrow();
+    expect(() => validateFeatureFlagRules({ entitlement: " " })).toThrow();
   });
 });

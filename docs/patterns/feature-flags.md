@@ -7,10 +7,10 @@ A new UI feature often needs to reach a few accounts before everyone: an operato
 | Question | Answered by |
 |---|---|
 | Can this engine build do X? | Engine capabilities (`useEngineCapabilities`) |
-| Is this engine allowed to do X? | Engine entitlements, for managed engines |
+| Does this account's plan include X? | An [entitlement](./entitlements.md) |
 | Should this viewer see new UI Y yet? | A feature flag (this page) |
 
-A flag is temporary. When its feature is on for everyone, the flag and its row are deleted. A flag is never a plan gate: a paid feature is a license feature or an entitlement, which outlives any rollout.
+A flag is temporary. When its feature is on for everyone, the flag and its row are deleted. A flag is never a plan gate: a paid feature is an entitlement, which outlives any rollout.
 
 ## Decision
 
@@ -20,7 +20,7 @@ Flags are built on Convex, not bought. A query is already reactive and evaluated
 - **Targeting lives in the `featureFlags` table**, one row per key, written only by operators with the internal `featureFlags:set` mutation. A flag with no row is off.
 - **State** is `off`, `on` or `rules`. Under `rules`:
   - An allowlisted user, account or instance always gets the flag, whatever else is set, so an operator can try a feature anywhere.
-  - Otherwise every condition that is set must hold: `hosting` (`managed` or `external`), `licenseFeature` (the account's unexpired licenses must list it), and `percent`.
+  - Otherwise every condition that is set must hold: `hosting` (`managed` or `external`), `entitlement` (the account's plan must include it), and `percent`.
   - `percent` admits a stable share, bucketed by account (by user when no instance is selected), hashed with the flag key so each flag's first 10% is a different set of accounts.
   - Rules with nothing set are off.
 - **Reading:** `useFeatureFlag(key)` in the browser (undefined while loading). Every caller shares the `featureFlags.forViewer` subscription.
@@ -36,6 +36,6 @@ bunx convex run featureFlags:list   # overdue flags and orphaned rows
 ## Consequences
 
 - Adding a flag is a code change; turning it on is not.
-- An instance's account, hosting and license count only when the viewer is a member of it, so a non-member cannot borrow another account's rollout.
+- An instance's account, hosting and entitlements count only when the viewer is a member of it, so a non-member cannot borrow another account's rollout.
 - `featureFlags:list` reports flags past `removeBy` and rows whose key was removed from `FEATURE_FLAGS`. Removing a flag means deleting the key and its checks, then `featureFlags:remove` for the row.
 - There are no experiments or statistics. If the product needs A/B tests with analysis, revisit a hosted service then.
