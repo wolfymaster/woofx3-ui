@@ -50,4 +50,8 @@ crons.interval("companion relay resync", { minutes: 15 }, internal.companionRela
 // at this cadence an alert is marked within five minutes of crossing it.
 crons.interval("engine alert staleness sweep", { minutes: 5 }, internal.engineAlerts.markStaleAlerts, {});
 
+// Releases hosted storage reservations whose upload action died before
+// releasing them, and deletes released ones no limit check can still need.
+crons.interval("hosted storage reservation sweep", { minutes: 5 }, internal.hostedStorage.sweep, {});
+
 export default crons;
