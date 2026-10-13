@@ -42,6 +42,7 @@ import type * as engineHealth from "../engineHealth.js";
 import type * as engineInfo from "../engineInfo.js";
 import type * as engineSync from "../engineSync.js";
 import type * as engineSyncInternal from "../engineSyncInternal.js";
+import type * as featureFlags from "../featureFlags.js";
 import type * as feedback from "../feedback.js";
 import type * as fieldOptions from "../fieldOptions.js";
 import type * as gettingStarted from "../gettingStarted.js";
@@ -84,6 +85,8 @@ import type * as lib_engineSync_steps_widgets from "../lib/engineSync/steps/widg
 import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/workflows.js";
 import type * as lib_engineSync_syncRow from "../lib/engineSync/syncRow.js";
 import type * as lib_engineTestRun from "../lib/engineTestRun.js";
+import type * as lib_featureFlagAccess from "../lib/featureFlagAccess.js";
+import type * as lib_featureFlags from "../lib/featureFlags.js";
 import type * as lib_feedback from "../lib/feedback.js";
 import type * as lib_fieldOptions from "../lib/fieldOptions.js";
 import type * as lib_gettingStarted from "../lib/gettingStarted.js";
@@ -280,6 +283,7 @@ declare const fullApi: ApiFromModules<{
   engineInfo: typeof engineInfo;
   engineSync: typeof engineSync;
   engineSyncInternal: typeof engineSyncInternal;
+  featureFlags: typeof featureFlags;
   feedback: typeof feedback;
   fieldOptions: typeof fieldOptions;
   gettingStarted: typeof gettingStarted;
@@ -322,6 +326,8 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/steps/workflows": typeof lib_engineSync_steps_workflows;
   "lib/engineSync/syncRow": typeof lib_engineSync_syncRow;
   "lib/engineTestRun": typeof lib_engineTestRun;
+  "lib/featureFlagAccess": typeof lib_featureFlagAccess;
+  "lib/featureFlags": typeof lib_featureFlags;
   "lib/feedback": typeof lib_feedback;
   "lib/fieldOptions": typeof lib_fieldOptions;
   "lib/gettingStarted": typeof lib_gettingStarted;

@@ -2,6 +2,7 @@ import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
+import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
@@ -1295,6 +1296,16 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_account", ["accountId"]),
+
+  // featureFlags: an operator's targeting for a UI flag listed in
+  // lib/featureFlags.ts. A flag with no row is off. Written only by the
+  // internal featureFlags.set, never from the dashboard.
+  featureFlags: defineTable({
+    key: v.string(),
+    state: featureFlagStateValidator,
+    rules: v.optional(featureFlagRulesValidator),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 
   // scenes: scene configurations for browser sources
   scenes: defineTable({
