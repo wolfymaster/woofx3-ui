@@ -10,6 +10,8 @@ A new UI feature often needs to reach a few accounts before everyone: an operato
 | Is this engine allowed to do X? | Engine entitlements, for managed engines |
 | Should this viewer see new UI Y yet? | A feature flag (this page) |
 
+How the three fit together across the dashboard, woofx3-maintenance and the engine is in woofx3 `docs/services/feature-gating.md`.
+
 A flag is temporary. When its feature is on for everyone, the flag and its row are deleted. A flag is never a plan gate: a paid feature is a license feature or an entitlement, which outlives any rollout.
 
 ## Decision

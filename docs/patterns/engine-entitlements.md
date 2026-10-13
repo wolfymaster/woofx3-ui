@@ -2,7 +2,7 @@
 
 ## Context
 
-An engine release can ship a feature that managed engines should get only on a plan, or only as a rollout reaches them, while a self-hosted engine of the same release has it outright. The engine enforces this itself (woofx3 `docs/services/engine-entitlements.md`): a governed engine, one started with `WOOFX3_ENTITLEMENT_PUBLIC_KEYS`, withholds each gateable capability unless a grant signed by this deployment lists it. The dashboard decides what each managed engine is granted, signs it, and keeps it fresh.
+An engine release can ship a feature that managed engines should get only on a plan, or only as a rollout reaches them, while a self-hosted engine of the same release has it outright. The engine enforces this itself (woofx3 `docs/services/engine-entitlements.md`): a governed engine, one started with `WOOFX3_ENTITLEMENT_PUBLIC_KEYS`, withholds each gateable capability unless a grant signed by this deployment lists it. The dashboard decides what each managed engine is granted, signs it, and keeps it fresh. The end-to-end picture, including maintenance's part, is in woofx3 `docs/services/feature-gating.md`.
 
 ## Decision
 
