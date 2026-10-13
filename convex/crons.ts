@@ -50,4 +50,9 @@ crons.interval("companion relay resync", { minutes: 15 }, internal.companionRela
 // at this cadence an alert is marked within five minutes of crossing it.
 crons.interval("engine alert staleness sweep", { minutes: 5 }, internal.engineAlerts.markStaleAlerts, {});
 
+// Pushes each managed engine's entitlement grant when it is due: daily, an
+// hour after a failed push, or at once after targeting changes. Reads only
+// grants past their renewAt.
+crons.interval("entitlement grant renewal", { minutes: 10 }, internal.engineEntitlements.scheduleDueRenewals, {});
+
 export default crons;

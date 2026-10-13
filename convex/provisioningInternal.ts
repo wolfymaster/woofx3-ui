@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
+import { scheduleGrantPush } from "./lib/entitlementGrantSchedule";
 import {
   decideRedeployEvent,
   mergeRunSnapshot,
@@ -640,6 +641,7 @@ export const recordRegistrationResult = internalMutation({
     }
     if (ok) {
       await ctx.db.patch(provisioningId, { status: "registered", error: undefined, updatedAt: Date.now() });
+      await scheduleGrantPush(ctx, row.instanceId);
       return;
     }
 

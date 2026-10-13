@@ -1307,6 +1307,31 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_key", ["key"]),
 
+  // engineEntitlements: an operator's targeting for one gateable engine
+  // capability, evaluated per managed instance like a feature flag. A
+  // capability with no row is granted to no governed engine.
+  engineEntitlements: defineTable({
+    capability: v.string(),
+    state: featureFlagStateValidator,
+    rules: v.optional(featureFlagRulesValidator),
+    updatedAt: v.number(),
+  }).index("by_capability", ["capability"]),
+
+  // entitlementGrants: the latest grant issued to each managed instance's
+  // engine. `seq` must only rise, since the engine refuses a lower one;
+  // `renewAt` is when the renewal sweep next pushes it (by_renew_at).
+  entitlementGrants: defineTable({
+    instanceId: v.id("instances"),
+    seq: v.number(),
+    grants: v.array(v.string()),
+    issuedAt: v.optional(v.number()),
+    pushedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    renewAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_renew_at", ["renewAt"]),
+
   // scenes: scene configurations for browser sources
   scenes: defineTable({
     instanceId: v.id("instances"),
