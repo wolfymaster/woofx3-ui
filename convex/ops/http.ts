@@ -2,6 +2,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { httpAction } from "../_generated/server";
 import { authenticateOps, OPS_SECRET_ENV, OPS_SECRET_NEXT_ENV } from "../lib/ops/auth";
+import { type AssignmentRow, tallyPlanAccounts } from "../lib/ops/planCounts";
 import { matchOpsRoute } from "../lib/ops/routes";
 import { logger } from "../logger";
 
@@ -85,6 +86,30 @@ export const opsHandler = httpAction(async (ctx, request) => {
         reason: auth.reason ?? "",
       });
       return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "plans.list": {
+      // Accounts and assignments are read a page per query; see ops/reads.ts.
+      const plans = await ctx.runQuery(internal.ops.reads.plansForCount, {});
+      let totalAccounts = 0;
+      let accountCursor: string | null = null;
+      do {
+        const page: { count: number; cursor: string | null } = await ctx.runQuery(internal.ops.reads.accountCountPage, {
+          cursor: accountCursor,
+        });
+        totalAccounts += page.count;
+        accountCursor = page.cursor;
+      } while (accountCursor !== null);
+      const assignments: AssignmentRow[] = [];
+      let assignmentCursor: string | null = null;
+      do {
+        const page: { assignments: AssignmentRow[]; cursor: string | null } = await ctx.runQuery(
+          internal.ops.reads.assignmentPage,
+          { cursor: assignmentCursor }
+        );
+        assignments.push(...page.assignments);
+        assignmentCursor = page.cursor;
+      } while (assignmentCursor !== null);
+      return ok(tallyPlanAccounts(plans, assignments, totalAccounts, Date.now()));
     }
     case "audit.list": {
       const actor = url.searchParams.get("actor") ?? undefined;
