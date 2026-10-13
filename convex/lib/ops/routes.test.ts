@@ -29,6 +29,19 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/audit")).toEqual({ method: "GET", name: "audit.list" });
   });
 
+  it("names each engine action", () => {
+    for (const action of ["upgrade", "retry", "delete"]) {
+      expect(matchOpsRoute("POST", `/api/ops/engines/i1/${action}`)).toEqual({
+        method: "POST",
+        name: "engines.act",
+        instanceId: "i1",
+        action,
+      });
+    }
+    expect(matchOpsRoute("POST", "/api/ops/engines/i1/deprovision")).toBeNull();
+    expect(matchOpsRoute("GET", "/api/ops/engines/i1/upgrade")).toBeNull();
+  });
+
   it("serves nothing else", () => {
     expect(matchOpsRoute("POST", "/api/ops/users")).toBeNull();
     expect(matchOpsRoute("GET", "/api/ops/")).toBeNull();

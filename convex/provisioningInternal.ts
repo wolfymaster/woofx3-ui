@@ -260,7 +260,7 @@ export const recordRetryStarted = internalMutation({
 export const beginUpgrade = internalMutation({
   args: {
     provisioningId: v.id("engineProvisioning"),
-    requestedBy: v.id("users"),
+    requestedBy: v.union(v.id("users"), v.object({ operator: v.string() })),
     fromVersion: v.string(),
     toVersion: v.string(),
   },

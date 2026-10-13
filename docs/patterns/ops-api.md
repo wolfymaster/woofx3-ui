@@ -40,6 +40,21 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only t
 
 List routes are cursor-paginated: pass back `cursor` until it is `null`.
 
+Operators act on a customer's managed engine exactly as the customer could:
+
+| Route | Does |
+|---|---|
+| `POST /api/ops/engines/:instanceId/upgrade` | The customer's upgrade, to the offered release. |
+| `POST /api/ops/engines/:instanceId/retry` | The customer's retry of a failed run or registration. |
+| `POST /api/ops/engines/:instanceId/delete` | The customer's delete: the engine is torn down, and the instance stays. |
+
+- **One implementation:** both paths run `convex/lib/managedEngineActions.ts`. The provisioning row, the runs, the callbacks and a rollback are identical; only `upgrade.requestedBy` names the operator, as `{ operator: email }`.
+- **Not shown to the customer:** `provisioning.forInstance` strips `requestedBy`, and the customer sees the run like any other.
+- **No duplicates:** the maintenance API's idempotency keys come from the row's state, so a repeated request is answered by the run already started.
+- **Errors:** a refusal, such as an engine that isn't running, answers `409 refused`. A maintenance API failure answers `502 maintenance_error`.
+- **Audit:** the action calls the maintenance API between its own mutations, so its audit row is written when it finishes, success or failure, rather than in one mutation with the change.
+- **The maintenance API's own audit names the Convex client, not the operator.** Only admin keys may name an operator there, and Convex does not hold one. The operator is in `opsAuditLog` and the backoffice's audit.
+
 ## Consequences
 
 - Each new operator capability is a deliberate ops route with its own DTO and audit row, never a generic table read.

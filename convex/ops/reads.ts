@@ -336,6 +336,24 @@ export const instanceHealth = internalQuery({
   },
 });
 
+/**
+ * The provisioning row an operator action works on, with every field: only
+ * ops/engines.ts reads it, and nothing of it is returned over HTTP.
+ */
+export const provisioningForInstance = internalQuery({
+  args: { instanceId: v.string() },
+  handler: async (ctx, args): Promise<Doc<"engineProvisioning"> | null> => {
+    const instanceId = ctx.db.normalizeId("instances", args.instanceId);
+    if (!instanceId) {
+      return null;
+    }
+    return ctx.db
+      .query("engineProvisioning")
+      .withIndex("by_instance", (index) => index.eq("instanceId", instanceId))
+      .first();
+  },
+});
+
 /** The ops audit log, newest first, optionally for one operator or one target. */
 export const listAudit = internalQuery({
   args: { actor: v.optional(v.string()), target: v.optional(v.string()), cursor: cursorArg },

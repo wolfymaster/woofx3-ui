@@ -12,3 +12,22 @@ export const recordRead = internalMutation({
     await recordOpsAudit(ctx, { actor, action, target, reason, result: "ok" });
   },
 });
+
+/**
+ * Records an operator's action on a managed engine once it has finished.
+ * The action calls the maintenance API between its own mutations, so no one
+ * mutation holds the whole change; this row is written whether the action
+ * succeeded or failed.
+ */
+export const recordEngineAction = internalMutation({
+  args: {
+    actor: v.string(),
+    action: v.string(),
+    target: v.string(),
+    reason: v.string(),
+    result: v.string(),
+  },
+  handler: async (ctx, { actor, action, target, reason, result }) => {
+    await recordOpsAudit(ctx, { actor, action, target, reason, result });
+  },
+});
