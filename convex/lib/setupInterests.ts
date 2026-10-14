@@ -114,12 +114,11 @@ export function buildDashboardPreset(interestIds: readonly string[]): PresetWidg
 
   const dock = wants("chat-commands") ? ["macro-pad"] : ["stream-status"];
 
-  const activity = ["live-events"];
+  // The Events feed already shows every alert, so celebrating subs and cheers
+  // adds no widget of its own; their alerts come from the starter packs.
+  const activity = ["events"];
   if (wants("thank-followers-raiders")) {
     activity.push("activity");
-  }
-  if (wants("celebrate-subs-cheers")) {
-    activity.push("alert-log");
   }
 
   const controls: string[] = [];

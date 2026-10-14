@@ -1,7 +1,6 @@
 import {
   Activity,
   AlarmClock,
-  BellRing,
   Clapperboard,
   Grid3x3,
   History,
@@ -21,10 +20,9 @@ import {
 } from "lucide-react";
 import { ActivityPanelWidget } from "@/components/dashboard/widgets/activity-panel";
 import { AdBreaksWidget } from "@/components/dashboard/widgets/ad-breaks";
-import { AlertLogWidget } from "@/components/dashboard/widgets/alert-log";
 import { AnnouncementWidget } from "@/components/dashboard/widgets/announcement";
+import { EventsWidget } from "@/components/dashboard/widgets/events";
 import { GoLiveWidget } from "@/components/dashboard/widgets/go-live";
-import { LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
 import { MacroPadModule } from "@/components/dashboard/widgets/macro-pad";
 import { ModerationWidget } from "@/components/dashboard/widgets/moderation";
 import { NotesWidget } from "@/components/dashboard/widgets/notes";
@@ -63,17 +61,17 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     component: GoLiveWidget,
   },
   {
-    type: "live-events",
-    label: "Live Events",
-    description: "Realtime follows, subs, cheers, and raids — straight from Twitch, no engine round-trip.",
+    type: "events",
+    label: "Events",
+    description: "Everything that happened on stream, with the alerts it played, their status and replay.",
     icon: Zap,
     category: "stream",
-    component: LiveEventsWidget,
+    component: EventsWidget,
   },
   {
     type: "activity",
     label: "Activity",
-    description: "Live events, pinned notes, and saved highlights in one tabbed card.",
+    description: "The events feed and saved highlights in one tabbed card.",
     icon: MessagesSquare,
     category: "stream",
     component: ActivityPanelWidget,
@@ -159,14 +157,6 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
     component: WorkflowRunsModule,
   },
   {
-    type: "alert-log",
-    label: "Alert Log",
-    description: "Alerts the engine sent, and the reason any of them never played.",
-    icon: BellRing,
-    category: "automation",
-    component: AlertLogWidget,
-  },
-  {
     type: "stream-stats",
     label: "Stream Stats",
     description: "Viewers, uptime, category, and what's come in since the page loaded.",
@@ -200,8 +190,20 @@ export const dashboardWidgets: DashboardWidgetDefinition[] = [
   },
 ];
 
+/**
+ * Saved types whose widget was replaced, and the type that renders them now.
+ * Panels keep the saved type (and its config) and render the replacement; the
+ * picker offers only the replacement.
+ */
+const REPLACED_WIDGET_TYPES: Record<string, string> = {
+  "live-events": "events",
+  "alert-log": "events",
+};
+
+/** The definition that renders a saved widget type, following REPLACED_WIDGET_TYPES. */
 export function getDashboardWidget(type: string): DashboardWidgetDefinition | undefined {
-  return dashboardWidgets.find((widget) => widget.type === type);
+  const resolved = REPLACED_WIDGET_TYPES[type] ?? type;
+  return dashboardWidgets.find((widget) => widget.type === resolved);
 }
 
 export const dashboardWidgetCategoryLabels: Record<DashboardWidgetCategory, string> = {

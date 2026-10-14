@@ -1,17 +1,13 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { BellRing, Loader2, RotateCcw, ScrollText } from "lucide-react";
-import { useState } from "react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useDescribeAlert } from "@/hooks/use-describe-alert";
-import { useToast } from "@/hooks/use-toast";
+import { useReplayAlert } from "@/hooks/use-replay-alert";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import { replayResultToast } from "@/lib/alert-queue";
 import { alertRunPath } from "@/lib/alert-run-route";
 import { engineAlertStyle } from "@/lib/alert-status";
 import type { AlertSummary } from "@/lib/alert-summary";
@@ -55,32 +51,12 @@ interface AlertFeedRowProps {
 }
 
 function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
-  const replay = useAction(api.alertActions.replay);
-  const { toast } = useToast();
-  const [busy, setBusy] = useState(false);
+  const { replay, busy } = useReplayAlert(instanceId);
 
   const style = engineAlertStyle(alert);
   const StatusIcon = style.icon;
   const target = alertTarget(alert.payload);
   const failure = alert.error ? describeAlertFailure(alert.error) : null;
-
-  const start = async () => {
-    setBusy(true);
-    try {
-      // The new dispatch and this row's `replayed` status both arrive as
-      // webhooks, so the list updates itself; the toast only reports what the
-      // engine answered.
-      toast(replayResultToast(await replay({ instanceId, engineAlertId: alert.engineAlertId })));
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Replay could not be started",
-        description: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <li className="group flex items-start gap-3 px-3 py-2.5" data-testid={`alert-feed-${alert._id}`}>
@@ -145,7 +121,7 @@ function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
               variant="ghost"
               className="h-7 w-7"
               disabled={busy}
-              onClick={() => void start()}
+              onClick={() => void replay(alert.engineAlertId)}
               data-testid={`button-replay-alert-${alert._id}`}
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
