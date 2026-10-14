@@ -70,6 +70,13 @@ export interface TriggerPreset {
   summary?: string;
   /** Short secondary lines under the summary, e.g. `"{streakMonths}-month streak"`; same placeholders. */
   summaryDetails?: string[];
+  /**
+   * The manifest trigger `type`: `"eventbus"` for a trigger fired by an event, absent
+   * from engines that predate the field (read it as `"eventbus"`).
+   */
+  transport?: string;
+  /** The module providing this trigger, by its display name; the Events widget groups by it. */
+  source?: string;
 }
 
 export interface ActionPreset {
