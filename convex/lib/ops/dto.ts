@@ -227,6 +227,32 @@ export function auditEntryDto(entry: Doc<"opsAuditLog">): AuditEntryDto {
   };
 }
 
+export interface NotificationDto {
+  id: string;
+  heading: string;
+  description: string;
+  link: string | null;
+  audience: { kind: "all" } | { kind: "account"; accountId: string } | { kind: "user"; userId: string };
+  recipients: number;
+  delivering: boolean;
+  createdBy: string;
+  createdAt: number;
+}
+
+export function notificationDto(notification: Doc<"notifications">): NotificationDto {
+  return {
+    id: notification._id,
+    heading: notification.heading,
+    description: notification.description,
+    link: notification.link ?? null,
+    audience: notification.audience,
+    recipients: notification.recipients,
+    delivering: notification.delivering,
+    createdBy: notification.createdBy,
+    createdAt: notification._creationTime,
+  };
+}
+
 /** Keys no ops response may contain, at any depth. The DTO test walks every response against these. */
 export const FORBIDDEN_RESPONSE_KEYS: ReadonlySet<string> = new Set([
   "registrationToken",

@@ -2,6 +2,7 @@ import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { httpAction } from "../_generated/server";
 import { authenticateOps, OPS_SECRET_ENV, OPS_SECRET_NEXT_ENV } from "../lib/ops/auth";
+import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { type AssignmentRow, tallyPlanAccounts } from "../lib/ops/planCounts";
 import { matchOpsRoute } from "../lib/ops/routes";
 import { logger } from "../logger";
@@ -110,6 +111,30 @@ export const opsHandler = httpAction(async (ctx, request) => {
         assignmentCursor = page.cursor;
       } while (assignmentCursor !== null);
       return ok(tallyPlanAccounts(plans, assignments, totalAccounts, Date.now()));
+    }
+    case "notifications.list":
+      return ok(await ctx.runQuery(internal.ops.notifications.list, { cursor }));
+    case "notifications.create": {
+      const body = await request.json().catch(() => null);
+      const parsed = parseNotificationRequest(body);
+      if (!parsed.ok) {
+        return error(400, "invalid_notification", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.notifications.create, {
+        ...parsed.value,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "notifications.delete": {
+      const outcome = await ctx.runMutation(internal.ops.notifications.remove, {
+        notificationId: route.notificationId,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
     }
     case "audit.list": {
       const actor = url.searchParams.get("actor") ?? undefined;

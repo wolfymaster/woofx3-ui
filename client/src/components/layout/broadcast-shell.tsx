@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import { useMutation } from "convex/react";
-import { Activity, Bell, Check, ChevronDown, Command, MonitorPlay, Pencil, Search } from "lucide-react";
+import { Activity, Check, ChevronDown, Command, MonitorPlay, Pencil, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { CommandPalette } from "@/components/command-palette/command-palette";
@@ -32,7 +32,7 @@ import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
 import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { formatEngineVersion } from "@/lib/engine-version";
-import { $commandPaletteOpen, $notifications } from "@/lib/stores";
+import { $commandPaletteOpen } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { EngineUpgradingBanner } from "./engine-upgrading-banner";
 import {
@@ -44,6 +44,7 @@ import {
   UTILITY_SECTIONS,
   withAlertsChildren,
 } from "./nav-config";
+import { NotificationsMenu } from "./notifications-menu";
 import { SectionSidebar } from "./section-sidebar";
 import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
@@ -199,12 +200,10 @@ function StatusBar() {
 }
 
 function AppHeader() {
-  const notifications = useStore($notifications);
   const { user } = useConvexUser();
   const { signOut } = useAuthActions();
   const [location] = useLocation();
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
   const displayName = (user as any)?.name || "User";
   const initials = displayName
     .split(" ")
@@ -281,15 +280,7 @@ function AppHeader() {
           </kbd>
         </Button>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative" data-testid="button-notifications">
-              <Bell className="h-5 w-5" />
-              {unreadCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Notifications</TooltipContent>
-        </Tooltip>
+        <NotificationsMenu />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
