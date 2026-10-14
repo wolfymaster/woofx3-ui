@@ -8,6 +8,7 @@ import {
   libraryAlertOfStep,
   libraryJsonOf,
   libraryPreviewInputs,
+  withLayersOf,
 } from "@/lib/alert-library";
 import type { VariableOption } from "@/lib/workflow-variables";
 
@@ -116,6 +117,47 @@ describe("inlineCopyOfLibraryAlert", () => {
     const unbound = inlineCopyOfLibraryAlert(row, []);
     expect(unbound.unfilled).toEqual(["name"]);
     expect(unbound.doc.widgets.top?.settings).toEqual({ text: "Thanks {name}!" });
+  });
+});
+
+describe("withLayersOf", () => {
+  const fade = (target: string) => ({
+    type: "transition",
+    kind: "fade",
+    target,
+    order: "a0",
+    timing: { anchor: "enter", offsetMs: 0, durationMs: 400, easing: "ease" },
+    params: {},
+  });
+
+  test("adds the copy's layers on top of the stack, in their order, with fresh ids", () => {
+    const current = compositionOfLibraryAlert(libraryRow({ layout: { width: 800, height: 600 } }));
+    const copy = compositionOfLibraryAlert(libraryRow());
+    const merged = withLayersOf(current, copy);
+
+    const order = stackOrder(merged);
+    expect(order).toHaveLength(4);
+    expect(order.slice(0, 2)).toEqual(["bottom", "top"]);
+    const added = order.slice(2);
+    expect(added.some((id) => id in current.widgets)).toBe(false);
+    expect(added.map((id) => merged.widgets[id]?.settings)).toEqual([{}, { text: "Thanks {{name}}!" }]);
+    expect(merged.layout).toEqual(current.layout);
+  });
+
+  test("retargets the copy's behaviors to the added layers", () => {
+    const current = compositionOfLibraryAlert(libraryRow({ behaviors: { b1: fade("top") } }));
+    const copy = compositionOfLibraryAlert(libraryRow({ behaviors: { b1: fade("top") } }));
+    const merged = withLayersOf(current, copy);
+
+    const addedTop = stackOrder(merged)[3] as string;
+    const targets = Object.values(merged.behaviors).map((behavior) => behavior.target);
+    expect(Object.keys(merged.behaviors)).toHaveLength(2);
+    expect(targets.sort()).toEqual([addedTop, "top"].sort());
+  });
+
+  test("adds to an empty canvas", () => {
+    const empty = compositionOfLibraryAlert(libraryRow({ widgets: [] }));
+    expect(stackOrder(withLayersOf(empty, compositionOfLibraryAlert(libraryRow())))).toHaveLength(2);
   });
 });
 

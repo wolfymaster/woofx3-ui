@@ -15,6 +15,10 @@ interface OverlayEditorShellProps {
   stage: (zoom: number) => ReactNode;
   /** See StageArea.zoomControl. */
   zoomControl?: StageZoom;
+  /** See StageArea.toolbar. */
+  stageToolbar?: ReactNode;
+  /** Clears the selection: a press around the canvas, outside it. */
+  onDeselect?: () => void;
   /** The selected widget's settings, or null when nothing is selected. */
   inspector: ReactNode | null;
   /** What the right rail shows with nothing selected, so the rail is never empty. */
@@ -56,6 +60,8 @@ export function OverlayEditorShell({
   layers,
   stage,
   zoomControl,
+  stageToolbar,
+  onDeselect,
   inspector,
   inspectorFallback,
   className = "h-full",
@@ -73,7 +79,7 @@ export function OverlayEditorShell({
         data-testid="overlay-editor-body"
       >
         <aside className="flex min-h-0 flex-col overflow-y-auto border-r p-4">{palette}</aside>
-        <StageArea canvas={canvas} zoomControl={zoomControl}>
+        <StageArea canvas={canvas} zoomControl={zoomControl} toolbar={stageToolbar} onBackgroundPress={onDeselect}>
           {stage}
         </StageArea>
         <aside className="flex min-h-0 flex-col border-l">

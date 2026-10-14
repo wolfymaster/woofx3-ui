@@ -13,8 +13,9 @@ import {
   type DraftLiveCopy,
   type DraftLiveTestIds,
 } from "@/components/scenes/draft-live-controls";
-import { sessionStatusText } from "@/components/scenes/scene-canvas-editor";
+import { hasUnsavedEdits, sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
 import { Button } from "@/components/ui/button";
+import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
@@ -37,6 +38,7 @@ interface LibraryAlertEditorProps {
  */
 export function LibraryAlertEditor({ instanceId, compositionId, onBack }: LibraryAlertEditorProps) {
   const { toast } = useToast();
+  useCollapsedSidebar();
   const row = useQuery(api.alertCompositions.getByEngineId, { instanceId, engineCompositionId: compositionId });
   const catalogRows = useQuery(api.sceneWidgets.listForInstance, { instanceId });
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
@@ -138,7 +140,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
     );
   }
 
-  const status = sessionStatusText(syncState, live, "alert");
+  const notice = sessionNotice(syncState, "alert");
 
   return (
     <AlertEditorFrame
@@ -149,9 +151,11 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
       backLabel="alerts"
       onBack={onBack}
       status={
-        <span className="truncate text-xs text-muted-foreground" data-testid="text-alert-sync">
-          {status}
-        </span>
+        notice === null ? undefined : (
+          <span className="truncate text-xs text-muted-foreground" data-testid="text-alert-sync">
+            {notice}
+          </span>
+        )
       }
       actions={
         <DraftLiveControls
@@ -161,6 +165,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
           pendingCommand={pendingCommand}
           onCommand={runDraftCommand}
           hasDraft={syncState?.hasDraft ?? false}
+          unsaved={hasUnsavedEdits(syncState, live)}
           copy={ALERT_DRAFT_COPY}
           testIds={ALERT_DRAFT_TEST_IDS}
         />
@@ -175,14 +180,14 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
           {pendingCommand === "publish" ? "Publishing…" : "Publish"}
         </Button>
       }
-      phoneStatus={status}
+      phoneStatus={sessionStatusText(syncState, live, "alert")}
     />
   );
 }
 
 const ALERT_DRAFT_COPY: DraftLiveCopy = {
-  draft: "Edit a draft that new copies don't start from until you publish it",
-  live: "Edit what new copies start from right now, without publishing",
+  draft: "Edits go to a draft that new copies don't start from until you publish it",
+  live: "Edits change what new copies start from right away, without publishing",
   liveDisabled: "Live edits are already what new copies start from",
   publish: "Make the draft what new copies start from",
   discardTitle: "Discard your draft of this alert?",
@@ -191,9 +196,7 @@ const ALERT_DRAFT_COPY: DraftLiveCopy = {
 };
 
 const ALERT_DRAFT_TEST_IDS: DraftLiveTestIds = {
-  mode: "toggle-alert-mode",
-  draft: "toggle-alert-draft",
-  live: "toggle-alert-live",
+  live: "menu-alert-live-update",
   discard: "button-discard-alert-draft",
   confirmDiscard: "button-confirm-discard-alert-draft",
   publish: "button-publish-alert",
