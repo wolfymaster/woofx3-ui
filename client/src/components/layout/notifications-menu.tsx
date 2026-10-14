@@ -108,7 +108,7 @@ function NotificationItem({ notification, onNavigate }: { notification: InboxNot
                 navigate(notification.link ?? "/");
               }}
             >
-              View <ArrowRight className="h-3 w-3" />
+              {notification.actionLabel ?? "View"} <ArrowRight className="h-3 w-3" />
             </button>
           )}
           {linkKind === "external" && notification.link !== null && (
@@ -119,7 +119,7 @@ function NotificationItem({ notification, onNavigate }: { notification: InboxNot
               className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
               onClick={markThisRead}
             >
-              Open <ExternalLink className="h-3 w-3" />
+              {notification.actionLabel ?? "Open"} <ExternalLink className="h-3 w-3" />
             </a>
           )}
         </div>

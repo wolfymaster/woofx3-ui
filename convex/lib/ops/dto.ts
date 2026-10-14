@@ -232,6 +232,7 @@ export interface NotificationDto {
   heading: string;
   description: string;
   link: string | null;
+  actionLabel: string | null;
   audience: { kind: "all" } | { kind: "account"; accountId: string } | { kind: "user"; userId: string };
   recipients: number;
   delivering: boolean;
@@ -245,6 +246,7 @@ export function notificationDto(notification: Doc<"notifications">): Notificatio
     heading: notification.heading,
     description: notification.description,
     link: notification.link ?? null,
+    actionLabel: notification.actionLabel ?? null,
     audience: notification.audience,
     recipients: notification.recipients,
     delivering: notification.delivering,

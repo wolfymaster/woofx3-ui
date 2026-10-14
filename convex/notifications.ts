@@ -21,6 +21,7 @@ export type InboxNotification = {
   heading: string;
   description: string;
   link: string | null;
+  actionLabel: string | null;
   read: boolean;
   createdAt: number;
 };
@@ -37,6 +38,7 @@ export async function sendNotification(
     heading: notification.heading,
     description: notification.description,
     link: notification.link ?? undefined,
+    actionLabel: notification.actionLabel ?? undefined,
     audience: notification.audience,
     recipients: 0,
     delivering: true,
@@ -160,6 +162,7 @@ export const list = query({
         heading: notification.heading,
         description: notification.description,
         link: notification.link ?? null,
+        actionLabel: notification.actionLabel ?? null,
         read: row.read,
         createdAt: notification._creationTime,
       });

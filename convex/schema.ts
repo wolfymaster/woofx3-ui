@@ -1305,6 +1305,8 @@ export default defineSchema({
     description: v.string(),
     // An internal path ("/admin/engine") or an https URL; see lib/notifications.ts.
     link: v.optional(v.string()),
+    // The link's button text; only set alongside a link.
+    actionLabel: v.optional(v.string()),
     audience: notificationAudienceValidator,
     // Inboxes delivered so far; delivery to every user runs in batches.
     recipients: v.number(),

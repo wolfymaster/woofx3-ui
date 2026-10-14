@@ -35,6 +35,7 @@ export const create = internalMutation({
     heading: v.string(),
     description: v.string(),
     link: v.union(v.string(), v.null()),
+    actionLabel: v.union(v.string(), v.null()),
     audience: v.union(
       v.object({ kind: v.literal("all") }),
       v.object({ kind: v.literal("account"), accountId: v.string() }),
@@ -71,6 +72,7 @@ export const create = internalMutation({
       heading: args.heading,
       description: args.description,
       link: args.link,
+      actionLabel: args.actionLabel,
       audience,
       createdBy: args.actor,
       requestId: args.requestId,
@@ -80,7 +82,13 @@ export const create = internalMutation({
       action: "notifications.create",
       target: notificationId,
       reason: args.reason,
-      request: { heading: args.heading, description: args.description, link: args.link, audience: args.audience },
+      request: {
+        heading: args.heading,
+        description: args.description,
+        link: args.link,
+        actionLabel: args.actionLabel,
+        audience: args.audience,
+      },
       result: "ok",
     });
     const created = await ctx.db.get(notificationId);

@@ -9,8 +9,9 @@ The bell in the app header opens the signed-in user's notifications. A dot on th
 | Heading | 1–50 characters |
 | Description | 1–150 characters |
 | Link (optional) | A path in the app (`/admin/engine`) or an `https://` URL, at most 500 characters |
+| Action label (optional) | The link's button text, at most 24 characters; only with a link |
 
-An internal link shows **View** and navigates in place. An external link shows **Open** and opens a new tab. Following either marks the notification read. The rules live in `convex/lib/notifications.ts`.
+An internal link navigates in place and an external link opens a new tab. Without an action label their buttons read **View** and **Open**. Following either marks the notification read. The rules live in `convex/lib/notifications.ts`.
 
 ## What a user can do
 
@@ -35,7 +36,7 @@ Operators write and retract notifications in the backoffice. The backoffice goes
 | Route | Does |
 |---|---|
 | `GET /api/ops/notifications?cursor=` | Lists notifications, newest first |
-| `POST /api/ops/notifications` | Creates one: `{ requestId, heading, description, link, audience }` |
+| `POST /api/ops/notifications` | Creates one: `{ requestId, heading, description, link, actionLabel, audience }` |
 | `POST /api/ops/notifications/<id>/delete` | Retracts one from every inbox |
 
 Both writes need a reason and are recorded in `opsAuditLog`. Repeating a `requestId` returns the notification it already created.

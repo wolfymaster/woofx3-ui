@@ -13,7 +13,11 @@ describe("parseNotificationRequest", () => {
   it("accepts each audience", () => {
     expect(parseNotificationRequest(valid)).toEqual({
       ok: true,
-      value: { ...valid, audience: { kind: "all" } },
+      value: { ...valid, actionLabel: null, audience: { kind: "all" } },
+    });
+    expect(parseNotificationRequest({ ...valid, actionLabel: "Upgrade engine" })).toMatchObject({
+      ok: true,
+      value: { actionLabel: "Upgrade engine" },
     });
     expect(parseNotificationRequest({ ...valid, audience: { kind: "account", accountId: "k1" } })).toMatchObject({
       ok: true,

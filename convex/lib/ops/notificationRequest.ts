@@ -18,7 +18,12 @@ export function parseNotificationRequest(body: unknown): ParseResult<Notificatio
   if (typeof requestId !== "string" || requestId === "" || requestId.length > MAX_REQUEST_ID_LENGTH) {
     return { ok: false, message: `requestId must be 1 to ${MAX_REQUEST_ID_LENGTH} characters` };
   }
-  const content = parseNotificationContent({ heading: raw.heading, description: raw.description, link: raw.link });
+  const content = parseNotificationContent({
+    heading: raw.heading,
+    description: raw.description,
+    link: raw.link,
+    actionLabel: raw.actionLabel,
+  });
   if (!content.ok) {
     return content;
   }
