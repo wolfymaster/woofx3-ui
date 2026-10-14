@@ -1,11 +1,17 @@
 import type { Doc } from "@convex/_generated/dataModel";
+import { randomNodeId } from "@woofx3/scene/editor";
 import {
+  type BehaviorDocument,
   bindInputs,
   type CompositionDocument,
   type InputField,
   inputReferences,
   isPlainObject,
+  keysBetween,
+  type NodeId,
   normalizeComposition,
+  type PlacementDocument,
+  stackOrder,
 } from "@woofx3/scene/model";
 import { compositionOfLegacyAlert, DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
@@ -109,6 +115,48 @@ export function inlineCopyOfLibraryAlert(
   const inputs = ids.map((id) => ({ id, label: id, type: "text" }));
   const bound = bindInputs({ ...published, inputs }, filled);
   return { doc: withoutInputs(bound.ok ? bound.document : published), unfilled: bound.ok ? unfilled : [] };
+}
+
+/**
+ * `current` with every layer of `copy` added on top of its stack, as the library tab adds a
+ * library alert to the canvas. The copied layers and their behaviors take fresh ids, so the
+ * alert can be added more than once, and the canvas keeps its own size and background.
+ */
+export function withLayersOf(current: CompositionDocument, copy: CompositionDocument): CompositionDocument {
+  const takenNodes = new Set(Object.keys(current.widgets));
+  const idMap = new Map<NodeId, NodeId>();
+  for (const id of stackOrder(copy)) {
+    const fresh = randomNodeId(takenNodes);
+    takenNodes.add(fresh);
+    idMap.set(id, fresh);
+  }
+
+  const order = stackOrder(current);
+  const topId = order[order.length - 1];
+  const top = topId === undefined ? null : (current.widgets[topId] as PlacementDocument).z;
+  const keys = keysBetween(top, null, idMap.size);
+  const widgets = { ...current.widgets };
+  Array.from(idMap.entries()).forEach(([from, to], i) => {
+    widgets[to] = { ...structuredClone(copy.widgets[from] as PlacementDocument), z: keys[i] as string };
+  });
+
+  const behaviors = { ...current.behaviors };
+  const takenBehaviors = new Set(Object.keys(behaviors));
+  for (const behavior of Object.values(copy.behaviors)) {
+    const target = idMap.get(behavior.target);
+    if (target === undefined) {
+      // A behavior on the copy's canvas belongs to that alert as a whole, not to its layers.
+      continue;
+    }
+    const id = `b-${randomNodeId(takenBehaviors).slice(2)}`;
+    takenBehaviors.add(id);
+    const timing = { ...behavior.timing };
+    if (timing.node !== undefined) {
+      timing.node = idMap.get(timing.node) ?? timing.node;
+    }
+    behaviors[id] = { ...(structuredClone(behavior) as BehaviorDocument), target, timing };
+  }
+  return { ...current, widgets, behaviors };
 }
 
 /** What a copy says about the inputs it left as `{id}` placeholders. */
