@@ -13,23 +13,46 @@ export type AlertSummarySource = Pick<TriggerPreset, "name" | "emits" | "summary
 
 const ANONYMOUS = "Anonymous";
 
+/** What an event says about itself: its CloudEvent type and payload, either of which may be missing. */
+export interface EventFacts {
+  type: string | null;
+  data: Record<string, unknown> | null;
+}
+
 /**
  * How a recent alert reads, e.g. "wolfy_fan redeemed Hydrate" with the
- * viewer's message underneath.
- *
- * The module that declares a trigger knows what its event means, so the
- * wording is its `emits.summary` and `emits.details`, filled from the event
- * the alert carries. A trigger that declares no summary, or whose event lacks
- * a value the summary needs, still reads as who it was about and what
- * happened ("wolfy_fan · Channel follow") whenever its `emits` marks an
- * identity. An alert with no originating event, or one no trigger claims,
- * reads as it always has: the trigger's name, or the alert widget it went to.
+ * viewer's message underneath: the event the alert carries, read through
+ * `describeEvent`. An alert with no originating event, or one no trigger
+ * claims, reads as it always has: the trigger's name, or the alert widget it
+ * went to.
  */
 export function describeAlert(payload: string | undefined, trigger: AlertSummarySource | undefined): AlertSummary {
-  const event = alertEventType(payload);
-  const data = alertEventData(payload);
   const target = alertTarget(payload);
-  const name = trigger?.name ?? event ?? (target ? `Alert → ${target}` : "Alert");
+  return describeEvent(
+    { type: alertEventType(payload), data: alertEventData(payload) },
+    trigger,
+    target ? `Alert → ${target}` : "Alert"
+  );
+}
+
+/**
+ * How a fired event reads, e.g. "wolfy_fan redeemed Hydrate".
+ *
+ * The module that declares a trigger knows what its event means, so the
+ * wording is its `emits.summary` and `emits.details`, filled from the event's
+ * data. A trigger that declares no summary, or whose event lacks a value the
+ * summary needs, still reads as who it was about and what happened
+ * ("wolfy_fan · Channel follow") whenever its `emits` marks an identity. An
+ * event no trigger claims reads as its type, and one with no type as
+ * `fallbackName`.
+ */
+export function describeEvent(
+  event: EventFacts,
+  trigger: AlertSummarySource | undefined,
+  fallbackName = "Event"
+): AlertSummary {
+  const { data } = event;
+  const name = trigger?.name ?? event.type ?? fallbackName;
   if (!trigger || !data) {
     return { title: name, details: [] };
   }
@@ -128,6 +151,40 @@ function identityName(data: Record<string, unknown>, fields: readonly DataShapeF
     }
   }
   return null;
+}
+
+/** One labelled value of an event, for showing the event in full. */
+export interface EventFieldRow {
+  path: string;
+  label: string;
+  value: string;
+}
+
+/**
+ * Every value an event carries that reads as text, labelled from its trigger's
+ * `emits` (the field's description, else its path) and in the order `emits`
+ * declares them. An event whose trigger declares nothing lists its top-level
+ * values by key. Lists and objects are left out: they have no one-line form.
+ */
+export function eventFieldRows(
+  data: Record<string, unknown> | null,
+  emits: readonly DataShapeField[] | undefined
+): EventFieldRow[] {
+  if (!data) {
+    return [];
+  }
+  const fields = emits?.length
+    ? emits.map((field) => ({ path: field.path, label: field.description?.trim() || field.path }))
+    : Object.keys(data).map((key) => ({ path: key, label: key }));
+  const rows: EventFieldRow[] = [];
+  for (const field of fields) {
+    const raw = valueAt(data, field.path);
+    const value = typeof raw === "boolean" ? (raw ? "Yes" : "No") : textOf(raw);
+    if (value !== null) {
+      rows.push({ ...field, value });
+    }
+  }
+  return rows;
 }
 
 function valueAt(data: Record<string, unknown>, path: string): unknown {
