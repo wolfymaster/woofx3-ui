@@ -1,3 +1,5 @@
+import { parseRelease } from "@convex/lib/releaseVersion";
+
 /**
  * Footer label for the engine's reported release. The engine reports its
  * image tag, which is not guaranteed to be semver: a release is a bare number
@@ -14,4 +16,20 @@ export function formatEngineVersion(version: string | null): string {
     return `v${trimmed}`;
   }
   return trimmed;
+}
+
+/** The engine repository's releases; must match `releaseNotesUrl` in convex/provisioning.ts. */
+const ENGINE_RELEASES_URL = "https://github.com/wolfymaster/woofx3/releases/tag";
+
+/**
+ * GitHub release page for the tag an engine reports, or null when the tag is
+ * not a release: preview builds (`pr-<n>-<sha7>`) and dev images have no
+ * release page to open.
+ */
+export function engineReleaseNotesUrl(version: string | null): string | null {
+  const trimmed = version?.trim();
+  if (!trimmed || !parseRelease(trimmed)) {
+    return null;
+  }
+  return `${ENGINE_RELEASES_URL}/${encodeURIComponent(trimmed)}`;
 }
