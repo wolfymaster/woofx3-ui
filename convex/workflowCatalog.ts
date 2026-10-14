@@ -24,6 +24,8 @@ function catalogTriggerRow(def: Doc<"triggerDefinitions">, id: string, moduleNam
     configFields: def.configFields,
     emits: def.emits,
     sentence: def.sentence,
+    summary: def.summary,
+    summaryDetails: def.summaryDetails,
     projectionKey: def.projectionKey,
     taxonomy: def.taxonomy,
     canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "trigger"),

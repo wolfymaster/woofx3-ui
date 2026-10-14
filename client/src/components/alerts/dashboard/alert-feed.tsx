@@ -7,24 +7,25 @@ import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDescribeAlert } from "@/hooks/use-describe-alert";
 import { useToast } from "@/hooks/use-toast";
-import { alertEventType, alertTarget } from "@/lib/alert-envelope";
+import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { replayResultToast } from "@/lib/alert-queue";
 import { alertRunPath } from "@/lib/alert-run-route";
 import { engineAlertStyle } from "@/lib/alert-status";
+import type { AlertSummary } from "@/lib/alert-summary";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
 interface AlertFeedProps {
   instanceId: Id<"instances">;
   alerts: Doc<"engineAlerts">[];
-  /** CloudEvent type → the trigger's own name, so a row reads "Follow", not "channel.follow". */
-  eventNames: Map<string, string>;
 }
 
 /** Recent dispatches, newest first, each replayable. */
-export function AlertFeed({ instanceId, alerts, eventNames }: AlertFeedProps) {
+export function AlertFeed({ instanceId, alerts }: AlertFeedProps) {
+  const describe = useDescribeAlert();
   if (alerts.length === 0) {
     return (
       <div className="flex flex-col items-center px-4 py-12 text-center" data-testid="alert-feed-empty">
@@ -40,7 +41,7 @@ export function AlertFeed({ instanceId, alerts, eventNames }: AlertFeedProps) {
   return (
     <ul className="divide-y divide-border" data-testid="alert-feed">
       {alerts.map((alert) => (
-        <AlertFeedRow key={alert._id} instanceId={instanceId} alert={alert} eventNames={eventNames} />
+        <AlertFeedRow key={alert._id} instanceId={instanceId} alert={alert} summary={describe(alert.payload)} />
       ))}
     </ul>
   );
@@ -49,10 +50,11 @@ export function AlertFeed({ instanceId, alerts, eventNames }: AlertFeedProps) {
 interface AlertFeedRowProps {
   instanceId: Id<"instances">;
   alert: Doc<"engineAlerts">;
-  eventNames: Map<string, string>;
+  /** Who did what, e.g. "wolfy_fan redeemed Hydrate", and the facts worth a glance. */
+  summary: AlertSummary;
 }
 
-function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
+function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
   const replay = useAction(api.alertActions.replay);
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
@@ -60,8 +62,6 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
   const style = engineAlertStyle(alert);
   const StatusIcon = style.icon;
   const target = alertTarget(alert.payload);
-  const event = alertEventType(alert.payload);
-  const title = (event ? (eventNames.get(event) ?? event) : null) ?? (target ? `Alert → ${target}` : "Alert");
   const failure = alert.error ? describeAlertFailure(alert.error) : null;
 
   const start = async () => {
@@ -89,7 +89,14 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{title}</p>
+        <p className="truncate text-sm font-medium" title={summary.title}>
+          {summary.title}
+        </p>
+        {summary.details.length > 0 && (
+          <p className="truncate text-xs text-foreground/80" title={summary.details.join("\n")}>
+            {summary.details.join(" · ")}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span>{formatTimeAgo(alert.engineCreatedAt)}</span>
           {target && (

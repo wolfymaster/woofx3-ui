@@ -48,6 +48,8 @@ export function triggerDefinitionRow(t: EngineTriggerFields, moduleId: Id<"modul
     configFields: configFields.length > 0 ? configFields : undefined,
     emits: emits ? emits.fields : undefined,
     sentence: t.sentence?.trim() || undefined,
+    summary: emits?.summary,
+    summaryDetails: emits?.details,
     allowVariants: t.allowVariants,
     projectionKey: t.projectionKey,
     taxonomy: t.taxonomy,
