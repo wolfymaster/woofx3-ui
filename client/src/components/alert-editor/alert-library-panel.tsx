@@ -69,32 +69,34 @@ export function LibraryAlertList({ alerts, layout, onPick, onEdit }: LibraryAler
           <li
             key={alert._id}
             className={cn(
-              "group relative flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-1.5 hover:border-foreground/20 hover:bg-accent",
+              "flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-1.5 hover:border-foreground/20 hover:bg-accent",
               layout === "row" && "w-40 shrink-0"
             )}
           >
             <button
               type="button"
-              className="flex flex-col gap-1.5 text-left"
+              className="text-left"
               onClick={() => onPick(alert)}
               title={`Add ${alert.name} to the canvas`}
               data-testid={`library-add-${alert.engineCompositionId}`}
             >
               <LibraryAlertPreview alert={alert} />
-              <span className="truncate px-1 pr-7 text-xs font-medium">{alert.name}</span>
             </button>
             <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute bottom-0.5 right-0.5 h-7 w-7 text-muted-foreground"
-                  aria-label={`More options for ${alert.name}`}
-                  data-testid={`library-menu-${alert.engineCompositionId}`}
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
+              <div className="flex min-w-0 items-center gap-1">
+                <span className="min-w-0 flex-1 truncate px-1 text-xs font-medium">{alert.name}</span>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 shrink-0 text-muted-foreground"
+                    aria-label={`More options for ${alert.name}`}
+                    data-testid={`library-menu-${alert.engineCompositionId}`}
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </div>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   onClick={() => onEdit(alert)}

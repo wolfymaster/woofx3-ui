@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import { useAuthActions } from "@/hooks/use-convex-auth";
 import { useTheme } from "@/hooks/use-theme";
-import { $commandBarHidden, $sidebarCollapsed } from "@/lib/stores";
+import { $commandBarHidden, $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
 import { themePalettes } from "@/lib/theme/palettes";
 import { CUSTOM_PALETTE_ID } from "@/lib/theme/resolve";
 import type { PaletteCommand } from "./types";
@@ -119,7 +119,7 @@ export function useActionCommands(
   const renameInstance = useMutation(api.instances.update);
   const { signOut } = useAuthActions();
   const { mode, modePreference, paletteId, setMode, toggleMode, selectPalette } = useTheme();
-  const sidebarCollapsed = useStore($sidebarCollapsed);
+  const sidebarCollapsed = useStore($sidebarShownCollapsed);
   const commandBarHidden = useStore($commandBarHidden);
 
   const commands: PaletteCommand[] = [];
@@ -518,7 +518,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            $sidebarCollapsed.set(!sidebarCollapsed);
+            toggleSidebar();
             return undefined;
           },
         },

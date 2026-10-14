@@ -2,7 +2,7 @@ import { useStore } from "@nanostores/react";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Link } from "wouter";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { $sidebarCollapsed } from "@/lib/stores";
+import { $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
 import { cn } from "@/lib/utils";
 import { isNavGroupOpen, isNavItemActive, type NavItem } from "./nav-config";
 import { SIDEBAR_RAIL } from "./sidebar-rail";
@@ -14,7 +14,7 @@ interface SectionSidebarProps {
 }
 
 export function SectionSidebar({ title, items, location }: SectionSidebarProps) {
-  const collapsed = useStore($sidebarCollapsed);
+  const collapsed = useStore($sidebarShownCollapsed);
 
   return (
     <nav className={cn(SIDEBAR_RAIL, collapsed && "w-14")} aria-label={`${title} navigation`}>
@@ -44,7 +44,7 @@ export function SectionSidebar({ title, items, location }: SectionSidebarProps) 
       <div className="border-t border-border p-2">
         <button
           type="button"
-          onClick={() => $sidebarCollapsed.set(!collapsed)}
+          onClick={toggleSidebar}
           className={cn(
             "w-full flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm text-muted-foreground",
             "cursor-pointer hover:bg-accent hover:text-foreground",
