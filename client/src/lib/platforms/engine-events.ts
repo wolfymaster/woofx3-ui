@@ -14,6 +14,11 @@ const FRAME_TYPE_TO_EVENT: Record<string, PlatformEventType> = {
   "channel.raid": "raid",
 };
 
+/** The engine event types that map onto `eventTypes`, to ask the engine to push. */
+export function frameTypesFor(eventTypes: readonly PlatformEventType[]): string[] {
+  return Object.keys(FRAME_TYPE_TO_EVENT).filter((frameType) => eventTypes.includes(FRAME_TYPE_TO_EVENT[frameType]));
+}
+
 function text(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }

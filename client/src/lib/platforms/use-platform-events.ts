@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useInstance } from "@/hooks/use-instance";
 import { transport } from "@/lib/transport";
-import { frameToPlatformEvent } from "./engine-events";
+import { frameToPlatformEvent, frameTypesFor } from "./engine-events";
 import type { PlatformEvent, PlatformEventType } from "./types";
 
 // Widget-facing entry point for realtime platform events. Events arrive from
@@ -10,8 +10,8 @@ import type { PlatformEvent, PlatformEventType } from "./types";
 // and one CloudEvent vocabulary shared with every other engine surface.
 //
 // Each call is a "virtual" subscription — the transport keeps a single engine
-// subscription and fans out locally, so N widgets asking for "follow" still
-// produce one registration.
+// subscription for the union of every listener's types and fans out locally, so
+// N widgets asking for "follow" still produce one registration.
 export function usePlatformEvents(eventTypes: PlatformEventType[], onEvent: (event: PlatformEvent) => void): void {
   const { instance } = useInstance();
 
@@ -33,7 +33,7 @@ export function usePlatformEvents(eventTypes: PlatformEventType[], onEvent: (eve
     if (!instanceId) {
       return;
     }
-    return transport.subscribeStreamEvents(instanceId, (frame) => {
+    return transport.subscribeStreamEvents(instanceId, frameTypesFor(eventTypesRef.current), (frame) => {
       const event = frameToPlatformEvent(frame);
       if (event && eventTypesRef.current.includes(event.type)) {
         onEventRef.current(event);
