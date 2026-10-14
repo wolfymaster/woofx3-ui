@@ -93,17 +93,6 @@ export const $engineUrl = atom<string>(initialEngineUrl);
 
 $engineUrl.subscribe((value) => persistValue(STORAGE_KEYS.engineUrl, value));
 
-export const $notifications = atom<
-  Array<{
-    id: string;
-    type: "info" | "success" | "warning" | "error";
-    title: string;
-    message?: string;
-    timestamp: Date;
-    read: boolean;
-  }>
->([]);
-
 /**
  * Whether this tab is on screen. Anything that polls should pause on false:
  * browsers throttle timers in background tabs but still run them.

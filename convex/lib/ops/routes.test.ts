@@ -28,6 +28,18 @@ describe("matchOpsRoute", () => {
     });
     expect(matchOpsRoute("GET", "/api/ops/audit")).toEqual({ method: "GET", name: "audit.list" });
     expect(matchOpsRoute("GET", "/api/ops/plans")).toEqual({ method: "GET", name: "plans.list" });
+    expect(matchOpsRoute("GET", "/api/ops/notifications")).toEqual({ method: "GET", name: "notifications.list" });
+  });
+
+  it("names each notification write", () => {
+    expect(matchOpsRoute("POST", "/api/ops/notifications")).toEqual({ method: "POST", name: "notifications.create" });
+    expect(matchOpsRoute("POST", "/api/ops/notifications/n1/delete")).toEqual({
+      method: "POST",
+      name: "notifications.delete",
+      notificationId: "n1",
+    });
+    expect(matchOpsRoute("GET", "/api/ops/notifications/n1/delete")).toBeNull();
+    expect(matchOpsRoute("POST", "/api/ops/notifications/n1")).toBeNull();
   });
 
   it("names each engine action", () => {

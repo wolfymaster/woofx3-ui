@@ -22,6 +22,7 @@ export default defineConfig({
             { text: "Quick actions", link: "/ui/quick-actions" },
             { text: "Stream recaps", link: "/ui/stream-recaps" },
             { text: "Feedback", link: "/ui/feedback" },
+            { text: "Notifications", link: "/ui/notifications" },
             { text: "Chat commands", link: "/ui/commands" },
             { text: "Modules", link: "/ui/modules" },
             { text: "Workflows", link: "/ui/workflows" },
