@@ -20,6 +20,7 @@ import {
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
+import { MARKETPLACE_AUTHOR_ROUTE, MARKETPLACE_LISTING_ROUTE, MARKETPLACE_PATH } from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
@@ -54,6 +55,9 @@ const FeedbackEdit = lazy(() => import("@/pages/feedback-edit"));
 const GoLive = lazy(() => import("@/pages/go-live"));
 const Learning = lazy(() => import("@/pages/learning"));
 const Logs = lazy(() => import("@/pages/logs"));
+const Marketplace = lazy(() => import("@/pages/marketplace"));
+const MarketplaceAuthor = lazy(() => import("@/pages/marketplace-author"));
+const MarketplaceListing = lazy(() => import("@/pages/marketplace-listing"));
 const ModuleInstall = lazy(() => import("@/pages/module-install"));
 const Modules = lazy(() => import("@/pages/modules"));
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -210,11 +214,21 @@ function AppRoutes() {
                   <Route path="/stream/workflows/:id/edit" component={Workflows} />
                   <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
-                  {/* Modules section */}
+                  {/* Marketplace section */}
+                  <Route path={MARKETPLACE_AUTHOR_ROUTE} component={MarketplaceAuthor} />
+                  <Route path={MARKETPLACE_LISTING_ROUTE} component={MarketplaceListing} />
+                  <Route path={MARKETPLACE_PATH} component={Marketplace} />
+
+                  {/* The install surface. /modules/install and /modules/installed are
+                      linked from elsewhere in the app and from an install's own redirect,
+                      so they stay; the two storefront routes under /modules forward to
+                      their /marketplace equivalents for old bookmarks. */}
                   <Route path="/modules/install" component={ModuleInstall} />
                   <Route path="/modules/installed" component={Modules} />
                   <Route path="/modules/:moduleId" component={Modules} />
-                  <Route path="/modules" component={Modules} />
+                  <Route path="/modules">
+                    <Redirect to={MARKETPLACE_PATH} />
+                  </Route>
 
                   {/* Help section */}
                   <Route path="/help">
