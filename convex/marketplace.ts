@@ -10,7 +10,9 @@ import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { unapprovedLocalEndpointIds } from "./lib/localEndpoints";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
+import { requireEntitlement } from "./lib/marketplaceEntitlement";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
+import { recordListingInstall } from "./lib/marketplaceInstalls";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
 
@@ -467,6 +469,11 @@ async function installFromMarketplace(
     throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
   }
 
+  // Refused before anything is downloaded or sent to the engine. A paid
+  // listing the account has not bought must not install, and the browser
+  // showing a Buy button is not a guard -- this is.
+  await requireEntitlement(ctx, instanceId, marketplaceModuleId, detail.name);
+
   const download = await fetchMarketplaceDownload(marketplaceModuleId, access);
   const manifest = await fetchMarketplaceArchiveManifest(download);
   const unapproved = unapprovedPermissions(parseManifestPermissions(manifest), approvedPermissions);
@@ -499,6 +506,10 @@ async function installFromMarketplace(
       source: "marketplace",
       marketplaceModuleId,
     });
+    // The marketplace handed out a download URL and never hears what became of
+    // it, so the install count is a ping from here. After the engine accepted
+    // the module, so a failed install is not counted as one.
+    await recordListingInstall(marketplaceModuleId);
     return { status: "installed", moduleKey };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
