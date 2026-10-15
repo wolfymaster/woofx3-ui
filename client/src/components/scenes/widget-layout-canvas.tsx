@@ -175,6 +175,8 @@ export function WidgetLayoutCanvas({
       readOnly={readOnly}
       header={header}
       zoomControl={zoomControl}
+      stageToolbar={`${width} × ${height}`}
+      onDeselect={() => editor.dispatch("selection.clear")}
       palette={
         <WidgetPalette
           widgets={paletteRows}

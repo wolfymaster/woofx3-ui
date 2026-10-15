@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
@@ -50,6 +51,7 @@ interface SceneCanvasEditorProps {
 export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEditorProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  useCollapsedSidebar();
 
   const fetchedScene = useQuery(api.scenes.getByEngineSceneId, { instanceId, engineSceneId });
   // undefined = loading; null = synced id not in the cache yet (webhook pending).
@@ -499,6 +501,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     );
   }
 
+  const notice = sessionMode ? sessionNotice(syncState) : null;
   const header = (
     <div className="h-14 border-b border-border bg-background flex items-center justify-between gap-4 px-4 shrink-0">
       <div className="flex items-center gap-3 min-w-0">
@@ -518,9 +521,9 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
           data-testid="input-scene-name"
         />
         {/* On the left so its changing length never moves the controls on the right. */}
-        {sessionMode && (
+        {notice !== null && (
           <span className="text-xs text-muted-foreground truncate" data-testid="text-scene-sync">
-            {sessionStatusText(syncState, live)}
+            {notice}
           </span>
         )}
       </div>
@@ -569,6 +572,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             pendingCommand={pendingCommand}
             onCommand={runDraftCommand}
             hasDraft={syncState?.hasDraft ?? false}
+            unsaved={hasUnsavedEdits(syncState, live)}
             copy={SCENE_DRAFT_COPY}
             testIds={SCENE_DRAFT_TEST_IDS}
           />
@@ -773,6 +777,28 @@ export function sessionStatusText(state: SceneSyncState | null, live: boolean, n
   return state.hasDraft ? "Draft saved · not on stream yet" : "Up to date";
 }
 
+/**
+ * What the header says about the session beyond the live and saved indicators: why it
+ * cannot take edits, or the command it is running. Null while it is simply connected.
+ */
+export function sessionNotice(state: SceneSyncState | null, noun = "scene"): string | null {
+  if (state === null || state.conn !== "ready" || state.pendingCommand !== null) {
+    return sessionStatusText(state, false, noun);
+  }
+  return null;
+}
+
+/**
+ * Edits not yet where this editor's mode puts them: still on their way to the scene
+ * manager, or, while not live updating, waiting in a draft that has not been published.
+ */
+export function hasUnsavedEdits(state: SceneSyncState | null, live: boolean): boolean {
+  if (state === null) {
+    return false;
+  }
+  return state.pendingItems > 0 || state.retrying || (!live && state.hasDraft);
+}
+
 type FetchedScene = NonNullable<FunctionReturnType<typeof api.scenes.getByEngineSceneId>>;
 
 function sceneOf(fetchedScene: FetchedScene): Scene {
@@ -793,8 +819,8 @@ function sceneOf(fetchedScene: FetchedScene): Scene {
 const COMMAND_NAME: Record<DraftCommand, string> = { publish: "Publish", discard: "Discard" };
 
 const SCENE_DRAFT_COPY: DraftLiveCopy = {
-  draft: "Edit a draft that reaches OBS when you publish it",
-  live: "Edit what's on stream right now, without publishing",
+  draft: "Edits go to a draft that reaches OBS when you publish it",
+  live: "Edits go straight to what's on stream, without publishing",
   liveDisabled: "Live edits are already on stream",
   publish: "Put the draft on stream",
   discardTitle: "Discard your draft of this scene?",
@@ -802,9 +828,7 @@ const SCENE_DRAFT_COPY: DraftLiveCopy = {
 };
 
 const SCENE_DRAFT_TEST_IDS: DraftLiveTestIds = {
-  mode: "toggle-scene-mode",
-  draft: "toggle-scene-draft",
-  live: "toggle-scene-live",
+  live: "menu-scene-live-update",
   discard: "button-discard-draft",
   confirmDiscard: "button-confirm-discard-draft",
   publish: "button-publish-scene",

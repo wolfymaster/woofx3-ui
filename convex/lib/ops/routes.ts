@@ -12,7 +12,10 @@ export type OpsRoute =
   | { method: "GET"; name: "instances.health"; instanceId: string }
   | { method: "GET"; name: "audit.list" }
   | { method: "GET"; name: "plans.list" }
-  | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction };
+  | { method: "GET"; name: "notifications.list" }
+  | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
+  | { method: "POST"; name: "notifications.create" }
+  | { method: "POST"; name: "notifications.delete"; notificationId: string };
 
 /** What an operator can do to a customer's managed engine, exactly as the customer could. */
 export type EngineAction = "upgrade" | "retry" | "delete";
@@ -35,6 +38,12 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     if (segments.length === 3 && first === "engines" && second && third && ENGINE_ACTIONS.has(third)) {
       return { method, name: "engines.act", instanceId: second, action: third as EngineAction };
     }
+    if (segments.length === 1 && first === "notifications") {
+      return { method, name: "notifications.create" };
+    }
+    if (segments.length === 3 && first === "notifications" && second && third === "delete") {
+      return { method, name: "notifications.delete", notificationId: second };
+    }
     return null;
   }
   if (method !== "GET") {
@@ -56,6 +65,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
       }
       if (first === "plans") {
         return { method, name: "plans.list" };
+      }
+      if (first === "notifications") {
+        return { method, name: "notifications.list" };
       }
       return null;
     case 2:

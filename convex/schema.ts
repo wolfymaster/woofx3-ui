@@ -5,6 +5,7 @@ import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { limitValuesValidator } from "./lib/entitlements";
 import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
+import { notificationAudienceValidator } from "./lib/notifications";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 // Must match SessionSummarySession and SessionSummaryTotals in
@@ -1304,6 +1305,37 @@ export default defineSchema({
     data: v.any(),
     createdAt: v.number(),
   }).index("by_state", ["state"]),
+
+  // notifications: in-app messages to users, written once and delivered to
+  // each recipient as a userNotifications row. Content lives only here, so a
+  // broadcast to every user stores its text once.
+  notifications: defineTable({
+    heading: v.string(),
+    description: v.string(),
+    // An internal path ("/admin/engine") or an https URL; see lib/notifications.ts.
+    link: v.optional(v.string()),
+    // The link's button text; only set alongside a link.
+    actionLabel: v.optional(v.string()),
+    audience: notificationAudienceValidator,
+    // Inboxes delivered so far; delivery to every user runs in batches.
+    recipients: v.number(),
+    delivering: v.boolean(),
+    // The operator, or "system" for a notification Convex sends itself.
+    createdBy: v.string(),
+    // The caller's id for the request that created it, so a repeat creates nothing.
+    requestId: v.optional(v.string()),
+  }).index("by_request_id", ["requestId"]),
+
+  // userNotifications: one notification in one user's inbox. Clearing a
+  // notification deletes its row; the notification itself is untouched.
+  userNotifications: defineTable({
+    userId: v.id("users"),
+    notificationId: v.id("notifications"),
+    read: v.boolean(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_read", ["userId", "read"])
+    .index("by_notification", ["notificationId"]),
 
   // opsAuditLog: every write through the ops API, and every read of a single
   // user or account, by the operator the backoffice named. Written in the

@@ -58,6 +58,30 @@ export const $sidebarWidth = atom<number>(280);
 
 $sidebarCollapsed.subscribe((value) => persistValue(STORAGE_KEYS.sidebarCollapsed, value));
 
+/**
+ * A page's own choice for the sidebar, kept apart from the saved preference above so it
+ * is never persisted: an editor that collapses the sidebar while it is open leaves the
+ * preference as it was, even when the tab is reloaded or closed before the editor unmounts.
+ * Null when no page overrides it.
+ */
+export const $sidebarCollapsedOverride = atom<boolean | null>(null);
+
+/** Whether the sidebar is collapsed right now: the page's override, else the saved preference. */
+export const $sidebarShownCollapsed = computed(
+  [$sidebarCollapsed, $sidebarCollapsedOverride],
+  (preference, override) => override ?? preference
+);
+
+/** Flips the sidebar. While a page overrides it, only the override changes, so the preference survives the page. */
+export function toggleSidebar(): void {
+  const override = $sidebarCollapsedOverride.get();
+  if (override !== null) {
+    $sidebarCollapsedOverride.set(!override);
+    return;
+  }
+  $sidebarCollapsed.set(!$sidebarCollapsed.get());
+}
+
 // Engine configuration
 const getDefaultEngineUrl = (): string => {
   if (typeof window === "undefined") return "localhost:8080";
@@ -68,17 +92,6 @@ const initialEngineUrl = getStoredValue<string>(STORAGE_KEYS.engineUrl, getDefau
 export const $engineUrl = atom<string>(initialEngineUrl);
 
 $engineUrl.subscribe((value) => persistValue(STORAGE_KEYS.engineUrl, value));
-
-export const $notifications = atom<
-  Array<{
-    id: string;
-    type: "info" | "success" | "warning" | "error";
-    title: string;
-    message?: string;
-    timestamp: Date;
-    read: boolean;
-  }>
->([]);
 
 /**
  * Whether this tab is on screen. Anything that polls should pause on false:
