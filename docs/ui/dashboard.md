@@ -58,8 +58,8 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 |------|----------|-------|
 | `stream-status` | stream | Live/offline, viewers, uptime |
 | `go-live` | stream | Pre-flight checklist before a stream; also a page at `/stream/go-live` — see below |
-| `live-events` | stream | Follows/subs/cheers/raids, pushed from the engine |
-| `activity` | stream | Tabbed events and highlights |
+| `events` | stream | Everything that happened on stream, with the alerts it played — see below |
+| `activity` | stream | The events feed and saved highlights, as tabs |
 | `stream-info` | stream | Title, category, tags, saved presets and stream markers — see below |
 | `stream-preview` | stream | Thumbnail, click to enlarge |
 | `announcement` | stream | Send a coloured announcement to chat |
@@ -71,9 +71,88 @@ configure dashboard widgets. Layout is persisted per user per instance via Conve
 | `timer` | stream | One timer's countdown, with start, pause and add time — see below |
 | `workflow-runs` | automation | Recent and in-progress executions |
 | `macro-pad` | automation | One-click buttons — see below |
-| `stream-stats` | utility | Viewers, uptime, category |
+| `stream-stats` | utility | Viewers, uptime, category, and follows/subs/bits/raids pushed since the page loaded |
 | `recent-streams` | utility | Totals for the last finished sessions, from `streamSessionSummaries` — see below |
 | `notes` | utility | Scratch pad shared by everyone on the instance — see below |
+
+Saved panels can hold two retired types, `live-events` and `alert-log`. Both
+render the Events widget (`REPLACED_WIDGET_TYPES` in the registry) and keep their
+saved type and config; the picker offers only `events`.
+
+## Events
+
+One feed of what happened on stream
+(`components/dashboard/widgets/events.tsx`). A row is one thing that happened,
+built by `mergeActivity` in `client/src/lib/activity-feed.ts`:
+
+- **Rows are every alert, plus every event of an enabled type that no alert
+  claims.** An alert joins its event by `engineAlerts.sourceEventId`, else by the
+  id of the event its envelope carries, so one event that played two alerts is
+  one row marked "2 alerts". An alert always shows, whatever the selection; one
+  with no event (a schedule, a manual fire) shows on its own.
+- **Wording** comes from the event's trigger: its `emits.summary` and
+  `emits.details` (`describeEvent` in `lib/alert-summary.ts`), so the widget never
+  names an event type. An event no installed trigger claims reads as its type.
+- **Test events never show.** The dashboard's own test alerts and debug triggers
+  reach the engine with CloudEvent `source: "api"`; such events, and alerts whose
+  envelope event has that source, are dropped. The Alerts page feed still shows
+  them: it is where a test alert is checked.
+- **Which events: the engine's selection.** Each engine keeps one selection of
+  event types (CloudEvent `type`), which decides what it logs and pushes, and
+  every Events widget on that engine shows it. The widget's filter reads it with
+  `getEventLogSettings` and writes it with `setEventLogSelection`
+  (`hooks/use-event-log-settings.ts`, shared by every widget on the page and read
+  again on reconnect and whenever the filter opens). The checklist lists the
+  engine's `offered` types grouped by the module of the trigger that fires each
+  (`eventTypeGroups`; a type no installed trigger claims shows as its raw type),
+  checked when `enabled`. The engine decides the defaults and what it offers;
+  the dashboard computes neither. The selection is stored as overrides on the
+  defaults, and `withEventTypeEnabled` keeps it that way: turning a default on
+  drops it from `hidden`, turning a non-default on adds it to `shown`, turning a
+  default off adds it to `hidden`, turning a non-default off drops it from
+  `shown`. Turning a type on records it from then on; history does not fill in
+  backwards. The widget keeps no config of its own, so a `filter` saved in an
+  older layout's config is ignored.
+- **Sources.** History is a page of the engine's event log
+  (`listEvents({ types: enabled })` on the transport), read on mount, whenever
+  `enabled` changes, and again on every reconnect because the push is not
+  gapless; pushed events of the enabled types go on top, deduplicated by event
+  id (`hooks/use-event-log.ts`). Alerts come from `engineAlerts.listForInstance`.
+- **Older engines.** An engine without the `events.log` capability has no
+  selection and no log. The widget shows a "Live only" badge, disables the
+  filter with a tooltip to update the engine, and shows alerts plus whatever the
+  engine pushes (its fixed set: follows, subs, gifts, cheers, raids, stream
+  online/offline, ad breaks).
+- **A row** shows its summary, details, time and module. A row with an alert adds
+  the newest alert's status, its failure reason, **Open run**
+  (`/stream/alert-run/:engineRunId`) and **Replay** (`alertActions.replay`). An
+  event-only row opens its fields in a popover, labelled from the trigger's
+  `emits` descriptions, so the row itself never grows. The header carries the
+  counts, the alert queue controls (skip, clear) and the filter.
+
+The Activity panel's Events tab is the same feed with a star on each row that
+saves it to Highlights (`activityPanel.saveHighlight`), storing the row's summary
+as it read then.
+
+### One stream subscription per page
+
+Every widget that listens to pushed events (Events, Stream Stats, Ad Breaks)
+goes through `transport.subscribeStreamEvents(instanceId, types, callback)`,
+declaring the event types it takes. The browser transport holds one engine
+subscription per session and registers the union of every listener's types
+with `subscribeStreamEvents(subscriber, types)`. Calling it again replaces the
+previous registration, so the transport registers again whenever the union
+changes (debounced by 100 ms, so a widget changing its types or several
+mounting together cost one call) and after every reconnect. Each listener
+receives only frames of its own types. Events asks for its `enabled` types,
+Stream Stats for the five it counts (`STREAM_TALLY_EVENTS`) and Ad Breaks for
+the three ad-break events.
+
+On connect the transport asks the engine for its capabilities over the same
+session. An engine without `events.log` adds a subscription on every call
+rather than replacing one, so it is registered once, without types, and pushes
+its fixed set; listeners still take only their own types, and a listener that
+passes `null` (the Events widget on such an engine) takes everything.
 
 ## Go live checklist
 

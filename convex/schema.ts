@@ -890,12 +890,16 @@ export default defineSchema({
     pinnedByUserId: v.id("users"),
   }).index("by_instance_pinned_at", ["instanceId", "pinnedAt"]),
 
-  // streamHighlights: moments saved off the live event feed (a big cheer, a
-  // raid) so they survive the feed scrolling away. Curated, not derived —
-  // saved explicitly from the Activity panel's Events tab.
+  // streamHighlights: moments saved off the Events feed (a big cheer, a raid)
+  // so they survive the feed scrolling away. Curated, not derived — saved
+  // explicitly from the Activity panel's Events tab. `userName` holds the
+  // row's summary as it read when saved.
   streamHighlights: defineTable({
     instanceId: v.id("instances"),
-    kind: v.string(), // PlatformEventType, or "note" for a hand-written one
+    // The event's CloudEvent type, "alert" for an alert no event fired, "note"
+    // for a hand-written one, or a short platform kind ("follow", "cheer") on
+    // rows saved before kinds were event types.
+    kind: v.string(),
     userName: v.string(),
     detail: v.optional(v.string()),
     amount: v.optional(v.number()),

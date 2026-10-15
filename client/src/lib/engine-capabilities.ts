@@ -44,6 +44,12 @@ export const SUPPORTER_CAPABILITIES: readonly EngineCapability[] = ["analytics.s
 /** Per-minute viewer samples and a session's leaderboards, which a stream recap reads together. */
 export const RECAP_ENGINE_CAPABILITIES: readonly EngineCapability[] = ["analytics.gauges", "analytics.aggregates"];
 
+/**
+ * The engine's event log and the streamer's selection of which event types it
+ * logs and pushes, which the Events widget reads and edits together.
+ */
+export const EVENT_LOG_CAPABILITIES: readonly EngineCapability[] = ["events.log"];
+
 type TestRunState = OptionsSupport | "checking";
 
 export interface TestRunSupport {

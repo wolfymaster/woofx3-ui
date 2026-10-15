@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { alertEventData, alertEventType, alertTarget } from "./alert-envelope";
+import { alertEvent, alertEventData, alertEventType, alertTarget } from "./alert-envelope";
 
 const envelope = JSON.stringify({
   id: "env-1",
@@ -57,5 +57,38 @@ describe("alertEventData", () => {
     expect(alertEventData(JSON.stringify({ parameters: {}, event: null }))).toBeNull();
     expect(alertEventData(JSON.stringify({ event: { data: ["a"] } }))).toBeNull();
     expect(alertEventData("not json")).toBeNull();
+  });
+});
+
+describe("alertEvent", () => {
+  test("reads the originating CloudEvent's id, type, source, time and data", () => {
+    const payload = JSON.stringify({
+      parameters: {},
+      event: {
+        id: "evt-1",
+        type: "channel.cheer",
+        source: "twitch",
+        time: "2026-05-02T12:00:00Z",
+        data: { userName: "alice" },
+      },
+    });
+    expect(alertEvent(payload)).toEqual({
+      id: "evt-1",
+      type: "channel.cheer",
+      source: "twitch",
+      time: "2026-05-02T12:00:00Z",
+      data: { userName: "alice" },
+    });
+  });
+
+  test("is null without an event, and nulls each field that is missing", () => {
+    expect(alertEvent(JSON.stringify({ parameters: {}, event: null }))).toBeNull();
+    expect(alertEvent(JSON.stringify({ event: { type: "channel.follow", id: 7 } }))).toEqual({
+      id: null,
+      type: "channel.follow",
+      source: null,
+      time: null,
+      data: null,
+    });
   });
 });

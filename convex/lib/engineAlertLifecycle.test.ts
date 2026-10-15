@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   type AlertLifecyclePoint,
+  alertRetentionCutoff,
   type EngineAlertMirror,
   type EngineAlertSnapshot,
   type EngineAlertStatus,
@@ -453,5 +454,12 @@ describe("isFailureStatus", () => {
     expect(isFailureStatus("playing")).toBe(false);
     expect(isFailureStatus("unknown")).toBe(false);
     expect(isFailureStatus("teleported")).toBe(false);
+  });
+});
+
+describe("alertRetentionCutoff", () => {
+  test("keeps exactly the last seven days", () => {
+    const now = Date.parse("2026-10-14T12:00:00Z");
+    expect(alertRetentionCutoff(now)).toBe(Date.parse("2026-10-07T12:00:00Z"));
   });
 });

@@ -13,7 +13,7 @@ import { isRevokedRefreshResponse, refreshOutcomeApplies } from "./lib/twitchRef
 // The module name is a leftover. It also used to mint and revoke EventSub
 // subscriptions for a browser that held its own socket to Twitch; stream events
 // now reach the browser from the engine over capnweb instead (see
-// client/src/lib/platforms/).
+// client/src/lib/transport/).
 
 const TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ConfigField, DataShapeField } from "@woofx3/api/ui-schema";
-import { type AlertSummarySource, describeAlert } from "./alert-summary";
+import { type AlertSummarySource, describeAlert, describeEvent, eventFieldRows } from "./alert-summary";
 
 function payload(type: string | null, data?: Record<string, unknown>, target = "default"): string {
   return JSON.stringify({ parameters: { target }, event: type ? { type, data } : null });
@@ -143,5 +143,59 @@ describe("describeAlert", () => {
     expect(describeAlert(payload("channel.follow", { userName: "a" }), undefined).title).toBe("channel.follow");
     expect(describeAlert(payload(null, undefined, "fullscreen"), undefined).title).toBe("Alert → fullscreen");
     expect(describeAlert(undefined, undefined).title).toBe("Alert");
+  });
+});
+
+describe("describeEvent", () => {
+  test("reads a bare event through its trigger's summary", () => {
+    const summary = describeEvent(
+      {
+        type: "channel.channel_points_custom_reward_redemption.add",
+        data: { userName: "wolfy_fan", rewardTitle: "Hydrate", message: "drink!" },
+      },
+      redeem
+    );
+    expect(summary).toEqual({ title: "wolfy_fan redeemed Hydrate", details: ["“drink!”"] });
+  });
+
+  test("reads an event no trigger claims as its type", () => {
+    expect(describeEvent({ type: "kofi.donation", data: { amount: 5 } }, undefined)).toEqual({
+      title: "kofi.donation",
+      details: [],
+    });
+  });
+
+  test("falls back to the given name for an event with no type", () => {
+    expect(describeEvent({ type: null, data: null }, undefined, "Alert")).toEqual({ title: "Alert", details: [] });
+  });
+});
+
+describe("eventFieldRows", () => {
+  test("labels each value from emits, in its order, skipping values the event lacks", () => {
+    const rows = eventFieldRows({ userName: "ana", rewardTitle: "Hydrate", userId: "7" }, [
+      { path: "userName", type: "string", description: "Who redeemed" },
+      { path: "rewardTitle", type: "string" },
+      { path: "message", type: "string" },
+    ]);
+    expect(rows).toEqual([
+      { path: "userName", label: "Who redeemed", value: "ana" },
+      { path: "rewardTitle", label: "rewardTitle", value: "Hydrate" },
+    ]);
+  });
+
+  test("reads nested paths and booleans, and leaves out objects", () => {
+    const rows = eventFieldRows({ user: { name: "ana" }, isAnonymous: true, facts: { a: 1 } }, [
+      { path: "user.name", type: "string" },
+      { path: "isAnonymous", type: "boolean" },
+      { path: "facts", type: "object" },
+    ]);
+    expect(rows.map((row) => row.value)).toEqual(["ana", "Yes"]);
+  });
+
+  test("lists top-level values by key when the trigger declares nothing", () => {
+    expect(eventFieldRows({ amount: 1500, note: "hi", items: [1] }, undefined)).toEqual([
+      { path: "amount", label: "amount", value: (1500).toLocaleString() },
+      { path: "note", label: "note", value: "hi" },
+    ]);
   });
 });

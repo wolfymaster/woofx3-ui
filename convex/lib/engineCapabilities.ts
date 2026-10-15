@@ -24,6 +24,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "compositions.alerts",
   "compositions.preview",
   "config.bundles",
+  "events.log",
   "modules.files",
   "modules.localEndpoints",
   "modules.oauth",

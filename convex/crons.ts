@@ -24,6 +24,10 @@ crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engine
 
 crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLog.cleanupOld);
 
+// Alerts carry viewer names and messages; past the engine's detail retention
+// nothing reads them.
+crons.interval("engine alert cleanup", { hours: 24 }, internal.engineAlerts.cleanupOld, {});
+
 // Maintenance callback ids exist only to reject a redelivery of an event already
 // applied; once the sender has stopped retrying they are dead weight.
 crons.interval("maintenance callback id cleanup", { hours: 24 }, internal.provisioningInternal.cleanupOldEvents);
