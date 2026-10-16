@@ -211,6 +211,13 @@ function CardCta({
     onClick();
   };
 
+  if (listing.type === "emote") {
+    return (
+      <Button variant="outline" className="mt-auto w-full font-semibold" onClick={press}>
+        View emotes
+      </Button>
+    );
+  }
   if (state?.updateAvailable) {
     return (
       <Button className="mt-auto w-full gap-2 font-semibold" onClick={press}>

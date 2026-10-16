@@ -24,13 +24,15 @@ export interface InstallStateInput {
  * One function so the states stay mutually exclusive and the precedence is
  * visible in one place, because the ordering is the whole of the logic:
  *
- * 1. A theme with no base module cannot be installed at all — the engine
- *    refuses it — so that outranks everything, including ownership.
- * 2. Already installed outranks ownership: a bought-and-installed listing
+ * 1. An emote pack installs nothing: there is no engine call for it, so
+ *    offering Install would send its id down the module install path.
+ * 2. A theme with no base module cannot be installed at all — the engine
+ *    refuses it — so that outranks ownership.
+ * 3. Already installed outranks ownership: a bought-and-installed listing
  *    should not offer to sell itself again.
- * 3. A free listing is installable, full stop. That is every listing that
+ * 4. A free listing is installable, full stop. That is every listing that
  *    existed before commerce, and nothing about them changed.
- * 4. Ownership that could not be read falls back to Buy, not Install: the
+ * 5. Ownership that could not be read falls back to Buy, not Install: the
  *    server refuses an install it cannot verify either, so Install would
  *    produce a failure the streamer cannot act on.
  */
@@ -43,6 +45,9 @@ export function listingInstallState({
   baseModuleInstalled,
   bundleInstalled,
 }: InstallStateInput): ListingInstallState {
+  if (listing.type === "emote") {
+    return { kind: "not_installable" };
+  }
   if (listing.type === "theme" && listing.baseModuleId && !baseModuleInstalled) {
     return { kind: "needs_base_module", baseModuleId: listing.baseModuleId };
   }
