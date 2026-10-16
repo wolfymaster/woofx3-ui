@@ -13,8 +13,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import type { MarketplaceAccess } from "./marketplaceAccess";
-import { marketplaceAuthed, marketplaceGet, queryString } from "./marketplaceApi";
-import { parseCatalogDetail } from "./marketplaceCatalog";
+import { MarketplaceError, marketplaceAuthed, marketplaceGet, queryString } from "./marketplaceApi";
 
 /**
  * The buyer a purchase belongs to.
@@ -42,45 +41,96 @@ export async function marketplaceAccessForInstanceId(
 }
 
 /**
- * Refuses an install the account has not paid for.
+ * How a listing's content -- a module archive or a bundle -- may be fetched
+ * for an account. The marketplace serves a free listing's content to anyone,
+ * and a paid listing's only with the write token and the buyer it was sold to.
+ */
+export type ContentGrant = { kind: "free" } | { kind: "paid"; buyerRef: string };
+
+/**
+ * Refuses a listing the account has not paid for, and otherwise says how to
+ * fetch its content.
  *
- * Whether a listing is paid is read from the *public* catalog, which needs no
- * credential, and only a paid listing goes on to the credential-gated
- * entitlement read. That ordering matters twice over:
+ * Fails closed. With `MARKETPLACE_API_TOKEN` set, the marketplace's
+ * entitlement read is the only answer trusted: it knows whether a listing is
+ * paid, so nothing here has to parse a price, and any answer it does not
+ * recognise is a refusal. Without the token, a listing is treated as free
+ * only when the public catalog carries no price for it at all; a price in any
+ * shape, or a listing that cannot be read, refuses the install rather than
+ * guessing. Free installs, which are every install that existed before
+ * commerce, therefore still need no new configuration.
  *
- * - A free install -- which is every install that existed before commerce --
- *   never touches the write token, so adding commerce did not add a
- *   configuration requirement to a flow that already worked.
- * - A paid listing with no `MARKETPLACE_API_TOKEN` configured fails loudly
- *   instead of installing ungated. Failing closed on a missing credential is
- *   the whole point of checking on the server rather than in the browser.
- *
- * The storefront also shows Buy instead of Install, but a client that simply
- * asked to install would otherwise install.
+ * The storefront also shows Buy instead of Install, but that is not a guard:
+ * this is, and the marketplace refuses paid content to anyone else.
  */
 export async function requireEntitlement(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
   listingId: string,
   listingName: string
-): Promise<void> {
-  const payload = await marketplaceGet(
-    `/catalog/${encodeURIComponent(listingId)}`,
-    await marketplaceAccessForInstanceId(ctx, instanceId)
-  );
-  const wrapper = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-  const listing = parseCatalogDetail(wrapper.listing);
-  if (!listing?.price) {
-    return;
+): Promise<ContentGrant> {
+  const path = `/catalog/${encodeURIComponent(listingId)}`;
+  if (!process.env.MARKETPLACE_API_TOKEN?.trim()) {
+    const payload = await marketplaceGet(path, await marketplaceAccessForInstanceId(ctx, instanceId));
+    if (catalogListingIsFree(payload)) {
+      return { kind: "free" };
+    }
+    throw new ConvexError(
+      `${listingName} is a paid listing, and purchases cannot be checked on this deployment (MARKETPLACE_API_TOKEN is not set).`
+    );
   }
 
   const buyerRef = await buyerRefFor(ctx, instanceId);
-  const entitlement = await marketplaceAuthed(
-    `/catalog/${encodeURIComponent(listingId)}/entitlement${queryString({ buyerRef })}`,
-    "GET"
-  );
-  const obj = entitlement && typeof entitlement === "object" ? (entitlement as Record<string, unknown>) : {};
-  if (obj.entitled !== true) {
+  let answer: unknown;
+  try {
+    answer = await marketplaceAuthed(`${path}/entitlement${queryString({ buyerRef })}`, "GET");
+  } catch (err) {
+    if (err instanceof MarketplaceError && err.status === 404) {
+      throw new ConvexError(`${listingName} is no longer in the marketplace.`);
+    }
+    throw err;
+  }
+  const grant = grantFromEntitlement(answer, buyerRef);
+  if (!grant) {
     throw new ConvexError(`${listingName} has not been purchased on this account.`);
   }
+  return grant;
+}
+
+/**
+ * The grant an entitlement answer carries, or null when it does not entitle.
+ * Anything but the two entitled shapes is null, so a changed answer refuses
+ * rather than installs.
+ */
+export function grantFromEntitlement(answer: unknown, buyerRef: string): ContentGrant | null {
+  const obj = answer && typeof answer === "object" ? (answer as Record<string, unknown>) : {};
+  if (obj.entitled !== true) {
+    return null;
+  }
+  if (obj.free === true) {
+    return { kind: "free" };
+  }
+  if (obj.free === false) {
+    return { kind: "paid", buyerRef };
+  }
+  return null;
+}
+
+/**
+ * Whether a public catalog detail shows a listing as free: readable, and with
+ * no price at all. A price that is present but unreadable counts as paid.
+ */
+export function catalogListingIsFree(payload: unknown): boolean {
+  const wrapper = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  const listing = wrapper?.listing;
+  if (!listing || typeof listing !== "object") {
+    return false;
+  }
+  const price = (listing as Record<string, unknown>).price;
+  return price === undefined || price === null;
+}
+
+/** Query parameters that fetch a listing's content under `grant`. */
+export function grantQuery(grant: ContentGrant): string {
+  return grant.kind === "paid" ? queryString({ buyerRef: grant.buyerRef }) : "";
 }

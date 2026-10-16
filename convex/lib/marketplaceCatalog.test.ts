@@ -3,6 +3,7 @@ import {
   isBundleListing,
   isModuleListing,
   parseAuthorPage,
+  parseBundle,
   parseCatalogCounts,
   parseCatalogDetail,
   parseCatalogListing,
@@ -194,16 +195,22 @@ describe("parseCatalogDetail", () => {
     expect(detail?.emotes?.[0].animated).toBe(true);
   });
 
-  test("keeps a bundle opaque and reads what it requires", () => {
+  test("reads what a bundle listing requires", () => {
     const detail = parseCatalogDetail({
       ...listingPayload({ id: "retro", type: "overlay" }),
-      bundle: { layout: { width: 1920 }, widgets: [{ id: "a" }] },
       requires: ["counter", 7],
     });
-    // The bundle is the control plane's own scene document; validating it here
-    // would couple this client to the scene editor's release.
-    expect(detail?.bundle).toEqual({ layout: { width: 1920 }, widgets: [{ id: "a" }] });
     expect(detail?.requires).toEqual(["counter"]);
+  });
+
+  test("keeps a fetched bundle opaque, and reads none from a malformed answer", () => {
+    expect(parseBundle({ bundle: { layout: { width: 1920 }, widgets: [{ id: "a" }] } })).toEqual({
+      layout: { width: 1920 },
+      widgets: [{ id: "a" }],
+    });
+    expect(parseBundle({ bundle: [] })).toBeNull();
+    expect(parseBundle({})).toBeNull();
+    expect(parseBundle(null)).toBeNull();
   });
 
   test("reads the module detail carried inline", () => {

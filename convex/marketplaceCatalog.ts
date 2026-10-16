@@ -13,11 +13,17 @@ import {
   isBundleListing,
   LISTING_TYPES,
   parseAuthorPage,
+  parseBundle,
   parseCatalogCounts,
   parseCatalogDetail,
   parseCatalogPage,
 } from "./lib/marketplaceCatalog";
-import { buyerRefFor, marketplaceAccessForInstanceId, requireEntitlement } from "./lib/marketplaceEntitlement";
+import {
+  buyerRefFor,
+  grantQuery,
+  marketplaceAccessForInstanceId,
+  requireEntitlement,
+} from "./lib/marketplaceEntitlement";
 import { recordListingInstall } from "./lib/marketplaceInstalls";
 
 // The marketplace storefront, across every listing type.
@@ -267,14 +273,18 @@ export const installBundle = action({
     if (!isBundleListing(listing.type)) {
       throw new ConvexError(`${listing.name} is a ${listing.type} listing and does not install as a bundle`);
     }
-    if (!listing.bundle) {
+    // The same gate the module install uses. The marketplace serves a paid
+    // bundle only for the buyer it was sold to, so this is not the only check.
+    const grant = await requireEntitlement(ctx, args.instanceId, listing.id, listing.name);
+    const bundlePath = `/catalog/${encodeURIComponent(listing.id)}/bundle`;
+    const bundlePayload =
+      grant.kind === "paid"
+        ? await marketplaceAuthed(`${bundlePath}${grantQuery(grant)}`, "GET")
+        : await marketplaceGet(bundlePath, await marketplaceAccessForInstanceId(ctx, args.instanceId));
+    const bundle = parseBundle(bundlePayload);
+    if (!bundle) {
       throw new ConvexError(`${listing.name} carries no bundle to install`);
     }
-
-    // The same gate the module install uses.
-    await requireEntitlement(ctx, args.instanceId, listing.id, listing.name);
-
-    const bundle = listing.bundle;
     const layoutJson = JSON.stringify(bundle.layout ?? {});
     const widgetsJson = JSON.stringify(bundle.widgets ?? []);
 

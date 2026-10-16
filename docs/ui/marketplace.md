@@ -111,13 +111,19 @@ renditions, so they actually move.
 Ownership is read once for a whole grid (`marketplaceCatalog.entitlements`),
 not per card.
 
-**The gate is on the server.** `requireEntitlement` runs inside both install
-paths, so a client that simply asked to install a paid listing is refused
-whatever the button said. It asks the *public* catalog whether a listing is paid
-first and only then does the credential-gated entitlement read — so a free
-install, which is every install that existed before commerce, needs no new
-configuration, while a paid listing with no `MARKETPLACE_API_TOKEN` fails loudly
-instead of installing ungated.
+**The gate is on the server, and it fails closed.** `requireEntitlement` runs
+before any marketplace content is fetched: both install paths, the file browser
+for a module not yet installed, the module detail's permission read, and setup
+platforms. It returns how to fetch the content. A free listing's archive or
+bundle is fetched as before; a paid listing's is fetched with
+`MARKETPLACE_API_TOKEN` and the buyer, because the marketplace serves paid
+content to nobody else.
+
+- With the token set, the marketplace's entitlement read is the only answer
+  trusted, and an answer it does not recognise refuses the install.
+- Without the token, a listing counts as free only when the public catalog
+  shows no price at all. Any price, or a listing that cannot be read, refuses
+  the install. Free installs therefore still need no new configuration.
 
 When ownership cannot be read at all, the button says **Buy**, not Install: the
 server refuses an install it cannot verify either, so Install would produce a
