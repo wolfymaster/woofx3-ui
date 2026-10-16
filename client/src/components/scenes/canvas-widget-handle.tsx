@@ -1,6 +1,6 @@
 import type { CommandResult, CompositionEditor, GestureKind, NodeView, Point } from "@woofx3/scene/editor";
 import { Lock } from "lucide-react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createFrameCoalescer } from "@/lib/frame-coalescer";
 import type { RemoteSelection } from "@/lib/scene-composition";
 import { cn } from "@/lib/utils";
@@ -65,8 +65,12 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
   const [isHovered, setIsHovered] = useState(false);
   const pointerId = useRef<number | null>(null);
 
-  const [updates] = useState(() =>
-    createFrameCoalescer<PointerUpdate>(({ point, shift, alt }) => editor.gesture.update(point, { shift, alt }))
+  // Made again with the editor: the scene editor replaces its editor when the document source
+  // changes (the cached scene, then the live session), and a handle mounted before that must
+  // send its moves to the editor its gesture began on.
+  const updates = useMemo(
+    () => createFrameCoalescer<PointerUpdate>(({ point, shift, alt }) => editor.gesture.update(point, { shift, alt })),
+    [editor]
   );
 
   useEffect(() => {
