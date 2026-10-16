@@ -211,6 +211,9 @@ function press(id: string, onOpen: (id: string) => void) {
 
 /** What the hero's button says, given what the account already has. */
 function ctaLabel(listing: CatalogListing, state: ListingCardState): string {
+  if (listing.type === "emote") {
+    return "View emotes";
+  }
   if (state.updateAvailable) {
     return "Update";
   }

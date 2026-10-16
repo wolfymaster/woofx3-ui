@@ -36,6 +36,14 @@ function state(overrides: Partial<InstallStateInput> = {}) {
 const paid = { price: { amountCents: 499, currency: "usd" } };
 
 describe("listingInstallState", () => {
+  test("an emote pack never offers Install, owned, free or otherwise", () => {
+    // There is no engine call for an emote pack; Install would send its id
+    // down the module install path.
+    for (const overrides of [{}, { owned: true }, { entitlementsError: "down" }, { installedVersion: "1.0.0" }]) {
+      expect(state({ listing: listing({ type: "emote" }), ...overrides })).toEqual({ kind: "not_installable" });
+    }
+  });
+
   test("a free listing is installable, as it always has been", () => {
     expect(state()).toEqual({ kind: "installable" });
   });

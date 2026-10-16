@@ -32,7 +32,9 @@ export type ListingInstallState =
   /** A theme whose base module is missing. */
   | { kind: "needs_base_module"; baseModuleId: string }
   /** Entitlements could not be read, so ownership is unknown. */
-  | { kind: "unknown" };
+  | { kind: "unknown" }
+  /** An emote pack: nothing installs, and the images on the page are the product. */
+  | { kind: "not_installable" };
 
 interface ListingInstallButtonProps {
   instanceId: Id<"instances"> | undefined;
@@ -110,6 +112,10 @@ export function ListingInstallButton({
   }, [installBundle, instanceId, listing.id, onBundleInstalled]);
 
   const working = busy || isInstalling === true;
+
+  if (state.kind === "not_installable") {
+    return null;
+  }
 
   return (
     <div className={cn("flex flex-col items-stretch gap-2", className)}>
