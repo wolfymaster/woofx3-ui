@@ -1,30 +1,27 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { BellRing, Loader2, RotateCcw, ScrollText } from "lucide-react";
-import { useState } from "react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useToast } from "@/hooks/use-toast";
-import { alertEventType, alertTarget } from "@/lib/alert-envelope";
+import { useDescribeAlert } from "@/hooks/use-describe-alert";
+import { useReplayAlert } from "@/hooks/use-replay-alert";
+import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import { replayResultToast } from "@/lib/alert-queue";
 import { alertRunPath } from "@/lib/alert-run-route";
 import { engineAlertStyle } from "@/lib/alert-status";
+import type { AlertSummary } from "@/lib/alert-summary";
 import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
 interface AlertFeedProps {
   instanceId: Id<"instances">;
   alerts: Doc<"engineAlerts">[];
-  /** CloudEvent type → the trigger's own name, so a row reads "Follow", not "channel.follow". */
-  eventNames: Map<string, string>;
 }
 
 /** Recent dispatches, newest first, each replayable. */
-export function AlertFeed({ instanceId, alerts, eventNames }: AlertFeedProps) {
+export function AlertFeed({ instanceId, alerts }: AlertFeedProps) {
+  const describe = useDescribeAlert();
   if (alerts.length === 0) {
     return (
       <div className="flex flex-col items-center px-4 py-12 text-center" data-testid="alert-feed-empty">
@@ -40,7 +37,7 @@ export function AlertFeed({ instanceId, alerts, eventNames }: AlertFeedProps) {
   return (
     <ul className="divide-y divide-border" data-testid="alert-feed">
       {alerts.map((alert) => (
-        <AlertFeedRow key={alert._id} instanceId={instanceId} alert={alert} eventNames={eventNames} />
+        <AlertFeedRow key={alert._id} instanceId={instanceId} alert={alert} summary={describe(alert.payload)} />
       ))}
     </ul>
   );
@@ -49,38 +46,17 @@ export function AlertFeed({ instanceId, alerts, eventNames }: AlertFeedProps) {
 interface AlertFeedRowProps {
   instanceId: Id<"instances">;
   alert: Doc<"engineAlerts">;
-  eventNames: Map<string, string>;
+  /** Who did what, e.g. "wolfy_fan redeemed Hydrate", and the facts worth a glance. */
+  summary: AlertSummary;
 }
 
-function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
-  const replay = useAction(api.alertActions.replay);
-  const { toast } = useToast();
-  const [busy, setBusy] = useState(false);
+function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
+  const { replay, busy } = useReplayAlert(instanceId);
 
   const style = engineAlertStyle(alert);
   const StatusIcon = style.icon;
   const target = alertTarget(alert.payload);
-  const event = alertEventType(alert.payload);
-  const title = (event ? (eventNames.get(event) ?? event) : null) ?? (target ? `Alert → ${target}` : "Alert");
   const failure = alert.error ? describeAlertFailure(alert.error) : null;
-
-  const start = async () => {
-    setBusy(true);
-    try {
-      // The new dispatch and this row's `replayed` status both arrive as
-      // webhooks, so the list updates itself; the toast only reports what the
-      // engine answered.
-      toast(replayResultToast(await replay({ instanceId, engineAlertId: alert.engineAlertId })));
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Replay could not be started",
-        description: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <li className="group flex items-start gap-3 px-3 py-2.5" data-testid={`alert-feed-${alert._id}`}>
@@ -89,7 +65,14 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{title}</p>
+        <p className="truncate text-sm font-medium" title={summary.title}>
+          {summary.title}
+        </p>
+        {summary.details.length > 0 && (
+          <p className="truncate text-xs text-foreground/80" title={summary.details.join("\n")}>
+            {summary.details.join(" · ")}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <span>{formatTimeAgo(alert.engineCreatedAt)}</span>
           {target && (
@@ -138,7 +121,7 @@ function AlertFeedRow({ instanceId, alert, eventNames }: AlertFeedRowProps) {
               variant="ghost"
               className="h-7 w-7"
               disabled={busy}
-              onClick={() => void start()}
+              onClick={() => void replay(alert.engineAlertId)}
               data-testid={`button-replay-alert-${alert._id}`}
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}

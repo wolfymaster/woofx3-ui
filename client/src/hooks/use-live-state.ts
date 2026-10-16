@@ -7,8 +7,9 @@ import { createPollThrottle } from "@/lib/poll-throttle";
 
 // Single entry point for the current instance's live state. Every consumer
 // reads through this hook rather than wiring up the query and the poll action
-// itself, for the same reason usePlatformEvents owns the EventSub client: N
-// components wanting the same fact should not produce N calls to Twitch.
+// itself, for the same reason the transport keeps one stream-event subscription
+// for every widget: N components wanting the same fact should not produce N
+// calls to Twitch.
 //
 // The Convex query needs no help — five components subscribing to
 // getForInstance is already one subscription. The poll did: it's an action, so

@@ -1,7 +1,12 @@
 import { authTables } from "@convex-dev/auth/server";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { syncTriggerValidator } from "./lib/engineSync/trigger";
+import { limitValuesValidator } from "./lib/entitlements";
+import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
+import { notificationAudienceValidator } from "./lib/notifications";
+import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 // Must match SessionSummarySession and SessionSummaryTotals in
 // convex/lib/sessionSummary.ts, which validates the webhook body before it
@@ -100,13 +105,17 @@ const dashboardPanelValidator = v.array(
 
 export default defineSchema({
   ...authTables,
+  // Ops search by name; the email index comes with authTables.
+  users: authTables.users.searchIndex("search_name", { searchField: "name" }),
 
   // accounts: tenant/organization level
   accounts: defineTable({
     name: v.string(),
     ownerId: v.id("users"),
     createdAt: v.number(),
-  }).index("by_owner", ["ownerId"]),
+  })
+    .index("by_owner", ["ownerId"])
+    .searchIndex("search_name", { searchField: "name" }),
 
   // accountMembers: users with access to an account (team). Owner also has accounts.ownerId.
   accountMembers: defineTable({
@@ -296,7 +305,10 @@ export default defineSchema({
       v.object({
         fromVersion: v.string(),
         toVersion: v.string(),
-        requestedBy: v.id("users"),
+        // The member who asked, or the operator (by email) who asked through
+        // the ops API. Absent on upgrades an operator started directly in the
+        // maintenance API.
+        requestedBy: v.optional(v.union(v.id("users"), v.object({ operator: v.string() }))),
         startedAt: v.number(),
         // Counts upgrades asked of this row and is part of each one's
         // Idempotency-Key. The maintenance API keeps keys for 7 days, so a
@@ -316,7 +328,8 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_account", ["accountId"])
-    .index("by_maintenance_engine", ["maintenanceEngineId"]),
+    .index("by_maintenance_engine", ["maintenanceEngineId"])
+    .index("by_status", ["status"]),
 
   // maintenanceEvents: delivered maintenance-API callback ids. The endpoint is
   // at-least-once, so this is the dedupe key: an id already present means the
@@ -877,12 +890,16 @@ export default defineSchema({
     pinnedByUserId: v.id("users"),
   }).index("by_instance_pinned_at", ["instanceId", "pinnedAt"]),
 
-  // streamHighlights: moments saved off the live event feed (a big cheer, a
-  // raid) so they survive the feed scrolling away. Curated, not derived —
-  // saved explicitly from the Activity panel's Events tab.
+  // streamHighlights: moments saved off the Events feed (a big cheer, a raid)
+  // so they survive the feed scrolling away. Curated, not derived — saved
+  // explicitly from the Activity panel's Events tab. `userName` holds the
+  // row's summary as it read when saved.
   streamHighlights: defineTable({
     instanceId: v.id("instances"),
-    kind: v.string(), // PlatformEventType, or "note" for a hand-written one
+    // The event's CloudEvent type, "alert" for an alert no event fired, "note"
+    // for a hand-written one, or a short platform kind ("follow", "cheer") on
+    // rows saved before kinds were event types.
+    kind: v.string(),
     userName: v.string(),
     detail: v.optional(v.string()),
     amount: v.optional(v.number()),
@@ -908,6 +925,11 @@ export default defineSchema({
     // How a configured trigger reads, e.g. "{reward} is redeemed": the module's
     // wording, with a {fieldId} placeholder for each condition value.
     sentence: v.optional(v.string()),
+    // How a fired event reads in the alert feed, e.g. "{userName} redeemed
+    // {rewardTitle}", and its secondary lines: the module's `emits.summary` and
+    // `emits.details`, each {path} naming a field of `emits`.
+    summary: v.optional(v.string()),
+    summaryDetails: v.optional(v.array(v.string())),
     supportsTiers: v.optional(v.boolean()),
     tierLabel: v.optional(v.string()),
     projectionKey: v.optional(v.string()),
@@ -1284,7 +1306,59 @@ export default defineSchema({
     createdAt: v.number(),
   }).index("by_state", ["state"]),
 
-  // licenses: entitlements per account
+  // notifications: in-app messages to users, written once and delivered to
+  // each recipient as a userNotifications row. Content lives only here, so a
+  // broadcast to every user stores its text once.
+  notifications: defineTable({
+    heading: v.string(),
+    description: v.string(),
+    // An internal path ("/admin/engine") or an https URL; see lib/notifications.ts.
+    link: v.optional(v.string()),
+    // The link's button text; only set alongside a link.
+    actionLabel: v.optional(v.string()),
+    audience: notificationAudienceValidator,
+    // Inboxes delivered so far; delivery to every user runs in batches.
+    recipients: v.number(),
+    delivering: v.boolean(),
+    // The operator, or "system" for a notification Convex sends itself.
+    createdBy: v.string(),
+    // The caller's id for the request that created it, so a repeat creates nothing.
+    requestId: v.optional(v.string()),
+  }).index("by_request_id", ["requestId"]),
+
+  // userNotifications: one notification in one user's inbox. Clearing a
+  // notification deletes its row; the notification itself is untouched.
+  userNotifications: defineTable({
+    userId: v.id("users"),
+    notificationId: v.id("notifications"),
+    read: v.boolean(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_read", ["userId", "read"])
+    .index("by_notification", ["notificationId"]),
+
+  // opsAuditLog: every write through the ops API, and every read of a single
+  // user or account, by the operator the backoffice named. Written in the
+  // same mutation as the change it records.
+  opsAuditLog: defineTable({
+    actor: v.string(),
+    action: v.string(),
+    // The user, account, instance or maintenance engine id acted on.
+    target: v.string(),
+    reason: v.optional(v.string()),
+    // The request's arguments as JSON, never including secrets.
+    request: v.optional(v.string()),
+    // "ok", or the error code the request failed with.
+    result: v.string(),
+    at: v.number(),
+  })
+    .index("by_at", ["at"])
+    .index("by_actor", ["actor", "at"])
+    .index("by_target", ["target", "at"]),
+
+  // licenses: written by account creation before plans existed, always
+  // free with no features, and read by nothing. Emptied by
+  // migrations/dropLegacyLicenses; the table goes once that has run.
   licenses: defineTable({
     accountId: v.id("accounts"),
     tier: v.union(v.literal("free"), v.literal("pro"), v.literal("enterprise")),
@@ -1292,6 +1366,66 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_account", ["accountId"]),
+
+  // plans: what each plan includes, edited by operators. Features and limit
+  // keys must be listed in lib/entitlements.ts. Exactly one plan may be the
+  // default, which applies to every account without an active assignment.
+  plans: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    features: v.array(v.string()),
+    limits: limitValuesValidator,
+    // Whether new accounts may choose or be sold it. An account already on a
+    // plan keeps it when it stops being offered.
+    offered: v.boolean(),
+    isDefault: v.boolean(),
+    updatedAt: v.number(),
+    // Who last changed it: an operator's email, or "cli".
+    updatedBy: v.string(),
+  })
+    .index("by_key", ["key"])
+    .index("by_default", ["isDefault"]),
+
+  // accountPlans: an account's plan, at most one row per account. No row, or
+  // an expired one, means the default plan with no overrides.
+  accountPlans: defineTable({
+    accountId: v.id("accounts"),
+    // Absent: the default plan, with this row's overrides.
+    planId: v.optional(v.id("plans")),
+    addFeatures: v.array(v.string()),
+    removeFeatures: v.array(v.string()),
+    limits: limitValuesValidator,
+    expiresAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  })
+    .index("by_account", ["accountId"])
+    .index("by_plan", ["planId"]),
+
+  // hostedStorageReservations: bytes promised to an upload grant on hosted
+  // storage, held while the grant is issued so concurrent uploads cannot each
+  // pass the plan limit against the same usage. See convex/hostedStorage.ts.
+  hostedStorageReservations: defineTable({
+    instanceId: v.id("instances"),
+    bytes: v.number(),
+    createdAt: v.number(),
+    // Set once the engine's resource row for the grant exists (or the grant
+    // failed), from which point the engine's own usage includes it.
+    releasedAt: v.optional(v.number()),
+  })
+    .index("by_instance_released", ["instanceId", "releasedAt"])
+    .index("by_released_created", ["releasedAt", "createdAt"]),
+
+  // featureFlags: an operator's targeting for a UI flag listed in
+  // lib/featureFlags.ts. A flag with no row is off. Written only by the
+  // internal featureFlags.set, never from the dashboard.
+  featureFlags: defineTable({
+    key: v.string(),
+    state: featureFlagStateValidator,
+    rules: v.optional(featureFlagRulesValidator),
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
 
   // scenes: scene configurations for browser sources
   scenes: defineTable({
@@ -1310,6 +1444,32 @@ export default defineSchema({
   })
     .index("by_instance", ["instanceId"])
     .index("by_engine_scene_id", ["instanceId", "engineSceneId"]),
+
+  // alertCompositions: alerts stored in the engine as starting points for steps.
+  // The engine keeps them in its scenes table (`kind: "alert"`) and reports
+  // them with the scene webhooks; they are cached apart from `scenes` so no
+  // scene listing, browser source or scene child table can ever reach one.
+  // Written only by those webhooks and `alertCompositionActions.refresh`.
+  alertCompositions: defineTable({
+    instanceId: v.id("instances"),
+    engineCompositionId: v.string(),
+    name: v.string(),
+    description: v.optional(v.string()),
+    /** The published placements as the engine stores them: a list, bottom of the stack first. */
+    widgets: v.array(v.any()),
+    /** The published canvas: `width`, `height`, `backgroundColor`, and any other keys. */
+    layout: v.any(),
+    /** The published behaviors, keyed by behavior id. */
+    behaviors: v.any(),
+    /** The `{{id}}` placeholders a copy fills in from its step: ConfigField-shaped objects, each with a unique `id`. */
+    inputs: v.array(v.any()),
+    createdByType: v.optional(v.string()),
+    createdByRef: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_instance", ["instanceId"])
+    .index("by_engine_composition_id", ["instanceId", "engineCompositionId"]),
 
   // sceneSlots: named slots within a scene
   sceneSlots: defineTable({
@@ -1481,6 +1641,10 @@ export default defineSchema({
     // Absent on rows registered before widgets declared it, and empty for a
     // widget whose author declared none.
     taxonomy: v.optional(v.array(v.string())),
+    // The transition and effect kinds the widget plays itself, which the
+    // scene and alert editors offer after the host's. Absent on rows
+    // registered before widgets declared them, which declare none.
+    behaviorKinds: v.optional(widgetBehaviorKindsValidator),
     createdAt: v.number(),
   })
     .index("by_module", ["moduleId"])
@@ -1776,7 +1940,7 @@ export default defineSchema({
   // live-progress feed when status="running".
   syncRuns: defineTable({
     instanceId: v.id("instances"),
-    trigger: v.union(v.literal("scheduled"), v.literal("manual")),
+    trigger: syncTriggerValidator,
     status: v.union(v.literal("running"), v.literal("success"), v.literal("error")),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),

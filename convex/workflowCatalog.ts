@@ -11,7 +11,12 @@ import { isWebhookTrigger } from "./lib/webhookEndpointKey";
 import type { CatalogBundle } from "./workflowCatalogContext";
 import { loadCatalogBundle } from "./workflowCatalogContext";
 
-function catalogTriggerRow(def: Doc<"triggerDefinitions">, id: string, moduleName: string | undefined) {
+function catalogTriggerRow(
+  def: Doc<"triggerDefinitions">,
+  id: string,
+  moduleName: string | undefined,
+  moduleLabel: string | undefined
+) {
   return {
     id,
     name: def.name,
@@ -24,11 +29,16 @@ function catalogTriggerRow(def: Doc<"triggerDefinitions">, id: string, moduleNam
     configFields: def.configFields,
     emits: def.emits,
     sentence: def.sentence,
+    summary: def.summary,
+    summaryDetails: def.summaryDetails,
     projectionKey: def.projectionKey,
     taxonomy: def.taxonomy,
+    transport: def.transport,
     canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "trigger"),
     moduleId: def.moduleId,
     moduleName,
+    // The Events widget groups its filter by the module a user recognises; see catalogActionRow.
+    moduleLabel: moduleLabel ?? BUILTIN_MODULE_LABEL,
   };
 }
 
@@ -95,7 +105,7 @@ async function mergeCatalog(ctx: QueryCtx, bundle: CatalogBundle): Promise<Merge
   );
   const moduleLabels = await resolveModuleDisplayNames(
     ctx,
-    actionDefs.map((def) => def.moduleId)
+    [...triggerDefs, ...actionDefs].map((def) => def.moduleId)
   );
 
   const triggers = [];
@@ -105,7 +115,14 @@ async function mergeCatalog(ctx: QueryCtx, bundle: CatalogBundle): Promise<Merge
     if (!def || isWebhookTrigger(def)) {
       continue;
     }
-    triggers.push(catalogTriggerRow(def, id, def.moduleId ? moduleNames.get(def.moduleId) : undefined));
+    triggers.push(
+      catalogTriggerRow(
+        def,
+        id,
+        def.moduleId ? moduleNames.get(def.moduleId) : undefined,
+        def.moduleId ? moduleLabels.get(def.moduleId) : undefined
+      )
+    );
   }
 
   const actions = [];

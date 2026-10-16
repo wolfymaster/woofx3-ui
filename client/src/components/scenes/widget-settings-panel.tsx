@@ -1,4 +1,5 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { ReactNode } from "react";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
@@ -7,55 +8,71 @@ import {
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { withWidgetCanonicalId } from "@/lib/parse-config-fields";
 import type { VariableOption } from "@/lib/workflow-variables";
-import type { Widget } from "@/types";
 
 interface WidgetSettingsPanelProps {
-  widget: Widget;
+  /** The widget's canonical id, `{moduleId}:widget:{manifestId}`. */
+  widgetCanonicalId: string;
+  settings: Record<string, unknown>;
   fields: ConfigField[];
   renderers: Record<string, CustomFieldRenderer>;
   availableVariables?: VariableOption[];
   onChangeSetting: (key: string, value: unknown) => void;
+  /** Shown below the settings, in the same scrolling pane. */
+  children?: ReactNode;
 }
 
 /** Right-side settings pane for the currently-selected canvas widget. */
-export function WidgetSettingsPanel({
-  widget,
+export function WidgetSettingsPanel({ children, ...form }: WidgetSettingsPanelProps) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-1 overflow-y-auto p-4">
+        <WidgetSettingsForm {...form} />
+        {children}
+      </div>
+    </div>
+  );
+}
+
+type WidgetSettingsFormProps = Omit<WidgetSettingsPanelProps, "children">;
+
+/**
+ * A widget's settings, drawn from its schema. The scene editor and the alert editor both
+ * use it, so a widget shows the same fields wherever it is placed.
+ */
+export function WidgetSettingsForm({
+  widgetCanonicalId,
+  settings,
   fields,
   renderers,
   availableVariables,
   onChangeSetting,
-}: WidgetSettingsPanelProps) {
+}: WidgetSettingsFormProps) {
+  if (fields.length === 0) {
+    return <p className="text-xs text-muted-foreground">This widget has no configurable settings.</p>;
+  }
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto p-4">
-        {fields.length === 0 ? (
-          <p className="text-xs text-muted-foreground">This widget has no configurable settings.</p>
-        ) : (
-          <ConfigurationForm
-            // A widget's settings are ConfigFields, exactly like a trigger's
-            // config, so they render through the same form rather than a
-            // parallel one that supported a narrower set of types. That is
-            // what gives a widget `resource_ref` pickers, `required`,
-            // `description` and hints for free.
-            fields={
-              withFieldOptionsOwner(
-                withWidgetCanonicalId(fields, widget.widgetCanonicalId),
-                fieldOptionsOwnerFromCanonicalId(widget.widgetCanonicalId)
-              ) as unknown as FieldDescriptor[]
-            }
-            values={widget.settings}
-            onChange={(next) => {
-              for (const field of fields) {
-                if (next[field.id] !== widget.settings[field.id]) {
-                  onChangeSetting(field.id, next[field.id]);
-                }
-              }
-            }}
-            customRenderers={renderers}
-            availableVariables={availableVariables}
-          />
-        )}
-      </div>
-    </div>
+    <ConfigurationForm
+      // A widget's settings are ConfigFields, exactly like a trigger's
+      // config, so they render through the same form rather than a
+      // parallel one that supported a narrower set of types. That is
+      // what gives a widget `resource_ref` pickers, `required`,
+      // `description` and hints for free.
+      fields={
+        withFieldOptionsOwner(
+          withWidgetCanonicalId(fields, widgetCanonicalId),
+          fieldOptionsOwnerFromCanonicalId(widgetCanonicalId)
+        ) as unknown as FieldDescriptor[]
+      }
+      values={settings}
+      onChange={(next) => {
+        for (const field of fields) {
+          if (next[field.id] !== settings[field.id]) {
+            onChangeSetting(field.id, next[field.id]);
+          }
+        }
+      }}
+      customRenderers={renderers}
+      availableVariables={availableVariables}
+    />
   );
 }

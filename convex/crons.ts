@@ -24,6 +24,10 @@ crons.interval("engine sync run history cleanup", { hours: 24 }, internal.engine
 
 crons.interval("engine event log cleanup", { hours: 24 }, internal.engineEventLog.cleanupOld);
 
+// Alerts carry viewer names and messages; past the engine's detail retention
+// nothing reads them.
+crons.interval("engine alert cleanup", { hours: 24 }, internal.engineAlerts.cleanupOld, {});
+
 // Maintenance callback ids exist only to reject a redelivery of an event already
 // applied; once the sender has stopped retrying they are dead weight.
 crons.interval("maintenance callback id cleanup", { hours: 24 }, internal.provisioningInternal.cleanupOldEvents);
@@ -49,5 +53,9 @@ crons.interval("companion relay resync", { minutes: 15 }, internal.companionRela
 // counting them in flight. Reads only unsettled rows already past the bound;
 // at this cadence an alert is marked within five minutes of crossing it.
 crons.interval("engine alert staleness sweep", { minutes: 5 }, internal.engineAlerts.markStaleAlerts, {});
+
+// Releases hosted storage reservations whose upload action died before
+// releasing them, and deletes released ones no limit check can still need.
+crons.interval("hosted storage reservation sweep", { minutes: 5 }, internal.hostedStorage.sweep, {});
 
 export default crons;

@@ -24,6 +24,7 @@ env:
   ENGINE_REPOSITORY: wolfymaster/woofx3
   ENGINE_REF: master
   ENGINE_API_DIR: woofx3/shared/clients/typescript/api
+  ENGINE_SCENE_DIR: woofx3/shared/clients/typescript/scene
   # workflow_run runs in the context of the default branch's latest commit, so
   # the commit CI tested has to be named explicitly.
   DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -53,7 +54,9 @@ jobs:
           repository: ${{ env.ENGINE_REPOSITORY }}
           ref: ${{ env.ENGINE_REF }}
           path: woofx3
-          sparse-checkout: shared/clients/typescript/api
+          sparse-checkout: |
+            shared/clients/typescript/api
+            shared/clients/typescript/scene
           sparse-checkout-cone-mode: true
 
       - uses: oven-sh/setup-bun@v2
@@ -122,7 +125,9 @@ jobs:
           repository: ${{ env.ENGINE_REPOSITORY }}
           ref: ${{ env.ENGINE_REF }}
           path: woofx3
-          sparse-checkout: shared/clients/typescript/api
+          sparse-checkout: |
+            shared/clients/typescript/api
+            shared/clients/typescript/scene
           sparse-checkout-cone-mode: true
 
       - uses: docker/setup-buildx-action@v4
@@ -137,7 +142,9 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: woofx3-ui
-          build-contexts: engine-api=${{ github.workspace }}/${{ env.ENGINE_API_DIR }}
+          build-contexts: |
+            engine-api=${{ github.workspace }}/${{ env.ENGINE_API_DIR }}
+            engine-scene=${{ github.workspace }}/${{ env.ENGINE_SCENE_DIR }}
           build-args: |
             BUN_VERSION=${{ env.BUN_VERSION }}
             VITE_CONVEX_URL=${{ vars.VITE_CONVEX_URL }}

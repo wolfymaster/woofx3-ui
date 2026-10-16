@@ -1,3 +1,4 @@
+import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { ReplayControls } from "@/components/alert-run/replay-controls";
@@ -43,6 +44,7 @@ export default function AlertRun() {
                   instanceId={instance._id}
                   engineRunId={engineRunId}
                   failedStepTaskId={failedStepTaskId}
+                  origin={REPLAY_ORIGIN}
                 />
               )}
             />

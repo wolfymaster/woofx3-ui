@@ -63,6 +63,20 @@ export interface TriggerPreset {
   sentence?: string;
   /** What `trigger.data` carries when this fires; seeds the Alerts test sheet's payload. */
   emits?: DataShapeField[];
+  /**
+   * How a fired event reads in the alert feed, e.g. `"{userName} redeemed {rewardTitle}"`,
+   * with `{path}` naming a field of `emits`. Declared by the module; see lib/alert-summary.ts.
+   */
+  summary?: string;
+  /** Short secondary lines under the summary, e.g. `"{streakMonths}-month streak"`; same placeholders. */
+  summaryDetails?: string[];
+  /**
+   * The manifest trigger `type`: `"eventbus"` for a trigger fired by an event, absent
+   * from engines that predate the field (read it as `"eventbus"`).
+   */
+  transport?: string;
+  /** The module providing this trigger, by its display name; the Events widget groups by it. */
+  source?: string;
 }
 
 export interface ActionPreset {

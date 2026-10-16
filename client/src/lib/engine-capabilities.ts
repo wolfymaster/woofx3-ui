@@ -35,6 +35,9 @@ export function capabilitySupport(
 /** The alert skip, clear and replay controls, with the result shapes the dashboard reads. */
 export const ALERT_QUEUE_CONTROL_CAPABILITIES: readonly EngineCapability[] = ["alerts.queueControls"];
 
+/** The alert library: alerts the engine stores as starting points for the alerts steps hold. */
+export const ALERT_LIBRARY_CAPABILITIES: readonly EngineCapability[] = ["compositions.alerts"];
+
 /** Stream session history plus leaderboards and viewer totals, which the supporters page reads together. */
 export const SUPPORTER_CAPABILITIES: readonly EngineCapability[] = ["analytics.sessions", "analytics.aggregates"];
 
@@ -43,6 +46,12 @@ export const RECAP_ENGINE_CAPABILITIES: readonly EngineCapability[] = ["analytic
 
 /** A session's events in time order, which the recap timeline draws as lanes. */
 export const RECAP_EVENT_CAPABILITIES: readonly EngineCapability[] = ["analytics.sessionEvents"];
+
+/**
+ * The engine's event log and the streamer's selection of which event types it
+ * logs and pushes, which the Events widget reads and edits together.
+ */
+export const EVENT_LOG_CAPABILITIES: readonly EngineCapability[] = ["events.log"];
 
 type TestRunState = OptionsSupport | "checking";
 

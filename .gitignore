@@ -20,3 +20,6 @@ docs/.vitepress/dist
 
 # Superpowers plans/specs (local planning artifacts)
 docs/superpowers/
+
+# scripts/check.sh output
+logs/

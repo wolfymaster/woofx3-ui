@@ -7,13 +7,13 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import type { SceneEditorSession, SceneEditorSessionApi } from "./lib/sceneEditorSession";
 import type { WidgetThemes, WidgetThemesApi } from "./lib/widgetThemes";
 
-type InstanceContext = {
+export type InstanceContext = {
   url: string;
   clientId: string;
   clientSecret: string;
 };
 
-async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances">): Promise<InstanceContext> {
+export async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances">): Promise<InstanceContext> {
   const userId = await getAuthUserId(ctx);
   if (!userId) {
     throw new Error("Not authenticated");
@@ -155,7 +155,7 @@ export const listWidgetThemes = action({
  * A token to open sceneManager's editor socket for one scene, and the socket's
  * path relative to sceneManager's public URL. Null when the engine does not
  * know the scene or cannot reach sceneManager. Requires the
- * `scenes.editorSessions` capability; the token is short-lived, so a
+ * `scenes.editorSync` capability; the token is short-lived, so a
  * reconnecting editor asks again.
  */
 export const getSceneEditorSession = action({

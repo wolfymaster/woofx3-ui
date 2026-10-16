@@ -97,7 +97,7 @@ export function AdBreaksWidget() {
     if (!active || !instanceId) {
       return;
     }
-    return transport.subscribeStreamEvents(instanceId, (frame) => {
+    return transport.subscribeStreamEvents(instanceId, Object.values(AD_BREAK_EVENTS), (frame) => {
       if (frame.type === AD_BREAK_EVENTS.begin) {
         setRunning(runningAdFromBegin(frame.data, Date.now()));
       } else if (frame.type === AD_BREAK_EVENTS.end) {

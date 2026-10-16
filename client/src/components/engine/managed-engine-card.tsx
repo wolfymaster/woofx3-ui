@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { useLiveState } from "@/hooks/use-live-state";
 import { upgradeHeading, upgradeResult } from "@/lib/engine-upgrade";
+import { engineReleaseNotesUrl } from "@/lib/engine-version";
 import { ProvisioningSteps } from "./provisioning-steps";
 import { UpgradeDialog } from "./upgrade-dialog";
 
@@ -177,6 +178,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
   const upgrade = provisioning.upgrade;
   const result = upgradeResult(status, upgrade);
   const offered = status === "registered" && upgradeInfo?.available ? upgradeInfo.offered : null;
+  const currentReleaseNotesUrl = engineReleaseNotesUrl(provisioning.reportedVersion ?? null);
 
   async function handleUpgrade() {
     setError(null);
@@ -258,8 +260,21 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
             </div>
             <div>
               <div className="text-xs uppercase tracking-wide text-muted-foreground">Release</div>
-              <div className="mt-1 font-mono" data-testid="text-engine-release">
-                {provisioning.reportedVersion ?? "—"}
+              <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+                <span className="font-mono" data-testid="text-engine-release">
+                  {provisioning.reportedVersion ?? "—"}
+                </span>
+                {currentReleaseNotesUrl && (
+                  <a
+                    href={currentReleaseNotesUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline"
+                    data-testid="link-engine-current-release-notes"
+                  >
+                    (Release Notes)
+                  </a>
+                )}
               </div>
             </div>
           </div>
@@ -294,7 +309,7 @@ export function ManagedEngineCard({ instanceId }: ManagedEngineCardProps) {
                     <a
                       href={upgradeInfo.releaseNotesUrl}
                       target="_blank"
-                      rel="noreferrer"
+                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-primary hover:underline"
                       data-testid="link-engine-release-notes"
                     >

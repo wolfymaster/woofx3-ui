@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { findAlertWidget, SETUP_OVERLAY_SIZE, setupOverlayWidgets } from "./setup-overlay";
+import {
+  findAlertWidget,
+  type OverlaySyncRun,
+  overlayCatalogState,
+  SETUP_OVERLAY_SIZE,
+  setupOverlayWidgets,
+} from "./setup-overlay";
 
 const alert = {
   widgetId: "woofx3:widget:alert",
@@ -27,5 +33,37 @@ describe("setupOverlayWidgets", () => {
 
   test("starts empty without an alert widget", () => {
     expect(setupOverlayWidgets(undefined)).toEqual([]);
+  });
+});
+
+describe("overlayCatalogState", () => {
+  const run = (id: string, status: OverlaySyncRun["status"], widgets: string): OverlaySyncRun => ({
+    _id: id,
+    status,
+    steps: [
+      { name: "modules", status: "success" },
+      { name: "widgets", status: widgets },
+    ],
+  });
+
+  test("is ready as soon as the alert widget is in the catalog", () => {
+    expect(overlayCatalogState(true, [])).toBe("ready");
+    expect(overlayCatalogState(true, [run("a", "running", "pending")], null)).toBe("ready");
+  });
+
+  test("does not take an empty catalog at its word before a sync has read the widgets", () => {
+    expect(overlayCatalogState(false, [])).toBe("unsynced");
+    expect(overlayCatalogState(false, [run("a", "running", "pending")])).toBe("syncing");
+    expect(overlayCatalogState(false, [run("a", "error", "error")])).toBe("failed");
+  });
+
+  test("is ready without an alert widget once a sync read the engine's widgets", () => {
+    expect(overlayCatalogState(false, [run("b", "error", "success"), run("a", "error", "error")])).toBe("ready");
+  });
+
+  test("waits for the run it asked for rather than the one before", () => {
+    expect(overlayCatalogState(false, [], null)).toBe("syncing");
+    expect(overlayCatalogState(false, [run("a", "error", "error")], "a")).toBe("syncing");
+    expect(overlayCatalogState(false, [run("b", "error", "error"), run("a", "error", "error")], "a")).toBe("failed");
   });
 });

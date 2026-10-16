@@ -259,9 +259,7 @@ const AlertWidgetNameRenderer: CustomFieldRenderer = (props) => <AlertWidgetName
 // does everywhere else.
 // ---------------------------------------------------------------------------
 
-const LayoutFieldRenderer: CustomFieldRenderer = (props) => (
-  <AlertLayoutField {...props} renderers={configFieldRenderers} />
-);
+const LayoutFieldRenderer: CustomFieldRenderer = (props) => <AlertLayoutField {...props} />;
 
 // ---------------------------------------------------------------------------
 // TriggerConfigForm — thin wrapper around ConfigurationForm

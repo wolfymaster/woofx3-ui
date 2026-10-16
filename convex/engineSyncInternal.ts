@@ -5,9 +5,12 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { reconcileEndpoints } from "./inboundWebhooks";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
+import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
+import { triggerDefinitionRow } from "./lib/triggerDefinitionRow";
+import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
 // One-shot cleanup for the orphan instanceSync rows that exist in the
 // pre-spec deployment. Safe to delete after the first prod deploy.
@@ -218,10 +221,16 @@ export const reconcileGroups = internalMutation({
  * declare the full live set even when only a subset is being upserted.
  * In practice they match, but keeping the parameter explicit avoids
  * coupling the deletion check to upsert iteration.
+ *
+ * A row written after `snapshotStartedAt` is left alone: a webhook echo
+ * (a workflow created, or switched on, while the pages were being read) is
+ * newer than the snapshot, which would otherwise switch it back off or delete
+ * it until the next sync.
  */
 export const reconcileWorkflows = internalMutation({
   args: {
     instanceId: v.id("instances"),
+    snapshotStartedAt: v.number(),
     engineIds: v.array(v.string()),
     upserts: v.array(
       v.object({
@@ -231,7 +240,7 @@ export const reconcileWorkflows = internalMutation({
       })
     ),
   },
-  handler: async (ctx, { instanceId, engineIds, upserts }) => {
+  handler: async (ctx, { instanceId, snapshotStartedAt, engineIds, upserts }) => {
     const now = Date.now();
 
     for (const u of upserts) {
@@ -239,6 +248,9 @@ export const reconcileWorkflows = internalMutation({
         .query("workflows")
         .withIndex("by_engine_id", (q) => q.eq("instanceId", instanceId).eq("engineWorkflowId", u.engineWorkflowId))
         .first();
+      if (existing && existing.updatedAt >= snapshotStartedAt) {
+        continue;
+      }
       if (existing) {
         await ctx.db.patch(existing._id, {
           definition: u.definition,
@@ -263,7 +275,7 @@ export const reconcileWorkflows = internalMutation({
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .collect();
     for (const row of local) {
-      if (!liveIds.has(row.engineWorkflowId)) {
+      if (!liveIds.has(row.engineWorkflowId) && row.updatedAt < snapshotStartedAt) {
         await ctx.db.delete(row._id);
       }
     }
@@ -344,33 +356,6 @@ export const reconcileScenes = internalMutation({
 });
 
 const DEFAULT_UI_COLOR = "#888888";
-const DEFAULT_TRIGGER_ICON = "Zap";
-
-function parseJsonSafe(raw: string | undefined): unknown {
-  if (!raw) {
-    return undefined;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return undefined;
-  }
-}
-
-function triggerUiFields(configSchema: string | undefined): {
-  color: string;
-  icon: string;
-  configFields?: unknown[];
-} {
-  // color / icon were read out of the schema container, which no longer
-  // exists and which nothing ever populated — every row takes the defaults.
-  const fields = parseFieldList(configSchema);
-  return {
-    color: DEFAULT_UI_COLOR,
-    icon: DEFAULT_TRIGGER_ICON,
-    configFields: fields.length > 0 ? fields : undefined,
-  };
-}
 
 /**
  * Reconcile `triggerDefinitions` (global UI catalog) and `instanceTriggers`
@@ -394,6 +379,7 @@ export const reconcileTriggers = internalMutation({
         category: v.optional(v.string()),
         event: v.optional(v.string()),
         configSchema: v.optional(v.string()),
+        emits: v.optional(v.string()),
         sentence: v.optional(v.string()),
         allowVariants: v.optional(v.boolean()),
         projectionKey: v.optional(v.string()),
@@ -413,23 +399,7 @@ export const reconcileTriggers = internalMutation({
       const moduleId =
         snap.createdByType === "MODULE" ? moduleIdsByKey.get(bareModuleKey(snap.createdByRef) ?? "") : undefined;
 
-      const ui = triggerUiFields(snap.configSchema);
-      const defRow = {
-        slug: snap.id,
-        name: snap.name ?? snap.id,
-        description: snap.description ?? "",
-        category: snap.category ?? "General",
-        event: snap.event || undefined,
-        color: ui.color,
-        icon: ui.icon,
-        configFields: ui.configFields,
-        sentence: snap.sentence?.trim() || undefined,
-        allowVariants: snap.allowVariants,
-        projectionKey: snap.projectionKey,
-        taxonomy: snap.taxonomy,
-        transport: snap.transport,
-        moduleId,
-      };
+      const defRow = triggerDefinitionRow(snap, moduleId);
       const existingDef = await ctx.db
         .query("triggerDefinitions")
         .withIndex("by_slug", (q) => q.eq("slug", defRow.slug))
@@ -638,6 +608,7 @@ export const reconcileWidgets = internalMutation({
         surfaces: v.optional(v.array(v.string())),
         hostsSurface: v.optional(v.string()),
         taxonomy: v.optional(v.array(v.string())),
+        behaviorKinds: widgetBehaviorKindsValidator,
         createdByType: v.string(),
         createdByRef: v.string(),
       })
@@ -666,6 +637,7 @@ export const reconcileWidgets = internalMutation({
         surfaces: snap.surfaces,
         hostsSurface: snap.hostsSurface,
         taxonomy: snap.taxonomy,
+        behaviorKinds: snap.behaviorKinds,
       };
       const existingDef = await ctx.db
         .query("moduleWidgets")
@@ -951,7 +923,7 @@ export const ensureInstanceSyncRow = internalMutation({
 export const startRun = internalMutation({
   args: {
     instanceId: v.id("instances"),
-    trigger: v.union(v.literal("scheduled"), v.literal("manual")),
+    trigger: syncTriggerValidator,
   },
   handler: async (ctx, { instanceId, trigger }): Promise<Id<"syncRuns">> => {
     const now = Date.now();

@@ -53,18 +53,6 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
   const [testPresetId, setTestPresetId] = useState<string | null>(null);
   const selectedTestId = testPresetId ?? sections[0]?.presets[0]?.id ?? null;
 
-  const eventNames = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const section of sections) {
-      for (const preset of section.presets) {
-        if (preset.event) {
-          names.set(preset.event, preset.name);
-        }
-      }
-    }
-    return names;
-  }, [sections]);
-
   const shown = useMemo(
     () => (alerts ?? []).filter((alert) => !failuresOnly || isFailureStatus(alert.status)),
     [alerts, failuresOnly]
@@ -143,7 +131,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
                 No failures in the last {alerts.length} alerts. Nothing to diagnose.
               </p>
             ) : (
-              <AlertFeed instanceId={instanceId} alerts={shown} eventNames={eventNames} />
+              <AlertFeed instanceId={instanceId} alerts={shown} />
             )}
           </Card>
         </div>

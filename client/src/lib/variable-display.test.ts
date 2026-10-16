@@ -70,3 +70,43 @@ describe("toDisplayText / toStoredText", () => {
     expect(toStoredText(toDisplayText(stored, names), names)).toBe(stored);
   });
 });
+
+describe("input references", () => {
+  const triggerNames = variableNames([option("${trigger.data.userName}")]);
+  const inputNames = variableNames([option("{{userName}}"), option("{{user.name}}")]);
+
+  test("names an input by its whole id", () => {
+    expect(inputNames.nameByToken.get("{{userName}}")).toBe("userName");
+    expect(inputNames.nameByToken.get("{{user.name}}")).toBe("user.name");
+  });
+
+  test("shows an input reference as its short name and stores it back", () => {
+    expect(toDisplayText("{{userName}} just followed!", inputNames)).toBe("{userName} just followed!");
+    expect(toStoredText("Thank you {userName}!", inputNames)).toBe("Thank you {{userName}}!");
+  });
+
+  test("never reads the inside of an input reference as a short name", () => {
+    expect(toStoredText("Thank you {{userName}}!", triggerNames)).toBe("Thank you {{userName}}!");
+    expect(toStoredText("Thank you {{userName}}!", inputNames)).toBe("Thank you {{userName}}!");
+  });
+
+  test("keeps an escaped {{ as literal text", () => {
+    expect(toDisplayText("\\{{userName}}", inputNames)).toBe("\\{{userName}}");
+  });
+
+  test("keeps a reference in full where its short form would not read back", () => {
+    expect(toDisplayText("{${trigger.data.userName}}", triggerNames)).toBe("{${trigger.data.userName}}");
+    expect(toDisplayText("$${trigger.data.userName}", triggerNames)).toBe("$${trigger.data.userName}");
+  });
+
+  test.each([
+    "Thank you {{userName}}!",
+    "{{userName}} and {{user.name}} and \\{{literal}}",
+    "{{{userName}}}",
+    "{${trigger.data.userName}} ${trigger.data.userName}",
+    "{{ userName }} {{unknown}}",
+  ])("round-trips %p in either mode", (stored) => {
+    expect(toStoredText(toDisplayText(stored, inputNames), inputNames)).toBe(stored);
+    expect(toStoredText(toDisplayText(stored, triggerNames), triggerNames)).toBe(stored);
+  });
+});

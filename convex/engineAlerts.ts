@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, type MutationCtx, type QueryCtx, query } from "./_generated/server";
 import {
   ALERT_IN_FLIGHT_STALE_MS,
+  alertRetentionCutoff,
   mirrorOf,
   outcomeOf,
   UNSETTLED_STATUSES,
@@ -309,5 +310,32 @@ export const markStaleAlerts = internalMutation({
         return;
       }
     }
+  },
+});
+
+/** Rows one cleanup pass deletes; a full batch schedules the next pass at once. */
+const CLEANUP_BATCH = 200;
+
+/**
+ * Deletes alerts past retention (`ALERT_RETENTION_MS`), oldest first. Runs on
+ * a daily cron (see crons.ts), like engineEventLog.cleanupOld, and continues in
+ * further passes while a batch comes back full, so a busy day's backlog clears
+ * without any one mutation reading an unbounded set.
+ */
+export const cleanupOld = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const cutoff = alertRetentionCutoff(Date.now());
+    const old = await ctx.db
+      .query("engineAlerts")
+      .withIndex("by_creation_time", (q) => q.lt("_creationTime", cutoff))
+      .take(CLEANUP_BATCH);
+    for (const row of old) {
+      await ctx.db.delete(row._id);
+    }
+    if (old.length === CLEANUP_BATCH) {
+      await ctx.scheduler.runAfter(0, internal.engineAlerts.cleanupOld, {});
+    }
+    return old.length;
   },
 });

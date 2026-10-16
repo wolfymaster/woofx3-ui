@@ -3,11 +3,11 @@ import type { Doc } from "@convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { Gift, HandHeart, Heart, Star, Trash2, UserPlus, Zap } from "lucide-react";
 import { useCallback } from "react";
-import { giftedSubsDetail, LiveEventsWidget } from "@/components/dashboard/widgets/live-events";
+import { type EventsRow, EventsWidget } from "@/components/dashboard/widgets/events";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
-import type { PlatformEvent } from "@/lib/platforms/types";
+import type { AlertSummary } from "@/lib/alert-summary";
 
 // One card, two tabs, instead of two tiled widgets. Chat is deliberately
 // absent: this app has no chat data path at all right now — the transport
@@ -18,6 +18,8 @@ import type { PlatformEvent } from "@/lib/platforms/types";
 // real Twitch pinning and lives in its own widget; those old notes survive as
 // re-pinnable history there (see convex/pins.ts).
 
+// Rows saved with a short platform kind keep their own icon; a highlight saved
+// with an event's CloudEvent type, or "alert", reads as a star.
 const highlightIcons: Record<string, typeof Star> = {
   follow: UserPlus,
   subscribe: Heart,
@@ -87,40 +89,24 @@ function HighlightsTab() {
   );
 }
 
-/** Describes a live event the way the highlights feed stores it. */
-function highlightDetail(event: PlatformEvent): string | undefined {
-  if (event.type === "cheer" && event.amount != null) {
-    return `${event.amount} bits`;
-  }
-  if (event.type === "raid" && event.amount != null) {
-    return `${event.amount} viewers`;
-  }
-  if (event.type === "subscribe" && event.tier) {
-    return `Tier ${event.tier}`;
-  }
-  if (event.type === "subscriptionGift" && event.amount != null) {
-    return giftedSubsDetail(event.amount, event.tier);
-  }
-  return event.message;
-}
-
 export function ActivityPanelWidget() {
   const { instance } = useInstance();
   const { toast } = useToast();
   const saveHighlight = useMutation(api.activityPanel.saveHighlight);
 
+  // A highlight keeps the row as it read when saved: it outlives the trigger
+  // that worded it, and the event behind it ages out of the engine's log.
   const handleSaveHighlight = useCallback(
-    (event: PlatformEvent) => {
+    (row: EventsRow, summary: AlertSummary) => {
       if (!instance) {
         return;
       }
       void saveHighlight({
         instanceId: instance._id,
-        kind: event.type,
-        userName: event.userName,
-        detail: highlightDetail(event),
-        amount: event.amount,
-        occurredAt: event.timestamp.getTime(),
+        kind: row.event?.type ?? "alert",
+        userName: summary.title,
+        detail: summary.details.join(" · ") || undefined,
+        occurredAt: row.time,
       })
         .then(() => toast({ title: "Saved to Highlights" }))
         .catch((error: unknown) =>
@@ -145,11 +131,11 @@ export function ActivityPanelWidget() {
         </TabsTrigger>
       </TabsList>
 
-      {/* Each tab keeps its own scroll area; forceMount would keep the events
-          subscription alive across tab switches, but usePlatformEvents is
-          ref-counted and cheap to re-establish, so plain unmounting is fine. */}
+      {/* Each tab keeps its own scroll area. Unmounting the events tab drops
+          its pushed events, but coming back re-reads the engine's event log,
+          so nothing is lost but what that log does not keep. */}
       <TabsContent value="events" className="flex-1 min-h-0 mt-0">
-        <LiveEventsWidget hideHeader onSaveHighlight={handleSaveHighlight} />
+        <EventsWidget onSaveHighlight={handleSaveHighlight} />
       </TabsContent>
       <TabsContent value="highlights" className="flex-1 min-h-0 mt-0">
         <HighlightsTab />

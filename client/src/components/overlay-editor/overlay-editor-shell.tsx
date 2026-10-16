@@ -1,6 +1,6 @@
+import type { CanvasSize } from "@woofx3/scene/editor";
 import type { ReactNode } from "react";
-import { StageArea } from "@/components/common/stage-area";
-import type { CanvasSize } from "@/lib/alert-editor";
+import { StageArea, type StageZoom } from "@/components/common/stage-area";
 import { cn } from "@/lib/utils";
 
 interface OverlayEditorShellProps {
@@ -13,6 +13,12 @@ interface OverlayEditorShellProps {
   layers: ReactNode;
   /** The canvas, drawn at the zoom the stage area settled on. */
   stage: (zoom: number) => ReactNode;
+  /** See StageArea.zoomControl. */
+  zoomControl?: StageZoom;
+  /** See StageArea.toolbar. */
+  stageToolbar?: ReactNode;
+  /** Clears the selection: a press around the canvas, outside it. */
+  onDeselect?: () => void;
   /** The selected widget's settings, or null when nothing is selected. */
   inspector: ReactNode | null;
   /** What the right rail shows with nothing selected, so the rail is never empty. */
@@ -23,8 +29,8 @@ interface OverlayEditorShellProps {
    */
   className?: string;
   /**
-   * Shown but not editable, while what it edits waits on something else (a
-   * scene's draft while a Publish or Discard is answered). The header stays live.
+   * Shown but not editable: a scene the editor's session has not loaded yet,
+   * or one that no longer exists. The header stays live.
    */
   readOnly?: boolean;
 }
@@ -53,6 +59,9 @@ export function OverlayEditorShell({
   palette,
   layers,
   stage,
+  zoomControl,
+  stageToolbar,
+  onDeselect,
   inspector,
   inspectorFallback,
   className = "h-full",
@@ -66,12 +75,13 @@ export function OverlayEditorShell({
           "grid min-h-0 flex-1 grid-cols-[216px_minmax(0,1fr)_320px] transition-opacity",
           readOnly && "pointer-events-none select-none opacity-60"
         )}
-        aria-busy={readOnly}
         aria-disabled={readOnly}
         data-testid="overlay-editor-body"
       >
         <aside className="flex min-h-0 flex-col overflow-y-auto border-r p-4">{palette}</aside>
-        <StageArea canvas={canvas}>{stage}</StageArea>
+        <StageArea canvas={canvas} zoomControl={zoomControl} toolbar={stageToolbar} onBackgroundPress={onDeselect}>
+          {stage}
+        </StageArea>
         <aside className="flex min-h-0 flex-col border-l">
           <div className="max-h-[40%] shrink-0 overflow-y-auto border-b p-4" data-testid="editor-layers">
             {layers}

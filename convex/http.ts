@@ -36,15 +36,18 @@ import { OAUTH_CALLBACK_PATHS, oauthCallbackUrl } from "./lib/oauthCallback";
 import type { OAuthErrorCode } from "./lib/oauthErrors";
 import { generateOpaqueToken, hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { forwardedCallbackUrl, mintOAuthState, oauthStateConfigFromEnv, routeOAuthState } from "./lib/oauthState";
+import { OPS_PATH_PREFIX } from "./lib/ops/routes";
 import { withQuery } from "./lib/safeRedirect";
 import { isCurrentSceneUrl } from "./lib/sceneOverlayUrl";
 import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 import { parseEngineShoutoutTarget, SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE } from "./lib/shoutoutEngineRequest";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 import { TWITCH_TOKEN_REQUESTED_EVENT_TYPE } from "./lib/twitchTokenGrant";
+import { readWidgetBehaviorKinds } from "./lib/widgetBehaviorKinds";
 import { widgetCanonicalKey } from "./lib/widgetKey";
 import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
 import { logger } from "./logger";
+import { opsHandler } from "./ops/http";
 import { canonicalIdForStorageKey } from "./resourceValues";
 import "./browserSource";
 import "./moduleWebhook";
@@ -719,6 +722,7 @@ http.route({
             surfaces: widget.surfaces,
             hostsSurface: widget.hostsSurface,
             taxonomy: widget.taxonomy,
+            behaviorKinds: readWidgetBehaviorKinds(widget.behaviorKinds),
           });
         }
         return corsJson({ success: true, type: event.type });
@@ -776,10 +780,13 @@ http.route({
         await ctx.runMutation(internal.scenes.upsertFromWebhook, {
           instanceId: instance._id,
           engineSceneId: event.scene.id,
+          kind: optionalString(event.scene.kind),
           name: event.scene.name,
           description: event.scene.description,
           widgetsJson: event.scene.widgetsJson,
           layoutJson: event.scene.layoutJson,
+          behaviorsJson: optionalString(event.scene.behaviorsJson),
+          inputsJson: optionalString(event.scene.inputsJson),
           createdByType: event.scene.createdByType,
           createdByRef: event.scene.createdByRef,
           createdAt: event.scene.createdAt,
@@ -792,10 +799,13 @@ http.route({
         await ctx.runMutation(internal.scenes.upsertFromWebhook, {
           instanceId: instance._id,
           engineSceneId: event.scene.id,
+          kind: optionalString(event.scene.kind),
           name: event.scene.name,
           description: event.scene.description,
           widgetsJson: event.scene.widgetsJson,
           layoutJson: event.scene.layoutJson,
+          behaviorsJson: optionalString(event.scene.behaviorsJson),
+          inputsJson: optionalString(event.scene.inputsJson),
           createdByType: event.scene.createdByType,
           createdByRef: event.scene.createdByRef,
           createdAt: event.scene.createdAt,
@@ -808,6 +818,7 @@ http.route({
         await ctx.runMutation(internal.scenes.deleteFromWebhook, {
           instanceId: instance._id,
           engineSceneId: event.sceneId,
+          kind: optionalString(event.kind),
         });
         return corsJson({ success: true, type: event.type });
       }
@@ -1198,6 +1209,8 @@ http.route({
       detail: maintenanceDetailText(event.detail),
       engineStatus: typeof event.engineStatus === "string" ? event.engineStatus : undefined,
       rollbackRunId: typeof event.rollbackRunId === "string" ? event.rollbackRunId : undefined,
+      targetVersion: typeof event.targetVersion === "string" ? event.targetVersion : undefined,
+      rollbackOf: typeof event.rollbackOf === "string" ? event.rollbackOf : undefined,
     });
     return corsJson({ success: true, type: eventType, ...result });
   }),
@@ -1377,6 +1390,10 @@ const inboundWebhookHandler = httpAction(async (ctx, request) => {
   return response;
 });
 
+// The backoffice's ops API; see ops/http.ts.
+http.route({ pathPrefix: OPS_PATH_PREFIX, method: "GET", handler: opsHandler });
+http.route({ pathPrefix: OPS_PATH_PREFIX, method: "POST", handler: opsHandler });
+
 http.route({ pathPrefix: "/api/webhooks/", method: "POST", handler: inboundWebhookHandler });
 http.route({ pathPrefix: "/api/webhooks/", method: "GET", handler: inboundWebhookHandler });
 
@@ -1479,3 +1496,12 @@ http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "POST", handler: mac
 http.route({ pathPrefix: MACRO_TRIGGER_PATH_PREFIX, method: "GET", handler: macroTriggerHandler });
 
 export default http;
+
+/**
+ * A webhook field newer engines send and older ones leave out. Typed as a
+ * string by the shared event types, but read defensively: the validator
+ * downstream takes a string or nothing, never null.
+ */
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}

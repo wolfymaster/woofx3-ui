@@ -1,4 +1,4 @@
-import type { StreamEventFrame } from "@woofx3/api";
+import type { EventLogPage, EventLogQuery, EventLogSelection, EventLogSettings, StreamEventFrame } from "@woofx3/api";
 
 // WoofxTransport — abstracts communication with a woofx3 instance.
 // The browser (BrowserTransport) connects directly via WebSocket.
@@ -82,11 +82,30 @@ export interface WoofxTransport {
   // Chat (inbound subscription only — outbound send was removed from the engine)
   subscribeChatMessages(instanceId: string, callback: (msg: ChatMessage) => void): () => void;
 
-  // Stream events. Carries the engine's CloudEvent frame verbatim; mapping to
-  // whatever a consumer renders is the consumer's job (see
-  // lib/platforms/engine-events.ts), so this transport does not introduce a
-  // second event vocabulary alongside the shared contract.
-  subscribeStreamEvents(instanceId: string, callback: (frame: StreamEventFrame) => void): () => void;
+  // Stream events. Carries the engine's CloudEvent frame verbatim; wording it
+  // is the consumer's job (lib/activity-feed.ts reads it through the trigger
+  // catalog), so this transport does not introduce a second event vocabulary
+  // alongside the shared contract.
+  //
+  // `types` are the event types (CloudEvent `type`) the callback takes; the
+  // engine is asked to push only what some listener takes. `types` null takes
+  // every frame that arrives and asks for nothing: for an engine that predates
+  // per-subscriber types (capability `events.log`), which pushes its own fixed
+  // set whatever it is asked.
+  subscribeStreamEvents(
+    instanceId: string,
+    types: readonly string[] | null,
+    callback: (frame: StreamEventFrame) => void
+  ): () => void;
+  /**
+   * A page of the engine's event log, newest first: the history behind
+   * `subscribeStreamEvents`, in the same frame shape. Needs `events.log`.
+   */
+  listEvents(instanceId: string, query?: EventLogQuery): Promise<EventLogPage>;
+  /** Which event types the engine logs and pushes, and which it offers. Needs `events.log`. */
+  getEventLogSettings(instanceId: string): Promise<EventLogSettings>;
+  /** Replaces the engine's selection and returns the settings it results in. Needs `events.log`. */
+  setEventLogSelection(instanceId: string, selection: EventLogSelection): Promise<EventLogSettings>;
 
   // Workflow runs
   subscribeWorkflowRuns(instanceId: string, callback: (run: WorkflowRun) => void): () => void;

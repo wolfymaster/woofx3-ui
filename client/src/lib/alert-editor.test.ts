@@ -1,119 +1,119 @@
 import { describe, expect, test } from "bun:test";
-import type { Widget } from "@/types";
+import { mediaLengthEstimates, PROFILES, resolveTimeline } from "@woofx3/scene/model";
 import {
   alertLengthSeconds,
-  centerOf,
-  clampCenter,
-  fitZoom,
-  longestLayerId,
-  newLayer,
-  snapToCenter,
-  withCenter,
-  zoomIn,
-  zoomOut,
+  durationOf,
+  fileName,
+  formatSeconds,
+  layerLabel,
+  playedLengthSeconds,
 } from "./alert-editor";
 
-const CANVAS = { width: 1920, height: 1080 };
-
-function widget(id: string, extra: Partial<Widget> = {}): Widget {
-  return {
-    id,
-    widgetCanonicalId: "woofx3:widget:text",
-    name: "Text",
-    position: { x: 0, y: 0 },
-    size: { width: 200, height: 100 },
-    rotation: 0,
-    opacity: 1,
-    zIndex: 1,
-    locked: false,
-    visible: true,
-    settings: {},
-    ...extra,
-  };
+function layer(id: string, duration?: unknown) {
+  return { id, settings: duration === undefined ? {} : { duration } };
 }
-
-describe("centers", () => {
-  test("round-trip between a center and the stored top-left", () => {
-    const moved = withCenter(widget("a"), { x: 960, y: 540 });
-    expect(moved.position).toEqual({ x: 860, y: 490 });
-    expect(centerOf(moved)).toEqual({ x: 960, y: 540 });
-  });
-
-  test("keep a center on the canvas", () => {
-    expect(clampCenter({ x: -40, y: 2000 }, CANVAS)).toEqual({ x: 0, y: 1080 });
-  });
-});
-
-describe("snapToCenter", () => {
-  test("pulls a near center onto both center lines", () => {
-    expect(snapToCenter({ x: 975, y: 530 }, CANVAS, 20)).toEqual({
-      center: { x: 960, y: 540 },
-      onVertical: true,
-      onHorizontal: true,
-    });
-  });
-
-  test("leaves a far center alone", () => {
-    expect(snapToCenter({ x: 1200, y: 540 }, CANVAS, 20)).toEqual({
-      center: { x: 1200, y: 540 },
-      onVertical: false,
-      onHorizontal: true,
-    });
-  });
-});
-
-describe("zoom", () => {
-  test("steps between the fixed levels, stopping at the ends", () => {
-    expect(zoomIn(0.36)).toBe(0.5);
-    expect(zoomOut(0.36)).toBe(0.3);
-    expect(zoomIn(1)).toBe(1);
-    expect(zoomOut(0.2)).toBe(0.2);
-  });
-
-  test("steps from a fit zoom that sits between levels", () => {
-    expect(zoomIn(0.4)).toBe(0.5);
-    expect(zoomOut(0.4)).toBe(0.36);
-  });
-
-  test("fits the canvas in a box", () => {
-    expect(fitZoom({ width: 1008, height: 800 }, CANVAS, 24)).toBeCloseTo(0.5);
-  });
-});
 
 describe("alert length", () => {
   test("is the longest layer's duration", () => {
-    const widgets = [widget("a", { settings: { duration: 5 } }), widget("b", { settings: { duration: 8 } })];
-    expect(alertLengthSeconds(widgets)).toBe(8);
-    expect(longestLayerId(widgets)).toBe("b");
+    const layers = [layer("a", 5), layer("b", 8)];
+    expect(alertLengthSeconds(layers)).toBe(8);
   });
 
-  test("names no longest layer on a tie", () => {
-    const widgets = [widget("a", { settings: { duration: 5 } }), widget("b", { settings: { duration: 5 } })];
-    expect(longestLayerId(widgets)).toBeUndefined();
+  test("is zero when no layer has a length", () => {
+    expect(alertLengthSeconds([layer("a"), layer("b", 0)])).toBe(0);
+  });
+
+  test("reads a missing, negative or non-number duration as none", () => {
+    expect(durationOf(layer("a"))).toBe(0);
+    expect(durationOf(layer("a", -2))).toBe(0);
+    expect(durationOf(layer("a", "5"))).toBe(0);
+    expect(durationOf(layer("a", 2.5))).toBe(2.5);
   });
 });
 
-describe("newLayer", () => {
-  const text = { widgetId: "woofx3:widget:text", name: "Text", settings: [{ id: "align", defaultValue: "center" }] };
+describe("formatSeconds", () => {
+  test("shows whole seconds bare and anything else to a tenth", () => {
+    expect(formatSeconds(5)).toBe("5s");
+    expect(formatSeconds(2.5)).toBe("2.5s");
+    expect(formatSeconds(1.25)).toBe("1.3s");
+  });
+});
 
-  test("starts a text layer centered, with the declared defaults and a length", () => {
-    const layer = newLayer(text, [], CANVAS);
-    expect(centerOf(layer)).toEqual({ x: 960, y: 540 });
-    expect(layer.settings).toMatchObject({ align: "center", text: "New text", fontSize: 48, duration: 5 });
-    expect(layer.id).toBe("w-1");
+describe("layerLabel", () => {
+  const shown = (text: string) => text.replace("{user}", "user");
+
+  test("names a Text layer by its text as the page shows it", () => {
+    expect(layerLabel({ kind: "text", name: "Text", settings: { text: " {user} followed " } }, shown)).toBe(
+      "user followed"
+    );
   });
 
-  test("steps a repeated add off the layers already there, on a fresh id", () => {
-    const first = newLayer(text, [], CANVAS);
-    const second = newLayer(text, [first], CANVAS);
-    expect(centerOf(second)).toEqual({ x: 1000, y: 580 });
-    expect(second.id).not.toBe(first.id);
-    expect(second.zIndex).toBe(first.zIndex + 1);
+  test("falls back to the name for a Text layer with no text", () => {
+    expect(layerLabel({ kind: "text", name: "Text", settings: { text: "  " } }, shown)).toBe("Text");
   });
 
-  test("puts audio in the top right", () => {
-    const layer = newLayer({ widgetId: "woofx3:widget:audio", name: "Audio", settings: [] }, [], CANVAS);
-    expect(centerOf(layer)).toEqual({ x: 1780, y: 60 });
-    expect(layer.settings.duration).toBe(3);
+  test("adds a media layer's file to its name", () => {
+    expect(layerLabel({ kind: "image", name: "Image", settings: { src: { name: "cat.png" } } }, shown)).toBe(
+      "Image · cat.png"
+    );
+    expect(layerLabel({ kind: "video", name: "Video", settings: { src: "https://x.test/a/clip.webm" } }, shown)).toBe(
+      "Video · clip.webm"
+    );
+    expect(layerLabel({ kind: "other", name: "Confetti", settings: {} }, shown)).toBe("Confetti");
+  });
+});
+
+describe("fileName", () => {
+  test("reads an asset's name, a URL's last segment, or nothing", () => {
+    expect(fileName({ name: "a.png", url: "https://x.test/b.png" })).toBe("a.png");
+    expect(fileName("https://x.test/b.png")).toBe("b.png");
+    expect(fileName(undefined)).toBe("");
+  });
+});
+
+describe("playedLengthSeconds", () => {
+  const placement = (settings: Record<string, unknown>) => ({
+    widget: "woofx3:widget:text",
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 100,
+    visible: true,
+    z: "a0",
+    settings,
+    name: "Text",
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    extra: {},
+  });
+  const tracksOf = (doc: Parameters<typeof resolveTimeline>[0]) =>
+    resolveTimeline(doc, PROFILES.alert, { startedAtMs: 0 }, { estimate: { durationsMs: mediaLengthEstimates(doc) } });
+
+  test("counts a layer's exit transition, as the overlay plays it", () => {
+    const doc = {
+      layout: { width: 1920, height: 1080 },
+      widgets: { text: placement({ duration: 5 }) },
+      behaviors: {
+        out: {
+          type: "transition",
+          kind: "fade",
+          target: "text",
+          order: "a0",
+          timing: { anchor: "exit" as const, offsetMs: 0, durationMs: 400, easing: "ease-out" },
+          params: { phase: "out" },
+        },
+      },
+    };
+    expect(playedLengthSeconds(tracksOf(doc), [{ settings: { duration: 5 } }])).toBe(5.4);
+  });
+
+  test("an alert with nothing timed holds as long as the overlay holds it", () => {
+    const doc = { layout: { width: 1920, height: 1080 }, widgets: {}, behaviors: {} };
+    expect(playedLengthSeconds(tracksOf(doc), [])).toBe(5);
+  });
+
+  test("falls back to the longest layer without tracks", () => {
+    expect(playedLengthSeconds(null, [layer("a", 3), layer("b", 7)])).toBe(7);
   });
 });

@@ -4,7 +4,7 @@ import { AlertCircle, BellRing, CheckCircle2, HelpCircle, Loader2, type LucideIc
 /**
  * How each point of an alert's lifecycle is named and drawn.
  *
- * Shared by the dashboard's feed and the Alert Log widget so a status never
+ * Shared by the Alerts page feed and the Events widget so a status never
  * looks like one thing in one place and something else in another. The keys
  * are the engine's own lifecycle values, mirrored in the `engineAlerts` table.
  */

@@ -1,29 +1,17 @@
 import { Clock, Gamepad2, Gift, HandHeart, Heart, Radio, UserPlus, Users, Zap } from "lucide-react";
-import { type ReactNode, useCallback, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Uptime } from "@/components/common/uptime";
+import { useInstance } from "@/hooks/use-instance";
 import { useLiveState } from "@/hooks/use-live-state";
-import type { PlatformEvent, PlatformEventType } from "@/lib/platforms/types";
-import { usePlatformEvents } from "@/lib/platforms/use-platform-events";
+import { EMPTY_TALLIES, STREAM_TALLY_EVENTS, type StreamTallies, tallyStreamEvent } from "@/lib/stream-tallies";
+import { transport } from "@/lib/transport";
 
 // Every number here comes from a path that already exists: the channel facts
 // from the same `instanceLiveState` row the stream-status widget reads, and
-// the tallies from the same direct-to-Twitch EventSub subscription the
-// live-events widget uses (shared and ref-counted by usePlatformEvents, so
-// this widget adds no second connection). Nothing is invented, and no third
-// metrics table was added — the engine reports no running follower/sub/bits
-// totals to read instead.
-
-const EVENT_TYPES: PlatformEventType[] = ["follow", "subscribe", "subscriptionGift", "cheer", "raid"];
-
-interface SessionTallies {
-  follows: number;
-  subscribes: number;
-  giftedSubs: number;
-  bits: number;
-  raids: number;
-}
-
-const EMPTY_TALLIES: SessionTallies = { follows: 0, subscribes: 0, giftedSubs: 0, bits: 0, raids: 0 };
+// the tallies from the engine's stream-event push (one engine subscription the
+// transport fans out, so this widget adds no second connection). Nothing is
+// invented, and no third metrics table was added — the engine reports no
+// running follower/sub/bits totals to read instead.
 
 function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: string; value: ReactNode }) {
   return (
@@ -38,8 +26,10 @@ function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: stri
 }
 
 export function StreamStatsWidget() {
+  const { instance } = useInstance();
+  const instanceId = instance?._id;
   const liveState = useLiveState();
-  const [tallies, setTallies] = useState<SessionTallies>(EMPTY_TALLIES);
+  const [tallies, setTallies] = useState<StreamTallies>(EMPTY_TALLIES);
 
   const isLive = liveState?.isLive ?? false;
   const startedAt = liveState?.startedAt;
@@ -56,30 +46,14 @@ export function StreamStatsWidget() {
     setTallies(EMPTY_TALLIES);
   }
 
-  const handleEvent = useCallback((event: PlatformEvent) => {
-    setTallies((prev) => {
-      switch (event.type) {
-        case "follow":
-          return { ...prev, follows: prev.follows + 1 };
-        case "subscribe":
-          return { ...prev, subscribes: prev.subscribes + 1 };
-        case "subscriptionGift":
-          // One gift event can carry many subs, so this sums `amount` rather
-          // than counting events. It stays apart from Subs because Twitch also
-          // sends a channel.subscribe (isGift) per recipient, which Subs
-          // already counts.
-          return { ...prev, giftedSubs: prev.giftedSubs + (event.amount ?? 0) };
-        case "cheer":
-          return { ...prev, bits: prev.bits + (event.amount ?? 0) };
-        case "raid":
-          return { ...prev, raids: prev.raids + 1 };
-        default:
-          return prev;
-      }
+  useEffect(() => {
+    if (!instanceId) {
+      return;
+    }
+    return transport.subscribeStreamEvents(instanceId, STREAM_TALLY_EVENTS, (frame) => {
+      setTallies((previous) => tallyStreamEvent(previous, frame));
     });
-  }, []);
-
-  usePlatformEvents(EVENT_TYPES, handleEvent);
+  }, [instanceId]);
 
   const uptime = isLive && startedAt ? <Uptime startedAt={startedAt} /> : "—";
 

@@ -293,6 +293,20 @@ function parseUpdatedAt(point: AlertLifecyclePoint): bigint | null {
  */
 export const ALERT_IN_FLIGHT_STALE_MS = 15 * 60 * 1000;
 
+/**
+ * How long the mirror keeps an alert. Its payload carries viewer names and
+ * messages, and nothing reads an alert from further back than the engine still
+ * holds: this matches the engine's default detail retention
+ * (`EVENT_DETAIL_RETENTION`), after which its own alerts and the events behind
+ * them are gone. Stream recaps read session summaries, which are kept.
+ */
+export const ALERT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Rows created before this moment are past retention. */
+export function alertRetentionCutoff(now: number): number {
+  return now - ALERT_RETENTION_MS;
+}
+
 /** The statuses of an alert the mirror has not yet seen settle. */
 export const UNSETTLED_STATUSES = [
   "pending",
