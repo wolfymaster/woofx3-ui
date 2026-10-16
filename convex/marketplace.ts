@@ -10,7 +10,8 @@ import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { unapprovedLocalEndpointIds } from "./lib/localEndpoints";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
-import { requireEntitlement } from "./lib/marketplaceEntitlement";
+import { marketplaceAuthed } from "./lib/marketplaceApi";
+import { type ContentGrant, grantQuery, requireEntitlement } from "./lib/marketplaceEntitlement";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
 import { recordListingInstall } from "./lib/marketplaceInstalls";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
@@ -130,11 +131,21 @@ export interface MarketplaceDownload {
   sha256: string;
 }
 
+/**
+ * A presigned URL for a module's archive. `grant` comes from
+ * `requireEntitlement`: a paid module's archive is only handed out with the
+ * write token and the buyer it was sold to.
+ */
 export async function fetchMarketplaceDownload(
   marketplaceModuleId: string,
-  access: MarketplaceAccess
+  access: MarketplaceAccess,
+  grant: ContentGrant
 ): Promise<MarketplaceDownload> {
-  const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`, access);
+  const path = `/modules/${encodeURIComponent(marketplaceModuleId)}/download`;
+  const payload =
+    grant.kind === "paid"
+      ? await marketplaceAuthed(`${path}${grantQuery(grant)}`, "GET")
+      : await marketplaceFetch(path, access);
   const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
   const url = asString(obj.url);
   if (!url) {
@@ -472,9 +483,9 @@ async function installFromMarketplace(
   // Refused before anything is downloaded or sent to the engine. A paid
   // listing the account has not bought must not install, and the browser
   // showing a Buy button is not a guard -- this is.
-  await requireEntitlement(ctx, instanceId, marketplaceModuleId, detail.name);
+  const grant = await requireEntitlement(ctx, instanceId, marketplaceModuleId, detail.name);
 
-  const download = await fetchMarketplaceDownload(marketplaceModuleId, access);
+  const download = await fetchMarketplaceDownload(marketplaceModuleId, access, grant);
   const manifest = await fetchMarketplaceArchiveManifest(download);
   const unapproved = unapprovedPermissions(parseManifestPermissions(manifest), approvedPermissions);
   const unapprovedLocalEndpoints = unapprovedLocalEndpointIds(manifest, approvedLocalEndpoints);

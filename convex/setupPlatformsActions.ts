@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
+import { requireEntitlement } from "./lib/marketplaceEntitlement";
 import { parseManifestPermissions } from "./lib/modulePermissions";
 import { NO_SETUP_PLATFORMS_MESSAGE, type ResolvedSetupPlatforms, resolveSetupPlatforms } from "./lib/setupPlatforms";
 import { logger } from "./logger";
@@ -46,7 +47,13 @@ export const listForSetup = action({
         .filter((entry) => listedIds.has(entry.marketplaceModuleId))
         .map(async (entry): Promise<[string, unknown]> => {
           try {
-            const download = await fetchMarketplaceDownload(entry.marketplaceModuleId, access);
+            const grant = await requireEntitlement(
+              ctx,
+              instanceId,
+              entry.marketplaceModuleId,
+              entry.marketplaceModuleId
+            );
+            const download = await fetchMarketplaceDownload(entry.marketplaceModuleId, access, grant);
             return [entry.marketplaceModuleId, await fetchMarketplaceArchiveManifest(download)];
           } catch (err) {
             logger.warn("could not read setup platform permissions", {

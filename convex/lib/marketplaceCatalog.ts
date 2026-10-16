@@ -120,8 +120,6 @@ export interface CatalogListingDetail extends CatalogListing {
   previews: ListingPreview[];
   emotes?: ListingEmote[];
   license?: string;
-  /** The scene or alert composition an overlay or alert listing installs. */
-  bundle?: Record<string, unknown>;
   /** Modules a bundle's widgets come from. */
   requires?: string[];
   module?: CatalogModuleDetail;
@@ -417,14 +415,24 @@ export function parseCatalogDetail(raw: unknown): CatalogListingDetail | null {
     detail.license = optionalString(obj.license);
   }
   if (listing.type === "overlay" || listing.type === "alert") {
-    const bundle = obj.bundle;
-    if (bundle && typeof bundle === "object") {
-      detail.bundle = bundle as Record<string, unknown>;
-    }
     detail.requires = asStringArray(obj.requires);
   }
   detail.module = parseModuleDetail(obj.module);
   return detail;
+}
+
+/**
+ * The scene or alert composition from `/catalog/{id}/bundle`, or null when
+ * the answer carries none. Kept opaque: it is this deployment's own scene
+ * document, and validating it here would couple the marketplace client to the
+ * scene editor's release.
+ */
+export function parseBundle(payload: unknown): Record<string, unknown> | null {
+  const bundle = asObject(payload).bundle;
+  if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) {
+    return null;
+  }
+  return bundle as Record<string, unknown>;
 }
 
 export function parseCatalogPage(payload: unknown): CatalogPage {
