@@ -7,9 +7,9 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import type { MarketplaceAccess } from "./lib/marketplaceAccess";
+import { type ContentAccess, contentAccessFor } from "./lib/marketplaceEntitlement";
 import { listArchiveModuleFiles, readArchiveModuleFile } from "./lib/moduleArchiveFiles";
-import { fetchMarketplaceArchive, fetchMarketplaceDownload, marketplaceAccessForInstance } from "./marketplace";
+import { fetchMarketplaceArchive, fetchMarketplaceDownload } from "./marketplace";
 import { requireEngineInstance } from "./moduleSettingsActions";
 
 /**
@@ -35,7 +35,7 @@ const UPDATE_ENGINE_MESSAGE = "Update WoofX3 to browse this module's files.";
 
 type FileSource =
   | { kind: "engine"; manifestModuleId: string; engine: { url: string; clientId: string; clientSecret: string } }
-  | { kind: "marketplace"; marketplaceId: string; access: MarketplaceAccess };
+  | { kind: "marketplace"; marketplaceId: string; content: ContentAccess };
 
 /**
  * Where a module's files live. `moduleId` is what the detail view identifies
@@ -45,10 +45,12 @@ type FileSource =
 async function resolveFileSource(ctx: ActionCtx, instanceId: Id<"instances">, moduleId: string): Promise<FileSource> {
   const installed = await ctx.runQuery(internal.moduleRepository.resolveModuleForDetail, { instanceId, moduleId });
   if (installed?.status !== "installed") {
+    // A module not yet installed is read from its marketplace archive, which
+    // for a paid module is the product itself: only a buyer may browse it.
     return {
       kind: "marketplace",
       marketplaceId: moduleId,
-      access: await marketplaceAccessForInstance(ctx, instanceId),
+      content: await contentAccessFor(ctx, instanceId),
     };
   }
   const engine = await requireEngineInstance(ctx, instanceId);
@@ -57,8 +59,8 @@ async function resolveFileSource(ctx: ActionCtx, instanceId: Id<"instances">, mo
   return { kind: "engine", manifestModuleId, engine };
 }
 
-async function fetchArchive(marketplaceId: string, access: MarketplaceAccess): Promise<Uint8Array> {
-  return await fetchMarketplaceArchive(await fetchMarketplaceDownload(marketplaceId, access));
+async function fetchArchive(source: Extract<FileSource, { kind: "marketplace" }>): Promise<Uint8Array> {
+  return await fetchMarketplaceArchive(await fetchMarketplaceDownload(source.marketplaceId, source.content));
 }
 
 /**
@@ -88,7 +90,7 @@ export const listModuleFiles = action({
           source.manifestModuleId
         );
       }
-      return listArchiveModuleFiles(await fetchArchive(source.marketplaceId, source.access));
+      return listArchiveModuleFiles(await fetchArchive(source));
     } catch (error) {
       throw toClientError(error, "listModuleFiles");
     }
@@ -112,7 +114,7 @@ export const readModuleFile = action({
           path
         );
       }
-      return readArchiveModuleFile(await fetchArchive(source.marketplaceId, source.access), path);
+      return readArchiveModuleFile(await fetchArchive(source), path);
     } catch (error) {
       throw toClientError(error, "getModuleFile");
     }
