@@ -1,4 +1,5 @@
 import { atom, computed, map } from "nanostores";
+import { parseHiddenLayers, type RecapLayerId } from "./recap-timeline";
 
 const STORAGE_KEYS = {
   sidebarCollapsed: "streamdeck-sidebar-collapsed",
@@ -8,6 +9,7 @@ const STORAGE_KEYS = {
   dashboardLayoutHint: "woofx3-dashboard-layout-hint",
   hideUnusedAlerts: "woofx3-hide-unused-alerts",
   paletteRecents: "woofx3-palette-recents",
+  recapHiddenLayers: "woofx3-recap-hidden-layers",
 };
 
 export function getStoredValue<T>(key: string, defaultValue: T): T {
@@ -51,6 +53,12 @@ $dashboardLayoutHint.subscribe((value) => persistValue(STORAGE_KEYS.dashboardLay
 const initialHideUnusedAlerts = getStoredValue(STORAGE_KEYS.hideUnusedAlerts, false);
 export const $hideUnusedAlerts = atom<boolean>(initialHideUnusedAlerts);
 $hideUnusedAlerts.subscribe((value) => persistValue(STORAGE_KEYS.hideUnusedAlerts, value));
+
+// Stream recap timeline layers the viewer switched off. Per-browser, and the
+// same on every recap, so comparing streams keeps the same view.
+const initialRecapHiddenLayers = parseHiddenLayers(getStoredValue<unknown>(STORAGE_KEYS.recapHiddenLayers, []));
+export const $recapHiddenLayers = atom<RecapLayerId[]>(initialRecapHiddenLayers);
+$recapHiddenLayers.subscribe((value) => persistValue(STORAGE_KEYS.recapHiddenLayers, value));
 
 const initialSidebarCollapsed = getStoredValue(STORAGE_KEYS.sidebarCollapsed, false);
 export const $sidebarCollapsed = atom<boolean>(initialSidebarCollapsed);

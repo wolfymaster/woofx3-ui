@@ -54,6 +54,7 @@ interface WidgetLayoutCanvasProps {
 interface NodeLayer {
   id: string;
   visible: boolean;
+  locked: boolean;
   node: NodeView;
 }
 
@@ -147,7 +148,10 @@ export function WidgetLayoutCanvas({
   );
 
   const layers = useMemo(
-    (): NodeLayer[] => [...nodes].reverse().map((node) => ({ id: node.id, visible: node.placement.visible, node })),
+    (): NodeLayer[] =>
+      [...nodes]
+        .reverse()
+        .map((node) => ({ id: node.id, visible: node.placement.visible, locked: node.placement.locked, node })),
     [nodes]
   );
   const moveLayer = useCallback(
@@ -159,6 +163,15 @@ export function WidgetLayoutCanvas({
       const placement = editor.getState().doc?.widgets[id];
       if (placement !== undefined) {
         report(editor.nodes.patch(id, { visible: !placement.visible }));
+      }
+    },
+    [editor, report]
+  );
+  const toggleLocked = useCallback(
+    (id: string) => {
+      const placement = editor.getState().doc?.widgets[id];
+      if (placement !== undefined) {
+        report(editor.nodes.patch(id, { locked: !placement.locked }));
       }
     },
     [editor, report]
@@ -195,6 +208,7 @@ export function WidgetLayoutCanvas({
           onMove={moveLayer}
           onDelete={(id) => report(editor.nodes.remove([id]))}
           onToggleVisible={state.capabilities.canHide ? toggleVisible : undefined}
+          onToggleLock={toggleLocked}
           emptyMessage="Nothing on the canvas yet. Add a widget to start."
         />
       }

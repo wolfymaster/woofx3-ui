@@ -8,16 +8,28 @@ import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
 import { PageHeader } from "@/components/layout/page-header";
 import { ClipsCard, TopClipTile } from "@/components/stream-recap/clips-card";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
-import { ViewerChart } from "@/components/stream-recap/viewer-chart";
+import { RecapTimeline } from "@/components/stream-recap/recap-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import { useRecapClips } from "@/hooks/use-recap-clips";
+import { useRecapMarkers } from "@/hooks/use-recap-markers";
+import { useRecapTimelineEvents } from "@/hooks/use-recap-timeline-events";
 import { type StreamRecapEngineState, useStreamRecapEngineDetail } from "@/hooks/use-stream-recap-engine-detail";
 import { useToast } from "@/hooks/use-toast";
-import { RECAP_ENGINE_CAPABILITIES } from "@/lib/engine-capabilities";
+import { RECAP_ENGINE_CAPABILITIES, RECAP_EVENT_CAPABILITIES } from "@/lib/engine-capabilities";
+import {
+  buildLanePoints,
+  clipLayerStatus,
+  eventLayersStatus,
+  eventsTruncatedNote,
+  laneCounts,
+  markerLayerStatus,
+  recapLayerStatuses,
+  viewerLayerStatus,
+} from "@/lib/recap-timeline";
 import {
   formatLiveDuration,
   formatViewerFigure,
@@ -365,11 +377,40 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
     engineSupport === "supported",
     engineDetailRefreshKey
   );
+  const eventSupport = capabilities.support(...RECAP_EVENT_CAPABILITIES);
+  const events = useRecapTimelineEvents(
+    row.instanceId,
+    sessionId,
+    eventSupport === "supported",
+    engineDetailRefreshKey
+  );
   const clips = useRecapClips(row.instanceId, sessionId);
+  const markers = useRecapMarkers(row.instanceId, sessionId);
   const body: SessionBody | null = row.session && row.totals ? { session: row.session, totals: row.totals } : null;
   const segments = useMemo(() => summarySegments(row), [row]);
   const detail = okDetail(state);
   const series = useMemo(() => buildViewerSeries(detail?.viewerSamples ?? [], segments), [detail, segments]);
+  const eventResult = events.kind === "loaded" ? events.result : null;
+  const lanePoints = useMemo(
+    () =>
+      buildLanePoints({
+        events: eventResult?.status === "ok" ? eventResult.events : [],
+        clips: clips.state.kind === "loaded" ? clips.state.clips : [],
+        markers: markers.kind === "loaded" && markers.result.status === "ok" ? markers.result.markers : [],
+      }),
+    [eventResult, clips.state, markers]
+  );
+  const layerStatuses = recapLayerStatuses({
+    viewers: viewerLayerStatus(
+      engineSupport,
+      state,
+      series.points.some((point) => point.viewers !== null)
+    ),
+    events: eventLayersStatus(eventSupport, events),
+    eventCounts: laneCounts(lanePoints),
+    clips: clipLayerStatus(clips.state),
+    markers: markerLayerStatus(markers),
+  });
   const timeline = useMemo(() => segmentTimeline(segments), [segments]);
   const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   const canAnnounce = !!twitchLink?.scopes.includes(ANNOUNCEMENT_SCOPE);
@@ -409,18 +450,31 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Viewers</CardTitle>
-          <CardDescription>Per minute while live. Gaps are minutes that weren't sampled.</CardDescription>
+          <CardTitle className="text-base">Timeline</CardTitle>
+          <CardDescription>
+            Viewers per minute while live, with when follows, subs, gifts, cheers, raids, clips and markers happened.
+            Gaps in the line are minutes that weren't sampled.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <EngineFeatureGate
-            support={engineSupport}
-            state={capabilities.state}
-            feature="Viewer history and top supporters"
-            onRetry={capabilities.refresh}
-          >
-            {detail ? <ViewerChart series={series} /> : <EngineNotice state={state} onRetry={retry} />}
-          </EngineFeatureGate>
+        <CardContent className="space-y-4">
+          <RecapTimeline
+            series={series}
+            points={lanePoints}
+            statuses={layerStatuses}
+            footnote={eventsTruncatedNote(eventResult)}
+          />
+          {(engineSupport === "unsupported" ||
+            engineSupport === "unknown" ||
+            (engineSupport === "supported" && !detail && state.kind !== "loading")) && (
+            <EngineFeatureGate
+              support={engineSupport}
+              state={capabilities.state}
+              feature="Viewer history and top supporters"
+              onRetry={capabilities.refresh}
+            >
+              <EngineNotice state={state} onRetry={retry} />
+            </EngineFeatureGate>
+          )}
         </CardContent>
       </Card>
 

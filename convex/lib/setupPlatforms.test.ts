@@ -1,11 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   type CuratedSetupPlatform,
+  curatedForDeployment,
   curatedSetupPlatformError,
   DEFAULT_SETUP_PLATFORMS,
   resolveSetupPlatforms,
   type SetupPlatformListing,
   setupChoiceError,
+  setupNeedsTwitch,
+  TWITCH_SETUP_MODULE_ID,
 } from "./setupPlatforms";
 
 function curated(overrides: Partial<CuratedSetupPlatform> & { marketplaceModuleId: string }): CuratedSetupPlatform {
@@ -143,5 +146,42 @@ describe("setupChoiceError", () => {
 
   test("rejects a platform chosen twice", () => {
     expect(setupChoiceError([twitch, twitch], ["woofx3_twitch"])).toBe("woofx3_twitch is chosen more than once");
+  });
+});
+
+describe("curatedForDeployment", () => {
+  test("production keeps the stored requirements", () => {
+    expect(curatedForDeployment(DEFAULT_SETUP_PLATFORMS, false)).toEqual([...DEFAULT_SETUP_PLATFORMS]);
+  });
+
+  test("a preview requires nothing but keeps what is selected by default", () => {
+    const preview = curatedForDeployment(DEFAULT_SETUP_PLATFORMS, true);
+    expect(preview.every((entry) => !entry.required)).toBe(true);
+    expect(preview.map((entry) => entry.defaultSelected)).toEqual(
+      DEFAULT_SETUP_PLATFORMS.map((entry) => entry.defaultSelected)
+    );
+    expect(
+      DEFAULT_SETUP_PLATFORMS.find((entry) => entry.marketplaceModuleId === TWITCH_SETUP_MODULE_ID)?.required
+    ).toBe(true);
+  });
+
+  test("a preview choice without Twitch passes the required check", () => {
+    const requiredIds = curatedForDeployment(DEFAULT_SETUP_PLATFORMS, true)
+      .filter((entry) => entry.required)
+      .map((entry) => entry.marketplaceModuleId);
+    expect(setupChoiceError([], requiredIds)).toBeNull();
+  });
+});
+
+describe("setupNeedsTwitch", () => {
+  test("production always needs Twitch", () => {
+    expect(setupNeedsTwitch([], false)).toBe(true);
+    expect(setupNeedsTwitch(["woofx3_obs"], false)).toBe(true);
+  });
+
+  test("a preview needs Twitch only when it was chosen", () => {
+    expect(setupNeedsTwitch([], true)).toBe(false);
+    expect(setupNeedsTwitch(["woofx3_obs"], true)).toBe(false);
+    expect(setupNeedsTwitch([TWITCH_SETUP_MODULE_ID], true)).toBe(true);
   });
 });
