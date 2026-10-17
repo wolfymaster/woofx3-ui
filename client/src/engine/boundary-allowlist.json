@@ -1,7 +1,5 @@
 [
-  "components/alert-editor/alert-library-panel.tsx",
   "components/alert-editor/library-alert-editor.tsx",
-  "components/alert-editor/save-to-library-dialog.tsx",
   "components/alert-run/replay-controls.tsx",
   "components/alert-run/run-trace.tsx",
   "components/command-palette/use-item-commands.ts",
@@ -31,8 +29,6 @@
   "components/workflows/trigger-config-form.tsx",
   "components/workflows/workflow-runs-panel.tsx",
   "hooks/use-alert-layout-editor.ts",
-  "hooks/use-alert-library.ts",
-  "hooks/use-composition-preview.ts",
   "hooks/use-field-options.ts",
   "hooks/use-fire-test-event.ts",
   "hooks/use-go-live-checklist.ts",

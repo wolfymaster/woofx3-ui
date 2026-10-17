@@ -1,4 +1,3 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { CompositionEditor, EditorState } from "@woofx3/scene/editor";
 import {
@@ -14,8 +13,8 @@ import {
   type PreviewSampleEvent,
   parsePreviewReport,
 } from "@woofx3/scene/runtime";
-import { useAction } from "convex/react";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCompositionPreviewUrlRequest } from "@/engine/hooks/use-alert-library";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -124,8 +123,8 @@ export function useCompositionPreview({
   labelOf,
 }: UseCompositionPreviewArgs): CompositionPreviewController {
   const supported = useEngineCapabilities(instanceId).support(CAPABILITY) === "supported";
-  const getUrl = useAction(api.compositionPreview.getUrl);
-  fetchPreviewUrl = (id) => getUrl({ instanceId: id as Id<"instances"> });
+  const getUrl = useCompositionPreviewUrlRequest();
+  fetchPreviewUrl = (id) => getUrl(id as Id<"instances">);
   const { toast } = useToast();
 
   const frameRef = useRef<HTMLIFrameElement>(null);

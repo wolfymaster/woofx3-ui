@@ -1,8 +1,10 @@
 import type {
   AlertClearResult,
+  AlertComposition,
   AlertOverview,
   AlertReplayResult,
   AlertSkipResult,
+  CompositionPreviewUrl,
   EngineAlert,
   EngineCapabilityReport,
   EngineConnectionTest,
@@ -17,6 +19,7 @@ import type {
   InstanceId,
   InstanceLiveState,
   Live,
+  NewLibraryAlert,
   ObsStatus,
   Paginated,
   Resource,
@@ -45,6 +48,7 @@ export interface EngineGateway {
   readonly resources: ResourcesGateway;
   readonly eventLog: EventLogGateway;
   readonly alertQueue: AlertQueueGateway;
+  readonly alertLibrary: AlertLibraryGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -140,6 +144,24 @@ export interface AlertQueueGateway {
   useSkipCurrentRequest(): (instanceId: InstanceId) => Promise<AlertSkipResult>;
   /** Drops every alert still waiting; the one playing keeps playing. */
   useClearQueueRequest(): (instanceId: InstanceId) => Promise<AlertClearResult>;
+}
+
+/**
+ * The engine's library of reusable alerts, read from the cache its webhooks
+ * keep in Convex, and the page that previews a composition.
+ */
+export interface AlertLibraryGateway {
+  /** By name. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
+  useAlerts(instanceId: InstanceId | null): Live<AlertComposition[]>;
+  /** Null until its webhook arrives, once it is deleted, or when the caller cannot see the instance. */
+  useAlert(instanceId: InstanceId, engineCompositionId: string): Live<AlertComposition | null>;
+  /** Reads the engine's whole library into the cache, for alerts no webhook brought. */
+  useRefreshRequest(): (instanceId: InstanceId) => Promise<{ count: number }>;
+  /** Rejects when the engine keeps no alert library or the name is blank. */
+  useCreateRequest(): (instanceId: InstanceId, alert: NewLibraryAlert) => Promise<{ engineCompositionId: string }>;
+  useRemoveRequest(): (instanceId: InstanceId, engineCompositionId: string) => Promise<{ success: boolean }>;
+  /** A short-lived URL of the engine's composition preview page; null when the engine has none. */
+  usePreviewUrlRequest(): (instanceId: InstanceId) => Promise<CompositionPreviewUrl | null>;
 }
 
 export interface OptimisticInstance {
