@@ -74,6 +74,51 @@
           }
         }
       }
+    },
+    {
+      "includes": ["client/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@/lib/transport", "@/lib/transport/**"],
+                    "message": "The engine transport is reached through the EngineGateway (client/src/engine). Add what you need to a gateway namespace instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "client/src/engine/**",
+        "client/src/lib/transport/**",
+        "client/src/hooks/use-sync-engine-transport.ts",
+        "client/src/components/dashboard/widgets/ad-breaks.tsx",
+        "client/src/components/dashboard/widgets/stream-stats.tsx",
+        "client/src/components/dashboard/widgets/workflow-runs.tsx",
+        "client/src/hooks/use-engine-capabilities.ts",
+        "client/src/hooks/use-engine-health.ts",
+        "client/src/hooks/use-engine-upgrading.ts",
+        "client/src/hooks/use-event-log-settings.ts",
+        "client/src/hooks/use-event-log.ts",
+        "client/src/hooks/use-workflow-health.ts",
+        "client/src/lib/workflow-run-list.test.ts",
+        "client/src/lib/workflow-run-list.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
     }
   ]
 }

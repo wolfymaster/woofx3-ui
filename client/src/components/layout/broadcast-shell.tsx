@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { EngineGatewayProvider } from "@/engine/context";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useEngineHealth } from "@/hooks/use-engine-health";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
@@ -349,29 +350,31 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   }, []);
 
   return (
-    <StatusBarSlotProvider>
-      <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
-        <InstanceBar />
-        <AppHeader />
-        <TwitchReconnectBanner />
-        <EngineUpgradingBanner />
-        <SetupInstallBanner />
+    <EngineGatewayProvider>
+      <StatusBarSlotProvider>
+        <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+          <InstanceBar />
+          <AppHeader />
+          <TwitchReconnectBanner />
+          <EngineUpgradingBanner />
+          <SetupInstallBanner />
 
-        <div className="flex-1 flex min-h-0 overflow-hidden">
-          {activeSection?.children && (
-            <SectionSidebar
-              title={activeSection.label}
-              items={navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting)}
-              location={location}
-            />
-          )}
-          <main className="flex-1 overflow-auto">{children}</main>
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+            {activeSection?.children && (
+              <SectionSidebar
+                title={activeSection.label}
+                items={navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting)}
+                location={location}
+              />
+            )}
+            <main className="flex-1 overflow-auto">{children}</main>
+          </div>
+
+          <StatusBar />
+
+          <CommandPalette open={commandPaletteOpen} onOpenChange={(open: boolean) => $commandPaletteOpen.set(open)} />
         </div>
-
-        <StatusBar />
-
-        <CommandPalette open={commandPaletteOpen} onOpenChange={(open: boolean) => $commandPaletteOpen.set(open)} />
-      </div>
-    </StatusBarSlotProvider>
+      </StatusBarSlotProvider>
+    </EngineGatewayProvider>
   );
 }
