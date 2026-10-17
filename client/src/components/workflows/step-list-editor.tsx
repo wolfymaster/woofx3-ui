@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "wouter";
@@ -26,6 +26,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
+import { useWorkflow } from "@/engine/hooks/use-workflows";
 import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { type CatalogActionRow, type CatalogTriggerRow, useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -198,10 +199,7 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
   const { toast } = useToast();
   const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
 
-  const workflow = useQuery(
-    api.workflows.getByEngineId,
-    instanceId && engineWorkflowId ? { instanceId: instanceId as never, engineWorkflowId } : "skip"
-  );
+  const workflow = useWorkflow((instanceId as InstanceId | null) ?? null, engineWorkflowId || null);
 
   // Backs the step-list summary line for resource_ref fields (e.g. Increment
   // Counter's "Counter" picker) — resolves the stored canonical id to the

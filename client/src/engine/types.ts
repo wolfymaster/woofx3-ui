@@ -207,6 +207,12 @@ export type SceneChanges = Omit<FunctionArgs<typeof api.sceneActions.updateScene
  */
 export type WorkflowRecord = Pick<Doc<"workflows">, "engineWorkflowId" | "definition" | "isEnabled" | "nodes">;
 
+/** A workflow on the engine, mirrored from its webhooks. */
+export type Workflow = Doc<"workflows">;
+
+/** The workflow builder's catalog: the triggers and actions the installed modules register. */
+export type WorkflowCatalog = NonNullable<FunctionReturnType<typeof api.workflowCatalog.get>>;
+
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;
 
