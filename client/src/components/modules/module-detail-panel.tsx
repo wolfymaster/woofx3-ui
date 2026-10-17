@@ -52,6 +52,7 @@ import {
   useResourceKind,
   useSyncModuleResourceInstancesRequest,
 } from "@/engine/hooks/use-module-resources";
+import { useModuleSettingsRequest, useUpdateModuleSettingRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
@@ -889,8 +890,8 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
-  const getSettingsAction = useAction(api.moduleSettingsActions.getModuleSettings);
-  const updateSettingAction = useAction(api.moduleSettingsActions.updateModuleSetting);
+  const getSettingsAction = useModuleSettingsRequest();
+  const updateSettingAction = useUpdateModuleSettingRequest();
 
   const [loadState, setLoadState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -925,7 +926,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     }
     setLoadState("loading");
     setLoadError(null);
-    void getSettingsAction({ instanceId, moduleId })
+    void getSettingsAction(instanceId, moduleId)
       .then((settings) => {
         const map: Record<string, string> = {};
         const secrets: Record<string, boolean> = {};
@@ -980,7 +981,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     setSaveError(null);
     setSaveSuccess(null);
     try {
-      await updateSettingAction({ instanceId, moduleId, key, value });
+      await updateSettingAction(instanceId, moduleId, key, value);
       if (isSecret) {
         setSecretIsSet((prev) => ({ ...prev, [key]: value !== "" }));
         // The typed secret is not kept once the engine has it.

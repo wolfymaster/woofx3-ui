@@ -34,8 +34,8 @@ import { MacroRemoteTrigger } from "./macro-remote-trigger";
 
 /**
  * Minimal shape the picker needs — only `id` + `name` are read. Sourced from
- * `api.moduleEngine.listWorkflows`, which projects the engine's
- * PaginatedWorkflows into this.
+ * `useEngineWorkflowsRequest`, which projects the engine's PaginatedWorkflows
+ * into this.
  */
 type WorkflowOption = { id: string; name: string };
 

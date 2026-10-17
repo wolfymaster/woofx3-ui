@@ -17,6 +17,7 @@ import type {
   EngineInfo,
   EngineSyncRequest,
   EngineSyncState,
+  EngineWorkflowOption,
   EventLogPage,
   EventLogQuery,
   EventLogSelection,
@@ -25,9 +26,13 @@ import type {
   InstanceId,
   InstanceLiveState,
   Live,
+  ModuleDetail,
+  ModuleFileContent,
+  ModuleFileList,
   ModuleId,
   ModuleResourceInstance,
   ModuleResourceInstanceChanges,
+  ModuleSettingValue,
   NewChatCommand,
   NewChatCommandGroup,
   NewLibraryAlert,
@@ -65,6 +70,7 @@ export interface EngineGateway {
   readonly alertLibrary: AlertLibraryGateway;
   readonly commands: CommandsGateway;
   readonly moduleResources: ModuleResourcesGateway;
+  readonly modules: ModulesGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -255,6 +261,40 @@ export interface ModuleResourcesGateway {
    * (lib/dollar-keys); the result arrives through the values they change.
    */
   useRunActionsRequest(): (instanceId: InstanceId, label: string, actions: unknown[]) => Promise<null>;
+}
+
+/**
+ * Installed modules as the engine runs them: their detail, settings and files,
+ * and uninstalling them. `moduleId` is what the module detail was asked for
+ * with (an installed module's key or a marketplace id) unless typed `ModuleId`.
+ */
+export interface ModulesGateway {
+  /** The module's manifest-derived detail, merged with its marketplace listing when it has one. */
+  useDetailRequest(): (instanceId: InstanceId, moduleId: string) => Promise<ModuleDetail>;
+  /** The declared settings' current values; a secret's value never comes back, only whether one is set. */
+  useSettingsRequest(): (instanceId: InstanceId, moduleId: string) => Promise<ModuleSettingValue[]>;
+  /** Rejects for a key the module does not declare as a setting. */
+  useUpdateSettingRequest(): (
+    instanceId: InstanceId,
+    moduleId: string,
+    key: string,
+    value: string
+  ) => Promise<ModuleSettingValue>;
+  useFilesRequest(): (instanceId: InstanceId, moduleId: string) => Promise<ModuleFileList>;
+  useFileRequest(): (instanceId: InstanceId, moduleId: string, path: string) => Promise<ModuleFileContent>;
+  /**
+   * Asks the engine to uninstall; resolves with the key its outcome is
+   * reported under (`transientEvents`), not when the module is gone.
+   */
+  useUninstallRequest(): (instanceId: InstanceId, moduleId: ModuleId) => Promise<{ moduleKey: string }>;
+  /** Asks the engine whether an uninstall whose outcome never arrived took effect, and settles the mirror. */
+  useReconcileUninstallRequest(): (
+    instanceId: InstanceId,
+    moduleId: ModuleId,
+    correlationKey: string
+  ) => Promise<{ stillInstalled: boolean }>;
+  /** The engine's workflows, by id and name. */
+  useWorkflowsRequest(): (instanceId: InstanceId) => Promise<EngineWorkflowOption[]>;
 }
 
 export interface OptimisticInstance {
