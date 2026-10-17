@@ -73,8 +73,8 @@ interface ScenePlacement {
 }
 
 // Every name an alert widget answers to across the instance's scenes, for the
-// Alert action's target picker. The default always leads the list: it is what
-// an unconfigured step plays on, even before any scene has an alert widget.
+// Alert action's target picker. Only names some scene has are offered, so a step
+// cannot pick a target nothing will play on; the default leads when present.
 export const alertWidgetNames = query({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<string[]> => {
@@ -97,7 +97,8 @@ export const alertWidgetNames = query({
         }
       }
     }
-    names.delete(DEFAULT_ALERT_WIDGET_NAME);
-    return [DEFAULT_ALERT_WIDGET_NAME, ...Array.from(names).sort((a, b) => a.localeCompare(b))];
+    const hasDefault = names.delete(DEFAULT_ALERT_WIDGET_NAME);
+    const sorted = Array.from(names).sort((a, b) => a.localeCompare(b));
+    return hasDefault ? [DEFAULT_ALERT_WIDGET_NAME, ...sorted] : sorted;
   },
 });

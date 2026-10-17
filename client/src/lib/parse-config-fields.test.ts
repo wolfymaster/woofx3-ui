@@ -32,6 +32,26 @@ describe("parseConfigFields", () => {
     expect(fields[0].description).toBe("Only fire when the redemption matches this reward.");
   });
 
+  test("keeps the app-state sources the custom renderers are keyed on", () => {
+    const fields = parseConfigFields([
+      { id: "target", label: "Alert widget", type: "text", source: { kind: "alertWidgets" } },
+      { id: "scene", label: "Scene", type: "text", source: { kind: "scenes" } },
+      { id: "widget", label: "Widget", type: "text", source: { kind: "scenePlacements", sceneField: "scene" } },
+    ]);
+    expect(fields.map((f) => f.source)).toEqual([
+      { kind: "alertWidgets" },
+      { kind: "scenes" },
+      { kind: "scenePlacements", sceneField: "scene" },
+    ]);
+  });
+
+  test("drops a scenePlacements source that names no scene field", () => {
+    const [field] = parseConfigFields([
+      { id: "widget", label: "Widget", type: "text", source: { kind: "scenePlacements" } },
+    ]);
+    expect(field.source).toBeUndefined();
+  });
+
   // The contract's type list is closed and barkloader validates it at install, so an
   // unrecognised type means a malformed declaration rather than a dialect to translate.
   // `boolean` was the one the old parser rewrote to `toggle`; no manifest declares it.
