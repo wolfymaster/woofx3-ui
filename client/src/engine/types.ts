@@ -2,8 +2,12 @@ import type { Doc, Id } from "@convex/_generated/dataModel";
 
 export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
-export type { PaginatedResourcesDto as ResourcePage, ResourceDto as Resource } from "@convex/resources";
-export type { EngineInfo } from "@woofx3/api";
+export type {
+  HostedStorageUsage,
+  PaginatedResourcesDto as ResourcePage,
+  ResourceDto as Resource,
+} from "@convex/resources";
+export type { EngineInfo, UploadGrant } from "@woofx3/api";
 
 /** The Convex `_id` of the instance record, which is the instance's only identity. */
 export type InstanceId = Id<"instances">;
@@ -65,4 +69,18 @@ export interface ResourceQuery {
   search?: string;
   page?: number;
   pageSize?: number;
+}
+
+/** The file an upload grant is asked for; the grant is bound to `size`. */
+export interface UploadRequest {
+  name: string;
+  contentType: string;
+  parentId: string | null;
+  size: number;
+}
+
+/** A rename (`name`), a move (`parentId`), or both. */
+export interface ResourceChanges {
+  name?: string;
+  parentId?: string | null;
 }

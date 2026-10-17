@@ -15,9 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useResourceUpload } from "@/engine/hooks/use-resource-upload";
+import { type Resource, useResources } from "@/engine/hooks/use-resources";
 import { useInstance } from "@/hooks/use-instance";
-import { useResourceUpload } from "@/hooks/use-resource-upload";
-import { type Resource, useResources } from "@/hooks/use-resources";
 import { useToast } from "@/hooks/use-toast";
 import {
   externalMediaValue,
