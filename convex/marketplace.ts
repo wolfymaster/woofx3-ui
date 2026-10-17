@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
@@ -10,6 +10,13 @@ import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { unapprovedLocalEndpointIds } from "./lib/localEndpoints";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
+import {
+  acquireListing,
+  type ContentAccess,
+  contentAccessFor,
+  contentRefusal,
+  fetchListingContent,
+} from "./lib/marketplaceEntitlement";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
@@ -128,11 +135,15 @@ export interface MarketplaceDownload {
   sha256: string;
 }
 
+/**
+ * A presigned URL for a module's archive. A module that is not free is only
+ * handed out for an account that holds it (see `fetchListingContent`).
+ */
 export async function fetchMarketplaceDownload(
   marketplaceModuleId: string,
-  access: MarketplaceAccess
+  content: ContentAccess
 ): Promise<MarketplaceDownload> {
-  const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`, access);
+  const payload = await fetchListingContent(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`, content);
   const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
   const url = asString(obj.url);
   if (!url) {
@@ -467,7 +478,16 @@ async function installFromMarketplace(
     throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
   }
 
-  const download = await fetchMarketplaceDownload(marketplaceModuleId, access);
+  let download: MarketplaceDownload;
+  try {
+    download = await fetchMarketplaceDownload(marketplaceModuleId, await contentAccessFor(ctx, instanceId));
+  } catch (err) {
+    const refusal = contentRefusal(err, detail.name);
+    if (refusal !== null) {
+      throw new ConvexError(refusal);
+    }
+    throw err;
+  }
   const manifest = await fetchMarketplaceArchiveManifest(download);
   const unapproved = unapprovedPermissions(parseManifestPermissions(manifest), approvedPermissions);
   const unapprovedLocalEndpoints = unapprovedLocalEndpointIds(manifest, approvedLocalEndpoints);
@@ -480,6 +500,13 @@ async function installFromMarketplace(
       unapprovedLocalEndpoints,
     };
   }
+  // After consent, so a streamer who backs out of the permission prompt has
+  // not acquired anything; before the engine, because a listing the account
+  // does not hold must not install, and the browser's Buy button is not a
+  // guard -- this is. A free listing is claimed here, which is also what
+  // counts the install.
+  await acquireListing(ctx, instanceId, marketplaceModuleId, detail.name);
+
   const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
 
   await ctx.runMutation(internal.transientEvents.emit, {

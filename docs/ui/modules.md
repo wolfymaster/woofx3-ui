@@ -1,9 +1,14 @@
 # Modules
 
-**Routes:** `/modules`, `/modules/installed`, `/modules/install`, `/modules/:id`
+**Routes:** `/modules/installed`, `/modules/install`, `/modules/:id`
 **Primary files:** `client/src/pages/modules.tsx`, `client/src/pages/module-install.tsx`, `client/src/pages/module-detail.tsx`, `client/src/components/modules/uninstall-module-dialog.tsx`
 
-## Catalog (`/modules`, `/modules/installed`)
+The storefront moved to [Marketplace](./marketplace.md) — `/marketplace`. These
+routes are the **install surface** it leads to, and are linked from elsewhere in
+the app and from an install's own success redirect, so they stay. Bare
+`/modules` redirects to `/marketplace`.
+
+## Catalog (`/modules/installed`)
 
 - **Convex** holds the repository of **engine-confirmed** modules: a `moduleRepository` row is only written after the engine sends a `module.installed` webhook. A module that is mid-install or whose delivery failed does **not** appear in the catalog — its state is communicated through transient events instead (see below).
 - The page reads `api.moduleRepository.list` (local Convex rows) and merges in live engine state via the **Convex action** `api.moduleEngine.listEngineModules`. The browser does **not** call the engine directly for module browsing — `WoofxTransport` is reserved for realtime channels (chat, stream status).
