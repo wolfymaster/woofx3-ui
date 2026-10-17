@@ -3,6 +3,7 @@ import { convexAlertLibraryGateway } from "./alert-library";
 import { convexAlertQueueGateway } from "./alert-queue";
 import { convexCommandsGateway } from "./commands";
 import { convexEventLogGateway } from "./event-log";
+import { convexModuleResourcesGateway } from "./module-resources";
 import { convexResourcesGateway } from "./resources";
 import { convexStatusGateway } from "./status";
 
@@ -19,4 +20,5 @@ export const convexEngineGateway: EngineGateway = {
   alertQueue: convexAlertQueueGateway,
   alertLibrary: convexAlertLibraryGateway,
   commands: convexCommandsGateway,
+  moduleResources: convexModuleResourcesGateway,
 };

@@ -45,6 +45,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import {
+  useCreateResourceInstanceRequest,
+  useDeleteResourceInstanceRequest,
+  useModuleResourceInstances,
+  useResourceKind,
+  useSyncModuleResourceInstancesRequest,
+} from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
@@ -1147,7 +1154,7 @@ interface ResourceRefSettingRowProps {
 function ResourceRefSettingRow({ field, resourceKind, value, busy, saved, onChange }: ResourceRefSettingRowProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const kind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: resourceKind } : "skip");
+  const kind = useResourceKind(instanceId ?? null, resourceKind);
   const ResourcePicker = configFieldRenderers.resource_ref;
   return (
     <div className="space-y-2">
@@ -1462,14 +1469,11 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const instances = useQuery(
-    api.moduleResourceInstances.listByModule,
-    instanceId && moduleDbId ? { instanceId, moduleId: moduleDbId } : "skip"
-  );
+  const instances = useModuleResourceInstances(instanceId ?? null, moduleDbId ?? null);
 
-  const createAction = useAction(api.moduleResourceActions.createResourceInstance);
-  const deleteAction = useAction(api.moduleResourceActions.deleteResourceInstance);
-  const syncAction = useAction(api.moduleResourceActions.syncResourceInstancesForModule);
+  const createAction = useCreateResourceInstanceRequest();
+  const deleteAction = useDeleteResourceInstanceRequest();
+  const syncAction = useSyncModuleResourceInstancesRequest();
 
   useEffect(() => {
     if (!instanceId || !moduleDbId) {
@@ -1479,7 +1483,7 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
     let cancelled = false;
     setSyncing(true);
     setSyncError(null);
-    void syncAction({ instanceId, moduleDbId })
+    void syncAction(instanceId, moduleDbId)
       .catch((err: unknown) => {
         if (!cancelled) {
           setSyncError(err instanceof Error ? err.message : "Failed to sync resource instances from the engine.");
@@ -1507,13 +1511,10 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
     setDeleting(deleteTarget.canonicalId);
     setOpError(null);
     try {
-      await deleteAction({
-        instanceId,
-        canonicalId: deleteTarget.canonicalId,
-      });
+      await deleteAction(instanceId, deleteTarget.canonicalId);
       setDeleteTarget(null);
       if (moduleDbId) {
-        await syncAction({ instanceId, moduleDbId });
+        await syncAction(instanceId, moduleDbId);
       }
     } catch (err) {
       setOpError(err instanceof Error ? err.message : "Failed to delete resource.");
@@ -1631,15 +1632,14 @@ function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResour
           kind={createDialogKind}
           onClose={() => setCreateDialogKind(null)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            await createAction({
-              instanceId,
+            await createAction(instanceId, {
               moduleName,
               kind: createDialogKind.kind,
               resourceInstanceId,
               displayName,
               settings,
             });
-            await syncAction({ instanceId, moduleDbId });
+            await syncAction(instanceId, moduleDbId);
           }}
         />
       )}
