@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { useAction, useQuery } from "convex/react";
 import { Loader2, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -22,6 +20,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  useAddChatCommandGroupMemberRequest,
+  useChatCommandGroupMembers,
+  useChatCommandGroups,
+  useChatCommands,
+  useCreateChatCommandGroupRequest,
+  useRemoveChatCommandGroupMemberRequest,
+  useUpdateChatCommandGroupRequest,
+} from "@/engine/hooks/use-chat-commands";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { COMMAND_GROUPS_PATH } from "@/lib/command-editor-route";
@@ -52,11 +59,11 @@ export default function CommandGroupEditor() {
   const { toast } = useToast();
   const { instance, isLoading: instanceLoading } = useInstance();
 
-  const groupsRaw = useQuery(api.chatCommandGroups.list, instance ? { instanceId: instance._id } : "skip");
-  const commandsRaw = useQuery(api.chatCommands.list, instance ? { instanceId: instance._id } : "skip");
+  const groupsRaw = useChatCommandGroups(instance?._id ?? null);
+  const commandsRaw = useChatCommands(instance?._id ?? null);
 
-  const createGroup = useAction(api.chatCommandActions.createGroup);
-  const updateGroup = useAction(api.chatCommandActions.updateGroup);
+  const createGroup = useCreateChatCommandGroupRequest();
+  const updateGroup = useUpdateChatCommandGroupRequest();
 
   const existing = groupsRaw?.find((doc) => doc.engineGroupId === engineGroupId);
   // Built-in groups are seeded by the engine and cannot be renamed or deleted, so this
@@ -118,16 +125,14 @@ export default function CommandGroupEditor() {
     setSaving(true);
     try {
       if (existing) {
-        await updateGroup({
-          instanceId: instance._id,
+        await updateGroup(instance._id, {
           engineGroupId: existing.engineGroupId,
           name,
           description: form.description.trim() || undefined,
         });
         toast({ title: "Group updated" });
       } else {
-        await createGroup({
-          instanceId: instance._id,
+        await createGroup(instance._id, {
           name,
           description: form.description.trim() || undefined,
         });
@@ -291,13 +296,10 @@ function GroupMembers({ instanceId, group }: { instanceId: Id<"instances">; grou
   const [usernameInput, setUsernameInput] = useState("");
   const [pending, setPending] = useState(false);
 
-  const members = useQuery(api.chatCommandGroups.listMembers, {
-    instanceId,
-    engineGroupId: group.engineGroupId,
-  });
+  const members = useChatCommandGroupMembers(instanceId, group.engineGroupId);
 
-  const addUserToGroup = useAction(api.chatCommandActions.addUserToGroup);
-  const removeUserFromGroup = useAction(api.chatCommandActions.removeUserFromGroup);
+  const addUserToGroup = useAddChatCommandGroupMemberRequest();
+  const removeUserFromGroup = useRemoveChatCommandGroupMemberRequest();
 
   async function handleAdd() {
     const username = usernameInput.trim().toLowerCase().replace(/^@/, "");
@@ -306,7 +308,7 @@ function GroupMembers({ instanceId, group }: { instanceId: Id<"instances">; grou
     }
     setPending(true);
     try {
-      await addUserToGroup({ instanceId, engineGroupId: group.engineGroupId, username });
+      await addUserToGroup(instanceId, group.engineGroupId, username);
       setUsernameInput("");
     } catch (err: unknown) {
       toast({
@@ -322,7 +324,7 @@ function GroupMembers({ instanceId, group }: { instanceId: Id<"instances">; grou
   async function handleRemove(username: string) {
     setPending(true);
     try {
-      await removeUserFromGroup({ instanceId, engineGroupId: group.engineGroupId, username });
+      await removeUserFromGroup(instanceId, group.engineGroupId, username);
     } catch (err: unknown) {
       toast({
         title: "Failed to remove member",

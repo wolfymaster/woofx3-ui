@@ -1,10 +1,9 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { Loader2, MessageSquare } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { AlertLayoutEditor } from "@/components/alert-editor/alert-layout-editor";
 import { EmptyState } from "@/components/common/empty-state";
+import { useChatCommands } from "@/engine/hooks/use-chat-commands";
 import { useOpenCommandDraft } from "@/hooks/use-command-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -31,7 +30,7 @@ export default function CommandStepAlertEditor() {
   const { instance } = useInstance();
   const { actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
-  const commandsRaw = useQuery(api.chatCommands.list, instance ? { instanceId: instance._id } : "skip");
+  const commandsRaw = useChatCommands(instance?._id ?? null);
   const existing = commandsRaw?.find((doc) => doc.engineCommandId === engineCommandId);
   const draft = useOpenCommandDraft(engineCommandId, existing);
 

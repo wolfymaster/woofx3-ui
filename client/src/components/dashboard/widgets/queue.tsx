@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import { QUEUE_KIND } from "@convex/lib/resourceKinds";
-import { useAction, useQuery } from "convex/react";
 import { ChevronsRight, Plus, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "wouter";
@@ -8,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  useRefreshResourceValuesRequest,
+  useResourceInstancesOfKind,
+  useResourceKind,
+  useResourceValues,
+} from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
 import { useResourceAction } from "@/hooks/use-resource-action";
 import type { DashboardWidgetProps } from "@/lib/dashboard-widgets/types";
@@ -40,16 +44,10 @@ export function QueueWidget({ config, onConfigChange }: DashboardWidgetProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
 
-  const kindDefinition = useQuery(
-    api.resourceKinds.getForInstance,
-    instanceId ? { instanceId, kind: QUEUE_KIND } : "skip"
-  );
-  const queues = useQuery(
-    api.moduleResourceInstances.listByKind,
-    instanceId ? { instanceId, kind: QUEUE_KIND } : "skip"
-  );
-  const values = useQuery(api.resourceValues.listForInstance, instanceId ? { instanceId } : "skip");
-  const refreshValues = useAction(api.moduleResourceActions.refreshResourceValues);
+  const kindDefinition = useResourceKind(instanceId ?? null, QUEUE_KIND);
+  const queues = useResourceInstancesOfKind(instanceId ?? null, QUEUE_KIND);
+  const values = useResourceValues(instanceId ?? null);
+  const refreshValues = useRefreshResourceValuesRequest();
 
   // Entries arrive by webhook while the dashboard is open; this fills in any
   // written before it was, or while a webhook went missing.
@@ -57,7 +55,7 @@ export function QueueWidget({ config, onConfigChange }: DashboardWidgetProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues({ instanceId, kind: QUEUE_KIND }).catch(() => {
+    refreshValues(instanceId, QUEUE_KIND).catch(() => {
       // The mirror still shows the last known line; the next change updates it.
     });
   }, [instanceId, refreshValues]);

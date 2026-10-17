@@ -1,16 +1,13 @@
-import { api } from "@convex/_generated/api";
-import { useAction } from "convex/react";
 import { useEffect, useState } from "react";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
 
 // Asks the engine for its release each time the connection comes up, not on
 // a timer: the version only changes when the engine restarts on a new image,
 // and a restart shows up as a disconnect followed by a reconnect.
 export function useEngineVersion(connected: boolean): string | null {
-  const { instance } = useInstance();
-  const getEngineInfo = useAction(api.engineInfo.getEngineInfo);
+  const { instanceId } = useEngineScope();
+  const getEngineInfo = useEngineGateway().status.useEngineInfoRequest();
   const [version, setVersion] = useState<string | null>(null);
-  const instanceId = instance?._id;
 
   useEffect(() => {
     setVersion(null);
@@ -19,7 +16,7 @@ export function useEngineVersion(connected: boolean): string | null {
     }
 
     let cancelled = false;
-    void getEngineInfo({ instanceId })
+    void getEngineInfo(instanceId)
       .then((info) => {
         // An engine older than the version field returns an EngineInfo
         // without one, so the type alone does not guarantee a string.

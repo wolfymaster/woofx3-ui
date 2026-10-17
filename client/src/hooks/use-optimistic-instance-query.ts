@@ -20,7 +20,18 @@ export function useOptimisticInstanceQuery<Query extends InstanceQuery>(
   query: Query
 ): FunctionReturnType<Query> | undefined {
   const { optimisticInstanceId, isLoading } = useInstance();
+  return useOptimisticInstanceQueryFor(query, optimisticInstanceId, isLoading);
+}
 
+/**
+ * useOptimisticInstanceQuery for a caller that already holds the instance
+ * scope; `isInstanceLoading` is true while `optimisticInstanceId` is unconfirmed.
+ */
+export function useOptimisticInstanceQueryFor<Query extends InstanceQuery>(
+  query: Query,
+  optimisticInstanceId: Id<"instances"> | null,
+  isInstanceLoading: boolean
+): FunctionReturnType<Query> | undefined {
   // Memoized on the function's name, never on `query` itself: every read of
   // `api.x.y` builds a new proxy, so a reference-keyed memo hands useQueries a
   // new request each render, and its subscription resets state during render
@@ -37,7 +48,7 @@ export function useOptimisticInstanceQuery<Query extends InstanceQuery>(
   const result: unknown = useQueries(queries).result;
 
   if (result instanceof Error) {
-    if (isLoading) {
+    if (isInstanceLoading) {
       return undefined;
     }
     throw result;

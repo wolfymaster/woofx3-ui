@@ -1,8 +1,6 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import type { HostedStorageUsage } from "@convex/resources";
-import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useEngineGateway } from "@/engine/context";
+import type { HostedStorageUsage, InstanceId } from "@/engine/types";
 
 /**
  * How much of the plan's hosted asset storage the instance uses, or null when
@@ -12,8 +10,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
  * Fetched through an action for the same reason as `useResources`: the usage
  * is the engine's, so callers `refresh()` after anything that changes it.
  */
-export function useHostedStorageUsage(instanceId: Id<"instances"> | undefined) {
-  const read = useAction(api.resources.hostedStorageUsage);
+export function useHostedStorageUsage(instanceId: InstanceId | undefined) {
+  const read = useEngineGateway().resources.useHostedStorageUsageRequest();
   const [usage, setUsage] = useState<HostedStorageUsage | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const requestSeq = useRef(0);
@@ -25,7 +23,7 @@ export function useHostedStorageUsage(instanceId: Id<"instances"> | undefined) {
       return;
     }
     const seq = ++requestSeq.current;
-    void read({ instanceId })
+    void read(instanceId)
       .then((result) => {
         if (seq === requestSeq.current) {
           setUsage(result);
