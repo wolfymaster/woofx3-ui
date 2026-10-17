@@ -1,9 +1,6 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { EngineEventType } from "@woofx3/api/webhooks";
-import { usePaginatedQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
 import { Clock, RotateCcw, Webhook } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
@@ -13,8 +10,9 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useRetriggerEvent, useWebhookEventLog } from "@/engine/hooks/use-webhook-event-log";
+import type { WebhookEventSummary } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
-import { useRetriggerEvent } from "@/hooks/use-retrigger-event";
 
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -105,7 +103,7 @@ const OVERSCAN_ROWS = 10;
 // Start fetching the next page while this many loaded rows remain below the viewport.
 const LOAD_MORE_THRESHOLD_ROWS = 10;
 
-type EventLogSummary = FunctionReturnType<typeof api.engineEventLog.list>["page"][number];
+type EventLogSummary = WebhookEventSummary;
 
 function formatPayloadSize(length: number): string {
   if (length < 1024) {
@@ -173,11 +171,7 @@ export function WebhookEventLogTable() {
     results: events,
     status,
     loadMore,
-  } = usePaginatedQuery(
-    api.engineEventLog.list,
-    instance ? { instanceId: instance._id, ...(typeFilter !== "all" ? { eventType: typeFilter } : {}) } : "skip",
-    { initialNumItems: PAGE_SIZE }
-  );
+  } = useWebhookEventLog(instance?._id ?? null, typeFilter !== "all" ? typeFilter : null, PAGE_SIZE);
 
   const isLoading = instanceLoading || status === "LoadingFirstPage";
 
