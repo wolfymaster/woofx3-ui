@@ -14,6 +14,10 @@ import { base64UrlDecode } from "./relayCredential";
  * issue time the tokens below are fixed too. The same two tokens verify
  * against woofx3-marketplace-api's `verifyBuyerToken` with this public key
  * registered as `cp-test-1`, which pins the format on both sides.
+ *
+ * These vectors MUST stay in sync with `TestBuyerTokenCrossRepoVectors` in
+ * woofx3-marketplace-api's internal/httpapi/buyertoken_test.go. If the token
+ * format changes, update both tests together.
  */
 const TEST_KID = "cp-test-1";
 const TEST_PUBLIC_KEY = "J_Y9g67WJLfKYAGtu2uf1PLeYJTtyqumyKimTNHJHOE";
