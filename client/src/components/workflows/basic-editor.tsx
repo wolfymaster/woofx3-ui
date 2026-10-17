@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
+import { actionMenuGroups } from "@/lib/action-menu";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import type { GlossaryKey } from "@/lib/glossary";
 import { cn } from "@/lib/utils";
@@ -217,8 +218,8 @@ function VariantStepNav({ index, total, onPrev, onNext }: VariantStepNavProps) {
   );
 }
 
-// Action picker for the single active variant — same category-grouped PresetCard grid
-// used everywhere else, so the layout matches trigger selection and non-variant action selection.
+// Action picker for the single active variant: the same module-grouped PresetCard grid
+// as non-variant action selection, so both read like the action picker.
 interface VariantActionPickerProps {
   tier: TriggerVariant;
   actionChoices: ActionPreset[];
@@ -226,34 +227,48 @@ interface VariantActionPickerProps {
 }
 
 function VariantActionPicker({ tier, actionChoices, onSelectAction }: VariantActionPickerProps) {
-  const actionCategoryOrder = useMemo(
-    () => Array.from(new Set(actionChoices.map((a) => a.category))).sort(),
-    [actionChoices]
+  return (
+    <ActionCardGroups
+      actions={actionChoices}
+      selectedId={tier.action?.id}
+      onSelect={(action) => onSelectAction(tier.id, action)}
+      headingClassName="text-xs font-medium text-muted-foreground mb-2"
+    />
   );
+}
+
+interface ActionCardGroupsProps {
+  actions: ActionPreset[];
+  selectedId: string | undefined;
+  onSelect: (action: ActionPreset) => void;
+  headingClassName: string;
+}
+
+/**
+ * Actions as PresetCards under the module providing them, ordered as the action picker
+ * orders them. Grouping by `category` would sort nothing: the engine gives every
+ * action the same one.
+ */
+function ActionCardGroups({ actions, selectedId, onSelect, headingClassName }: ActionCardGroupsProps) {
+  const groups = useMemo(() => actionMenuGroups(actions, ""), [actions]);
 
   return (
     <div className="space-y-4">
-      {actionCategoryOrder.map((category) => {
-        const categoryActions = actionChoices.filter((a) => a.category === category);
-        if (categoryActions.length === 0) {
-          return null;
-        }
-        return (
-          <div key={category}>
-            <h4 className="text-xs font-medium text-muted-foreground mb-2 capitalize">{category}</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {categoryActions.map((action) => (
-                <PresetCard
-                  key={action.id}
-                  preset={action}
-                  isSelected={tier.action?.id === action.id}
-                  onClick={() => onSelectAction(tier.id, action)}
-                />
-              ))}
-            </div>
+      {groups.map((group) => (
+        <div key={group.source}>
+          <h4 className={headingClassName}>{group.source}</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {group.actions.map((action) => (
+              <PresetCard
+                key={action.id}
+                preset={action}
+                isSelected={selectedId === action.id}
+                onClick={() => onSelect(action)}
+              />
+            ))}
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -301,10 +316,6 @@ export function BasicWorkflowEditor() {
   const triggerCategoryOrder = useMemo(
     () => Array.from(new Set(triggerPresets.map((t) => t.category))).sort(),
     [triggerPresets]
-  );
-  const actionCategoryOrder = useMemo(
-    () => Array.from(new Set(actionPresets.map((a) => a.category))).sort(),
-    [actionPresets]
   );
 
   const [step, setStep] = useState<EditorStep>("trigger");
@@ -752,26 +763,12 @@ export function BasicWorkflowEditor() {
             </div>
           ) : (
             /* Simple mode: show all actions */
-            actionCategoryOrder.map((category) => {
-              const categoryActions = actionPresets.filter((a) => a.category === category);
-              if (categoryActions.length === 0) return null;
-
-              return (
-                <div key={category}>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-3 capitalize">{category}</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {categoryActions.map((action) => (
-                      <PresetCard
-                        key={action.id}
-                        preset={action}
-                        isSelected={selectedAction?.id === action.id}
-                        onClick={() => handleActionSelect(action)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })
+            <ActionCardGroups
+              actions={actionPresets}
+              selectedId={selectedAction?.id}
+              onSelect={handleActionSelect}
+              headingClassName="text-sm font-medium text-muted-foreground mb-3"
+            />
           )}
         </div>
       )}
