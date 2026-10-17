@@ -106,6 +106,35 @@ export type NewChatCommandGroup = Omit<FunctionArgs<typeof api.chatCommandAction
 
 export type ChatCommandGroupChanges = Omit<FunctionArgs<typeof api.chatCommandActions.updateGroup>, "instanceId">;
 
+/** One runtime instance of a module-declared resource kind (a counter, a timer, a queue), mirrored from the engine's webhooks. */
+export type ModuleResourceInstance = Doc<"moduleResourceInstances">;
+
+/** The installed module that provides a resource kind, merged with the kind's declaration. */
+export type ResourceKindDefinition = NonNullable<FunctionReturnType<typeof api.resourceKinds.getForInstance>>;
+
+/** A resource kind an installed module declares, with the module declaring it. */
+export type DeclaredResourceKind = FunctionReturnType<typeof api.resourceKinds.listForInstance>[number];
+
+/** Every mirrored resource value on the instance, keyed by canonical id. */
+export type ResourceValues = FunctionReturnType<typeof api.resourceValues.listForInstance>;
+
+/** A new resource instance; `settings` are values for the kind's `schema` fields. */
+export type NewModuleResourceInstance = Omit<
+  FunctionArgs<typeof api.moduleResourceActions.createResourceInstance>,
+  "instanceId"
+>;
+
+export type CreatedModuleResourceInstance = FunctionReturnType<typeof api.moduleResourceActions.createResourceInstance>;
+
+/** A rename and the settings the instance runs with; its identity is fixed. */
+export type ModuleResourceInstanceChanges = Omit<
+  FunctionArgs<typeof api.moduleResourceActions.updateResourceInstance>,
+  "instanceId"
+>;
+
+/** The Convex id of an installed module's repository row. */
+export type ModuleId = Id<"moduleRepository">;
+
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;
 
