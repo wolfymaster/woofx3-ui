@@ -17,6 +17,7 @@ import { hasUnsavedEdits, sessionNotice, sessionStatusText } from "@/components/
 import { Button } from "@/components/ui/button";
 import { useLibraryAlert } from "@/engine/hooks/use-alert-library";
 import { useEngineInfoRequest } from "@/engine/hooks/use-engine-status";
+import { useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
@@ -42,7 +43,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   const { toast } = useToast();
   useCollapsedSidebar();
   const row = useLibraryAlert(instanceId, compositionId);
-  const catalogRows = useQuery(api.sceneWidgets.listForInstance, { instanceId });
+  const catalogRows = useSceneWidgetCatalog(instanceId);
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
   const me = useQuery(api.users.getMe);
