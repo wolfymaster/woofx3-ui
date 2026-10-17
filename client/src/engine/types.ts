@@ -200,6 +200,13 @@ export type NewScene = Omit<FunctionArgs<typeof api.sceneActions.createScene>, "
 /** The parts of a scene to replace; a field left out keeps its value. */
 export type SceneChanges = Omit<FunctionArgs<typeof api.sceneActions.updateScene>, "instanceId" | "engineSceneId">;
 
+/**
+ * What the UI's workflow logic reads of a workflow: the engine's definition
+ * and enabled flag, and the builder's nodes. Structural, so the pure libraries
+ * work on any gateway's rows; a read returns the whole record, which has these.
+ */
+export type WorkflowRecord = Pick<Doc<"workflows">, "engineWorkflowId" | "definition" | "isEnabled" | "nodes">;
+
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;
 
