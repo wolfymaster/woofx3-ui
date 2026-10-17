@@ -8,6 +8,8 @@ export type { AlertClearResult, AlertReplayResult, AlertSkipResult } from "@conv
 export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
 export type { FieldOptionsReference } from "@convex/lib/fieldOptions";
+export type { SceneEditorSession as SceneEditorGrant } from "@convex/lib/sceneEditorSession";
+export type { WidgetThemes } from "@convex/lib/widgetThemes";
 export type { ModuleDetailResult as ModuleDetail } from "@convex/moduleDetail";
 export type { ModuleSettingValue } from "@convex/moduleSettingsActions";
 export type {
@@ -15,6 +17,7 @@ export type {
   PaginatedResourcesDto as ResourcePage,
   ResourceDto as Resource,
 } from "@convex/resources";
+export type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 export type {
   EngineInfo,
   EventLogPage,
@@ -187,6 +190,15 @@ export interface Correlated<Request> {
   /** The current request's send failure; null when it was sent or there is none. */
   failure: CorrelatedFailure | null;
 }
+
+/** One scene on the engine, cached from its webhooks; `id` repeats `_id` and `widgets` is never missing. */
+export type SceneRecord = FunctionReturnType<typeof api.scenes.list>[number];
+
+/** A new scene: its name and, in the engine's stored JSON shapes, its widgets and layout. */
+export type NewScene = Omit<FunctionArgs<typeof api.sceneActions.createScene>, "instanceId">;
+
+/** The parts of a scene to replace; a field left out keeps its value. */
+export type SceneChanges = Omit<FunctionArgs<typeof api.sceneActions.updateScene>, "instanceId" | "engineSceneId">;
 
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;
