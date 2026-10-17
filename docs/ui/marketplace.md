@@ -156,6 +156,17 @@ parts only work as a set, and a second copy would have drifted from the first.
 | `MARKETPLACE_DEV_TOKEN` | Revealing dev-tier listings to flagged instances. |
 | `MARKETPLACE_API_TOKEN` | Checkout and entitlement reads. The marketplace gates those on its write token. Never reaches the browser. |
 | `APP_BASE_URL` | Checkout. The origin a return path is joined onto. |
+| `MARKETPLACE_BUYER_SIGNING_KEY` | Minting buyer tokens (`buyerTokenFor`). The Ed25519 private key as JWK JSON. A secret. |
+| `MARKETPLACE_BUYER_SIGNING_KEY_ID` | Minting buyer tokens. The `kid` the marketplace knows the public key by. |
 
-Without the last two, the catalog browses normally and paid listings cannot be
-bought or installed.
+Without `MARKETPLACE_API_TOKEN` and `APP_BASE_URL`, the catalog browses
+normally and paid listings cannot be bought or installed.
+
+A buyer token is a five-minute Ed25519 JWS that lets an engine act for one
+account (`sub` is the same `account:{id}` as `buyerRef`) on the marketplace's
+acquire, quote, entitlement, bundle and download routes, without the write
+token. `bun scripts/marketplace-buyer-keygen.ts <kid>` generates a key pair and
+prints both the Convex values and the marketplace's `CONTROL_PLANE_PUBLIC_KEYS`
+entry. Give the marketplace the public key before setting the Convex values:
+until it lists the key, it refuses every token signed with it. Minting throws
+when either variable is unset, and nothing else depends on them.
