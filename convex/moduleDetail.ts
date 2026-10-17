@@ -8,7 +8,7 @@ import { type ActionCtx, action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
 import type { MarketplaceAccess } from "./lib/marketplaceAccess";
-import { requireEntitlement } from "./lib/marketplaceEntitlement";
+import { buyerRefFor } from "./lib/marketplaceEntitlement";
 import {
   installedFunctionSummaries,
   type ModuleFunctionSummary,
@@ -176,8 +176,8 @@ async function readMarketplaceManifest(
   access: MarketplaceAccess
 ): Promise<unknown> {
   try {
-    const grant = await requireEntitlement(ctx, instanceId, marketplaceId, marketplaceId);
-    return await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId, access, grant));
+    const content = { access, buyerRef: await buyerRefFor(ctx, instanceId) };
+    return await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId, content));
   } catch (err) {
     logger.warn("could not read marketplace module manifest", {
       marketplaceId,

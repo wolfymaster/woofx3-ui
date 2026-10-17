@@ -1,57 +1,79 @@
 import { describe, expect, test } from "bun:test";
-import { catalogListingIsFree, grantFromEntitlement, grantQuery } from "./marketplaceEntitlement";
+import { MarketplaceError } from "./marketplaceApi";
+import { acquireRefusal, contentRefusal, publicListingIsFree } from "./marketplaceEntitlement";
 
-const BUYER = "account:j57abc";
-
-describe("grantFromEntitlement", () => {
-  test("a free listing is fetched like any other", () => {
-    expect(grantFromEntitlement({ entitled: true, free: true }, BUYER)).toEqual({ kind: "free" });
+describe("acquireRefusal", () => {
+  test("a listing that costs money has not been bought", () => {
+    const err = new MarketplaceError(402, "payment_required", "this listing costs 900 usd for this buyer");
+    expect(acquireRefusal(err, "Cozy Alerts")).toBe("Cozy Alerts hasn't been bought on this account.");
   });
 
-  test("a bought listing is fetched for its buyer", () => {
-    expect(grantFromEntitlement({ entitled: true, free: false, source: "purchase" }, BUYER)).toEqual({
-      kind: "paid",
-      buyerRef: BUYER,
-    });
+  test("an unavailable listing says why, in the marketplace's words", () => {
+    const err = new MarketplaceError(
+      409,
+      "listing_unavailable",
+      "this listing has no pricing yet, so nobody can install it"
+    );
+    expect(acquireRefusal(err, "Cozy Alerts")).toBe("this listing has no pricing yet, so nobody can install it");
   });
 
-  test("refuses anything it does not recognise, rather than installing", () => {
-    for (const answer of [
-      { entitled: false, free: false },
-      { entitled: "true", free: true },
-      { entitled: true },
-      { entitled: true, free: "no" },
-      {},
-      null,
-      "entitled",
+  test("a missing listing is gone from the marketplace", () => {
+    expect(acquireRefusal(new MarketplaceError(404, "listing_not_found", "listing not found"), "Cozy Alerts")).toBe(
+      "Cozy Alerts is no longer in the marketplace."
+    );
+  });
+
+  test("anything else is a failure, not a refusal", () => {
+    for (const err of [
+      new MarketplaceError(500, "internal_error", "boom"),
+      new MarketplaceError(409, "something_else", "?"),
+      new Error("network"),
+      "nope",
     ]) {
-      expect(grantFromEntitlement(answer, BUYER)).toBeNull();
+      expect(acquireRefusal(err, "Cozy Alerts")).toBeNull();
     }
   });
 });
 
-describe("catalogListingIsFree", () => {
-  test("is free only when the listing is readable and carries no price", () => {
-    expect(catalogListingIsFree({ listing: { id: "counter" } })).toBe(true);
-    expect(catalogListingIsFree({ listing: { id: "counter", price: null } })).toBe(true);
+describe("publicListingIsFree", () => {
+  test("only an explicit free pricing is free", () => {
+    expect(publicListingIsFree({ listing: { id: "counter", pricing: { mode: "free", currency: "usd" } } })).toBe(true);
   });
 
-  test("treats any price, however shaped, as paid", () => {
-    for (const price of [{ amountCents: 500, currency: "usd" }, { amount: "5.00" }, 500, "free", 0]) {
-      expect(catalogListingIsFree({ listing: { id: "counter", price } })).toBe(false);
+  test("unpriced, paid, or unrecognised pricing is not free", () => {
+    for (const pricing of [
+      null,
+      undefined,
+      { mode: "paid", amountCents: 500, currency: "usd" },
+      { mode: "FREE" },
+      "free",
+      0,
+    ]) {
+      expect(publicListingIsFree({ listing: { id: "counter", pricing } })).toBe(false);
     }
   });
 
-  test("treats a listing it cannot read as paid", () => {
-    for (const payload of [{}, { item: { id: "counter" } }, { listing: "counter" }, null, []]) {
-      expect(catalogListingIsFree(payload)).toBe(false);
-    }
+  test("a listing that cannot be read is not free", () => {
+    expect(publicListingIsFree(null)).toBe(false);
+    expect(publicListingIsFree({})).toBe(false);
+    expect(publicListingIsFree({ listing: "counter" })).toBe(false);
   });
 });
 
-describe("grantQuery", () => {
-  test("names the buyer only for paid content", () => {
-    expect(grantQuery({ kind: "free" })).toBe("");
-    expect(grantQuery({ kind: "paid", buyerRef: BUYER })).toBe("?buyerRef=account%3Aj57abc");
+describe("contentRefusal", () => {
+  test("content the account does not hold has not been bought", () => {
+    const err = new MarketplaceError(403, "not_entitled", "this account does not hold this listing");
+    expect(contentRefusal(err, "Cozy Alerts")).toBe("Cozy Alerts hasn't been bought on this account.");
+  });
+
+  test("content refused for want of a token says so", () => {
+    expect(contentRefusal(new MarketplaceError(401, "unauthorized", "x"), "Cozy Alerts")).toContain(
+      "MARKETPLACE_API_TOKEN"
+    );
+  });
+
+  test("anything else is a failure, not a refusal", () => {
+    expect(contentRefusal(new MarketplaceError(404, "module_not_found", "x"), "Cozy Alerts")).toBeNull();
+    expect(contentRefusal(new Error("network"), "Cozy Alerts")).toBeNull();
   });
 });

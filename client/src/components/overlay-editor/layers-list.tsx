@@ -15,7 +15,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Eye, EyeOff, GripVertical, Trash2 } from "lucide-react";
+import { Eye, EyeOff, GripVertical, Lock, LockOpen, Trash2 } from "lucide-react";
 import { widgetIconFor } from "@/components/overlay-editor/widget-icon";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,8 @@ export interface Layer {
   id: string;
   /** False for a hidden layer; see `onToggleVisible`. */
   visible: boolean;
+  /** True for a layer that cannot be moved or resized on the canvas; see `onToggleLock`. */
+  locked?: boolean;
 }
 
 interface LayersListProps<T extends Layer> {
@@ -44,6 +46,8 @@ interface LayersListProps<T extends Layer> {
   onDelete?: (widgetId: string) => void;
   /** Gives each layer a show/hide button; a hidden layer is struck through. */
   onToggleVisible?: (widgetId: string) => void;
+  /** Gives each layer a lock/unlock button; a locked layer's button stays shown. */
+  onToggleLock?: (widgetId: string) => void;
   /** The phone layout lays the layers out as one sideways-scrolling row. */
   horizontal?: boolean;
   emptyMessage: string;
@@ -60,6 +64,7 @@ function LayerRow({
   onSelect,
   onDelete,
   onToggleVisible,
+  onToggleLock,
 }: {
   layer: Layer;
   label: string;
@@ -71,8 +76,10 @@ function LayerRow({
   onSelect: (widgetId: string) => void;
   onDelete: ((widgetId: string) => void) | undefined;
   onToggleVisible: ((widgetId: string) => void) | undefined;
+  onToggleLock: ((widgetId: string) => void) | undefined;
 }) {
   const hidden = onToggleVisible !== undefined && layer.visible === false;
+  const locked = layer.locked === true;
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: layer.id,
     disabled: !canDrag,
@@ -112,6 +119,24 @@ function LayerRow({
         <span className={cn("min-w-0 flex-1 truncate", hidden && "text-muted-foreground line-through")}>{label}</span>
         {note ? <span className="shrink-0 font-mono text-xs text-muted-foreground">{note}</span> : null}
       </button>
+      {onToggleLock && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "shrink-0 text-muted-foreground",
+            horizontal ? "h-11 w-11 rounded-full" : "h-7 w-7",
+            // An unlocked layer's button shows on hover, so a locked one stands out in the list.
+            !locked && !horizontal && "opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
+          )}
+          onClick={() => onToggleLock(layer.id)}
+          aria-label={locked ? `Unlock ${label}` : `Lock ${label}`}
+          aria-pressed={locked}
+          data-testid={`button-lock-layer-${layer.id}`}
+        >
+          {locked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+        </Button>
+      )}
       {onToggleVisible && (
         <Button
           variant="ghost"
@@ -163,6 +188,7 @@ export function LayersList<T extends Layer>({
   onMove,
   onDelete,
   onToggleVisible,
+  onToggleLock,
   horizontal = false,
   emptyMessage,
 }: LayersListProps<T>) {
@@ -210,6 +236,7 @@ export function LayersList<T extends Layer>({
                   onSelect={onSelect}
                   onDelete={onDelete}
                   onToggleVisible={onToggleVisible}
+                  onToggleLock={onToggleLock}
                 />
               ))}
             </div>

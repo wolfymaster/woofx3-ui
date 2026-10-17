@@ -28,6 +28,14 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
+import { useChatCommandGroups, useChatCommands, useUpdateChatCommandRequest } from "@/engine/hooks/use-chat-commands";
+import {
+  useResourceInstances,
+  useResourceInstancesOfKind,
+  useResourceKind,
+  useResourceKinds,
+  useResourceValues,
+} from "@/engine/hooks/use-module-resources";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useAimedResourceActionRunner, useResourceActionRunner } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -76,8 +84,8 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const args = instanceId ? { instanceId } : "skip";
 
   const workflows = useQuery(api.workflows.list, args);
-  const commands = useQuery(api.chatCommands.list, args);
-  const commandGroups = useQuery(api.chatCommandGroups.list, args);
+  const commands = useChatCommands(instanceId ?? null);
+  const commandGroups = useChatCommandGroups(instanceId ?? null);
   const scenes = useQuery(api.scenes.list, args);
   const modules = useQuery(api.moduleRepository.list, args);
   const recaps = useQuery(
@@ -86,31 +94,19 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   );
   const macros = useQuery(api.macros.list, args);
   const presets = useQuery(api.streamInfo.listPresets, args);
-  const counters = useQuery(
-    api.moduleResourceInstances.listByKind,
-    instanceId ? { instanceId, kind: COUNTER_KIND } : "skip"
-  );
-  const timers = useQuery(
-    api.moduleResourceInstances.listByKind,
-    instanceId ? { instanceId, kind: TIMER_KIND } : "skip"
-  );
-  const queues = useQuery(
-    api.moduleResourceInstances.listByKind,
-    instanceId ? { instanceId, kind: QUEUE_KIND } : "skip"
-  );
-  const counterKind = useQuery(
-    api.resourceKinds.getForInstance,
-    instanceId ? { instanceId, kind: COUNTER_KIND } : "skip"
-  );
-  const timerKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: TIMER_KIND } : "skip");
-  const queueKind = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind: QUEUE_KIND } : "skip");
-  const values = useQuery(api.resourceValues.listForInstance, args);
-  const resourceInstances = useQuery(api.moduleResourceInstances.listForInstance, args);
-  const declaredKinds = useQuery(api.resourceKinds.listForInstance, args);
+  const counters = useResourceInstancesOfKind(instanceId ?? null, COUNTER_KIND);
+  const timers = useResourceInstancesOfKind(instanceId ?? null, TIMER_KIND);
+  const queues = useResourceInstancesOfKind(instanceId ?? null, QUEUE_KIND);
+  const counterKind = useResourceKind(instanceId ?? null, COUNTER_KIND);
+  const timerKind = useResourceKind(instanceId ?? null, TIMER_KIND);
+  const queueKind = useResourceKind(instanceId ?? null, QUEUE_KIND);
+  const values = useResourceValues(instanceId ?? null);
+  const resourceInstances = useResourceInstances(instanceId ?? null);
+  const declaredKinds = useResourceKinds(instanceId ?? null);
   const { triggerPresets, actionPresets } = useWorkflowCatalog();
 
   const setWorkflowEnabled = useAction(api.workflowActions.setEnabled);
-  const updateCommand = useAction(api.chatCommandActions.updateCommand);
+  const updateCommand = useUpdateChatCommandRequest();
   const runMacro = useAction(api.macros.run);
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
   const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
@@ -196,8 +192,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         action: {
           type: "run",
           run: async () => {
-            await updateCommand({
-              instanceId,
+            await updateCommand(instanceId, {
               engineCommandId: cmd.engineCommandId,
               command: cmd.command,
               actions: cmd.actions ?? [],

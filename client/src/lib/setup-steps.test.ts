@@ -4,6 +4,7 @@ import { allowedSetupStep, firstIncompleteStep, isSetupStepId, type SetupProgres
 const nothingDone: SetupProgress = {
   platformsChosenAt: null,
   twitchUsername: null,
+  twitchRequired: true,
   importChosenAt: null,
   interestsChosenAt: null,
   completedAt: null,
@@ -26,6 +27,11 @@ describe("firstIncompleteStep", () => {
 
   test("does not send a setup back to the import question once interests are answered", () => {
     expect(firstIncompleteStep({ ...twitchConnected, interestsChosenAt: 2 })).toBe("dashboard");
+  });
+
+  test("passes the Twitch page unconnected where Twitch is optional", () => {
+    expect(firstIncompleteStep({ ...platformsChosen, twitchRequired: false })).toBe("import");
+    expect(allowedSetupStep("finish", { ...platformsChosen, twitchRequired: false })).toBe("import");
   });
 
   test("asks for platforms before Twitch even when Twitch is already connected", () => {

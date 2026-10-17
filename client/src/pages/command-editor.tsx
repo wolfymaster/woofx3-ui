@@ -1,5 +1,3 @@
-import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
 import { AlertTriangle, Loader2, MessageSquare, Shield, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -23,6 +21,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import {
+  useChatCommandGroups,
+  useChatCommands,
+  useCreateChatCommandRequest,
+  useUpdateChatCommandRequest,
+} from "@/engine/hooks/use-chat-commands";
 import { useOpenCommandDraft } from "@/hooks/use-command-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -61,12 +65,12 @@ export default function CommandEditor() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const { actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
-  const commandsRaw = useQuery(api.chatCommands.list, instance ? { instanceId: instance._id } : "skip");
-  const groupsRaw = useQuery(api.chatCommandGroups.list, instance ? { instanceId: instance._id } : "skip");
+  const commandsRaw = useChatCommands(instance?._id ?? null);
+  const groupsRaw = useChatCommandGroups(instance?._id ?? null);
   const groups = useMemo(() => groupsRaw ?? [], [groupsRaw]);
 
-  const createCommand = useAction(api.chatCommandActions.createCommand);
-  const updateCommand = useAction(api.chatCommandActions.updateCommand);
+  const createCommand = useCreateChatCommandRequest();
+  const updateCommand = useUpdateChatCommandRequest();
 
   const existing = commandsRaw?.find((doc) => doc.engineCommandId === engineCommandId);
   const draft = useOpenCommandDraft(draftKey, existing);
@@ -124,7 +128,6 @@ export default function CommandEditor() {
     }
 
     const fields = {
-      instanceId: instance._id,
       command,
       actions: escapeDollarKeys(form.actions) as unknown[],
       cooldown: form.cooldown,
@@ -146,10 +149,10 @@ export default function CommandEditor() {
     setSaving(true);
     try {
       if (existing) {
-        await updateCommand({ ...fields, engineCommandId: existing.engineCommandId });
+        await updateCommand(instance._id, { ...fields, engineCommandId: existing.engineCommandId });
         toast({ title: "Command updated" });
       } else {
-        await createCommand(fields);
+        await createCommand(instance._id, fields);
         toast({ title: "Command created" });
       }
       discardAndLeave();

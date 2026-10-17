@@ -8,7 +8,7 @@ import type {
   WidgetKind,
 } from "@woofx3/scene/editor";
 import { Film, Sparkles, Square, Volume2 } from "lucide-react";
-import { type KeyboardEvent, type PointerEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type PointerEvent, useEffect, useMemo, useRef } from "react";
 import { CompositionPreviewFrame } from "@/components/alert-editor/composition-preview-frame";
 import { CANVAS_STAGE_CLASS } from "@/components/common/stage-area";
 import { alertWidgetPreview, TextWidgetPreview } from "@/components/scenes/alert-widget-previews";
@@ -86,8 +86,12 @@ export function AlertStage({
 }: AlertStageProps) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const pointerId = useRef<number | null>(null);
-  const [updates] = useState(() =>
-    createFrameCoalescer<PointerUpdate>(({ x, y, shift, alt }) => editor.gesture.update({ x, y }, { shift, alt }))
+  // Made again with the editor, which is replaced when its document source changes: moves go
+  // to the editor the gesture began on.
+  const updates = useMemo(
+    () =>
+      createFrameCoalescer<PointerUpdate>(({ x, y, shift, alt }) => editor.gesture.update({ x, y }, { shift, alt })),
+    [editor]
   );
   useEffect(() => () => updates.cancel(), [updates]);
 

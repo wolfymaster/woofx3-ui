@@ -4,6 +4,7 @@ import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
 import { useAction, useQuery } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
 import type { PermissionApprovalMode } from "@/components/modules/module-permissions";
+import { actionErrorMessage } from "@/lib/action-error";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 
 // Installing a marketplace module from the browser.
@@ -117,7 +118,7 @@ export function useModuleInstall(
         });
         setPendingModuleKey(moduleKey);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to install marketplace module.");
+        setError(actionErrorMessage(err));
         setIsInstalling(false);
       }
     },

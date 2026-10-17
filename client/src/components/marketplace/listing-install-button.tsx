@@ -6,32 +6,39 @@ import { useAction } from "convex/react";
 import { AlertCircle, Check, CreditCard, Download, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { formatPrice } from "@/lib/listing-type";
+import { actionErrorMessage } from "@/lib/action-error";
+import { formatAmount } from "@/lib/listing-type";
 import { cn } from "@/lib/utils";
 
 /**
  * The one button that moves a listing forward, in whichever of its states it
  * is in: Buy, then Install, then Installed.
  *
- * A paid listing shows Buy until the account owns it. Buying is a redirect to
- * Stripe and a return to this page, so "owned" is not something this component
- * can decide — it is told, by the entitlements the page fetched. The install is
- * refused server-side for anything unpaid regardless, so a wrong answer here
- * costs a confusing button rather than a free module.
+ * What the account must pay is the marketplace's quote, which the page
+ * fetched: this component never works out a price. The install is refused
+ * server-side for anything the account does not hold regardless, so a wrong
+ * answer here costs a confusing button rather than a free module.
  */
 
 export type ListingInstallState =
-  /** Free, or paid and owned. */
-  | { kind: "installable" }
-  /** Paid and not owned. */
-  | { kind: "purchasable" }
+  /**
+   * The account may install it: free, owned (`owned` on a paid listing), or a
+   * free upgrade from the earlier edition `upgradeFrom`.
+   */
+  | { kind: "installable"; owned?: boolean; upgradeFrom?: string }
+  /** Costs this account the quoted amount; `upgradeFrom` when it is an upgrade price. */
+  | { kind: "purchasable"; amountCents: number; currency: string; upgradeFrom?: string }
+  /** Nobody can acquire it now; `reason` is the marketplace's. */
+  | { kind: "unavailable"; reason: string; supersededBy?: string }
+  /** The quote has not come back yet. */
+  | { kind: "checking" }
   /** Already on this instance. */
   | { kind: "installed" }
   /** A newer version of an installed module is available. */
   | { kind: "updatable" }
   /** A theme whose base module is missing. */
   | { kind: "needs_base_module"; baseModuleId: string }
-  /** Entitlements could not be read, so ownership is unknown. */
+  /** The quote could not be read, so what the account holds is unknown. */
   | { kind: "unknown" }
   /** An emote pack: nothing installs, and the images on the page are the product. */
   | { kind: "not_installable" };
@@ -46,6 +53,10 @@ interface ListingInstallButtonProps {
   onBundleInstalled?: (result: { kind: "scene" | "alert"; engineId: string }) => void;
   /** Opens the base module a theme needs. */
   onOpenBaseModule?: (moduleId: string) => void;
+  /** Opens another listing: the newer edition that replaced this one. */
+  onOpenListing?: (listingId: string) => void;
+  /** Checkout found nothing to pay, or that the account already holds it: read the quote again. */
+  onQuoteStale?: () => void;
   isInstalling?: boolean;
   className?: string;
 }
@@ -57,6 +68,8 @@ export function ListingInstallButton({
   onInstallModule,
   onBundleInstalled,
   onOpenBaseModule,
+  onOpenListing,
+  onQuoteStale,
   isInstalling,
   className,
 }: ListingInstallButtonProps) {
@@ -85,15 +98,17 @@ export function ListingInstallButton({
       }
       if (result.status === "unavailable") {
         setError(result.message);
+        return;
       }
-      // "already_entitled" needs no message: the page re-reads entitlements
-      // when it regains focus and the button becomes Install on its own.
+      // Already held, or nothing to pay: the quote is out of date, and the
+      // fresh one turns the button into Install.
+      onQuoteStale?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start checkout.");
+      setError(actionErrorMessage(err));
     } finally {
       setBusy(false);
     }
-  }, [createCheckout, instanceId, listing.id]);
+  }, [createCheckout, instanceId, listing.id, onQuoteStale]);
 
   const runBundleInstall = useCallback(async () => {
     if (!instanceId) {
@@ -105,7 +120,7 @@ export function ListingInstallButton({
       const result = await installBundle({ instanceId, listingId: listing.id });
       onBundleInstalled?.({ kind: result.kind, engineId: result.engineId });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Install failed.");
+      setError(actionErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -133,10 +148,10 @@ export function ListingInstallButton({
       ) : (
         <PrimaryAction
           state={state}
-          listing={listing}
           working={working}
           disabled={!instanceId}
           onPurchase={() => void startCheckout()}
+          onOpenListing={onOpenListing}
           onInstall={() => {
             if (isBundleListing(listing.type)) {
               void runBundleInstall();
@@ -159,18 +174,18 @@ export function ListingInstallButton({
 
 function PrimaryAction({
   state,
-  listing,
   working,
   disabled,
   onPurchase,
   onInstall,
+  onOpenListing,
 }: {
   state: ListingInstallState;
-  listing: CatalogListingDetail;
   working: boolean;
   disabled: boolean;
   onPurchase: () => void;
   onInstall: () => void;
+  onOpenListing?: (listingId: string) => void;
 }) {
   if (state.kind === "installed") {
     return (
@@ -181,31 +196,92 @@ function PrimaryAction({
     );
   }
 
-  if (state.kind === "purchasable" || state.kind === "unknown") {
+  if (state.kind === "checking") {
+    return (
+      <Button disabled className="gap-2">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Checking…
+      </Button>
+    );
+  }
+
+  if (state.kind === "unknown") {
     return (
       <>
-        <Button className="gap-2" disabled={disabled || working} onClick={onPurchase}>
-          {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-          Buy for {formatPrice(listing.price)}
+        <Button disabled className="gap-2">
+          <AlertCircle className="h-4 w-4" />
+          Unavailable right now
         </Button>
-        {state.kind === "unknown" && (
-          // Ownership could not be read. Buy is the safe button: the server
-          // refuses an install it cannot verify, so offering Install here
-          // would produce a failure the streamer cannot act on.
-          <p className="text-xs text-muted-foreground">
-            We couldn't check your purchases just now. If you already own this, reload the page.
-          </p>
+        <p className="text-xs text-muted-foreground">
+          We couldn't check what this costs you just now. Reload the page to try again.
+        </p>
+      </>
+    );
+  }
+
+  if (state.kind === "unavailable") {
+    return (
+      <>
+        <Button disabled className="gap-2">
+          Not available
+        </Button>
+        <p className="text-xs text-muted-foreground">{unavailableReason(state.reason)}</p>
+        {state.reason === "superseded" && state.supersededBy && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => onOpenListing?.(state.supersededBy as string)}
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            See the new edition
+          </Button>
         )}
       </>
     );
   }
 
-  const label = state.kind === "updatable" ? "Update" : "Install";
+  if (state.kind === "purchasable") {
+    const amount = formatAmount(state.amountCents, state.currency);
+    return (
+      <>
+        <Button className="gap-2" disabled={disabled || working} onClick={onPurchase}>
+          {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+          {state.upgradeFrom ? `Upgrade for ${amount}` : `Buy for ${amount}`}
+        </Button>
+        {state.upgradeFrom && (
+          <p className="text-xs text-muted-foreground">Upgrade price, because you own an earlier edition.</p>
+        )}
+      </>
+    );
+  }
+
+  if (state.kind === "needs_base_module" || state.kind === "not_installable") {
+    return null;
+  }
+
+  const label = state.kind === "updatable" ? "Update" : state.upgradeFrom ? "Upgrade — free" : "Install";
   return (
     <Button className="gap-2" disabled={disabled || working} onClick={onInstall}>
       {working ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
       {label}
-      {listing.price && <span className="text-xs opacity-80">· owned</span>}
+      {state.kind === "installable" && state.owned && <span className="text-xs opacity-80">· owned</span>}
     </Button>
   );
+}
+
+/** Why a listing cannot be acquired, from the marketplace's reason code. */
+function unavailableReason(reason: string): string {
+  switch (reason) {
+    case "superseded":
+      return "A newer edition has replaced this one.";
+    case "unpriced":
+      return "This listing isn't on sale yet.";
+    case "not_ready":
+      return "This listing isn't published yet.";
+    case "commerce_unconfigured":
+      return "Purchases aren't available on this deployment.";
+    default:
+      return "This listing can't be installed right now.";
+  }
 }

@@ -1,4 +1,4 @@
-import type { ListingType } from "@convex/lib/marketplaceCatalog";
+import type { ListingPricing, ListingType } from "@convex/lib/marketplaceCatalog";
 import { Bell, Image, Layers, Palette, Puzzle } from "lucide-react";
 
 /**
@@ -84,18 +84,26 @@ export function listingTypeHue(type: ListingType): number {
   return META[type].hue;
 }
 
-/** `$4.99`, or "Free" when there is no price. */
-export function formatPrice(price: { amountCents: number; currency: string } | undefined): string {
-  if (!price) {
-    return "Free";
-  }
+/** `$4.99` for an amount in cents. */
+export function formatAmount(amountCents: number, currency: string): string {
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",
-      currency: price.currency.toUpperCase(),
-    }).format(price.amountCents / 100);
+      currency: currency.toUpperCase(),
+    }).format(amountCents / 100);
   } catch {
     // An unknown currency code would otherwise throw and blank the card.
-    return `${(price.amountCents / 100).toFixed(2)} ${price.currency.toUpperCase()}`;
+    return `${(amountCents / 100).toFixed(2)} ${currency.toUpperCase()}`;
   }
+}
+
+/**
+ * What a listing costs, as a card shows it. A listing with no pricing is one
+ * nobody can install yet, which is not the same as free.
+ */
+export function pricingLabel(pricing: ListingPricing | null): string {
+  if (pricing === null) {
+    return "Unavailable";
+  }
+  return pricing.mode === "free" ? "Free" : formatAmount(pricing.amountCents, pricing.currency);
 }

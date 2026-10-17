@@ -1,6 +1,12 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
-import { type CuratedSetupPlatform, curatedSetupPlatformError, DEFAULT_SETUP_PLATFORMS } from "./lib/setupPlatforms";
+import { isPreviewDeployment } from "./lib/previewDeployment";
+import {
+  type CuratedSetupPlatform,
+  curatedForDeployment,
+  curatedSetupPlatformError,
+  DEFAULT_SETUP_PLATFORMS,
+} from "./lib/setupPlatforms";
 
 // Curation of the platforms offered at setup. Everything here is internal: the
 // list is ours, changed with `bunx convex run`, e.g.
@@ -27,13 +33,16 @@ export const listCurated = internalQuery({
   args: {},
   handler: async (ctx): Promise<CuratedSetupPlatform[]> => {
     const rows = await ctx.db.query("setupPlatforms").withIndex("by_sort_order").take(MAX_SETUP_PLATFORMS);
-    return rows.map(({ marketplaceModuleId, required, defaultSelected, sortOrder, summary }) => ({
-      marketplaceModuleId,
-      required,
-      defaultSelected,
-      sortOrder,
-      summary,
-    }));
+    return curatedForDeployment(
+      rows.map(({ marketplaceModuleId, required, defaultSelected, sortOrder, summary }) => ({
+        marketplaceModuleId,
+        required,
+        defaultSelected,
+        sortOrder,
+        summary,
+      })),
+      isPreviewDeployment()
+    );
   },
 });
 

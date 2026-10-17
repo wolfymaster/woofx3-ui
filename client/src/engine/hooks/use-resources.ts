@@ -1,32 +1,8 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useEngineGateway } from "@/engine/context";
+import type { InstanceId, Resource, ResourceQuery } from "@/engine/types";
 
-export interface Resource {
-  id: string;
-  name: string;
-  parentId: string | null;
-  isFolder: boolean;
-  /** "image" | "video" | "audio" | "other" | "folder" */
-  kind: string;
-  contentType: string;
-  size: number;
-  /** "pending" | "ready" | "failed"; folders are always "ready". */
-  status: string;
-  url: string | null;
-  thumbnailUrl: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ResourceQuery {
-  folderId?: string | null;
-  kind?: string;
-  search?: string;
-  page?: number;
-  pageSize?: number;
-}
+export type { Resource, ResourceQuery };
 
 interface ResourcesState {
   resources: Resource[];
@@ -52,8 +28,8 @@ interface ResourcesState {
  * paging are all sent to the engine rather than applied to a local array, so
  * search reaches beyond the current page.
  */
-export function useResources(instanceId: Id<"instances"> | undefined, query: ResourceQuery): ResourcesState {
-  const list = useAction(api.resources.list);
+export function useResources(instanceId: InstanceId | undefined, query: ResourceQuery): ResourcesState {
+  const list = useEngineGateway().resources.useListRequest();
 
   const [resources, setResources] = useState<Resource[]>([]);
   const [total, setTotal] = useState(0);
@@ -89,8 +65,7 @@ export function useResources(instanceId: Id<"instances"> | undefined, query: Res
     setError(null);
 
     const parsed = JSON.parse(queryKey) as Required<ResourceQuery>;
-    void list({
-      instanceId,
+    void list(instanceId, {
       folderId: parsed.folderId,
       kind: parsed.kind ?? undefined,
       search: parsed.search || undefined,
@@ -124,4 +99,18 @@ export function useResources(instanceId: Id<"instances"> | undefined, query: Res
   const refetch = useCallback(() => setReloadToken((n) => n + 1), []);
 
   return { resources, total, page, pageSize, isLoading, error, refetch };
+}
+
+export function useCreateResourceFolderRequest() {
+  return useEngineGateway().resources.useCreateFolderRequest();
+}
+
+/** Renames or moves a resource. */
+export function useUpdateResourceRequest() {
+  return useEngineGateway().resources.useUpdateRequest();
+}
+
+/** Deletes a resource with its stored bytes and derived files. */
+export function useRemoveResourceRequest() {
+  return useEngineGateway().resources.useRemoveRequest();
 }

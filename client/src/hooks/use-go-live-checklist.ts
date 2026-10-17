@@ -5,9 +5,9 @@ import type { StreamInfoField } from "@convex/lib/streamInfo";
 import { type ConvexReactClient, useAction, useConvex, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useEngineHealth } from "@/hooks/use-engine-health";
+import { useEngineHealth } from "@/engine/hooks/use-engine-health";
+import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useInstance } from "@/hooks/use-instance";
-import { useLiveState } from "@/hooks/use-live-state";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { dispatchErrorMessage } from "@/lib/field-options-request";
 import {

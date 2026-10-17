@@ -31,8 +31,11 @@ export function parseConfigFieldSource(raw: unknown): ConfigFieldSource | undefi
     return undefined;
   }
   const o = raw as Record<string, unknown>;
-  if (o.kind === "commands") {
-    return { kind: "commands" };
+  if (o.kind === "commands" || o.kind === "alertWidgets" || o.kind === "scenes") {
+    return { kind: o.kind };
+  }
+  if (o.kind === "scenePlacements" && typeof o.sceneField === "string") {
+    return { kind: "scenePlacements", sceneField: o.sceneField };
   }
   if (o.kind === "internal" && o.request && typeof o.request === "object") {
     const req = o.request as Record<string, unknown>;
