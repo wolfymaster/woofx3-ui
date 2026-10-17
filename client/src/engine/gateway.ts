@@ -40,6 +40,7 @@ import type {
   NewChatCommandGroup,
   NewLibraryAlert,
   NewModuleResourceInstance,
+  NewScene,
   ObsStatus,
   Paginated,
   Resource,
@@ -48,12 +49,17 @@ import type {
   ResourcePage,
   ResourceQuery,
   ResourceValues,
+  SceneChanges,
+  SceneEditorGrant,
+  SceneRecord,
+  SceneWidgetCatalogRow,
   StreamEventFrame,
   TransientEvent,
   UploadGrant,
   UploadRequest,
   WebhookEventId,
   WebhookEventSummary,
+  WidgetThemes,
 } from "@/engine/types";
 
 /**
@@ -75,6 +81,7 @@ export interface EngineGateway {
   readonly commands: CommandsGateway;
   readonly moduleResources: ModuleResourcesGateway;
   readonly modules: ModulesGateway;
+  readonly scenes: ScenesGateway;
   readonly requests: RequestsGateway;
 }
 
@@ -300,6 +307,45 @@ export interface ModulesGateway {
   ) => Promise<{ stillInstalled: boolean }>;
   /** The engine's workflows, by id and name. */
   useWorkflowsRequest(): (instanceId: InstanceId) => Promise<EngineWorkflowOption[]>;
+}
+
+/**
+ * Overlay scenes and the widgets they place. Reads come from the cache the
+ * engine's webhooks keep in Convex; writes go to the engine, and their result
+ * reaches the cache the same way.
+ */
+export interface ScenesGateway {
+  /** Every scene. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
+  useScenes(instanceId: InstanceId | null): Live<SceneRecord[]>;
+  /** One scene by the engine's id; null until its webhook arrives, or when the caller cannot see the instance. */
+  useScene(instanceId: InstanceId, engineSceneId: string): Live<SceneRecord | null>;
+  /**
+   * The widgets the instance can place, with the name of the module providing
+   * each. Empty when the caller cannot see the instance; skipped (always
+   * loading) for a null id.
+   */
+  useWidgetCatalog(instanceId: InstanceId | null): Live<SceneWidgetCatalogRow[]>;
+  /**
+   * Every name an alert widget on the instance's scenes answers to, the
+   * default first. Empty when the caller cannot see the instance; skipped
+   * (always loading) for a null id.
+   */
+  useAlertWidgetNames(instanceId: InstanceId | null): Live<string[]>;
+  useCreateRequest(): (instanceId: InstanceId, scene: NewScene) => Promise<{ engineSceneId: string }>;
+  useUpdateRequest(): (
+    instanceId: InstanceId,
+    engineSceneId: string,
+    changes: SceneChanges
+  ) => Promise<{ success: boolean }>;
+  useRemoveRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<{ success: boolean }>;
+  /** The installed themes made for one widget. */
+  useWidgetThemesRequest(): (instanceId: InstanceId, widgetCanonicalId: string) => Promise<WidgetThemes>;
+  /**
+   * A short-lived token for sceneManager's editor socket for one scene, and
+   * the socket's path. Null when the engine does not know the scene or cannot
+   * reach sceneManager. Needs `scenes.editorSync`.
+   */
+  useEditorSessionRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<SceneEditorGrant | null>;
 }
 
 /**
