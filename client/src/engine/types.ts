@@ -2,6 +2,7 @@ import type { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { FunctionReturnType } from "convex/server";
 
+export type { CompositionPreviewUrl } from "@convex/compositionPreview";
 export type { AlertClearResult, AlertReplayResult, AlertSkipResult } from "@convex/lib/alertQueueResults";
 export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
@@ -76,6 +77,19 @@ export type EngineAlert = Doc<"engineAlerts">;
 
 /** How alerts have gone over a window: totals by outcome and one bucket per hour. */
 export type AlertOverview = NonNullable<FunctionReturnType<typeof api.engineAlerts.overview>>;
+
+/** One alert in the engine's library, cached from its webhooks. */
+export type AlertComposition = Doc<"alertCompositions">;
+
+/** A new library alert: the composition in the engine's stored JSON shapes. */
+export interface NewLibraryAlert {
+  name: string;
+  description?: string;
+  widgetsJson: string;
+  layoutJson: string;
+  behaviorsJson: string;
+  inputsJson?: string;
+}
 
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;
