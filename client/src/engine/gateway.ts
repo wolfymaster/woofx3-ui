@@ -4,12 +4,17 @@ import type {
   EngineInfo,
   EngineSyncRequest,
   EngineSyncState,
+  HostedStorageUsage,
   InstanceId,
   InstanceLiveState,
   Live,
   ObsStatus,
+  Resource,
+  ResourceChanges,
   ResourcePage,
   ResourceQuery,
+  UploadGrant,
+  UploadRequest,
 } from "@/engine/types";
 
 /**
@@ -53,6 +58,22 @@ export interface StatusGateway {
 /** The engine's uploaded files and folders. */
 export interface ResourcesGateway {
   useListRequest(): (instanceId: InstanceId, query: ResourceQuery) => Promise<ResourcePage>;
+  /** Null when the instance is not on hosted storage. */
+  useHostedStorageUsageRequest(): (instanceId: InstanceId) => Promise<HostedStorageUsage | null>;
+  /** Reserves a pending resource and returns where to PUT its bytes. Rejects when a plan limit refuses it. */
+  useUploadGrantRequest(): (instanceId: InstanceId, file: UploadRequest) => Promise<UploadGrant>;
+  /** Marks a granted upload's bytes as landed. */
+  useCompleteUploadRequest(): (instanceId: InstanceId, resourceId: string) => Promise<Resource>;
+  /** Asks for a derived file such as a thumbnail; resolves once the request is accepted, not when it is done. */
+  useProcessingRequest(): (
+    instanceId: InstanceId,
+    resourceId: string,
+    utility: string
+  ) => Promise<{ accepted: boolean }>;
+  useCreateFolderRequest(): (instanceId: InstanceId, name: string, parentId: string | null) => Promise<Resource>;
+  /** Renames (`name`) or moves (`parentId`) a resource. */
+  useUpdateRequest(): (instanceId: InstanceId, resourceId: string, changes: ResourceChanges) => Promise<Resource>;
+  useRemoveRequest(): (instanceId: InstanceId, resourceId: string) => Promise<{ deleted: boolean }>;
 }
 
 export interface OptimisticInstance {
