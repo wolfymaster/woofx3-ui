@@ -9,6 +9,9 @@ import type {
   ChatCommandGroup,
   ChatCommandGroupChanges,
   CompositionPreviewUrl,
+  Correlated,
+  CorrelatedRequestKind,
+  CorrelatedRequests,
   CreatedModuleResourceInstance,
   DeclaredResourceKind,
   EngineAlert,
@@ -46,6 +49,7 @@ import type {
   ResourceQuery,
   ResourceValues,
   StreamEventFrame,
+  TransientEvent,
   UploadGrant,
   UploadRequest,
   WebhookEventId,
@@ -71,6 +75,7 @@ export interface EngineGateway {
   readonly commands: CommandsGateway;
   readonly moduleResources: ModuleResourcesGateway;
   readonly modules: ModulesGateway;
+  readonly requests: RequestsGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -295,6 +300,32 @@ export interface ModulesGateway {
   ) => Promise<{ stillInstalled: boolean }>;
   /** The engine's workflows, by id and name. */
   useWorkflowsRequest(): (instanceId: InstanceId) => Promise<EngineWorkflowOption[]>;
+}
+
+/**
+ * Work the engine finishes after the call that started it returns, followed
+ * through the transient events its callbacks leave under a correlation key.
+ */
+export interface RequestsGateway {
+  /**
+   * The latest event under a key; null until one arrives, or when the caller
+   * cannot see the instance. Skipped (always loading) for a null id or key.
+   */
+  useEvent(instanceId: InstanceId | null, correlationKey: string | null): Live<TransientEvent | null>;
+  /**
+   * Every event under a key, oldest first, for keys several runs answer to.
+   * Empty when the caller cannot see the instance; skipped (always loading)
+   * for a null id or key.
+   */
+  useEvents(instanceId: InstanceId | null, correlationKey: string | null): Live<TransientEvent[]>;
+  /**
+   * Sends requests of one kind to the instance's engine under keys it makes
+   * up, and reads the answer. `kind` must not change while mounted.
+   */
+  useCorrelated<Kind extends CorrelatedRequestKind>(
+    kind: Kind,
+    instanceId: InstanceId | null
+  ): Correlated<CorrelatedRequests[Kind]>;
 }
 
 export interface OptimisticInstance {

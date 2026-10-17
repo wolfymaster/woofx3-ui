@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useQuery } from "convex/react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -15,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useReconcileModuleUninstallRequest, useUninstallModuleRequest } from "@/engine/hooks/use-modules";
 import { usedByContext, usedByHeading } from "@/lib/uninstall-conflicts";
 
@@ -74,10 +73,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<ConflictResource[]>([]);
 
-  const uninstallEvent = useQuery(
-    api.transientEvents.get,
-    pendingKey ? { instanceId, correlationKey: pendingKey } : "skip"
-  );
+  const uninstallEvent = useTransientEvent(instanceId, pendingKey || null);
 
   const reset = useCallback(() => {
     setPhase("confirm");

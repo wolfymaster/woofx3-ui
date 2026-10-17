@@ -1,11 +1,13 @@
 import type { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import type { FunctionArgs, FunctionReturnType } from "convex/server";
 
 export type { CompositionPreviewUrl } from "@convex/compositionPreview";
 export type { AlertClearResult, AlertReplayResult, AlertSkipResult } from "@convex/lib/alertQueueResults";
 export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
+export type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 export type { ModuleDetailResult as ModuleDetail } from "@convex/moduleDetail";
 export type { ModuleSettingValue } from "@convex/moduleSettingsActions";
 export type {
@@ -143,6 +145,47 @@ export type ModuleId = Id<"moduleRepository">;
 export interface EngineWorkflowOption {
   id: string;
   name: string;
+}
+
+/**
+ * A short-lived event Convex records from an engine callback under a
+ * correlation key, so a caller can follow work the engine does after the
+ * request that started it has returned. Rows expire after about a minute.
+ */
+export type TransientEvent = Doc<"transientEvents">;
+
+/** The requests the engine answers with a transient event, and what each one sends. */
+export interface CorrelatedRequests {
+  /** Asks a module's worker for a field's options, or presses an `internal` settings button. */
+  fieldOptions: FieldOptionsReference;
+}
+
+export type CorrelatedRequestKind = keyof CorrelatedRequests;
+
+/** A request that could not be sent, so no event will arrive for it. */
+export interface CorrelatedFailure {
+  correlationKey: string;
+  /** What the send rejected with. */
+  error: unknown;
+}
+
+/**
+ * One correlated request at a time: `start` sends it under a fresh key and
+ * `event` follows the answer. Starting again replaces the request before, and
+ * an answer or failure that arrives late for a replaced request is never read
+ * as the current one's.
+ */
+export interface Correlated<Request> {
+  /** The current request's key; null before the first and after `clear`. */
+  correlationKey: string | null;
+  /** Sends `request` under a new key. Throws when there is no instance to send it to. */
+  start: (request: Request) => void;
+  /** Drops the current request, so nothing is read for it. */
+  clear: () => void;
+  /** The latest event for the current request: undefined while loading or with no request, null until one arrives. */
+  event: Live<TransientEvent | null>;
+  /** The current request's send failure; null when it was sent or there is none. */
+  failure: CorrelatedFailure | null;
 }
 
 /** The instance's stream state, kept current by engine callbacks and polls. */
