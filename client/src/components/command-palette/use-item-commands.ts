@@ -28,6 +28,7 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
+import { useChatCommandGroups, useChatCommands, useUpdateChatCommandRequest } from "@/engine/hooks/use-chat-commands";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useAimedResourceActionRunner, useResourceActionRunner } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -76,8 +77,8 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const args = instanceId ? { instanceId } : "skip";
 
   const workflows = useQuery(api.workflows.list, args);
-  const commands = useQuery(api.chatCommands.list, args);
-  const commandGroups = useQuery(api.chatCommandGroups.list, args);
+  const commands = useChatCommands(instanceId ?? null);
+  const commandGroups = useChatCommandGroups(instanceId ?? null);
   const scenes = useQuery(api.scenes.list, args);
   const modules = useQuery(api.moduleRepository.list, args);
   const recaps = useQuery(
@@ -110,7 +111,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const { triggerPresets, actionPresets } = useWorkflowCatalog();
 
   const setWorkflowEnabled = useAction(api.workflowActions.setEnabled);
-  const updateCommand = useAction(api.chatCommandActions.updateCommand);
+  const updateCommand = useUpdateChatCommandRequest();
   const runMacro = useAction(api.macros.run);
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
   const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
@@ -196,8 +197,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         action: {
           type: "run",
           run: async () => {
-            await updateCommand({
-              instanceId,
+            await updateCommand(instanceId, {
               engineCommandId: cmd.engineCommandId,
               command: cmd.command,
               actions: cmd.actions ?? [],

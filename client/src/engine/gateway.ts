@@ -4,6 +4,10 @@ import type {
   AlertOverview,
   AlertReplayResult,
   AlertSkipResult,
+  ChatCommand,
+  ChatCommandChanges,
+  ChatCommandGroup,
+  ChatCommandGroupChanges,
   CompositionPreviewUrl,
   EngineAlert,
   EngineCapabilityReport,
@@ -19,6 +23,8 @@ import type {
   InstanceId,
   InstanceLiveState,
   Live,
+  NewChatCommand,
+  NewChatCommandGroup,
   NewLibraryAlert,
   ObsStatus,
   Paginated,
@@ -49,6 +55,7 @@ export interface EngineGateway {
   readonly eventLog: EventLogGateway;
   readonly alertQueue: AlertQueueGateway;
   readonly alertLibrary: AlertLibraryGateway;
+  readonly commands: CommandsGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -162,6 +169,42 @@ export interface AlertLibraryGateway {
   useRemoveRequest(): (instanceId: InstanceId, engineCompositionId: string) => Promise<{ success: boolean }>;
   /** A short-lived URL of the engine's composition preview page; null when the engine has none. */
   usePreviewUrlRequest(): (instanceId: InstanceId) => Promise<CompositionPreviewUrl | null>;
+}
+
+/**
+ * Chat commands and the user groups that may run them. Reads come from the
+ * mirror the engine's webhooks keep in Convex; writes go to the engine, and
+ * their result reaches the mirror the same way.
+ */
+export interface CommandsGateway {
+  /** Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
+  useCommands(instanceId: InstanceId | null): Live<ChatCommand[]>;
+  /** Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
+  useGroups(instanceId: InstanceId | null): Live<ChatCommandGroup[]>;
+  /** One group's usernames. */
+  useGroupMembers(instanceId: InstanceId, engineGroupId: string): Live<string[]>;
+  useCreateCommandRequest(): (instanceId: InstanceId, command: NewChatCommand) => Promise<{ engineCommandId: string }>;
+  useUpdateCommandRequest(): (
+    instanceId: InstanceId,
+    command: ChatCommandChanges
+  ) => Promise<{ engineCommandId: string }>;
+  useDeleteCommandRequest(): (instanceId: InstanceId, engineCommandId: string) => Promise<{ deleted: boolean }>;
+  useCreateGroupRequest(): (instanceId: InstanceId, group: NewChatCommandGroup) => Promise<{ engineGroupId: string }>;
+  useUpdateGroupRequest(): (
+    instanceId: InstanceId,
+    group: ChatCommandGroupChanges
+  ) => Promise<{ engineGroupId: string }>;
+  useDeleteGroupRequest(): (instanceId: InstanceId, engineGroupId: string) => Promise<{ deleted: boolean }>;
+  useAddGroupMemberRequest(): (
+    instanceId: InstanceId,
+    engineGroupId: string,
+    username: string
+  ) => Promise<{ ok: true }>;
+  useRemoveGroupMemberRequest(): (
+    instanceId: InstanceId,
+    engineGroupId: string,
+    username: string
+  ) => Promise<{ ok: true }>;
 }
 
 export interface OptimisticInstance {

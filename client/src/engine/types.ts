@@ -1,6 +1,6 @@
 import type { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import type { FunctionReturnType } from "convex/server";
+import type { FunctionArgs, FunctionReturnType } from "convex/server";
 
 export type { CompositionPreviewUrl } from "@convex/compositionPreview";
 export type { AlertClearResult, AlertReplayResult, AlertSkipResult } from "@convex/lib/alertQueueResults";
@@ -90,6 +90,21 @@ export interface NewLibraryAlert {
   behaviorsJson: string;
   inputsJson?: string;
 }
+
+/** A chat command, mirrored from the engine's webhooks. */
+export type ChatCommand = Doc<"chatCommands">;
+
+/** A group of users a chat command can be limited to, mirrored from the engine's webhooks. */
+export type ChatCommandGroup = Doc<"chatCommandGroups">;
+
+export type NewChatCommand = Omit<FunctionArgs<typeof api.chatCommandActions.createCommand>, "instanceId">;
+
+/** A command's full new definition, keyed by `engineCommandId`. */
+export type ChatCommandChanges = Omit<FunctionArgs<typeof api.chatCommandActions.updateCommand>, "instanceId">;
+
+export type NewChatCommandGroup = Omit<FunctionArgs<typeof api.chatCommandActions.createGroup>, "instanceId">;
+
+export type ChatCommandGroupChanges = Omit<FunctionArgs<typeof api.chatCommandActions.updateGroup>, "instanceId">;
 
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;

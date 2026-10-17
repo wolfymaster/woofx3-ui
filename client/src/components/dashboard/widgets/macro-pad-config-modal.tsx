@@ -39,7 +39,7 @@ import { MacroRemoteTrigger } from "./macro-remote-trigger";
  */
 type WorkflowOption = { id: string; name: string };
 
-/** A chat command the "Chat Command" dropdown offers, from `api.chatCommands.list`. */
+/** A chat command the "Chat Command" dropdown offers, from `useChatCommands`. */
 type CommandOption = { command: string; argumentPattern?: string; enabled: boolean };
 
 interface MacroConfigModalProps {
