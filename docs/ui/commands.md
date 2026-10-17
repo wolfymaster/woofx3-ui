@@ -22,7 +22,7 @@ The Commands/Groups tabs are links, not local state — the group pages need som
 
 ## Where the data lives
 
-The engine is the authority. `chatCommands` and `chatCommandGroups` in Convex are read caches, written by `convex/chatCommandActions.ts` from each RPC's own response and by the `command.*` / `group.*` webhooks. Every screen reads them with `useQuery`, and every write goes through a Convex **action** that proxies to the engine — never a direct mutation of the cache.
+The engine is the authority. `chatCommands` and `chatCommandGroups` in Convex are read caches, written by `convex/chatCommandActions.ts` from each RPC's own response and by the `command.*` / `group.*` webhooks. Every screen reads them through `engine/hooks/use-chat-commands.ts` (a `useQuery` underneath), and every write goes through a Convex **action** that proxies to the engine — never a direct mutation of the cache.
 
 No screen has a per-id query: each reads the list and finds its row, the same way the Alerts screen finds its workflow in `workflows.list`.
 
