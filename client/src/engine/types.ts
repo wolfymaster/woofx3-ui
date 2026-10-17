@@ -6,6 +6,8 @@ export type { CompositionPreviewUrl } from "@convex/compositionPreview";
 export type { AlertClearResult, AlertReplayResult, AlertSkipResult } from "@convex/lib/alertQueueResults";
 export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
+export type { ModuleDetailResult as ModuleDetail } from "@convex/moduleDetail";
+export type { ModuleSettingValue } from "@convex/moduleSettingsActions";
 export type {
   HostedStorageUsage,
   PaginatedResourcesDto as ResourcePage,
@@ -17,6 +19,8 @@ export type {
   EventLogQuery,
   EventLogSelection,
   EventLogSettings,
+  ModuleFileContent,
+  ModuleFileList,
   StreamEventFrame,
   UploadGrant,
 } from "@woofx3/api";
@@ -134,6 +138,12 @@ export type ModuleResourceInstanceChanges = Omit<
 
 /** The Convex id of an installed module's repository row. */
 export type ModuleId = Id<"moduleRepository">;
+
+/** A workflow on the engine, as the pickers that list them need it. */
+export interface EngineWorkflowOption {
+  id: string;
+  name: string;
+}
 
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;
