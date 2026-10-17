@@ -1,11 +1,9 @@
-import { api } from "@convex/_generated/api";
 import {
   type ComparisonOperator,
   type ConfigField,
   type InternalConfigFieldSource,
   isComparisonOperator,
 } from "@woofx3/api/ui-schema";
-import { useQuery } from "convex/react";
 import { Braces } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { ConfigFieldDescription, ConfigFieldLabel } from "@/components/common/config-field-label";
@@ -19,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useChatCommands } from "@/engine/hooks/use-chat-commands";
 import { useInstance } from "@/hooks/use-instance";
 import { unitFor } from "@/lib/amount-unit";
 import { commandNameToSubjectSegment } from "@/lib/command-slug";
@@ -305,7 +304,7 @@ function SelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
 function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const commands = useQuery(api.chatCommands.list, instanceId ? { instanceId } : "skip");
+  const commands = useChatCommands(instanceId ?? null);
 
   const options = useMemo(() => {
     if (!commands) {
