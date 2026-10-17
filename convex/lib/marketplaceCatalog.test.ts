@@ -8,6 +8,7 @@ import {
   parseCatalogDetail,
   parseCatalogListing,
   parseCatalogPage,
+  parseQuote,
 } from "./marketplaceCatalog";
 
 // The marketplace API is a separate service on its own release cycle, so these
@@ -27,12 +28,14 @@ function listingPayload(overrides: Record<string, unknown> = {}) {
     name: "Counter",
     description: "Counts things.",
     version: "1.2.0",
-    author: "Wolfy Master",
-    authorSlug: "wolfy-master",
+    author: "WolfyMaster LLC",
+    authorSlug: "wolfymaster",
     category: "Utilities",
     tags: ["counting"],
     images: { icon: iconUrls },
     tier: "public",
+    pricing: { mode: "free", currency: "usd" },
+    edition: 1,
     credits: [],
     updatedAt: "2026-10-01T00:00:00Z",
     ...overrides,
@@ -112,7 +115,7 @@ describe("parseCatalogListing", () => {
     expect(listing).not.toBeNull();
     expect(listing?.id).toBe("counter");
     expect(listing?.type).toBe("module");
-    expect(listing?.authorSlug).toBe("wolfy-master");
+    expect(listing?.authorSlug).toBe("wolfymaster");
     expect(listing?.tags).toEqual(["counting"]);
     expect(listing?.images.icon).toEqual(iconUrls);
   });
@@ -139,16 +142,53 @@ describe("parseCatalogListing", () => {
     expect(parseCatalogListing(listingPayload({ type: "emote", category: "Cats" }))?.category).toBe("Cats");
   });
 
-  test("reads a price but treats a non-positive amount as free", () => {
-    const paid = parseCatalogListing(listingPayload({ price: { amountCents: 499, currency: "usd" } }));
-    expect(paid?.price).toEqual({ amountCents: 499, currency: "usd" });
+  test("reads free and paid pricing, with the upgrade policy", () => {
+    expect(parseCatalogListing(listingPayload())?.pricing).toEqual({ mode: "free" });
+    const paid = parseCatalogListing(
+      listingPayload({
+        pricing: { mode: "paid", amountCents: 900, currency: "usd", upgrade: { mode: "discount", amountCents: 300 } },
+      })
+    );
+    expect(paid?.pricing).toEqual({
+      mode: "paid",
+      amountCents: 900,
+      currency: "usd",
+      upgrade: { mode: "discount", amountCents: 300 },
+    });
+  });
 
-    // The marketplace refuses a zero price, so seeing one means a shape we do
-    // not understand. Rendering the listing as free beats a "Buy for $0.00".
-    for (const amountCents of [0, -100]) {
-      expect(parseCatalogListing(listingPayload({ price: { amountCents, currency: "usd" } }))?.price).toBeUndefined();
+  test("no pricing, or pricing it cannot read, is unavailable and never free", () => {
+    // An unreadable price must not become a free install.
+    for (const pricing of [
+      null,
+      undefined,
+      "free",
+      { mode: "paid", amountCents: 0, currency: "usd" },
+      { mode: "paid", amountCents: 500 },
+      { mode: "gift" },
+    ]) {
+      expect(parseCatalogListing(listingPayload({ pricing }))?.pricing).toBeNull();
     }
-    expect(parseCatalogListing(listingPayload({ price: "free" }))?.price).toBeUndefined();
+  });
+
+  test("a discount the marketplace would refuse reads as the full price", () => {
+    const listing = parseCatalogListing(
+      listingPayload({
+        pricing: { mode: "paid", amountCents: 900, currency: "usd", upgrade: { mode: "discount", amountCents: 900 } },
+      })
+    );
+    expect(listing?.pricing).toEqual({ mode: "paid", amountCents: 900, currency: "usd", upgrade: { mode: "full" } });
+  });
+
+  test("reads which edition of which module a listing is", () => {
+    const v2 = parseCatalogListing(
+      listingPayload({ id: "counter-v2", moduleKey: "counter", edition: 2, supersededBy: "counter-v3" })
+    );
+    expect(v2?.moduleKey).toBe("counter");
+    expect(v2?.edition).toBe(2);
+    expect(v2?.supersededBy).toBe("counter-v3");
+    // A listing type with no editions reads as edition 1.
+    expect(parseCatalogListing(listingPayload({ edition: undefined }))?.edition).toBe(1);
   });
 
   test("keeps credits that name someone and drops the ones that do not", () => {
@@ -267,24 +307,29 @@ describe("parseAuthorPage", () => {
   test("reads a claimed profile and its links", () => {
     const page = parseAuthorPage({
       author: {
-        slug: "wolfy-master",
+        slug: "wolfymaster",
         displayName: "WolfyMaster",
         bio: "Builds counters.",
         links: [{ label: "twitch", url: "https://twitch.tv/wolfymaster" }, { label: "no url" }],
         claimed: true,
       },
       listings: [listingPayload()],
-      total: 1,
+      total: 60,
+      limit: 48,
+      offset: 0,
     });
     expect(page?.author.displayName).toBe("WolfyMaster");
+    expect(page?.total).toBe(60);
+    expect(page?.limit).toBe(48);
+    expect(page?.offset).toBe(0);
     expect(page?.author.claimed).toBe(true);
     expect(page?.author.links).toEqual([{ label: "twitch", url: "https://twitch.tv/wolfymaster" }]);
     expect(page?.listings).toHaveLength(1);
   });
 
-  test("reads an unclaimed page, which is what every older author has", () => {
+  test("reads an unclaimed page, whose display name is the username", () => {
     const page = parseAuthorPage({
-      author: { slug: "wolfy-master", displayName: "Wolfy Master", claimed: false },
+      author: { slug: "wolfymaster", displayName: "wolfymaster", claimed: false },
       listings: [],
       total: 0,
     });
@@ -314,5 +359,45 @@ describe("install path by type", () => {
     expect(isBundleListing("module")).toBe(false);
     // An emote pack installs nothing at all: it is images.
     expect(isBundleListing("emote")).toBe(false);
+  });
+});
+
+describe("parseQuote", () => {
+  test("reads every kind the marketplace decides", () => {
+    expect(parseQuote({ kind: "owned" })).toEqual({ kind: "owned" });
+    expect(parseQuote({ kind: "free" })).toEqual({ kind: "free" });
+    expect(parseQuote({ kind: "full", amountCents: 900, currency: "usd" })).toEqual({
+      kind: "full",
+      amountCents: 900,
+      currency: "usd",
+    });
+    expect(parseQuote({ kind: "upgrade", amountCents: 300, currency: "usd", upgradeFrom: "counter" })).toEqual({
+      kind: "upgrade",
+      amountCents: 300,
+      currency: "usd",
+      upgradeFrom: "counter",
+    });
+    expect(parseQuote({ kind: "upgrade_free", upgradeFrom: "counter" })).toEqual({
+      kind: "upgrade_free",
+      upgradeFrom: "counter",
+    });
+    expect(parseQuote({ kind: "unavailable", reason: "superseded" })).toEqual({
+      kind: "unavailable",
+      reason: "superseded",
+    });
+  });
+
+  test("refuses a quote it cannot read rather than guessing", () => {
+    for (const value of [
+      null,
+      {},
+      { kind: "full" },
+      { kind: "full", amountCents: 0, currency: "usd" },
+      { kind: "upgrade", amountCents: 300, currency: "usd" },
+      { kind: "upgrade_free" },
+      { kind: "gift" },
+    ]) {
+      expect(parseQuote(value)).toBeNull();
+    }
   });
 });

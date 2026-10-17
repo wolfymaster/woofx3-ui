@@ -6,6 +6,7 @@ import {
   marketplaceAuthorPath,
   marketplaceCategoryPath,
   marketplaceListingPath,
+  modulesIndexRedirect,
 } from "./marketplace-route";
 
 describe("marketplace paths", () => {
@@ -31,5 +32,22 @@ describe("marketplace paths", () => {
     expect(marketplaceCategoryPath("all")).toBe(MARKETPLACE_PATH);
     expect(marketplaceCategoryPath("Utilities")).toBe("/marketplace?category=Utilities");
     expect(marketplaceCategoryPath("Audio & Music")).toBe("/marketplace?category=Audio%20%26%20Music");
+  });
+});
+
+describe("modulesIndexRedirect", () => {
+  test("an integration's OAuth return reaches the modules page, code and all", () => {
+    // Only the modules page can redeem the one-time code or show the error.
+    expect(modulesIndexRedirect("integration=spotify&oauth_code=abc")).toBe(
+      "/modules/installed?integration=spotify&oauth_code=abc"
+    );
+    expect(modulesIndexRedirect("?integration=spotify&status=error&error=denied")).toBe(
+      "/modules/installed?integration=spotify&status=error&error=denied"
+    );
+  });
+
+  test("an old storefront link reaches the marketplace with its filters", () => {
+    expect(modulesIndexRedirect("")).toBe(MARKETPLACE_PATH);
+    expect(modulesIndexRedirect("category=Media")).toBe(`${MARKETPLACE_PATH}?category=Media`);
   });
 });

@@ -56,7 +56,8 @@ function ContentPlaceholder({ onDashboard }: { onDashboard: boolean }) {
  * is told to ask one rather than sent somewhere they cannot act. The check is
  * that a link exists, not that it still works: a revoked or under-scoped link
  * is the reconnect banner's job, and must never bounce an established user
- * into setup.
+ * into setup. A preview deployment set up without Twitch does not need a link
+ * (`SetupStatus.twitchRequired`).
  *
  * Setup also opens by itself once per user while the instance's setup is
  * unfinished, so a returning user is not sent back to it on every visit.
@@ -70,7 +71,8 @@ export function OnboardingGuard({ children }: { children: ReactNode }) {
   const hasRegisteredInstance = instances.some((candidate) => Boolean(candidate?.clientId));
   const isChecking = instancesLoading || (instance !== null && setup === undefined);
   const needsOnboarding = !hasRegisteredInstance;
-  const needsTwitch = !needsOnboarding && setup !== undefined && setup !== null && setup.twitchUsername === null;
+  const needsTwitch =
+    !needsOnboarding && setup !== undefined && setup !== null && setup.twitchRequired && setup.twitchUsername === null;
 
   useEffect(() => {
     if (!isAuthenticated || isChecking) {

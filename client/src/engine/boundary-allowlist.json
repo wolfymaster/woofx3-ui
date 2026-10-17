@@ -25,6 +25,8 @@
   "hooks/use-module-install.ts",
   "hooks/use-open-session-refresh.ts",
   "hooks/use-recap-clips.ts",
+  "hooks/use-recap-markers.ts",
+  "hooks/use-recap-timeline-events.ts",
   "hooks/use-scene-editor-session.ts",
   "hooks/use-stream-recap-engine-detail.ts",
   "hooks/use-test-run-capabilities.ts",

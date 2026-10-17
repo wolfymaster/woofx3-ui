@@ -7,10 +7,9 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import type { MarketplaceAccess } from "./lib/marketplaceAccess";
-import { type ContentGrant, requireEntitlement } from "./lib/marketplaceEntitlement";
+import { type ContentAccess, contentAccessFor } from "./lib/marketplaceEntitlement";
 import { listArchiveModuleFiles, readArchiveModuleFile } from "./lib/moduleArchiveFiles";
-import { fetchMarketplaceArchive, fetchMarketplaceDownload, marketplaceAccessForInstance } from "./marketplace";
+import { fetchMarketplaceArchive, fetchMarketplaceDownload } from "./marketplace";
 import { requireEngineInstance } from "./moduleSettingsActions";
 
 /**
@@ -36,7 +35,7 @@ const UPDATE_ENGINE_MESSAGE = "Update WoofX3 to browse this module's files.";
 
 type FileSource =
   | { kind: "engine"; manifestModuleId: string; engine: { url: string; clientId: string; clientSecret: string } }
-  | { kind: "marketplace"; marketplaceId: string; access: MarketplaceAccess; grant: ContentGrant };
+  | { kind: "marketplace"; marketplaceId: string; content: ContentAccess };
 
 /**
  * Where a module's files live. `moduleId` is what the detail view identifies
@@ -51,8 +50,7 @@ async function resolveFileSource(ctx: ActionCtx, instanceId: Id<"instances">, mo
     return {
       kind: "marketplace",
       marketplaceId: moduleId,
-      access: await marketplaceAccessForInstance(ctx, instanceId),
-      grant: await requireEntitlement(ctx, instanceId, moduleId, moduleId),
+      content: await contentAccessFor(ctx, instanceId),
     };
   }
   const engine = await requireEngineInstance(ctx, instanceId);
@@ -62,9 +60,7 @@ async function resolveFileSource(ctx: ActionCtx, instanceId: Id<"instances">, mo
 }
 
 async function fetchArchive(source: Extract<FileSource, { kind: "marketplace" }>): Promise<Uint8Array> {
-  return await fetchMarketplaceArchive(
-    await fetchMarketplaceDownload(source.marketplaceId, source.access, source.grant)
-  );
+  return await fetchMarketplaceArchive(await fetchMarketplaceDownload(source.marketplaceId, source.content));
 }
 
 /**

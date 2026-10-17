@@ -5,7 +5,7 @@ import type { ListingCardState } from "@/components/marketplace/listing-card";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { authorInitials, hasStats, listingStats } from "@/lib/listing-signals";
-import { formatPrice, listingTypeColor, listingTypeMeta } from "@/lib/listing-type";
+import { listingTypeColor, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
 import { cn } from "@/lib/utils";
 
 // The storefront's front window: one large featured listing and two smaller
@@ -66,10 +66,8 @@ function HeroMain({
           {ctaLabel(listing, state)}
         </Button>
         <div className="leading-tight text-white">
-          <div className="text-xl font-extrabold tracking-tight">{formatPrice(listing.price)}</div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60">
-            {listing.price ? "One-time purchase" : "No purchase needed"}
-          </div>
+          <div className="text-xl font-extrabold tracking-tight">{pricingLabel(listing.pricing)}</div>
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-white/60">{priceNote(listing)}</div>
         </div>
       </div>
     </HeroPanel>
@@ -220,8 +218,18 @@ function ctaLabel(listing: CatalogListing, state: ListingCardState): string {
   if (state.isInstalled) {
     return "Installed";
   }
-  if (listing.price && !state.isOwned) {
-    return `Buy · ${formatPrice(listing.price)}`;
+  if (listing.pricing === null) {
+    return "View listing";
   }
-  return listing.price ? "Install — owned" : "Install — Free";
+  if (listing.pricing.mode === "paid") {
+    return state.isOwned ? "Install — owned" : `Buy · ${pricingLabel(listing.pricing)}`;
+  }
+  return "Install — Free";
+}
+
+function priceNote(listing: CatalogListing): string {
+  if (listing.pricing === null) {
+    return "Not on sale yet";
+  }
+  return listing.pricing.mode === "paid" ? "One-time purchase" : "No purchase needed";
 }

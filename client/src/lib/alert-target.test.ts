@@ -4,9 +4,9 @@ import { alertTargetChoices } from "@/lib/alert-target";
 describe("alertTargetChoices", () => {
   const names = ["default", "overlay", "sidebar"];
 
-  test("selects the default for a blank or missing value", () => {
+  test("selects nothing for a blank or missing value, so the user must pick", () => {
     for (const value of [undefined, null, "", "   "]) {
-      expect(alertTargetChoices(names, value)).toEqual({ selected: "default", options: names, stale: null });
+      expect(alertTargetChoices(names, value)).toEqual({ selected: "", options: names, stale: null });
     }
   });
 
@@ -26,22 +26,22 @@ describe("alertTargetChoices", () => {
     });
   });
 
+  test("flags a stored default no scene has, instead of offering it", () => {
+    expect(alertTargetChoices(["sidebar"], "default")).toEqual({
+      selected: "default",
+      options: ["default", "sidebar"],
+      stale: "default",
+    });
+  });
+
   test("keeps a stored variable reference through the stale path", () => {
     const choices = alertTargetChoices(names, "{widget}");
     expect(choices.selected).toBe("{widget}");
     expect(choices.stale).toBe("{widget}");
   });
 
-  test("offers the default even when the names leave it out", () => {
-    expect(alertTargetChoices(["sidebar"], "")).toEqual({
-      selected: "default",
-      options: ["default", "sidebar"],
-      stale: null,
-    });
-  });
-
   test("offers only the stored value, unjudged, while the names load", () => {
     expect(alertTargetChoices(undefined, "sidebr")).toEqual({ selected: "sidebr", options: ["sidebr"], stale: null });
-    expect(alertTargetChoices(undefined, "")).toEqual({ selected: "default", options: ["default"], stale: null });
+    expect(alertTargetChoices(undefined, "")).toEqual({ selected: "", options: [], stale: null });
   });
 });

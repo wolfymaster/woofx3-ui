@@ -217,6 +217,16 @@ function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomField
   const { instance } = useInstance();
   const names = useQuery(api.sceneWidgets.alertWidgetNames, instance ? { instanceId: instance._id } : "skip");
   const { selected, options, stale } = alertTargetChoices(names, value);
+  const noWidgets = names !== undefined && options.length === 0;
+
+  let placeholder: string;
+  if (names === undefined) {
+    placeholder = "Loading...";
+  } else if (noWidgets) {
+    placeholder = "No alert widgets on any scene yet";
+  } else {
+    placeholder = "Choose an alert widget...";
+  }
 
   return (
     <div className="space-y-2">
@@ -224,9 +234,9 @@ function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomField
         {field.label}
         {field.required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
-      <Select value={selected} onValueChange={onChange} disabled={names === undefined}>
+      <Select value={selected} onValueChange={onChange} disabled={names === undefined || noWidgets}>
         <SelectTrigger id={field.id} data-testid={`select-${field.id}`}>
-          <SelectValue />
+          <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map((name) => (

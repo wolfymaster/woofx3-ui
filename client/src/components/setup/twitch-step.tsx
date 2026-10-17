@@ -17,6 +17,10 @@ interface TwitchStepProps {
  * owner or admin may grant them. It needs only the instance record, so it
  * works while the engine is still being built; the engine receives the
  * token when it registers.
+ *
+ * On a preview deployment whose chosen platforms leave Twitch out, connecting is
+ * optional (`SetupStatus.twitchRequired`) and the page can be skipped, so automated
+ * tests can finish setup with a password account.
  */
 export function TwitchStep({ instanceId, status, onContinue }: TwitchStepProps) {
   const { connect, starting, error } = useTwitchConnect();
@@ -55,6 +59,11 @@ export function TwitchStep({ instanceId, status, onContinue }: TwitchStepProps) 
         {starting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
         Connect Twitch
       </Button>
+      {!status.twitchRequired && (
+        <Button variant="ghost" className="w-full" onClick={onContinue} data-testid="button-twitch-skip">
+          Skip for now
+        </Button>
+      )}
     </div>
   );
 }

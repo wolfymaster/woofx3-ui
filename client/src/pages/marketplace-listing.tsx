@@ -19,10 +19,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
-import { useMarketplaceEntitlements, useMarketplaceListing } from "@/hooks/use-marketplace";
+import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
 import { listingInstallState } from "@/lib/listing-install-state";
-import { formatPrice, listingTypeColor, listingTypeIcon, listingTypeMeta } from "@/lib/listing-type";
+import { listingTypeColor, listingTypeIcon, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
 import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from "@/lib/marketplace-route";
 
 // One listing's page, for any of the five types.
@@ -40,7 +40,7 @@ export default function MarketplaceListing() {
   const searchString = useSearch();
 
   const { listing, notFound, loading, error, refetch } = useMarketplaceListing(instance?._id ?? null, listingId);
-  const entitlements = useMarketplaceEntitlements(instance?._id ?? null);
+  const quote = useMarketplaceQuote(instance?._id ?? null, listingId);
 
   // Stripe sends the buyer back here. The webhook that grants the entitlement
   // is a separate round trip from Stripe to the marketplace, so it may not
@@ -49,9 +49,9 @@ export default function MarketplaceListing() {
   const purchaseOutcome = useMemo(() => new URLSearchParams(searchString).get("purchase"), [searchString]);
   useEffect(() => {
     if (purchaseOutcome === "success") {
-      void entitlements.refetch();
+      void quote.refetch();
     }
-  }, [purchaseOutcome, entitlements.refetch]);
+  }, [purchaseOutcome, quote.refetch]);
 
   if (!listingId) {
     return null;
@@ -107,12 +107,10 @@ export default function MarketplaceListing() {
         {listing && (
           <ListingBody
             listing={listing}
-            owned={entitlements.owned.has(listing.id)}
-            entitlementsLoading={entitlements.loading}
-            entitlementsError={entitlements.error}
+            quote={quote}
             onRefetch={() => {
               void refetch();
-              void entitlements.refetch();
+              void quote.refetch();
             }}
           />
         )}
@@ -123,15 +121,11 @@ export default function MarketplaceListing() {
 
 function ListingBody({
   listing,
-  owned,
-  entitlementsLoading,
-  entitlementsError,
+  quote,
   onRefetch,
 }: {
   listing: CatalogListingDetail;
-  owned: boolean;
-  entitlementsLoading: boolean;
-  entitlementsError: string | null;
+  quote: MarketplaceQuote;
   onRefetch: () => void;
 }) {
   const { instance } = useInstance();
@@ -191,9 +185,9 @@ function ListingBody({
 
   const state = listingInstallState({
     listing,
-    owned,
-    entitlementsLoading,
-    entitlementsError,
+    quote: quote.quote,
+    quoteLoading: quote.loading,
+    quoteError: quote.error,
     installedVersion,
     baseModuleInstalled,
     bundleInstalled: bundleInstalled !== null,
@@ -244,6 +238,11 @@ function ListingBody({
                   Dev
                 </Badge>
               )}
+              {listing.edition > 1 && (
+                <Badge variant="secondary" className="text-[10px]">
+                  Edition {listing.edition}
+                </Badge>
+              )}
               <span className="text-xs text-muted-foreground">v{listing.version}</span>
             </div>
             <h1 className="text-2xl font-bold leading-tight">{listing.name}</h1>
@@ -277,7 +276,7 @@ function ListingBody({
         </div>
 
         <div className="flex w-full shrink-0 flex-col gap-2 sm:w-56">
-          <p className="text-right text-lg font-semibold">{formatPrice(listing.price)}</p>
+          <p className="text-right text-lg font-semibold">{pricingLabel(listing.pricing)}</p>
           <ListingInstallButton
             instanceId={instance?._id}
             listing={listing}
@@ -289,6 +288,8 @@ function ListingBody({
               onRefetch();
             }}
             onOpenBaseModule={(moduleId) => navigate(marketplaceListingPath(moduleId))}
+            onOpenListing={(id) => navigate(marketplaceListingPath(id))}
+            onQuoteStale={() => void quote.refetch()}
           />
           <PreviewButton listing={listing} className="w-full" />
           {install.isInstalling && install.progressMessage && (
@@ -313,6 +314,24 @@ function ListingBody({
           )}
         </div>
       </div>
+
+      {listing.supersededBy && (
+        // Holders of this edition keep it and can still install it; the
+        // newer edition is a separate listing with its own price, and what
+        // they pay for it is that listing's upgrade price.
+        <Banner tone="muted">
+          <span className="flex flex-wrap items-center justify-between gap-2">
+            A newer edition of {listing.name} is out.
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(marketplaceListingPath(listing.supersededBy as string))}
+            >
+              See the new edition
+            </Button>
+          </span>
+        </Banner>
+      )}
 
       <CreditsCard credits={listing.credits} listingName={listing.name} />
 

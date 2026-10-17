@@ -24,11 +24,33 @@ function isListingType(value: unknown): value is ListingType {
   return typeof value === "string" && (LISTING_TYPES as readonly string[]).includes(value);
 }
 
-/** What a paid listing costs. Absent means free. */
-export interface ListingPrice {
-  amountCents: number;
-  currency: string;
-}
+/**
+ * How a listing is acquired. The marketplace requires every listing to be
+ * priced explicitly, and `null` -- no pricing -- means nobody can install it,
+ * never that it is free.
+ */
+export type ListingPricing =
+  | { mode: "free" }
+  | { mode: "paid"; amountCents: number; currency: string; upgrade: ListingUpgrade };
+
+/** What an account holding an earlier edition of the module pays. */
+export type ListingUpgrade = { mode: "full" } | { mode: "discount"; amountCents: number } | { mode: "free" };
+
+/**
+ * What one account must do to hold one listing, as the marketplace decides
+ * it. The listing page's button reads this rather than working it out from
+ * the pricing, because only the marketplace knows what the account holds.
+ */
+export type ListingQuote =
+  | { kind: "owned" }
+  | { kind: "free" }
+  /** A paid edition this account takes for nothing, by holding an earlier one. */
+  | { kind: "upgrade_free"; upgradeFrom: string }
+  /** The discounted price, earned by holding an earlier edition. */
+  | { kind: "upgrade"; amountCents: number; currency: string; upgradeFrom: string }
+  | { kind: "full"; amountCents: number; currency: string }
+  /** Nobody can acquire it now: `not_ready`, `unpriced` or `superseded`. */
+  | { kind: "unavailable"; reason: string };
 
 /** A streamer a listing credits as its inspiration. */
 export interface ListingCredit {
@@ -64,7 +86,7 @@ export interface CatalogListing {
   description: string;
   version: string;
   author: string;
-  /** Address of the author's page. Absent when the listing names no author. */
+  /** The username the listing is published under, which addresses the author's page. */
   authorSlug?: string;
   category: string;
   tags: string[];
@@ -73,7 +95,19 @@ export interface CatalogListing {
   tier: "public" | "dev";
   /** The module a theme needs installed first. */
   baseModuleId?: string;
-  price?: ListingPrice;
+  pricing: ListingPricing | null;
+  /**
+   * The manifest id every edition of a module shares. Absent for the types
+   * that have no editions.
+   */
+  moduleKey?: string;
+  /** Which sellable version of the module this listing is; 1 for the rest. */
+  edition: number;
+  /**
+   * The newest later edition, once one is published. A superseded edition is
+   * no longer sold, but stays installable for the accounts that hold it.
+   */
+  supersededBy?: string;
   credits: ListingCredit[];
   updatedAt?: string;
   /**
@@ -146,14 +180,17 @@ export interface MarketplaceAuthor {
   bio?: string;
   avatarUrl?: string;
   links: MarketplaceAuthorLink[];
-  /** False when the page is built from the author string on their listings. */
+  /** False until the author sets up a profile; the page then shows the username. */
   claimed: boolean;
 }
 
 export interface AuthorPage {
   author: MarketplaceAuthor;
+  /** One page of the author's listings, newest first. */
   listings: CatalogListing[];
   total: number;
+  limit: number;
+  offset: number;
 }
 
 function asObject(value: unknown): Record<string, unknown> {
@@ -195,16 +232,63 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
 }
 
-function parsePrice(value: unknown): ListingPrice | undefined {
+/**
+ * Narrows a listing's pricing. Anything not recognised is `null`, which the
+ * storefront shows as unavailable: an unreadable price must never become a
+ * free install, and the marketplace refuses the install either way.
+ */
+export function parsePricing(value: unknown): ListingPricing | null {
+  const obj = asObject(value);
+  if (obj.mode === "free") {
+    return { mode: "free" };
+  }
+  if (obj.mode !== "paid") {
+    return null;
+  }
+  const amountCents = asNumber(obj.amountCents, -1);
+  const currency = asString(obj.currency);
+  if (amountCents <= 0 || currency === "") {
+    return null;
+  }
+  const upgradeObj = asObject(obj.upgrade);
+  let upgrade: ListingUpgrade = { mode: "full" };
+  if (upgradeObj.mode === "free") {
+    upgrade = { mode: "free" };
+  } else if (upgradeObj.mode === "discount") {
+    const discount = asNumber(upgradeObj.amountCents, -1);
+    // A discount the marketplace would refuse to store is read as the full
+    // price, which is what checkout would charge if it ever got this far.
+    if (discount > 0 && discount < amountCents) {
+      upgrade = { mode: "discount", amountCents: discount };
+    }
+  }
+  return { mode: "paid", amountCents, currency, upgrade };
+}
+
+/** Narrows a quote. Anything not recognised is `null`, which refuses rather than installs. */
+export function parseQuote(value: unknown): ListingQuote | null {
   const obj = asObject(value);
   const amountCents = asNumber(obj.amountCents, -1);
-  // A zero or negative amount is not a price. The marketplace refuses one, so
-  // seeing it here means a shape we do not understand -- better to render the
-  // listing as free than to show a "Buy for $0.00" button.
-  if (amountCents <= 0) {
-    return undefined;
+  const currency = asString(obj.currency);
+  const upgradeFrom = optionalString(obj.upgradeFrom);
+  switch (obj.kind) {
+    case "owned":
+      return { kind: "owned" };
+    case "free":
+      return { kind: "free" };
+    case "upgrade_free":
+      return upgradeFrom ? { kind: "upgrade_free", upgradeFrom } : null;
+    case "upgrade":
+      return upgradeFrom && amountCents > 0 && currency
+        ? { kind: "upgrade", amountCents, currency, upgradeFrom }
+        : null;
+    case "full":
+      return amountCents > 0 && currency ? { kind: "full", amountCents, currency } : null;
+    case "unavailable":
+      return { kind: "unavailable", reason: asString(obj.reason, "unknown") };
+    default:
+      return null;
   }
-  return { amountCents, currency: asString(obj.currency, "usd") };
 }
 
 function parseCredits(value: unknown): ListingCredit[] {
@@ -292,6 +376,8 @@ export function parseCatalogListing(raw: unknown): CatalogListing | null {
     tags: asStringArray(obj.tags),
     images: parseMarketplaceImages(obj.images),
     tier: obj.tier === "dev" ? "dev" : "public",
+    pricing: parsePricing(obj.pricing),
+    edition: Math.max(1, Math.floor(asNumber(obj.edition, 1))),
     credits: parseCredits(obj.credits),
     installCount: asCount(obj.installCount),
     weeklyInstallCount: asCount(obj.weeklyInstallCount),
@@ -301,7 +387,8 @@ export function parseCatalogListing(raw: unknown): CatalogListing | null {
   listing.authorAvatarUrl = optionalString(obj.authorAvatarUrl);
   listing.authorSlug = optionalString(obj.authorSlug);
   listing.baseModuleId = optionalString(obj.baseModuleId);
-  listing.price = parsePrice(obj.price);
+  listing.moduleKey = optionalString(obj.moduleKey);
+  listing.supersededBy = optionalString(obj.supersededBy);
   listing.updatedAt = optionalString(obj.updatedAt);
   const featuredRank = parseFeaturedRank(obj.featuredRank);
   if (featuredRank !== undefined) {
@@ -494,6 +581,8 @@ export function parseAuthorPage(payload: unknown): AuthorPage | null {
     },
     listings,
     total: asNumber(obj.total, listings.length),
+    limit: asNumber(obj.limit, listings.length),
+    offset: asNumber(obj.offset, 0),
   };
 }
 

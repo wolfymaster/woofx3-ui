@@ -5,8 +5,15 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { type MutationCtx, mutation, type QueryCtx, query } from "./_generated/server";
 import { readMemberRole } from "./instances";
 import { requireInstanceRole } from "./lib/instanceAccess";
+import { isPreviewDeployment } from "./lib/previewDeployment";
 import { availableInterests, buildDashboardPreset, PRESET_LAYOUT_ID } from "./lib/setupInterests";
-import { type ChosenSetupPlatform, NO_SETUP_PLATFORMS_MESSAGE, setupChoiceError } from "./lib/setupPlatforms";
+import {
+  type ChosenSetupPlatform,
+  curatedForDeployment,
+  NO_SETUP_PLATFORMS_MESSAGE,
+  setupChoiceError,
+  setupNeedsTwitch,
+} from "./lib/setupPlatforms";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 
 // Bounds for reads of tables that hold a handful of rows per key.
@@ -37,6 +44,12 @@ export interface SetupStatus {
   completedAt: number | null;
   /** The instance's Twitch link, whether or not its tokens still work. */
   twitchUsername: string | null;
+  /**
+   * Whether setup cannot finish, and the app sends an admin back to setup, until
+   * Twitch is connected. Always true except on a preview deployment whose chosen
+   * platforms leave Twitch out (`setupNeedsTwitch`).
+   */
+  twitchRequired: boolean;
   /** Whether the viewer may choose platforms and connect Twitch: only an owner or admin can. */
   canManageSetup: boolean;
   /** Whether the setup wizard has opened for the viewer before. */
@@ -66,6 +79,19 @@ async function readTwitchLink(ctx: QueryCtx, instanceId: Id<"instances">): Promi
     .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
     .take(MAX_PLATFORM_LINKS);
   return links.find((link) => link.platform === "twitch") ?? null;
+}
+
+/** The curated platforms, with what this deployment requires (`curatedForDeployment`). */
+async function readCuratedPlatforms(ctx: QueryCtx): Promise<Doc<"setupPlatforms">[]> {
+  const rows = await ctx.db.query("setupPlatforms").withIndex("by_sort_order").take(MAX_SETUP_PLATFORMS);
+  return curatedForDeployment(rows, isPreviewDeployment());
+}
+
+function twitchRequiredFor(row: Doc<"instanceSetup"> | null): boolean {
+  return setupNeedsTwitch(
+    (row?.platforms ?? []).map((platform) => platform.marketplaceModuleId),
+    isPreviewDeployment()
+  );
 }
 
 /**
@@ -107,7 +133,7 @@ export const status = query({
         .withIndex("by_user", (q) => q.eq("userId", userId))
         .first(),
       ctx.db.get(instanceId),
-      ctx.db.query("setupPlatforms").withIndex("by_sort_order").take(MAX_SETUP_PLATFORMS),
+      readCuratedPlatforms(ctx),
     ]);
     const account = instance ? await ctx.db.get(instance.accountId) : null;
     const platformsNeedingSettings: string[] = [];
@@ -135,6 +161,7 @@ export const status = query({
       interestsChosenAt: row?.interestsChosenAt ?? null,
       completedAt: row?.completedAt ?? null,
       twitchUsername: twitchLink?.platformUsername ?? null,
+      twitchRequired: twitchRequiredFor(row),
       canManageSetup: canManageTwitchLink(role),
       setupSeen: seen !== null,
       engineRegistered: Boolean(instance?.clientId),
@@ -153,7 +180,7 @@ export const choosePlatforms = mutation({
   handler: async (ctx, { instanceId, platforms }) => {
     await requireInstanceRole(ctx, instanceId, "admin");
 
-    const curated = await ctx.db.query("setupPlatforms").withIndex("by_sort_order").take(MAX_SETUP_PLATFORMS);
+    const curated = await readCuratedPlatforms(ctx);
     if (curated.length === 0) {
       throw new Error(NO_SETUP_PLATFORMS_MESSAGE);
     }
@@ -250,7 +277,8 @@ async function seedDashboard(
 /**
  * Finishes setup: seeds the caller's dashboard, and installs the chosen
  * modules and starter packs, now if the engine is registered, otherwise when
- * it registers. Refused until platforms are chosen and Twitch is connected.
+ * it registers. Refused until platforms are chosen and, where it is required
+ * (`SetupStatus.twitchRequired`), Twitch is connected.
  */
 export const complete = mutation({
   args: { instanceId: v.id("instances") },
@@ -260,7 +288,7 @@ export const complete = mutation({
     if (!row?.platformsChosenAt) {
       throw new Error("Choose your platforms before finishing setup");
     }
-    if (!(await readTwitchLink(ctx, instanceId))) {
+    if (twitchRequiredFor(row) && !(await readTwitchLink(ctx, instanceId))) {
       throw new Error("Connect Twitch before finishing setup");
     }
     if (row.completedAt) {

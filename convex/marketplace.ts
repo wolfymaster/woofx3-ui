@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
@@ -10,10 +10,14 @@ import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { unapprovedLocalEndpointIds } from "./lib/localEndpoints";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
-import { marketplaceAuthed } from "./lib/marketplaceApi";
-import { type ContentGrant, grantQuery, requireEntitlement } from "./lib/marketplaceEntitlement";
+import {
+  acquireListing,
+  type ContentAccess,
+  contentAccessFor,
+  contentRefusal,
+  fetchListingContent,
+} from "./lib/marketplaceEntitlement";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
-import { recordListingInstall } from "./lib/marketplaceInstalls";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
 
@@ -132,20 +136,14 @@ export interface MarketplaceDownload {
 }
 
 /**
- * A presigned URL for a module's archive. `grant` comes from
- * `requireEntitlement`: a paid module's archive is only handed out with the
- * write token and the buyer it was sold to.
+ * A presigned URL for a module's archive. A module that is not free is only
+ * handed out for an account that holds it (see `fetchListingContent`).
  */
 export async function fetchMarketplaceDownload(
   marketplaceModuleId: string,
-  access: MarketplaceAccess,
-  grant: ContentGrant
+  content: ContentAccess
 ): Promise<MarketplaceDownload> {
-  const path = `/modules/${encodeURIComponent(marketplaceModuleId)}/download`;
-  const payload =
-    grant.kind === "paid"
-      ? await marketplaceAuthed(`${path}${grantQuery(grant)}`, "GET")
-      : await marketplaceFetch(path, access);
+  const payload = await fetchListingContent(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`, content);
   const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
   const url = asString(obj.url);
   if (!url) {
@@ -480,12 +478,16 @@ async function installFromMarketplace(
     throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
   }
 
-  // Refused before anything is downloaded or sent to the engine. A paid
-  // listing the account has not bought must not install, and the browser
-  // showing a Buy button is not a guard -- this is.
-  const grant = await requireEntitlement(ctx, instanceId, marketplaceModuleId, detail.name);
-
-  const download = await fetchMarketplaceDownload(marketplaceModuleId, access, grant);
+  let download: MarketplaceDownload;
+  try {
+    download = await fetchMarketplaceDownload(marketplaceModuleId, await contentAccessFor(ctx, instanceId));
+  } catch (err) {
+    const refusal = contentRefusal(err, detail.name);
+    if (refusal !== null) {
+      throw new ConvexError(refusal);
+    }
+    throw err;
+  }
   const manifest = await fetchMarketplaceArchiveManifest(download);
   const unapproved = unapprovedPermissions(parseManifestPermissions(manifest), approvedPermissions);
   const unapprovedLocalEndpoints = unapprovedLocalEndpointIds(manifest, approvedLocalEndpoints);
@@ -498,6 +500,13 @@ async function installFromMarketplace(
       unapprovedLocalEndpoints,
     };
   }
+  // After consent, so a streamer who backs out of the permission prompt has
+  // not acquired anything; before the engine, because a listing the account
+  // does not hold must not install, and the browser's Buy button is not a
+  // guard -- this is. A free listing is claimed here, which is also what
+  // counts the install.
+  await acquireListing(ctx, instanceId, marketplaceModuleId, detail.name);
+
   const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
 
   await ctx.runMutation(internal.transientEvents.emit, {
@@ -517,10 +526,6 @@ async function installFromMarketplace(
       source: "marketplace",
       marketplaceModuleId,
     });
-    // The marketplace handed out a download URL and never hears what became of
-    // it, so the install count is a ping from here. After the engine accepted
-    // the module, so a failed install is not counted as one.
-    await recordListingInstall(marketplaceModuleId);
     return { status: "installed", moduleKey };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

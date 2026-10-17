@@ -4,7 +4,7 @@ import { ListingArt } from "@/components/marketplace/listing-art";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { authorInitials, hasStats, type ListingBadge, listingStats } from "@/lib/listing-signals";
-import { formatPrice, listingTypeColor, listingTypeIcon, listingTypeMeta } from "@/lib/listing-type";
+import { listingTypeColor, listingTypeIcon, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
 import { cn } from "@/lib/utils";
 
 export interface ListingCardState {
@@ -12,7 +12,7 @@ export interface ListingCardState {
   isInstalled?: boolean;
   /** A newer version of an installed module is available. */
   updateAvailable?: boolean;
-  /** The account has bought this paid listing. */
+  /** The account holds this listing. */
   isOwned?: boolean;
 }
 
@@ -78,7 +78,7 @@ export function ListingCard({ listing, state, badge, size = "default", onClick, 
           {meta.label}
         </span>
         {badge && <BadgeRibbon badge={badge} />}
-        {state?.isOwned && !badge && (
+        {state?.isOwned && listing.pricing?.mode === "paid" && !badge && (
           <span className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
             <Check className="h-3 w-3" />
             Owned
@@ -234,21 +234,26 @@ function CardCta({
       </Button>
     );
   }
-  if (listing.price && !state?.isOwned) {
+  if (listing.pricing === null) {
+    // Nobody can install a listing that has no pricing. Its page says why.
+    return (
+      <Button variant="outline" className="mt-auto w-full font-semibold" onClick={press}>
+        Unavailable
+      </Button>
+    );
+  }
+  const paid = listing.pricing.mode === "paid";
+  if (paid && !state?.isOwned) {
     return (
       <Button className="mt-auto w-full font-semibold" onClick={press}>
-        Buy · {formatPrice(listing.price)}
+        Buy · {pricingLabel(listing.pricing)}
       </Button>
     );
   }
   return (
-    <Button
-      variant={state?.isOwned ? "outline" : "default"}
-      className="mt-auto w-full gap-2 font-semibold"
-      onClick={press}
-    >
+    <Button variant={paid ? "outline" : "default"} className="mt-auto w-full gap-2 font-semibold" onClick={press}>
       <Download className="h-4 w-4" />
-      {state?.isOwned ? "Install — owned" : listing.price ? "Install" : "Install — Free"}
+      {paid ? "Install — owned" : "Install — Free"}
     </Button>
   );
 }

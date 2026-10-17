@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import type { CatalogListing, ListingType } from "@convex/lib/marketplaceCatalog";
+import { type CatalogListing, LISTING_TYPES, type ListingType } from "@convex/lib/marketplaceCatalog";
 import { featuredInOrder } from "@convex/lib/marketplaceImages";
 import { useQuery } from "convex/react";
 import { Loader2, Moon, RefreshCw, Search, Sun } from "lucide-react";
@@ -69,7 +69,9 @@ export default function Marketplace() {
   const params = useMemo(() => new URLSearchParams(searchString), [searchString]);
 
   const selectedCategory = params.get("category") ?? ALL_CATEGORIES;
-  const selectedType = (params.get("type") as ListingType | null) ?? null;
+  // A type the storefront does not know, from a hand-edited or stale link,
+  // shows the whole catalog rather than a page built around a missing type.
+  const selectedType = LISTING_TYPES.find((type) => type === params.get("type")) ?? null;
   // What a section's "view all" opens: the whole catalog as one paged grid,
   // with no type or category narrowing it. In the URL so it survives a reload
   // and a back button, like every other thing the page is showing.

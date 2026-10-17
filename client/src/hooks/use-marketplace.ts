@@ -5,10 +5,12 @@ import type {
   CatalogCounts,
   CatalogListingDetail,
   CatalogPage,
+  ListingQuote,
   ListingType,
 } from "@convex/lib/marketplaceCatalog";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { actionErrorMessage } from "@/lib/action-error";
 
 // The marketplace catalog is served by a separate HTTP service through Convex
 // *actions*, not queries, so none of it is reactive. These hooks do the one
@@ -73,7 +75,13 @@ export function useMarketplaceSearch(
     (Fetched<MarketplaceSearchArgs, CatalogPage> & { instanceId: Id<"instances"> }) | null
   >(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<{ instanceId: Id<"instances">; message: string } | null>(null);
+  // Keyed by the search as well as the instance: a failure belongs to the
+  // request that failed, so changing the query or a filter asks again.
+  const [error, setError] = useState<{
+    instanceId: Id<"instances">;
+    args: MarketplaceSearchArgs;
+    message: string;
+  } | null>(null);
 
   // The args object is rebuilt on every render by every caller, so the effect
   // below keys off a value compared by content instead.
@@ -102,10 +110,7 @@ export function useMarketplaceSearch(
       });
       setFetched({ instanceId, args: stableArgs, result: page });
     } catch (err) {
-      setError({
-        instanceId,
-        message: err instanceof Error ? err.message : "Failed to load the marketplace.",
-      });
+      setError({ instanceId, args: stableArgs, message: actionErrorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -115,7 +120,8 @@ export function useMarketplaceSearch(
     fetched && instanceId && fetched.instanceId === instanceId && sameSearch(fetched.args, stableArgs)
       ? fetched.result
       : null;
-  const currentError = error && error.instanceId === instanceId ? error.message : null;
+  const currentError =
+    error && error.instanceId === instanceId && sameSearch(error.args, stableArgs) ? error.message : null;
 
   useEffect(() => {
     if (instanceId && current === null && !loading && !currentError) {
@@ -158,7 +164,7 @@ export function useMarketplaceListing(
     try {
       setFetched({ instanceId, listingId, result: await getListing({ instanceId, listingId }) });
     } catch (err) {
-      setError({ listingId, message: err instanceof Error ? err.message : "Failed to load this listing." });
+      setError({ listingId, message: actionErrorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -183,41 +189,55 @@ export function useMarketplaceListing(
 }
 
 export interface MarketplaceAuthorResult {
+  /** The profile and every listing fetched so far, newest first. */
   page: AuthorPage | null;
   notFound: boolean;
   loading: boolean;
   error: string | null;
+  /** More listings than have been fetched. */
+  hasMore: boolean;
+  loadingMore: boolean;
+  /** Why the last "show more" failed, if it did. */
+  loadMoreError: string | null;
+  /** Fetches the next page and appends it. */
+  loadMore: () => Promise<void>;
 }
 
-/** An author's page: their profile and every listing they published. */
+/** How many of an author's listings each request fetches. */
+const AUTHOR_PAGE_SIZE = 48;
+
+/**
+ * An author's page: their profile and their listings, a page at a time. The
+ * marketplace pages the listings itself, so an author with hundreds of them
+ * costs one page to open.
+ */
 export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: string | null): MarketplaceAuthorResult {
   const getAuthor = useAction(api.marketplaceCatalog.getAuthor);
-  const [fetched, setFetched] = useState<{
-    instanceId: Id<"instances">;
-    slug: string;
-    result: AuthorPage | null;
-  } | null>(null);
+  const [fetched, setFetched] = useState<{ key: string; result: AuthorPage | null } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<{ slug: string; message: string } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<{ key: string; message: string } | null>(null);
+  const [error, setError] = useState<{ key: string; message: string } | null>(null);
+  const key = instanceId && slug ? `${instanceId}:${slug}` : null;
 
-  const matches = fetched !== null && fetched.instanceId === instanceId && fetched.slug === slug;
-  const currentError = error && error.slug === slug ? error.message : null;
+  const current = fetched && fetched.key === key ? fetched : null;
+  const currentError = error && error.key === key ? error.message : null;
 
   useEffect(() => {
-    if (!instanceId || !slug || matches || loading || currentError) {
+    if (!instanceId || !slug || !key || current || loading || currentError) {
       return;
     }
     let cancelled = false;
     setLoading(true);
-    void getAuthor({ instanceId, slug })
+    void getAuthor({ instanceId, slug, limit: AUTHOR_PAGE_SIZE, offset: 0 })
       .then((result) => {
         if (!cancelled) {
-          setFetched({ instanceId, slug, result });
+          setFetched({ key, result });
         }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError({ slug, message: err instanceof Error ? err.message : "Failed to load this author." });
+          setError({ key, message: actionErrorMessage(err) });
         }
       })
       .finally(() => {
@@ -228,13 +248,98 @@ export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: s
     return () => {
       cancelled = true;
     };
-  }, [getAuthor, instanceId, slug, matches, loading, currentError]);
+  }, [getAuthor, instanceId, slug, key, current, loading, currentError]);
+
+  const page = current?.result ?? null;
+  const hasMore = page !== null && page.listings.length < page.total;
+
+  const loadMore = useCallback(async () => {
+    if (!instanceId || !slug || !key || !page || !hasMore || loadingMore) {
+      return;
+    }
+    setLoadingMore(true);
+    setMoreError(null);
+    try {
+      const next = await getAuthor({ instanceId, slug, limit: AUTHOR_PAGE_SIZE, offset: page.listings.length });
+      if (next) {
+        // Ids already shown are dropped, in case a publish shifted the pages.
+        const seen = new Set(page.listings.map((l) => l.id));
+        setFetched({
+          key,
+          result: { ...next, listings: [...page.listings, ...next.listings.filter((l) => !seen.has(l.id))] },
+        });
+      }
+    } catch (err) {
+      // The listings already shown stay; only the button reports it.
+      setMoreError({ key, message: actionErrorMessage(err) });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [getAuthor, instanceId, slug, key, page, hasMore, loadingMore]);
 
   return {
-    page: matches ? fetched.result : null,
-    notFound: matches && fetched.result === null,
+    page,
+    notFound: current !== null && current.result === null,
     loading,
     error: currentError,
+    hasMore,
+    loadingMore,
+    loadMoreError: moreError && moreError.key === key ? moreError.message : null,
+    loadMore,
+  };
+}
+
+export interface MarketplaceQuote {
+  quote: ListingQuote | null;
+  /** True until the first answer for this listing arrives. */
+  loading: boolean;
+  /** Set when the quote could not be read; the button then refuses to guess. */
+  error: string | null;
+  refetch: () => Promise<void>;
+}
+
+/**
+ * What this account must do to hold one listing, as the marketplace decides
+ * it: owned, free, an upgrade price, the full price, or unavailable. The
+ * listing page's button reads nothing else, because only the marketplace
+ * knows what the account holds.
+ */
+export function useMarketplaceQuote(instanceId: Id<"instances"> | null, listingId: string | null): MarketplaceQuote {
+  const getQuote = useAction(api.marketplaceCatalog.quote);
+  const [fetched, setFetched] = useState<{ key: string; quote: ListingQuote | null } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<{ key: string; message: string } | null>(null);
+  const key = instanceId && listingId ? `${instanceId}:${listingId}` : null;
+
+  const refetch = useCallback(async () => {
+    if (!instanceId || !listingId || !key) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      setFetched({ key, quote: await getQuote({ instanceId, listingId }) });
+    } catch (err) {
+      setError({ key, message: actionErrorMessage(err) });
+    } finally {
+      setLoading(false);
+    }
+  }, [getQuote, instanceId, listingId, key]);
+
+  const current = fetched && fetched.key === key ? fetched : null;
+  const currentError = error && error.key === key ? error.message : null;
+
+  useEffect(() => {
+    if (key && current === null && !loading && !currentError) {
+      void refetch();
+    }
+  }, [key, current, loading, currentError, refetch]);
+
+  return {
+    quote: current?.quote ?? null,
+    loading: current === null && currentError === null,
+    error: currentError,
+    refetch,
   };
 }
 
@@ -275,7 +380,7 @@ export function useMarketplaceEntitlements(instanceId: Id<"instances"> | null): 
     } catch (err) {
       setError({
         instanceId,
-        message: err instanceof Error ? err.message : "Failed to read your purchases.",
+        message: actionErrorMessage(err),
       });
     } finally {
       setLoading(false);

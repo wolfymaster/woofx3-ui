@@ -30,6 +30,8 @@ export function setupStepIndex(step: SetupStepId): number {
 export interface SetupProgress {
   platformsChosenAt: number | null;
   twitchUsername: string | null;
+  /** False only on a preview deployment whose chosen platforms leave Twitch out. */
+  twitchRequired: boolean;
   importChosenAt: number | null;
   interestsChosenAt: number | null;
   completedAt: number | null;
@@ -45,7 +47,8 @@ export function firstIncompleteStep(progress: SetupProgress): SetupStepId {
   if (progress.platformsChosenAt === null) {
     return "platforms";
   }
-  if (progress.twitchUsername === null) {
+  // Where Twitch is optional its page can be skipped, and leaves no record.
+  if (progress.twitchRequired && progress.twitchUsername === null) {
     return "twitch";
   }
   // Answering the interests question passes the import question too, so a

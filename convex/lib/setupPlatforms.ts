@@ -115,13 +115,34 @@ export function curatedSetupPlatformError(entry: CuratedSetupPlatform): string |
   return null;
 }
 
+/** The Twitch module's marketplace id: the platform setup connects an account for. */
+export const TWITCH_SETUP_MODULE_ID = "woofx3_twitch";
+
+/**
+ * The curated list as this deployment enforces it. A preview deployment requires no
+ * platform, so automated tests can finish setup without a Twitch account; what is
+ * selected by default is unchanged. Production gets the list as stored.
+ */
+export function curatedForDeployment<T extends { required: boolean }>(curated: readonly T[], preview: boolean): T[] {
+  return preview ? curated.map((entry) => ({ ...entry, required: false })) : [...curated];
+}
+
+/**
+ * Whether setup needs the instance's Twitch account connected before it can finish.
+ * Always, except on a preview deployment where Twitch was not among the chosen
+ * platforms.
+ */
+export function setupNeedsTwitch(chosenModuleIds: readonly string[], preview: boolean): boolean {
+  return !preview || chosenModuleIds.includes(TWITCH_SETUP_MODULE_ID);
+}
+
 /**
  * The list offered at launch. Twitch is required because the app depends on
  * it. OBS is not preselected because alternatives to it are planned.
  */
 export const DEFAULT_SETUP_PLATFORMS: readonly CuratedSetupPlatform[] = [
   {
-    marketplaceModuleId: "woofx3_twitch",
+    marketplaceModuleId: TWITCH_SETUP_MODULE_ID,
     required: true,
     defaultSelected: true,
     sortOrder: 10,
