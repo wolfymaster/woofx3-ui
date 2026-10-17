@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { LISTING_TYPES } from "@convex/lib/marketplaceCatalog";
-import { formatPrice, listingTypeColor, listingTypeHue, listingTypeMeta } from "./listing-type";
+import { formatAmount, listingTypeColor, listingTypeHue, listingTypeMeta, pricingLabel } from "./listing-type";
 
 describe("listing type metadata", () => {
   test("every type has metadata, so no card can render blank", () => {
@@ -22,28 +22,40 @@ describe("listing type metadata", () => {
   });
 });
 
-describe("formatPrice", () => {
-  test("no price is Free, which is every listing from before commerce", () => {
-    expect(formatPrice(undefined)).toBe("Free");
+describe("pricingLabel", () => {
+  test("a free listing is Free", () => {
+    expect(pricingLabel({ mode: "free" })).toBe("Free");
   });
 
+  test("a listing with no pricing is unavailable, not free", () => {
+    expect(pricingLabel(null)).toBe("Unavailable");
+  });
+
+  test("a paid listing shows its amount", () => {
+    expect(pricingLabel({ mode: "paid", amountCents: 499, currency: "usd", upgrade: { mode: "full" } })).toContain(
+      "4.99"
+    );
+  });
+});
+
+describe("formatAmount", () => {
   test("renders cents as a currency amount", () => {
-    expect(formatPrice({ amountCents: 499, currency: "usd" })).toContain("4.99");
-    expect(formatPrice({ amountCents: 1000, currency: "usd" })).toContain("10.00");
+    expect(formatAmount(499, "usd")).toContain("4.99");
+    expect(formatAmount(1000, "usd")).toContain("10.00");
   });
 
   test("a well-formed but unfamiliar currency still formats", () => {
     // Intl accepts any three-letter code, so a currency this runtime has no
     // symbol for is rendered with the code rather than refused.
-    expect(formatPrice({ amountCents: 250, currency: "zzz" })).toContain("2.50");
-    expect(formatPrice({ amountCents: 250, currency: "zzz" })).toContain("ZZZ");
+    expect(formatAmount(250, "zzz")).toContain("2.50");
+    expect(formatAmount(250, "zzz")).toContain("ZZZ");
   });
 
   test("a malformed currency code falls back instead of blanking the card", () => {
     // Intl throws on these, and the catalog is a separate service -- a price
     // tag is not worth taking the whole card down for.
     for (const currency of ["", "us", "dollars"]) {
-      expect(formatPrice({ amountCents: 250, currency })).toBe(`2.50 ${currency.toUpperCase()}`);
+      expect(formatAmount(250, currency)).toBe(`2.50 ${currency.toUpperCase()}`);
     }
   });
 });
