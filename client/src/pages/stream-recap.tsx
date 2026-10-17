@@ -11,7 +11,7 @@ import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { ViewerChart } from "@/components/stream-recap/viewer-chart";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import { useRecapClips } from "@/hooks/use-recap-clips";

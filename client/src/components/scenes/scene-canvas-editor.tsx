@@ -24,9 +24,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";

@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
 import { useEffect } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
 

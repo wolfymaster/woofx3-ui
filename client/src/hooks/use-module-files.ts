@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { ModuleFileContent, ModuleFileList } from "@woofx3/api/api";
 import { useAction } from "convex/react";
 import { useCallback, useRef, useState } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { actionErrorMessage } from "@/lib/action-error";
 import type { CapabilitySupport } from "@/lib/engine-capabilities";
 

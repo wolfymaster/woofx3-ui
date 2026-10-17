@@ -4,8 +4,8 @@ import { LocalDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
 import { useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { type CompositionEditorHandle, useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import {
   ALERT_COMPOSITION_CAPABILITY,

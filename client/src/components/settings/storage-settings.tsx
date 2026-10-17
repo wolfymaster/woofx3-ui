@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useEngineInfoRequest, useSetOverlayPublicUrlRequest } from "@/engine/hooks/use-engine-status";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
@@ -40,8 +41,8 @@ export function StorageSettings() {
   const { instance } = useInstance();
   const getConfig = useAction(api.storage.getConfig);
   const setConfig = useAction(api.storage.setConfig);
-  const getEngineInfo = useAction(api.engineInfo.getEngineInfo);
-  const setOverlayPublicUrl = useAction(api.engineInfo.setOverlayPublicUrl);
+  const getEngineInfo = useEngineInfoRequest();
+  const setOverlayPublicUrl = useSetOverlayPublicUrlRequest();
   const { toast } = useToast();
   // Both settings change the engine for everyone on the instance, so the
   // server accepts them from an owner or admin only. Undefined while loading,
@@ -72,7 +73,7 @@ export function StorageSettings() {
     try {
       const [result, engineInfo] = await Promise.all([
         getConfig({ instanceId: instance._id }),
-        getEngineInfo({ instanceId: instance._id }),
+        getEngineInfo(instance._id),
       ]);
       if (result) {
         setConfigState(result as unknown as StorageConfig);
@@ -102,7 +103,7 @@ export function StorageSettings() {
     try {
       await Promise.all([
         setConfig({ instanceId: instance._id, config: config as unknown as Record<string, unknown> }),
-        setOverlayPublicUrl({ instanceId: instance._id, value: trimmedOverlayUrl }),
+        setOverlayPublicUrl(instance._id, trimmedOverlayUrl),
       ]);
       setOverlayPublicUrlState(trimmedOverlayUrl);
       toast({ title: "Settings saved" });

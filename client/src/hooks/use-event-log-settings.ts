@@ -3,7 +3,7 @@ import { useStore } from "@nanostores/react";
 import type { EventLogSettings } from "@woofx3/api";
 import { atom } from "nanostores";
 import { useCallback, useEffect, useState } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { withEventTypeEnabled } from "@/lib/activity-feed";
 import { type CapabilitySupport, EVENT_LOG_CAPABILITIES } from "@/lib/engine-capabilities";
 import { transport } from "@/lib/transport";

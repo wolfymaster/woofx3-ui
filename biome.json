@@ -103,8 +103,6 @@
         "client/src/components/dashboard/widgets/ad-breaks.tsx",
         "client/src/components/dashboard/widgets/stream-stats.tsx",
         "client/src/components/dashboard/widgets/workflow-runs.tsx",
-        "client/src/hooks/use-engine-capabilities.ts",
-        "client/src/hooks/use-engine-health.ts",
         "client/src/hooks/use-engine-upgrading.ts",
         "client/src/hooks/use-event-log-settings.ts",
         "client/src/hooks/use-event-log.ts",

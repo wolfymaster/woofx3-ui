@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { PROFILES } from "@woofx3/scene/model";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertEditorFrame, useAlertEditorView } from "@/components/alert-editor/alert-layout-editor";
@@ -15,6 +15,7 @@ import {
 } from "@/components/scenes/draft-live-controls";
 import { hasUnsavedEdits, sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
 import { Button } from "@/components/ui/button";
+import { useEngineInfoRequest } from "@/engine/hooks/use-engine-status";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
@@ -45,11 +46,11 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
 
   const me = useQuery(api.users.getMe);
   const myName = me === undefined ? undefined : (me?.name ?? me?.email ?? "");
-  const getEngineInfo = useAction(api.engineInfo.getEngineInfo);
+  const getEngineInfo = useEngineInfoRequest();
   // An alert has no preview page to take sceneManager's origin from, so the socket is
   // opened at the engine's overlay URL, which is sceneManager's public URL.
   const publicUrl = useCallback(
-    async () => (await getEngineInfo({ instanceId }))?.overlayPublicUrl ?? null,
+    async () => (await getEngineInfo(instanceId))?.overlayPublicUrl ?? null,
     [instanceId, getEngineInfo]
   );
 
