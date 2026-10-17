@@ -1,6 +1,6 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { TaskDefinition } from "@woofx3/api/workflow-definition";
+import type { WorkflowRecord } from "@/engine/types";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import type { TriggerConfigValues } from "@/lib/workflow-presets";
 
@@ -82,7 +82,7 @@ type EngineTask = TaskDefinition & { function?: string; $ref?: string; disabled?
 
 const RESULT_REFERENCE = /^\$\{([A-Za-z0-9_-]+)\.result\}$/;
 
-export function projectWorkflow(row: Doc<"workflows">): ProjectionResult {
+export function projectWorkflow(row: WorkflowRecord): ProjectionResult {
   const definition = unescapeDollarKeys(row.definition) as WorkflowDefinition | undefined;
   const trigger = definition?.trigger;
   if (!definition || !trigger) {

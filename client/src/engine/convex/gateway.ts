@@ -9,6 +9,7 @@ import { convexRequestsGateway } from "./requests";
 import { convexResourcesGateway } from "./resources";
 import { convexScenesGateway } from "./scenes";
 import { convexStatusGateway } from "./status";
+import { convexWorkflowsGateway } from "./workflows";
 
 /**
  * The engine reached through Convex: reads and calls go to Convex functions
@@ -26,5 +27,6 @@ export const convexEngineGateway: EngineGateway = {
   moduleResources: convexModuleResourcesGateway,
   modules: convexModulesGateway,
   scenes: convexScenesGateway,
+  workflows: convexWorkflowsGateway,
   requests: convexRequestsGateway,
 };

@@ -1,6 +1,6 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { resourceKindMatches } from "@convex/lib/resourceKinds";
 import type { ActionStep } from "@woofx3/api";
+import type { WorkflowRecord } from "@/engine/types";
 import { type ProjectedAction, projectWorkflow } from "@/lib/trigger-projection";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import { presetToActionStep } from "@/lib/workflow-presets-json";
@@ -86,7 +86,7 @@ export function aimsAtResource(action: ProjectedAction, actions: ResourceAction[
  * editable here either way, and the workflow builder is where it is dealt with.
  */
 export function eventsChangingResource(
-  workflows: Doc<"workflows">[],
+  workflows: WorkflowRecord[],
   actions: ResourceAction[],
   canonicalId: string
 ): string[] {
