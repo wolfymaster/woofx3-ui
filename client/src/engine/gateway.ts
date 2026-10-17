@@ -60,6 +60,8 @@ import type {
   WebhookEventId,
   WebhookEventSummary,
   WidgetThemes,
+  Workflow,
+  WorkflowCatalog,
 } from "@/engine/types";
 
 /**
@@ -82,6 +84,7 @@ export interface EngineGateway {
   readonly moduleResources: ModuleResourcesGateway;
   readonly modules: ModulesGateway;
   readonly scenes: ScenesGateway;
+  readonly workflows: WorkflowsGateway;
   readonly requests: RequestsGateway;
 }
 
@@ -346,6 +349,25 @@ export interface ScenesGateway {
    * reach sceneManager. Needs `scenes.editorSync`.
    */
   useEditorSessionRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<SceneEditorGrant | null>;
+}
+
+/**
+ * Workflows and the catalog the builder composes them from. Reads come from
+ * the mirror the engine's webhooks keep in Convex.
+ */
+export interface WorkflowsGateway {
+  /** Every workflow. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
+  useWorkflows(instanceId: InstanceId | null): Live<Workflow[]>;
+  /** Whether the instance has any workflow; null while the caller's membership cannot be confirmed. */
+  useHasAny(instanceId: InstanceId): Live<boolean | null>;
+  /**
+   * One workflow by the engine's id; null until its webhook arrives, or when
+   * the caller cannot see the instance. Skipped (always loading) for a null id
+   * or engine id.
+   */
+  useWorkflow(instanceId: InstanceId | null, engineWorkflowId: string | null): Live<Workflow | null>;
+  /** Null when the caller cannot see the instance; skipped (always loading) for a null id. */
+  useCatalog(instanceId: InstanceId | null): Live<WorkflowCatalog | null>;
 }
 
 /**
