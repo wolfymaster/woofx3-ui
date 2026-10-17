@@ -530,6 +530,7 @@ export const reconcileActions = internalMutation({
         configFields: ui.configFields,
         returns: ui.returns,
         projectionKey: snap.projectionKey,
+        taxonomy: snap.taxonomy,
         handlerType,
         functionCall: snap.functionCall?.trim() || undefined,
         moduleId,

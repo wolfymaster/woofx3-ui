@@ -41,6 +41,10 @@ Curated sets of workflows and chat commands (raid welcome, follower thanks, sub 
 - A full-width screen with a back link, wrapping **`BasicWorkflowEditor`**: a step-based wizard driven by presets (`client/src/lib/workflow-presets.ts`) and `useWorkflowCatalog` for trigger/action definitions.
 - On save it navigates to the new workflow's editor.
 
+## Action picker
+
+`components/workflows/action-picker-dialog.tsx` is where an action is chosen, from the workflow builder and from an alert's trigger card. `lib/action-menu.ts` decides where each action is listed, from its first `taxonomy` entry: the first segment is the section in the left rail, the second the heading inside it. Sections are by purpose, not by the module that ships the action: the bundled actions file as `workflow` (Function, Print), `chat`, `overlay.alerts` / `overlay.scenes` (**Overlays**), and `tools.counter` / `tools.timer` / `tools.queue` (**Stream tools › Counters**, etc.); a platform integration's `platform.obs` lists under **Platforms › OBS**. **Workflow** leads, then sections alphabetically. An older engine's `system` family is labelled **Built-in** and also leads. An action with no taxonomy, or a malformed first entry, is listed under its module as a section of its own, so an engine that sends no action taxonomy shows one section per module. The step tiles on alert triggers and command steps, and the basic workflow wizard, use the same groups and headings (`actionGroupHeading`). Search matches name, then description, then the section, heading or module, across every section; the rail counts each section's matches. The manifest side is documented in the engine's `docs/barkloader/modules.md` (Taxonomy).
+
 ## Editor (`/stream/workflows/:id`)
 
 - A header bar (back, click-to-rename title, enabled badge, **Save**, and a kebab with *View JSON* and *Delete*) above **`StepListEditor`**, which reads the workflow id from the route itself.
