@@ -1,4 +1,5 @@
 import type { EngineGateway } from "@/engine/gateway";
+import { convexEventLogGateway } from "./event-log";
 import { convexResourcesGateway } from "./resources";
 import { convexStatusGateway } from "./status";
 
@@ -11,4 +12,5 @@ import { convexStatusGateway } from "./status";
 export const convexEngineGateway: EngineGateway = {
   status: convexStatusGateway,
   resources: convexResourcesGateway,
+  eventLog: convexEventLogGateway,
 };

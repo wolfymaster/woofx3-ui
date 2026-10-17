@@ -4,17 +4,25 @@ import type {
   EngineInfo,
   EngineSyncRequest,
   EngineSyncState,
+  EventLogPage,
+  EventLogQuery,
+  EventLogSelection,
+  EventLogSettings,
   HostedStorageUsage,
   InstanceId,
   InstanceLiveState,
   Live,
   ObsStatus,
+  Paginated,
   Resource,
   ResourceChanges,
   ResourcePage,
   ResourceQuery,
+  StreamEventFrame,
   UploadGrant,
   UploadRequest,
+  WebhookEventId,
+  WebhookEventSummary,
 } from "@/engine/types";
 
 /**
@@ -30,6 +38,7 @@ import type {
 export interface EngineGateway {
   readonly status: StatusGateway;
   readonly resources: ResourcesGateway;
+  readonly eventLog: EventLogGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -74,6 +83,39 @@ export interface ResourcesGateway {
   /** Renames (`name`) or moves (`parentId`) a resource. */
   useUpdateRequest(): (instanceId: InstanceId, resourceId: string, changes: ResourceChanges) => Promise<Resource>;
   useRemoveRequest(): (instanceId: InstanceId, resourceId: string) => Promise<{ deleted: boolean }>;
+}
+
+/**
+ * Events the engine received: the callbacks Convex recorded (the webhook log,
+ * kept for debugging and retriggering), and the engine's own event log with
+ * its live push and type selection.
+ */
+export interface EventLogGateway {
+  /** Newest first, optionally of one type. Skipped (always loading) for a null id. */
+  useWebhookEvents(
+    instanceId: InstanceId | null,
+    eventType: string | null,
+    initialNumItems: number
+  ): Paginated<WebhookEventSummary>;
+  /** The raw payload JSON; null when the entry is gone or not the caller's. */
+  useWebhookPayload(logId: WebhookEventId): Live<string | null>;
+  /** Fires a logged event's type and payload at the engine again. */
+  useRetriggerRequest(): (
+    instanceId: InstanceId,
+    logId: WebhookEventId
+  ) => Promise<{ success: boolean; message: string }>;
+  /** Subscribes to pushed events of `types` (null: every type the engine pushes); returns the unsubscribe. */
+  useStreamEventsSubscription(): (
+    instanceId: string,
+    types: readonly string[] | null,
+    onFrame: (frame: StreamEventFrame) => void
+  ) => () => void;
+  /** A page of the engine's event log. Needs `events.log`. */
+  useEventsRequest(): (instanceId: string, query?: EventLogQuery) => Promise<EventLogPage>;
+  /** Which event types the engine logs and pushes, and which it offers. Needs `events.log`. */
+  useSettingsRequest(): (instanceId: string) => Promise<EventLogSettings>;
+  /** Replaces the engine's selection and resolves with the settings it results in. */
+  useSetSelectionRequest(): (instanceId: string, selection: EventLogSelection) => Promise<EventLogSettings>;
 }
 
 export interface OptimisticInstance {

@@ -101,7 +101,7 @@ built by `mergeActivity` in `client/src/lib/activity-feed.ts`:
   event types (CloudEvent `type`), which decides what it logs and pushes, and
   every Events widget on that engine shows it. The widget's filter reads it with
   `getEventLogSettings` and writes it with `setEventLogSelection`
-  (`hooks/use-event-log-settings.ts`, shared by every widget on the page and read
+  (`engine/hooks/use-event-log-settings.ts`, shared by every widget on the page and read
   again on reconnect and whenever the filter opens). The checklist lists the
   engine's `offered` types grouped by the module of the trigger that fires each
   (`eventTypeGroups`; a type no installed trigger claims shows as its raw type),
@@ -117,7 +117,7 @@ built by `mergeActivity` in `client/src/lib/activity-feed.ts`:
   (`listEvents({ types: enabled })` on the transport), read on mount, whenever
   `enabled` changes, and again on every reconnect because the push is not
   gapless; pushed events of the enabled types go on top, deduplicated by event
-  id (`hooks/use-event-log.ts`). Alerts come from `engineAlerts.listForInstance`.
+  id (`engine/hooks/use-event-log.ts`). Alerts come from `engineAlerts.listForInstance`.
 - **Older engines.** An engine without the `events.log` capability has no
   selection and no log. The widget shows a "Live only" badge, disables the
   filter with a tooltip to update the engine, and shows alerts plus whatever the
