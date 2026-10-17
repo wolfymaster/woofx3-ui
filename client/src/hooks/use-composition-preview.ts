@@ -16,7 +16,7 @@ import {
 } from "@woofx3/scene/runtime";
 import { useAction } from "convex/react";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import {
   createPreviewUrlCache,

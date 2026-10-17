@@ -1,9 +1,8 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
-import { useAction } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useEngineGateway } from "@/engine/context";
 import {
   type CapabilitySupport,
   capabilitySupport,
@@ -88,7 +87,7 @@ export interface EngineCapabilities {
  * turning the answer into a gate.
  */
 export function useEngineCapabilities(instanceId: Id<"instances"> | undefined): EngineCapabilities {
-  const getCapabilities = useAction(api.engineCapabilities.get);
+  const getCapabilities = useEngineGateway().status.useCapabilitiesRequest();
   const key = instanceId ?? "";
   const state = useSyncExternalStore(subscribe, () => (key ? (entries.get(key) ?? LOADING) : LOADING));
   const cached = key !== "" && entries.has(key);
@@ -97,7 +96,7 @@ export function useEngineCapabilities(instanceId: Id<"instances"> | undefined): 
     if (!instanceId) {
       throw new Error("useEngineCapabilities: fetch without an instance");
     }
-    return getCapabilities({ instanceId });
+    return getCapabilities(instanceId);
   }, [instanceId, getCapabilities]);
 
   useEffect(() => {

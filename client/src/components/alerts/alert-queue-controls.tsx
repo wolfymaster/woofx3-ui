@@ -4,7 +4,7 @@ import { useAction } from "convex/react";
 import { ListX, Loader2, SkipForward } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import { clearResultToast, skipResultToast } from "@/lib/alert-queue";
 import { ALERT_QUEUE_CONTROL_CAPABILITIES, capabilitySupport } from "@/lib/engine-capabilities";
