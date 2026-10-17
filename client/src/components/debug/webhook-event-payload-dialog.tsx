@@ -1,11 +1,10 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useQuery } from "convex/react";
 import { Copy } from "lucide-react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useWebhookEventPayload } from "@/engine/hooks/use-webhook-event-log";
 import { useToast } from "@/hooks/use-toast";
 
 interface WebhookEventPayloadDialogProps {
@@ -25,7 +24,7 @@ function formatPayload(payload: string): string {
 // on open), so a closed dialog neither subscribes to the payload nor parses it.
 function PayloadBody({ logId }: { logId: Id<"engineEventLog"> }) {
   const { toast } = useToast();
-  const payload = useQuery(api.engineEventLog.getPayload, { logId });
+  const payload = useWebhookEventPayload(logId);
   const formatted = useMemo(() => (typeof payload === "string" ? formatPayload(payload) : null), [payload]);
 
   if (payload === undefined) {

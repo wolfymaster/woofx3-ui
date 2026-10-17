@@ -1,8 +1,8 @@
 import { useStore } from "@nanostores/react";
-import type { StreamEventFrame } from "@woofx3/api";
 import { useEffect, useMemo, useState } from "react";
+import { useEngineGateway } from "@/engine/context";
+import type { StreamEventFrame } from "@/engine/types";
 import type { ActivityEvent } from "@/lib/activity-feed";
-import { transport } from "@/lib/transport";
 import { $engineConnected } from "@/lib/transport/engine-connection";
 
 /** One page: the engine keeps a few days of detail, and the feed shows the latest of it. */
@@ -40,6 +40,9 @@ export function useEventLog(
   instanceId: string | undefined,
   types: readonly string[] | null | undefined
 ): { events: ActivityEvent[]; status: EventLogStatus } {
+  const { eventLog } = useEngineGateway();
+  const subscribeStreamEvents = eventLog.useStreamEventsSubscription();
+  const listEvents = eventLog.useEventsRequest();
   const connected = useStore($engineConnected);
   const [history, setHistory] = useState<ActivityEvent[]>([]);
   const [live, setLive] = useState<ActivityEvent[]>([]);
@@ -59,10 +62,10 @@ export function useEventLog(
       return;
     }
     const wanted = typesKey === null ? null : typesKey.split(",").filter(Boolean);
-    return transport.subscribeStreamEvents(instanceId, wanted, (frame) => {
+    return subscribeStreamEvents(instanceId, wanted, (frame) => {
       setLive((previous) => [withId(frame), ...previous].slice(0, LIVE_LIMIT));
     });
-  }, [instanceId, typesKey]);
+  }, [instanceId, typesKey, subscribeStreamEvents]);
 
   useEffect(() => {
     if (!instanceId || !connected || typeof typesKey !== "string") {
@@ -75,8 +78,7 @@ export function useEventLog(
       return;
     }
     let cancelled = false;
-    transport
-      .listEvents(instanceId, { types: wanted, limit: HISTORY_LIMIT })
+    listEvents(instanceId, { types: wanted, limit: HISTORY_LIMIT })
       .then((page) => {
         if (!cancelled) {
           setHistory(page.events.map(withId));
@@ -92,7 +94,7 @@ export function useEventLog(
     return () => {
       cancelled = true;
     };
-  }, [instanceId, connected, typesKey]);
+  }, [instanceId, connected, typesKey, listEvents]);
 
   const events = useMemo(() => [...live, ...history], [live, history]);
   const status = typesKey === null ? "unsupported" : typesKey === undefined ? "loading" : historyStatus;

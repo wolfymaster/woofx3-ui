@@ -1,4 +1,6 @@
+import type { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { FunctionReturnType } from "convex/server";
 
 export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
@@ -7,7 +9,15 @@ export type {
   PaginatedResourcesDto as ResourcePage,
   ResourceDto as Resource,
 } from "@convex/resources";
-export type { EngineInfo, UploadGrant } from "@woofx3/api";
+export type {
+  EngineInfo,
+  EventLogPage,
+  EventLogQuery,
+  EventLogSelection,
+  EventLogSettings,
+  StreamEventFrame,
+  UploadGrant,
+} from "@woofx3/api";
 
 /** The Convex `_id` of the instance record, which is the instance's only identity. */
 export type InstanceId = Id<"instances">;
@@ -29,6 +39,17 @@ export interface Fetched<T> {
   /** The failed request's message; null while loading and after a success. */
   error: string | null;
   refetch: () => void;
+}
+
+/**
+ * A paged subscribed read, shaped like Convex's `usePaginatedQuery`: `results`
+ * grows as `loadMore` brings in pages, and every loaded page stays live.
+ */
+export interface Paginated<T> {
+  results: T[];
+  status: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
+  isLoading: boolean;
+  loadMore: (numItems: number) => void;
 }
 
 /** Which instance engine hooks read, owned by `EngineGatewayProvider`. */
@@ -84,3 +105,9 @@ export interface ResourceChanges {
   name?: string;
   parentId?: string | null;
 }
+
+/** A callback Convex recorded from the engine, kept for debugging. */
+export type WebhookEventId = Id<"engineEventLog">;
+
+/** One webhook log entry without its payload, which is read on its own. */
+export type WebhookEventSummary = FunctionReturnType<typeof api.engineEventLog.list>["page"][number];
