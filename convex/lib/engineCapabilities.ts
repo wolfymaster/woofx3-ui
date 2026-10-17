@@ -27,6 +27,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "events.log",
   "modules.files",
   "modules.localEndpoints",
+  "modules.marketplaceInstall",
   "modules.oauth",
   "obs.control",
   "obs.status",

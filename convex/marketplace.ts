@@ -11,7 +11,16 @@ import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { unapprovedLocalEndpointIds } from "./lib/localEndpoints";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
 import { marketplaceAuthed } from "./lib/marketplaceApi";
-import { type ContentGrant, grantQuery, requireEntitlement } from "./lib/marketplaceEntitlement";
+import {
+  catalogListingName,
+  type EngineCredentials,
+  installModuleThroughEngine,
+  type MarketplaceInstallResult,
+  marketplaceEngineFor,
+  marketplaceEngineSession,
+  moduleInstallProgress,
+} from "./lib/marketplaceEngineInstall";
+import { buyerTokenFor, type ContentGrant, grantQuery, requireEntitlement } from "./lib/marketplaceEntitlement";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
 import { recordListingInstall } from "./lib/marketplaceInstalls";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
@@ -427,33 +436,16 @@ export const getModule = action({
   },
 });
 
-export type MarketplaceInstallResult =
-  | { status: "installed"; moduleKey: string }
-  | {
-      /**
-       * The archive declares permissions or local endpoints nobody approved,
-       * e.g. because the listing was republished after the streamer reviewed
-       * it. Nothing was sent to the engine.
-       */
-      status: "needs_approval";
-      name: string;
-      version: string;
-      unapproved: string[];
-      /** Ids of `local[]` endpoints outside the approval. */
-      unapprovedLocalEndpoints: string[];
-    };
-
-interface EngineCredentials {
-  url: string;
-  clientId: string;
-  clientSecret: string;
-}
+export type { MarketplaceInstallResult };
 
 /**
  * Installs the marketplace's current build of a module on an engine, provided
  * every permission its archive declares is in `approvedPermissions` and every
  * local endpoint in `approvedLocalEndpoints`. Callers decide who may install;
  * this only checks consent. Engine and marketplace failures throw.
+ *
+ * Runs on the engine when `marketplaceEngineFor` routes it there, and
+ * otherwise downloads and checks the archive here and hands the engine its URL.
  */
 async function installFromMarketplace(
   ctx: ActionCtx,
@@ -471,6 +463,31 @@ async function installFromMarketplace(
     approvedLocalEndpoints: readonly string[];
   }
 ): Promise<MarketplaceInstallResult> {
+  const viaEngine = await marketplaceEngineFor(ctx, instanceId);
+  if (viaEngine) {
+    // `acquire` records the install on the marketplace, so no install ping is sent from here.
+    return await installModuleThroughEngine(
+      {
+        engine: () => marketplaceEngineSession(viaEngine),
+        buyerToken: () => buyerTokenFor(ctx, instanceId),
+        listingName: () => catalogListingName(marketplaceModuleId),
+        emitProgress: async (progress, since) => {
+          await ctx.runMutation(internal.transientEvents.emitUnlessNewer, {
+            instanceId,
+            correlationKey: progress.moduleKey,
+            type: "module.install",
+            status: "progress",
+            message: progress.message,
+            data: progress.data,
+            since,
+          });
+        },
+        now: Date.now,
+      },
+      { listingId: marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }
+    );
+  }
+
   const access = await marketplaceAccessForInstance(ctx, instanceId);
   const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`, access);
   const rawModule =
@@ -500,13 +517,14 @@ async function installFromMarketplace(
   }
   const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
 
+  const progress = moduleInstallProgress(moduleKey, detail.name, detail.version);
   await ctx.runMutation(internal.transientEvents.emit, {
     instanceId,
     correlationKey: moduleKey,
     type: "module.install",
     status: "progress",
-    message: `Installing ${detail.name}@${detail.version} from marketplace...`,
-    data: { moduleName: detail.name, moduleVersion: detail.version, source: "marketplace" },
+    message: progress.message,
+    data: progress.data,
   });
 
   try {

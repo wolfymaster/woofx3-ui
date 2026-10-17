@@ -119,9 +119,14 @@ export async function requireEntitlement(
   }
   const grant = grantFromEntitlement(answer, buyerRef);
   if (!grant) {
-    throw new ConvexError(`${listingName} has not been purchased on this account.`);
+    throw new ConvexError(notPurchasedMessage(listingName));
   }
   return grant;
+}
+
+/** What a buyer is told when installing or browsing a paid listing they do not hold. */
+export function notPurchasedMessage(listingName: string): string {
+  return `${listingName} has not been purchased on this account.`;
 }
 
 /**

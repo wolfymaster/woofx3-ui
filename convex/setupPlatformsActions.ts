@@ -5,7 +5,14 @@ import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
-import { requireEntitlement } from "./lib/marketplaceEntitlement";
+import {
+  inspectThroughEngine,
+  marketplaceEngineFor,
+  marketplaceEngineSession,
+  type SetupReview,
+  setupReviewFromInspection,
+} from "./lib/marketplaceEngineInstall";
+import { buyerTokenFor, requireEntitlement } from "./lib/marketplaceEntitlement";
 import { parseManifestPermissions } from "./lib/modulePermissions";
 import { NO_SETUP_PLATFORMS_MESSAGE, type ResolvedSetupPlatforms, resolveSetupPlatforms } from "./lib/setupPlatforms";
 import { logger } from "./logger";
@@ -21,6 +28,9 @@ import {
  * and local endpoints each one's current marketplace build declares. Choosing
  * a platform approves exactly those, and the later install refuses a build
  * that asks for more.
+ *
+ * The builds are read on the engine when `marketplaceEngineFor` routes it
+ * there, and otherwise from archives fetched here.
  *
  * Throws when the curated list is empty or the marketplace listing cannot be
  * read: setup cannot offer anything without them, and an empty list would look
@@ -41,34 +51,43 @@ export const listForSetup = action({
       throw new Error(NO_SETUP_PLATFORMS_MESSAGE);
     }
     const listedIds = new Set(listing.map((entry) => entry.id));
+    const viaEngine = await marketplaceEngineFor(ctx, instanceId);
 
-    const manifests = await Promise.all(
+    const reviews = await Promise.all(
       curated
         .filter((entry) => listedIds.has(entry.marketplaceModuleId))
-        .map(async (entry): Promise<[string, unknown]> => {
+        .map(async (entry): Promise<[string, SetupReview | null]> => {
+          const id = entry.marketplaceModuleId;
           try {
-            const grant = await requireEntitlement(
-              ctx,
-              instanceId,
-              entry.marketplaceModuleId,
-              entry.marketplaceModuleId
-            );
-            const download = await fetchMarketplaceDownload(entry.marketplaceModuleId, access, grant);
-            return [entry.marketplaceModuleId, await fetchMarketplaceArchiveManifest(download)];
+            if (viaEngine) {
+              const inspection = await inspectThroughEngine(
+                { engine: () => marketplaceEngineSession(viaEngine), buyerToken: () => buyerTokenFor(ctx, instanceId) },
+                id,
+                id
+              );
+              return [id, setupReviewFromInspection(inspection)];
+            }
+            const grant = await requireEntitlement(ctx, instanceId, id, id);
+            const download = await fetchMarketplaceDownload(id, access, grant);
+            const manifest = await fetchMarketplaceArchiveManifest(download);
+            return [
+              id,
+              { permissions: parseManifestPermissions(manifest), localEndpoints: localEndpointSummaries(manifest) },
+            ];
           } catch (err) {
             logger.warn("could not read setup platform permissions", {
-              marketplaceModuleId: entry.marketplaceModuleId,
+              marketplaceModuleId: id,
               error: err instanceof Error ? err.message : String(err),
             });
-            return [entry.marketplaceModuleId, null];
+            return [id, null];
           }
         })
     );
     const permissionsById = new Map<string, string[] | null>(
-      manifests.map(([id, manifest]) => [id, manifest === null ? null : parseManifestPermissions(manifest)])
+      reviews.map(([id, review]) => [id, review === null ? null : review.permissions])
     );
     const localEndpointsById = new Map<string, LocalEndpointSummary[]>(
-      manifests.map(([id, manifest]) => [id, localEndpointSummaries(manifest)])
+      reviews.map(([id, review]) => [id, review === null ? [] : review.localEndpoints])
     );
 
     return resolveSetupPlatforms(curated, listing, permissionsById, localEndpointsById);

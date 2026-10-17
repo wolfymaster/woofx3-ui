@@ -130,6 +130,33 @@ server refuses an install it cannot verify either, so Install would produce a
 failure the streamer could not act on. `lib/listing-install-state.ts` holds that
 precedence in one place.
 
+### Installing on the engine
+
+Behind flag `marketplace.engineInstall`, the engine does the fetching instead
+(`lib/marketplaceEngineInstall.ts`). `marketplaceEngineFor` picks the path per
+call, and takes the engine only when all of these hold:
+
+- the instance does not have dev marketplace access (the engine reads
+  `/catalog/{id}` anonymously, where dev-tier listings do not exist);
+- the flag is on for the instance (`featureFlags.isOnForInstance`, so percent
+  rollouts bucket by account and `hosting: "managed"` targets managed engines);
+- the engine reports capability `modules.marketplaceInstall`.
+
+Otherwise everything above runs unchanged. On the engine path, the module
+install (`installMarketplaceListing`), the bundle install
+(`installMarketplaceBundle`), the file list of a module not yet installed and
+the setup platform review (`inspectMarketplaceListing`) each get a fresh buyer
+token. The engine claims the listing with `acquire`, which also counts the
+install, so no install count is sent from Convex. Results and refusals keep
+the Convex path's shapes and texts: `payment_required` becomes the same
+"has not been purchased on this account" error `requireEntitlement` raises.
+
+Two things differ. The install key is only known once the engine has hashed
+the archive, so the `module.install` progress event is written after the
+engine answers, and skipped when the engine's own callback already settled
+the key. Reading one file of a module that is not installed still uses the
+archive fetched by Convex, because the engine has no call for it.
+
 ## Author pages
 
 `modules.author` has always been free text, so the author **slug is derived**
