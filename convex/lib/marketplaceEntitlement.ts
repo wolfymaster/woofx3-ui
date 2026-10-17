@@ -16,8 +16,9 @@ import { ConvexError } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
-import type { MarketplaceAccess } from "./marketplaceAccess";
+import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
 import { MarketplaceError, marketplaceAuthed, marketplaceGet, queryString } from "./marketplaceApi";
+import { buyerSigningKeyFromEnv, mintBuyerToken } from "./marketplaceBuyerToken";
 
 /**
  * The buyer a purchase belongs to.
@@ -29,11 +30,37 @@ import { MarketplaceError, marketplaceAuthed, marketplaceGet, queryString } from
  * of that service.
  */
 export async function buyerRefFor(ctx: ActionCtx, instanceId: Id<"instances">): Promise<string> {
+  return buyerRefForAccount((await instanceForBuyer(ctx, instanceId)).accountId);
+}
+
+function buyerRefForAccount(accountId: Id<"accounts">): string {
+  return `account:${accountId}`;
+}
+
+async function instanceForBuyer(ctx: ActionCtx, instanceId: Id<"instances">) {
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
   if (!instance) {
     throw new ConvexError("Instance not found");
   }
-  return `account:${instance.accountId}`;
+  return instance;
+}
+
+/**
+ * A five-minute marketplace buyer token for the account that owns
+ * `instanceId`, for an engine to present in place of the write token.
+ *
+ * Its `sub` is exactly `buyerRefFor`'s value, and it carries `tier: "dev"`
+ * exactly when the instance has dev marketplace access, so the token grants
+ * no more than this deployment already asks for on the account's behalf. Like
+ * `buyerRefFor`, it does not authorize the caller: the action calling it must
+ * already have checked membership (`requireInstanceRoleInAction`).
+ *
+ * Throws when `MARKETPLACE_BUYER_SIGNING_KEY` or `_KEY_ID` is not set.
+ */
+export async function buyerTokenFor(ctx: ActionCtx, instanceId: Id<"instances">): Promise<string> {
+  const instance = await instanceForBuyer(ctx, instanceId);
+  const key = await buyerSigningKeyFromEnv();
+  return await mintBuyerToken(buyerRefForAccount(instance.accountId), marketplaceAccessFor(instance), key);
 }
 
 /** The slice of the catalog this instance may see. */
