@@ -10,6 +10,7 @@ import type {
 } from "@convex/lib/marketplaceCatalog";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { actionErrorMessage } from "@/lib/action-error";
 
 // The marketplace catalog is served by a separate HTTP service through Convex
 // *actions*, not queries, so none of it is reactive. These hooks do the one
@@ -74,7 +75,13 @@ export function useMarketplaceSearch(
     (Fetched<MarketplaceSearchArgs, CatalogPage> & { instanceId: Id<"instances"> }) | null
   >(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<{ instanceId: Id<"instances">; message: string } | null>(null);
+  // Keyed by the search as well as the instance: a failure belongs to the
+  // request that failed, so changing the query or a filter asks again.
+  const [error, setError] = useState<{
+    instanceId: Id<"instances">;
+    args: MarketplaceSearchArgs;
+    message: string;
+  } | null>(null);
 
   // The args object is rebuilt on every render by every caller, so the effect
   // below keys off a value compared by content instead.
@@ -103,10 +110,7 @@ export function useMarketplaceSearch(
       });
       setFetched({ instanceId, args: stableArgs, result: page });
     } catch (err) {
-      setError({
-        instanceId,
-        message: err instanceof Error ? err.message : "Failed to load the marketplace.",
-      });
+      setError({ instanceId, args: stableArgs, message: actionErrorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -116,7 +120,8 @@ export function useMarketplaceSearch(
     fetched && instanceId && fetched.instanceId === instanceId && sameSearch(fetched.args, stableArgs)
       ? fetched.result
       : null;
-  const currentError = error && error.instanceId === instanceId ? error.message : null;
+  const currentError =
+    error && error.instanceId === instanceId && sameSearch(error.args, stableArgs) ? error.message : null;
 
   useEffect(() => {
     if (instanceId && current === null && !loading && !currentError) {
@@ -159,7 +164,7 @@ export function useMarketplaceListing(
     try {
       setFetched({ instanceId, listingId, result: await getListing({ instanceId, listingId }) });
     } catch (err) {
-      setError({ listingId, message: err instanceof Error ? err.message : "Failed to load this listing." });
+      setError({ listingId, message: actionErrorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -192,6 +197,8 @@ export interface MarketplaceAuthorResult {
   /** More listings than have been fetched. */
   hasMore: boolean;
   loadingMore: boolean;
+  /** Why the last "show more" failed, if it did. */
+  loadMoreError: string | null;
   /** Fetches the next page and appends it. */
   loadMore: () => Promise<void>;
 }
@@ -209,6 +216,7 @@ export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: s
   const [fetched, setFetched] = useState<{ key: string; result: AuthorPage | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState<{ key: string; message: string } | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const key = instanceId && slug ? `${instanceId}:${slug}` : null;
 
@@ -229,7 +237,7 @@ export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: s
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError({ key, message: err instanceof Error ? err.message : "Failed to load this author." });
+          setError({ key, message: actionErrorMessage(err) });
         }
       })
       .finally(() => {
@@ -250,6 +258,7 @@ export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: s
       return;
     }
     setLoadingMore(true);
+    setMoreError(null);
     try {
       const next = await getAuthor({ instanceId, slug, limit: AUTHOR_PAGE_SIZE, offset: page.listings.length });
       if (next) {
@@ -261,7 +270,8 @@ export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: s
         });
       }
     } catch (err) {
-      setError({ key, message: err instanceof Error ? err.message : "Failed to load more listings." });
+      // The listings already shown stay; only the button reports it.
+      setMoreError({ key, message: actionErrorMessage(err) });
     } finally {
       setLoadingMore(false);
     }
@@ -274,6 +284,7 @@ export function useMarketplaceAuthor(instanceId: Id<"instances"> | null, slug: s
     error: currentError,
     hasMore,
     loadingMore,
+    loadMoreError: moreError && moreError.key === key ? moreError.message : null,
     loadMore,
   };
 }
@@ -309,7 +320,7 @@ export function useMarketplaceQuote(instanceId: Id<"instances"> | null, listingI
     try {
       setFetched({ key, quote: await getQuote({ instanceId, listingId }) });
     } catch (err) {
-      setError({ key, message: err instanceof Error ? err.message : "Failed to check what this costs." });
+      setError({ key, message: actionErrorMessage(err) });
     } finally {
       setLoading(false);
     }
@@ -369,7 +380,7 @@ export function useMarketplaceEntitlements(instanceId: Id<"instances"> | null): 
     } catch (err) {
       setError({
         instanceId,
-        message: err instanceof Error ? err.message : "Failed to read your purchases.",
+        message: actionErrorMessage(err),
       });
     } finally {
       setLoading(false);

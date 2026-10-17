@@ -4,7 +4,13 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { MarketplaceError, marketplaceAuthed, marketplaceGet, queryString } from "./lib/marketplaceApi";
+import {
+  MarketplaceError,
+  marketplaceAuthed,
+  marketplaceGet,
+  queryString,
+  withClientErrors,
+} from "./lib/marketplaceApi";
 import {
   type AuthorPage,
   type CatalogCounts,
@@ -72,22 +78,23 @@ export const search = action({
     limit: v.optional(v.number()),
     offset: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<CatalogPage> => {
-    await requireInstanceRoleInAction(ctx, args.instanceId);
-    const path = `/catalog${queryString({
-      q: args.query,
-      type: args.types?.join(","),
-      category: args.category,
-      author: args.authorSlug,
-      // Sent only when asked for: `featured=false` is not a filter, and the
-      // marketplace reads the parameter's presence.
-      featured: args.featured === true ? "true" : undefined,
-      sort: args.sort,
-      limit: args.limit,
-      offset: args.offset,
-    })}`;
-    return parseCatalogPage(await marketplaceGet(path, await marketplaceAccessForInstanceId(ctx, args.instanceId)));
-  },
+  handler: async (ctx, args): Promise<CatalogPage> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const path = `/catalog${queryString({
+        q: args.query,
+        type: args.types?.join(","),
+        category: args.category,
+        author: args.authorSlug,
+        // Sent only when asked for: `featured=false` is not a filter, and the
+        // marketplace reads the parameter's presence.
+        featured: args.featured === true ? "true" : undefined,
+        sort: args.sort,
+        limit: args.limit,
+        offset: args.offset,
+      })}`;
+      return parseCatalogPage(await marketplaceGet(path, await marketplaceAccessForInstanceId(ctx, args.instanceId)));
+    }),
 });
 
 /**
@@ -99,42 +106,44 @@ export const search = action({
  */
 export const counts = action({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<CatalogCounts | null> => {
-    await requireInstanceRoleInAction(ctx, args.instanceId);
-    try {
-      return parseCatalogCounts(
-        await marketplaceGet("/catalog/counts", await marketplaceAccessForInstanceId(ctx, args.instanceId))
-      );
-    } catch (err) {
-      if (err instanceof MarketplaceError && (err.status === 404 || err.status === 400)) {
-        return null;
+  handler: async (ctx, args): Promise<CatalogCounts | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      try {
+        return parseCatalogCounts(
+          await marketplaceGet("/catalog/counts", await marketplaceAccessForInstanceId(ctx, args.instanceId))
+        );
+      } catch (err) {
+        if (err instanceof MarketplaceError && (err.status === 404 || err.status === 400)) {
+          return null;
+        }
+        throw err;
       }
-      throw err;
-    }
-  },
+    }),
 });
 
 /** One listing with everything its page shows. */
 export const getListing = action({
   args: { instanceId: v.id("instances"), listingId: v.string() },
-  handler: async (ctx, args): Promise<CatalogListingDetail | null> => {
-    await requireInstanceRoleInAction(ctx, args.instanceId);
-    try {
-      const payload = await marketplaceGet(
-        `/catalog/${encodeURIComponent(args.listingId)}`,
-        await marketplaceAccessForInstanceId(ctx, args.instanceId)
-      );
-      const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-      return parseCatalogDetail(obj.listing);
-    } catch (err) {
-      // A listing that is missing, dev-tier or unpublished answers 404
-      // identically, so the page shows "not found" rather than an error.
-      if (err instanceof MarketplaceError && err.status === 404) {
-        return null;
+  handler: async (ctx, args): Promise<CatalogListingDetail | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      try {
+        const payload = await marketplaceGet(
+          `/catalog/${encodeURIComponent(args.listingId)}`,
+          await marketplaceAccessForInstanceId(ctx, args.instanceId)
+        );
+        const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+        return parseCatalogDetail(obj.listing);
+      } catch (err) {
+        // A listing that is missing, dev-tier or unpublished answers 404
+        // identically, so the page shows "not found" rather than an error.
+        if (err instanceof MarketplaceError && err.status === 404) {
+          return null;
+        }
+        throw err;
       }
-      throw err;
-    }
-  },
+    }),
 });
 
 /**
@@ -148,22 +157,23 @@ export const getAuthor = action({
     limit: v.optional(v.number()),
     offset: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<AuthorPage | null> => {
-    await requireInstanceRoleInAction(ctx, args.instanceId);
-    try {
-      return parseAuthorPage(
-        await marketplaceGet(
-          `/authors/${encodeURIComponent(args.slug)}${queryString({ limit: args.limit, offset: args.offset })}`,
-          await marketplaceAccessForInstanceId(ctx, args.instanceId)
-        )
-      );
-    } catch (err) {
-      if (err instanceof MarketplaceError && err.status === 404) {
-        return null;
+  handler: async (ctx, args): Promise<AuthorPage | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      try {
+        return parseAuthorPage(
+          await marketplaceGet(
+            `/authors/${encodeURIComponent(args.slug)}${queryString({ limit: args.limit, offset: args.offset })}`,
+            await marketplaceAccessForInstanceId(ctx, args.instanceId)
+          )
+        );
+      } catch (err) {
+        if (err instanceof MarketplaceError && err.status === 404) {
+          return null;
+        }
+        throw err;
       }
-      throw err;
-    }
-  },
+    }),
 });
 
 /**
@@ -175,34 +185,35 @@ export const getAuthor = action({
  */
 export const quote = action({
   args: { instanceId: v.id("instances"), listingId: v.string() },
-  handler: async (ctx, args): Promise<ListingQuote | null> => {
-    await requireInstanceRoleInAction(ctx, args.instanceId);
-    const path = `/catalog/${encodeURIComponent(args.listingId)}`;
-    try {
-      if (!commerceConfigured()) {
-        const payload = await marketplaceGet(path, await marketplaceAccessForInstanceId(ctx, args.instanceId));
-        const listing = parseCatalogDetail((payload as Record<string, unknown> | null)?.listing);
-        if (!listing) {
+  handler: async (ctx, args): Promise<ListingQuote | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const path = `/catalog/${encodeURIComponent(args.listingId)}`;
+      try {
+        if (!commerceConfigured()) {
+          const payload = await marketplaceGet(path, await marketplaceAccessForInstanceId(ctx, args.instanceId));
+          const listing = parseCatalogDetail((payload as Record<string, unknown> | null)?.listing);
+          if (!listing) {
+            return null;
+          }
+          return listing.pricing?.mode === "free"
+            ? { kind: "free" }
+            : { kind: "unavailable", reason: "commerce_unconfigured" };
+        }
+        const buyerRef = await buyerRefFor(ctx, args.instanceId);
+        const payload = await marketplaceAuthed(`${path}/quote${queryString({ buyerRef })}`, "GET");
+        const parsed = parseQuote((payload as Record<string, unknown> | null)?.quote);
+        if (!parsed) {
+          throw new ConvexError("The marketplace sent a quote this app does not understand");
+        }
+        return parsed;
+      } catch (err) {
+        if (err instanceof MarketplaceError && err.status === 404) {
           return null;
         }
-        return listing.pricing?.mode === "free"
-          ? { kind: "free" }
-          : { kind: "unavailable", reason: "commerce_unconfigured" };
+        throw err;
       }
-      const buyerRef = await buyerRefFor(ctx, args.instanceId);
-      const payload = await marketplaceAuthed(`${path}/quote${queryString({ buyerRef })}`, "GET");
-      const parsed = parseQuote((payload as Record<string, unknown> | null)?.quote);
-      if (!parsed) {
-        throw new ConvexError("The marketplace sent a quote this app does not understand");
-      }
-      return parsed;
-    } catch (err) {
-      if (err instanceof MarketplaceError && err.status === 404) {
-        return null;
-      }
-      throw err;
-    }
-  },
+    }),
 });
 
 /**
@@ -214,14 +225,15 @@ export const quote = action({
  */
 export const entitlements = action({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, args): Promise<string[]> => {
-    await requireInstanceRoleInAction(ctx, args.instanceId);
-    const buyerRef = await buyerRefFor(ctx, args.instanceId);
-    const payload = await marketplaceAuthed(`/entitlements${queryString({ buyerRef })}`, "GET");
-    const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-    const ids = Array.isArray(obj.listingIds) ? obj.listingIds : [];
-    return ids.filter((id): id is string => typeof id === "string");
-  },
+  handler: async (ctx, args): Promise<string[]> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const buyerRef = await buyerRefFor(ctx, args.instanceId);
+      const payload = await marketplaceAuthed(`/entitlements${queryString({ buyerRef })}`, "GET");
+      const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const ids = Array.isArray(obj.listingIds) ? obj.listingIds : [];
+      return ids.filter((id): id is string => typeof id === "string");
+    }),
 });
 
 export type CheckoutResult =
@@ -260,44 +272,45 @@ export const createCheckout = action({
     /** Path in this app to come back to, e.g. `/marketplace/cozy-cats`. */
     returnPath: v.string(),
   },
-  handler: async (ctx, args): Promise<CheckoutResult> => {
-    // A purchase spends the account's money, so it takes more than membership.
-    await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
-    const buyerRef = await buyerRefFor(ctx, args.instanceId);
-    const base = returnUrl(args.returnPath);
-    const separator = base.includes("?") ? "&" : "?";
+  handler: async (ctx, args): Promise<CheckoutResult> =>
+    withClientErrors(async () => {
+      // A purchase spends the account's money, so it takes more than membership.
+      await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
+      const buyerRef = await buyerRefFor(ctx, args.instanceId);
+      const base = returnUrl(args.returnPath);
+      const separator = base.includes("?") ? "&" : "?";
 
-    try {
-      const payload = await marketplaceAuthed("/checkout/sessions", "POST", {
-        listingId: args.listingId,
-        buyerRef,
-        successUrl: `${base}${separator}purchase=success`,
-        cancelUrl: `${base}${separator}purchase=cancelled`,
-      });
-      const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-      if (obj.alreadyEntitled === true) {
-        return { status: "already_entitled" };
+      try {
+        const payload = await marketplaceAuthed("/checkout/sessions", "POST", {
+          listingId: args.listingId,
+          buyerRef,
+          successUrl: `${base}${separator}purchase=success`,
+          cancelUrl: `${base}${separator}purchase=cancelled`,
+        });
+        const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+        if (obj.alreadyEntitled === true) {
+          return { status: "already_entitled" };
+        }
+        if (typeof obj.url !== "string" || obj.url === "") {
+          throw new ConvexError("The marketplace did not return a checkout URL");
+        }
+        return { status: "redirect", url: obj.url };
+      } catch (err) {
+        if (err instanceof MarketplaceError && err.status === 503) {
+          return {
+            status: "unavailable",
+            message: "Purchases aren't available yet on this deployment.",
+          };
+        }
+        if (err instanceof MarketplaceError && err.code === "no_payment_needed") {
+          return { status: "no_payment_needed" };
+        }
+        if (err instanceof MarketplaceError && err.code === "listing_unavailable") {
+          return { status: "unavailable", message: err.message };
+        }
+        throw err;
       }
-      if (typeof obj.url !== "string" || obj.url === "") {
-        throw new ConvexError("The marketplace did not return a checkout URL");
-      }
-      return { status: "redirect", url: obj.url };
-    } catch (err) {
-      if (err instanceof MarketplaceError && err.status === 503) {
-        return {
-          status: "unavailable",
-          message: "Purchases aren't available yet on this deployment.",
-        };
-      }
-      if (err instanceof MarketplaceError && err.code === "no_payment_needed") {
-        return { status: "no_payment_needed" };
-      }
-      if (err instanceof MarketplaceError && err.code === "listing_unavailable") {
-        return { status: "unavailable", message: err.message };
-      }
-      throw err;
-    }
-  },
+    }),
 });
 
 export type InstallBundleResult = {
@@ -318,67 +331,68 @@ export type InstallBundleResult = {
  */
 export const installBundle = action({
   args: { instanceId: v.id("instances"), listingId: v.string() },
-  handler: async (ctx, args): Promise<InstallBundleResult> => {
-    await requireInstanceRoleInAction(ctx, args.instanceId);
+  handler: async (ctx, args): Promise<InstallBundleResult> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
 
-    const payload = await marketplaceGet(
-      `/catalog/${encodeURIComponent(args.listingId)}`,
-      await marketplaceAccessForInstanceId(ctx, args.instanceId)
-    );
-    const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-    const listing = parseCatalogDetail(obj.listing);
-    if (!listing) {
-      throw new ConvexError(`Marketplace listing ${args.listingId} was not found`);
-    }
-    if (!isBundleListing(listing.type)) {
-      throw new ConvexError(`${listing.name} is a ${listing.type} listing and does not install as a bundle`);
-    }
-    // The same gate the module install uses: the account must hold the
-    // listing, and a free one is claimed here, which also counts the install.
-    // The marketplace serves a paid bundle only to its holder regardless.
-    await acquireListing(ctx, args.instanceId, listing.id, listing.name);
-    let bundlePayload: unknown;
-    try {
-      bundlePayload = await fetchListingContent(
-        `/catalog/${encodeURIComponent(listing.id)}/bundle`,
-        await contentAccessFor(ctx, args.instanceId)
+      const payload = await marketplaceGet(
+        `/catalog/${encodeURIComponent(args.listingId)}`,
+        await marketplaceAccessForInstanceId(ctx, args.instanceId)
       );
-    } catch (err) {
-      const refusal = contentRefusal(err, listing.name);
-      if (refusal !== null) {
-        throw new ConvexError(refusal);
+      const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const listing = parseCatalogDetail(obj.listing);
+      if (!listing) {
+        throw new ConvexError(`Marketplace listing ${args.listingId} was not found`);
       }
-      throw err;
-    }
-    const bundle = parseBundle(bundlePayload);
-    if (!bundle) {
-      throw new ConvexError(`${listing.name} carries no bundle to install`);
-    }
-    const layoutJson = JSON.stringify(bundle.layout ?? {});
-    const widgetsJson = JSON.stringify(bundle.widgets ?? []);
+      if (!isBundleListing(listing.type)) {
+        throw new ConvexError(`${listing.name} is a ${listing.type} listing and does not install as a bundle`);
+      }
+      // The same gate the module install uses: the account must hold the
+      // listing, and a free one is claimed here, which also counts the install.
+      // The marketplace serves a paid bundle only to its holder regardless.
+      await acquireListing(ctx, args.instanceId, listing.id, listing.name);
+      let bundlePayload: unknown;
+      try {
+        bundlePayload = await fetchListingContent(
+          `/catalog/${encodeURIComponent(listing.id)}/bundle`,
+          await contentAccessFor(ctx, args.instanceId)
+        );
+      } catch (err) {
+        const refusal = contentRefusal(err, listing.name);
+        if (refusal !== null) {
+          throw new ConvexError(refusal);
+        }
+        throw err;
+      }
+      const bundle = parseBundle(bundlePayload);
+      if (!bundle) {
+        throw new ConvexError(`${listing.name} carries no bundle to install`);
+      }
+      const layoutJson = JSON.stringify(bundle.layout ?? {});
+      const widgetsJson = JSON.stringify(bundle.widgets ?? []);
 
-    if (listing.type === "overlay") {
-      const { engineSceneId } = await ctx.runAction(internal.marketplaceCatalog.createSceneFromBundle, {
+      if (listing.type === "overlay") {
+        const { engineSceneId } = await ctx.runAction(internal.marketplaceCatalog.createSceneFromBundle, {
+          instanceId: args.instanceId,
+          name: listing.name,
+          description: listing.description,
+          layoutJson,
+          widgetsJson,
+        });
+        return { listingId: listing.id, engineId: engineSceneId, kind: "scene" };
+      }
+
+      const { engineCompositionId } = await ctx.runAction(internal.marketplaceCatalog.createAlertFromBundle, {
         instanceId: args.instanceId,
         name: listing.name,
         description: listing.description,
         layoutJson,
         widgetsJson,
+        behaviorsJson: JSON.stringify(bundle.behaviors ?? {}),
+        inputsJson: JSON.stringify(bundle.inputs ?? []),
       });
-      return { listingId: listing.id, engineId: engineSceneId, kind: "scene" };
-    }
-
-    const { engineCompositionId } = await ctx.runAction(internal.marketplaceCatalog.createAlertFromBundle, {
-      instanceId: args.instanceId,
-      name: listing.name,
-      description: listing.description,
-      layoutJson,
-      widgetsJson,
-      behaviorsJson: JSON.stringify(bundle.behaviors ?? {}),
-      inputsJson: JSON.stringify(bundle.inputs ?? []),
-    });
-    return { listingId: listing.id, engineId: engineCompositionId, kind: "alert" };
-  },
+      return { listingId: listing.id, engineId: engineCompositionId, kind: "alert" };
+    }),
 });
 
 // --- engine writes ---

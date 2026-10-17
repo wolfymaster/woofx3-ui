@@ -14,6 +14,7 @@
  * Reads with no credential are the normal case: the catalog is public.
  */
 
+import { ConvexError } from "convex/values";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./marketplaceAccess";
 
 const MARKETPLACE_TIMEOUT_MS = 10_000;
@@ -71,6 +72,40 @@ function errorFrom(status: number, body: string, path: string): MarketplaceError
     return new MarketplaceError(status, code, message);
   } catch {
     return new MarketplaceError(status, "unknown", `Marketplace request to ${path} failed: ${status}`);
+  }
+}
+
+/**
+ * The error a public action throws for a failure talking to the marketplace.
+ *
+ * Convex shows a browser only "Server Error" for anything but a ConvexError,
+ * which tells a streamer nothing. The marketplace writes its 4xx messages for
+ * people -- "this listing has no pricing yet" -- so those are passed on as
+ * they are; an outage or a timeout becomes a sentence saying to try again.
+ * Anything else is left alone, to be logged as the bug it is.
+ */
+export function toClientError(err: unknown): unknown {
+  if (err instanceof ConvexError) {
+    return err;
+  }
+  if (err instanceof MarketplaceError) {
+    if (err.status >= 500 || err.status === 429) {
+      return new ConvexError("The marketplace is unavailable right now. Try again in a moment.");
+    }
+    return new ConvexError(err.message);
+  }
+  if (err instanceof Error && err.message.startsWith("Marketplace request to ") && err.message.includes("timed out")) {
+    return new ConvexError("The marketplace took too long to answer. Try again in a moment.");
+  }
+  return err;
+}
+
+/** Runs an action's work, throwing marketplace failures as `toClientError` does. */
+export async function withClientErrors<T>(work: () => Promise<T>): Promise<T> {
+  try {
+    return await work();
+  } catch (err) {
+    throw toClientError(err);
   }
 }
 

@@ -25,7 +25,7 @@ export default function MarketplaceAuthor() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? null;
 
-  const { page, notFound, loading, error, hasMore, loadingMore, loadMore } = useMarketplaceAuthor(
+  const { page, notFound, loading, error, hasMore, loadingMore, loadMoreError, loadMore } = useMarketplaceAuthor(
     instance?._id ?? null,
     slug
   );
@@ -145,11 +145,12 @@ export default function MarketplaceAuthor() {
             ))}
 
             {hasMore && (
-              <div className="flex justify-center">
+              <div className="flex flex-col items-center gap-2">
                 <Button variant="outline" className="gap-2" disabled={loadingMore} onClick={() => void loadMore()}>
                   {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
                   Show more ({page.total - page.listings.length} more)
                 </Button>
+                {loadMoreError && <p className="text-xs text-destructive">{loadMoreError}</p>}
               </div>
             )}
 

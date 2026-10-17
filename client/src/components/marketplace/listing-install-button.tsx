@@ -6,6 +6,7 @@ import { useAction } from "convex/react";
 import { AlertCircle, Check, CreditCard, Download, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { actionErrorMessage } from "@/lib/action-error";
 import { formatAmount } from "@/lib/listing-type";
 import { cn } from "@/lib/utils";
 
@@ -103,7 +104,7 @@ export function ListingInstallButton({
       // fresh one turns the button into Install.
       onQuoteStale?.();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start checkout.");
+      setError(actionErrorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -119,7 +120,7 @@ export function ListingInstallButton({
       const result = await installBundle({ instanceId, listingId: listing.id });
       onBundleInstalled?.({ kind: result.kind, engineId: result.engineId });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Install failed.");
+      setError(actionErrorMessage(err));
     } finally {
       setBusy(false);
     }

@@ -2,7 +2,7 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import { useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { lazy, Suspense, useEffect } from "react";
-import { Route, Switch, useLocation } from "wouter";
+import { Route, Switch, useLocation, useSearch } from "wouter";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { AdminOnly } from "@/components/layout/admin-only";
 import { BroadcastShell } from "@/components/layout/broadcast-shell";
@@ -20,7 +20,12 @@ import {
   COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
-import { MARKETPLACE_AUTHOR_ROUTE, MARKETPLACE_LISTING_ROUTE, MARKETPLACE_PATH } from "@/lib/marketplace-route";
+import {
+  MARKETPLACE_AUTHOR_ROUTE,
+  MARKETPLACE_LISTING_ROUTE,
+  MARKETPLACE_PATH,
+  modulesIndexRedirect,
+} from "@/lib/marketplace-route";
 import { builtInKindRoutes } from "@/lib/resource-kind-route";
 import { STREAM_RECAP_ROUTE, STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 import { WORKFLOW_RUN_ROUTE } from "@/lib/workflow-run-route";
@@ -134,6 +139,11 @@ function Redirect({ to }: { to: string }) {
   return null;
 }
 
+/** Bare `/modules`, forwarded with its query string (see `modulesIndexRedirect`). */
+function ModulesIndexRedirect() {
+  return <Redirect to={modulesIndexRedirect(useSearch())} />;
+}
+
 function AppRoutes() {
   const [location] = useLocation();
 
@@ -226,9 +236,7 @@ function AppRoutes() {
                   <Route path="/modules/install" component={ModuleInstall} />
                   <Route path="/modules/installed" component={Modules} />
                   <Route path="/modules/:moduleId" component={Modules} />
-                  <Route path="/modules">
-                    <Redirect to={MARKETPLACE_PATH} />
-                  </Route>
+                  <Route path="/modules" component={ModulesIndexRedirect} />
 
                   {/* Help section */}
                   <Route path="/help">
