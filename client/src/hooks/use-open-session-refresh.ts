@@ -2,8 +2,8 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import { useCallback, useEffect } from "react";
+import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
-import { useLiveState } from "@/hooks/use-live-state";
 import { createPollThrottle } from "@/lib/poll-throttle";
 
 /** How often a live stream's recap totals are refreshed while someone watches them. */
