@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
-import { actionMenuGroups } from "@/lib/action-menu";
+import { actionGroupHeading, actionMenuGroups } from "@/lib/action-menu";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import type { GlossaryKey } from "@/lib/glossary";
 import { cn } from "@/lib/utils";
@@ -245,8 +245,8 @@ interface ActionCardGroupsProps {
 }
 
 /**
- * Actions as PresetCards under the module providing them, ordered as the action picker
- * orders them. Grouping by `category` would sort nothing: the engine gives every
+ * Actions as PresetCards grouped, ordered and headed as the action picker lists them,
+ * by purpose. Grouping by `category` would sort nothing: the engine gives every
  * action the same one.
  */
 function ActionCardGroups({ actions, selectedId, onSelect, headingClassName }: ActionCardGroupsProps) {
@@ -254,9 +254,9 @@ function ActionCardGroups({ actions, selectedId, onSelect, headingClassName }: A
 
   return (
     <div className="space-y-4">
-      {groups.map((group) => (
-        <div key={group.source}>
-          <h4 className={headingClassName}>{group.source}</h4>
+      {groups.map((group, index) => (
+        <div key={group.groupKey}>
+          <h4 className={headingClassName}>{actionGroupHeading(group, groups[index - 1], true)}</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {group.actions.map((action) => (
               <PresetCard

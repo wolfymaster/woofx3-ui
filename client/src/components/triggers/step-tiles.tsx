@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { stepIcon } from "@/components/triggers/action-row";
-import { actionMenuGroups } from "@/lib/action-menu";
+import { actionGroupHeading, actionMenuGroups } from "@/lib/action-menu";
 import type { ActionPreset } from "@/lib/workflow-presets";
 
 interface StepTilesProps {
@@ -10,9 +10,9 @@ interface StepTilesProps {
 
 /**
  * Every action in the catalog as a tile, always on show, so adding a step is one click
- * and never a menu to open first. Grouped and ordered as the action picker groups them:
- * the engine's own actions, then each module's under its name, so a long catalog reads
- * as a few short sections instead of one undifferentiated grid.
+ * and never a menu to open first. Grouped, ordered and headed as the action picker lists
+ * them, by purpose (Workflow, Chat, Stream tools › Counters, ...), so a long catalog
+ * reads as a few short sections instead of one undifferentiated grid.
  */
 export function StepTiles({ actionPresets, onAdd }: StepTilesProps) {
   const groups = useMemo(() => actionMenuGroups(actionPresets, ""), [actionPresets]);
@@ -25,9 +25,11 @@ export function StepTiles({ actionPresets, onAdd }: StepTilesProps) {
 
   return (
     <div className="space-y-4">
-      {groups.map((group) => (
-        <section key={group.source} aria-label={group.source}>
-          <h4 className="mb-2 text-xs font-medium text-muted-foreground">{group.source}</h4>
+      {groups.map((group, index) => (
+        <section key={group.groupKey} aria-label={group.groupLabel}>
+          <h4 className="mb-2 text-xs font-medium text-muted-foreground">
+            {actionGroupHeading(group, groups[index - 1], true)}
+          </h4>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {group.actions.map((preset) => (
               <StepTile key={preset.id} preset={preset} onAdd={onAdd} />
