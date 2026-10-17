@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import { bareKind, parseKindRef, WOOFX3_MODULE } from "@convex/lib/resourceKinds";
-import { useAction, useQuery } from "convex/react";
 import { Boxes, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -28,6 +26,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import {
+  useCreateResourceInstanceRequest,
+  useDeleteResourceInstanceRequest,
+  useRefreshResourceValuesRequest,
+  useResourceInstancesOfKind,
+  useResourceKind,
+  useResourceValues,
+  useUpdateResourceInstanceRequest,
+} from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
@@ -74,13 +81,13 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   const { toast } = useToast();
   const instanceId = instance?._id;
 
-  const kindDefinition = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind } : "skip");
-  const instances = useQuery(api.moduleResourceInstances.listByKind, instanceId ? { instanceId, kind } : "skip");
-  const values = useQuery(api.resourceValues.listForInstance, instanceId ? { instanceId } : "skip");
-  const createInstance = useAction(api.moduleResourceActions.createResourceInstance);
-  const updateInstance = useAction(api.moduleResourceActions.updateResourceInstance);
-  const deleteInstance = useAction(api.moduleResourceActions.deleteResourceInstance);
-  const refreshValues = useAction(api.moduleResourceActions.refreshResourceValues);
+  const kindDefinition = useResourceKind(instanceId ?? null, kind);
+  const instances = useResourceInstancesOfKind(instanceId ?? null, kind);
+  const values = useResourceValues(instanceId ?? null);
+  const createInstance = useCreateResourceInstanceRequest();
+  const updateInstance = useUpdateResourceInstanceRequest();
+  const deleteInstance = useDeleteResourceInstanceRequest();
+  const refreshValues = useRefreshResourceValuesRequest();
 
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ResourceInstanceDoc | null>(null);
@@ -91,7 +98,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues({ instanceId, kind }).catch(() => {
+    refreshValues(instanceId, kind).catch(() => {
       // The mirror still shows the last known values; the next change updates it.
     });
   }, [instanceId, kind, refreshValues]);
@@ -234,8 +241,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                 settings={resourceSettings(selected)}
                 onSave={async (displayName, settings) => {
                   try {
-                    await updateInstance({
-                      instanceId,
+                    await updateInstance(instanceId, {
                       canonicalId: selected.canonicalId,
                       displayName,
                       settings,
@@ -260,8 +266,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
           kind={{ kind: kindDefinition.kind, name: kindDefinition.name, schema: kindDefinition.schema }}
           onClose={() => setCreating(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            await createInstance({
-              instanceId,
+            await createInstance(instanceId, {
               moduleName: kindDefinition.moduleName,
               kind: kindDefinition.kind,
               resourceInstanceId,
@@ -290,7 +295,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                   return;
                 }
                 try {
-                  await deleteInstance({ instanceId, canonicalId: deleteTarget.canonicalId });
+                  await deleteInstance(instanceId, deleteTarget.canonicalId);
                   navigate(basePath);
                 } catch (err) {
                   toast({

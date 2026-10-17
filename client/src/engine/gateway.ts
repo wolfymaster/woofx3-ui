@@ -9,6 +9,8 @@ import type {
   ChatCommandGroup,
   ChatCommandGroupChanges,
   CompositionPreviewUrl,
+  CreatedModuleResourceInstance,
+  DeclaredResourceKind,
   EngineAlert,
   EngineCapabilityReport,
   EngineConnectionTest,
@@ -23,15 +25,21 @@ import type {
   InstanceId,
   InstanceLiveState,
   Live,
+  ModuleId,
+  ModuleResourceInstance,
+  ModuleResourceInstanceChanges,
   NewChatCommand,
   NewChatCommandGroup,
   NewLibraryAlert,
+  NewModuleResourceInstance,
   ObsStatus,
   Paginated,
   Resource,
   ResourceChanges,
+  ResourceKindDefinition,
   ResourcePage,
   ResourceQuery,
+  ResourceValues,
   StreamEventFrame,
   UploadGrant,
   UploadRequest,
@@ -56,6 +64,7 @@ export interface EngineGateway {
   readonly alertQueue: AlertQueueGateway;
   readonly alertLibrary: AlertLibraryGateway;
   readonly commands: CommandsGateway;
+  readonly moduleResources: ModuleResourcesGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -205,6 +214,47 @@ export interface CommandsGateway {
     engineGroupId: string,
     username: string
   ) => Promise<{ ok: true }>;
+}
+
+/**
+ * Runtime instances of the resource kinds installed modules declare (counters,
+ * timers, queues), their values, and the kinds themselves. Reads come from the
+ * mirror the engine's webhooks keep in Convex; writes go to the engine.
+ */
+export interface ModuleResourcesGateway {
+  /** Every resource instance. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
+  useInstances(instanceId: InstanceId | null): Live<ModuleResourceInstance[]>;
+  /** One installed module's instances. Skipped (always loading) unless both ids are set. */
+  useModuleInstances(instanceId: InstanceId | null, moduleId: ModuleId | null): Live<ModuleResourceInstance[]>;
+  /**
+   * The instances of one kind: `module:kind`, or a bare kind. Skipped (always
+   * loading) for a null id or kind.
+   */
+  useKindInstances(instanceId: InstanceId | null, kind: string | null): Live<ModuleResourceInstance[]>;
+  /** Every mirrored value, keyed by canonical id. Skipped (always loading) for a null id. */
+  useValues(instanceId: InstanceId | null): Live<ResourceValues>;
+  /**
+   * The module providing a kind, and its declaration; null when no installed
+   * module declares it. Skipped (always loading) for a null id or kind.
+   */
+  useKind(instanceId: InstanceId | null, kind: string | null): Live<ResourceKindDefinition | null>;
+  /** Every kind the installed modules declare. Skipped (always loading) for a null id. */
+  useKinds(instanceId: InstanceId | null): Live<DeclaredResourceKind[]>;
+  useCreateRequest(): (
+    instanceId: InstanceId,
+    resource: NewModuleResourceInstance
+  ) => Promise<CreatedModuleResourceInstance>;
+  useUpdateRequest(): (instanceId: InstanceId, changes: ModuleResourceInstanceChanges) => Promise<null>;
+  useRemoveRequest(): (instanceId: InstanceId, canonicalId: string) => Promise<null>;
+  /** Reads one module's instances from the engine into the mirror, for any no webhook brought. */
+  useSyncModuleRequest(): (instanceId: InstanceId, moduleId: ModuleId) => Promise<{ itemsProcessed: number }>;
+  /** Reads the current value of every instance of a kind from the engine into the mirror. */
+  useRefreshValuesRequest(): (instanceId: InstanceId, kind: string) => Promise<null>;
+  /**
+   * Runs action steps on the engine now. `actions` carry their `$` keys escaped
+   * (lib/dollar-keys); the result arrives through the values they change.
+   */
+  useRunActionsRequest(): (instanceId: InstanceId, label: string, actions: unknown[]) => Promise<null>;
 }
 
 export interface OptimisticInstance {

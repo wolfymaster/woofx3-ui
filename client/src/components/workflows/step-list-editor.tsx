@@ -25,6 +25,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useResourceInstances } from "@/engine/hooks/use-module-resources";
+import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { type CatalogActionRow, type CatalogTriggerRow, useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
@@ -204,10 +206,7 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
   // Backs the step-list summary line for resource_ref fields (e.g. Increment
   // Counter's "Counter" picker) — resolves the stored canonical id to the
   // module resource instance's friendly display name.
-  const resourceInstances = useQuery(
-    api.moduleResourceInstances.listForInstance,
-    instanceId ? { instanceId: instanceId as never } : "skip"
-  );
+  const resourceInstances = useResourceInstances((instanceId as InstanceId | null) ?? null);
   const resourceLabels = useMemo(() => {
     if (!resourceInstances) {
       return undefined;
