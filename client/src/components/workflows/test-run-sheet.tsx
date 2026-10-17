@@ -27,6 +27,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useTransientEvents } from "@/engine/hooks/use-correlated-request";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -559,10 +560,7 @@ function TestRunOutcome({
   const { waitElapsed, gaveUp } = useTestEventWaits();
   const [executionId, setExecutionId] = useState<string | null>(knownExecutionId);
   const [sticky, setSticky] = useState<TestEventOutcome | null>(null);
-  const rows = useQuery(
-    api.transientEvents.listByCorrelation,
-    instance ? { instanceId: instance._id, correlationKey: triggerId } : "skip"
-  );
+  const rows = useTransientEvents(instance?._id ?? null, triggerId);
   const recorded = useQuery(
     api.workflowRuns.runWithSteps,
     instance && executionId ? { instanceId: instance._id, engineRunId: executionId } : "skip"
