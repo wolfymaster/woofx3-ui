@@ -5,6 +5,7 @@ import { convexCommandsGateway } from "./commands";
 import { convexEventLogGateway } from "./event-log";
 import { convexModuleResourcesGateway } from "./module-resources";
 import { convexModulesGateway } from "./modules";
+import { convexRequestsGateway } from "./requests";
 import { convexResourcesGateway } from "./resources";
 import { convexStatusGateway } from "./status";
 
@@ -23,4 +24,5 @@ export const convexEngineGateway: EngineGateway = {
   commands: convexCommandsGateway,
   moduleResources: convexModuleResourcesGateway,
   modules: convexModulesGateway,
+  requests: convexRequestsGateway,
 };
