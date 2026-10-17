@@ -15,6 +15,7 @@ import {
 } from "@/components/scenes/draft-live-controls";
 import { hasUnsavedEdits, sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
 import { Button } from "@/components/ui/button";
+import { useLibraryAlert } from "@/engine/hooks/use-alert-library";
 import { useEngineInfoRequest } from "@/engine/hooks/use-engine-status";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
@@ -40,7 +41,7 @@ interface LibraryAlertEditorProps {
 export function LibraryAlertEditor({ instanceId, compositionId, onBack }: LibraryAlertEditorProps) {
   const { toast } = useToast();
   useCollapsedSidebar();
-  const row = useQuery(api.alertCompositions.getByEngineId, { instanceId, engineCompositionId: compositionId });
+  const row = useLibraryAlert(instanceId, compositionId);
   const catalogRows = useQuery(api.sceneWidgets.listForInstance, { instanceId });
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 

@@ -1,4 +1,5 @@
 import type { EngineGateway } from "@/engine/gateway";
+import { convexAlertLibraryGateway } from "./alert-library";
 import { convexAlertQueueGateway } from "./alert-queue";
 import { convexEventLogGateway } from "./event-log";
 import { convexResourcesGateway } from "./resources";
@@ -15,4 +16,5 @@ export const convexEngineGateway: EngineGateway = {
   resources: convexResourcesGateway,
   eventLog: convexEventLogGateway,
   alertQueue: convexAlertQueueGateway,
+  alertLibrary: convexAlertLibraryGateway,
 };
