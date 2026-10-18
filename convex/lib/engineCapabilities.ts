@@ -19,6 +19,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "alerts.queueControls",
   "analytics.aggregates",
   "analytics.gauges",
+  "analytics.sessionEvents",
   "analytics.sessions",
   "assets.sizedUploads",
   "compositions.alerts",

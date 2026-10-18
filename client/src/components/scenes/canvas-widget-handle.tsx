@@ -1,5 +1,6 @@
 import type { CommandResult, CompositionEditor, GestureKind, NodeView, Point } from "@woofx3/scene/editor";
-import { memo, useEffect, useRef, useState } from "react";
+import { Lock } from "lucide-react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createFrameCoalescer } from "@/lib/frame-coalescer";
 import type { RemoteSelection } from "@/lib/scene-composition";
 import { cn } from "@/lib/utils";
@@ -64,8 +65,12 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
   const [isHovered, setIsHovered] = useState(false);
   const pointerId = useRef<number | null>(null);
 
-  const [updates] = useState(() =>
-    createFrameCoalescer<PointerUpdate>(({ point, shift, alt }) => editor.gesture.update(point, { shift, alt }))
+  // Made again with the editor: the scene editor replaces its editor when the document source
+  // changes (the cached scene, then the live session), and a handle mounted before that must
+  // send its moves to the editor its gesture began on.
+  const updates = useMemo(
+    () => createFrameCoalescer<PointerUpdate>(({ point, shift, alt }) => editor.gesture.update(point, { shift, alt })),
+    [editor]
   );
 
   useEffect(() => {
@@ -155,7 +160,8 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
     // biome-ignore lint/a11y/noStaticElementInteractions: pointer-driven drag surface on the scaled canvas
     <div
       className={cn(
-        "absolute cursor-move touch-none group border-2 border-dashed border-transparent hover:border-white/40",
+        "absolute touch-none group border-2 border-dashed border-transparent hover:border-white/40",
+        placement.locked ? "cursor-default" : "cursor-move",
         node.selected && "!border-solid !border-primary",
         // Hidden on stream, but still here to be placed.
         !placement.visible &&
@@ -186,7 +192,8 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
       data-testid={`canvas-widget-${node.id}`}
     >
       {showLabel && (
-        <span className="absolute -top-5 left-0 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground whitespace-nowrap">
+        <span className="absolute -top-5 left-0 flex items-center gap-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground whitespace-nowrap">
+          {placement.locked && <Lock className="h-2.5 w-2.5" aria-label="Locked" />}
           {placement.name}
         </span>
       )}
@@ -205,7 +212,7 @@ export const CanvasWidgetHandle = memo(function CanvasWidgetHandle({
         </span>
       )}
 
-      {node.selected && (
+      {node.selected && !placement.locked && (
         <div
           className="absolute flex cursor-se-resize items-center justify-center"
           style={{

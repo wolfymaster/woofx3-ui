@@ -96,74 +96,125 @@ rendering anything.
 Animated emotes are served from the original uploaded bytes, not the WebP
 renditions, so they actually move.
 
+## Pricing, quotes and editions
+
+Every listing is priced explicitly on the marketplace: `pricing` is
+`{mode: "free"}`, `{mode: "paid", amountCents, currency, upgrade}`, or `null`.
+**`null` means nobody can install it yet, never free**, and a pricing shape the
+parser does not recognise is read as `null` too. Cards show **Unavailable** for
+it.
+
+A new sellable version of a module is a separate listing — an **edition**,
+`{moduleKey}-v{n}` — with its own price. Owning one edition does not entitle
+another. A paid edition may give holders of an earlier edition a discounted or
+free upgrade. Once a newer edition is published, the older one leaves the grid,
+but its page still works for the accounts that hold it and points them at the
+new one (`supersededBy`).
+
+What one account must do to hold one listing is a **quote**, decided by the
+marketplace (`marketplaceCatalog.quote`): `owned`, `free`, `upgrade_free`,
+`upgrade` (the discounted price), `full`, or `unavailable` with a reason. The
+listing page's button reads only the quote, through `useMarketplaceQuote`,
+because only the marketplace knows what the account holds.
+`lib/listing-install-state.ts` turns it into the button's state, with the
+precedence in one place. While the quote loads the button waits, and when it
+cannot be read the button says so rather than guessing; a free listing installs
+without waiting.
+
+Grids read ownership once (`marketplaceCatalog.entitlements`), not a quote per
+card, so a card shows **Buy · $X** for a paid listing the account does not hold.
+
 ## Purchase → install
 
-1. A paid listing shows **Buy for $X**. `marketplaceCatalog.createCheckout`
-   takes a return **path**, never a URL, and joins it onto `APP_BASE_URL` on the
-   server — so a Stripe payment page can only ever return the buyer into
-   woofx3. A purchase spends the account's money, so it needs `admin`.
+1. A listing the quote prices shows **Buy for $X** (or **Upgrade for $X**).
+   `marketplaceCatalog.createCheckout` takes a return **path**, never a URL,
+   and joins it onto `APP_BASE_URL` on the server — so a Stripe payment page
+   can only ever return the buyer into woofx3. A purchase spends the account's
+   money, so it needs `admin`. The marketplace charges its own quote.
 2. Stripe sends the buyer back to the listing with `?purchase=success`. The
    entitlement is granted by a webhook from Stripe to the *marketplace*, a
-   separate round trip, so the page re-reads entitlements and says so rather
+   separate round trip, so the page reads the quote again and says so rather
    than assuming the button has already flipped.
 3. The button becomes **Install**.
 
-Ownership is read once for a whole grid (`marketplaceCatalog.entitlements`),
-not per card.
+**The gate is on the server, and it fails closed.** Both install paths call
+`acquireListing` (`convex/lib/marketplaceEntitlement.ts`) before the engine is
+asked to install anything — for a module, after the streamer approves its
+permissions, so backing out acquires nothing.
 
-**The gate is on the server, and it fails closed.** `requireEntitlement` runs
-before any marketplace content is fetched: both install paths, the file browser
-for a module not yet installed, the module detail's permission read, and setup
-platforms. It returns how to fetch the content. A free listing's archive or
-bundle is fetched as before; a paid listing's is fetched with
-`MARKETPLACE_API_TOKEN` and the buyer, because the marketplace serves paid
-content to nobody else.
+- With `MARKETPLACE_API_TOKEN` set, it is the marketplace's
+  `POST /catalog/{id}/acquire`: it claims a free listing or a free upgrade,
+  confirms one already held, and refuses one that costs money (402) or that
+  nobody can acquire (409, with the marketplace's reason). A free claim is
+  also what counts the install, so counts are accounts, not install clicks.
+- Without the token nothing can be recorded, so only a listing the public
+  catalog prices `free` installs.
 
-- With the token set, the marketplace's entitlement read is the only answer
-  trusted, and an answer it does not recognise refuses the install.
-- Without the token, a listing counts as free only when the public catalog
-  shows no price at all. Any price, or a listing that cannot be read, refuses
-  the install. Free installs therefore still need no new configuration.
-
-When ownership cannot be read at all, the button says **Buy**, not Install: the
-server refuses an install it cannot verify either, so Install would produce a
-failure the streamer could not act on. `lib/listing-install-state.ts` holds that
-precedence in one place.
+Content — a module archive or a bundle — is fetched by `fetchListingContent`:
+anonymously at the instance's own catalog access first, which is how free
+content is served and keeps dev-tier listings hidden from instances not
+flagged for them; then, only on a 401 (visible but not free), with the write
+token as the buyer. The marketplace serves it only to an account that holds
+the listing. Previews — the module detail's permission read, the file browser
+for a module not yet installed, setup platforms — use the same fetch without
+acquiring anything.
 
 ### Installing on the engine
 
-Behind flag `marketplace.engineInstall`, the engine does the fetching instead
-(`lib/marketplaceEngineInstall.ts`). `marketplaceEngineFor` picks the path per
-call, and takes the engine only when all of these hold:
+Behind flag `marketplace.engineInstall`, the engine does the fetching and the
+acquire instead (`convex/lib/marketplaceEngineInstall.ts`).
+`marketplaceEngineFor` picks the path per call, and takes the engine only when
+all of these hold, checked cheapest first:
 
 - the instance does not have dev marketplace access (the engine reads
   `/catalog/{id}` anonymously, where dev-tier listings do not exist);
+- `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are set, so a buyer token can
+  be minted;
 - the flag is on for the instance (`featureFlags.isOnForInstance`, so percent
   rollouts bucket by account and `hosting: "managed"` targets managed engines);
 - the engine reports capability `modules.marketplaceInstall`.
 
-Otherwise everything above runs unchanged. On the engine path, the module
-install (`installMarketplaceListing`), the bundle install
-(`installMarketplaceBundle`), the file list of a module not yet installed and
-the setup platform review (`inspectMarketplaceListing`) each get a fresh buyer
-token. The engine claims the listing with `acquire`, which also counts the
-install, so no install count is sent from Convex. Results and refusals keep
-the Convex path's shapes and texts: `payment_required` becomes the same
-"has not been purchased on this account" error `requireEntitlement` raises.
+Otherwise everything above runs unchanged, with no extra marketplace or engine
+call. On the engine path, the module install (`installMarketplaceListing`),
+the bundle install (`installMarketplaceBundle`), the file list of a module not
+yet installed and the setup platform review (`inspectMarketplaceListing`) each
+get a fresh buyer token. The engine calls `acquire` itself with that token,
+which also counts the install, so Convex does not call `acquireListing` there.
+Inspecting acquires nothing.
 
-Two things differ. The install key is only known once the engine has hashed
-the archive, so the `module.install` progress event is written after the
-engine answers, and skipped when the engine's own callback already settled
-the key. Reading one file of a module that is not installed still uses the
-archive fetched by Convex, because the engine has no call for it.
+A module install also reads the listing from `/catalog/{id}` first, for its
+name, and keeps the Convex path for a listing whose id is not its manifest id
+(`moduleKey`): a later edition such as `cozy-v2`. Barkloader accepts only
+`{manifest id}:{version}:{sha7}` as the install key, while both paths send
+`{listing id}:{version}:{sha7}`, so such an install fails with
+`ModuleKeyMismatch` either way until the engine keys editions by manifest id.
+
+What differs on the engine path:
+
+- `payment_required` becomes the same "hasn't been bought on this account"
+  error a 402 from `acquireListing` raises. Other refusals (a 409 for an
+  unpriced or superseded listing, a 404) reach the browser as a ConvexError
+  carrying the engine's message, because capnweb passes only an error's
+  message and the engine reports those refusals by throwing.
+- The engine acquires before it checks consent, so a module install that
+  comes back `needs_approval` has already claimed a free listing.
+- The install key is only known once the engine has hashed the archive, so
+  the `module.install` progress event is written after the engine answers,
+  and skipped when the engine's own callback already settled the key. A
+  failure before that is reported by the action itself; the browser only
+  watches the key the action returns.
+- Reading one file of a module that is not installed still uses the archive
+  fetched by Convex, because the engine has no call for it.
 
 ## Author pages
 
-`modules.author` has always been free text, so the author **slug is derived**
-from it rather than introduced as an id. Every module published before author
-pages existed therefore has a page, with no backfill and no author-account
-model. An `authors` row on the marketplace side only enriches it; `claimed` in
-the response says which, and the page tells the reader so.
+Every listing is attributed to the **username** it was published under
+(`authorSlug`). The page is `/marketplace/author/{username}`, and the
+marketplace looks it up by that username and pages the listings itself, so
+the page loads 48 at a time with **Show more**. The manifest's `author` is only
+the name a card shows. An `authors` profile on the marketplace side adds a
+display name, bio, avatar and links; until there is one (`claimed: false`) the
+page shows the username.
 
 Listings are grouped by type rather than shown as one grid, because "what does
 this person make" is the question the page answers.
@@ -181,7 +232,7 @@ parts only work as a set, and a second copy would have drifted from the first.
 |---|---|
 | `MARKETPLACE_API_URL` | Everything. The marketplace API's origin. |
 | `MARKETPLACE_DEV_TOKEN` | Revealing dev-tier listings to flagged instances. |
-| `MARKETPLACE_API_TOKEN` | Checkout and entitlement reads. The marketplace gates those on its write token. Never reaches the browser. |
+| `MARKETPLACE_API_TOKEN` | Acquire, quotes, checkout and ownership reads. The marketplace gates those on its write token. Never reaches the browser. |
 | `APP_BASE_URL` | Checkout. The origin a return path is joined onto. |
 | `MARKETPLACE_BUYER_SIGNING_KEY` | Minting buyer tokens (`buyerTokenFor`). The Ed25519 private key as JWK JSON. A secret. |
 | `MARKETPLACE_BUYER_SIGNING_KEY_ID` | Minting buyer tokens. The `kid` the marketplace knows the public key by. |

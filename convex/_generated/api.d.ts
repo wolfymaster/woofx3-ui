@@ -121,7 +121,6 @@ import type * as lib_marketplaceApi from "../lib/marketplaceApi.js";
 import type * as lib_marketplaceCatalog from "../lib/marketplaceCatalog.js";
 import type * as lib_marketplaceEntitlement from "../lib/marketplaceEntitlement.js";
 import type * as lib_marketplaceImages from "../lib/marketplaceImages.js";
-import type * as lib_marketplaceInstalls from "../lib/marketplaceInstalls.js";
 import type * as lib_moderation from "../lib/moderation.js";
 import type * as lib_moduleArchiveFiles from "../lib/moduleArchiveFiles.js";
 import type * as lib_moduleDisplayName from "../lib/moduleDisplayName.js";
@@ -394,7 +393,6 @@ declare const fullApi: ApiFromModules<{
   "lib/marketplaceCatalog": typeof lib_marketplaceCatalog;
   "lib/marketplaceEntitlement": typeof lib_marketplaceEntitlement;
   "lib/marketplaceImages": typeof lib_marketplaceImages;
-  "lib/marketplaceInstalls": typeof lib_marketplaceInstalls;
   "lib/moderation": typeof lib_moderation;
   "lib/moduleArchiveFiles": typeof lib_moduleArchiveFiles;
   "lib/moduleDisplayName": typeof lib_moduleDisplayName;

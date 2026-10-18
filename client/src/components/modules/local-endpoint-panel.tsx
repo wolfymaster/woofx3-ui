@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { AlertTriangle, Download, Laptop, Unplug } from "lucide-react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { companionDownloadUrl, type LocalEndpointSituation, localEndpointSituation } from "@/lib/local-endpoints";
 import { cn } from "@/lib/utils";

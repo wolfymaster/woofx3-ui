@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { OptionsSupport } from "@convex/lib/engineTestRun";
 import { useAction } from "convex/react";
 import { useEffect, useState } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { type TestRunSupport, testRunSupport } from "@/lib/engine-capabilities";
 
 /** `checking` while the engine is being asked; otherwise what it answered. */

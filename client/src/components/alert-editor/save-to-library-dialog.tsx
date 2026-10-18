@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { CompositionDocument } from "@woofx3/scene/model";
-import { useAction } from "convex/react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCreateLibraryAlertRequest } from "@/engine/hooks/use-alert-library";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { libraryAlertOfStep, libraryJsonOf } from "@/lib/alert-library";
@@ -46,7 +45,7 @@ export function SaveToLibraryDialog({
 }: SaveToLibraryDialogProps) {
   const { instance } = useInstance();
   const { toast } = useToast();
-  const create = useAction(api.alertCompositionActions.create);
+  const create = useCreateLibraryAlertRequest();
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
   const taken = takenNames?.includes(name.trim()) ?? false;
@@ -58,8 +57,7 @@ export function SaveToLibraryDialog({
     setPending(true);
     try {
       const savedName = name.trim();
-      await create({
-        instanceId: instance._id,
+      await create(instance._id, {
         name: savedName,
         ...libraryJsonOf(libraryAlertOfStep(doc, availableVariables)),
       });

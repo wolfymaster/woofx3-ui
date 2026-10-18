@@ -3,12 +3,12 @@
  *
  * The engine can install a listing by id (`installMarketplaceListing`), read
  * the build an install would use (`inspectMarketplaceListing`) and install an
- * overlay or alert bundle (`installMarketplaceBundle`), fetching and checking
- * everything itself with a buyer token this deployment mints. The Convex
- * actions that install, review and browse marketplace content take that path
- * only when `routeThroughEngine` allows it, and otherwise run their own
- * download path. Either way they answer with the same shapes and errors, so a
- * caller cannot tell which path ran.
+ * overlay or alert bundle (`installMarketplaceBundle`). It reads the listing,
+ * claims it with `acquire`, downloads and verifies the content itself, with a
+ * buyer token this deployment mints. The Convex actions that install, review
+ * and browse marketplace content take that path only when
+ * `marketplaceEngineFor` allows it, and otherwise run their own download path.
+ * Either way they answer with the same shapes.
  *
  * Shared by `"use node"` and default-runtime action files, so it defines no
  * Convex functions.
@@ -35,7 +35,9 @@ import type { FeatureFlagKey } from "./featureFlags";
 import type { LocalEndpointSummary, LocalProtocol } from "./localEndpoints";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
 import { marketplaceGet } from "./marketplaceApi";
-import { notPurchasedMessage } from "./marketplaceEntitlement";
+import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
+import { type CatalogListing, isModuleListing, parseCatalogDetail } from "./marketplaceCatalog";
+import { notBoughtMessage } from "./marketplaceEntitlement";
 
 export const ENGINE_INSTALL_FLAG: FeatureFlagKey = "marketplace.engineInstall";
 export const ENGINE_INSTALL_CAPABILITY: EngineCapability = "modules.marketplaceInstall";
@@ -80,22 +82,28 @@ export type MarketplaceEngine = Pick<
 /** What decides the path for one instance. Read lazily, cheapest first. */
 export interface EngineInstallGate {
   access: MarketplaceAccess;
+  /** Whether this deployment can mint buyer tokens at all. */
+  buyerTokens: boolean;
   flagOn(): Promise<boolean>;
   capabilities(): Promise<EngineCapabilityReport>;
 }
 
 /**
- * Whether the engine path runs. Dev access keeps the Convex path because the
- * engine reads `/catalog/{id}` anonymously, where dev-tier listings do not
- * exist. The engine is asked for its capabilities last, so an instance outside
- * the rollout costs no engine round trip.
+ * Whether the engine path runs.
+ *
+ * Dev access keeps the Convex path: the engine reads `/catalog/{id}`
+ * anonymously, where dev-tier listings do not exist. A deployment without
+ * the buyer signing key keeps it too, because the engine could then only
+ * install free listings and would claim nothing for the buyer. The engine is
+ * asked for its capabilities last, so an instance outside the rollout costs no
+ * engine round trip.
  *
  * An engine that cannot answer for its capabilities gets the Convex path:
  * reviews and file browsing do not need the engine there, and an install
  * fails the way it always has.
  */
 export async function routeThroughEngine(gate: EngineInstallGate): Promise<boolean> {
-  if (gate.access === "dev") {
+  if (gate.access === "dev" || !gate.buyerTokens) {
     return false;
   }
   if (!(await gate.flagOn())) {
@@ -109,6 +117,11 @@ export async function routeThroughEngine(gate: EngineInstallGate): Promise<boole
     return false;
   }
   return hasEngineCapability(report, ENGINE_INSTALL_CAPABILITY);
+}
+
+/** Whether `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are both set. */
+export function buyerTokensConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  return Boolean(env[BUYER_SIGNING_KEY_ENV]?.trim() && env[BUYER_SIGNING_KEY_ID_ENV]?.trim());
 }
 
 /**
@@ -127,10 +140,75 @@ export async function marketplaceEngineFor(
   const engine = { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
   const useEngine = await routeThroughEngine({
     access: marketplaceAccessFor(instance),
+    buyerTokens: buyerTokensConfigured(),
     flagOn: () => ctx.runQuery(internal.featureFlags.isOnForInstance, { key: ENGINE_INSTALL_FLAG, instanceId }),
     capabilities: () => fetchEngineCapabilities(engine),
   });
   return useEngine ? engine : null;
+}
+
+/**
+ * Why a module listing stays on the Convex path although the instance is
+ * routed to the engine, or null when the engine may install it.
+ *
+ * - Only module and theme listings install as modules. Anything else keeps
+ *   the Convex path, which refuses it with its own error.
+ * - A listing whose id is not its manifest id -- a later edition such as
+ *   `cozy-v2` of manifest `cozy` -- cannot install on the engine:
+ *   barkloader computes the key it accepts from the manifest id, the engine
+ *   sends `{listingId}:{version}:{sha7}`, and barkloader refuses the archive
+ *   with ModuleKeyMismatch. The Convex path sends the same key, so it fails
+ *   there too; keeping it there only keeps one behaviour while the flag rolls
+ *   out.
+ */
+export function moduleListingStaysOnConvex(listing: CatalogListing): string | null {
+  if (!isModuleListing(listing.type)) {
+    return `a ${listing.type} listing does not install as a module`;
+  }
+  if (listing.moduleKey !== undefined && listing.moduleKey !== listing.id) {
+    return `listing ${listing.id} installs from manifest ${listing.moduleKey} (edition ${listing.edition})`;
+  }
+  return null;
+}
+
+/**
+ * The engine to install module listing `listingId` on, with the listing as
+ * the catalog describes it, or null for the Convex path.
+ *
+ * Reads `/catalog/{id}` only once the instance is routed to the engine, so
+ * with the flag off nothing more is asked of the marketplace. A listing that
+ * cannot be read keeps the Convex path, which then reports the failure the
+ * way it always has.
+ */
+export async function marketplaceModuleEngineFor(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  listingId: string
+): Promise<{ engine: EngineCredentials; listing: CatalogListing } | null> {
+  const engine = await marketplaceEngineFor(ctx, instanceId);
+  if (!engine) {
+    return null;
+  }
+  let listing: CatalogListing | null;
+  try {
+    // Public: the engine path never runs at dev access.
+    const payload = await marketplaceGet(`/catalog/${encodeURIComponent(listingId)}`, "public");
+    listing = parseCatalogDetail(
+      payload && typeof payload === "object" ? (payload as { listing?: unknown }).listing : null
+    );
+  } catch (err) {
+    console.warn(`Marketplace listing ${listingId} could not be read for the engine path:`, err);
+    return null;
+  }
+  if (!listing) {
+    return null;
+  }
+  const reason = moduleListingStaysOnConvex(listing);
+  if (reason !== null) {
+    console.info(`Marketplace install of ${listingId} stays on the Convex path: ${reason}`);
+    return null;
+  }
+  return { engine, listing };
 }
 
 /** A fresh session: a capnweb HTTP batch session is spent by its first call. */
@@ -140,30 +218,18 @@ export function marketplaceEngineSession(engine: EngineCredentials): Marketplace
 
 // --- engine errors ---
 
-/** A marketplace refusal the engine passed on, read from its error message. */
-export interface EngineMarketplaceRefusal {
-  method: string;
-  path: string;
-  status: number;
-}
-
 /**
- * Must match `marketplaceError` in woofx3 `api/src/marketplace-client.ts`:
- * `Marketplace {method} {path} failed with {status}`, then an optional reason.
+ * An engine failure as an error the browser can read. Convex shows only
+ * "Server Error" for anything but a ConvexError, and capnweb passes only an
+ * error's name and message, so the engine's message is all there is to show.
+ * It is passed on as it is, never parsed: refusals the streamer must act on
+ * (payment required, needs approval) arrive as results instead.
  */
-const REFUSAL_PATTERN = /^Marketplace (GET|POST) (\S+) failed with (\d{3})\b/;
-
-export function engineMarketplaceRefusal(err: unknown): EngineMarketplaceRefusal | null {
-  const message = err instanceof Error ? err.message : typeof err === "string" ? err : "";
-  const match = REFUSAL_PATTERN.exec(message);
-  if (!match) {
-    return null;
+export function engineFailure(err: unknown): ConvexError<string> {
+  if (err instanceof ConvexError) {
+    return err;
   }
-  return { method: match[1], path: match[2], status: Number(match[3]) };
-}
-
-function isPurchaseRefusal(refusal: EngineMarketplaceRefusal | null): boolean {
-  return refusal !== null && (refusal.status === 401 || refusal.status === 402 || refusal.status === 403);
+  return new ConvexError(err instanceof Error ? err.message : String(err));
 }
 
 // --- module installs ---
@@ -181,7 +247,7 @@ export function moduleInstallResultFromEngine(result: EngineModuleInstallResult)
         unapprovedLocalEndpoints: result.unapprovedLocalEndpoints,
       };
     case "payment_required":
-      throw new ConvexError(notPurchasedMessage(result.name));
+      throw new ConvexError(notBoughtMessage(result.name));
   }
 }
 
@@ -216,8 +282,6 @@ export function moduleInstallProgress(moduleKey: string, name: string, version: 
 export interface EngineModuleInstallDeps {
   engine: () => MarketplaceEngine;
   buyerToken: () => Promise<string>;
-  /** The listing's display name for the progress event. */
-  listingName: () => Promise<string>;
   /**
    * Writes the progress event unless an event under its key was written at
    * or after `since`: barkloader may already have answered by webhook.
@@ -227,70 +291,58 @@ export interface EngineModuleInstallDeps {
 }
 
 /**
- * Installs a module or theme listing through the engine.
+ * Installs a module or theme listing through the engine. `listingName` is the
+ * catalog's name for it, for the progress event.
  *
- * The install key only exists once the engine has hashed the archive, so the
- * progress event follows the engine's answer instead of preceding the call,
- * and is skipped when the engine's own `module.installed` or
- * `module.install_failed` callback already settled the key. A failure after
- * the key is known reaches the dashboard as the engine's
- * `module.install_failed`; this side has no key to report one under.
+ * The engine claims the listing with `acquire`, which also counts the install,
+ * so nothing here calls acquire. The install key only exists once the engine
+ * has hashed the archive, so the progress event follows the engine's answer
+ * instead of preceding the call, and is skipped when the engine's own
+ * `module.installed` or `module.install_failed` callback already settled the
+ * key.
+ *
+ * A failure is thrown as a ConvexError carrying the engine's message. The
+ * dashboard learns the key only from this action's answer, so a thrown
+ * failure is the whole report, and there is no key to write an error event
+ * under. A failure after the engine knew the key also reaches the key as the
+ * engine's `module.install_failed`.
  */
 export async function installModuleThroughEngine(
   deps: EngineModuleInstallDeps,
-  request: { listingId: string; approvedPermissions: readonly string[]; approvedLocalEndpoints: readonly string[] }
+  request: {
+    listingId: string;
+    listingName: string;
+    approvedPermissions: readonly string[];
+    approvedLocalEndpoints: readonly string[];
+  }
 ): Promise<MarketplaceInstallResult> {
   const buyerToken = await deps.buyerToken();
   const since = deps.now();
-  const result = await deps.engine().installMarketplaceListing(request.listingId, {
-    approvedPermissions: [...request.approvedPermissions],
-    approvedLocalEndpoints: [...request.approvedLocalEndpoints],
-    buyerToken,
-  });
+  let result: EngineModuleInstallResult;
+  try {
+    result = await deps.engine().installMarketplaceListing(request.listingId, {
+      approvedPermissions: [...request.approvedPermissions],
+      approvedLocalEndpoints: [...request.approvedLocalEndpoints],
+      buyerToken,
+    });
+  } catch (err) {
+    throw engineFailure(err);
+  }
   const mapped = moduleInstallResultFromEngine(result);
   if (result.status === "installed" && result.alreadyInstalled !== true) {
     const version = versionFromModuleKey(request.listingId, result.moduleKey);
-    const name = await deps.listingName().catch(() => request.listingId);
-    await deps.emitProgress(moduleInstallProgress(result.moduleKey, name, version), since);
+    await deps.emitProgress(moduleInstallProgress(result.moduleKey, request.listingName, version), since);
   }
   return mapped;
-}
-
-/**
- * A listing's name read the way the engine reads it: `/catalog/{id}`,
- * anonymously. Only called on the engine path, which never runs at dev access.
- */
-export async function catalogListingName(listingId: string): Promise<string> {
-  const payload = await marketplaceGet(`/catalog/${encodeURIComponent(listingId)}`, "public");
-  const listing = payload && typeof payload === "object" ? (payload as Record<string, unknown>).listing : undefined;
-  const name = listing && typeof listing === "object" ? (listing as Record<string, unknown>).name : undefined;
-  return typeof name === "string" && name !== "" ? name : listingId;
 }
 
 // --- bundle installs ---
 
 export function bundleInstallResultFromEngine(result: EngineBundleInstallResult): InstallBundleResult {
   if (result.status === "payment_required") {
-    throw new ConvexError(notPurchasedMessage(result.name));
+    throw new ConvexError(notBoughtMessage(result.name));
   }
   return { listingId: result.listingId, engineId: result.engineId, kind: result.kind };
-}
-
-/**
- * The error the Convex bundle path raises for the same failure, so the
- * storefront shows the same text. Engine errors reach a browser only as a
- * ConvexError, which is why the refusals that path names are rewrapped.
- */
-export function bundleInstallErrorFromEngine(err: unknown, listingId: string): unknown {
-  const refusal = engineMarketplaceRefusal(err);
-  if (refusal?.status === 404 && refusal.path === `/catalog/${encodeURIComponent(listingId)}`) {
-    return new ConvexError(`Marketplace listing ${listingId} was not found`);
-  }
-  const message = err instanceof Error ? err.message : "";
-  if (message.endsWith("does not install as a bundle") || message.endsWith("carries no bundle to install")) {
-    return new ConvexError(message);
-  }
-  return err;
 }
 
 export interface EngineCallDeps {
@@ -298,7 +350,12 @@ export interface EngineCallDeps {
   buyerToken: () => Promise<string>;
 }
 
-/** Installs an overlay or alert listing through the engine. */
+/**
+ * Installs an overlay or alert listing through the engine, which claims it
+ * with `acquire` (counting the install) and writes the scene or alert
+ * composition. The caller has already read the listing and checked its type,
+ * as the Convex path does, so those refusals keep their text.
+ */
 export async function installBundleThroughEngine(
   deps: EngineCallDeps,
   listingId: string
@@ -308,7 +365,7 @@ export async function installBundleThroughEngine(
   try {
     result = await deps.engine().installMarketplaceBundle(listingId, buyerToken);
   } catch (err) {
-    throw bundleInstallErrorFromEngine(err, listingId);
+    throw engineFailure(err);
   }
   return bundleInstallResultFromEngine(result);
 }
@@ -321,30 +378,16 @@ export function moduleFilesFromInspection(inspection: MarketplaceListingInspecti
 }
 
 /**
- * The error the Convex path raises for the same failure. A download the
- * marketplace refused the buyer is a listing they have not bought, which
- * that path refuses up front under the same message.
- */
-export function inspectionErrorFromEngine(err: unknown, listingName: string): unknown {
-  return isPurchaseRefusal(engineMarketplaceRefusal(err)) ? new ConvexError(notPurchasedMessage(listingName)) : err;
-}
-
-/**
  * The build an install would use, read by the engine. Claims nothing, so
- * browsing or reviewing a listing is never counted as an install.
- * `listingName` names the listing in a purchase refusal.
+ * browsing or reviewing a listing is never counted as an install. Failures
+ * propagate: both callers already turn any failure into their own answer.
  */
 export async function inspectThroughEngine(
   deps: EngineCallDeps,
-  listingId: string,
-  listingName: string
+  listingId: string
 ): Promise<MarketplaceListingInspection> {
   const buyerToken = await deps.buyerToken();
-  try {
-    return await deps.engine().inspectMarketplaceListing(listingId, buyerToken);
-  } catch (err) {
-    throw inspectionErrorFromEngine(err, listingName);
-  }
+  return await deps.engine().inspectMarketplaceListing(listingId, buyerToken);
 }
 
 /** What the setup review offers for approval of one listing. */

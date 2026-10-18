@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { bareKind, parseKindRef } from "@convex/lib/resourceKinds";
 import { THEME_FIELD_TYPE } from "@convex/lib/widgetThemes";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { FileAudio, FileImage, FileVideo, Link2, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
@@ -17,6 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  useCreateResourceInstanceRequest,
+  useResourceInstancesOfKind,
+  useResourceKind,
+} from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTargetChoices } from "@/lib/alert-target";
 import { isExternalMediaValue, toMediaValue } from "@/lib/media-value";
@@ -113,18 +118,12 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
   const moduleName = typeof field.moduleName === "string" ? field.moduleName : undefined;
   const [createOpen, setCreateOpen] = useState(false);
 
-  const instances = useQuery(
-    api.moduleResourceInstances.listByKind,
-    instanceId && resourceKind ? { instanceId, kind: resourceKind } : "skip"
-  );
-  const createAction = useAction(api.moduleResourceActions.createResourceInstance);
+  const instances = useResourceInstancesOfKind(instanceId ?? null, resourceKind || null);
+  const createAction = useCreateResourceInstanceRequest();
   // The kind's declaration: the module an instance made from here belongs to,
   // and its create form, so it is configured the same way as one made on the
   // kind's own page.
-  const kindDefinition = useQuery(
-    api.resourceKinds.getForInstance,
-    instanceId && resourceKind ? { instanceId, kind: resourceKind } : "skip"
-  );
+  const kindDefinition = useResourceKind(instanceId ?? null, resourceKind || null);
   // Until the kind's declaration is known, a qualified kind still names its
   // module, and a bare one is taken to be the field's own module's.
   const owner =
@@ -190,8 +189,7 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
           kind={{ kind: bareKind(resourceKind), name: field.label, schema: kindDefinition?.schema }}
           onClose={() => setCreateOpen(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            const created = await createAction({
-              instanceId,
+            const created = await createAction(instanceId, {
               moduleName: owner,
               kind: bareKind(resourceKind),
               resourceInstanceId,
@@ -219,6 +217,16 @@ function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomField
   const { instance } = useInstance();
   const names = useQuery(api.sceneWidgets.alertWidgetNames, instance ? { instanceId: instance._id } : "skip");
   const { selected, options, stale } = alertTargetChoices(names, value);
+  const noWidgets = names !== undefined && options.length === 0;
+
+  let placeholder: string;
+  if (names === undefined) {
+    placeholder = "Loading...";
+  } else if (noWidgets) {
+    placeholder = "No alert widgets on any scene yet";
+  } else {
+    placeholder = "Choose an alert widget...";
+  }
 
   return (
     <div className="space-y-2">
@@ -226,9 +234,9 @@ function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomField
         {field.label}
         {field.required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
-      <Select value={selected} onValueChange={onChange} disabled={names === undefined}>
+      <Select value={selected} onValueChange={onChange} disabled={names === undefined || noWidgets}>
         <SelectTrigger id={field.id} data-testid={`select-${field.id}`}>
-          <SelectValue />
+          <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map((name) => (

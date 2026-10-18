@@ -12,7 +12,7 @@ import {
   type SetupReview,
   setupReviewFromInspection,
 } from "./lib/marketplaceEngineInstall";
-import { buyerTokenFor, requireEntitlement } from "./lib/marketplaceEntitlement";
+import { buyerRefFor, buyerTokenFor } from "./lib/marketplaceEntitlement";
 import { parseManifestPermissions } from "./lib/modulePermissions";
 import { NO_SETUP_PLATFORMS_MESSAGE, type ResolvedSetupPlatforms, resolveSetupPlatforms } from "./lib/setupPlatforms";
 import { logger } from "./logger";
@@ -41,6 +41,7 @@ export const listForSetup = action({
   handler: async (ctx, { instanceId }): Promise<ResolvedSetupPlatforms> => {
     await requireInstanceRoleInAction(ctx, instanceId);
     const access = await marketplaceAccessForInstance(ctx, instanceId);
+    const content = { access, buyerRef: await buyerRefFor(ctx, instanceId) };
 
     const [curated, listing] = await Promise.all([
       ctx.runQuery(internal.setupPlatforms.listCurated, {}),
@@ -62,14 +63,11 @@ export const listForSetup = action({
             if (viaEngine) {
               const inspection = await inspectThroughEngine(
                 { engine: () => marketplaceEngineSession(viaEngine), buyerToken: () => buyerTokenFor(ctx, instanceId) },
-                id,
                 id
               );
               return [id, setupReviewFromInspection(inspection)];
             }
-            const grant = await requireEntitlement(ctx, instanceId, id, id);
-            const download = await fetchMarketplaceDownload(id, access, grant);
-            const manifest = await fetchMarketplaceArchiveManifest(download);
+            const manifest = await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(id, content));
             return [
               id,
               { permissions: parseManifestPermissions(manifest), localEndpoints: localEndpointSummaries(manifest) },

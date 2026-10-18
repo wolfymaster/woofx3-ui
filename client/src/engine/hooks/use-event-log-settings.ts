@@ -1,12 +1,12 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
-import type { EventLogSettings } from "@woofx3/api";
 import { atom } from "nanostores";
 import { useCallback, useEffect, useState } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineGateway } from "@/engine/context";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import type { EventLogSettings } from "@/engine/types";
 import { withEventTypeEnabled } from "@/lib/activity-feed";
 import { type CapabilitySupport, EVENT_LOG_CAPABILITIES } from "@/lib/engine-capabilities";
-import { transport } from "@/lib/transport";
 import { $engineConnected } from "@/lib/transport/engine-connection";
 
 /**
@@ -52,6 +52,9 @@ export interface EventLogSettingsHandle {
  */
 export function useEventLogSettings(instanceId: Id<"instances"> | undefined): EventLogSettingsHandle {
   const support = useEngineCapabilities(instanceId).support(...EVENT_LOG_CAPABILITIES);
+  const { eventLog } = useEngineGateway();
+  const getEventLogSettings = eventLog.useSettingsRequest();
+  const setEventLogSelection = eventLog.useSetSelectionRequest();
   const connected = useStore($engineConnected);
   const settingsByInstance = useStore($settingsByInstance);
   const settings = instanceId ? settingsByInstance[instanceId] : undefined;
@@ -65,8 +68,7 @@ export function useEventLogSettings(instanceId: Id<"instances"> | undefined): Ev
       return;
     }
     let cancelled = false;
-    transport
-      .getEventLogSettings(instanceId)
+    getEventLogSettings(instanceId)
       .then((next) => {
         if (!cancelled) {
           storeSettings(instanceId, next);
@@ -82,7 +84,7 @@ export function useEventLogSettings(instanceId: Id<"instances"> | undefined): Ev
     return () => {
       cancelled = true;
     };
-  }, [instanceId, support, connected, readCount]);
+  }, [instanceId, support, connected, readCount, getEventLogSettings]);
 
   const refresh = useCallback(() => {
     setReadCount((count) => count + 1);
@@ -96,12 +98,12 @@ export function useEventLogSettings(instanceId: Id<"instances"> | undefined): Ev
       setSaving(true);
       try {
         const selection = withEventTypeEnabled(settings.selection, settings.defaults, type, enabled);
-        storeSettings(instanceId, await transport.setEventLogSelection(instanceId, selection));
+        storeSettings(instanceId, await setEventLogSelection(instanceId, selection));
       } finally {
         setSaving(false);
       }
     },
-    [instanceId, settings]
+    [instanceId, settings, setEventLogSelection]
   );
 
   return { state: settingsState(support, settings, error), saving, refresh, setEnabled };

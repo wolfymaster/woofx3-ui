@@ -1,10 +1,9 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ObsStatus } from "@convex/lib/engineObsStatus";
 import { useStore } from "@nanostores/react";
-import { useAction } from "convex/react";
 import { useEffect, useState } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineGateway } from "@/engine/context";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { CapabilitySupport } from "@/lib/engine-capabilities";
 import { $documentVisible } from "@/lib/stores";
 
@@ -28,7 +27,7 @@ export interface ObsStatusResult {
  */
 export function useObsStatus(instanceId: Id<"instances"> | undefined, enabled: boolean): ObsStatusResult {
   const support = useEngineCapabilities(instanceId).support("obs.status");
-  const getStatus = useAction(api.obsStatus.get);
+  const getStatus = useEngineGateway().status.useObsStatusRequest();
   const visible = useStore($documentVisible);
   const [status, setStatus] = useState<ObsStatus | null>(null);
   const active = Boolean(instanceId) && enabled && support === "supported" && visible;
@@ -41,7 +40,7 @@ export function useObsStatus(instanceId: Id<"instances"> | undefined, enabled: b
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
-        const next = await getStatus({ instanceId });
+        const next = await getStatus(instanceId);
         if (!cancelled) {
           setStatus(next);
         }

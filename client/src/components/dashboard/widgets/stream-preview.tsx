@@ -4,8 +4,8 @@ import { Maximize2, Radio } from "lucide-react";
 import { useState } from "react";
 import { LiveThumbnail } from "@/components/dashboard/live-thumbnail";
 import { StreamPlayerDialog } from "@/components/dashboard/stream-player-dialog";
+import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useInstance } from "@/hooks/use-instance";
-import { useLiveState } from "@/hooks/use-live-state";
 
 export function StreamPreviewWidget() {
   const { instance } = useInstance();

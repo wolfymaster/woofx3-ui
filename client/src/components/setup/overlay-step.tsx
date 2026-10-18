@@ -6,6 +6,7 @@ import { Copy, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import {
@@ -48,8 +49,8 @@ function Actions({ onContinue, continueLabel }: { onContinue: () => void; contin
 export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps) {
   const scenes = useQuery(api.scenes.list, status.engineRegistered ? { instanceId } : "skip");
   const catalog = useQuery(api.sceneWidgets.listForInstance, status.engineRegistered ? { instanceId } : "skip");
-  const syncState = useQuery(api.engineSync.getSyncState, status.engineRegistered ? { instanceId } : "skip");
-  const syncNow = useAction(api.engineSync.syncNow);
+  const syncState = useEngineSyncState(status.engineRegistered ? instanceId : null);
+  const syncNow = useEngineSyncRequest();
   const createScene = useAction(api.sceneActions.createScene);
   const getOrCreateKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
   const { toast } = useToast();
@@ -73,7 +74,7 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
   const requestSync = useCallback(() => {
     setError(null);
     setSyncRequestedAfter(latestRunId);
-    syncNow({ instanceId }).catch((err: unknown) => {
+    syncNow(instanceId).catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err));
     });
   }, [instanceId, latestRunId, syncNow]);

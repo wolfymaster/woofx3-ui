@@ -15,8 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
 import { SUPPORTER_CAPABILITIES } from "@/lib/engine-capabilities";

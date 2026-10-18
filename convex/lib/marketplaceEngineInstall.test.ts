@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import type {
   MarketplaceInstallResult as EngineModuleInstallResult,
   MarketplaceBundleInstallResult,
@@ -11,23 +11,29 @@ import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { type EngineCapabilityReport, LEGACY_ENGINE_REPORT } from "./engineCapabilities";
 import { FEATURE_FLAGS, isFeatureFlagKey } from "./featureFlags";
+import { MarketplaceError } from "./marketplaceApi";
+import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
+import { type CatalogListing, parseCatalogListing } from "./marketplaceCatalog";
 import {
+  buyerTokensConfigured,
   ENGINE_INSTALL_FLAG,
   type EngineInstallGate,
-  engineMarketplaceRefusal,
+  engineFailure,
   inspectThroughEngine,
   installBundleThroughEngine,
   installModuleThroughEngine,
   type MarketplaceEngine,
   type ModuleInstallProgress,
   marketplaceEngineFor,
+  marketplaceModuleEngineFor,
   moduleFilesFromInspection,
   moduleInstallProgress,
+  moduleListingStaysOnConvex,
   routeThroughEngine,
   setupReviewFromInspection,
   versionFromModuleKey,
 } from "./marketplaceEngineInstall";
-import { notPurchasedMessage } from "./marketplaceEntitlement";
+import { acquireRefusal, notBoughtMessage } from "./marketplaceEntitlement";
 
 const LISTING = "obs-scenes";
 const TOKEN = "header.claims.signature";
@@ -38,10 +44,18 @@ const CAPABLE: EngineCapabilityReport = { legacy: false, capabilities: ["modules
 const NOT_CAPABLE: EngineCapabilityReport = { legacy: false, capabilities: ["modules.files"] };
 
 /** A gate that records which inputs it was asked for. */
-function gate(overrides: Partial<{ access: "public" | "dev"; flag: boolean; report: EngineCapabilityReport }> = {}) {
+function gate(
+  overrides: Partial<{
+    access: "public" | "dev";
+    buyerTokens: boolean;
+    flag: boolean;
+    report: EngineCapabilityReport;
+  }> = {}
+) {
   const asked: string[] = [];
   const value: EngineInstallGate = {
     access: overrides.access ?? "public",
+    buyerTokens: overrides.buyerTokens ?? true,
     flagOn: async () => {
       asked.push("flag");
       return overrides.flag ?? true;
@@ -87,7 +101,7 @@ function fakeEngine(handlers: Partial<MarketplaceEngine>) {
   return { open, calls, sessions };
 }
 
-function moduleInstallDeps(answer: () => Promise<EngineModuleInstallResult>, name: () => Promise<string>) {
+function moduleInstallDeps(answer: () => Promise<EngineModuleInstallResult>) {
   const engine = fakeEngine({ installMarketplaceListing: answer });
   const emitted: { progress: ModuleInstallProgress; since: number }[] = [];
   let tokens = 0;
@@ -101,7 +115,6 @@ function moduleInstallDeps(answer: () => Promise<EngineModuleInstallResult>, nam
         tokens += 1;
         return TOKEN;
       },
-      listingName: name,
       emitProgress: async (progress: ModuleInstallProgress, since: number) => {
         emitted.push({ progress, since });
       },
@@ -110,7 +123,12 @@ function moduleInstallDeps(answer: () => Promise<EngineModuleInstallResult>, nam
   };
 }
 
-const APPROVAL = { listingId: LISTING, approvedPermissions: ["chat.read"], approvedLocalEndpoints: ["obs"] };
+const APPROVAL = {
+  listingId: LISTING,
+  listingName: "OBS Scenes",
+  approvedPermissions: ["chat.read"],
+  approvedLocalEndpoints: ["obs"],
+};
 
 async function convexErrorMessage(promise: Promise<unknown>): Promise<string> {
   try {
@@ -146,9 +164,16 @@ describe("routeThroughEngine", () => {
     expect(asked).toEqual([]);
   });
 
+  test("a deployment that cannot mint buyer tokens keeps the Convex path before the flag is read", async () => {
+    const { gate: g, asked } = gate({ buyerTokens: false });
+    expect(await routeThroughEngine(g)).toBe(false);
+    expect(asked).toEqual([]);
+  });
+
   test("an engine that cannot report capabilities keeps the Convex path", async () => {
     const g: EngineInstallGate = {
       access: "public",
+      buyerTokens: true,
       flagOn: async () => true,
       capabilities: async () => {
         throw new Error("fetch failed");
@@ -158,8 +183,44 @@ describe("routeThroughEngine", () => {
   });
 });
 
+describe("buyerTokensConfigured", () => {
+  test("needs both the key and its id", () => {
+    expect(buyerTokensConfigured({ [BUYER_SIGNING_KEY_ENV]: "{}", [BUYER_SIGNING_KEY_ID_ENV]: "k1" })).toBe(true);
+    expect(buyerTokensConfigured({ [BUYER_SIGNING_KEY_ENV]: "{}" })).toBe(false);
+    expect(buyerTokensConfigured({ [BUYER_SIGNING_KEY_ENV]: " ", [BUYER_SIGNING_KEY_ID_ENV]: "k1" })).toBe(false);
+    expect(buyerTokensConfigured({})).toBe(false);
+  });
+});
+
 describe("marketplaceEngineFor", () => {
   const instanceId = "instance1" as Id<"instances">;
+  const savedEnv = { key: process.env[BUYER_SIGNING_KEY_ENV], id: process.env[BUYER_SIGNING_KEY_ID_ENV] };
+  const savedFetch = globalThis.fetch;
+  let fetches = 0;
+
+  beforeEach(() => {
+    process.env[BUYER_SIGNING_KEY_ENV] = "{}";
+    process.env[BUYER_SIGNING_KEY_ID_ENV] = "k1";
+    fetches = 0;
+    globalThis.fetch = (async () => {
+      fetches += 1;
+      throw new Error("no network in tests");
+    }) as unknown as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = savedFetch;
+    for (const [name, value] of [
+      [BUYER_SIGNING_KEY_ENV, savedEnv.key],
+      [BUYER_SIGNING_KEY_ID_ENV, savedEnv.id],
+    ] as const) {
+      if (value === undefined) {
+        delete process.env[name];
+      } else {
+        process.env[name] = value;
+      }
+    }
+  });
 
   function fakeCtx(instance: Record<string, unknown> | null, flag: boolean) {
     const queries: string[] = [];
@@ -186,6 +247,20 @@ describe("marketplaceEngineFor", () => {
     const { ctx, queries } = fakeCtx(registered, false);
     expect(await marketplaceEngineFor(ctx, instanceId)).toBeNull();
     expect(queries).toEqual(["instances:getInternal", "featureFlags:isOnForInstance"]);
+    expect(fetches).toBe(0);
+  });
+
+  test("flag off sends a module install down the Convex path without asking the marketplace or the engine", async () => {
+    const { ctx } = fakeCtx(registered, false);
+    expect(await marketplaceModuleEngineFor(ctx, instanceId, LISTING)).toBeNull();
+    expect(fetches).toBe(0);
+  });
+
+  test("without the buyer signing key the flag is never read", async () => {
+    delete process.env[BUYER_SIGNING_KEY_ID_ENV];
+    const { ctx, queries } = fakeCtx(registered, true);
+    expect(await marketplaceEngineFor(ctx, instanceId)).toBeNull();
+    expect(queries).toEqual(["instances:getInternal"]);
   });
 
   test("dev access answers the Convex path without reading the flag", async () => {
@@ -211,10 +286,7 @@ describe("the flag", () => {
 
 describe("installModuleThroughEngine", () => {
   test("installs with a fresh buyer token and the approvals, then reports progress in the Convex path's words", async () => {
-    const t = moduleInstallDeps(
-      async () => ({ status: "installed", moduleKey: KEY }),
-      async () => "OBS Scenes"
-    );
+    const t = moduleInstallDeps(async () => ({ status: "installed", moduleKey: KEY }));
     expect(await installModuleThroughEngine(t.deps, APPROVAL)).toEqual({ status: "installed", moduleKey: KEY });
 
     expect(t.tokensMinted()).toBe(1);
@@ -234,36 +306,19 @@ describe("installModuleThroughEngine", () => {
   });
 
   test("an already installed build answers like a fresh install and leaves the engine's success event alone", async () => {
-    const t = moduleInstallDeps(
-      async () => ({ status: "installed", moduleKey: KEY, alreadyInstalled: true }),
-      async () => "OBS Scenes"
-    );
+    const t = moduleInstallDeps(async () => ({ status: "installed", moduleKey: KEY, alreadyInstalled: true }));
     expect(await installModuleThroughEngine(t.deps, APPROVAL)).toEqual({ status: "installed", moduleKey: KEY });
     expect(t.emitted).toEqual([]);
   });
 
-  test("names the listing by id when its name cannot be read", async () => {
-    const t = moduleInstallDeps(
-      async () => ({ status: "installed", moduleKey: KEY }),
-      async () => {
-        throw new Error("marketplace down");
-      }
-    );
-    await installModuleThroughEngine(t.deps, APPROVAL);
-    expect(t.emitted[0].progress.message).toBe(`Installing ${LISTING}@1.4.2 from marketplace...`);
-  });
-
   test("passes needs_approval through in the Convex path's shape, without progress", async () => {
-    const t = moduleInstallDeps(
-      async () => ({
-        status: "needs_approval",
-        name: "OBS Scenes",
-        version: "1.5.0",
-        unapproved: ["chat.write"],
-        unapprovedLocalEndpoints: ["obs-2"],
-      }),
-      async () => "OBS Scenes"
-    );
+    const t = moduleInstallDeps(async () => ({
+      status: "needs_approval",
+      name: "OBS Scenes",
+      version: "1.5.0",
+      unapproved: ["chat.write"],
+      unapprovedLocalEndpoints: ["obs-2"],
+    }));
     expect(await installModuleThroughEngine(t.deps, APPROVAL)).toEqual({
       status: "needs_approval",
       name: "OBS Scenes",
@@ -274,26 +329,23 @@ describe("installModuleThroughEngine", () => {
     expect(t.emitted).toEqual([]);
   });
 
-  test("payment_required is the refusal requireEntitlement raises", async () => {
-    const t = moduleInstallDeps(
-      async () => ({ status: "payment_required", name: "OBS Scenes", version: "1.4.2" }),
-      async () => "OBS Scenes"
+  test("payment_required is the refusal the Convex path's acquire raises for a 402", async () => {
+    const t = moduleInstallDeps(async () => ({ status: "payment_required", name: "OBS Scenes", version: "1.4.2" }));
+    const message = await convexErrorMessage(installModuleThroughEngine(t.deps, APPROVAL));
+    expect(message).toBe("OBS Scenes hasn't been bought on this account.");
+    expect(message).toBe(
+      acquireRefusal(new MarketplaceError(402, "payment_required", "payment required"), "OBS Scenes")
     );
-    expect(await convexErrorMessage(installModuleThroughEngine(t.deps, APPROVAL))).toBe(
-      "OBS Scenes has not been purchased on this account."
-    );
-    expect(notPurchasedMessage("OBS Scenes")).toBe("OBS Scenes has not been purchased on this account.");
     expect(t.emitted).toEqual([]);
   });
 
-  test("an engine failure propagates and reports no progress", async () => {
-    const t = moduleInstallDeps(
-      async () => {
-        throw new Error("Marketplace archive does not match the marketplace's sha256 hash");
-      },
-      async () => "OBS Scenes"
+  test("an engine failure reaches the browser with the engine's message and reports no progress", async () => {
+    const t = moduleInstallDeps(async () => {
+      throw new Error("Marketplace archive does not match the marketplace's sha256 hash");
+    });
+    expect(await convexErrorMessage(installModuleThroughEngine(t.deps, APPROVAL))).toBe(
+      "Marketplace archive does not match the marketplace's sha256 hash"
     );
-    await expect(installModuleThroughEngine(t.deps, APPROVAL)).rejects.toThrow("sha256");
     expect(t.emitted).toEqual([]);
   });
 });
@@ -327,37 +379,18 @@ describe("installBundleThroughEngine", () => {
     expect(t.engine.calls).toEqual([{ method: "installMarketplaceBundle", args: ["cozy", TOKEN] }]);
   });
 
-  test("payment_required is the refusal requireEntitlement raises", async () => {
+  test("payment_required is the refusal the Convex path's acquire raises for a 402", async () => {
     const t = deps(async () => ({ status: "payment_required", name: "Cozy Cats", version: "1.0.0" }));
-    expect(await convexErrorMessage(installBundleThroughEngine(t.deps, "cozy"))).toBe(
-      "Cozy Cats has not been purchased on this account."
-    );
+    expect(await convexErrorMessage(installBundleThroughEngine(t.deps, "cozy"))).toBe(notBoughtMessage("Cozy Cats"));
   });
 
-  test("a missing listing reads as the Convex path's not-found", async () => {
+  test("an engine failure reaches the browser with the engine's message, unparsed", async () => {
     const t = deps(async () => {
-      throw new Error("Marketplace GET /catalog/cozy failed with 404 (not_found: listing not found)");
+      throw new Error("Marketplace POST /catalog/cozy/acquire failed with 409 (listing_unavailable: replaced)");
     });
     expect(await convexErrorMessage(installBundleThroughEngine(t.deps, "cozy"))).toBe(
-      "Marketplace listing cozy was not found"
+      "Marketplace POST /catalog/cozy/acquire failed with 409 (listing_unavailable: replaced)"
     );
-  });
-
-  test("a module listing is refused with the same text, visible to the browser", async () => {
-    const t = deps(async () => {
-      throw new Error("OBS Scenes is a module listing and does not install as a bundle");
-    });
-    expect(await convexErrorMessage(installBundleThroughEngine(t.deps, "obs-scenes"))).toBe(
-      "OBS Scenes is a module listing and does not install as a bundle"
-    );
-  });
-
-  test("any other failure propagates unchanged", async () => {
-    const failure = new Error("Marketplace POST /catalog/cozy/acquire failed with 409 (superseded)");
-    const t = deps(async () => {
-      throw failure;
-    });
-    await expect(installBundleThroughEngine(t.deps, "cozy")).rejects.toBe(failure);
   });
 });
 
@@ -385,11 +418,7 @@ const INSPECTION: MarketplaceListingInspection = {
 describe("inspectThroughEngine", () => {
   test("reads the build with a buyer token and lists its files as listModuleFiles does", async () => {
     const engine = fakeEngine({ inspectMarketplaceListing: async () => INSPECTION });
-    const inspection = await inspectThroughEngine(
-      { engine: engine.open, buyerToken: async () => TOKEN },
-      LISTING,
-      LISTING
-    );
+    const inspection = await inspectThroughEngine({ engine: engine.open, buyerToken: async () => TOKEN }, LISTING);
     expect(engine.calls).toEqual([{ method: "inspectMarketplaceListing", args: [LISTING, TOKEN] }]);
     expect(moduleFilesFromInspection(inspection)).toEqual({
       available: true,
@@ -400,31 +429,16 @@ describe("inspectThroughEngine", () => {
     });
   });
 
-  test("a download refused to the buyer is the Convex path's purchase refusal", async () => {
-    for (const status of [401, 402, 403]) {
-      const engine = fakeEngine({
-        inspectMarketplaceListing: async () => {
-          throw new Error(`Marketplace GET /modules/${LISTING}/download failed with ${status} (forbidden)`);
-        },
-      });
-      expect(
-        await convexErrorMessage(
-          inspectThroughEngine({ engine: engine.open, buyerToken: async () => TOKEN }, LISTING, LISTING)
-        )
-      ).toBe(notPurchasedMessage(LISTING));
-    }
-  });
-
-  test("any other failure propagates unchanged", async () => {
+  test("a failure propagates unchanged, for the caller to answer as it does on the Convex path", async () => {
     const failure = new Error("Marketplace archive does not match the marketplace's sha256 hash");
     const engine = fakeEngine({
       inspectMarketplaceListing: async () => {
         throw failure;
       },
     });
-    await expect(
-      inspectThroughEngine({ engine: engine.open, buyerToken: async () => TOKEN }, LISTING, LISTING)
-    ).rejects.toBe(failure);
+    await expect(inspectThroughEngine({ engine: engine.open, buyerToken: async () => TOKEN }, LISTING)).rejects.toBe(
+      failure
+    );
   });
 });
 
@@ -437,20 +451,40 @@ describe("setupReviewFromInspection", () => {
   });
 });
 
-describe("engineMarketplaceRefusal", () => {
-  test("reads the engine's marketplace error format", () => {
-    expect(engineMarketplaceRefusal(new Error("Marketplace GET /catalog/x failed with 404 (not_found: gone)"))).toEqual(
-      { method: "GET", path: "/catalog/x", status: 404 }
-    );
-    expect(engineMarketplaceRefusal(new Error("Marketplace POST /catalog/x/acquire failed with 409"))).toEqual({
-      method: "POST",
-      path: "/catalog/x/acquire",
-      status: 409,
-    });
+describe("engineFailure", () => {
+  test("passes the engine's message on as a ConvexError", () => {
+    const err = engineFailure(new Error("Marketplace installs are turned off on this engine"));
+    expect(err).toBeInstanceOf(ConvexError);
+    expect(err.data).toBe("Marketplace installs are turned off on this engine");
   });
 
-  test("is null for any other error", () => {
-    expect(engineMarketplaceRefusal(new Error("fetch failed"))).toBeNull();
-    expect(engineMarketplaceRefusal(null)).toBeNull();
+  test("keeps a ConvexError as it is", () => {
+    const original = new ConvexError("already readable");
+    expect(engineFailure(original)).toBe(original);
+  });
+});
+
+function listing(overrides: Record<string, unknown>): CatalogListing {
+  const parsed = parseCatalogListing({ id: "cozy", type: "module", name: "Cozy", version: "1.0.0", ...overrides });
+  if (!parsed) {
+    throw new Error("test listing did not parse");
+  }
+  return parsed;
+}
+
+describe("moduleListingStaysOnConvex", () => {
+  test("a module or theme whose id is its manifest id installs on the engine", () => {
+    expect(moduleListingStaysOnConvex(listing({ moduleKey: "cozy" }))).toBeNull();
+    expect(moduleListingStaysOnConvex(listing({ type: "theme", moduleKey: "cozy" }))).toBeNull();
+    expect(moduleListingStaysOnConvex(listing({}))).toBeNull();
+  });
+
+  test("a later edition installing from another manifest id stays on the Convex path", () => {
+    const reason = moduleListingStaysOnConvex(listing({ id: "cozy-v2", moduleKey: "cozy", edition: 2 }));
+    expect(reason).toBe("listing cozy-v2 installs from manifest cozy (edition 2)");
+  });
+
+  test("a listing that is not a module stays on the Convex path, which refuses it", () => {
+    expect(moduleListingStaysOnConvex(listing({ type: "overlay" }))).not.toBeNull();
   });
 });

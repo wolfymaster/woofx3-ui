@@ -1,6 +1,6 @@
 import type { CatalogListing, ListingType } from "@convex/lib/marketplaceCatalog";
 import { LISTING_TYPES } from "@convex/lib/marketplaceCatalog";
-import { AlertCircle, ArrowLeft, ExternalLink } from "lucide-react";
+import { AlertCircle, ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
 import { useMemo } from "react";
 import { useLocation, useParams } from "wouter";
 import { ListingCard } from "@/components/marketplace/listing-card";
@@ -25,7 +25,10 @@ export default function MarketplaceAuthor() {
   const params = useParams<{ slug: string }>();
   const slug = params.slug ?? null;
 
-  const { page, notFound, loading, error } = useMarketplaceAuthor(instance?._id ?? null, slug);
+  const { page, notFound, loading, error, hasMore, loadingMore, loadMoreError, loadMore } = useMarketplaceAuthor(
+    instance?._id ?? null,
+    slug
+  );
   const entitlements = useMarketplaceEntitlements(instance?._id ?? null);
 
   const grouped = useMemo(() => {
@@ -116,13 +119,7 @@ export default function MarketplaceAuthor() {
                   </ul>
                 )}
                 {!page.author.claimed && (
-                  // The page is built from the author string on their
-                  // listings, which is how every module published before
-                  // author pages existed has one at all.
-                  <p className="text-xs text-muted-foreground">
-                    This page is built from what {page.author.displayName} wrote on their listings. They haven't added a
-                    profile yet.
-                  </p>
+                  <p className="text-xs text-muted-foreground">{page.author.displayName} hasn't added a profile yet.</p>
                 )}
               </div>
             </header>
@@ -146,6 +143,16 @@ export default function MarketplaceAuthor() {
                 </div>
               </section>
             ))}
+
+            {hasMore && (
+              <div className="flex flex-col items-center gap-2">
+                <Button variant="outline" className="gap-2" disabled={loadingMore} onClick={() => void loadMore()}>
+                  {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Show more ({page.total - page.listings.length} more)
+                </Button>
+                {loadMoreError && <p className="text-xs text-destructive">{loadMoreError}</p>}
+              </div>
+            )}
 
             {grouped.length === 0 && (
               <p className="text-sm text-muted-foreground">
