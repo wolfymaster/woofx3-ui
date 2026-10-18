@@ -29,6 +29,9 @@ import type {
   InstanceId,
   InstanceLiveState,
   Live,
+  MacroId,
+  MacroRunResult,
+  MacroVariableValue,
   ModuleDetail,
   ModuleFileContent,
   ModuleFileList,
@@ -97,6 +100,7 @@ export interface EngineGateway {
   readonly scenes: ScenesGateway;
   readonly workflows: WorkflowsGateway;
   readonly requests: RequestsGateway;
+  readonly macros: MacrosGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -452,6 +456,16 @@ export interface RequestsGateway {
     kind: Kind,
     instanceId: InstanceId | null
   ): Correlated<CorrelatedRequests[Kind]>;
+}
+
+/** Running the dashboard's macros. The macros themselves are kept in Convex, not on the engine. */
+export interface MacrosGateway {
+  /**
+   * Runs a chat-command, workflow or action macro on the engine. Rejects for
+   * an HTTP-request macro, which the browser fetches itself, and for a
+   * chat-command macro pressed by someone who does not manage the instance.
+   */
+  useRunRequest(): (instanceId: InstanceId, macroId: MacroId, values: MacroVariableValue[]) => Promise<MacroRunResult>;
 }
 
 export interface OptimisticInstance {

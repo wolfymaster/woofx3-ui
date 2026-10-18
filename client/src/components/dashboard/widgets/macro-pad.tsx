@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChatCommands } from "@/engine/hooks/use-chat-commands";
+import { useRunMacroRequest } from "@/engine/hooks/use-macros";
 import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -178,7 +179,7 @@ export function MacroPadModule() {
   const [pendingMacro, setPendingMacro] = useState<MacroButton | null>(null);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const listEngineWorkflows = useEngineWorkflowsRequest();
-  const runMacroOnServer = useAction(api.macros.run);
+  const runMacroOnServer = useRunMacroRequest();
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
   const { toast } = useToast();
 
@@ -312,11 +313,11 @@ export function MacroPadModule() {
           const resolved = applyMacroVariables(macro.config, values);
           await sendChatMessage({ instanceId, message: resolved.message ?? "" });
         } else {
-          await runMacroOnServer({
+          await runMacroOnServer(
             instanceId,
-            macroId: macro.id as Id<"macros">,
-            values: Object.entries(values).map(([name, value]) => ({ name, value })),
-          });
+            macro.id as Id<"macros">,
+            Object.entries(values).map(([name, value]) => ({ name, value }))
+          );
         }
       } catch (error) {
         toast({
