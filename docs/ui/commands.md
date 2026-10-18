@@ -27,6 +27,8 @@ No screen has a per-id query: each reads the list and finds its row, the same wa
 
 A command's steps are a stored workflow of its own in the engine, whose trigger has type `"command"`: only the command starts it, after its cooldown and permission checks, so it runs once per use however many workflows also listen for the command (the engine's `docs/services/commands-ui.md`, "How a command runs its steps"). The `chatCommands` row holds that workflow's id (`engineWorkflowId`) and its tasks (`steps`), so the editor needs nothing else. A command the engine has not linked to a workflow yet still has its `actions`, which open as the same steps and become the workflow when saved. The workflow also reaches the `workflows` table through the usual sync, but `workflows.list` leaves it out (`lib/commandWorkflow.ts`): it is edited as its command, and listing it under Workflows would offer a second editor for the same steps.
 
+When the engine could not give a command its workflow (its actions failed to convert on upgrade, or the workflow it pointed at is gone), the row carries the engine's reason as `workflowError`. The list marks the command "Steps need attention" and the editor shows the reason above the steps; saving the command sends its steps again, which is how the engine relinks it.
+
 Every save of a command sends its whole `steps`; a save that sends none (turning a command on or off from the list or the command palette) leaves them as they are.
 
 ## Drafts
