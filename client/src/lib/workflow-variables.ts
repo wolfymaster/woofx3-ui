@@ -129,7 +129,8 @@ function collectPredecessorSteps(steps: StepNode[], targetId: string): StepNode[
 
 /**
  * Every ${...} variable a field on `currentNodeId` could reference right now: the
- * trigger's payload, plus each predecessor action's declared return value, each
+ * trigger's payload (`triggerVariables` when the surface supplies it, else what the tree's
+ * catalog trigger emits), plus each predecessor action's declared return value, each
  * predecessor condition's boolean result and each predecessor wait's exports. Steps that haven't necessarily run yet by
  * the time `currentNodeId` executes (later siblings, sibling branches, descendants)
  * are excluded — offering them would suggest references the engine can't reliably
@@ -139,13 +140,10 @@ export function computeAvailableVariables(
   tree: WorkflowTree,
   currentNodeId: string,
   catalogActions: CatalogActionRow[],
-  catalogTriggers: CatalogTriggerRow[]
+  catalogTriggers: CatalogTriggerRow[],
+  triggerVariables?: readonly VariableOption[]
 ): VariableOption[] {
-  const triggerRow = resolveCatalogTrigger(tree.trigger, catalogTriggers);
-  const options = triggerDataVariables(
-    parseDataShapeFields(triggerRow?.emits),
-    parseConfigFields(triggerRow?.configFields)
-  );
+  const options = triggerVariables ? [...triggerVariables] : catalogTriggerVariables(tree, catalogTriggers);
 
   const predecessors = collectPredecessorSteps(tree.steps, currentNodeId) ?? [];
   for (const step of predecessors) {
@@ -168,6 +166,11 @@ export function computeAvailableVariables(
   }
 
   return options;
+}
+
+function catalogTriggerVariables(tree: WorkflowTree, catalogTriggers: CatalogTriggerRow[]): VariableOption[] {
+  const triggerRow = resolveCatalogTrigger(tree.trigger, catalogTriggers);
+  return triggerDataVariables(parseDataShapeFields(triggerRow?.emits), parseConfigFields(triggerRow?.configFields));
 }
 
 /**

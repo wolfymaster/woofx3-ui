@@ -60,19 +60,23 @@ type GroupDoc = Doc<"chatCommandGroups">;
 
 /**
  * What a command does, for a row that shows no detail: the one action it runs,
- * or how many. A command with none only announces itself for workflows.
+ * or how many steps. A command with none only announces itself for workflows.
+ * A command's steps are its workflow's; one not linked to a workflow yet runs
+ * its actions instead.
  */
-function summarizeActions(actions: unknown[], actionPresets: ActionPreset[]): ReactNode {
-  const steps = unescapeDollarKeys(actions) as ActionStep[];
+function summarizeSteps(cmd: CommandDoc, actionPresets: ActionPreset[]): ReactNode {
+  const steps = unescapeDollarKeys(cmd.engineWorkflowId ? (cmd.steps ?? []) : (cmd.actions ?? [])) as Array<
+    ActionStep & { type?: string }
+  >;
   if (steps.length === 0) {
     return <span className="italic">trigger only</span>;
   }
-  if (steps.length === 1) {
-    const step = steps[0];
-    const name = actionStepLabel(step, actionPresets);
+  const only = steps[0];
+  if (steps.length === 1 && (only.type === undefined || only.type === "action")) {
+    const name = actionStepLabel(only, actionPresets);
     return <span title={name}>{truncate(name)}</span>;
   }
-  return `${steps.length} actions`;
+  return steps.length === 1 ? "1 step" : `${steps.length} steps`;
 }
 
 function truncate(text: string, max = 60): string {
@@ -255,7 +259,6 @@ function CommandsTab({
         instanceId,
         engineCommandId: cmd.engineCommandId,
         command: cmd.command,
-        actions: cmd.actions ?? [],
         cooldown: cmd.cooldown,
         priority: cmd.priority,
         enabled: !cmd.enabled,
@@ -340,7 +343,7 @@ function CommandsTab({
                     ) : null}
                   </TableCell>
                   <TableCell className="max-w-[280px] text-muted-foreground">
-                    {summarizeActions(cmd.actions ?? [], actionPresets)}
+                    {summarizeSteps(cmd, actionPresets)}
                   </TableCell>
                   <TableCell>
                     {cmd.visibility === "public" ? (

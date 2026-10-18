@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import type { ActionStep, CreateCommandInput } from "@woofx3/api";
+import type { TaskDefinition } from "@woofx3/api/workflow-definition";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -50,9 +51,32 @@ async function requireInstanceContext(ctx: ActionCtx, instanceId: Id<"instances"
  * party that knows which actions exist.
  */
 const actionsValidator = v.array(v.any());
+/**
+ * The tasks of a command's workflow, escaped the same way. Validated by the
+ * engine against the same rules a saved workflow is held to.
+ */
+const stepsValidator = v.array(v.any());
 const visibilityValidator = v.union(v.literal("public"), v.literal("restricted"));
 
 export type NewCommand = Omit<CreateCommandInput, "correlationKey">;
+
+/**
+ * What a save sends for the command's steps: `steps` when the editor has them,
+ * otherwise `actions`, otherwise nothing, which leaves an existing command's
+ * steps as they are.
+ */
+function stepsInput(args: { steps?: unknown[]; actions?: unknown[] }): {
+  steps?: TaskDefinition[];
+  actions?: ActionStep[];
+} {
+  if (args.steps !== undefined) {
+    return { steps: unescapeDollarKeys(args.steps) as TaskDefinition[] };
+  }
+  if (args.actions !== undefined) {
+    return { actions: unescapeDollarKeys(args.actions) as ActionStep[] };
+  }
+  return {};
+}
 
 /**
  * Create a chat command in the engine and mirror the engine's copy into the
@@ -73,6 +97,8 @@ export async function createCommandInEngine(
     engineCommandId: result.id,
     command: result.command,
     actions: escapeDollarKeys(result.actions ?? []) as unknown[],
+    engineWorkflowId: result.workflowId ?? "",
+    steps: escapeDollarKeys(result.steps ?? []) as unknown[],
     cooldown: result.cooldown,
     priority: result.priority,
     enabled: result.enabled,
@@ -89,7 +115,8 @@ export const createCommand = action({
   args: {
     instanceId: v.id("instances"),
     command: v.string(),
-    actions: actionsValidator,
+    steps: v.optional(stepsValidator),
+    actions: v.optional(actionsValidator),
     cooldown: v.number(),
     priority: v.optional(v.number()),
     enabled: v.boolean(),
@@ -102,7 +129,7 @@ export const createCommand = action({
     const bundle = await requireInstanceContext(ctx, args.instanceId);
     const engineCommandId = await createCommandInEngine(ctx, args.instanceId, bundle, {
       command: args.command,
-      actions: unescapeDollarKeys(args.actions) as ActionStep[],
+      ...stepsInput(args),
       cooldown: args.cooldown,
       priority: args.priority,
       enabled: args.enabled,
@@ -120,7 +147,8 @@ export const updateCommand = action({
     instanceId: v.id("instances"),
     engineCommandId: v.string(),
     command: v.string(),
-    actions: actionsValidator,
+    steps: v.optional(stepsValidator),
+    actions: v.optional(actionsValidator),
     cooldown: v.number(),
     priority: v.number(),
     enabled: v.boolean(),
@@ -136,7 +164,7 @@ export const updateCommand = action({
     const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
     const result = await rpc.updateCommand(args.engineCommandId, {
       command: args.command,
-      actions: unescapeDollarKeys(args.actions) as ActionStep[],
+      ...stepsInput(args),
       cooldown: args.cooldown,
       priority: args.priority,
       enabled: args.enabled,
@@ -152,6 +180,8 @@ export const updateCommand = action({
       engineCommandId: result.id,
       command: result.command,
       actions: escapeDollarKeys(result.actions ?? []) as unknown[],
+      engineWorkflowId: result.workflowId ?? "",
+      steps: escapeDollarKeys(result.steps ?? []) as unknown[],
       cooldown: result.cooldown,
       priority: result.priority,
       enabled: result.enabled,
