@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { WorkflowRun } from "@/lib/transport";
+import type { WorkflowRun } from "@/engine/types";
 import { mergeWorkflowRun } from "./workflow-run-list";
 
 function run(id: string, overrides: Partial<WorkflowRun> = {}): WorkflowRun {
