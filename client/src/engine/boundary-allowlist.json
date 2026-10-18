@@ -1,13 +1,8 @@
 [
-  "components/alert-run/replay-controls.tsx",
   "components/alert-run/run-trace.tsx",
   "components/command-palette/use-item-commands.ts",
   "components/dashboard/widgets/macro-pad.tsx",
-  "components/resources/resource-action-editors.tsx",
   "components/settings/storage-settings.tsx",
-  "components/triggers/event-workflow-editor.tsx",
-  "components/workflows/basic-editor.tsx",
-  "components/workflows/step-list-editor.tsx",
   "components/workflows/test-run-sheet.tsx",
   "components/workflows/workflow-runs-panel.tsx",
   "hooks/use-fire-test-event.ts",
@@ -18,11 +13,9 @@
   "hooks/use-recap-markers.ts",
   "hooks/use-recap-timeline-events.ts",
   "hooks/use-stream-recap-engine-detail.ts",
-  "hooks/use-test-run-capabilities.ts",
   "hooks/use-workflow-health.ts",
   "pages/admin/backup.tsx",
   "pages/module-install.tsx",
   "pages/supporters.tsx",
-  "pages/workflow-run.tsx",
-  "pages/workflows.tsx"
+  "pages/workflow-run.tsx"
 ]

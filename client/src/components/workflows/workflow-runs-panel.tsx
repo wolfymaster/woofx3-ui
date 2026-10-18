@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { History, Loader2, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
@@ -24,6 +24,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useCancelWorkflowRunRequest, useReplayWorkflowRunRequest } from "@/engine/hooks/use-workflows";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useTestRunSupport } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
@@ -60,8 +61,8 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
     workflowId: engineWorkflowId,
     limit: RUN_LIMIT,
   });
-  const replay = useAction(api.workflowActions.replay);
-  const cancelRun = useAction(api.workflowActions.cancelRun);
+  const replay = useReplayWorkflowRunRequest();
+  const cancelRun = useCancelWorkflowRunRequest();
   const realCancel = useTestRunSupport(instanceId).realCancel;
 
   const [now, setNow] = useState(() => Date.now());
@@ -77,7 +78,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
   const handleReplay = async (run: RunDoc) => {
     setReplayingId(run.engineRunId);
     try {
-      await replay({ instanceId, engineRunId: run.engineRunId, origin: REPLAY_ORIGIN });
+      await replay(instanceId, { engineRunId: run.engineRunId, origin: REPLAY_ORIGIN });
       toast({ title: "Replay requested", description: "It will appear at the top of this list when it starts." });
     } catch (err) {
       toast({
@@ -96,7 +97,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
     }
     setIsCancelling(true);
     try {
-      const result = await cancelRun({ instanceId, engineRunId: cancelTarget.engineRunId });
+      const result = await cancelRun(instanceId, cancelTarget.engineRunId);
       setCancelTarget(null);
       toast(describeStopOutcome(result.outcome, result.status));
     } catch (err) {
