@@ -2,7 +2,13 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { type QueryCtx, query } from "./_generated/server";
-import { alertWidgetName, DEFAULT_ALERT_WIDGET_NAME } from "./lib/alertWidgets";
+import {
+  type AlertTargetUse,
+  alertStepTargets,
+  alertWidgetNamesOf,
+  DEFAULT_ALERT_WIDGET_NAME,
+  type PlacedWidget,
+} from "./lib/alertWidgets";
 import { BUILTIN_MODULE_LABEL, resolveModuleDisplayNames } from "./lib/moduleDisplayName";
 
 export type SceneWidgetCatalogRow = Doc<"moduleWidgets"> & { moduleName: string };
@@ -72,6 +78,19 @@ interface ScenePlacement {
   settings?: Record<string, unknown>;
 }
 
+function placedWidgets(scene: Doc<"scenes">): PlacedWidget[] {
+  return ((scene.widgets ?? []) as ScenePlacement[]).flatMap((placement) =>
+    typeof placement.widgetCanonicalId === "string"
+      ? [{ widgetId: placement.widgetCanonicalId, settings: placement.settings }]
+      : []
+  );
+}
+
+async function alertWidgetIdsOf(ctx: QueryCtx, instanceId: Id<"instances">): Promise<Set<string>> {
+  const defs = await instanceWidgetDefinitions(ctx, instanceId);
+  return new Set(defs.filter((def) => def.hostsSurface === "alert").map((def) => def.widgetId));
+}
+
 // Every name an alert widget answers to across the instance's scenes, for the
 // Alert action's target picker. Only names some scene has are offered, so a step
 // cannot pick a target nothing will play on; the default leads when present.
@@ -82,8 +101,7 @@ export const alertWidgetNames = query({
       return [];
     }
 
-    const defs = await instanceWidgetDefinitions(ctx, instanceId);
-    const alertWidgetIds = new Set(defs.filter((def) => def.hostsSurface === "alert").map((def) => def.widgetId));
+    const alertWidgetIds = await alertWidgetIdsOf(ctx, instanceId);
     const scenes = await ctx.db
       .query("scenes")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
@@ -91,14 +109,75 @@ export const alertWidgetNames = query({
 
     const names = new Set<string>();
     for (const scene of scenes) {
-      for (const placement of (scene.widgets ?? []) as ScenePlacement[]) {
-        if (typeof placement.widgetCanonicalId === "string" && alertWidgetIds.has(placement.widgetCanonicalId)) {
-          names.add(alertWidgetName(placement.settings));
-        }
+      for (const name of alertWidgetNamesOf(placedWidgets(scene), alertWidgetIds)) {
+        names.add(name);
       }
     }
     const hasDefault = names.delete(DEFAULT_ALERT_WIDGET_NAME);
     const sorted = Array.from(names).sort((a, b) => a.localeCompare(b));
     return hasDefault ? [DEFAULT_ALERT_WIDGET_NAME, ...sorted] : sorted;
+  },
+});
+
+export interface AlertTargetUsage {
+  /** The canonical ids of the widgets that host alerts, so the editor can tell its own alert widgets apart. */
+  alertWidgetIds: string[];
+  /** Names the alert widgets of every scene but the one asked about answer to. */
+  elsewhere: string[];
+  /** Every Alert step's target, in workflows and chat commands. */
+  uses: AlertTargetUse[];
+}
+
+// What the scene editor needs to warn that an edit leaves Alert steps with no
+// alert widget to play on (see `orphanedAlertTargets`). The scene being edited
+// is left out of `elsewhere`, since the editor knows its names better than
+// this cache: it holds the draft.
+export const alertTargetUsage = query({
+  args: { instanceId: v.id("instances"), engineSceneId: v.string() },
+  handler: async (ctx, { instanceId, engineSceneId }): Promise<AlertTargetUsage | null> => {
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return null;
+    }
+
+    const alertWidgetIds = await alertWidgetIdsOf(ctx, instanceId);
+    const scenes = await ctx.db
+      .query("scenes")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    const elsewhere = new Set<string>();
+    for (const scene of scenes) {
+      if (scene.engineSceneId === engineSceneId) {
+        continue;
+      }
+      for (const name of alertWidgetNamesOf(placedWidgets(scene), alertWidgetIds)) {
+        elsewhere.add(name);
+      }
+    }
+
+    const uses: AlertTargetUse[] = [];
+    const workflows = await ctx.db
+      .query("workflows")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const workflow of workflows) {
+      const definition = workflow.definition as { name?: unknown; tasks?: unknown } | null;
+      const tasks = Array.isArray(definition?.tasks) ? definition.tasks : [];
+      const name =
+        typeof definition?.name === "string" && definition.name ? definition.name : workflow.engineWorkflowId;
+      for (const target of alertStepTargets(tasks)) {
+        uses.push({ target, kind: "workflow", name });
+      }
+    }
+    const commands = await ctx.db
+      .query("chatCommands")
+      .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
+      .collect();
+    for (const command of commands) {
+      for (const target of alertStepTargets(command.actions)) {
+        uses.push({ target, kind: "command", name: `!${command.command}` });
+      }
+    }
+
+    return { alertWidgetIds: Array.from(alertWidgetIds), elsewhere: Array.from(elsewhere), uses };
   },
 });

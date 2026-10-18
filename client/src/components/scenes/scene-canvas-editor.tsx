@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { alertWidgetNamesOf, orphanedAlertTargets } from "@convex/lib/alertWidgets";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
@@ -41,6 +42,7 @@ import {
 import type { Scene, Widget } from "@/types";
 import { type DraftCommand, DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "./draft-live-controls";
 import { LiveScenePreview } from "./live-scene-preview";
+import { OrphanedAlertTargetsNotice } from "./orphaned-alert-targets-notice";
 import { WidgetLayoutCanvas } from "./widget-layout-canvas";
 
 interface SceneCanvasEditorProps {
@@ -199,6 +201,29 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
 
   const shownDoc = editorState?.doc ?? null;
   const canvasSettings = useMemo(() => (shownDoc === null ? null : canvasSettingsOf(shownDoc)), [shownDoc]);
+
+  // Alert steps this editor's changes leave with no alert widget to play on,
+  // measured against the scene as the editor first had it: the published
+  // scene in session mode, the last save otherwise.
+  const alertTargetUsage = useQuery(api.sceneWidgets.alertTargetUsage, { instanceId, engineSceneId });
+  const orphanedTargets = useMemo(() => {
+    if (!alertTargetUsage || scene === null || shownDoc === null) {
+      return [];
+    }
+    const alertWidgetIds = new Set(alertTargetUsage.alertWidgetIds);
+    const before = alertWidgetNamesOf(
+      scene.widgets.map((widget) => ({ widgetId: widget.widgetCanonicalId, settings: widget.settings })),
+      alertWidgetIds
+    );
+    const after = alertWidgetNamesOf(
+      Object.values(shownDoc.widgets).map((placement) => ({
+        widgetId: placement.widget,
+        settings: placement.settings,
+      })),
+      alertWidgetIds
+    );
+    return orphanedAlertTargets(alertTargetUsage.uses, before, after, new Set(alertTargetUsage.elsewhere));
+  }, [alertTargetUsage, scene, shownDoc]);
 
   // Who else is editing this version, and where: other editors' selections,
   // in a colour each keeps for as long as it is connected.
@@ -717,7 +742,12 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
 
   return (
     <WidgetLayoutCanvas
-      header={header}
+      header={
+        <>
+          {header}
+          <OrphanedAlertTargetsNotice targets={orphanedTargets} />
+        </>
+      }
       editor={editor}
       state={editorState}
       catalog={catalogRows ?? NO_ROWS}
