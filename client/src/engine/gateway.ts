@@ -54,6 +54,7 @@ import type {
   SceneRecord,
   SceneWidgetCatalogRow,
   StreamEventFrame,
+  TestRunCapabilities,
   TransientEvent,
   UploadGrant,
   UploadRequest,
@@ -61,7 +62,11 @@ import type {
   WebhookEventSummary,
   WidgetThemes,
   Workflow,
+  WorkflowCancelResult,
   WorkflowCatalog,
+  WorkflowReplay,
+  WorkflowTrigger,
+  WorkflowTriggerResult,
 } from "@/engine/types";
 
 /**
@@ -368,6 +373,34 @@ export interface WorkflowsGateway {
   useWorkflow(instanceId: InstanceId | null, engineWorkflowId: string | null): Live<Workflow | null>;
   /** Null when the caller cannot see the instance; skipped (always loading) for a null id. */
   useCatalog(instanceId: InstanceId | null): Live<WorkflowCatalog | null>;
+  /**
+   * Creates a workflow from a definition with its `$` keys escaped
+   * (lib/dollar-keys), and resolves once its webhook echo has landed, with
+   * the id the engine gave it.
+   */
+  useCreateRequest(): (instanceId: InstanceId, definition: unknown) => Promise<{ engineWorkflowId: string }>;
+  /** Replaces a workflow's definition (`$` keys escaped); resolves once its webhook echo has landed. */
+  useUpdateRequest(): (
+    instanceId: InstanceId,
+    engineWorkflowId: string,
+    definition: unknown
+  ) => Promise<{ engineWorkflowId: string }>;
+  /** Resolves once the delete's webhook echo has landed. */
+  useRemoveRequest(): (instanceId: InstanceId, engineWorkflowId: string) => Promise<{ deleted: true }>;
+  /** Resolves once the change's webhook echo has landed. */
+  useSetEnabledRequest(): (
+    instanceId: InstanceId,
+    engineWorkflowId: string,
+    isEnabled: boolean
+  ) => Promise<{ isEnabled: boolean }>;
+  /** Starts a manual run and resolves at once with its key; the run's progress arrives in transient events. */
+  useTriggerRequest(): (instanceId: InstanceId, run: WorkflowTrigger) => Promise<WorkflowTriggerResult>;
+  /** Probes whether the engine takes test-run options, without starting a run. */
+  useTestRunCapabilitiesRequest(): (instanceId: InstanceId) => Promise<TestRunCapabilities>;
+  /** Runs a recorded run again and resolves at once with its key, like a manual run. */
+  useReplayRequest(): (instanceId: InstanceId, replay: WorkflowReplay) => Promise<{ triggerId: string }>;
+  /** Stops a recorded run. */
+  useCancelRunRequest(): (instanceId: InstanceId, engineRunId: string) => Promise<WorkflowCancelResult>;
 }
 
 /**

@@ -1,9 +1,8 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { OptionsSupport } from "@convex/lib/engineTestRun";
-import { useAction } from "convex/react";
 import { useEffect, useState } from "react";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useTestRunCapabilitiesRequest } from "@/engine/hooks/use-workflows";
 import { type TestRunSupport, testRunSupport } from "@/lib/engine-capabilities";
 
 /** `checking` while the engine is being asked; otherwise what it answered. */
@@ -31,7 +30,7 @@ export function rememberOptionsUnsupported(instanceId: Id<"instances">): void {
 
 /** Probes only when `enabled`; see `workflowActions.testRunCapabilities`. */
 function useLegacyOptionsProbe(instanceId: Id<"instances"> | undefined, enabled: boolean): TestRunOptionsState {
-  const probe = useAction(api.workflowActions.testRunCapabilities);
+  const probe = useTestRunCapabilitiesRequest();
   const [state, setState] = useState<TestRunOptionsState>(() =>
     instanceId ? (probed.get(instanceId) ?? "checking") : "checking"
   );
@@ -47,7 +46,7 @@ function useLegacyOptionsProbe(instanceId: Id<"instances"> | undefined, enabled:
     }
     let cancelled = false;
     setState("checking");
-    probe({ instanceId })
+    probe(instanceId)
       .then(({ options }) => {
         if (options !== "unknown") {
           probed.set(instanceId, options);

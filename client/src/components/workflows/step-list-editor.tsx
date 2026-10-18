@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import { useStore } from "@nanostores/react";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
-import { useAction } from "convex/react";
 import { Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "wouter";
@@ -26,7 +24,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
-import { useWorkflow } from "@/engine/hooks/use-workflows";
+import { useUpdateWorkflowRequest, useWorkflow } from "@/engine/hooks/use-workflows";
 import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { type CatalogActionRow, type CatalogTriggerRow, useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -197,7 +195,7 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
   const instanceId = useStore($currentInstanceId);
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const { toast } = useToast();
-  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
+  const updateFromDefinition = useUpdateWorkflowRequest();
 
   const workflow = useWorkflow((instanceId as InstanceId | null) ?? null, engineWorkflowId || null);
 
@@ -277,11 +275,11 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
       }
       setIsSaving(true);
       try {
-        await updateFromDefinition({
-          instanceId: instanceId as never,
+        await updateFromDefinition(
+          instanceId as InstanceId,
           engineWorkflowId,
-          definition: escapeDollarKeys(definition) as WorkflowDefinition,
-        });
+          escapeDollarKeys(definition) as WorkflowDefinition
+        );
         return true;
       } catch (err) {
         toast({
