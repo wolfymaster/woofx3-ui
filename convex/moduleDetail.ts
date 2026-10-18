@@ -9,6 +9,7 @@ import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
 import type { MarketplaceAccess } from "./lib/marketplaceAccess";
 import { buyerRefFor } from "./lib/marketplaceEntitlement";
+import { installedListing } from "./lib/marketplaceInstallIdentity";
 import {
   installedFunctionSummaries,
   type ModuleFunctionSummary,
@@ -123,10 +124,10 @@ export const getModuleDetail = action({
       // The DB is authoritative for installed modules, but we do not store the README. Fetch it
       // (and the icon / latest version / workflows) from the marketplace alongside the DB queries —
       // run concurrently rather than after, since the external marketplace call can take seconds
-      // (up to MARKETPLACE_TIMEOUT_MS) and gains nothing from waiting on the DB queries first. Only
-      // attempted when the moduleKey carries a real marketplace id; a marketplace miss must not fail
-      // the detail.
-      const marketplaceId = installedModule.moduleKey?.split(":")[0];
+      // (up to MARKETPLACE_TIMEOUT_MS) and gains nothing from waiting on the DB queries first. Read
+      // from the listing the module was installed from, so a later edition reports its own latest
+      // version rather than its first edition's; a marketplace miss must not fail the detail.
+      const marketplaceId = installedListing(installedModule)?.listingId;
       const [triggers, actions, functions, widgets, marketplaceMeta] = await Promise.all([
         ctx.runQuery(internal.triggerDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(internal.actionDefinitions.listByModule, { moduleId: installedModule._id }),
@@ -269,6 +270,8 @@ function formatInstalledDetail(
     category?: string;
     tags: string[];
     moduleKey?: string;
+    marketplaceListingId?: string;
+    marketplaceEdition?: number;
     status?: string;
   },
   triggers: Array<{ slug: string; name: string; description: string; color: string }>,
@@ -277,7 +280,7 @@ function formatInstalledDetail(
   widgets: Array<{ widgetId: string; name: string }>,
   manifest: unknown
 ): ModuleDetailResult {
-  const mpId = module.moduleKey?.split(":")[0] ?? module.name;
+  const mpId = installedListing(module)?.listingId ?? module.name;
   return {
     id: mpId,
     name: module.name,

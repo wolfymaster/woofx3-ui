@@ -1,6 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { type CatalogListing, LISTING_TYPES, type ListingType } from "@convex/lib/marketplaceCatalog";
 import { featuredInOrder } from "@convex/lib/marketplaceImages";
+import { installedVersionsByListing } from "@convex/lib/marketplaceInstallIdentity";
 import { useQuery } from "convex/react";
 import { Loader2, Moon, RefreshCw, Search, Sun } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -162,18 +163,7 @@ export default function Marketplace() {
   const entitlements = useMarketplaceEntitlements(instanceId);
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
 
-  // moduleKey is `{marketplaceId}:{version}:{sha7}`, so the installed version
-  // of a marketplace listing is read off its prefix.
-  const installedVersions = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const module of repoModules ?? []) {
-      const parts = module.moduleKey?.split(":");
-      if (parts && parts.length >= 2 && parts[0]) {
-        map.set(parts[0], parts[1]);
-      }
-    }
-    return map;
-  }, [repoModules]);
+  const installedVersions = useMemo(() => installedVersionsByListing(repoModules ?? []), [repoModules]);
 
   const stateFor = useCallback(
     (listing: CatalogListing) => {

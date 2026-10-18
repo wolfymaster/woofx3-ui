@@ -111,6 +111,23 @@ free upgrade. Once a newer edition is published, the older one leaves the grid,
 but its page still works for the accounts that hold it and points them at the
 new one (`supersededBy`).
 
+Every edition of a module installs under its manifest id (the listing's
+`moduleKey`): the install key is `{manifest id}:{version}:{sha7}` on both
+install paths, because barkloader computes the key from the archive and
+refuses any other. Edition 2 therefore replaces edition 1 in place, and
+edition 1's key is the one it always had (its listing id is its manifest id).
+Since the key no longer says which listing is installed, a `moduleRepository`
+row carries `marketplaceListingId` and `marketplaceEdition`, read through
+`installedListing` (`convex/lib/marketplaceInstallIdentity.ts`). They come
+from the engine's install provenance (`listEngineModules`, applied by the
+modules sync step) or, for an install Convex started, from the record it wrote
+under the key (`marketplaceInstalls`), applied when `module.installed` arrives.
+A row with neither falls back to the key's first segment; that is right for
+every module installed before editions could install, since only first
+editions could. So edition 1 installed shows edition 2's page as the upgrade
+its quote names, and an earlier edition's page reads as installed while a later
+one is, rather than offering to replace it.
+
 What one account must do to hold one listing is a **quote**, decided by the
 marketplace (`marketplaceCatalog.quote`): `owned`, `free`, `upgrade_free`,
 `upgrade` (the discounted price), `full`, or `unavailable` with a reason. The
@@ -181,11 +198,8 @@ which also counts the install, so Convex does not call `acquireListing` there.
 Inspecting acquires nothing.
 
 A module install also reads the listing from `/catalog/{id}` first, for its
-name, and keeps the Convex path for a listing whose id is not its manifest id
-(`moduleKey`): a later edition such as `cozy-v2`. Barkloader accepts only
-`{manifest id}:{version}:{sha7}` as the install key, while both paths send
-`{listing id}:{version}:{sha7}`, so such an install fails with
-`ModuleKeyMismatch` either way until the engine keys editions by manifest id.
+name and its manifest id (`moduleKey`), which the engine's install key must
+start with.
 
 What differs on the engine path:
 
