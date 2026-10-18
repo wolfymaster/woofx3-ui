@@ -961,6 +961,9 @@ export default defineSchema({
     projectionKey: v.optional(v.string()),
     /** See triggerDefinitions.taxonomy. */
     taxonomy: v.optional(v.array(v.string())),
+    // The manifest's one-line template for a configured step, e.g. "Add {amount}
+    // to {target}"; absent when the action declares none. See lib/action-sentence.ts.
+    sentence: v.optional(v.string()),
     handlerType: v.optional(v.string()),
     functionCall: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),

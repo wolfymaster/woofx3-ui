@@ -49,6 +49,8 @@ export type CatalogActionRow = {
   configFields?: unknown;
   /** DataShapeField[] naming what this action's function hands back (e.g. {next, previous}). */
   returns?: unknown;
+  /** The module's template for a configured step; see ActionPreset.sentence. */
+  sentence?: string;
   /** See CatalogTriggerRow.taxonomy. */
   taxonomy?: string[];
   moduleId?: string;
@@ -110,6 +112,7 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
     color: row.color,
     source: row.moduleLabel ?? BUILTIN_MODULE_LABEL,
     taxonomy: row.taxonomy,
+    sentence: typeof row.sentence === "string" && row.sentence.trim() !== "" ? row.sentence : undefined,
     config:
       fields.length > 0 || outputs.length > 0
         ? { fields, outputs: outputs.length > 0 ? outputs : undefined }
