@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { TriggerConfigPanel } from "@/components/workflows/step-config-panel";
 import { useToast } from "@/hooks/use-toast";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import { conditionSourcesFor, type EngineConditionSupport, NO_ENGINE_CONDITION_SUPPORT } from "@/lib/condition-builder";
 import {
   descendantIds,
   type FlowPick,
@@ -35,7 +36,7 @@ import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
 import { type StepSummary, stepSummary } from "@/lib/step-summary";
 import { cn } from "@/lib/utils";
 import { isDelayWait } from "@/lib/wait-config";
-import { resolveCatalogAction, triggerNodeLabel } from "@/lib/workflow-node-label";
+import { resolveCatalogAction, resolveCatalogTrigger, triggerNodeLabel } from "@/lib/workflow-node-label";
 import { triggerNodeSummary } from "@/lib/workflow-node-summary";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import {
@@ -65,6 +66,8 @@ export interface FlowEditorProps {
   resourceLabels?: Map<string, string>;
   /** Why a step can't be removed from `steps`, or null when it can. */
   removeBlockedReason?: (steps: StepNode[], id: string) => string | null;
+  /** What the engine lets condition steps check beyond the catalog; nothing extra when absent. */
+  conditionSupport?: EngineConditionSupport;
 }
 
 /** What every row in the flow reads and calls; held in context so nested branches need no prop chains. */
@@ -117,6 +120,7 @@ export function FlowEditor({
   actionPresets,
   resourceLabels,
   removeBlockedReason,
+  conditionSupport = NO_ENGINE_CONDITION_SUPPORT,
 }: FlowEditorProps) {
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -303,20 +307,39 @@ export function FlowEditor({
 
   const existingStepIds = useMemo(() => collectStepIds(tree.steps), [tree.steps]);
 
+  const triggerRow = useMemo(
+    () => resolveCatalogTrigger(tree.trigger, catalogTriggers),
+    [tree.trigger, catalogTriggers]
+  );
+
   const renderEditor = useCallback(
-    (step: StepNode) => (
-      <StepInlineEditor
-        step={step}
-        catalogTriggers={catalogTriggers}
-        catalogActions={catalogActions}
-        catalogLoading={catalogLoading}
-        existingStepIds={existingStepIds}
-        availableVariables={computeAvailableVariables(tree, step.id, catalogActions, catalogTriggers)}
-        onChange={(next) => onChange({ ...tree, steps: updateStepInTree(tree.steps, step.id, () => next) })}
-        onRename={rename}
-      />
-    ),
-    [tree, catalogTriggers, catalogActions, catalogLoading, existingStepIds, onChange, rename]
+    (step: StepNode) => {
+      const availableVariables = computeAvailableVariables(tree, step.id, catalogActions, catalogTriggers);
+      return (
+        <StepInlineEditor
+          step={step}
+          catalogTriggers={catalogTriggers}
+          catalogActions={catalogActions}
+          catalogLoading={catalogLoading}
+          existingStepIds={existingStepIds}
+          availableVariables={availableVariables}
+          conditionSources={conditionSourcesFor(availableVariables, triggerRow, conditionSupport)}
+          onChange={(next) => onChange({ ...tree, steps: updateStepInTree(tree.steps, step.id, () => next) })}
+          onRename={rename}
+        />
+      );
+    },
+    [
+      tree,
+      catalogTriggers,
+      catalogActions,
+      catalogLoading,
+      existingStepIds,
+      onChange,
+      rename,
+      triggerRow,
+      conditionSupport,
+    ]
   );
 
   const state: FlowState = {
@@ -329,6 +352,14 @@ export function FlowEditor({
       stepSummary(step, {
         action: step.type === "action" ? resolveCatalogAction(step, catalogActions) : undefined,
         resourceLabels,
+        conditionFields:
+          step.type === "condition"
+            ? conditionSourcesFor(
+                computeAvailableVariables(tree, step.id, catalogActions, catalogTriggers),
+                triggerRow,
+                conditionSupport
+              ).fields
+            : undefined,
       }),
     iconOf: (step) => stepIcon(step, catalogActions),
     placeOf: (id) => findStepPlace(tree.steps, id),

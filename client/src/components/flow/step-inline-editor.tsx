@@ -1,6 +1,7 @@
-import type { ConditionConfig } from "@woofx3/api";
-import { ActionConfigPanel, ConditionConfigPanel, WaitConfigPanel } from "@/components/workflows/step-config-panel";
+import { ConditionStepEditor } from "@/components/flow/condition-builder";
+import { ActionConfigPanel, WaitConfigPanel } from "@/components/workflows/step-config-panel";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import type { ConditionSources } from "@/lib/condition-builder";
 import type { WaitConfig } from "@/lib/wait-config";
 import type { StepNode } from "@/lib/workflow-tree";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -13,6 +14,8 @@ export interface StepInlineEditorProps {
   existingStepIds: ReadonlySet<string>;
   /** Values of the trigger and of earlier steps this step can read. */
   availableVariables: VariableOption[];
+  /** What a condition step's rows can check; see conditionSourcesFor. */
+  conditionSources: ConditionSources;
   onChange: (step: StepNode) => void;
   onRename: (oldId: string, newId: string) => void;
 }
@@ -28,6 +31,7 @@ export function StepInlineEditor({
   catalogLoading,
   existingStepIds,
   availableVariables,
+  conditionSources,
   onChange,
   onRename,
 }: StepInlineEditorProps) {
@@ -48,10 +52,11 @@ export function StepInlineEditor({
       );
     case "condition":
       return (
-        <ConditionConfigPanel
-          node={step}
+        <ConditionStepEditor
+          step={step}
+          sources={conditionSources}
           availableVariables={availableVariables}
-          onUpdateConditionConditions={(_id, conditions: ConditionConfig[]) => onChange({ ...step, conditions })}
+          onChange={onChange}
         />
       );
     case "wait":

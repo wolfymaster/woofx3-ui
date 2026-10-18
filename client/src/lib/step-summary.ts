@@ -1,5 +1,6 @@
 import type { ConditionConfig, ConditionOperator } from "@woofx3/api";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
+import { type ConditionField, conditionsSentence } from "@/lib/condition-builder";
 import { conditionValueText } from "@/lib/condition-value";
 import { describeWaitTimeout, isDelayWait, waitNodeLabel } from "@/lib/wait-config";
 import { actionNodeSummary } from "@/lib/workflow-node-summary";
@@ -20,6 +21,8 @@ export interface StepSummaryContext {
   action?: CatalogActionRow;
   /** Display names of the streamer's counters, timers and queues, by canonical id. */
   resourceLabels?: Map<string, string>;
+  /** What a condition step can check, so its rows read by their labels. */
+  conditionFields?: readonly ConditionField[];
 }
 
 const OPERATOR_PHRASES: Record<ConditionOperator, string> = {
@@ -87,8 +90,11 @@ function baseSummary(step: StepNode, context: StepSummaryContext): Pick<StepSumm
       return { title, details };
     }
     case "condition": {
-      const all = [...step.conditions, ...(step.condition ? [step.condition] : [])];
-      const text = conditionsText(all, step.conditionLogic);
+      // The engine evaluates `condition` before `conditions`; the builder lists them so too.
+      const all = [...(step.condition ? [step.condition] : []), ...step.conditions];
+      const text = context.conditionFields
+        ? conditionsSentence(all, step.conditionLogic, context.conditionFields)
+        : conditionsText(all, step.conditionLogic);
       return { title: text ? `If ${text}` : "If …", details: text ? [] : ["No conditions yet"] };
     }
     case "wait": {

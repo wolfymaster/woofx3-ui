@@ -88,6 +88,7 @@ import type * as lib_engineSync_steps_workflows from "../lib/engineSync/steps/wo
 import type * as lib_engineSync_syncRow from "../lib/engineSync/syncRow.js";
 import type * as lib_engineSync_trigger from "../lib/engineSync/trigger.js";
 import type * as lib_engineTestRun from "../lib/engineTestRun.js";
+import type * as lib_engineViewerFacts from "../lib/engineViewerFacts.js";
 import type * as lib_entitlementAccess from "../lib/entitlementAccess.js";
 import type * as lib_entitlements from "../lib/entitlements.js";
 import type * as lib_featureFlagAccess from "../lib/featureFlagAccess.js";
@@ -260,6 +261,7 @@ import type * as twitchBroadcast from "../twitchBroadcast.js";
 import type * as twitchClips from "../twitchClips.js";
 import type * as twitchIntegration from "../twitchIntegration.js";
 import type * as users from "../users.js";
+import type * as viewerFacts from "../viewerFacts.js";
 import type * as webhookAuth from "../webhookAuth.js";
 import type * as workflowActions from "../workflowActions.js";
 import type * as workflowCatalog from "../workflowCatalog.js";
@@ -356,6 +358,7 @@ declare const fullApi: ApiFromModules<{
   "lib/engineSync/syncRow": typeof lib_engineSync_syncRow;
   "lib/engineSync/trigger": typeof lib_engineSync_trigger;
   "lib/engineTestRun": typeof lib_engineTestRun;
+  "lib/engineViewerFacts": typeof lib_engineViewerFacts;
   "lib/entitlementAccess": typeof lib_entitlementAccess;
   "lib/entitlements": typeof lib_entitlements;
   "lib/featureFlagAccess": typeof lib_featureFlagAccess;
@@ -528,6 +531,7 @@ declare const fullApi: ApiFromModules<{
   twitchClips: typeof twitchClips;
   twitchIntegration: typeof twitchIntegration;
   users: typeof users;
+  viewerFacts: typeof viewerFacts;
   webhookAuth: typeof webhookAuth;
   workflowActions: typeof workflowActions;
   workflowCatalog: typeof workflowCatalog;
