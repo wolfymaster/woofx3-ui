@@ -1,24 +1,43 @@
-import { bareKind, COUNTER_KIND, QUEUE_KIND, resourceKindMatches, TIMER_KIND } from "@convex/lib/resourceKinds";
+import { bareKind, parseKindRef, resourceKindMatches } from "@convex/lib/resourceKinds";
 import { Braces, Clock, Hourglass, type LucideIcon, MessageSquare, Puzzle, Radio, Split } from "lucide-react";
 import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
 import { taxonomyLabel } from "@/lib/alert-groups";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import { type ActionPreset, type ConfigField, getDefaultConfigValues } from "@/lib/workflow-presets";
 
+type SourceTarget = { type: "source"; source: "scenes" | "alertWidgets" };
+
 /**
- * Which of the streamer's own things an object's actions act on: instances of a
- * resource kind (a `resource_ref` field naming it), or a field whose options come
- * from the streamer's scenes or alert widgets.
+ * Which of the streamer's own things an object's actions act on: instances of
+ * the resource kinds its actions' `resource_ref` fields name, or a field whose
+ * options come from the streamer's scenes or alert widgets.
  */
-export type ActionObjectTarget =
-  | { type: "resource"; kind: string }
-  | { type: "source"; source: "scenes" | "alertWidgets" };
+export type ActionObjectTarget = { type: "resource"; kinds: readonly string[] } | SourceTarget;
+
+/**
+ * What an object definition says its actions act on. A resource object names
+ * only what its things are called (`counter`), never a module's kind: the kinds
+ * come from its actions' fields, so a module's own counter kind is listed
+ * alongside the bundled one.
+ */
+type DefinitionTarget = { type: "resource"; kindName: string } | SourceTarget;
 
 /** One of the streamer's things, as a "Which one?" chip offers it. */
 export interface ObjectInstance {
   /** What the action's target field stores: a canonical id, an engine scene id, a widget name. */
   value: string;
   label: string;
+  /** A resource instance's kind, qualified (`woofx3:counter`); absent for a scene or alert widget. */
+  kind?: string;
+}
+
+/** A resource instance as Convex mirrors it (`moduleResourceInstances`). */
+export interface ResourceInstanceRow {
+  canonicalId: string;
+  displayName: string;
+  moduleName: string;
+  /** The kind's own name, without its module. */
+  kind: string;
 }
 
 /** An action listed under an object, and the setting a chosen instance fills. */
@@ -37,6 +56,10 @@ export interface ActionObject {
   target?: ActionObjectTarget;
   /** What one of its things is called, for "Which counter?": lower case, singular. */
   noun?: string;
+  /** Leads the list of its things under the object, when a bare list of names would not say what they are. */
+  instancesLead?: string;
+  /** Said in place of its things when the streamer has none. */
+  noInstances?: string;
   actions: ObjectAction[];
 }
 
@@ -46,8 +69,10 @@ interface ObjectDefinition {
   taxonomy: string;
   label: string;
   icon: LucideIcon;
-  target?: ActionObjectTarget;
+  target?: DefinitionTarget;
   noun?: string;
+  instancesLead?: string;
+  noInstances?: string;
 }
 
 /**
@@ -63,7 +88,11 @@ const OBJECT_DEFINITIONS: readonly ObjectDefinition[] = [
     label: "Alerts",
     icon: STREAM_OBJECT_ICONS.alerts,
     target: { type: "source", source: "alertWidgets" },
-    noun: "alert widget",
+    // An alert's target is an alert widget, a named area of a scene. Streamers
+    // think of it as where the alert shows up, so that is what the picker asks.
+    noun: "spot on your overlay",
+    instancesLead: "Plays on your overlay at",
+    noInstances: "None of your overlays has a spot for alerts yet.",
   },
   {
     key: "scenes",
@@ -78,7 +107,7 @@ const OBJECT_DEFINITIONS: readonly ObjectDefinition[] = [
     taxonomy: "tools.counter",
     label: "Counters",
     icon: STREAM_OBJECT_ICONS.counters,
-    target: { type: "resource", kind: COUNTER_KIND },
+    target: { type: "resource", kindName: "counter" },
     noun: "counter",
   },
   {
@@ -86,7 +115,7 @@ const OBJECT_DEFINITIONS: readonly ObjectDefinition[] = [
     taxonomy: "tools.timer",
     label: "Timers",
     icon: STREAM_OBJECT_ICONS.timers,
-    target: { type: "resource", kind: TIMER_KIND },
+    target: { type: "resource", kindName: "timer" },
     noun: "timer",
   },
   {
@@ -94,15 +123,10 @@ const OBJECT_DEFINITIONS: readonly ObjectDefinition[] = [
     taxonomy: "tools.queue",
     label: "Queues",
     icon: STREAM_OBJECT_ICONS.queues,
-    target: { type: "resource", kind: QUEUE_KIND },
+    target: { type: "resource", kindName: "queue" },
     noun: "queue",
   },
 ];
-
-/** The resource kinds objects list instances of; useActionObjectInstances loads exactly these. */
-export const RESOURCE_OBJECT_KINDS: readonly string[] = OBJECT_DEFINITIONS.flatMap((definition) =>
-  definition.target?.type === "resource" ? [definition.target.kind] : []
-);
 
 export const ADVANCED_OBJECT_KEY = "advanced";
 const ADVANCED_LABEL = "Advanced";
@@ -181,31 +205,114 @@ export function actionObjects(presets: readonly ActionPreset[]): ActionObject[] 
     .sort((a, b) => a.placement.rank - b.placement.rank || a.placement.label.localeCompare(b.placement.label))
     .map(({ placement, actions }) => {
       const definition = placement.definition;
+      const target = definition?.target ? objectTarget(definition.target, actions) : undefined;
       return {
         key: placement.key,
         label: placement.label,
         icon: placement.icon,
-        ...(definition?.target ? { target: definition.target } : {}),
+        ...(target ? { target } : {}),
         ...(definition?.noun ? { noun: definition.noun } : {}),
+        ...(definition?.instancesLead ? { instancesLead: definition.instancesLead } : {}),
+        ...(definition?.noInstances ? { noInstances: definition.noInstances } : {}),
         actions: actions.sort((a, b) => a.preset.name.localeCompare(b.preset.name)),
       };
     });
 }
 
 /**
- * The setting a chosen thing fills: the first field that is a `resource_ref` of
- * the target's kind, or whose options come from the target's source.
+ * The object's target as its actions declare it: for a resource object, every
+ * kind its actions' target fields name, in the order first named. A resource
+ * object none of whose actions names a kind has no things to choose from.
+ */
+function objectTarget(target: DefinitionTarget, actions: readonly ObjectAction[]): ActionObjectTarget | undefined {
+  if (target.type === "source") {
+    return target;
+  }
+  const kinds = new Set<string>();
+  for (const action of actions) {
+    const kind = action.targetField?.resourceKind;
+    if (kind) {
+      kinds.add(kind);
+    }
+  }
+  return kinds.size > 0 ? { type: "resource", kinds: [...kinds] } : undefined;
+}
+
+/**
+ * The setting a chosen thing fills: the first `resource_ref` field naming a
+ * kind of the object's name (`counter`, from any module, or bare as a module
+ * installed before kinds were qualified names it), or the first field whose
+ * options come from the target's source.
  */
 export function findTargetField(
   preset: Pick<ActionPreset, "config">,
-  target: ActionObjectTarget
+  target: DefinitionTarget
 ): ConfigField | undefined {
   return preset.config?.fields.find((field) => {
     if (target.type === "resource") {
-      return field.type === "resource_ref" && resourceKindMatches(field.resourceKind, target.kind);
+      return field.type === "resource_ref" && parseKindRef(field.resourceKind ?? "")?.kind === target.kindName;
     }
     return field.source?.kind === target.source;
   });
+}
+
+/**
+ * Whether `action` can be pointed at `instance`. A resource instance must be of
+ * a kind the action's target field accepts, so an action of one module is never
+ * handed another module's counter; a scene or alert widget fits any action of
+ * its object that has a target field.
+ */
+export function acceptsInstance(action: ObjectAction, instance: ObjectInstance): boolean {
+  const field = action.targetField;
+  if (!field) {
+    return false;
+  }
+  if (instance.kind === undefined) {
+    return field.type !== "resource_ref";
+  }
+  return field.type === "resource_ref" && resourceKindMatches(field.resourceKind, instance.kind);
+}
+
+/** The instances `action` can be pointed at, in the order given. */
+export function instancesFor(action: ObjectAction, instances: readonly ObjectInstance[]): ObjectInstance[] {
+  return instances.filter((instance) => acceptsInstance(action, instance));
+}
+
+/**
+ * The resource instances an object offers: those some action of the object
+ * accepts, each once, by label. When they come from more than one module, each
+ * label names its module, since two modules may each hold a "Hype" counter.
+ */
+export function resourceObjectInstances(object: ActionObject, rows: readonly ResourceInstanceRow[]): ObjectInstance[] {
+  const byId = new Map<string, ResourceInstanceRow>();
+  for (const row of rows) {
+    const kind = `${row.moduleName}:${row.kind}`;
+    const wanted = object.actions.some(
+      (action) =>
+        action.targetField?.type === "resource_ref" && resourceKindMatches(action.targetField.resourceKind, kind)
+    );
+    if (wanted && !byId.has(row.canonicalId)) {
+      byId.set(row.canonicalId, row);
+    }
+  }
+  const picked = [...byId.values()];
+  const modules = new Set(picked.map((row) => row.moduleName));
+  return picked
+    .map((row) => ({
+      value: row.canonicalId,
+      label: modules.size > 1 ? `${row.displayName} (${row.moduleName})` : row.displayName,
+      kind: `${row.moduleName}:${row.kind}`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/** What a kind an instance can be created of is called when there is a choice: "counter from woofx3". */
+export function kindChoiceLabel(kind: string): string {
+  const parsed = parseKindRef(kind);
+  if (!parsed) {
+    return kind;
+  }
+  return parsed.module ? `${parsed.kind} from ${parsed.module}` : parsed.kind;
 }
 
 /** "Which counter?", or "Which one?" for an object that does not name its things. */
@@ -216,7 +323,7 @@ export function whichPrompt(object: Pick<ActionObject, "noun">): string {
 /** The parameters a new step starts with: the settings' defaults, and the chosen thing in its setting. */
 export function initialParameters(action: ObjectAction, instance?: ObjectInstance): Record<string, unknown> {
   const parameters = getDefaultConfigValues(action.preset.config?.fields ?? []) as Record<string, unknown>;
-  if (instance && action.targetField) {
+  if (instance && action.targetField && acceptsInstance(action, instance)) {
     parameters[action.targetField.id] = instance.value;
   }
   return parameters;
@@ -230,13 +337,13 @@ export function initialParameters(action: ObjectAction, instance?: ObjectInstanc
  * front of that word: "Increment Hype counter". The word is looked for as the
  * target field's label and, for a resource, as its kind ("counter" for
  * `woofx3:counter`). A name without either word gets the thing after it:
- * "Set widget visibility on Main overlay". With nothing chosen, or no setting to
- * put it in, the step is the action's name as it is.
+ * "Set widget visibility on Main overlay". With nothing chosen, or a thing the
+ * action cannot take, the step is the action's name as it is.
  */
 export function verbLabel(action: ObjectAction, instance?: ObjectInstance): string {
   const name = action.preset.name;
   const field = action.targetField;
-  if (!instance || !field) {
+  if (!instance || !field || !acceptsInstance(action, instance)) {
     return name;
   }
   const nouns = new Set([field.label.trim().toLowerCase()]);
@@ -258,15 +365,20 @@ export function verbLabel(action: ObjectAction, instance?: ObjectInstance): stri
 }
 
 /**
- * The line under an object: the first few of the streamer's things it holds, or
- * when it holds none (or names no things), the first few of its actions.
+ * The line under an object: the first few of the streamer's things it holds,
+ * after the object's lead when it has one, or when it holds none (or names no
+ * things), the first few of its actions.
  */
 export function objectHint(object: ActionObject, instances: readonly ObjectInstance[] | undefined): string {
+  if (object.target && instances && instances.length > 0) {
+    const names = firstFew(instances.map((instance) => instance.label));
+    return object.instancesLead ? `${object.instancesLead} ${names}` : names;
+  }
+  return firstFew(object.actions.map((action) => action.preset.name));
+}
+
+function firstFew(names: readonly string[]): string {
   const shown = 3;
-  const names =
-    object.target && instances && instances.length > 0
-      ? instances.map((instance) => instance.label)
-      : object.actions.map((action) => action.preset.name);
   if (names.length <= shown) {
     return names.join(", ");
   }
@@ -326,8 +438,8 @@ export type ActionSearchHit =
 
 /**
  * Everything matching `query`: each action once per thing it can act on (so "hype"
- * finds "Increment Hype counter"), or once on its own when it has no things to act
- * on yet, and the flow blocks in `flowBlocks`.
+ * finds "Increment Hype counter"), or once on its own when none of its object's
+ * things fits it, and the flow blocks in `flowBlocks`.
  *
  * Every word of the query must appear in what the hit says or where it is listed.
  * Hits rank by how well the label alone matches: all of it, its start, the start
@@ -350,7 +462,8 @@ export function searchActionObjects(
   objects.forEach((object, order) => {
     const held = object.target ? (instances.get(object.key) ?? []) : [];
     for (const action of object.actions) {
-      const targets: (ObjectInstance | undefined)[] = action.targetField && held.length > 0 ? [...held] : [undefined];
+      const fitting = instancesFor(action, held);
+      const targets: (ObjectInstance | undefined)[] = fitting.length > 0 ? fitting : [undefined];
       for (const instance of targets) {
         const label = verbLabel(action, instance);
         const where = instance ? `${object.label}, ${instance.label}` : object.label;

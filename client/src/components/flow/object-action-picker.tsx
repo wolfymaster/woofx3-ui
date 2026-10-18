@@ -13,14 +13,17 @@ import {
   type ActionObject,
   type ActionSearchHit,
   ADVANCED_OBJECT_KEY,
+  acceptsInstance,
   actionObjects,
   FLOW_BLOCKS,
   type FlowBlock,
   type FlowStepKind,
   initialParameters,
+  kindChoiceLabel,
   type ObjectAction,
   type ObjectInstance,
   objectHint,
+  type ResourceInstanceRow,
   searchActionObjects,
   verbLabel,
   whichPrompt,
@@ -69,7 +72,9 @@ export function ObjectActionPicker({
   onCancel,
 }: ObjectActionPickerProps) {
   const objects = useMemo(() => actionObjects(presets), [presets]);
-  const instances = useActionObjectInstances(objects);
+  // Made here and not yet mirrored back from the engine, so still missing from the instance query.
+  const [created, setCreated] = useState<ResourceInstanceRow[]>([]);
+  const instances = useActionObjectInstances(objects, created);
   const blocks = useMemo(
     () =>
       flowSteps.flatMap((kind) => {
@@ -82,8 +87,6 @@ export function ObjectActionPicker({
   const [query, setQuery] = useState("");
   const [objectKey, setObjectKey] = useState<string | null>(null);
   const [chosen, setChosen] = useState<Record<string, string>>({});
-  // Made here and not yet mirrored back from the engine, so still missing from `instances`.
-  const [created, setCreated] = useState<Record<string, ObjectInstance[]>>({});
   const searchRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const searchId = useId();
@@ -207,12 +210,12 @@ export function ObjectActionPicker({
         {object && (
           <ObjectVerbs
             object={object}
-            instances={withCreated(instances.get(object.key), created[object.key])}
+            instances={instances.get(object.key)}
             chosenValue={chosen[object.key]}
             onChoose={(value) => setChosen((current) => ({ ...current, [object.key]: value }))}
             onCreated={(made) => {
-              setCreated((current) => ({ ...current, [object.key]: [...(current[object.key] ?? []), made] }));
-              setChosen((current) => ({ ...current, [object.key]: made.value }));
+              setCreated((current) => [...current, made]);
+              setChosen((current) => ({ ...current, [object.key]: made.canonicalId }));
             }}
             onPick={pickAction}
           />
@@ -220,18 +223,6 @@ export function ObjectActionPicker({
       </div>
     </section>
   );
-}
-
-/** The listed instances followed by those created here that the list does not hold yet. */
-function withCreated(
-  listed: readonly ObjectInstance[] | undefined,
-  created: readonly ObjectInstance[] | undefined
-): readonly ObjectInstance[] | undefined {
-  if (!created || created.length === 0) {
-    return listed;
-  }
-  const held = listed ?? [];
-  return [...held, ...created.filter((made) => !held.some((instance) => instance.value === made.value))];
 }
 
 /** Moves focus between a list's items with the arrow keys; Tab still walks them too. */
@@ -393,7 +384,7 @@ function ObjectVerbs({
   instances: readonly ObjectInstance[] | undefined;
   chosenValue: string | undefined;
   onChoose: (value: string) => void;
-  onCreated: (instance: ObjectInstance) => void;
+  onCreated: (instance: ResourceInstanceRow) => void;
   onPick: (action: ObjectAction, instance: ObjectInstance | undefined) => void;
 }) {
   const chosen = object.target
@@ -415,15 +406,18 @@ function ObjectVerbs({
         className="flex flex-col"
         onKeyDown={moveFocus}
       >
-        {object.actions.map((action) => (
-          <li key={action.preset.id}>
-            <VerbButton
-              title={verbLabel(action, chosen)}
-              detail={action.preset.description}
-              onClick={() => onPick(action, action.targetField ? chosen : undefined)}
-            />
-          </li>
-        ))}
+        {object.actions.map((action) => {
+          const instance = chosen && acceptsInstance(action, chosen) ? chosen : undefined;
+          return (
+            <li key={action.preset.id}>
+              <VerbButton
+                title={verbLabel(action, instance)}
+                detail={action.preset.description}
+                onClick={() => onPick(action, instance)}
+              />
+            </li>
+          );
+        })}
       </ul>
     </>
   );
@@ -440,7 +434,7 @@ function InstanceChips({
   instances: readonly ObjectInstance[] | undefined;
   chosen: ObjectInstance | undefined;
   onChoose: (value: string) => void;
-  onCreated: (instance: ObjectInstance) => void;
+  onCreated: (instance: ResourceInstanceRow) => void;
 }) {
   const [creating, setCreating] = useState(false);
   const labelId = useId();
@@ -455,7 +449,7 @@ function InstanceChips({
     target?.type === "resource" ? (
       creating ? (
         <InlineCreateInstance
-          kind={target.kind}
+          kinds={target.kinds}
           noun={noun}
           onCreated={(made) => {
             onCreated(made);
@@ -482,12 +476,15 @@ function InstanceChips({
     return (
       <div className="flex flex-col gap-2">
         <p className="text-[13px] text-muted-foreground">
-          You have no {object.label.toLowerCase()} yet. The steps below can still be added and pointed at one later.
+          {object.noInstances ?? `You have no ${object.label.toLowerCase()} yet.`} The steps below can still be added
+          and pointed at one later.
         </p>
         {create}
         {target?.type === "source" && (
           <Link href="/stream/scenes" className="text-xs text-primary underline-offset-4 hover:underline">
-            {target.source === "scenes" ? "Make a scene in the scene editor" : "Name alert widgets in the scene editor"}
+            {target.source === "scenes"
+              ? "Make a scene in the scene editor"
+              : "Add a spot for alerts in the scene editor"}
           </Link>
         )}
       </div>
@@ -528,10 +525,72 @@ function InstanceChips({
 }
 
 /**
- * Creates an instance of `kind` in place, through the same form and action the
- * kind's own page uses, and hands back its canonical id so it becomes the choice.
+ * Creates an instance of one of `kinds` (the kinds the object's actions accept)
+ * in place, asking which first when there is more than one, and hands back the
+ * new instance so it becomes the choice.
  */
 function InlineCreateInstance({
+  kinds,
+  noun,
+  onCreated,
+  onCancel,
+}: {
+  kinds: readonly string[];
+  noun: string;
+  onCreated: (instance: ResourceInstanceRow) => void;
+  onCancel: () => void;
+}) {
+  const [kind, setKind] = useState<string | undefined>(kinds.length === 1 ? kinds[0] : undefined);
+
+  if (kind === undefined) {
+    return (
+      <fieldset
+        className="min-w-0 space-y-2 rounded-lg border bg-muted/30 px-3 pb-3 pt-1"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onCancel();
+          }
+        }}
+      >
+        <legend className="px-1 text-[13px] font-medium">What kind of {noun}?</legend>
+        <div className="flex flex-wrap gap-2">
+          {kinds.map((candidate) => (
+            <Button
+              key={candidate}
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => setKind(candidate)}
+              data-testid={`button-create-kind-${candidate}`}
+            >
+              {kindChoiceLabel(candidate)}
+            </Button>
+          ))}
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+        </div>
+      </fieldset>
+    );
+  }
+  return (
+    <InlineCreateForm
+      key={kind}
+      kind={kind}
+      noun={noun}
+      onCreated={onCreated}
+      onCancel={kinds.length > 1 ? () => setKind(undefined) : onCancel}
+    />
+  );
+}
+
+/**
+ * Creates an instance of `kind` through the same form and action the kind's own
+ * page uses.
+ */
+function InlineCreateForm({
   kind,
   noun,
   onCreated,
@@ -539,7 +598,7 @@ function InlineCreateInstance({
 }: {
   kind: string;
   noun: string;
-  onCreated: (instance: ObjectInstance) => void;
+  onCreated: (instance: ResourceInstanceRow) => void;
   onCancel: () => void;
 }) {
   const { instance } = useInstance();
@@ -547,7 +606,7 @@ function InlineCreateInstance({
   const createInstance = useAction(api.moduleResourceActions.createResourceInstance);
   const kindDefinition = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind } : "skip");
   const owner = kindDefinition?.moduleName ?? parseKindRef(kind)?.module;
-  const createdRef = useRef<ObjectInstance | null>(null);
+  const createdRef = useRef<ResourceInstanceRow | null>(null);
 
   if (!instanceId || kindDefinition === undefined) {
     return <p className="text-[13px] text-muted-foreground">Loading…</p>;
@@ -583,7 +642,12 @@ function InlineCreateInstance({
             displayName,
             settings,
           });
-          createdRef.current = { value: created.canonicalId, label: created.displayName };
+          createdRef.current = {
+            canonicalId: created.canonicalId,
+            displayName: created.displayName,
+            moduleName: owner,
+            kind: bareKind(kind),
+          };
         }}
         onClose={() => {
           const created = createdRef.current;

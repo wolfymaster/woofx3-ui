@@ -1,18 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
 import { Square } from "lucide-react";
 import { BUILTIN_MODULE_LABEL } from "./action-menu";
 import {
   type ActionObject,
   ADVANCED_OBJECT_KEY,
+  acceptsInstance,
   actionObjectKey,
   actionObjects,
   FLOW_BLOCKS,
   findTargetField,
   initialParameters,
+  instancesFor,
+  kindChoiceLabel,
   type ObjectInstance,
   objectHint,
-  RESOURCE_OBJECT_KINDS,
+  type ResourceInstanceRow,
+  resourceObjectInstances,
   searchActionObjects,
   verbLabel,
   whichPrompt,
@@ -145,10 +148,25 @@ function objectByKey(key: string): ActionObject {
   return found;
 }
 
-const HYPE: ObjectInstance = { value: "woofx3:counter:hype", label: "Hype" };
-const DEATHS: ObjectInstance = { value: "woofx3:counter:deaths", label: "Deaths" };
-const BREAK: ObjectInstance = { value: "woofx3:timer:break", label: "Break" };
-const SONGS: ObjectInstance = { value: "woofx3:queue:songs", label: "Song requests" };
+const HYPE: ObjectInstance = { value: "woofx3:counter:hype", label: "Hype", kind: "woofx3:counter" };
+const DEATHS: ObjectInstance = { value: "woofx3:counter:deaths", label: "Deaths", kind: "woofx3:counter" };
+const BREAK: ObjectInstance = { value: "woofx3:timer:break", label: "Break", kind: "woofx3:timer" };
+const SONGS: ObjectInstance = { value: "woofx3:queue:songs", label: "Song requests", kind: "woofx3:queue" };
+
+// A second module declaring its own counter kind, with an action filed under the
+// same taxonomy entry as the bundled counter actions.
+const BUMP_TALLY = action(
+  "tally.bump",
+  "Bump counter",
+  ["tools.counter"],
+  [resourceTarget("tally:counter", "Counter"), amount],
+  "Tally"
+);
+const TALLY_HYPE: ObjectInstance = { value: "tally:counter:hype", label: "Hype (tally)", kind: "tally:counter" };
+
+function row(moduleName: string, kind: string, id: string, displayName: string): ResourceInstanceRow {
+  return { canonicalId: `${moduleName}:${kind}:${id}`, displayName, moduleName, kind };
+}
 const MAIN_SCENE: ObjectInstance = { value: "scene-1", label: "Main overlay" };
 
 describe("actionObjectKey", () => {
@@ -222,20 +240,46 @@ describe("actionObjects", () => {
 
   test("names what an object's things are called", () => {
     expect(whichPrompt(objectByKey("counters"))).toBe("Which counter?");
-    expect(whichPrompt(objectByKey("alerts"))).toBe("Which alert widget?");
     expect(whichPrompt(objectByKey("chat"))).toBe("Which one?");
   });
 
-  test("loads instances for exactly the kinds the hook queries", () => {
-    expect(RESOURCE_OBJECT_KINDS).toEqual([COUNTER_KIND, TIMER_KIND, QUEUE_KIND]);
+  test("asks where on the overlay an alert plays", () => {
+    expect(whichPrompt(objectByKey("alerts"))).toBe("Which spot on your overlay?");
+  });
+
+  test("takes an object's kinds from what its actions' target fields name", () => {
+    expect(objectByKey("counters").target).toEqual({ type: "resource", kinds: ["woofx3:counter"] });
+    const counters = actionObjects([INCREMENT, BUMP_TALLY, RESET_COUNTER])[0];
+    expect(counters.target).toEqual({ type: "resource", kinds: ["woofx3:counter", "tally:counter"] });
+  });
+
+  test("keeps a bare kind a module installed before kinds were qualified names", () => {
+    const legacy = action(
+      "counter.increment",
+      "Increment counter",
+      ["tools.counter"],
+      [resourceTarget("counter", "Counter")]
+    );
+    expect(actionObjects([legacy])[0].target).toEqual({ type: "resource", kinds: ["counter"] });
+  });
+
+  test("gives a resource object no target when none of its actions names a kind", () => {
+    const untargeted = action("counter.list", "List counters", ["tools.counter"]);
+    expect(actionObjects([untargeted])[0].target).toBeUndefined();
   });
 });
 
 describe("findTargetField", () => {
   test("finds the resource_ref field of the object's kind", () => {
     expect(objectByKey("counters").actions.map((entry) => entry.targetField?.id)).toEqual(["target", "target"]);
-    expect(findTargetField(ADD_TIME, { type: "resource", kind: TIMER_KIND })?.id).toBe("target");
-    expect(findTargetField(TAKE_NEXT, { type: "resource", kind: QUEUE_KIND })?.id).toBe("target");
+    expect(findTargetField(ADD_TIME, { type: "resource", kindName: "timer" })?.id).toBe("target");
+    expect(findTargetField(TAKE_NEXT, { type: "resource", kindName: "queue" })?.id).toBe("target");
+  });
+
+  test("finds another module's kind of the same name", () => {
+    const [bump] = actionObjects([INCREMENT, BUMP_TALLY])[0].actions;
+    expect(bump.preset.id).toBe("tally.bump");
+    expect(bump.targetField?.id).toBe("target");
   });
 
   test("matches a bare kind from a module installed before kinds were qualified", () => {
@@ -245,13 +289,11 @@ describe("findTargetField", () => {
       ["tools.counter"],
       [resourceTarget("counter", "Counter")]
     );
-    expect(findTargetField(legacy, { type: "resource", kind: COUNTER_KIND })?.id).toBe("target");
+    expect(findTargetField(legacy, { type: "resource", kindName: "counter" })?.id).toBe("target");
   });
 
-  test("ignores a resource_ref of another kind or another module", () => {
-    expect(findTargetField(ADD_TIME, { type: "resource", kind: COUNTER_KIND })).toBeUndefined();
-    const foreign = action("x", "Bump counter", ["tools.counter"], [resourceTarget("other:counter", "Counter")]);
-    expect(findTargetField(foreign, { type: "resource", kind: COUNTER_KIND })).toBeUndefined();
+  test("ignores a resource_ref of another kind", () => {
+    expect(findTargetField(ADD_TIME, { type: "resource", kindName: "counter" })).toBeUndefined();
   });
 
   test("finds the field whose options are the scenes or alert widgets", () => {
@@ -262,6 +304,83 @@ describe("findTargetField", () => {
   test("leaves an action with no matching setting without a target", () => {
     expect(objectByKey("chat").actions[0].targetField).toBeUndefined();
     expect(findTargetField(FUNCTION, { type: "source", source: "scenes" })).toBeUndefined();
+  });
+});
+
+describe("resourceObjectInstances", () => {
+  const counters = actionObjects([INCREMENT, BUMP_TALLY])[0];
+
+  test("offers the instances some action of the object accepts, by label", () => {
+    const rows = [row("woofx3", "counter", "hype", "Hype"), row("woofx3", "counter", "deaths", "Deaths")];
+    expect(resourceObjectInstances(objectByKey("counters"), rows)).toEqual([DEATHS, HYPE]);
+  });
+
+  test("leaves out instances of a kind no action accepts", () => {
+    const rows = [row("woofx3", "counter", "hype", "Hype"), row("rival", "counter", "hype", "Hype")];
+    expect(resourceObjectInstances(objectByKey("counters"), rows).map((instance) => instance.value)).toEqual([
+      "woofx3:counter:hype",
+    ]);
+  });
+
+  test("names the module when instances come from more than one", () => {
+    const rows = [row("woofx3", "counter", "hype", "Hype"), row("tally", "counter", "hype", "Hype")];
+    expect(resourceObjectInstances(counters, rows).map((instance) => instance.label)).toEqual([
+      "Hype (tally)",
+      "Hype (woofx3)",
+    ]);
+  });
+
+  test("lists an instance once when it arrives twice", () => {
+    const rows = [row("woofx3", "counter", "hype", "Hype"), row("woofx3", "counter", "hype", "Hype")];
+    expect(resourceObjectInstances(objectByKey("counters"), rows)).toEqual([HYPE]);
+  });
+
+  test("takes any module's instance of the name for a bare kind", () => {
+    const legacy = action(
+      "counter.increment",
+      "Increment counter",
+      ["tools.counter"],
+      [resourceTarget("counter", "Counter")]
+    );
+    const object = actionObjects([legacy])[0];
+    expect(resourceObjectInstances(object, [row("woofx3", "counter", "hype", "Hype")])).toEqual([HYPE]);
+  });
+});
+
+describe("acceptsInstance", () => {
+  const [bump, increment] = actionObjects([INCREMENT, BUMP_TALLY])[0].actions;
+
+  test("gives an action only instances of the kinds its target field names", () => {
+    expect(acceptsInstance(increment, HYPE)).toBe(true);
+    expect(acceptsInstance(increment, TALLY_HYPE)).toBe(false);
+    expect(acceptsInstance(bump, TALLY_HYPE)).toBe(true);
+    expect(acceptsInstance(bump, HYPE)).toBe(false);
+    expect(instancesFor(bump, [HYPE, TALLY_HYPE, DEATHS])).toEqual([TALLY_HYPE]);
+  });
+
+  test("gives a legacy bare-kind action an instance of that name from any module", () => {
+    const legacy = actionObjects([
+      action("counter.increment", "Increment counter", ["tools.counter"], [resourceTarget("counter", "Counter")]),
+    ])[0].actions[0];
+    expect(instancesFor(legacy, [HYPE, TALLY_HYPE])).toEqual([HYPE, TALLY_HYPE]);
+  });
+
+  test("fits a scene or alert widget to any action of its object with a target", () => {
+    expect(acceptsInstance(objectByKey("scenes").actions[0], MAIN_SCENE)).toBe(true);
+    expect(acceptsInstance(objectByKey("chat").actions[0], MAIN_SCENE)).toBe(false);
+  });
+
+  test("never fills an action's setting with an instance it cannot take", () => {
+    expect(initialParameters(bump, HYPE)).toEqual({ target: "", amount: 1 });
+    expect(verbLabel(bump, HYPE)).toBe("Bump counter");
+    expect(verbLabel(bump, TALLY_HYPE)).toBe("Bump Hype (tally) counter");
+  });
+});
+
+describe("kindChoiceLabel", () => {
+  test("names the module a kind comes from", () => {
+    expect(kindChoiceLabel("tally:counter")).toBe("counter from tally");
+    expect(kindChoiceLabel("counter")).toBe("counter");
   });
 });
 
@@ -331,7 +450,7 @@ describe("verbLabel", () => {
   });
 
   test("does not read the instance's name as a replacement pattern", () => {
-    expect(verbLabel(objectByKey("counters").actions[0], { value: "v", label: "$& $1" })).toBe(
+    expect(verbLabel(objectByKey("counters").actions[0], { value: "v", label: "$& $1", kind: "woofx3:counter" })).toBe(
       "Increment $& $1 counter"
     );
   });
@@ -343,6 +462,15 @@ describe("objectHint", () => {
     expect(objectHint(counters, [HYPE, DEATHS])).toBe("Hype, Deaths");
     const many = ["A", "B", "C", "D", "E"].map((label) => ({ value: label, label }));
     expect(objectHint(counters, many)).toBe("A, B, C and 2 more");
+  });
+
+  test("says an alert's spots are on the overlay", () => {
+    const spots = [
+      { value: "default", label: "default" },
+      { value: "sidebar", label: "sidebar" },
+    ];
+    expect(objectHint(objectByKey("alerts"), spots)).toBe("Plays on your overlay at default, sidebar");
+    expect(objectHint(objectByKey("alerts"), [])).toBe("Alert");
   });
 
   test("names the actions when there are no instances, or no things to have", () => {
@@ -403,6 +531,15 @@ describe("searchActionObjects", () => {
     expect(labels("if")).toEqual(["Check a condition"]);
     expect(labels("wait")).toEqual(["Wait for something", "Pause"]);
     expect(labels("if", [])).toEqual([]);
+  });
+
+  test("offers each action only the instances it accepts", () => {
+    const counters = actionObjects([INCREMENT, BUMP_TALLY]);
+    const held = new Map([["counters", [HYPE, TALLY_HYPE]]]);
+    expect(searchActionObjects(counters, held, "hype", []).map((hit) => hit.label)).toEqual([
+      "Bump Hype (tally) counter",
+      "Increment Hype counter",
+    ]);
   });
 
   test("says where an instance hit was found", () => {
