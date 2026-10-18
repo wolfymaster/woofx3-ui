@@ -40,9 +40,14 @@ const ALERT_AXIS_PREFIX = "alert.";
  * is a phrase the UI owns rather than one the module author does.
  */
 const LABEL_OVERRIDES: Record<string, string> = {
+  ai: "AI",
   channelpoints: "Channel Points",
   counter: "Counters",
+  lifx: "LIFX",
+  obs: "OBS",
+  queue: "Queues",
   subscription: "Subscriptions",
+  timer: "Timers",
   watchstreak: "Watch Streak",
   hypetrain: "Hype Train",
 };

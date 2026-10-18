@@ -10,13 +10,11 @@ import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { type EngineCapabilityReport, LEGACY_ENGINE_REPORT } from "./engineCapabilities";
-import { FEATURE_FLAGS, isFeatureFlagKey } from "./featureFlags";
 import { MarketplaceError } from "./marketplaceApi";
 import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBuyerToken";
 import { type CatalogListing, parseCatalogListing } from "./marketplaceCatalog";
 import {
   buyerTokensConfigured,
-  ENGINE_INSTALL_FLAG,
   type EngineInstallGate,
   engineFailure,
   inspectThroughEngine,
@@ -48,7 +46,6 @@ function gate(
   overrides: Partial<{
     access: "public" | "dev";
     buyerTokens: boolean;
-    flag: boolean;
     report: EngineCapabilityReport;
   }> = {}
 ) {
@@ -56,10 +53,6 @@ function gate(
   const value: EngineInstallGate = {
     access: overrides.access ?? "public",
     buyerTokens: overrides.buyerTokens ?? true,
-    flagOn: async () => {
-      asked.push("flag");
-      return overrides.flag ?? true;
-    },
     capabilities: async () => {
       asked.push("capabilities");
       return overrides.report ?? CAPABLE;
@@ -147,16 +140,10 @@ async function convexErrorMessage(promise: Promise<unknown>): Promise<string> {
 }
 
 describe("routeThroughEngine", () => {
-  test("takes the engine path only with the flag on, the capability reported and public access", async () => {
+  test("takes the engine path with the capability reported and public access", async () => {
     const { gate: g, asked } = gate();
     expect(await routeThroughEngine(g)).toBe(true);
-    expect(asked).toEqual(["flag", "capabilities"]);
-  });
-
-  test("flag off keeps the Convex path without asking the engine anything", async () => {
-    const { gate: g, asked } = gate({ flag: false });
-    expect(await routeThroughEngine(g)).toBe(false);
-    expect(asked).toEqual(["flag"]);
+    expect(asked).toEqual(["capabilities"]);
   });
 
   test("an engine without the capability keeps the Convex path", async () => {
@@ -164,13 +151,13 @@ describe("routeThroughEngine", () => {
     expect(await routeThroughEngine(gate({ report: LEGACY_ENGINE_REPORT }).gate)).toBe(false);
   });
 
-  test("dev access keeps the Convex path before the flag is read", async () => {
+  test("dev access keeps the Convex path without asking the engine", async () => {
     const { gate: g, asked } = gate({ access: "dev" });
     expect(await routeThroughEngine(g)).toBe(false);
     expect(asked).toEqual([]);
   });
 
-  test("a deployment that cannot mint buyer tokens keeps the Convex path before the flag is read", async () => {
+  test("a deployment that cannot mint buyer tokens keeps the Convex path without asking the engine", async () => {
     const { gate: g, asked } = gate({ buyerTokens: false });
     expect(await routeThroughEngine(g)).toBe(false);
     expect(asked).toEqual([]);
@@ -180,7 +167,6 @@ describe("routeThroughEngine", () => {
     const g: EngineInstallGate = {
       access: "public",
       buyerTokens: true,
-      flagOn: async () => true,
       capabilities: async () => {
         throw new Error("fetch failed");
       },
@@ -202,14 +188,14 @@ describe("marketplaceEngineFor", () => {
   const instanceId = "instance1" as Id<"instances">;
   const savedEnv = { key: process.env[BUYER_SIGNING_KEY_ENV], id: process.env[BUYER_SIGNING_KEY_ID_ENV] };
   const savedFetch = globalThis.fetch;
-  let fetches = 0;
+  let fetched: string[] = [];
 
   beforeEach(() => {
     process.env[BUYER_SIGNING_KEY_ENV] = "{}";
     process.env[BUYER_SIGNING_KEY_ID_ENV] = "k1";
-    fetches = 0;
-    globalThis.fetch = (async () => {
-      fetches += 1;
+    fetched = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      fetched.push(String(input instanceof Request ? input.url : input));
       throw new Error("no network in tests");
     }) as unknown as typeof fetch;
   });
@@ -228,18 +214,14 @@ describe("marketplaceEngineFor", () => {
     }
   });
 
-  function fakeCtx(instance: Record<string, unknown> | null, flag: boolean) {
+  function fakeCtx(instance: Record<string, unknown> | null) {
     const queries: string[] = [];
     const ctx = {
-      runQuery: async (ref: Parameters<typeof getFunctionName>[0], args: Record<string, unknown>) => {
+      runQuery: async (ref: Parameters<typeof getFunctionName>[0]) => {
         const name = getFunctionName(ref);
         queries.push(name);
         if (name === "instances:getInternal") {
           return instance;
-        }
-        if (name === "featureFlags:isOnForInstance") {
-          expect(args).toEqual({ key: ENGINE_INSTALL_FLAG, instanceId });
-          return flag;
         }
         throw new Error(`unexpected query ${name}`);
       },
@@ -249,44 +231,38 @@ describe("marketplaceEngineFor", () => {
 
   const registered = { url: "https://engine.example", clientId: "c", clientSecret: "s", accountId: "a" };
 
-  test("flag off answers the Convex path after reading only Convex", async () => {
-    const { ctx, queries } = fakeCtx(registered, false);
+  test("an engine that cannot be reached answers the Convex path", async () => {
+    const { ctx, queries } = fakeCtx(registered);
     expect(await marketplaceEngineFor(ctx, instanceId)).toBeNull();
-    expect(queries).toEqual(["instances:getInternal", "featureFlags:isOnForInstance"]);
-    expect(fetches).toBe(0);
+    expect(queries).toEqual(["instances:getInternal"]);
+    expect(fetched.length).toBeGreaterThan(0);
+    expect(fetched.every((url) => url.startsWith(registered.url))).toBe(true);
   });
 
-  test("flag off sends a module install down the Convex path without asking the marketplace or the engine", async () => {
-    const { ctx } = fakeCtx(registered, false);
+  test("a module install on an unreachable engine takes the Convex path without asking the marketplace", async () => {
+    const { ctx } = fakeCtx(registered);
     expect(await marketplaceModuleEngineFor(ctx, instanceId, LISTING)).toBeNull();
-    expect(fetches).toBe(0);
+    expect(fetched.every((url) => url.startsWith(registered.url))).toBe(true);
   });
 
-  test("without the buyer signing key the flag is never read", async () => {
+  test("without the buyer signing key the engine is never asked", async () => {
     delete process.env[BUYER_SIGNING_KEY_ID_ENV];
-    const { ctx, queries } = fakeCtx(registered, true);
+    const { ctx, queries } = fakeCtx(registered);
     expect(await marketplaceEngineFor(ctx, instanceId)).toBeNull();
     expect(queries).toEqual(["instances:getInternal"]);
+    expect(fetched).toEqual([]);
   });
 
-  test("dev access answers the Convex path without reading the flag", async () => {
-    const { ctx, queries } = fakeCtx({ ...registered, marketplaceDevAccess: true }, true);
+  test("dev access answers the Convex path without asking the engine", async () => {
+    const { ctx, queries } = fakeCtx({ ...registered, marketplaceDevAccess: true });
     expect(await marketplaceEngineFor(ctx, instanceId)).toBeNull();
     expect(queries).toEqual(["instances:getInternal"]);
+    expect(fetched).toEqual([]);
   });
 
   test("an instance not registered with its engine answers the Convex path", async () => {
-    expect(await marketplaceEngineFor(fakeCtx({ ...registered, clientSecret: undefined }, true).ctx, instanceId)).toBe(
-      null
-    );
-    expect(await marketplaceEngineFor(fakeCtx(null, true).ctx, instanceId)).toBeNull();
-  });
-});
-
-describe("the flag", () => {
-  test("is declared, so an operator can target it", () => {
-    expect(isFeatureFlagKey(ENGINE_INSTALL_FLAG)).toBe(true);
-    expect(FEATURE_FLAGS[ENGINE_INSTALL_FLAG].removeBy).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(await marketplaceEngineFor(fakeCtx({ ...registered, clientSecret: undefined }).ctx, instanceId)).toBeNull();
+    expect(await marketplaceEngineFor(fakeCtx(null).ctx, instanceId)).toBeNull();
   });
 });
 

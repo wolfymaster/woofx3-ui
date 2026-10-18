@@ -134,6 +134,45 @@ Toolchains are pinned in `mise.toml`. Create worktrees with the engine repo's `s
 
 Verify changes with `scripts/check.sh`. It runs CI's lint, type checks, tests and build for what changed against `master`, plus `companion/core` when that changed. It prints one PASS/FAIL line per check with a log path. `--quick` skips tests and the build; `--all` checks everything.
 
+## Testing Pull Requests
+
+Pull requests are browser-tested in their preview environment with [Kernel](https://kernel.sh) cloud browsers. Never use local Playwright or headless Chromium. `docs/ops/previews.md` covers previews in depth.
+
+### Preview deployments
+
+Label a pull request `preview` (branches in this repo only; forks get no preview). `.github/workflows/preview.yml` then runs on the label and on every push or description edit:
+
+- Convex preview deployment `pr-<n>`, seeded by `convex/seeds/preview.ts`. It is replaced on every push, so test accounts do not survive a push.
+- Image `ghcr.io/wolfymaster/woofx3-ui:pr-<n>-<sha7>`, served at `https://pr-<n>-woofx3-ui.woofx3.com`.
+- A sticky PR comment with the URLs (marker `<!-- woofx3:preview-ui -->`; read it with `gh pr view <n> --json comments`).
+
+The engine comes from a line `engine-version: <tag>` alone on its line in the PR description (backticks around the value are fine; trailing text after it is rejected), else the `preview` environment's `ENGINE_VERSION`, else `latest`. `none` gives no engine. Any engine image tag works, including an engine PR build `pr-<n>-<sha7>`. The engine is served at `https://<tag, dots as dashes>.woofx3.com` and shared by every preview on that tag.
+
+To test against an unmerged engine PR: label it (in `wolfymaster/woofx3`) `preview-engine`. Its "Preview engine" workflow pushes `ghcr.io/wolfymaster/woofx3:pr-<n>-<sha7>` in the "Build and push the preview image" step. The final "Create or redeploy the preview engine" step currently fails (`MAINTENANCE_API_URL` is unset in the engine repo); that is expected and the image is still pushed. Put `engine-version: pr-<n>-<sha7>` in the UI PR description, and update it after every engine push, since the tag changes.
+
+### Onboarding in a preview
+
+Preview deployments set `PREVIEW_DEPLOYMENT=true` (`convex/lib/previewDeployment.ts`), so setup needs no platform and a password account gets through it:
+
+1. Register at `/auth/register` (name, email, password) with a throwaway address like `pr<n>-tester@example.com`.
+2. Create a workspace. The engine step is prefilled with the paired preview engine: click "Get started".
+3. On `/setup/platforms`, uncheck Twitch (it is preselected) and continue. On Connect Twitch click "Skip for now" (`button-twitch-skip`), then continue through the remaining steps.
+
+### Kernel
+
+The CLI is `~/.local/bin/kernel`, authenticated through `KERNEL_API_KEY` in the environment (`kernel browsers --help` for the full surface).
+
+```bash
+kernel browsers create --name <name> --start-url <preview url> -o json   # → session_id, browser_live_view_url
+kernel browsers playwright execute <session-id> -o json < step.ts       # Playwright TS on stdin
+kernel browsers delete <id-or-name>                                     # always clean up
+```
+
+- Share `browser_live_view_url` with the user so they can watch.
+- Executed code has `page`, `context` and `browser` and may `return` a value. The default executor binds `page` to the active tab and state persists between calls, so drive a flow step by step.
+- Screenshots: `return (await page.screenshot()).toString("base64")` and decode locally.
+- Batch the checks for several changes into one session rather than one session per change.
+
 ## Convex Guidelines
 
 **Always read `convex/_generated/ai/guidelines.md` first** when working on Convex code. Key rules:
@@ -179,6 +218,8 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - **Less code, more foresight**: design APIs and boundaries that tolerate future change; avoid speculative features.
 - **Iterate with git**: if something feels wrong, commit or branch and try another shape—comparison is cheap.
 - **No Co-Authored-By lines**: never add `Co-Authored-By` trailers to commits. AI agents do not get credit for work.
+- **No plan documents in the repository**: effort plans, phase breakdowns, task lists and design notes for work in flight live outside the repository. `docs/` describes how the app works, not what is planned for it. A release branch gets its first commit from its first feature PR, not from a plan.
+- **No links to private or tool-hosted pages**: never put claude.ai artifacts, mockups or chat-shared plans in a commit message, a pull request title, description or comment, or a committed file. Readers of the repository cannot open them. Put what matters into the PR description or the docs instead.
 - **Verify before moving on**: run `bun run check`, `bunx biome check .`, and any tests or Convex checks relevant to your edits; keep them passing before layering new behavior.
 - **Have fun**: the best code is often written when you can be creative and express yourself—pair that with the discipline above.
 
