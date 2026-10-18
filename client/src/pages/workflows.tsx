@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
 import {
   ArrowLeft,
   Code,
@@ -55,6 +55,7 @@ import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import StepListEditor from "@/components/workflows/step-list-editor";
 import { TestRunSheet } from "@/components/workflows/test-run-sheet";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
+import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -141,7 +142,7 @@ function WorkflowListScreen() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const { catalogTriggers } = useWorkflowCatalog();
 
-  const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
+  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
   const { byId: notRunning } = useNotRunningWorkflows();
   useWorkflowHealthResyncOnMount();
   const setEnabled = useAction(api.workflowActions.setEnabled);
@@ -442,7 +443,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const { toast } = useToast();
   const { instance } = useInstance();
 
-  const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
+  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
   const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
   const notRunningHealth = useNotRunningWorkflows().byId.get(engineWorkflowId);

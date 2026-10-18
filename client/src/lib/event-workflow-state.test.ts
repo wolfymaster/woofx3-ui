@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { WorkflowRecord } from "@/engine/types";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import type { EventEditorState } from "@/lib/event-drafts";
 import { eventWorkflowTarget, newProjectedAction, withNewTrigger } from "@/lib/event-workflow-state";
@@ -82,12 +82,12 @@ describe("withNewTrigger", () => {
   });
 });
 
-function workflow(event: string, tasks: unknown[], engineWorkflowId: string): Doc<"workflows"> {
+function workflow(event: string, tasks: unknown[], engineWorkflowId: string): WorkflowRecord {
   return {
     engineWorkflowId,
     isEnabled: true,
     definition: escapeDollarKeys({ name: event, trigger: { type: "event", event }, tasks }),
-  } as Doc<"workflows">;
+  };
 }
 
 describe("eventWorkflowTarget", () => {
