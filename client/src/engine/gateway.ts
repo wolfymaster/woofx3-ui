@@ -9,6 +9,10 @@ import type {
   ChatCommandGroup,
   ChatCommandGroupChanges,
   CompositionPreviewUrl,
+  ConfigExportRequest,
+  ConfigImportPlan,
+  ConfigImportRequest,
+  ConfigImportResult,
   Correlated,
   CorrelatedRequestKind,
   CorrelatedRequests,
@@ -62,6 +66,7 @@ import type {
   SceneEditorGrant,
   SceneRecord,
   SceneWidgetCatalogRow,
+  StorageConfig,
   StreamEventFrame,
   StreamRecapEngineDetail,
   Supporter,
@@ -111,6 +116,7 @@ export interface EngineGateway {
   readonly requests: RequestsGateway;
   readonly macros: MacrosGateway;
   readonly streamOps: StreamOpsGateway;
+  readonly config: ConfigGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -516,6 +522,27 @@ export interface StreamOpsGateway {
    * `platform: "twitch"` so it passes the same filters as a real one.
    */
   useSimulateTwitchEventRequest(): (instanceId: InstanceId, event: EngineTestEvent) => Promise<PublishedTestEvent>;
+}
+
+/**
+ * The engine's own configuration: backups of what it runs, and where it keeps
+ * uploaded files. Who may see or change it is decided in Convex: owners and
+ * admins only.
+ */
+export interface ConfigGateway {
+  /** The configuration as backup JSON text, in chunks to join. */
+  useExportRequest(): (instanceId: InstanceId, request: ConfigExportRequest) => Promise<string[]>;
+  /** What importing a backup would do, without doing it. Rejects with the engine's list of problems for a malformed one. */
+  usePreviewImportRequest(): (instanceId: InstanceId, request: ConfigImportRequest) => Promise<ConfigImportPlan>;
+  /** Imports a backup. The engine plans it again, so an earlier preview is advisory only. */
+  useImportRequest(): (instanceId: InstanceId, request: ConfigImportRequest) => Promise<ConfigImportResult>;
+  /** The storage backend; null when the engine is not registered or does not answer. */
+  useStorageConfigRequest(): (instanceId: InstanceId) => Promise<StorageConfig | null>;
+  /** Replaces the storage backend, and its credentials, for everyone on the instance. */
+  useSetStorageConfigRequest(): (
+    instanceId: InstanceId,
+    config: Record<string, unknown>
+  ) => Promise<{ success: boolean }>;
 }
 
 export interface OptimisticInstance {

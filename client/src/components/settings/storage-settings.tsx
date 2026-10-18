@@ -1,12 +1,13 @@
 import { api } from "@convex/_generated/api";
 import { roleSatisfies } from "@convex/lib/instanceRoles";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { Save } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useSetStorageConfigRequest, useStorageConfigRequest } from "@/engine/hooks/use-engine-config";
 import { useEngineInfoRequest, useSetOverlayPublicUrlRequest } from "@/engine/hooks/use-engine-status";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -39,8 +40,8 @@ function isValidBaseUrl(value: string): boolean {
 
 export function StorageSettings() {
   const { instance } = useInstance();
-  const getConfig = useAction(api.storage.getConfig);
-  const setConfig = useAction(api.storage.setConfig);
+  const getConfig = useStorageConfigRequest();
+  const setConfig = useSetStorageConfigRequest();
   const getEngineInfo = useEngineInfoRequest();
   const setOverlayPublicUrl = useSetOverlayPublicUrlRequest();
   const { toast } = useToast();
@@ -71,10 +72,7 @@ export function StorageSettings() {
     if (!instance) return;
     setIsLoading(true);
     try {
-      const [result, engineInfo] = await Promise.all([
-        getConfig({ instanceId: instance._id }),
-        getEngineInfo(instance._id),
-      ]);
+      const [result, engineInfo] = await Promise.all([getConfig(instance._id), getEngineInfo(instance._id)]);
       if (result) {
         setConfigState(result as unknown as StorageConfig);
       }
@@ -102,7 +100,7 @@ export function StorageSettings() {
     setIsSaving(true);
     try {
       await Promise.all([
-        setConfig({ instanceId: instance._id, config: config as unknown as Record<string, unknown> }),
+        setConfig(instance._id, config as unknown as Record<string, unknown>),
         setOverlayPublicUrl(instance._id, trimmedOverlayUrl),
       ]);
       setOverlayPublicUrlState(trimmedOverlayUrl);

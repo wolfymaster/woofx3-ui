@@ -1,7 +1,1 @@
-[
-  "components/settings/storage-settings.tsx",
-  "hooks/use-go-live-checklist.ts",
-  "pages/admin/backup.tsx",
-  "pages/module-install.tsx",
-  "pages/modules.tsx"
-]
+["hooks/use-go-live-checklist.ts", "pages/module-install.tsx", "pages/modules.tsx"]

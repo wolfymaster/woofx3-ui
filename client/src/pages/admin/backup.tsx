@@ -12,7 +12,7 @@ import {
   type ConfigSection,
   chunkText,
 } from "@convex/lib/configBundle";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { Download, FileUp, Loader2, PackageX, Upload, UserPlus } from "lucide-react";
 import { useRef, useState } from "react";
@@ -39,6 +39,11 @@ import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import {
+  useConfigExportRequest,
+  useConfigImportPreviewRequest,
+  useConfigImportRequest,
+} from "@/engine/hooks/use-engine-config";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -158,7 +163,7 @@ function ExportCard({
   instanceName: string;
   canExportMembers: boolean;
 }) {
-  const exportConfig = useAction(api.configBackup.exportConfig);
+  const exportConfig = useConfigExportRequest();
   const { toast } = useToast();
   const [sections, setSections] = useState<ConfigSection[]>([...CONFIG_SECTIONS]);
   const [includeMembers, setIncludeMembers] = useState(false);
@@ -167,7 +172,7 @@ function ExportCard({
   async function handleExport() {
     setIsExporting(true);
     try {
-      const chunks = await exportConfig({ instanceId, include: sections, includeMembers });
+      const chunks = await exportConfig(instanceId, { include: sections, includeMembers });
       const fileName = backupFileName(instanceName, new Date());
       saveTextFile(fileName, chunks.join(""));
       toast({ title: "Backup downloaded", description: fileName });
@@ -399,8 +404,8 @@ interface PickedFile {
 }
 
 function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; canImport: boolean }) {
-  const previewImport = useAction(api.configBackup.previewImport);
-  const importConfig = useAction(api.configBackup.importConfig);
+  const previewImport = useConfigImportPreviewRequest();
+  const importConfig = useConfigImportRequest();
   const { toast } = useToast();
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -443,8 +448,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setResult(null);
     try {
       setPlan(
-        await previewImport({
-          instanceId,
+        await previewImport(instanceId, {
           bundleChunks: file.chunks,
           onConflict,
           include: sections,
@@ -466,8 +470,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setConfirming(false);
     setBusy("import");
     try {
-      const outcome = await importConfig({
-        instanceId,
+      const outcome = await importConfig(instanceId, {
         bundleChunks: file.chunks,
         onConflict,
         include: sections,
