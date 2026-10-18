@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ConfigField, InternalConfigFieldSource } from "@woofx3/api/ui-schema";
 import {
+  buttonActionOf,
   fieldOptionsOwnerFromCanonicalId,
   fieldOptionsReferenceOf,
   resourceKindFieldOptionsOwner,
@@ -89,6 +90,25 @@ describe("withFieldOptionsOwner", () => {
   test("leaves sources without a reference when there is no owner", () => {
     const [reward] = withFieldOptionsOwner(fields, undefined);
     expect(reward).toBe(fields[0]);
+  });
+
+  test("gives a button's action the reference it is pressed by", () => {
+    const actionOwner = { moduleId: "spotify", declaration: "action" as const, declarationId: "play" };
+    const [request, connect, broken] = withFieldOptionsOwner(
+      [
+        { id: "test", label: "Test", type: "button", action: { kind: "internal", request: { event: "x" } } },
+        { id: "connect", label: "Connect", type: "button", action: { kind: "integration", integration: "spotify" } },
+        { id: "broken", label: "Broken", type: "button" },
+      ],
+      actionOwner
+    );
+    expect(buttonActionOf(request?.action)?.reference).toEqual({ ...actionOwner, fieldId: "test" });
+    expect(buttonActionOf(connect?.action)).toEqual({
+      kind: "integration",
+      integration: "spotify",
+      reference: { ...actionOwner, fieldId: "connect" },
+    });
+    expect(buttonActionOf(broken?.action)).toBeUndefined();
   });
 });
 

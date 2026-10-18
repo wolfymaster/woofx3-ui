@@ -20,6 +20,7 @@ export default defineConfig({
             { text: "Shell & routing", link: "/ui/overview" },
             { text: "Dashboard", link: "/ui/dashboard" },
             { text: "Quick actions", link: "/ui/quick-actions" },
+            { text: "Alert triggers", link: "/ui/alerts" },
             { text: "Stream recaps", link: "/ui/stream-recaps" },
             { text: "Feedback", link: "/ui/feedback" },
             { text: "Notifications", link: "/ui/notifications" },

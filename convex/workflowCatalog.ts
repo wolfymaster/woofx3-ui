@@ -57,6 +57,7 @@ function catalogActionRow(
     icon: def.icon,
     configFields: def.configFields,
     returns: def.returns,
+    sentence: def.sentence,
     projectionKey: def.projectionKey,
     taxonomy: def.taxonomy,
     canonicalRef: canonicalRefFromProjectionKey(def.projectionKey, "action"),
