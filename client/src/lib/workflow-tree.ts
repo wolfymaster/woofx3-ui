@@ -437,10 +437,13 @@ function writeBranches(task: TaskDefinition, node: ConditionNode, onTrue: string
 }
 
 /**
- * The `nested` layout. The engine orders tasks by `dependsOn` alone (`onTrue`/`onFalse` only mark
- * which branch to skip), so each step gets an explicit dependency: a list's first step on the
- * condition that owns it, or none at the top; every later step on the step before it in its own
- * list. A step after a condition depends on the condition, since only one of its branches runs.
+ * The `nested` layout. The engine runs a task after everything in its `dependsOn`, and a task a
+ * condition lists in `onTrue`/`onFalse` after that condition; the branch not taken is skipped,
+ * along with every condition nested in it. A task that depends on a condition waits for the whole
+ * branch that ran, and tasks that wait on nothing run in `tasks` order. Each step still gets an
+ * explicit dependency, so the order holds on an engine that orders by `dependsOn` alone: a list's
+ * first step on the condition that owns it, or none at the top; every later step on the step
+ * before it in its own list. A step after a condition depends on the condition.
  */
 function flattenNested(steps: StepNode[], parentId?: string): TaskDefinition[] {
   const tasks: TaskDefinition[] = [];
@@ -656,7 +659,11 @@ function tasksById(tasks: readonly TaskDefinition[]): Map<string, TaskDefinition
   return new Map(tasks.map((task) => [task.id, task]));
 }
 
-/** Whether `written` is `source`, ignoring the order of `tasks` (the engine orders tasks by `dependsOn` alone). */
+/**
+ * Whether `written` is `source`, ignoring the order of `tasks`. Tasks are written in reading
+ * order, which is the order the source runs them in, so tasks that wait on nothing keep their
+ * relative order.
+ */
 function sameDefinition(written: WorkflowDefinition, source: WorkflowDefinition): boolean {
   const { tasks: writtenTasks, ...writtenRest } = written;
   const { tasks: sourceTasks, ...sourceRest } = source;
