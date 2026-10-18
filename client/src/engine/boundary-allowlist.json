@@ -1,1 +1,1 @@
-["pages/module-install.tsx", "pages/modules.tsx"]
+["hooks/use-module-install.ts", "pages/marketplace-listing.tsx", "pages/module-install.tsx"]

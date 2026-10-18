@@ -46,6 +46,7 @@ import {
   withAlertsChildren,
 } from "./nav-config";
 import { NotificationsMenu } from "./notifications-menu";
+import { PlatformStatusIndicators } from "./platform-status";
 import { SectionSidebar } from "./section-sidebar";
 import { SetupInstallBanner } from "./setup-install-banner";
 import { StatusBarCenterMount, StatusBarSlotProvider } from "./status-bar-slot";
@@ -178,6 +179,7 @@ function StatusBar() {
         <span className="text-muted-foreground font-mono truncate" data-testid="status-engine-version">
           {formatEngineVersion(engineVersion)}
         </span>
+        <PlatformStatusIndicators />
       </div>
 
       <StatusBarCenterMount className="flex items-center justify-center shrink-0" />

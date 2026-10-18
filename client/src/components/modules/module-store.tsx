@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { featuredInOrder } from "@convex/lib/marketplaceImages";
+import { installedVersionsByListing } from "@convex/lib/marketplaceInstallIdentity";
 import { useQuery } from "convex/react";
 import { AlertCircle, ChevronLeft, ChevronRight, Loader2, RefreshCw, Search } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
@@ -36,18 +37,7 @@ export function ModuleStore({ catalog, selectedCategory, onSelectCategory, heade
 
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
 
-  const installedVersionsByMarketplaceId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const m of repoModules || []) {
-      if (m.moduleKey) {
-        const parts = m.moduleKey.split(":");
-        if (parts.length >= 2 && parts[0]) {
-          map.set(parts[0], parts[1]);
-        }
-      }
-    }
-    return map;
-  }, [repoModules]);
+  const installedVersionsByMarketplaceId = useMemo(() => installedVersionsByListing(repoModules ?? []), [repoModules]);
 
   const toCardData = useCallback(
     (m: MarketplaceListItem): ModuleStoreCardData => {
