@@ -28,7 +28,7 @@ export const ENGINE_NAMESPACE_MODULES = {
   moduleResources: ["moduleResourceActions", "moduleResourceInstances", "resourceValues", "resourceKinds"],
   modules: ["moduleEngine", "moduleSettingsActions", "moduleFiles", "moduleDetail"],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
-  requests: ["transientEvents"],
+  requests: ["transientEvents", "fieldOptions"],
   workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog"],
   macros: ["macros.run"],
   streamOps: [
@@ -48,7 +48,6 @@ export const ENGINE_NAMESPACE_MODULES = {
     "configBackup.previewImport",
     "configBackup.importConfig",
     "storage",
-    "fieldOptions",
   ],
 } as const satisfies Record<string, readonly string[]>;
 

@@ -229,6 +229,14 @@ export interface Correlated<Request> {
   failure: CorrelatedFailure | null;
 }
 
+/** The latest transient event under one key, followed outside React. */
+export interface EventWatch {
+  /** Undefined until the read loads, then the event or null; throws when the read failed. */
+  current(): Live<TransientEvent | null>;
+  /** Calls `onChange` whenever `current` may have changed; returns the unsubscribe. */
+  onUpdate(onChange: () => void): () => void;
+}
+
 /** One scene on the engine, cached from its webhooks; `id` repeats `_id` and `widgets` is never missing. */
 export type SceneRecord = FunctionReturnType<typeof api.scenes.list>[number];
 
