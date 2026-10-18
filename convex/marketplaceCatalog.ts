@@ -27,8 +27,15 @@ import {
   parseQuote,
 } from "./lib/marketplaceCatalog";
 import {
+  type InstallBundleResult,
+  installBundleThroughEngine,
+  marketplaceEngineFor,
+  marketplaceEngineSession,
+} from "./lib/marketplaceEngineInstall";
+import {
   acquireListing,
   buyerRefFor,
+  buyerTokenFor,
   commerceConfigured,
   contentAccessFor,
   contentRefusal,
@@ -313,12 +320,7 @@ export const createCheckout = action({
     }),
 });
 
-export type InstallBundleResult = {
-  listingId: string;
-  /** What the install produced in the engine. */
-  engineId: string;
-  kind: "scene" | "alert";
-};
+export type { InstallBundleResult };
 
 /**
  * Installs an overlay or alert listing.
@@ -328,6 +330,10 @@ export type InstallBundleResult = {
  * engine calls the scene editor and the alert library already use. Nothing is
  * loaded into the module runtime, which is the whole reason they are not
  * modules.
+ *
+ * Runs on the engine when `marketplaceEngineFor` routes it there; the engine
+ * then claims the listing for the buyer, fetches the bundle and writes the
+ * document. The listing is read and its type checked here on either path.
  */
 export const installBundle = action({
   args: { instanceId: v.id("instances"), listingId: v.string() },
@@ -346,6 +352,13 @@ export const installBundle = action({
       }
       if (!isBundleListing(listing.type)) {
         throw new ConvexError(`${listing.name} is a ${listing.type} listing and does not install as a bundle`);
+      }
+      const viaEngine = await marketplaceEngineFor(ctx, args.instanceId);
+      if (viaEngine) {
+        return await installBundleThroughEngine(
+          { engine: () => marketplaceEngineSession(viaEngine), buyerToken: () => buyerTokenFor(ctx, args.instanceId) },
+          listing.id
+        );
       }
       // The same gate the module install uses: the account must hold the
       // listing, and a free one is claimed here, which also counts the install.

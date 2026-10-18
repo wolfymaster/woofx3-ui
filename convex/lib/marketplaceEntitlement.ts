@@ -157,6 +157,11 @@ export async function acquireListing(
   }
 }
 
+/** What the streamer is told about a listing their account does not hold. */
+export function notBoughtMessage(listingName: string): string {
+  return `${listingName} hasn't been bought on this account.`;
+}
+
 /**
  * What to tell the streamer when acquire refuses, or null for a failure that
  * is not a refusal (and is rethrown as it is).
@@ -167,7 +172,7 @@ export function acquireRefusal(err: unknown, listingName: string): string | null
   }
   switch (err.status) {
     case 402:
-      return `${listingName} hasn't been bought on this account.`;
+      return notBoughtMessage(listingName);
     case 404:
       return `${listingName} is no longer in the marketplace.`;
     case 409:
@@ -189,7 +194,7 @@ export function contentRefusal(err: unknown, listingName: string): string | null
     return null;
   }
   if (err.status === 403 && err.code === "not_entitled") {
-    return `${listingName} hasn't been bought on this account.`;
+    return notBoughtMessage(listingName);
   }
   if (err.status === 401) {
     return `${listingName} is not free, and purchases cannot be checked on this deployment (MARKETPLACE_API_TOKEN is not set).`;

@@ -159,6 +159,53 @@ the listing. Previews — the module detail's permission read, the file browser
 for a module not yet installed, setup platforms — use the same fetch without
 acquiring anything.
 
+### Installing on the engine
+
+Behind flag `marketplace.engineInstall`, the engine does the fetching and the
+acquire instead (`convex/lib/marketplaceEngineInstall.ts`).
+`marketplaceEngineFor` picks the path per call, and takes the engine only when
+all of these hold, checked cheapest first:
+
+- the instance does not have dev marketplace access (the engine reads
+  `/catalog/{id}` anonymously, where dev-tier listings do not exist);
+- `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are set, so a buyer token can
+  be minted;
+- the flag is on for the instance (`featureFlags.isOnForInstance`, so percent
+  rollouts bucket by account and `hosting: "managed"` targets managed engines);
+- the engine reports capability `modules.marketplaceInstall`.
+
+Otherwise everything above runs unchanged, with no extra marketplace or engine
+call. On the engine path, the module install (`installMarketplaceListing`),
+the bundle install (`installMarketplaceBundle`), the file list of a module not
+yet installed and the setup platform review (`inspectMarketplaceListing`) each
+get a fresh buyer token. The engine calls `acquire` itself with that token,
+which also counts the install, so Convex does not call `acquireListing` there.
+Inspecting acquires nothing.
+
+A module install also reads the listing from `/catalog/{id}` first, for its
+name, and keeps the Convex path for a listing whose id is not its manifest id
+(`moduleKey`): a later edition such as `cozy-v2`. Barkloader accepts only
+`{manifest id}:{version}:{sha7}` as the install key, while both paths send
+`{listing id}:{version}:{sha7}`, so such an install fails with
+`ModuleKeyMismatch` either way until the engine keys editions by manifest id.
+
+What differs on the engine path:
+
+- `payment_required` becomes the same "hasn't been bought on this account"
+  error a 402 from `acquireListing` raises. Other refusals (a 409 for an
+  unpriced or superseded listing, a 404) reach the browser as a ConvexError
+  carrying the engine's message, because capnweb passes only an error's
+  message and the engine reports those refusals by throwing.
+- The engine acquires before it checks consent, so a module install that
+  comes back `needs_approval` has already claimed a free listing.
+- The install key is only known once the engine has hashed the archive, so
+  the `module.install` progress event is written after the engine answers,
+  and skipped when the engine's own callback already settled the key. A
+  failure before that is reported by the action itself; the browser only
+  watches the key the action returns.
+- Reading one file of a module that is not installed still uses the archive
+  fetched by Convex, because the engine has no call for it.
+
 ## Author pages
 
 Every listing is attributed to the **username** it was published under

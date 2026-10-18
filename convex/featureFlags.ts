@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internalMutation, internalQuery, query } from "./_generated/server";
-import { featureFlagSubject } from "./lib/featureFlagAccess";
+import { featureFlagSubject, instanceFeatureFlagSubject, isFeatureFlagOn } from "./lib/featureFlagAccess";
 import {
   FEATURE_FLAGS,
   type FeatureFlagDefinition,
@@ -37,6 +37,21 @@ export const forViewer = query({
       answers[key] = isFlagOn(row, subject);
     }
     return answers as Record<FeatureFlagKey, boolean>;
+  },
+});
+
+/**
+ * Whether a flag is on for an instance, for server code that routes work by
+ * flag without a signed-in user. Off for an unknown key or instance.
+ */
+export const isOnForInstance = internalQuery({
+  args: { key: v.string(), instanceId: v.id("instances") },
+  handler: async (ctx, { key, instanceId }): Promise<boolean> => {
+    if (!isFeatureFlagKey(key)) {
+      return false;
+    }
+    const subject = await instanceFeatureFlagSubject(ctx, instanceId);
+    return subject !== null && (await isFeatureFlagOn(ctx, key, subject));
   },
 });
 

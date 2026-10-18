@@ -7,7 +7,14 @@ import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
-import { type ContentAccess, contentAccessFor } from "./lib/marketplaceEntitlement";
+import {
+  type EngineCredentials,
+  inspectThroughEngine,
+  marketplaceEngineFor,
+  marketplaceEngineSession,
+  moduleFilesFromInspection,
+} from "./lib/marketplaceEngineInstall";
+import { buyerTokenFor, type ContentAccess, contentAccessFor } from "./lib/marketplaceEntitlement";
 import { listArchiveModuleFiles, readArchiveModuleFile } from "./lib/moduleArchiveFiles";
 import { fetchMarketplaceArchive, fetchMarketplaceDownload } from "./marketplace";
 import { requireEngineInstance } from "./moduleSettingsActions";
@@ -34,17 +41,44 @@ const moduleFileContentValidator = v.union(
 const UPDATE_ENGINE_MESSAGE = "Update WoofX3 to browse this module's files.";
 
 type FileSource =
-  | { kind: "engine"; manifestModuleId: string; engine: { url: string; clientId: string; clientSecret: string } }
-  | { kind: "marketplace"; marketplaceId: string; content: ContentAccess };
+  | { kind: "engine"; manifestModuleId: string; engine: EngineCredentials }
+  | { kind: "marketplace"; marketplaceId: string; content: ContentAccess }
+  | { kind: "marketplaceEngine"; marketplaceId: string; engine: EngineCredentials };
 
 /**
  * Where a module's files live. `moduleId` is what the detail view identifies
  * the module by, resolved the way `getModuleDetail` resolves it, so the files
  * shown always belong to the version the detail shows.
+ *
+ * An uninstalled module's file list can come from the engine, which reads the
+ * listing's archive itself (`marketplaceEngineFor` decides). The engine has no
+ * call that reads one file of an uninstalled listing, so `read` always uses
+ * the archive fetched here.
  */
-async function resolveFileSource(ctx: ActionCtx, instanceId: Id<"instances">, moduleId: string): Promise<FileSource> {
+async function resolveFileSource(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  moduleId: string,
+  purpose: "list"
+): Promise<FileSource>;
+async function resolveFileSource(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  moduleId: string,
+  purpose: "read"
+): Promise<Exclude<FileSource, { kind: "marketplaceEngine" }>>;
+async function resolveFileSource(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  moduleId: string,
+  purpose: "list" | "read"
+): Promise<FileSource> {
   const installed = await ctx.runQuery(internal.moduleRepository.resolveModuleForDetail, { instanceId, moduleId });
   if (installed?.status !== "installed") {
+    const viaEngine = purpose === "list" ? await marketplaceEngineFor(ctx, instanceId) : null;
+    if (viaEngine) {
+      return { kind: "marketplaceEngine", marketplaceId: moduleId, engine: viaEngine };
+    }
     // A module not yet installed is read from its marketplace archive, which
     // for a paid module is the product itself: only a buyer may browse it.
     return {
@@ -82,13 +116,21 @@ export const listModuleFiles = action({
   returns: moduleFileListValidator,
   handler: async (ctx, { instanceId, moduleId }): Promise<ModuleFileList> => {
     await requireInstanceRoleInAction(ctx, instanceId);
-    const source = await resolveFileSource(ctx, instanceId, moduleId);
+    const source = await resolveFileSource(ctx, instanceId, moduleId, "list");
     try {
       if (source.kind === "engine") {
         const { url, clientId, clientSecret } = source.engine;
         return await createEngineRpcSession<EngineApi>(url, clientId, clientSecret).listModuleFiles(
           source.manifestModuleId
         );
+      }
+      if (source.kind === "marketplaceEngine") {
+        const { engine, marketplaceId } = source;
+        const inspection = await inspectThroughEngine(
+          { engine: () => marketplaceEngineSession(engine), buyerToken: () => buyerTokenFor(ctx, instanceId) },
+          marketplaceId
+        );
+        return moduleFilesFromInspection(inspection);
       }
       return listArchiveModuleFiles(await fetchArchive(source));
     } catch (error) {
@@ -105,7 +147,7 @@ export const readModuleFile = action({
     if (path === "") {
       throw new ConvexError("A file path is required");
     }
-    const source = await resolveFileSource(ctx, instanceId, moduleId);
+    const source = await resolveFileSource(ctx, instanceId, moduleId, "read");
     try {
       if (source.kind === "engine") {
         const { url, clientId, clientSecret } = source.engine;
