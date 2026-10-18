@@ -1,8 +1,16 @@
 import type { ConditionConfig, ConditionOperator } from "@woofx3/api";
 import { Plus, X } from "lucide-react";
+import { useId, useState } from "react";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  conditionFieldType,
+  conditionValueProblem,
+  conditionValueText,
+  isValuelessOperator,
+  parseConditionValue,
+} from "@/lib/condition-value";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 const OPERATORS: ConditionOperator[] = [
@@ -41,30 +49,54 @@ const OPERATOR_LABELS: Record<ConditionOperator, string> = {
   between: "between (min, max)",
 };
 
-const LIST_OPERATORS = new Set<ConditionOperator>(["in", "not_in", "between"]);
-const VALUELESS_OPERATORS = new Set<ConditionOperator>(["exists", "not_exists"]);
+/**
+ * The value input of one condition row. It keeps the text as typed, because the stored
+ * value drops what does not change it: the trailing comma of a list being typed, the
+ * "." of a decimal. The text shows only while it still reads as the stored value, so a
+ * value replaced from outside, or a row taking the place of a removed one, shows the
+ * stored value instead.
+ */
+function ConditionValueInput({
+  index,
+  operator,
+  fieldType,
+  value,
+  onChange,
+  availableVariables,
+}: {
+  index: number;
+  operator: ConditionOperator;
+  fieldType: string | undefined;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  availableVariables: VariableOption[];
+}) {
+  const [draft, setDraft] = useState(() => conditionValueText(value));
+  const draftIsCurrent = JSON.stringify(parseConditionValue(operator, draft, fieldType)) === JSON.stringify(value);
+  const text = draftIsCurrent ? draft : conditionValueText(value);
+  const problem = conditionValueProblem(operator, text);
+  const problemId = useId();
 
-function valueToInputString(value: unknown): string {
-  if (value === undefined || value === null) {
-    return "";
-  }
-  if (Array.isArray(value)) {
-    return value.join(", ");
-  }
-  return String(value);
-}
-
-function parseValueForOperator(operator: ConditionOperator, raw: string): unknown {
-  if (VALUELESS_OPERATORS.has(operator)) {
-    return undefined;
-  }
-  if (LIST_OPERATORS.has(operator)) {
-    return raw
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-  }
-  return raw;
+  return (
+    <div className="flex-1 space-y-1">
+      <VariableAwareInput
+        value={text}
+        onChange={(raw) => {
+          setDraft(raw);
+          onChange(parseConditionValue(operator, raw, fieldType));
+        }}
+        placeholder={operator === "between" ? "min, max" : "value"}
+        availableVariables={availableVariables}
+        aria-describedby={problem ? problemId : undefined}
+        data-testid={`input-condition-value-${index}`}
+      />
+      {problem && (
+        <p id={problemId} className="text-xs text-destructive" data-testid={`text-condition-value-error-${index}`}>
+          {problem}
+        </p>
+      )}
+    </div>
+  );
 }
 
 interface ConditionEditorProps {
@@ -92,6 +124,14 @@ export function ConditionEditor({
     onChange(conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)));
   };
 
+  // The field and operator decide how the value is typed, so changing either one
+  // converts the value again from its text.
+  const retypeRow = (index: number, field: string, operator: ConditionOperator) => {
+    const fieldType = conditionFieldType(field, availableVariables);
+    const text = conditionValueText(conditions[index].value);
+    updateRow(index, { field, operator, value: parseConditionValue(operator, text, fieldType) });
+  };
+
   const removeRow = (index: number) => {
     onChange(conditions.filter((_, i) => i !== index));
   };
@@ -103,14 +143,14 @@ export function ConditionEditor({
   return (
     <div className="space-y-2">
       {conditions.map((condition, index) => {
-        const hideValue = VALUELESS_OPERATORS.has(condition.operator);
+        const hideValue = isValuelessOperator(condition.operator);
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: rows have no stable identity; list is append/remove-only, not reordered
           <div key={index} className="flex items-start gap-2">
             <div className="flex-[1.2]">
               <VariableAwareInput
                 value={condition.field}
-                onChange={(field) => updateRow(index, { field })}
+                onChange={(field) => retypeRow(index, field, condition.operator)}
                 placeholder="{variable}"
                 className="font-mono text-xs"
                 availableVariables={availableVariables}
@@ -119,12 +159,7 @@ export function ConditionEditor({
             </div>
             <Select
               value={condition.operator}
-              onValueChange={(value) =>
-                updateRow(index, {
-                  operator: value as ConditionOperator,
-                  value: parseValueForOperator(value as ConditionOperator, valueToInputString(condition.value)),
-                })
-              }
+              onValueChange={(value) => retypeRow(index, condition.field, value as ConditionOperator)}
             >
               <SelectTrigger className="w-[168px] shrink-0" data-testid={`select-condition-operator-${index}`}>
                 <SelectValue />
@@ -138,15 +173,14 @@ export function ConditionEditor({
               </SelectContent>
             </Select>
             {!hideValue && (
-              <div className="flex-1">
-                <VariableAwareInput
-                  value={valueToInputString(condition.value)}
-                  onChange={(raw) => updateRow(index, { value: parseValueForOperator(condition.operator, raw) })}
-                  placeholder="value"
-                  availableVariables={availableVariables}
-                  data-testid={`input-condition-value-${index}`}
-                />
-              </div>
+              <ConditionValueInput
+                index={index}
+                operator={condition.operator}
+                fieldType={conditionFieldType(condition.field, availableVariables)}
+                value={condition.value}
+                onChange={(value) => updateRow(index, { value })}
+                availableVariables={availableVariables}
+              />
             )}
             <Button
               type="button"
