@@ -1,6 +1,5 @@
 import {
   ArchiveRestore,
-  Bell,
   CircleHelp,
   FolderOpen,
   GraduationCap,
@@ -8,10 +7,8 @@ import {
   HardDrive,
   History,
   Key,
-  Layers,
   LayoutDashboard,
   ListChecks,
-  ListOrdered,
   MessageSquare,
   MessageSquarePlus,
   PackagePlus,
@@ -22,14 +19,13 @@ import {
   ScrollText,
   Server,
   Settings,
-  Tally5,
-  Timer,
   Users,
   Workflow,
 } from "lucide-react";
 import { ALERT_EDITOR_BASE, ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { FEEDBACK_PATH } from "@/lib/feedback";
+import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
 export const STARTER_PACKS_PATH = "/stream/starter-packs";
@@ -90,18 +86,18 @@ export const STREAM_ITEMS: NavItem[] = [
   {
     id: "alerts",
     label: "Alerts",
-    icon: Bell,
+    icon: STREAM_OBJECT_ICONS.alerts,
     href: "/stream/alerts",
     owns: [ALERT_EDITOR_BASE, ALERT_LIBRARY_EDITOR_BASE, ALERT_RUN_BASE],
     children: [
-      { id: "counters", label: "Counters", icon: Tally5, href: "/stream/counters" },
-      { id: "timers", label: "Timers", icon: Timer, href: "/stream/timers" },
-      { id: "queues", label: "Queues", icon: ListOrdered, href: "/stream/queues" },
+      { id: "counters", label: "Counters", icon: STREAM_OBJECT_ICONS.counters, href: "/stream/counters" },
+      { id: "timers", label: "Timers", icon: STREAM_OBJECT_ICONS.timers, href: "/stream/timers" },
+      { id: "queues", label: "Queues", icon: STREAM_OBJECT_ICONS.queues, href: "/stream/queues" },
       { id: "workflows", label: "Workflows", icon: Workflow, href: "/stream/workflows" },
     ],
   },
   { id: "commands", label: "Commands", icon: MessageSquare, href: "/stream/commands" },
-  { id: "scenes", label: "Scenes", icon: Layers, href: "/stream/scenes" },
+  { id: "scenes", label: "Scenes", icon: STREAM_OBJECT_ICONS.scenes, href: "/stream/scenes" },
   { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
   { id: "supporters", label: "Supporters", icon: HandHeart, href: "/stream/supporters" },
   { id: "assets", label: "Assets", icon: FolderOpen, href: "/stream/assets" },
