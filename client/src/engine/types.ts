@@ -5,6 +5,7 @@ import type { FunctionArgs, FunctionReturnType } from "convex/server";
 
 export type { CompositionPreviewUrl } from "@convex/compositionPreview";
 export type { AlertClearResult, AlertReplayResult, AlertSkipResult } from "@convex/lib/alertQueueResults";
+export type { ConfigImportPlan, ConfigImportResult } from "@convex/lib/configBundle";
 export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
 export type { FieldOptionsReference } from "@convex/lib/fieldOptions";
@@ -30,6 +31,7 @@ export type {
   EventLogSettings,
   ModuleFileContent,
   ModuleFileList,
+  StorageConfig,
   StreamEventFrame,
   UploadGrant,
 } from "@woofx3/api";
@@ -173,6 +175,12 @@ export type EngineTestEvent = Omit<FunctionArgs<typeof api.debug.fireTrigger>, "
 
 /** Whether the engine published the event; `message` says why not. */
 export type PublishedTestEvent = FunctionReturnType<typeof api.debug.fireTrigger>;
+
+/** Which sections to back up, and whether to include each group's members. */
+export type ConfigExportRequest = Omit<FunctionArgs<typeof api.configBackup.exportConfig>, "instanceId">;
+
+/** A backup, as the chunks it was read into, and how to apply it. */
+export type ConfigImportRequest = Omit<FunctionArgs<typeof api.configBackup.importConfig>, "instanceId">;
 
 /** A workflow on the engine, as the pickers that list them need it. */
 export interface EngineWorkflowOption {

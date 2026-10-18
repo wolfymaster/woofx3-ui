@@ -42,7 +42,14 @@ export const ENGINE_NAMESPACE_MODULES = {
     "supporters.viewerTotals",
     "debug",
   ],
-  config: ["configBackup", "storage", "fieldOptions"],
+  config: [
+    // configBackup.access is the caller's role, read from Convex.
+    "configBackup.exportConfig",
+    "configBackup.previewImport",
+    "configBackup.importConfig",
+    "storage",
+    "fieldOptions",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type EngineNamespace = keyof typeof ENGINE_NAMESPACE_MODULES;
