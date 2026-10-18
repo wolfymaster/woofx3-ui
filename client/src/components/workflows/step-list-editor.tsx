@@ -56,6 +56,7 @@ import {
 import { ActionPickerDialog } from "./action-picker-dialog";
 import { StepConfigPanel } from "./step-config-panel";
 import { StepNodeCard } from "./step-node";
+import { WorkflowNotEditable } from "./workflow-not-editable";
 
 type InsertStepKind = "action" | "condition" | "wait" | "delay";
 
@@ -585,10 +586,7 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
               />
             </div>
           ) : notEditableReason ? (
-            <div className="text-sm text-muted-foreground space-y-1" data-testid="text-workflow-not-editable">
-              <p className="font-medium text-foreground">This workflow can't be edited here.</p>
-              <p>{notEditableReason}</p>
-            </div>
+            <WorkflowNotEditable reason={notEditableReason} />
           ) : null}
         </div>
       </ScrollArea>

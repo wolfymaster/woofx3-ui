@@ -54,7 +54,9 @@ import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import StepListEditor from "@/components/workflows/step-list-editor";
 import { TestRunSheet } from "@/components/workflows/test-run-sheet";
+import { WorkflowFlowEditor } from "@/components/workflows/workflow-flow-editor";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
+import { useFeatureFlag } from "@/hooks/use-feature-flag";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -447,6 +449,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
   const notRunningHealth = useNotRunningWorkflows().byId.get(engineWorkflowId);
   const { catalogTriggers, triggerPresets } = useWorkflowCatalog();
+  const flowEditorOn = useFeatureFlag("workflows.flowEditor");
   const search = useSearch();
 
   const [tab, setTab] = useState<WorkflowEditorTab>(() => workflowEditorTab(search));
@@ -684,7 +687,19 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
 
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
-        <StepListEditor onDefinitionChange={setCurrentDefinition} />
+        {flowEditorOn === undefined || !instance ? (
+          <div className="flex h-full items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : flowEditorOn ? (
+          <WorkflowFlowEditor
+            instanceId={instance._id as Id<"instances">}
+            engineWorkflowId={engineWorkflowId}
+            onDefinitionChange={setCurrentDefinition}
+          />
+        ) : (
+          <StepListEditor onDefinitionChange={setCurrentDefinition} />
+        )}
       </div>
       {tab === "runs" && instance && (
         <div className="flex-1 overflow-hidden">

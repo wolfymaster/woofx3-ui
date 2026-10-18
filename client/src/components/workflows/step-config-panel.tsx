@@ -105,7 +105,7 @@ function StepIdField({
   );
 }
 
-function TriggerConfigPanel({
+export function TriggerConfigPanel({
   node,
   catalog,
   onUpdateTriggerConditions,
@@ -150,7 +150,7 @@ function TriggerConfigPanel({
   );
 }
 
-function ActionConfigPanel({
+export function ActionConfigPanel({
   node,
   catalog,
   existingStepIds,
@@ -194,7 +194,7 @@ function ActionConfigPanel({
   );
 }
 
-function ConditionConfigPanel({
+export function ConditionConfigPanel({
   node,
   availableVariables,
   onUpdateConditionConditions,
@@ -217,7 +217,7 @@ function ConditionConfigPanel({
   );
 }
 
-function WaitConfigPanel({
+export function WaitConfigPanel({
   node,
   catalogTriggers,
   onUpdateWaitConfig,

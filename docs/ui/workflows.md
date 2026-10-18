@@ -1,7 +1,7 @@
 # Workflows
 
 **Routes:** `/stream/workflows`, `/stream/workflows/new`, `/stream/workflows/:id`, `/stream/workflows/:id/runs/:engineRunId`, `/stream/starter-packs`
-**Primary files:** `client/src/pages/workflows.tsx`, `client/src/components/workflows/basic-editor.tsx`, `client/src/components/workflows/step-list-editor.tsx`, `client/src/lib/workflow-display.ts`, `client/src/hooks/use-workflow-catalog.ts`
+**Primary files:** `client/src/pages/workflows.tsx`, `client/src/components/workflows/basic-editor.tsx`, `client/src/components/workflows/step-list-editor.tsx`, `client/src/components/flow/flow-editor.tsx`, `client/src/lib/workflow-display.ts`, `client/src/hooks/use-workflow-catalog.ts`
 
 `pages/workflows.tsx` serves the first three routes and picks one of three screens from the location: the list, the create flow, or the editor.
 
@@ -50,10 +50,28 @@ Curated sets of workflows and chat commands (raid welcome, follower thanks, sub 
 - A header bar (back, click-to-rename title, enabled badge, **Save**, and a kebab with *View JSON* and *Delete*) above **`StepListEditor`**, which reads the workflow id from the route itself.
 - The screen is keyed by workflow id, so switching workflows resets the in-progress definition rather than carrying the previous one's draft into the next save.
 - Saves go through `workflowActions.updateFromDefinition` with `escapeDollarKeys` applied (the engine's `$`-prefixed keys are not legal Convex field names).
-- The step list is a tree read from the definition by `definitionToTree` (`client/src/lib/workflow-tree.ts`) and written back by `treeToDefinition`. The round trip is lossless: every task field is carried (ones the editor doesn't use ride along on the step), a task type the editor doesn't know is kept whole, and a workflow is written back in the `dependsOn` / `onTrue` layout it was read in, so a save changes only the edited steps. Only the order of `tasks` is normalised, to reading order; the engine orders tasks by `dependsOn` alone. `workflow-tree.roundtrip.test.ts` holds the fixtures, including every starter pack workflow and setup import output.
+- The step list is a tree read from the definition by `definitionToTree` (`client/src/lib/workflow-tree.ts`) and written back by `treeToDefinition`. The round trip is lossless: every task field is carried (ones the editor doesn't use ride along on the step), a task type the editor doesn't know is kept whole, and a workflow is written back in the `dependsOn` / `onTrue` layout it was read in, so a save changes only the edited steps. Only the order of `tasks` is normalised, to reading order. The engine runs a task after its `dependsOn` and after the condition whose `onTrue` / `onFalse` lists it, a step after a condition waits for the branch that ran, and tasks that wait on nothing run in `tasks` order, which reading order keeps. `workflow-tree.roundtrip.test.ts` holds the fixtures, including every starter pack workflow and setup import output.
 - A definition the tree can't express without changing it (a step waiting on two others, steps that run side by side, a step in two branches) opens read-only with the reason, rather than being rewritten on save. Alerts workflows with more than one trigger or a shared action are such definitions.
 - Log and sub-workflow steps, and steps of unknown types, show as rows that can't be edited yet.
 - **Steps / Runs** tabs in the header. The step editor stays mounted behind the Runs tab so unsaved edits survive the switch; `?tab=runs` opens the editor on Runs.
+
+### Flow editor (behind a flag)
+
+With the `workflows.flowEditor` feature flag on (`convex/lib/featureFlags.ts`, see [Feature flags](../patterns/feature-flags.md)), the Steps tab shows **`WorkflowFlowEditor`** (`components/workflows/workflow-flow-editor.tsx`) in place of `StepListEditor`. It is off by default; turn it on for an instance with:
+
+```bash
+bunx convex run featureFlags:set '{"key": "workflows.flowEditor", "state": "rules", "rules": {"instances": ["<instance id>"]}}'
+```
+
+`WorkflowFlowEditor` reads and saves the definition exactly as `StepListEditor` does and renders **`FlowEditor`** (`components/flow/flow-editor.tsx`), which edits a `WorkflowTree` in place with no dialogs, sheets or popovers:
+
+- A **When** card shows the trigger's name and configured values (`triggerNodeLabel`, `triggerNodeSummary`); **Change** opens the trigger's settings inside the card.
+- Steps are numbered rows: 1, 2, 3 at the top and 2.1, 2.2 inside step 2's branches, running on from Then into Otherwise so every number names one step (`stepNumbers` in `lib/flow-tree.ts`). A condition's **Then** and **Otherwise** branches are indented below it, nested to any depth.
+- **Add a step** at the end of every list, and a point before each step that shows on hover or Tab, turns into the object-first picker (`ObjectActionPicker`) in place. An action is added with the picker's parameters; Pause adds a 5 second delay wait, Wait for something an event wait with no event yet, Check a condition an empty condition (`stepForPick`).
+- A collapsed row reads as `stepSummary` (`lib/step-summary.ts`): an action's catalog name and its configured settings, a condition's conditions as text, a wait's wait label. Log, sub-workflow and unknown steps say they are kept as is on save and have no settings.
+- Clicking a row opens its settings inside the row. `StepInlineEditor` (`components/flow/step-inline-editor.tsx`) is the one place that picks a step kind's editor; today it renders the step config panel's action, condition and wait bodies.
+- Each row moves up or down within its own list and is removed after an inline confirmation. The last action can't be removed.
+- Saving follows the step list: edits stay local until the open step closes (saved only if it changed; a new step always saves), a remove or move saves at once, and the header's **Save** saves the current draft. A failed save keeps the step open with its edits.
 
 ### Test run
 

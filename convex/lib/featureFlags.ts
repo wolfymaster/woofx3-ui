@@ -21,7 +21,13 @@ export interface FeatureFlagDefinition {
  * written for it, so a flag cannot be turned on by a typo, and a row whose
  * key is gone from this list is ignored.
  */
-export const FEATURE_FLAGS = {} as const satisfies Record<string, FeatureFlagDefinition>;
+export const FEATURE_FLAGS = {
+  "workflows.flowEditor": {
+    description: "The workflow editor shows its steps as an inline flow instead of the step list and its side sheet.",
+    owner: "wolfymaster",
+    removeBy: "2027-03-31",
+  },
+} as const satisfies Record<string, FeatureFlagDefinition>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
 
