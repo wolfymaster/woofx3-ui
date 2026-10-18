@@ -69,6 +69,8 @@ The Steps tab is **`WorkflowFlowEditor`**, which loads the workflow, reads it in
   - Once a thing is chosen, only the verbs that can take it are listed, plus those that act on no thing at all (`verbsFor`). Two actions of one object with the same name each end with their module's display name, as "Reset counter (Tally)" (`verbLabel`).
 - A collapsed row reads as `stepSummary` (`lib/step-summary.ts`): an action's sentence (below), a condition's rows as a sentence by their labels ("If amount is at least 100 and tier is one of Tier 1 or Tier 2", `conditionsSentence`), a wait as a sentence (see Wait steps below). An action still missing a required setting shows a **Needs:** badge naming those settings (`missingSettings`). Given the thing an action points at (`target`, as the macro pad's action buttons pass it), the sentence names it in that setting's place; an action without a sentence reads the way the picker words it, "Increment Hype counter", without that setting. Log, sub-workflow and unknown steps say they are kept as is on save and have no settings.
 - Clicking a row opens its settings inside the row. `StepInlineEditor` (`components/flow/step-inline-editor.tsx`) is the one place that picks a step kind's editor. Actions get `ActionSettingsEditor`, conditions the condition builder and waits `WaitStepEditor` (all below).
+- Each row moves up or down within its own list and is removed after an inline confirmation. The last action can't be removed.
+- Saving: edits stay local until the open step closes (saved only if it changed; a new step always saves), a remove or move saves at once, and the header's **Save** saves the current draft. A failed save keeps the step open with its edits.
 
 ### Condition builder
 
@@ -83,8 +85,6 @@ A condition step's rows are edited by **`ConditionBuilder`** (`components/flow/c
 - **Numbers stored as text**: a row comparing a number field with a number written as text (saved before values were typed) shows "This compares a number as text" with **Fix it**, which stores the numbers (`comparesNumberAsText`, `fixNumbersAsText`). Nothing is migrated.
 - **Type it**: any row can switch to the text it stores, with a free `${…}` field and value and every operator, for what the pickers can't express, such as comparing two variables. A row whose field isn't offered, or whose value is a `${…}` or a shape the pickers can't show, opens that way. Inside a list (an "is one of" item, a "between" bound) a `${…}` is accepted only when the engine resolves list items (capability `workflow.conditionListReferences`).
 - A step's single `condition`, which the engine evaluates before `conditions`, shows as the first row and moves into `conditions` on the first edit, which evaluates the same.
-- Each row moves up or down within its own list and is removed after an inline confirmation. The last action can't be removed.
-- Saving: edits stay local until the open step closes (saved only if it changed; a new step always saves), a remove or move saves at once, and the header's **Save** saves the current draft. A failed save keeps the step open with its edits.
 
 ### Wait steps
 

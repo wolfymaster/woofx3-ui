@@ -4,8 +4,8 @@ import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-c
 import { nameWithThing, type StepTarget } from "@/lib/action-objects";
 import { actionSentenceParts } from "@/lib/action-sentence";
 import { missingSettings } from "@/lib/action-settings";
-import { type OptionLabels, type SentencePart, sentenceText } from "@/lib/condition-sentence";
 import { type ConditionField, conditionsSentence } from "@/lib/condition-builder";
+import { type OptionLabels, type SentencePart, sentenceText } from "@/lib/condition-sentence";
 import { conditionValueText } from "@/lib/condition-value";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { placementChoices, type SceneRow, sceneChoices } from "@/lib/scene-field-options";
