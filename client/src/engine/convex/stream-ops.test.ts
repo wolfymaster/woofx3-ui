@@ -5,7 +5,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 // The Convex hooks are replaced so each call can be checked: a gateway
-// request must send what the recap hooks it replaced sent.
+// request must send what the recap hooks and the supporters page sent
+// before.
 
 const calls: Array<{ name: string; args: unknown }> = [];
 
@@ -58,5 +59,31 @@ describe("streamOps recap requests", () => {
     const refresh = renderRequest(() => convexStreamOpsGateway.useOpenSessionRefreshRequest());
     await refresh(instanceId);
     expect(calls).toEqual([{ name: "streamRecap:refreshOpenSession", args: { instanceId } }]);
+  });
+});
+
+describe("streamOps supporter requests", () => {
+  test("list streams and read a stream's leaderboard", async () => {
+    const listStreams = renderRequest(() => convexStreamOpsGateway.useSupporterStreamsRequest());
+    const leaderboard = renderRequest(() => convexStreamOpsGateway.useSupporterLeaderboardRequest());
+    await listStreams(instanceId);
+    await leaderboard(instanceId, { metric: "bits", minTotal: 1, sessionId: "session-1" });
+    expect(calls).toEqual([
+      { name: "supporters:listStreams", args: { instanceId } },
+      { name: "supporters:leaderboard", args: { instanceId, metric: "bits", minTotal: 1, sessionId: "session-1" } },
+    ]);
+  });
+
+  test("sends no session for the all-time leaderboard", async () => {
+    const leaderboard = renderRequest(() => convexStreamOpsGateway.useSupporterLeaderboardRequest());
+    await leaderboard(instanceId, { metric: "giftedSubs", minTotal: 5 });
+    expect(calls[0]?.args).toEqual({ instanceId, metric: "giftedSubs", minTotal: 5 });
+    expect(calls[0]?.args).not.toHaveProperty("sessionId");
+  });
+
+  test("read a viewer's totals", async () => {
+    const viewerTotals = renderRequest(() => convexStreamOpsGateway.useViewerSupportTotalsRequest());
+    await viewerTotals(instanceId, "1234");
+    expect(calls).toEqual([{ name: "supporters:viewerTotals", args: { instanceId, platformUserId: "1234" } }]);
   });
 });

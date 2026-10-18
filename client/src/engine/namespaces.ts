@@ -36,7 +36,10 @@ export const ENGINE_NAMESPACE_MODULES = {
     "streamRecap.loadEngineDetail",
     "streamRecap.loadTimelineEvents",
     "streamRecap.refreshOpenSession",
-    "supporters",
+    // The rest of supporters asks Twitch for a viewer or reads the channel's Twitch link.
+    "supporters.listStreams",
+    "supporters.leaderboard",
+    "supporters.viewerTotals",
     "debug",
   ],
   config: ["configBackup", "storage", "fieldOptions"],

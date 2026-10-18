@@ -4,6 +4,5 @@
   "hooks/use-go-live-checklist.ts",
   "pages/admin/backup.tsx",
   "pages/module-install.tsx",
-  "pages/modules.tsx",
-  "pages/supporters.tsx"
+  "pages/modules.tsx"
 ]
