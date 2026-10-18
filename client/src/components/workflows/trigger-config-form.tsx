@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import { bareKind, parseKindRef } from "@convex/lib/resourceKinds";
 import { THEME_FIELD_TYPE } from "@convex/lib/widgetThemes";
-import { useQuery } from "convex/react";
 import { FileAudio, FileImage, FileVideo, Link2, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
@@ -22,6 +20,7 @@ import {
   useResourceInstancesOfKind,
   useResourceKind,
 } from "@/engine/hooks/use-module-resources";
+import { useAlertWidgetNames } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTargetChoices } from "@/lib/alert-target";
 import { isExternalMediaValue, toMediaValue } from "@/lib/media-value";
@@ -215,7 +214,7 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = (props) => <ResourceRefFie
 
 function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
   const { instance } = useInstance();
-  const names = useQuery(api.sceneWidgets.alertWidgetNames, instance ? { instanceId: instance._id } : "skip");
+  const names = useAlertWidgetNames(instance ? instance._id : null);
   const { selected, options, stale } = alertTargetChoices(names, value);
   const noWidgets = names !== undefined && options.length === 0;
 

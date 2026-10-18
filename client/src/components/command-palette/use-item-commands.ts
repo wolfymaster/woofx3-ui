@@ -36,6 +36,7 @@ import {
   useResourceKinds,
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
+import { useScenes } from "@/engine/hooks/use-scenes";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useAimedResourceActionRunner, useResourceActionRunner } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -86,7 +87,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const workflows = useQuery(api.workflows.list, args);
   const commands = useChatCommands(instanceId ?? null);
   const commandGroups = useChatCommandGroups(instanceId ?? null);
-  const scenes = useQuery(api.scenes.list, args);
+  const scenes = useScenes(instanceId ?? null);
   const modules = useQuery(api.moduleRepository.list, args);
   const recaps = useQuery(
     api.streamSessionSummaries.listRecent,
