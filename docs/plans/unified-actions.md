@@ -4,9 +4,6 @@ One step editor for everything that runs steps: chat commands, alerts, workflows
 
 Feature PRs for this effort target `release/unified-actions` in this repository and in the engine repository.
 
-- Design mockups: <https://claude.ai/artifact/2FkTTiDSrCVe8fGyx652Cr>
-- Plan with the decisions table: <https://claude.ai/artifact/EgRbADAL8PEhj4sxEALhWH>
-
 ## What the editor is
 
 - **One component, configured per surface.** The command editor, the Alerts trigger cards, the workflow editor and the macro pad embed the same step editor. They differ only in the "When" card above it and in which step kinds they allow.
