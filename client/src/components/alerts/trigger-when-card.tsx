@@ -12,6 +12,8 @@ interface TriggerWhenCardProps {
   values: TriggerConfigValues;
   loadedOptions: ReadonlyMap<string, LoadedFieldOptions>;
   onChangeValue: (fieldId: string, value: unknown) => void;
+  /** What the card reads when the trigger has no sentence: no conditions and no template. */
+  fallback: string;
   /** A picker closed, so the values it changed are settled and can be saved. */
   onSettle: () => void;
 }
@@ -29,6 +31,7 @@ export function TriggerWhenCard({
   loadedOptions,
   onChangeValue,
   onSettle,
+  fallback,
 }: TriggerWhenCardProps) {
   const [openFieldId, setOpenFieldId] = useState<string | null>(null);
   return (
@@ -38,20 +41,24 @@ export function TriggerWhenCard({
       data-testid="trigger-when-card"
     >
       <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">When</span>
-      <ConditionSentence
-        parts={parts}
-        fields={editableFields}
-        values={values}
-        loadedOptions={loadedOptions}
-        openFieldId={openFieldId}
-        onOpenFieldChange={(fieldId) => {
-          setOpenFieldId(fieldId);
-          if (fieldId === null) {
-            onSettle();
-          }
-        }}
-        onChangeValue={onChangeValue}
-      />
+      {parts.length === 0 ? (
+        <span className="text-base font-medium leading-snug">{fallback}</span>
+      ) : (
+        <ConditionSentence
+          parts={parts}
+          fields={editableFields}
+          values={values}
+          loadedOptions={loadedOptions}
+          openFieldId={openFieldId}
+          onOpenFieldChange={(fieldId) => {
+            setOpenFieldId(fieldId);
+            if (fieldId === null) {
+              onSettle();
+            }
+          }}
+          onChangeValue={onChangeValue}
+        />
+      )}
     </section>
   );
 }

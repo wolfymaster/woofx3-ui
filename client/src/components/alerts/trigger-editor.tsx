@@ -240,6 +240,7 @@ export function TriggerEditor({
             loadedOptions={loadedOptions}
             onChangeValue={changeValue}
             onSettle={settleSentence}
+            fallback={triggerPreset.name}
           />
         }
       />
