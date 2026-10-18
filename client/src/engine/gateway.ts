@@ -67,6 +67,7 @@ import type {
   SceneChanges,
   SceneEditorGrant,
   SceneRecord,
+  SceneRepairResult,
   SceneWidgetCatalogRow,
   StorageConfig,
   StreamEventFrame,
@@ -407,6 +408,12 @@ export interface ScenesGateway {
    * reach sceneManager. Needs `scenes.editorSync`.
    */
   useEditorSessionRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<SceneEditorGrant | null>;
+  /**
+   * Repair a scene or alert whose stored data the engine cannot read: the
+   * engine keeps a copy of what it cannot read, then writes back the readable
+   * rest. Needs `scenes.repair`.
+   */
+  useRepairRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<SceneRepairResult>;
 }
 
 /**

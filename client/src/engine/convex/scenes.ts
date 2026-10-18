@@ -62,6 +62,14 @@ function useEditorSessionRequest() {
   );
 }
 
+function useRepairRequest() {
+  const repairScene = useAction(api.sceneActions.repairScene);
+  return useCallback(
+    (instanceId: InstanceId, engineSceneId: string) => repairScene({ instanceId, engineSceneId }),
+    [repairScene]
+  );
+}
+
 export const convexScenesGateway: ScenesGateway = {
   useScenes,
   useScene,
@@ -73,4 +81,5 @@ export const convexScenesGateway: ScenesGateway = {
   useRemoveRequest,
   useWidgetThemesRequest,
   useEditorSessionRequest,
+  useRepairRequest,
 };
