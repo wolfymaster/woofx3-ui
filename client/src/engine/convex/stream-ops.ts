@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useAction } from "convex/react";
 import { useCallback } from "react";
 import type { StreamOpsGateway } from "@/engine/gateway";
-import type { InstanceId, SupporterLeaderboardQuery } from "@/engine/types";
+import type { EngineTestEvent, InstanceId, SupporterLeaderboardQuery } from "@/engine/types";
 
 function useRecapEngineDetailRequest() {
   const loadEngineDetail = useAction(api.streamRecap.loadEngineDetail);
@@ -46,6 +46,22 @@ function useViewerSupportTotalsRequest() {
   );
 }
 
+function usePublishEventRequest() {
+  const fireTrigger = useAction(api.debug.fireTrigger);
+  return useCallback(
+    (instanceId: InstanceId, event: EngineTestEvent) => fireTrigger({ instanceId, ...event }),
+    [fireTrigger]
+  );
+}
+
+function useSimulateTwitchEventRequest() {
+  const simulateTwitchEvent = useAction(api.debug.simulateTwitchEvent);
+  return useCallback(
+    (instanceId: InstanceId, event: EngineTestEvent) => simulateTwitchEvent({ instanceId, ...event }),
+    [simulateTwitchEvent]
+  );
+}
+
 export const convexStreamOpsGateway: StreamOpsGateway = {
   useRecapEngineDetailRequest,
   useRecapTimelineEventsRequest,
@@ -53,4 +69,6 @@ export const convexStreamOpsGateway: StreamOpsGateway = {
   useSupporterStreamsRequest,
   useSupporterLeaderboardRequest,
   useViewerSupportTotalsRequest,
+  usePublishEventRequest,
+  useSimulateTwitchEventRequest,
 };
