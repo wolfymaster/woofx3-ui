@@ -117,6 +117,19 @@ export interface HelixRequest {
  */
 export const UNCONFIRMED_WRITE_STATUS = { failed: 502, timeout: 504 } as const;
 
+const UNCONFIRMED_HEADER = "X-Woofx3-Unconfirmed";
+
+/**
+ * Whether a failed write's response stands for an engine that could not say
+ * whether Twitch applied it, rather than for Twitch's own refusal. A caller
+ * that answers a refusal with a different write (pins re-post the message)
+ * must not do so here, or a write Twitch applied would be followed by a
+ * second one.
+ */
+export function isUnconfirmedWrite(response: Response): boolean {
+  return response.headers.has(UNCONFIRMED_HEADER);
+}
+
 /**
  * One Helix call, through the engine when the route has one. When the engine
  * has no answer from Twitch, or cannot be reached, the call goes to Helix
@@ -185,7 +198,7 @@ function unconfirmed(
     reason,
     error,
   });
-  return new Response(null, { status: UNCONFIRMED_WRITE_STATUS[reason] });
+  return new Response(null, { status: UNCONFIRMED_WRITE_STATUS[reason], headers: { [UNCONFIRMED_HEADER]: reason } });
 }
 
 function fallBack(route: TwitchHelixRoute, request: HelixRequest, reason: string, error: string): Promise<Response> {

@@ -253,6 +253,11 @@ stream preview, live pill, counter cards, Clip. It is not a widget and is not in
 the layout — it spans the whole dashboard and is hidden per browser through the
 `$commandBarHidden` nanostore.
 
+Clip creates the clip from `convex/twitchClips.ts`, on Helix or through an
+engine with `twitch.clips` while the `twitch.engineClips` flag is on (see
+[Helix calls through the engine](#helix-calls-through-the-engine)). Stream
+recap clips stay in Convex.
+
 The counter cards are a **projection of counter resources**, not a store of their
 own. A card reads its number from the `resourceValues` mirror and its name and
 goals from the counter's `moduleResourceInstances` row, through the same
@@ -628,11 +633,19 @@ keyed by its message id so it is added once, and can then be pinned again from
 here. There is no EventSub type for pinning, which is why the current pin is
 polled rather than pushed.
 
+Reading, pinning, re-posting and unpinning go to Helix from `convex/pins.ts`,
+or through an engine with `twitch.pins` (see
+[Helix calls through the engine](#helix-calls-through-the-engine)): the
+current pin on the capability alone, the writes only while the
+`twitch.enginePins` flag is on. The history stays in Convex.
+
 Re-pinning has two paths, chosen by `convex/lib/pinStrategy.ts`: reuse the
 stored message id when the entry was created during the current broadcast,
 otherwise re-post the text and pin the new message, since a message id stops
 being pinnable once its stream ends. A refusal falls back to re-posting anyway —
-the rule exists to keep that fallback rare, not to replace it. History rows
+the rule exists to keep that fallback rare, not to replace it. A pin the engine
+sent but could not confirm does not fall back: Twitch may have pinned it, and a
+re-post would put the message in chat twice. History rows
 predating this feature were hand-written Activity-panel notes; they carry no
 message id and so always take the re-post path.
 

@@ -11,6 +11,7 @@ import {
   directHelixRoute,
   type HelixRequest,
   helixResponse,
+  isUnconfirmedWrite,
   type TwitchHelixRoute,
   twitchHelixRoute,
 } from "./twitchEngineHelix";
@@ -166,6 +167,7 @@ describe("helixResponse", () => {
       helixRequest
     );
     expect(response.status).toBe(400);
+    expect(isUnconfirmedWrite(response)).toBe(false);
     expect(await response.text()).toBe(body);
     expect(direct).not.toHaveBeenCalled();
   });
@@ -236,6 +238,7 @@ describe("helixResponse", () => {
       const { helixRequest, direct } = request("write");
       const response = await helixResponse(routeAnswering(answer), helixRequest);
       expect(response.status).toBe(status);
+      expect(isUnconfirmedWrite(response)).toBe(true);
       expect(await response.text()).toBe("");
       expect(direct).not.toHaveBeenCalled();
       expect(warn).toHaveBeenCalledTimes(1);
