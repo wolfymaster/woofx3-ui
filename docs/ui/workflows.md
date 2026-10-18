@@ -72,7 +72,7 @@ The Steps tab is **`WorkflowFlowEditor`**, which loads the workflow, reads it in
 - Each row moves up or down within its own list and is removed after an inline confirmation. The last action can't be removed.
 - Saving: edits stay local until the open step closes (saved only if it changed; a new step always saves), a remove or move saves at once, and the header's **Save** saves the current draft. A failed save keeps the step open with its edits.
 
-`FlowEditor` is configured per surface rather than forked. A surface whose flow starts from something other than a catalog trigger passes its own **`when`** card, built from the exported `FlowWhenCard` so it looks and opens the same, and **`triggerVariables`**, what the start of the flow hands its steps (offered ahead of earlier steps' outputs by `computeAvailableVariables`). The chat command editor ([Chat commands](./commands.md#the-command-editor)) and an alert trigger's editor ([Alerts](./alerts.md)) are two; its `onCommit` keeps edits in its draft, since a command saves its steps with its own Save.
+`FlowEditor` is configured per surface rather than forked. A surface whose flow starts from something other than a catalog trigger passes its own **`when`** card, built from the exported `FlowWhenCard` so it looks and opens the same, and **`triggerVariables`**, what the start of the flow hands its steps (offered ahead of earlier steps' outputs by `computeAvailableVariables`). The chat command editor ([Chat commands](./commands.md#the-command-editor)) and an alert trigger's editor ([Alerts](./alerts.md)) are two. The command editor's `onCommit` keeps edits in its draft, since a command saves its steps with its own Save.
 
 ### Condition builder
 
