@@ -212,11 +212,11 @@ function ConditionConfigPanel({
 
 function WaitConfigPanel({
   node,
-  availableVariables,
+  catalogTriggers,
   onUpdateWaitConfig,
 }: {
   node: WaitNode;
-  availableVariables: VariableOption[];
+  catalogTriggers: CatalogTriggerRow[];
   onUpdateWaitConfig: (id: string, wait: WaitConfig) => void;
 }) {
   return (
@@ -224,7 +224,7 @@ function WaitConfigPanel({
       key={node.id}
       wait={node.wait}
       onChange={(wait) => onUpdateWaitConfig(node.id, wait)}
-      availableVariables={availableVariables}
+      catalogTriggers={catalogTriggers}
     />
   );
 }
@@ -271,7 +271,5 @@ export function StepConfigPanel({
       />
     );
   }
-  return (
-    <WaitConfigPanel node={node} availableVariables={availableVariables} onUpdateWaitConfig={onUpdateWaitConfig} />
-  );
+  return <WaitConfigPanel node={node} catalogTriggers={catalogTriggers} onUpdateWaitConfig={onUpdateWaitConfig} />;
 }

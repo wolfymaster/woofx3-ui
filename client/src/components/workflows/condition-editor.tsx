@@ -106,6 +106,8 @@ interface ConditionEditorProps {
   /** Offered when the user types "{" in the field or value input — see computeAvailableVariables.
    * Empty is fine: the picker only opens when it has something to show, so the inputs stay plain text. */
   availableVariables?: VariableOption[];
+  /** Why a row can never match where these conditions are evaluated, shown under the row. */
+  rowProblem?: (condition: ConditionConfig) => string | null;
 }
 
 /**
@@ -119,6 +121,7 @@ export function ConditionEditor({
   onChange,
   addLabel = "Add condition",
   availableVariables = [],
+  rowProblem,
 }: ConditionEditorProps) {
   const updateRow = (index: number, patch: Partial<ConditionConfig>) => {
     onChange(conditions.map((c, i) => (i === index ? { ...c, ...patch } : c)));
@@ -144,54 +147,62 @@ export function ConditionEditor({
     <div className="space-y-2">
       {conditions.map((condition, index) => {
         const hideValue = isValuelessOperator(condition.operator);
+        const problem = rowProblem?.(condition);
         return (
           // biome-ignore lint/suspicious/noArrayIndexKey: rows have no stable identity; list is append/remove-only, not reordered
-          <div key={index} className="flex items-start gap-2">
-            <div className="flex-[1.2]">
-              <VariableAwareInput
-                value={condition.field}
-                onChange={(field) => retypeRow(index, field, condition.operator)}
-                placeholder="{variable}"
-                className="font-mono text-xs"
-                availableVariables={availableVariables}
-                data-testid={`input-condition-field-${index}`}
-              />
+          <div key={index} className="space-y-1">
+            <div className="flex items-start gap-2">
+              <div className="flex-[1.2]">
+                <VariableAwareInput
+                  value={condition.field}
+                  onChange={(field) => retypeRow(index, field, condition.operator)}
+                  placeholder="{variable}"
+                  className="font-mono text-xs"
+                  availableVariables={availableVariables}
+                  data-testid={`input-condition-field-${index}`}
+                />
+              </div>
+              <Select
+                value={condition.operator}
+                onValueChange={(value) => retypeRow(index, condition.field, value as ConditionOperator)}
+              >
+                <SelectTrigger className="w-[168px] shrink-0" data-testid={`select-condition-operator-${index}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {OPERATORS.map((op) => (
+                    <SelectItem key={op} value={op}>
+                      {OPERATOR_LABELS[op]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!hideValue && (
+                <ConditionValueInput
+                  index={index}
+                  operator={condition.operator}
+                  fieldType={conditionFieldType(condition.field, availableVariables)}
+                  value={condition.value}
+                  onChange={(value) => updateRow(index, { value })}
+                  availableVariables={availableVariables}
+                />
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                onClick={() => removeRow(index)}
+                data-testid={`button-remove-condition-${index}`}
+              >
+                <X className="h-4 w-4" />
+              </Button>
             </div>
-            <Select
-              value={condition.operator}
-              onValueChange={(value) => retypeRow(index, condition.field, value as ConditionOperator)}
-            >
-              <SelectTrigger className="w-[168px] shrink-0" data-testid={`select-condition-operator-${index}`}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {OPERATORS.map((op) => (
-                  <SelectItem key={op} value={op}>
-                    {OPERATOR_LABELS[op]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!hideValue && (
-              <ConditionValueInput
-                index={index}
-                operator={condition.operator}
-                fieldType={conditionFieldType(condition.field, availableVariables)}
-                value={condition.value}
-                onChange={(value) => updateRow(index, { value })}
-                availableVariables={availableVariables}
-              />
+            {problem && (
+              <p className="text-xs text-destructive" data-testid={`text-condition-error-${index}`}>
+                {problem}
+              </p>
             )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-              onClick={() => removeRow(index)}
-              data-testid={`button-remove-condition-${index}`}
-            >
-              <X className="h-4 w-4" />
-            </Button>
           </div>
         );
       })}

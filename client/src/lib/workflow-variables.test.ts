@@ -10,6 +10,7 @@ import {
   isStepIdReferenced,
   isValidStepId,
   projectedActionVariables,
+  waitEventVariables,
 } from "./workflow-variables";
 
 function catalogTrigger(overrides: Partial<CatalogTriggerRow>): CatalogTriggerRow {
@@ -372,5 +373,95 @@ describe("projectedActionVariables", () => {
 
   test("a first action marked concurrent still sees the trigger", () => {
     expect(values([action("first", true)], 0)).toEqual(["${trigger.data.amount}"]);
+  });
+});
+
+const subCatalog = [
+  catalogTrigger({
+    id: "sub",
+    name: "Subscription",
+    event: "channel.subscribe",
+    emits: [
+      { path: "user_name", type: "string", description: "Who subscribed" },
+      { path: "months", type: "number" },
+    ],
+  }),
+];
+
+describe("waitEventVariables", () => {
+  test("offers the waited event's declared payload, typed, as ${event.data.*}", () => {
+    const options = waitEventVariables("channel.subscribe", subCatalog);
+    expect(options).toContainEqual(
+      expect.objectContaining({ value: "${event.data.user_name}", type: "string", description: "Who subscribed" })
+    );
+    expect(options).toContainEqual(expect.objectContaining({ value: "${event.data.months}", type: "number" }));
+  });
+
+  test("always offers the event's type and id, and never the trigger or a step", () => {
+    const options = waitEventVariables("custom.unknown", subCatalog);
+    expect(options.map((o) => o.value)).toEqual(["${event.type}", "${event.id}"]);
+  });
+
+  test("offers no payload for an empty event", () => {
+    expect(waitEventVariables("", subCatalog).map((o) => o.value)).toEqual(["${event.type}", "${event.id}"]);
+  });
+});
+
+describe("computeAvailableVariables — wait exports", () => {
+  const notify: StepNode = { type: "action", id: "notify", action: "function", parameters: {} };
+  const values = (wait: StepNode) =>
+    computeAvailableVariables({ trigger, steps: [wait, notify] }, "notify", actionCatalog, subCatalog)
+      .filter((o) => o.value.startsWith(`\${${wait.id}.`))
+      .map((o) => o.value);
+
+  test("an event wait offers its exports, with the waited event's payload under data", () => {
+    const wait: StepNode = { type: "wait", id: "sub-wait", wait: { type: "event", event: "channel.subscribe" } };
+    expect(values(wait)).toEqual([
+      "${sub-wait.satisfied}",
+      "${sub-wait.timedOut}",
+      "${sub-wait.events}",
+      "${sub-wait.lastEvent}",
+      "${sub-wait.data.user_name}",
+      "${sub-wait.data.months}",
+    ]);
+  });
+
+  test("a wait whose event has no declared payload offers data as a whole", () => {
+    const wait: StepNode = { type: "wait", id: "w", wait: { type: "event", event: "custom.thing" } };
+    expect(values(wait)).toContain("${w.data}");
+  });
+
+  test("an aggregation offers only the total its strategy advances", () => {
+    const count: StepNode = {
+      type: "wait",
+      id: "w",
+      wait: { type: "aggregation", event: "custom.thing", aggregation: { strategy: "count", threshold: 3 } },
+    };
+    const sum: StepNode = {
+      type: "wait",
+      id: "w",
+      wait: { type: "aggregation", event: "custom.thing", aggregation: { strategy: "sum", threshold: 3 } },
+    };
+    expect(values(count)).toContain("${w.count}");
+    expect(values(count)).not.toContain("${w.sum}");
+    expect(values(sum)).toContain("${w.sum}");
+    expect(values(sum)).not.toContain("${w.count}");
+  });
+
+  test("types the exports", () => {
+    const wait: StepNode = { type: "wait", id: "w", wait: { type: "event", event: "channel.subscribe" } };
+    const options = computeAvailableVariables({ trigger, steps: [wait, notify] }, "notify", actionCatalog, subCatalog);
+    const typeOf = (value: string) => options.find((o) => o.value === value)?.type;
+    expect(typeOf("${w.satisfied}")).toBe("boolean");
+    expect(typeOf("${w.events}")).toBe("array");
+    expect(typeOf("${w.data.months}")).toBe("number");
+  });
+
+  test("a delay offers nothing, and a wait is not offered to steps before it", () => {
+    const delay: StepNode = { type: "wait", id: "pause", wait: { type: "delay", durationMs: 5000 } };
+    expect(values(delay)).toEqual([]);
+    const wait: StepNode = { type: "wait", id: "w", wait: { type: "event", event: "channel.subscribe" } };
+    const before = computeAvailableVariables({ trigger, steps: [notify, wait] }, "notify", actionCatalog, subCatalog);
+    expect(before.some((o) => o.value.startsWith("${w."))).toBe(false);
   });
 });
