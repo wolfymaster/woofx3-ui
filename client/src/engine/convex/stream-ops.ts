@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import { useAction } from "convex/react";
 import { useCallback } from "react";
 import type { StreamOpsGateway } from "@/engine/gateway";
-import type { InstanceId } from "@/engine/types";
+import type { InstanceId, SupporterLeaderboardQuery } from "@/engine/types";
 
 function useRecapEngineDetailRequest() {
   const loadEngineDetail = useAction(api.streamRecap.loadEngineDetail);
@@ -25,8 +25,32 @@ function useOpenSessionRefreshRequest() {
   return useCallback((instanceId: InstanceId) => refreshOpenSession({ instanceId }), [refreshOpenSession]);
 }
 
+function useSupporterStreamsRequest() {
+  const listStreams = useAction(api.supporters.listStreams);
+  return useCallback((instanceId: InstanceId) => listStreams({ instanceId }), [listStreams]);
+}
+
+function useSupporterLeaderboardRequest() {
+  const leaderboard = useAction(api.supporters.leaderboard);
+  return useCallback(
+    (instanceId: InstanceId, query: SupporterLeaderboardQuery) => leaderboard({ instanceId, ...query }),
+    [leaderboard]
+  );
+}
+
+function useViewerSupportTotalsRequest() {
+  const viewerTotals = useAction(api.supporters.viewerTotals);
+  return useCallback(
+    (instanceId: InstanceId, platformUserId: string) => viewerTotals({ instanceId, platformUserId }),
+    [viewerTotals]
+  );
+}
+
 export const convexStreamOpsGateway: StreamOpsGateway = {
   useRecapEngineDetailRequest,
   useRecapTimelineEventsRequest,
   useOpenSessionRefreshRequest,
+  useSupporterStreamsRequest,
+  useSupporterLeaderboardRequest,
+  useViewerSupportTotalsRequest,
 };

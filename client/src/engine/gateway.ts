@@ -62,10 +62,14 @@ import type {
   SceneWidgetCatalogRow,
   StreamEventFrame,
   StreamRecapEngineDetail,
+  Supporter,
+  SupporterLeaderboardQuery,
+  SupporterStream,
   TestRunCapabilities,
   TransientEvent,
   UploadGrant,
   UploadRequest,
+  ViewerSupportTotals,
   WebhookEventId,
   WebhookEventSummary,
   WidgetThemes,
@@ -473,9 +477,10 @@ export interface MacrosGateway {
 }
 
 /**
- * What the engine records about the channel's streams, read on demand: no
- * webhook mirrors these figures into Convex. A recap's stored summary is
- * Convex data, and its clips and markers come from Twitch, not the engine.
+ * What the engine records about the channel's streams and the viewers who
+ * support them, read on demand: no webhook mirrors these figures into Convex.
+ * A recap's stored summary is Convex data; a recap's clips and markers, and a
+ * viewer's Twitch profile, come from Twitch, not the engine.
  */
 export interface StreamOpsGateway {
   /**
@@ -495,6 +500,12 @@ export interface StreamOpsGateway {
    * stored-summary reads.
    */
   useOpenSessionRefreshRequest(): (instanceId: InstanceId) => Promise<OpenSessionRefresh>;
+  /** Recent streams, newest first. Rejects with the reason when the engine cannot be asked. */
+  useSupporterStreamsRequest(): (instanceId: InstanceId) => Promise<SupporterStream[]>;
+  /** Top supporters, anonymous ones left out. Rejects for a stream the engine no longer has. */
+  useSupporterLeaderboardRequest(): (instanceId: InstanceId, query: SupporterLeaderboardQuery) => Promise<Supporter[]>;
+  /** Rejects for a blank id. */
+  useViewerSupportTotalsRequest(): (instanceId: InstanceId, platformUserId: string) => Promise<ViewerSupportTotals>;
 }
 
 export interface OptimisticInstance {

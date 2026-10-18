@@ -10,6 +10,7 @@ export type { ObsStatus } from "@convex/lib/engineObsStatus";
 export type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 export type { SceneEditorSession as SceneEditorGrant } from "@convex/lib/sceneEditorSession";
 export type { RecapTimelineEvents, StreamRecapEngineDetail } from "@convex/lib/streamRecap";
+export type { Supporter, SupporterStream } from "@convex/lib/supporters";
 export type { WidgetThemes } from "@convex/lib/widgetThemes";
 export type { ModuleDetailResult as ModuleDetail } from "@convex/moduleDetail";
 export type { ModuleSettingValue } from "@convex/moduleSettingsActions";
@@ -156,6 +157,12 @@ export type MacroVariableValue = FunctionArgs<typeof api.macros.run>["values"][n
 
 /** The key of the workflow run a macro started, or null when it started none. */
 export type MacroRunResult = FunctionReturnType<typeof api.macros.run>;
+
+/** Which supporters to rank: by bits or gifted subs, for one stream (`sessionId`) or all time, at or above `minTotal`. */
+export type SupporterLeaderboardQuery = Omit<FunctionArgs<typeof api.supporters.leaderboard>, "instanceId">;
+
+/** One viewer's lifetime support and their support in each of the last few live streams. */
+export type ViewerSupportTotals = FunctionReturnType<typeof api.supporters.viewerTotals>;
 
 /** A workflow on the engine, as the pickers that list them need it. */
 export interface EngineWorkflowOption {
