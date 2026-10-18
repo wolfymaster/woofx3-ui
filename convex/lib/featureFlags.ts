@@ -28,6 +28,18 @@ export const FEATURE_FLAGS = {
     owner: "wolfy",
     removeBy: "2027-03-31",
   },
+  "twitch.engineChat": {
+    description:
+      "Chat messages and announcements sent from the dashboard (Broadcast Controls, macro pad, the Go live announcement) are sent by the engine's twitch.chat methods instead of Convex calling Helix. Only for engines reporting twitch.chat. Roll out to managed engines first.",
+    owner: "wolfy",
+    removeBy: "2027-03-31",
+  },
+  "twitch.engineShoutouts": {
+    description:
+      "Shoutouts, from Broadcast Controls and from the shoutout queue, are sent by the engine's twitchSendShoutout instead of Convex calling Helix; the queue stays in Convex. Only for engines reporting twitch.chat. Roll out to managed engines first.",
+    owner: "wolfy",
+    removeBy: "2027-03-31",
+  },
 } as const satisfies Record<string, FeatureFlagDefinition>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
