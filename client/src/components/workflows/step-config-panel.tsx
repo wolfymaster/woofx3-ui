@@ -13,7 +13,14 @@ import {
   fieldValuesToConditions,
   incompleteConditionFields,
 } from "@/lib/workflow-presets-json";
-import type { ActionNode, ConditionNode, StepNode, TriggerNode, WaitNode } from "@/lib/workflow-tree";
+import {
+  type ActionNode,
+  type ConditionNode,
+  type StepNode,
+  stepKindLabel,
+  type TriggerNode,
+  type WaitNode,
+} from "@/lib/workflow-tree";
 import { isValidStepId, type VariableOption } from "@/lib/workflow-variables";
 import { ConditionEditor } from "./condition-editor";
 import { TriggerConfigForm } from "./trigger-config-form";
@@ -271,5 +278,12 @@ export function StepConfigPanel({
       />
     );
   }
-  return <WaitConfigPanel node={node} catalogTriggers={catalogTriggers} onUpdateWaitConfig={onUpdateWaitConfig} />;
+  if (node.type === "wait") {
+    return <WaitConfigPanel node={node} catalogTriggers={catalogTriggers} onUpdateWaitConfig={onUpdateWaitConfig} />;
+  }
+  return (
+    <p className="text-sm text-muted-foreground" data-testid="text-step-not-editable">
+      {stepKindLabel(node)} steps can't be edited here yet. The step is kept as it is when the workflow is saved.
+    </p>
+  );
 }

@@ -1,10 +1,10 @@
-import { ArrowRight, Clock, GitBranch, Zap } from "lucide-react";
+import { ArrowRight, CircleHelp, Clock, GitBranch, ScrollText, Workflow, Zap } from "lucide-react";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { cn } from "@/lib/utils";
 import { describeWaitTimeout, waitNodeLabel } from "@/lib/wait-config";
 import { actionNodeLabel, triggerNodeLabel } from "@/lib/workflow-node-label";
 import { actionNodeSummary, triggerNodeSummary } from "@/lib/workflow-node-summary";
-import type { StepNode, TriggerNode } from "@/lib/workflow-tree";
+import { type StepNode, stepKindLabel, type TriggerNode } from "@/lib/workflow-tree";
 
 interface StepNodeProps {
   node: StepNode | TriggerNode;
@@ -37,6 +37,21 @@ const NODE_STYLES = {
     icon: "bg-purple-500/20 text-purple-500",
     label: "Wait",
   },
+  log: {
+    border: "border-border bg-muted/30",
+    icon: "bg-muted text-muted-foreground",
+    label: "Log",
+  },
+  workflow: {
+    border: "border-border bg-muted/30",
+    icon: "bg-muted text-muted-foreground",
+    label: "Run workflow",
+  },
+  unknown: {
+    border: "border-dashed border-border bg-muted/30",
+    icon: "bg-muted text-muted-foreground",
+    label: "Unsupported step",
+  },
 };
 
 function getNodeLabel(
@@ -60,7 +75,14 @@ function getNodeLabel(
   if (node.type === "wait") {
     return waitNodeLabel(node.wait);
   }
-  return "Unknown";
+  if (node.type === "log") {
+    const message = node.parameters?.message;
+    return typeof message === "string" && message !== "" ? `Log "${message}"` : "Log";
+  }
+  if (node.type === "workflow") {
+    return node.workflow?.workflowId ? `Run workflow ${node.workflow.workflowId}` : "Run workflow";
+  }
+  return stepKindLabel(node);
 }
 
 function formatConditionValue(value: unknown): string {
@@ -109,7 +131,13 @@ function getNodeIcon(node: StepNode | TriggerNode) {
   if (node.type === "wait") {
     return Clock;
   }
-  return ArrowRight;
+  if (node.type === "log") {
+    return ScrollText;
+  }
+  if (node.type === "workflow") {
+    return Workflow;
+  }
+  return CircleHelp;
 }
 
 export function StepNodeCard({

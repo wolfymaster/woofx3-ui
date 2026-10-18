@@ -41,6 +41,7 @@ import {
   insertStepInTree,
   removeStepFromTree,
   type StepNode,
+  stepKindLabel,
   treeToDefinition,
   updateStepInTree,
   type WorkflowTree,
@@ -216,6 +217,8 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
   }, [resourceInstances]);
 
   const [tree, setTree] = useState<WorkflowTree | null>(null);
+  /** Why the stored definition can't be edited as a step list; set instead of `tree`. */
+  const [notEditableReason, setNotEditableReason] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [pendingActionInsert, setPendingActionInsert] = useState<{ path: BranchPath; index: number } | null>(null);
@@ -237,7 +240,9 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
 
   useEffect(() => {
     if (workflow?.definition) {
-      setTree(definitionToTree(unescapeDollarKeys(workflow.definition) as WorkflowDefinition));
+      const result = definitionToTree(unescapeDollarKeys(workflow.definition) as WorkflowDefinition);
+      setTree(result.editable ? result.tree : null);
+      setNotEditableReason(result.editable ? null : result.message);
     }
   }, [workflow?.definition]);
 
@@ -527,7 +532,7 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
     if (selectedNode.type === "action") {
       return actionNodeLabel(selectedNode, catalogActions);
     }
-    return selectedNode.type === "condition" ? "Condition" : "Wait";
+    return stepKindLabel(selectedNode);
   }, [selectedNode, catalogTriggers, catalogActions]);
 
   /** A workflow must always keep a trigger and at least one action, so the last remaining action can't be removed
@@ -578,6 +583,11 @@ export default function StepListEditor({ onDefinitionChange }: StepListEditorPro
                 catalogActions={catalogActions}
                 resourceLabels={resourceLabels}
               />
+            </div>
+          ) : notEditableReason ? (
+            <div className="text-sm text-muted-foreground space-y-1" data-testid="text-workflow-not-editable">
+              <p className="font-medium text-foreground">This workflow can't be edited here.</p>
+              <p>{notEditableReason}</p>
             </div>
           ) : null}
         </div>
