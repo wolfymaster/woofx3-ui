@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { TwitchHelixResult } from "@woofx3/api";
+import { type FunctionReference, getFunctionName } from "convex/server";
+import type { ActionCtx } from "../_generated/server";
 import { logger } from "../logger";
 import type { EngineCapabilityReport } from "./engineCapabilities";
 import type { EngineApi } from "./engineInstanceUrl";
@@ -10,6 +12,7 @@ import {
   type HelixRequest,
   helixResponse,
   type TwitchHelixRoute,
+  twitchHelixRoute,
 } from "./twitchEngineHelix";
 
 const DIRECT_BODY = JSON.stringify({ data: ["direct"] });
@@ -91,6 +94,37 @@ describe("chooseTwitchHelixRoute", () => {
       session,
     });
     expect(route.engine).toBe(session);
+  });
+});
+
+describe("twitchHelixRoute", () => {
+  function ctxAnswering(answers: Record<string, unknown>) {
+    const asked: string[] = [];
+    const ctx = {
+      runQuery: async (query: FunctionReference<"query", "internal">) => {
+        const name = getFunctionName(query);
+        asked.push(name);
+        return answers[name];
+      },
+    } as unknown as ActionCtx;
+    return { ctx, asked };
+  }
+  const instanceId = "instance-1" as Parameters<typeof twitchHelixRoute>[1];
+
+  test("a switch whose flag is off calls Helix without asking the engine anything", async () => {
+    const { ctx, asked } = ctxAnswering({ "featureFlags:isOnForInstance": false });
+    const route = await twitchHelixRoute(ctx, instanceId, "twitch.moderation", "twitch.engineModeration");
+    expect(route.engine).toBeNull();
+    expect(asked).toEqual(["featureFlags:isOnForInstance"]);
+  });
+
+  test("an instance not registered with its engine calls Helix", async () => {
+    const { ctx } = ctxAnswering({
+      "featureFlags:isOnForInstance": true,
+      "instances:getInternal": { url: "https://engine.example", clientId: undefined, clientSecret: undefined },
+    });
+    const route = await twitchHelixRoute(ctx, instanceId, "twitch.moderation", "twitch.engineModeration");
+    expect(route.engine).toBeNull();
   });
 });
 

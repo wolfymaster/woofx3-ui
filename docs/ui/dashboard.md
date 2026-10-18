@@ -274,9 +274,12 @@ Values arrive by webhook while the dashboard is open, and the bar calls
 
 For a streamer with nobody else modding: block a phrase, time out or ban a user,
 or lock chat down, in seconds and without leaving the dashboard. Every call goes
-straight to Helix from `convex/moderation.ts` with the broadcaster's token, the
-same path as the announcement and shoutout controls; the engine exposes no
-moderation methods.
+to Helix from `convex/moderation.ts` with the broadcaster's token, the same
+path as the announcement and shoutout controls, or through an engine with
+`twitch.moderation` (see
+[Helix calls through the engine](#helix-calls-through-the-engine)). Reads take
+the engine path on the capability alone; writes, and the user lookup before a
+timeout or ban, also need the `twitch.engineModeration` flag.
 
 The widget is three stacked sections, ordered by how fast each has to happen:
 
@@ -541,7 +544,9 @@ calls itself, with the same link's token, and answer with Twitch's own status
 and body. `convex/lib/twitchEngineHelix.ts` is the one place that chooses:
 
 - `twitchHelixRoute` picks the engine only when it is registered and lists the
-  capability (asked once per action, with a 3s limit).
+  capability (asked once per action, with a 3s limit). A riskier switch also
+  names a feature flag, checked first, so while the flag is off for the
+  instance the calls go to Helix and the engine is not asked anything.
 - `helixResponse` hands the engine's answer back as a `Response`, so each
   module's status checks, parsers and error sentences are the same on both
   paths.
