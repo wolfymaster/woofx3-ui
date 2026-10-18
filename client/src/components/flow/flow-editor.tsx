@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { TriggerConfigPanel } from "@/components/workflows/step-config-panel";
 import { useToast } from "@/hooks/use-toast";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import type { SentencePart } from "@/lib/condition-sentence";
 import {
   descendantIds,
   type FlowPick,
@@ -32,6 +33,7 @@ import {
   stepNumbers,
 } from "@/lib/flow-tree";
 import { resolveLucideIcon } from "@/lib/resolve-lucide-icon";
+import type { SceneRow } from "@/lib/scene-field-options";
 import { type StepSummary, stepSummary } from "@/lib/step-summary";
 import { cn } from "@/lib/utils";
 import { isDelayWait } from "@/lib/wait-config";
@@ -63,6 +65,8 @@ export interface FlowEditorProps {
   catalogLoading: boolean;
   actionPresets: readonly ActionPreset[];
   resourceLabels?: Map<string, string>;
+  /** The streamer's scenes, so a step naming a scene or one of its widgets reads by name. */
+  scenes?: readonly SceneRow[];
   /** Why a step can't be removed from `steps`, or null when it can. */
   removeBlockedReason?: (steps: StepNode[], id: string) => string | null;
 }
@@ -116,6 +120,7 @@ export function FlowEditor({
   catalogLoading,
   actionPresets,
   resourceLabels,
+  scenes,
   removeBlockedReason,
 }: FlowEditorProps) {
   const { toast } = useToast();
@@ -329,6 +334,7 @@ export function FlowEditor({
       stepSummary(step, {
         action: step.type === "action" ? resolveCatalogAction(step, catalogActions) : undefined,
         resourceLabels,
+        scenes,
       }),
     iconOf: (step) => stepIcon(step, catalogActions),
     placeOf: (id) => findStepPlace(tree.steps, id),
@@ -539,7 +545,9 @@ function StepRow({ step }: { step: StepNode }) {
 
   const text = (
     <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
-      <span className="truncate text-sm font-medium">{summary.title}</span>
+      <span className="truncate text-sm font-medium">
+        {summary.parts ? <SentenceText parts={summary.parts} /> : summary.title}
+      </span>
       {summary.details.length > 0 && (
         <span className="truncate text-xs text-muted-foreground">{summary.details.join(" · ")}</span>
       )}
@@ -577,6 +585,14 @@ function StepRow({ step }: { step: StepNode }) {
           >
             {text}
           </div>
+        )}
+        {summary.needs && (
+          <span
+            className="shrink-0 rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-200"
+            data-testid={`badge-flow-needs-${step.id}`}
+          >
+            Needs: {summary.needs.join(", ")}
+          </span>
         )}
         <div className="ml-auto flex items-center gap-0.5">
           {editable && (
@@ -639,6 +655,33 @@ function StepRow({ step }: { step: StepNode }) {
       )}
       {expanded && <div className="flex flex-col gap-4 border-t px-4 pb-4 pt-3">{flow.renderEditor(step)}</div>}
     </div>
+  );
+}
+
+/** A step's sentence, with what it still needs marked and the values it uses set apart. */
+function SentenceText({ parts }: { parts: readonly SentencePart[] }) {
+  return (
+    <>
+      {parts.map((part, index) => {
+        const key = `${index}-${part.text}`;
+        if (part.kind === "text") {
+          return <span key={key}>{part.text}</span>;
+        }
+        return (
+          <span
+            key={key}
+            className={cn(
+              part.state === "missing" && "text-amber-700 dark:text-amber-300",
+              part.state === "value" && "text-primary-text",
+              part.state === "variable" && "font-mono text-[13px] text-primary-text",
+              part.state === "default" && "text-muted-foreground"
+            )}
+          >
+            {part.state === "variable" ? `{${part.text}}` : part.text}
+          </span>
+        );
+      })}
+    </>
   );
 }
 
