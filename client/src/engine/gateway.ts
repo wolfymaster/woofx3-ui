@@ -30,6 +30,7 @@ import type {
   EventLogQuery,
   EventLogSelection,
   EventLogSettings,
+  EventWatch,
   HostedStorageUsage,
   InstanceId,
   InstanceLiveState,
@@ -472,6 +473,20 @@ export interface RequestsGateway {
     kind: Kind,
     instanceId: InstanceId | null
   ): Correlated<CorrelatedRequests[Kind]>;
+  /**
+   * Sends one request of a kind under a key the caller made up, for a caller
+   * that follows the answer itself. Resolves once the engine has taken the
+   * request, not when it answers. `kind` must not change while mounted.
+   */
+  useSendRequest<Kind extends CorrelatedRequestKind>(
+    kind: Kind
+  ): (
+    instanceId: InstanceId,
+    request: CorrelatedRequests[Kind],
+    correlationKey: string
+  ) => Promise<{ correlationKey: string }>;
+  /** Follows the latest event under a key from outside a component, such as a check that awaits it. */
+  useEventWatchRequest(): (instanceId: InstanceId, correlationKey: string) => EventWatch;
 }
 
 /** Running the dashboard's macros. The macros themselves are kept in Convex, not on the engine. */

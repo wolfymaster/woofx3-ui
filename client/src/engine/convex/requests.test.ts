@@ -13,6 +13,23 @@ import type { Correlated, FieldOptionsReference } from "@/engine/types";
 const queries: Array<{ name: string; args: unknown }> = [];
 const dispatched: unknown[] = [];
 let dispatchResult: Promise<unknown> = Promise.resolve(null);
+const watched: Array<{ name: string; args: unknown }> = [];
+let watchResult: () => unknown = () => undefined;
+let notifyWatch: () => void = () => undefined;
+const fakeClient = {
+  watchQuery: (query: Parameters<typeof getFunctionName>[0], args: unknown) => {
+    watched.push({ name: getFunctionName(query), args });
+    return {
+      localQueryResult: () => watchResult(),
+      onUpdate: (callback: () => void) => {
+        notifyWatch = callback;
+        return () => {
+          notifyWatch = () => undefined;
+        };
+      },
+    };
+  },
+};
 
 // Bun runs every test file in one process and a module mock is not undone,
 // so the rest of convex/react stays real for the files loaded after this one.
@@ -28,6 +45,7 @@ mock.module("convex/react", () => ({
     dispatched.push(args);
     return dispatchResult;
   },
+  useConvex: () => fakeClient,
 }));
 
 const { convexRequestsGateway } = await import("./requests");
@@ -52,6 +70,9 @@ beforeEach(() => {
   queries.length = 0;
   dispatched.length = 0;
   dispatchResult = Promise.resolve(null);
+  watched.length = 0;
+  watchResult = () => undefined;
+  notifyWatch = () => undefined;
 });
 
 describe("requests.useEvent", () => {
@@ -125,5 +146,65 @@ describe("requests.useCorrelated", () => {
     const correlated = renderCorrelated(null);
     expect(() => correlated.start(reference)).toThrow();
     expect(dispatched).toEqual([]);
+  });
+});
+
+describe("requests.useSendRequest", () => {
+  test("dispatches under the caller's key and resolves with the dispatch", async () => {
+    dispatchResult = Promise.resolve({ correlationKey: "key-1" });
+    let send: ReturnType<typeof convexRequestsGateway.useSendRequest<"fieldOptions">> | undefined;
+    render(() => {
+      send = convexRequestsGateway.useSendRequest("fieldOptions");
+    });
+    await expect(send?.(instanceId, reference, "key-1")).resolves.toEqual({ correlationKey: "key-1" });
+    expect(dispatched).toEqual([{ instanceId, reference, correlationKey: "key-1" }]);
+  });
+
+  test("passes a failed dispatch through to the caller", async () => {
+    dispatchResult = Promise.reject(new Error("engine unreachable"));
+    let send: ReturnType<typeof convexRequestsGateway.useSendRequest<"fieldOptions">> | undefined;
+    render(() => {
+      send = convexRequestsGateway.useSendRequest("fieldOptions");
+    });
+    await expect(send?.(instanceId, reference, "key-1")).rejects.toThrow("engine unreachable");
+  });
+});
+
+describe("requests.useEventWatchRequest", () => {
+  function renderWatch() {
+    let watchEvent: ReturnType<typeof convexRequestsGateway.useEventWatchRequest> | undefined;
+    render(() => {
+      watchEvent = convexRequestsGateway.useEventWatchRequest();
+    });
+    if (!watchEvent) {
+      throw new Error("the probe did not render");
+    }
+    return watchEvent;
+  }
+
+  test("watches the latest event under the key", () => {
+    renderWatch()(instanceId, "key-1");
+    expect(watched).toEqual([{ name: "transientEvents:get", args: { instanceId, correlationKey: "key-1" } }]);
+  });
+
+  test("reads the current result and throws the read's error", () => {
+    const watch = renderWatch()(instanceId, "key-1");
+    expect(watch.current()).toBeUndefined();
+    watchResult = () => {
+      throw new Error("read failed");
+    };
+    expect(() => watch.current()).toThrow("read failed");
+  });
+
+  test("calls back on updates until unsubscribed", () => {
+    const watch = renderWatch()(instanceId, "key-1");
+    let updates = 0;
+    const unsubscribe = watch.onUpdate(() => {
+      updates += 1;
+    });
+    notifyWatch();
+    unsubscribe();
+    notifyWatch();
+    expect(updates).toBe(1);
   });
 });

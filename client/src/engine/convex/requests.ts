@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
+import { useAction, useConvex, useQuery } from "convex/react";
 import { useCallback, useMemo, useState } from "react";
 import type { RequestsGateway } from "@/engine/gateway";
 import { failureForCurrentRequest } from "@/engine/hooks/correlated-failure";
@@ -8,6 +8,7 @@ import type {
   CorrelatedFailure,
   CorrelatedRequestKind,
   CorrelatedRequests,
+  EventWatch,
   InstanceId,
 } from "@/engine/types";
 
@@ -61,8 +62,30 @@ function useCorrelated(
   return { correlationKey, start, clear, event, failure: currentFailure };
 }
 
+function useSendRequest(kind: CorrelatedRequestKind) {
+  const dispatch = useAction(DISPATCH[kind]);
+  return useCallback(
+    (instanceId: InstanceId, request: CorrelatedRequests[CorrelatedRequestKind], correlationKey: string) =>
+      dispatch({ instanceId, reference: request, correlationKey }),
+    [dispatch]
+  );
+}
+
+function useEventWatchRequest() {
+  const convex = useConvex();
+  return useCallback(
+    (instanceId: InstanceId, correlationKey: string): EventWatch => {
+      const watch = convex.watchQuery(api.transientEvents.get, { instanceId, correlationKey });
+      return { current: () => watch.localQueryResult(), onUpdate: (onChange) => watch.onUpdate(onChange) };
+    },
+    [convex]
+  );
+}
+
 export const convexRequestsGateway: RequestsGateway = {
   useEvent,
   useEvents,
   useCorrelated,
+  useSendRequest,
+  useEventWatchRequest,
 };

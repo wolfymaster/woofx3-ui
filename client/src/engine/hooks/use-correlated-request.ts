@@ -11,6 +11,16 @@ export function useTransientEvents(instanceId: InstanceId | null, correlationKey
   return useEngineGateway().requests.useEvents(instanceId, correlationKey);
 }
 
+/** Sends one request of a kind under the caller's key; the caller follows the answer. */
+export function useSendCorrelatedRequest<Kind extends CorrelatedRequestKind>(kind: Kind) {
+  return useEngineGateway().requests.useSendRequest(kind);
+}
+
+/** Follows the latest transient event under a key from outside a component. */
+export function useTransientEventWatchRequest() {
+  return useEngineGateway().requests.useEventWatchRequest();
+}
+
 /** Sends requests of one kind under fresh correlation keys and follows the answer to the latest. */
 export function useCorrelatedRequest<Kind extends CorrelatedRequestKind>(kind: Kind, instanceId: InstanceId | null) {
   return useEngineGateway().requests.useCorrelated(kind, instanceId);
