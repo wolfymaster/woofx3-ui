@@ -1,6 +1,4 @@
 [
-  "components/command-palette/use-item-commands.ts",
-  "components/dashboard/widgets/macro-pad.tsx",
   "components/settings/storage-settings.tsx",
   "hooks/use-fire-test-event.ts",
   "hooks/use-go-live-checklist.ts",

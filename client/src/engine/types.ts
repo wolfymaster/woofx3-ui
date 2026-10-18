@@ -146,6 +146,15 @@ export type ModuleResourceInstanceChanges = Omit<
 /** The Convex id of an installed module's repository row. */
 export type ModuleId = Id<"moduleRepository">;
 
+/** The Convex id of a dashboard macro. Macros are kept in Convex; only running one reaches the engine. */
+export type MacroId = Id<"macros">;
+
+/** The value given for one of a macro's variables. */
+export type MacroVariableValue = FunctionArgs<typeof api.macros.run>["values"][number];
+
+/** The key of the workflow run a macro started, or null when it started none. */
+export type MacroRunResult = FunctionReturnType<typeof api.macros.run>;
+
 /** A workflow on the engine, as the pickers that list them need it. */
 export interface EngineWorkflowOption {
   id: string;

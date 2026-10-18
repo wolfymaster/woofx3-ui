@@ -29,6 +29,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useChatCommandGroups, useChatCommands, useUpdateChatCommandRequest } from "@/engine/hooks/use-chat-commands";
+import { useRunMacroRequest } from "@/engine/hooks/use-macros";
 import {
   useResourceInstances,
   useResourceInstancesOfKind,
@@ -109,7 +110,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
 
   const setWorkflowEnabled = useSetWorkflowEnabledRequest();
   const updateCommand = useUpdateChatCommandRequest();
-  const runMacro = useAction(api.macros.run);
+  const runMacro = useRunMacroRequest();
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
   const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
   const runResourceAction = useResourceActionRunner();
@@ -556,7 +557,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
           if (macro.type === "send-message") {
             await sendChatMessage({ instanceId, message: applyMacroVariables(macro.config, {}).message ?? "" });
           } else {
-            await runMacro({ instanceId, macroId: macro.id as Id<"macros">, values: [] });
+            await runMacro(instanceId, macro.id as Id<"macros">, []);
           }
           return `Ran ${macro.label}`;
         },
