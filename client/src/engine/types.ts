@@ -213,6 +213,21 @@ export type Workflow = Doc<"workflows">;
 /** The workflow builder's catalog: the triggers and actions the installed modules register. */
 export type WorkflowCatalog = NonNullable<FunctionReturnType<typeof api.workflowCatalog.get>>;
 
+/** A manual run: the workflow by name or id, its parameters, and test-run options. */
+export type WorkflowTrigger = Omit<FunctionArgs<typeof api.workflowActions.trigger>, "instanceId">;
+
+/** How the engine answered a manual run; its progress arrives in transient events under `triggerId`. */
+export type WorkflowTriggerResult = FunctionReturnType<typeof api.workflowActions.trigger>;
+
+/** Whether the engine takes test-run options. */
+export type TestRunCapabilities = FunctionReturnType<typeof api.workflowActions.testRunCapabilities>;
+
+/** A recorded run to run again, whole or from one step. */
+export type WorkflowReplay = Omit<FunctionArgs<typeof api.workflowActions.replay>, "instanceId">;
+
+/** How stopping a run went: the engine's outcome, or `marked` when an older engine only marked the row. */
+export type WorkflowCancelResult = FunctionReturnType<typeof api.workflowActions.cancelRun>;
+
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;
 

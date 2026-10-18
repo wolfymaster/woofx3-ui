@@ -37,7 +37,7 @@ import {
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
-import { useWorkflows } from "@/engine/hooks/use-workflows";
+import { useSetWorkflowEnabledRequest, useWorkflows } from "@/engine/hooks/use-workflows";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useAimedResourceActionRunner, useResourceActionRunner } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -107,7 +107,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const declaredKinds = useResourceKinds(instanceId ?? null);
   const { triggerPresets, actionPresets } = useWorkflowCatalog();
 
-  const setWorkflowEnabled = useAction(api.workflowActions.setEnabled);
+  const setWorkflowEnabled = useSetWorkflowEnabledRequest();
   const updateCommand = useUpdateChatCommandRequest();
   const runMacro = useAction(api.macros.run);
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
@@ -162,7 +162,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         action: {
           type: "run",
           run: async () => {
-            await setWorkflowEnabled({ instanceId, engineWorkflowId: row.engineWorkflowId, isEnabled: !enabled });
+            await setWorkflowEnabled(instanceId, row.engineWorkflowId, !enabled);
             return `${item.title} ${enabled ? "disabled" : "enabled"}`;
           },
         },

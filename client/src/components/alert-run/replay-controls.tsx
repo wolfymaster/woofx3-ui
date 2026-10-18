@@ -1,11 +1,10 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { isRecordedOrigin, type ManualRunOrigin, UNRECORDED_ORIGIN } from "@convex/lib/manualRunOrigin";
-import { useAction } from "convex/react";
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, StepForward } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
+import { useReplayWorkflowRunRequest } from "@/engine/hooks/use-workflows";
 import { useToast } from "@/hooks/use-toast";
 import { describeTestEventOutcome } from "@/lib/test-event-outcome";
 
@@ -42,7 +41,7 @@ export function ReplayControls({
   failedStepTaskId,
   origin = UNRECORDED_ORIGIN,
 }: ReplayControlsProps) {
-  const replay = useAction(api.workflowActions.replay);
+  const replay = useReplayWorkflowRunRequest();
   const { toast } = useToast();
   const [busy, setBusy] = useState<Mode | null>(null);
   const [triggerId, setTriggerId] = useState<string | null>(null);
@@ -70,7 +69,7 @@ export function ReplayControls({
     // Cleared first so the previous replay's outcome cannot be read as this one's.
     setTriggerId(null);
     try {
-      const result = await replay({ instanceId, engineRunId, fromTaskId, origin });
+      const result = await replay(instanceId, { engineRunId, fromTaskId, origin });
       setTriggerId(result.triggerId);
     } catch (err) {
       toast({
