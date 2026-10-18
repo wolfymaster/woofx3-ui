@@ -7,7 +7,16 @@ import {
   removeStepFromTree,
   type StepNode,
   treeToDefinition,
+  type WorkflowTree,
 } from "./workflow-tree";
+
+function readTree(def: WorkflowDefinition): WorkflowTree {
+  const result = definitionToTree(def);
+  if (!result.editable) {
+    throw new Error(result.message);
+  }
+  return result.tree;
+}
 
 const baseDef: WorkflowDefinition = {
   id: "wf-1",
@@ -18,7 +27,7 @@ const baseDef: WorkflowDefinition = {
 
 describe("definitionToTree", () => {
   test("trigger-only workflow", () => {
-    const tree = definitionToTree(baseDef);
+    const tree = readTree(baseDef);
     expect(tree.trigger.type).toBe("trigger");
     expect(tree.trigger.event).toBe("cheer.user.twitch");
     expect(tree.steps).toHaveLength(0);
@@ -32,7 +41,7 @@ describe("definitionToTree", () => {
         { id: "a2", type: "action", action: "playSound", parameters: {}, dependsOn: ["a1"] },
       ],
     };
-    const tree = definitionToTree(def);
+    const tree = readTree(def);
     expect(tree.steps).toHaveLength(2);
     expect(tree.steps[0].type).toBe("action");
     expect(tree.steps[1].type).toBe("action");
@@ -53,7 +62,7 @@ describe("definitionToTree", () => {
         { id: "a2", type: "action", action: "smallCheer", parameters: {} },
       ],
     };
-    const tree = definitionToTree(def);
+    const tree = readTree(def);
     expect(tree.steps).toHaveLength(1);
     expect(tree.steps[0].type).toBe("condition");
     const cond = tree.steps[0] as { type: "condition"; thenBranch: unknown[]; elseBranch: unknown[] };
@@ -66,14 +75,14 @@ describe("definitionToTree", () => {
       ...baseDef,
       tasks: [{ id: "w1", type: "wait", wait: { type: "event", event: "follow" } }],
     };
-    const tree = definitionToTree(def);
+    const tree = readTree(def);
     expect(tree.steps[0].type).toBe("wait");
   });
 });
 
 describe("treeToDefinition", () => {
   test("round-trip preserves trigger", () => {
-    const tree = definitionToTree(baseDef);
+    const tree = readTree(baseDef);
     const def = treeToDefinition(tree);
     expect(def.trigger.event).toBe("cheer.user.twitch");
   });
@@ -86,7 +95,7 @@ describe("treeToDefinition", () => {
         { id: "a2", type: "action", action: "playSound", parameters: {}, dependsOn: ["a1"] },
       ],
     };
-    const tree = definitionToTree(def);
+    const tree = readTree(def);
     const result = treeToDefinition(tree);
     expect(result.tasks).toHaveLength(2);
     expect(result.tasks[0].id).toBe("a1");
@@ -104,7 +113,7 @@ describe("treeToDefinition", () => {
       function: "twitch.chat.send",
     };
     const def = { ...baseDef, trigger, tasks: [task] } as unknown as WorkflowDefinition;
-    const tree = definitionToTree(def);
+    const tree = readTree(def);
     expect(tree.trigger.ref).toBe("twitch_platform:trigger:cheer.user");
     expect(tree.steps[0]).toMatchObject({ ref: "twitch_platform:action:chat.send", function: "twitch.chat.send" });
 
@@ -129,7 +138,7 @@ describe("treeToDefinition", () => {
         { id: "a2", type: "action", action: "smallCheer", parameters: {} },
       ],
     };
-    const tree = definitionToTree(def);
+    const tree = readTree(def);
     const result = treeToDefinition(tree);
     const cond = result.tasks.find((t) => t.id === "c1");
     expect(cond).toBeDefined();
@@ -137,54 +146,38 @@ describe("treeToDefinition", () => {
     expect(cond?.onFalse).toContain("a2");
   });
 
-  test("branch children explicitly depend on their condition, not just onTrue/onFalse", () => {
+  test("a tree built in the editor gives branch children an explicit dependsOn on their condition", () => {
     // The engine's execution order is a topological sort over dependsOn edges only;
     // onTrue/onFalse alone don't order anything. Without an explicit dependsOn back
     // to the condition, branch children would float as unordered root tasks.
-    const def: WorkflowDefinition = {
-      ...baseDef,
-      tasks: [
+    const tree: WorkflowTree = {
+      trigger: { type: "trigger", id: "__trigger", event: "cheer.user.twitch", conditions: [] },
+      steps: [
         {
-          id: "c1",
           type: "condition",
+          id: "c1",
           conditions: [{ field: "amount", operator: "gte", value: 100 }],
-          onTrue: ["a1"],
-          onFalse: ["a2"],
+          thenBranch: [{ type: "action", id: "a1", action: "bigCheer", parameters: {} }],
+          elseBranch: [{ type: "action", id: "a2", action: "smallCheer", parameters: {} }],
         },
-        { id: "a1", type: "action", action: "bigCheer", parameters: {} },
-        { id: "a2", type: "action", action: "smallCheer", parameters: {} },
+        { type: "action", id: "a3", action: "thankYou", parameters: {} },
       ],
     };
-    const tree = definitionToTree(def);
     const result = treeToDefinition(tree);
-    const a1 = result.tasks.find((t) => t.id === "a1");
-    const a2 = result.tasks.find((t) => t.id === "a2");
-    expect(a1?.dependsOn).toEqual(["c1"]);
-    expect(a2?.dependsOn).toEqual(["c1"]);
-  });
-
-  test("a step after a condition block depends on the condition, not a branch's last task", () => {
-    const def: WorkflowDefinition = {
-      ...baseDef,
-      tasks: [
-        {
-          id: "c1",
-          type: "condition",
-          conditions: [{ field: "amount", operator: "gte", value: 100 }],
-          onTrue: ["a1"],
-          onFalse: ["a2"],
-        },
-        { id: "a1", type: "action", action: "bigCheer", parameters: {} },
-        { id: "a2", type: "action", action: "smallCheer", parameters: {} },
-        { id: "a3", type: "action", action: "thankYou", parameters: {} },
-      ],
-    };
-    const tree = definitionToTree(def);
-    const result = treeToDefinition(tree);
-    const a3 = result.tasks.find((t) => t.id === "a3");
-    // a3 is a top-level sibling after the condition — it must run regardless of
-    // which branch was taken, so it should depend on c1 itself.
-    expect(a3?.dependsOn).toEqual(["c1"]);
+    expect(result.tasks).toEqual([
+      {
+        id: "c1",
+        type: "condition",
+        conditions: [{ field: "amount", operator: "gte", value: 100 }],
+        onTrue: ["a1"],
+        onFalse: ["a2"],
+      },
+      { id: "a1", type: "action", action: "bigCheer", parameters: {}, dependsOn: ["c1"] },
+      { id: "a2", type: "action", action: "smallCheer", parameters: {}, dependsOn: ["c1"] },
+      // a3 runs whichever branch was taken, so it depends on c1 itself.
+      { id: "a3", type: "action", action: "thankYou", parameters: {}, dependsOn: ["c1"] },
+    ]);
+    expect(result.trigger).toEqual({ type: "event", event: "cheer.user.twitch", conditions: [] });
   });
 });
 

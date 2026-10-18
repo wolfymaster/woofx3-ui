@@ -35,7 +35,7 @@ export function generateStepId(label: string, existingIds: ReadonlySet<string>):
   return `${base}-${n}`;
 }
 
-/** Every step id in the tree (condition/wait/action), including nested branches. Trigger isn't included —
+/** Every step id in the tree, including nested branches. Trigger isn't included —
  * it's addressed as the fixed "trigger" source, not by a user-editable id. */
 export function collectStepIds(steps: StepNode[]): Set<string> {
   const ids = new Set<string>();
@@ -52,8 +52,8 @@ export function collectStepIds(steps: StepNode[]): Set<string> {
   return ids;
 }
 
-/** Whether any step's parameters/conditions contain a ${stepId....} reference to the given id — used to warn
- * before a rename leaves those references dangling (renaming doesn't rewrite them). */
+/** Whether any step's fields (parameters, conditions, wait, ...) contain a ${stepId....} reference to the given
+ * id — used to warn before a rename leaves those references dangling (renaming doesn't rewrite them). */
 export function isStepIdReferenced(steps: StepNode[], stepId: string): boolean {
   const needle = `\${${stepId}.`;
   const containsReference = (value: unknown): boolean => {
@@ -70,18 +70,12 @@ export function isStepIdReferenced(steps: StepNode[], stepId: string): boolean {
   };
   const walk = (list: StepNode[]): boolean => {
     for (const step of list) {
-      if (step.type === "action" && containsReference(step.parameters)) {
-        return true;
-      }
       if (step.type === "condition") {
-        if (containsReference(step.conditions)) {
+        const { thenBranch, elseBranch, ...own } = step;
+        if (containsReference(own) || walk(thenBranch) || walk(elseBranch)) {
           return true;
         }
-        if (walk(step.thenBranch) || walk(step.elseBranch)) {
-          return true;
-        }
-      }
-      if (step.type === "wait" && containsReference(step.wait)) {
+      } else if (containsReference(step)) {
         return true;
       }
     }
@@ -167,7 +161,7 @@ export function computeAvailableVariables(
         type: "boolean",
         description: "Whether this condition matched.",
       });
-    } else {
+    } else if (step.type === "wait") {
       options.push(...waitExportVariables(step, catalogTriggers));
     }
   }

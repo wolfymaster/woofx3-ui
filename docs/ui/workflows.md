@@ -50,6 +50,9 @@ Curated sets of workflows and chat commands (raid welcome, follower thanks, sub 
 - A header bar (back, click-to-rename title, enabled badge, **Save**, and a kebab with *View JSON* and *Delete*) above **`StepListEditor`**, which reads the workflow id from the route itself.
 - The screen is keyed by workflow id, so switching workflows resets the in-progress definition rather than carrying the previous one's draft into the next save.
 - Saves go through `workflowActions.updateFromDefinition` with `escapeDollarKeys` applied (the engine's `$`-prefixed keys are not legal Convex field names).
+- The step list is a tree read from the definition by `definitionToTree` (`client/src/lib/workflow-tree.ts`) and written back by `treeToDefinition`. The round trip is lossless: every task field is carried (ones the editor doesn't use ride along on the step), a task type the editor doesn't know is kept whole, and a workflow is written back in the `dependsOn` / `onTrue` layout it was read in, so a save changes only the edited steps. Only the order of `tasks` is normalised, to reading order; the engine orders tasks by `dependsOn` alone. `workflow-tree.roundtrip.test.ts` holds the fixtures, including every starter pack workflow and setup import output.
+- A definition the tree can't express without changing it (a step waiting on two others, steps that run side by side, a step in two branches) opens read-only with the reason, rather than being rewritten on save. Alerts workflows with more than one trigger or a shared action are such definitions.
+- Log and sub-workflow steps, and steps of unknown types, show as rows that can't be edited yet.
 - **Steps / Runs** tabs in the header. The step editor stays mounted behind the Runs tab so unsaved edits survive the switch; `?tab=runs` opens the editor on Runs.
 
 ### Test run
