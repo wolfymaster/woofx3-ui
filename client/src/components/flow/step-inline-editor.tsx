@@ -1,5 +1,6 @@
+import { ActionSettingsEditor } from "@/components/flow/action-settings-editor";
 import { ConditionStepEditor } from "@/components/flow/condition-builder";
-import { ActionConfigPanel, WaitConfigPanel } from "@/components/workflows/step-config-panel";
+import { WaitStepEditor } from "@/components/flow/wait-step-editor";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import type { ConditionSources } from "@/lib/condition-builder";
 import type { WaitConfig } from "@/lib/wait-config";
@@ -17,7 +18,8 @@ export interface StepInlineEditorProps {
   /** What a condition step's rows can check; see conditionSourcesFor. */
   conditionSources: ConditionSources;
   onChange: (step: StepNode) => void;
-  onRename: (oldId: string, newId: string) => void;
+  /** Absent where steps have no ids the streamer edits, as on a macro button. */
+  onRename?: (oldId: string, newId: string) => void;
 }
 
 /**
@@ -41,13 +43,13 @@ export function StepInlineEditor({
   switch (step.type) {
     case "action":
       return (
-        <ActionConfigPanel
-          node={step}
-          catalog={catalogActions}
+        <ActionSettingsEditor
+          step={step}
+          catalogActions={catalogActions}
           existingStepIds={existingStepIds}
           availableVariables={availableVariables}
-          onUpdateActionParameters={(_id, parameters: Record<string, unknown>) => onChange({ ...step, parameters })}
-          onUpdateActionId={onRename}
+          onChange={onChange}
+          onRename={onRename}
         />
       );
     case "condition":
@@ -61,10 +63,11 @@ export function StepInlineEditor({
       );
     case "wait":
       return (
-        <WaitConfigPanel
-          node={step}
+        <WaitStepEditor
+          key={step.id}
+          step={step}
           catalogTriggers={catalogTriggers}
-          onUpdateWaitConfig={(_id, wait: WaitConfig) => onChange({ ...step, wait })}
+          onChange={(wait: WaitConfig) => onChange({ ...step, wait })}
         />
       );
     default:

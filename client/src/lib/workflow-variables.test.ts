@@ -431,7 +431,7 @@ describe("computeAvailableVariables — wait exports", () => {
     expect(values(wait)).toContain("${w.data}");
   });
 
-  test("an aggregation offers only the total its strategy advances", () => {
+  test("every aggregation offers both its count and its total", () => {
     const count: StepNode = {
       type: "wait",
       id: "w",
@@ -442,10 +442,10 @@ describe("computeAvailableVariables — wait exports", () => {
       id: "w",
       wait: { type: "aggregation", event: "custom.thing", aggregation: { strategy: "sum", threshold: 3 } },
     };
-    expect(values(count)).toContain("${w.count}");
-    expect(values(count)).not.toContain("${w.sum}");
-    expect(values(sum)).toContain("${w.sum}");
-    expect(values(sum)).not.toContain("${w.count}");
+    for (const wait of [count, sum]) {
+      expect(values(wait)).toContain("${w.count}");
+      expect(values(wait)).toContain("${w.sum}");
+    }
   });
 
   test("types the exports", () => {
