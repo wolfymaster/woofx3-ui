@@ -1,8 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
-import { useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
 import { History, Loader2, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -24,7 +21,12 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useCancelWorkflowRunRequest, useReplayWorkflowRunRequest } from "@/engine/hooks/use-workflows";
+import {
+  useCancelWorkflowRunRequest,
+  useReplayWorkflowRunRequest,
+  useWorkflowRuns,
+} from "@/engine/hooks/use-workflows";
+import type { RecordedWorkflowRun } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useTestRunSupport } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
@@ -35,7 +37,7 @@ import { workflowRunPath } from "@/lib/workflow-run-route";
 import { canReplayRun, describeStopOutcome, isActiveRun, runDurationMs, runOriginLabel } from "@/lib/workflow-run-rows";
 import { formatDuration, toneFor } from "@/lib/workflow-run-timeline";
 
-type RunDoc = FunctionReturnType<typeof api.workflowRuns.listForWorkflow>[number];
+type RunDoc = RecordedWorkflowRun;
 
 const RUN_LIMIT = 50;
 const CLOCK_TICK_MS = 1000;
@@ -56,11 +58,7 @@ interface WorkflowRunsPanelProps {
 export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRunsPanelProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const runs = useQuery(api.workflowRuns.listForWorkflow, {
-    instanceId,
-    workflowId: engineWorkflowId,
-    limit: RUN_LIMIT,
-  });
+  const runs = useWorkflowRuns(instanceId, engineWorkflowId, RUN_LIMIT);
   const replay = useReplayWorkflowRunRequest();
   const cancelRun = useCancelWorkflowRunRequest();
   const realCancel = useTestRunSupport(instanceId).realCancel;

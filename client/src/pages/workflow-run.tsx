@@ -1,12 +1,11 @@
-import { api } from "@convex/_generated/api";
 import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
-import { useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { ReplayControls } from "@/components/alert-run/replay-controls";
 import { RunTrace } from "@/components/alert-run/run-trace";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { Badge } from "@/components/ui/badge";
+import { useWorkflowRun } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { decodeRouteParam } from "@/lib/route-param";
 import { workflowRunsPath } from "@/lib/workflow-run-route";
@@ -23,10 +22,7 @@ export default function WorkflowRun() {
   const [, navigate] = useLocation();
   const { instance } = useInstance();
   // The same subscription RunTrace makes, so Convex serves both from one.
-  const recorded = useQuery(
-    api.workflowRuns.runWithSteps,
-    instance ? { instanceId: instance._id, engineRunId } : "skip"
-  );
+  const recorded = useWorkflowRun(instance ? instance._id : null, engineRunId);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
