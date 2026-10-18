@@ -4,7 +4,13 @@ import { HelpTip } from "@/components/common/help-tip";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ALL_SOURCES, actionMenuGroups, actionSourceCounts, flattenActionMenu } from "@/lib/action-menu";
+import {
+  ALL_SECTIONS,
+  actionGroupHeading,
+  actionMenuGroups,
+  actionSectionCounts,
+  flattenActionMenu,
+} from "@/lib/action-menu";
 import { cn } from "@/lib/utils";
 import type { ActionPreset } from "@/lib/workflow-presets";
 
@@ -19,38 +25,45 @@ interface ActionPickerDialogProps {
  * The one place an action is chosen, from the workflow builder and from an alert's
  * trigger card alike.
  *
- * The catalog is listed by the module providing it, because that is the only axis
- * that distinguishes actions: the engine gives every action the same `category`
- * ("General") and the same icon, so grouping or badging by those sorts nothing and
- * adds a column of identical glyphs. A row is one line with its description beside
- * the name, and the highlighted action's description is repeated in full below, so
- * a long catalog stays scannable without hiding what each action does.
+ * The catalog is listed by each action's declared taxonomy: the rail holds sections
+ * by purpose (Workflow, Chat, Stream tools, Platforms, ...) and the list headings
+ * within them (Stream tools › Counters), so actions doing the same kind of thing sit
+ * together whichever module ships them. An
+ * action declaring none is listed under its module (see `actionPlacement`). The
+ * engine's `category` and icon are the same for every action, so neither is used. A
+ * row is one line with its description beside the name, and the highlighted
+ * action's description is repeated in full below, so a long catalog stays scannable
+ * without hiding what each action does.
  */
 export function ActionPickerDialog({ open, onOpenChange, actionPresets, onSelect }: ActionPickerDialogProps) {
   const [search, setSearch] = useState("");
-  const [source, setSource] = useState<string>(ALL_SOURCES);
+  const [section, setSection] = useState<string>(ALL_SECTIONS);
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
     if (open) {
       setSearch("");
-      setSource(ALL_SOURCES);
+      setSection(ALL_SECTIONS);
       setActiveIndex(0);
     }
   }, [open]);
 
-  const sources = useMemo(() => actionSourceCounts(actionPresets, search), [actionPresets, search]);
-  // A search with no hits in the chosen module would otherwise show an empty list
+  const sections = useMemo(() => actionSectionCounts(actionPresets, search), [actionPresets, search]);
+  // A search with no hits in the chosen section would otherwise show an empty list
   // beside a rail saying where the hits are.
-  const effectiveSource = sources.some((entry) => entry.source === source) ? source : ALL_SOURCES;
+  const effectiveSection = sections.some((entry) => entry.key === section) ? section : ALL_SECTIONS;
   const groups = useMemo(
-    () => actionMenuGroups(actionPresets, search, effectiveSource),
-    [actionPresets, search, effectiveSource]
+    () => actionMenuGroups(actionPresets, search, effectiveSection),
+    [actionPresets, search, effectiveSection]
+  );
+  const headings = useMemo(
+    () => groups.map((group, index) => actionGroupHeading(group, groups[index - 1], effectiveSection === ALL_SECTIONS)),
+    [groups, effectiveSection]
   );
   const items = useMemo(() => flattenActionMenu(groups), [groups]);
   const activePosition = Math.min(activeIndex, items.length - 1);
   const active = items[activePosition];
-  const matchCount = sources.reduce((total, entry) => total + entry.count, 0);
+  const matchCount = sections.reduce((total, entry) => total + entry.count, 0);
   const optionId = (preset: ActionPreset) => `action-option-${preset.id}`;
 
   useEffect(() => {
@@ -105,26 +118,26 @@ export function ActionPickerDialog({ open, onOpenChange, actionPresets, onSelect
         </div>
 
         <div className="flex min-h-0 flex-1 border-t">
-          {sources.length > 1 && (
+          {sections.length > 1 && (
             <ScrollArea className="w-48 shrink-0 border-r">
               <div className="space-y-0.5 p-2">
-                <SourceButton
+                <SectionButton
                   label="All actions"
                   count={matchCount}
-                  isSelected={effectiveSource === ALL_SOURCES}
+                  isSelected={effectiveSection === ALL_SECTIONS}
                   onClick={() => {
-                    setSource(ALL_SOURCES);
+                    setSection(ALL_SECTIONS);
                     setActiveIndex(0);
                   }}
                 />
-                {sources.map((entry) => (
-                  <SourceButton
-                    key={entry.source}
-                    label={entry.source}
+                {sections.map((entry) => (
+                  <SectionButton
+                    key={entry.key}
+                    label={entry.label}
                     count={entry.count}
-                    isSelected={effectiveSource === entry.source}
+                    isSelected={effectiveSection === entry.key}
                     onClick={() => {
-                      setSource(entry.source);
+                      setSection(entry.key);
                       setActiveIndex(0);
                     }}
                   />
@@ -135,10 +148,10 @@ export function ActionPickerDialog({ open, onOpenChange, actionPresets, onSelect
 
           <ScrollArea className="flex-1">
             <div className="space-y-4 p-2">
-              {groups.map((group) => (
-                <div key={group.source}>
-                  {effectiveSource === ALL_SOURCES && (
-                    <h3 className="mb-1 px-2 text-xs font-medium text-muted-foreground">{group.source}</h3>
+              {groups.map((group, index) => (
+                <div key={group.groupKey}>
+                  {headings[index] && (
+                    <h3 className="mb-1 px-2 text-xs font-medium text-muted-foreground">{headings[index]}</h3>
                   )}
                   <div className="space-y-0.5">
                     {group.actions.map((preset) => (
@@ -198,7 +211,7 @@ export function ActionPickerDialog({ open, onOpenChange, actionPresets, onSelect
   );
 }
 
-function SourceButton({
+function SectionButton({
   label,
   count,
   isSelected,
@@ -217,7 +230,7 @@ function SourceButton({
         isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
       )}
       onClick={onClick}
-      data-testid={`button-action-source-${label}`}
+      data-testid={`button-action-section-${label}`}
     >
       <span className="truncate">{label}</span>
       <span className="ml-auto shrink-0 text-xs text-muted-foreground">{count}</span>
