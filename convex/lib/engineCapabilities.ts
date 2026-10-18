@@ -35,6 +35,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "scenes.editorSessions",
   "scenes.editorSync",
   "twitch.dashboardTokens",
+  "twitch.streamInfo",
   "widgets.themes",
   "workflow.delayWait",
   "workflow.dryRun",
