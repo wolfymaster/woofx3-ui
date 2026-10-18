@@ -43,7 +43,7 @@ interface StepConfigPanelProps {
 
 /** Editable step id, committed on blur/Enter rather than per keystroke — renaming mid-tree updates the
  * tree, autosaves, and re-selects under the new id, which would be disruptive on every character typed. */
-function StepIdField({
+export function StepIdField({
   id,
   existingStepIds,
   onUpdateActionId,

@@ -19,6 +19,7 @@ import {
   searchActionObjects,
   stepTarget,
   verbLabel,
+  verbsFor,
   whichPrompt,
 } from "./action-objects";
 import type { ActionPreset, ConfigField } from "./workflow-presets";
@@ -293,8 +294,28 @@ describe("findTargetField", () => {
     expect(findTargetField(legacy, { type: "resource", kindName: "counter" })?.id).toBe("target");
   });
 
-  test("ignores a resource_ref of another kind", () => {
-    expect(findTargetField(ADD_TIME, { type: "resource", kindName: "counter" })).toBeUndefined();
+  test("falls back to an action's only resource_ref when it names another kind", () => {
+    expect(findTargetField(ADD_TIME, { type: "resource", kindName: "counter" })?.id).toBe("target");
+    const points = action(
+      "points.add",
+      "Add points",
+      ["tools.counter"],
+      [resourceTarget("points:tally", "Tally"), amount],
+      "Points"
+    );
+    const [only] = actionObjects([points])[0].actions;
+    expect(only.targetField?.id).toBe("target");
+    expect(actionObjects([points])[0].target).toEqual({ type: "resource", kinds: ["points:tally"] });
+  });
+
+  test("picks no field when several resource_refs name other kinds", () => {
+    const transfer = action(
+      "transfer",
+      "Move time",
+      ["tools.counter"],
+      [resourceTarget("woofx3:timer", "From"), { ...resourceTarget("woofx3:timer", "To"), id: "to" }]
+    );
+    expect(findTargetField(transfer, { type: "resource", kindName: "counter" })).toBeUndefined();
   });
 
   test("finds the field whose options are the scenes or alert widgets", () => {
@@ -372,9 +393,49 @@ describe("acceptsInstance", () => {
   });
 
   test("never fills an action's setting with an instance it cannot take", () => {
-    expect(initialParameters(bump, HYPE)).toEqual({ target: "", amount: 1 });
+    expect(initialParameters(bump, HYPE)).toEqual({});
     expect(verbLabel(bump, HYPE)).toBe("Bump counter");
     expect(verbLabel(bump, TALLY_HYPE)).toBe("Bump Hype (tally) counter");
+  });
+});
+
+describe("verbsFor", () => {
+  const counters = actionObjects([
+    INCREMENT,
+    BUMP_TALLY,
+    action("counter.create", "Create counter", ["tools.counter"]),
+  ])[0];
+
+  test("hides the actions that can't take the chosen thing", () => {
+    expect(verbsFor(counters, HYPE).map((entry) => entry.preset.id)).toEqual(["counter.create", "counter.increment"]);
+    expect(verbsFor(counters, TALLY_HYPE).map((entry) => entry.preset.id)).toEqual(["tally.bump", "counter.create"]);
+  });
+
+  test("offers every action while nothing is chosen", () => {
+    expect(verbsFor(counters, undefined)).toHaveLength(3);
+  });
+});
+
+describe("actions sharing a name", () => {
+  const reset = action(
+    "tally.reset",
+    "Reset counter",
+    ["tools.counter"],
+    [resourceTarget("tally:counter", "Counter")],
+    "Tally"
+  );
+  const counters = actionObjects([RESET_COUNTER, reset])[0];
+
+  test("name the module each comes from", () => {
+    expect(counters.actions.map((entry) => verbLabel(entry))).toEqual([
+      "Reset counter (Tally)",
+      "Reset counter (woofx3)",
+    ]);
+    expect(verbLabel(counters.actions[1], HYPE)).toBe("Reset Hype counter (woofx3)");
+  });
+
+  test("leave a name no other action has as it is", () => {
+    expect(objectByKey("counters").actions.every((entry) => entry.qualifier === undefined)).toBe(true);
   });
 });
 
@@ -386,9 +447,14 @@ describe("kindChoiceLabel", () => {
 });
 
 describe("initialParameters", () => {
+  test("leaves a setting with no declared default empty, so the action uses its own", () => {
+    const increment = objectByKey("counters").actions[0];
+    expect(initialParameters(increment)).toEqual({});
+  });
+
   test("fills the target field with the chosen instance over the defaults", () => {
     const increment = objectByKey("counters").actions[0];
-    expect(initialParameters(increment, HYPE)).toEqual({ target: "woofx3:counter:hype", amount: 1 });
+    expect(initialParameters(increment, HYPE)).toEqual({ target: "woofx3:counter:hype" });
   });
 
   test("replaces a declared default with the chosen alert widget", () => {
@@ -399,12 +465,12 @@ describe("initialParameters", () => {
 
   test("keeps the other fields' defaults for a scene action", () => {
     const visibility = objectByKey("scenes").actions[0];
-    expect(initialParameters(visibility, MAIN_SCENE)).toEqual({ sceneId: "scene-1", placementId: "", visible: true });
+    expect(initialParameters(visibility, MAIN_SCENE)).toEqual({ sceneId: "scene-1", visible: true });
   });
 
   test("ignores an instance when the action has nowhere to put it", () => {
     const chat = objectByKey("chat").actions[0];
-    expect(initialParameters(chat, HYPE)).toEqual({ message: "" });
+    expect(initialParameters(chat, HYPE)).toEqual({});
   });
 });
 

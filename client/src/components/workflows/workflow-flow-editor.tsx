@@ -42,6 +42,7 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
   const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
   const workflow = useQuery(api.workflows.getByEngineId, { instanceId, engineWorkflowId });
   const resourceInstances = useQuery(api.moduleResourceInstances.listForInstance, { instanceId });
+  const scenes = useQuery(api.scenes.list, { instanceId });
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -126,6 +127,7 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
             catalogLoading={catalogLoading}
             actionPresets={actionPresets}
             resourceLabels={resourceLabels}
+            scenes={scenes}
             removeBlockedReason={lastActionReason}
           />
         ) : notEditableReason ? (
