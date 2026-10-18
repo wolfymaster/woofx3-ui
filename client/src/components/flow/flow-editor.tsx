@@ -70,6 +70,11 @@ export interface FlowEditorProps {
   scenes?: readonly SceneRow[];
   /** Why a step can't be removed from `steps`, or null when it can. */
   removeBlockedReason?: (steps: StepNode[], id: string) => string | null;
+  /**
+   * The "When" card, from a surface that words and edits its trigger itself (an alert
+   * trigger's sentence). Without it the flow shows the trigger's own card.
+   */
+  when?: ReactNode;
   /** What the engine lets condition steps check beyond the catalog; nothing extra when absent. */
   conditionSupport?: EngineConditionSupport;
 }
@@ -125,6 +130,7 @@ export function FlowEditor({
   resourceLabels,
   scenes,
   removeBlockedReason,
+  when,
   conditionSupport = NO_ENGINE_CONDITION_SUPPORT,
 }: FlowEditorProps) {
   const { toast } = useToast();
@@ -390,15 +396,17 @@ export function FlowEditor({
   return (
     <FlowContext.Provider value={state}>
       <div ref={rootRef} className="flex flex-col gap-1.5" data-testid="flow-editor">
-        <WhenCard
-          tree={tree}
-          expanded={expandedId === triggerId}
-          onToggle={() => toggle(triggerId)}
-          catalogTriggers={catalogTriggers}
-          catalogLoading={catalogLoading}
-          resourceLabels={resourceLabels}
-          onConditionsChange={(conditions) => onChange({ ...tree, trigger: { ...tree.trigger, conditions } })}
-        />
+        {when ?? (
+          <WhenCard
+            tree={tree}
+            expanded={expandedId === triggerId}
+            onToggle={() => toggle(triggerId)}
+            catalogTriggers={catalogTriggers}
+            catalogLoading={catalogLoading}
+            resourceLabels={resourceLabels}
+            onConditionsChange={(conditions) => onChange({ ...tree, trigger: { ...tree.trigger, conditions } })}
+          />
+        )}
         <FlowList steps={tree.steps} path={null} />
       </div>
     </FlowContext.Provider>
