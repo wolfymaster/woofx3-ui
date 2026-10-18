@@ -210,7 +210,9 @@ function EventWaitFields({
           ))}
         </datalist>
         <p className="text-xs text-muted-foreground">
-          {isAggregation ? "Event stream to aggregate over." : "NATS event subject to wait for."}
+          {isAggregation
+            ? "The event to count or add up. Matched exactly against each event's type."
+            : "The event to wait for. Matched exactly against each event's type."}
         </p>
       </div>
 
