@@ -164,6 +164,16 @@ export type SupporterLeaderboardQuery = Omit<FunctionArgs<typeof api.supporters.
 /** One viewer's lifetime support and their support in each of the last few live streams. */
 export type ViewerSupportTotals = FunctionReturnType<typeof api.supporters.viewerTotals>;
 
+/**
+ * An event to publish on the engine's bus. `triggerId` is the key the runs it
+ * starts report under; `triggeredBy` tags those runs (see
+ * convex/lib/manualRunOrigin.ts).
+ */
+export type EngineTestEvent = Omit<FunctionArgs<typeof api.debug.fireTrigger>, "instanceId">;
+
+/** Whether the engine published the event; `message` says why not. */
+export type PublishedTestEvent = FunctionReturnType<typeof api.debug.fireTrigger>;
+
 /** A workflow on the engine, as the pickers that list them need it. */
 export interface EngineWorkflowOption {
   id: string;

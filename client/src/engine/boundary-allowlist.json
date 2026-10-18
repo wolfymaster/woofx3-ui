@@ -1,6 +1,5 @@
 [
   "components/settings/storage-settings.tsx",
-  "hooks/use-fire-test-event.ts",
   "hooks/use-go-live-checklist.ts",
   "pages/admin/backup.tsx",
   "pages/module-install.tsx",

@@ -5,8 +5,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 // The Convex hooks are replaced so each call can be checked: a gateway
-// request must send what the recap hooks and the supporters page sent
-// before.
+// request must send what the recap hooks, the supporters page and the
+// test-event hook sent before.
 
 const calls: Array<{ name: string; args: unknown }> = [];
 
@@ -85,5 +85,19 @@ describe("streamOps supporter requests", () => {
     const viewerTotals = renderRequest(() => convexStreamOpsGateway.useViewerSupportTotalsRequest());
     await viewerTotals(instanceId, "1234");
     expect(calls).toEqual([{ name: "supporters:viewerTotals", args: { instanceId, platformUserId: "1234" } }]);
+  });
+});
+
+describe("streamOps test events", () => {
+  test("publish as given or simulate a Twitch event, with the same arguments", async () => {
+    const publish = renderRequest(() => convexStreamOpsGateway.usePublishEventRequest());
+    const simulate = renderRequest(() => convexStreamOpsGateway.useSimulateTwitchEventRequest());
+    const event = { eventType: "user.follow", eventData: { user: "wolfy" }, triggerId: "key-1", triggeredBy: "test" };
+    await publish(instanceId, event);
+    await simulate(instanceId, event);
+    expect(calls).toEqual([
+      { name: "debug:fireTrigger", args: { instanceId, ...event } },
+      { name: "debug:simulateTwitchEvent", args: { instanceId, ...event } },
+    ]);
   });
 });

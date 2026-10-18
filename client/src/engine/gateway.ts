@@ -20,6 +20,7 @@ import type {
   EngineInfo,
   EngineSyncRequest,
   EngineSyncState,
+  EngineTestEvent,
   EngineWorkflowOption,
   EventLogPage,
   EventLogQuery,
@@ -48,6 +49,7 @@ import type {
   ObsStatus,
   OpenSessionRefresh,
   Paginated,
+  PublishedTestEvent,
   RecapTimelineEvents,
   RecordedWorkflowRun,
   Resource,
@@ -480,7 +482,8 @@ export interface MacrosGateway {
  * What the engine records about the channel's streams and the viewers who
  * support them, read on demand: no webhook mirrors these figures into Convex.
  * A recap's stored summary is Convex data; a recap's clips and markers, and a
- * viewer's Twitch profile, come from Twitch, not the engine.
+ * viewer's Twitch profile, come from Twitch, not the engine. Also publishes
+ * test events onto the engine's bus.
  */
 export interface StreamOpsGateway {
   /**
@@ -506,6 +509,13 @@ export interface StreamOpsGateway {
   useSupporterLeaderboardRequest(): (instanceId: InstanceId, query: SupporterLeaderboardQuery) => Promise<Supporter[]>;
   /** Rejects for a blank id. */
   useViewerSupportTotalsRequest(): (instanceId: InstanceId, platformUserId: string) => Promise<ViewerSupportTotals>;
+  /** Publishes an event as given, with no `platform` attribute. */
+  usePublishEventRequest(): (instanceId: InstanceId, event: EngineTestEvent) => Promise<PublishedTestEvent>;
+  /**
+   * Publishes a synthetic Twitch event, which the engine stamps
+   * `platform: "twitch"` so it passes the same filters as a real one.
+   */
+  useSimulateTwitchEventRequest(): (instanceId: InstanceId, event: EngineTestEvent) => Promise<PublishedTestEvent>;
 }
 
 export interface OptimisticInstance {
