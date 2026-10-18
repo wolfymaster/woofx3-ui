@@ -1,6 +1,11 @@
 import { api } from "@convex/_generated/api";
 import type { CatalogListingDetail } from "@convex/lib/marketplaceCatalog";
 import { isBundleListing, isModuleListing } from "@convex/lib/marketplaceCatalog";
+import {
+  installedVersionsByListing,
+  laterEditionInstalled,
+  moduleInstalled,
+} from "@convex/lib/marketplaceInstallIdentity";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { useAction, useQuery } from "convex/react";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag } from "lucide-react";
@@ -132,21 +137,23 @@ function ListingBody({
   const meta = listingTypeMeta(listing.type);
 
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
-  const installedVersion = useMemo(() => {
-    for (const module of repoModules ?? []) {
-      const parts = module.moduleKey?.split(":");
-      if (parts && parts[0] === listing.id) {
-        return parts[1];
-      }
-    }
-    return undefined;
-  }, [repoModules, listing.id]);
+  // Every edition installs under one manifest id, so which listing is
+  // installed comes from the module's provenance, not its key: edition 1
+  // installed makes edition 2's page an upgrade, not an update.
+  const installedVersion = useMemo(
+    () => installedVersionsByListing(repoModules ?? []).get(listing.id),
+    [repoModules, listing.id]
+  );
+  const newerEditionInstalled = useMemo(
+    () => laterEditionInstalled(repoModules ?? [], listing),
+    [repoModules, listing]
+  );
 
   const baseModuleInstalled = useMemo(() => {
     if (!listing.baseModuleId) {
       return true;
     }
-    return (repoModules ?? []).some((module) => module.moduleKey?.split(":")[0] === listing.baseModuleId);
+    return moduleInstalled(repoModules ?? [], listing.baseModuleId);
   }, [repoModules, listing.baseModuleId]);
 
   // A module or theme install needs the permissions its archive declares,
@@ -188,6 +195,7 @@ function ListingBody({
     quoteLoading: quote.loading,
     quoteError: quote.error,
     installedVersion,
+    laterEditionInstalled: newerEditionInstalled,
     baseModuleInstalled,
     bundleInstalled: bundleInstalled !== null,
   });

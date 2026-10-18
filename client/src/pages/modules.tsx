@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
 import { oauthErrorMessage } from "@convex/lib/oauthErrors";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
@@ -269,19 +270,24 @@ export default function Modules() {
     };
   }, [detailModuleId, detailRefreshKey, instance, getModuleDetail]);
 
-  // Installing and updating are the same marketplace operation, and both need only the module's
-  // marketplace id. An installed selection carries that id in its moduleKey, so deriving it here —
-  // rather than reading it off a `source: "marketplace"` selection — is what makes Update reachable
-  // from the Installed list and not only from the Store.
+  // Installing and updating are the same marketplace operation, and both need only the listing id.
+  // For an installed module that is the listing it was installed from, derived here from its row —
+  // rather than read off a `source: "marketplace"` selection — which is what makes Update reachable
+  // from the Installed list and not only from the Store. Modules are routed by manifest id, which
+  // every edition shares, so the route alone would update a later edition from its first.
   const selectedMarketplaceId = useMemo(() => {
     if (!selectedModule) {
       return null;
     }
     if (selectedModule.source === "marketplace") {
-      return selectedModule.marketplaceId;
+      const { marketplaceId } = selectedModule;
+      const installed = repoModules?.find((m) => m.moduleKey?.startsWith(`${marketplaceId}:`));
+      return (installed && installedListing(installed)?.listingId) ?? marketplaceId;
     }
-    return bareModuleKey(selectedModule.module.moduleKey) ?? null;
-  }, [selectedModule]);
+    const { module } = selectedModule;
+    const row = repoModules?.find((m) => m._id === module._id) ?? module;
+    return installedListing(row)?.listingId ?? null;
+  }, [selectedModule, repoModules]);
 
   const requestMarketplaceInstall = useCallback(
     (mode: PermissionApprovalMode) => {

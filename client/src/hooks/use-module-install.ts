@@ -60,7 +60,7 @@ export interface ModuleInstall {
   /** The engine's own progress line while installing. */
   progressMessage: string | null;
   succeeded: boolean;
-  /** Set while an install is in flight; `{marketplaceId}:{version}:{sha7}`. */
+  /** Set while an install is in flight; `{manifestId}:{version}:{sha7}`. */
   pendingModuleKey: string | null;
   /** Starts an install or update, asking for approval first when needed. */
   request: (request: InstallRequest) => void;

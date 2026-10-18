@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { CatalogListingDetail, ListingPricing, ListingQuote } from "@convex/lib/marketplaceCatalog";
+import { installedVersionsByListing, laterEditionInstalled } from "@convex/lib/marketplaceInstallIdentity";
 import { type InstallStateInput, listingInstallState } from "./listing-install-state";
 
 const FREE: ListingPricing = { mode: "free" };
@@ -83,6 +84,50 @@ describe("listingInstallState", () => {
       kind: "installable",
       upgradeFrom: "counter",
     });
+  });
+
+  test("edition 1 installed makes edition 2 an upgrade, not an update, though both share a manifest id", () => {
+    // Installed before provenance existed: the key is all there is.
+    const rows = [{ moduleKey: "counter:1.2.0:abcdef0" }];
+    const v2 = listing({ id: "counter-v2", edition: 2, moduleKey: "counter", version: "2.0.0", pricing: PAID });
+    const installed = {
+      installedVersion: installedVersionsByListing(rows).get(v2.id),
+      laterEditionInstalled: laterEditionInstalled(rows, v2),
+    };
+    expect(installed).toEqual({ installedVersion: undefined, laterEditionInstalled: false });
+    expect(
+      state({
+        listing: v2,
+        ...installed,
+        quote: { kind: "upgrade", amountCents: 199, currency: "usd", upgradeFrom: "counter" },
+      })
+    ).toEqual({ kind: "purchasable", amountCents: 199, currency: "usd", upgradeFrom: "counter" });
+    // Edition 1's own page still reads it as installed.
+    expect(installedVersionsByListing(rows).get("counter")).toBe("1.2.0");
+  });
+
+  test("edition 2 installed reads as installed on both editions' pages, so edition 1 is never offered over it", () => {
+    const rows = [{ moduleKey: "counter:2.0.0:abcdef0", marketplaceListingId: "counter-v2", marketplaceEdition: 2 }];
+    const v1 = listing({ moduleKey: "counter", pricing: PAID, supersededBy: "counter-v2" });
+    const v2 = listing({ id: "counter-v2", edition: 2, moduleKey: "counter", version: "2.0.0", pricing: PAID });
+    const quote: ListingQuote = { kind: "owned" };
+
+    expect(
+      state({
+        listing: v1,
+        quote,
+        installedVersion: installedVersionsByListing(rows).get(v1.id),
+        laterEditionInstalled: laterEditionInstalled(rows, v1),
+      })
+    ).toEqual({ kind: "installed" });
+    expect(
+      state({
+        listing: v2,
+        quote,
+        installedVersion: installedVersionsByListing(rows).get(v2.id),
+        laterEditionInstalled: laterEditionInstalled(rows, v2),
+      })
+    ).toEqual({ kind: "installed" });
   });
 
   test("a listing nobody can acquire says why", () => {

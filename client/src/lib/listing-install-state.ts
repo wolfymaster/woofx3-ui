@@ -10,8 +10,10 @@ export interface InstallStateInput {
   quoteLoading: boolean;
   /** The quote could not be read at all. */
   quoteError: string | null;
-  /** The version installed on this instance, if any. */
+  /** The version of this listing installed on this instance, if any. */
   installedVersion: string | undefined;
+  /** A later edition of the same module is installed; this one would replace it. */
+  laterEditionInstalled?: boolean;
   /** False only for a theme whose base module is missing. */
   baseModuleInstalled: boolean;
   /** A bundle install already succeeded in this session. */
@@ -29,7 +31,8 @@ export interface InstallStateInput {
  * 2. A theme with no base module cannot be installed at all — the engine
  *    refuses it — so that outranks everything about buying it.
  * 3. Already installed outranks the quote: an installed listing should not
- *    offer to sell itself again.
+ *    offer to sell itself again. A later edition installed counts too, since
+ *    installing this one would replace it with an older edition.
  * 4. A free, current listing installs without waiting for a quote; the
  *    install claims it.
  * 5. Everything else is the marketplace's quote, which alone knows what this
@@ -43,6 +46,7 @@ export function listingInstallState({
   quoteLoading,
   quoteError,
   installedVersion,
+  laterEditionInstalled = false,
   baseModuleInstalled,
   bundleInstalled,
 }: InstallStateInput): ListingInstallState {
@@ -52,7 +56,7 @@ export function listingInstallState({
   if (listing.type === "theme" && listing.baseModuleId && !baseModuleInstalled) {
     return { kind: "needs_base_module", baseModuleId: listing.baseModuleId };
   }
-  if (bundleInstalled) {
+  if (bundleInstalled || laterEditionInstalled) {
     return { kind: "installed" };
   }
   if (installedVersion !== undefined) {

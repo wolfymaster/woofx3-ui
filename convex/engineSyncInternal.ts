@@ -6,6 +6,8 @@ import { reconcileEndpoints } from "./inboundWebhooks";
 import { computeNextEligibleAt, computeNextEligibleAtAfterError, ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
+import { resolveProvenance } from "./lib/marketplaceInstallIdentity";
+import { recordedProvenance } from "./lib/marketplaceInstallRecords";
 import { bareModuleKey, findModuleRow, loadModuleIdsByBareKey } from "./lib/moduleKey";
 import { deleteSceneAndChildren } from "./lib/sceneCascade";
 import { getInstanceMembership } from "./lib/teamAccess";
@@ -1114,6 +1116,8 @@ export const reconcileModules = internalMutation({
         author: v.string(),
         category: v.string(),
         tags: v.array(v.string()),
+        marketplaceListingId: v.optional(v.string()),
+        marketplaceEdition: v.optional(v.number()),
       })
     ),
   },
@@ -1136,6 +1140,16 @@ export const reconcileModules = internalMutation({
       // The engine is authoritative for identity and manifest. Catalog text is
       // only filled in, never blanked: a marketplace upload carries a
       // description the manifest itself may not.
+      const moduleKey = snap.moduleKey || existing?.moduleKey;
+      // An engine that predates install provenance reports none, and neither
+      // does one for a module it did not install from a listing; what Convex
+      // recorded for the key fills in.
+      const provenance = resolveProvenance({
+        moduleKey,
+        reported: { marketplaceListingId: snap.marketplaceListingId, marketplaceEdition: snap.marketplaceEdition },
+        recorded: await recordedProvenance(ctx, instanceId, moduleKey),
+        existing,
+      });
       const fields = {
         instanceId,
         name: snap.name,
@@ -1143,7 +1157,8 @@ export const reconcileModules = internalMutation({
         manifest: snap.manifest,
         status: "installed" as const,
         statusMessage: undefined,
-        moduleKey: snap.moduleKey || existing?.moduleKey,
+        moduleKey,
+        ...provenance,
         description: snap.description || existing?.description || "",
         tags: snap.tags.length > 0 ? snap.tags : (existing?.tags ?? []),
         ...(snap.author ? { author: snap.author } : {}),

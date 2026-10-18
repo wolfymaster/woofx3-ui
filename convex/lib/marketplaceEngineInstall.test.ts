@@ -104,10 +104,12 @@ function fakeEngine(handlers: Partial<MarketplaceEngine>) {
 function moduleInstallDeps(answer: () => Promise<EngineModuleInstallResult>) {
   const engine = fakeEngine({ installMarketplaceListing: answer });
   const emitted: { progress: ModuleInstallProgress; since: number }[] = [];
+  const recorded: string[] = [];
   let tokens = 0;
   return {
     engine,
     emitted,
+    recorded,
     tokensMinted: () => tokens,
     deps: {
       engine: engine.open,
@@ -118,6 +120,9 @@ function moduleInstallDeps(answer: () => Promise<EngineModuleInstallResult>) {
       emitProgress: async (progress: ModuleInstallProgress, since: number) => {
         emitted.push({ progress, since });
       },
+      recordInstall: async (moduleKey: string) => {
+        recorded.push(moduleKey);
+      },
       now: () => 1_000,
     },
   };
@@ -126,6 +131,7 @@ function moduleInstallDeps(answer: () => Promise<EngineModuleInstallResult>) {
 const APPROVAL = {
   listingId: LISTING,
   listingName: "OBS Scenes",
+  manifestId: LISTING,
   approvedPermissions: ["chat.read"],
   approvedLocalEndpoints: ["obs"],
 };
@@ -303,12 +309,24 @@ describe("installModuleThroughEngine", () => {
       message: "Installing OBS Scenes@1.4.2 from marketplace...",
       data: { moduleName: "OBS Scenes", moduleVersion: "1.4.2", source: "marketplace" },
     });
+    expect(t.recorded).toEqual([KEY]);
+  });
+
+  test("a later edition installs under its manifest id and is recorded as the listing it came from", async () => {
+    const key = "cozy:2.0.0:abcdef0";
+    const t = moduleInstallDeps(async () => ({ status: "installed", moduleKey: key }));
+    const request = { ...APPROVAL, listingId: "cozy-v2", listingName: "Cozy", manifestId: "cozy" };
+    expect(await installModuleThroughEngine(t.deps, request)).toEqual({ status: "installed", moduleKey: key });
+    expect(t.engine.calls[0].args[0]).toBe("cozy-v2");
+    expect(t.emitted).toEqual([{ progress: moduleInstallProgress(key, "Cozy", "2.0.0"), since: 1_000 }]);
+    expect(t.recorded).toEqual([key]);
   });
 
   test("an already installed build answers like a fresh install and leaves the engine's success event alone", async () => {
     const t = moduleInstallDeps(async () => ({ status: "installed", moduleKey: KEY, alreadyInstalled: true }));
     expect(await installModuleThroughEngine(t.deps, APPROVAL)).toEqual({ status: "installed", moduleKey: KEY });
     expect(t.emitted).toEqual([]);
+    expect(t.recorded).toEqual([KEY]);
   });
 
   test("passes needs_approval through in the Convex path's shape, without progress", async () => {
@@ -354,12 +372,15 @@ describe("versionFromModuleKey", () => {
   test("reads the version out of the pinned key format", () => {
     expect(versionFromModuleKey(LISTING, KEY)).toBe("1.4.2");
     expect(versionFromModuleKey("a", "a:2.0.0-beta.1:1234567")).toBe("2.0.0-beta.1");
+    expect(versionFromModuleKey("cozy", "cozy:2.0.0:1234567")).toBe("2.0.0");
   });
 
   test("refuses a key in any other format", () => {
     expect(() => versionFromModuleKey(LISTING, `other:1.4.2:${SHA.slice(0, 7)}`)).toThrow();
     expect(() => versionFromModuleKey(LISTING, `${LISTING}:1.4.2`)).toThrow();
     expect(() => versionFromModuleKey(LISTING, LISTING)).toThrow();
+    // A later edition's key carries its manifest id, never its listing id.
+    expect(() => versionFromModuleKey("cozy", "cozy-v2:2.0.0:1234567")).toThrow();
   });
 });
 
@@ -473,15 +494,17 @@ function listing(overrides: Record<string, unknown>): CatalogListing {
 }
 
 describe("moduleListingStaysOnConvex", () => {
-  test("a module or theme whose id is its manifest id installs on the engine", () => {
+  test("a module or theme installs on the engine", () => {
     expect(moduleListingStaysOnConvex(listing({ moduleKey: "cozy" }))).toBeNull();
     expect(moduleListingStaysOnConvex(listing({ type: "theme", moduleKey: "cozy" }))).toBeNull();
     expect(moduleListingStaysOnConvex(listing({}))).toBeNull();
   });
 
-  test("a later edition installing from another manifest id stays on the Convex path", () => {
-    const reason = moduleListingStaysOnConvex(listing({ id: "cozy-v2", moduleKey: "cozy", edition: 2 }));
-    expect(reason).toBe("listing cozy-v2 installs from manifest cozy (edition 2)");
+  test("a later edition installs on the engine too", () => {
+    expect(moduleListingStaysOnConvex(listing({ id: "cozy-v2", moduleKey: "cozy", edition: 2 }))).toBeNull();
+    expect(
+      moduleListingStaysOnConvex(listing({ id: "cozy-v2", type: "theme", moduleKey: "cozy", edition: 2 }))
+    ).toBeNull();
   });
 
   test("a listing that is not a module stays on the Convex path, which refuses it", () => {

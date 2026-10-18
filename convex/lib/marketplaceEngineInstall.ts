@@ -148,25 +148,14 @@ export async function marketplaceEngineFor(
 }
 
 /**
- * Why a module listing stays on the Convex path although the instance is
- * routed to the engine, or null when the engine may install it.
- *
- * - Only module and theme listings install as modules. Anything else keeps
- *   the Convex path, which refuses it with its own error.
- * - A listing whose id is not its manifest id -- a later edition such as
- *   `cozy-v2` of manifest `cozy` -- cannot install on the engine:
- *   barkloader computes the key it accepts from the manifest id, the engine
- *   sends `{listingId}:{version}:{sha7}`, and barkloader refuses the archive
- *   with ModuleKeyMismatch. The Convex path sends the same key, so it fails
- *   there too; keeping it there only keeps one behaviour while the flag rolls
- *   out.
+ * Why a listing stays on the Convex path although the instance is routed to
+ * the engine, or null when the engine may install it. Only module and theme
+ * listings install as modules; anything else keeps the Convex path, which
+ * refuses it with its own error.
  */
 export function moduleListingStaysOnConvex(listing: CatalogListing): string | null {
   if (!isModuleListing(listing.type)) {
     return `a ${listing.type} listing does not install as a module`;
-  }
-  if (listing.moduleKey !== undefined && listing.moduleKey !== listing.id) {
-    return `listing ${listing.id} installs from manifest ${listing.moduleKey} (edition ${listing.edition})`;
   }
   return null;
 }
@@ -252,11 +241,12 @@ export function moduleInstallResultFromEngine(result: EngineModuleInstallResult)
 }
 
 /**
- * The version in an install key, `{listingId}:{version}:{sha7}`. The format
- * is pinned by `marketplaceModuleKey` in woofx3 `api/src/routes/marketplace.ts`.
+ * The version in an install key, `{manifestId}:{version}:{sha7}`. The format
+ * is pinned by `marketplaceModuleKey` in woofx3 `api/src/routes/marketplace.ts`
+ * and by barkloader, which refuses a key it did not compute itself.
  */
-export function versionFromModuleKey(listingId: string, moduleKey: string): string {
-  const prefix = `${listingId}:`;
+export function versionFromModuleKey(manifestId: string, moduleKey: string): string {
+  const prefix = `${manifestId}:`;
   const hashAt = moduleKey.lastIndexOf(":");
   if (!moduleKey.startsWith(prefix) || hashAt < prefix.length) {
     throw new Error(`Engine answered with install key "${moduleKey}", which is not ${prefix}{version}:{hash}`);
@@ -287,12 +277,16 @@ export interface EngineModuleInstallDeps {
    * or after `since`: barkloader may already have answered by webhook.
    */
   emitProgress: (progress: ModuleInstallProgress, since: number) => Promise<void>;
+  /** Records which listing the installed key is, for `marketplaceInstalls`. */
+  recordInstall: (moduleKey: string) => Promise<void>;
   now: () => number;
 }
 
 /**
  * Installs a module or theme listing through the engine. `listingName` is the
- * catalog's name for it, for the progress event.
+ * catalog's name for it, for the progress event, and `manifestId` the
+ * listing's `moduleKey`, which the engine installs under (see
+ * `listingManifestId`).
  *
  * The engine claims the listing with `acquire`, which also counts the install,
  * so nothing here calls acquire. The install key only exists once the engine
@@ -312,6 +306,7 @@ export async function installModuleThroughEngine(
   request: {
     listingId: string;
     listingName: string;
+    manifestId: string;
     approvedPermissions: readonly string[];
     approvedLocalEndpoints: readonly string[];
   }
@@ -329,9 +324,12 @@ export async function installModuleThroughEngine(
     throw engineFailure(err);
   }
   const mapped = moduleInstallResultFromEngine(result);
-  if (result.status === "installed" && result.alreadyInstalled !== true) {
-    const version = versionFromModuleKey(request.listingId, result.moduleKey);
-    await deps.emitProgress(moduleInstallProgress(result.moduleKey, request.listingName, version), since);
+  if (result.status === "installed") {
+    await deps.recordInstall(result.moduleKey);
+    if (result.alreadyInstalled !== true) {
+      const version = versionFromModuleKey(request.manifestId, result.moduleKey);
+      await deps.emitProgress(moduleInstallProgress(result.moduleKey, request.listingName, version), since);
+    }
   }
   return mapped;
 }

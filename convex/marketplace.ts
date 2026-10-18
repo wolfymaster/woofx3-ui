@@ -27,6 +27,7 @@ import {
   fetchListingContent,
 } from "./lib/marketplaceEntitlement";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
+import { listingManifestId, marketplaceInstallKey } from "./lib/marketplaceInstallIdentity";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
 
@@ -88,6 +89,13 @@ export interface MarketplaceModuleSummary {
    * instance with marketplace dev access is ever sent one.
    */
   tier: "public" | "dev";
+  /**
+   * The manifest id every edition of the module shares, which it installs
+   * under. Absent from a marketplace that predates editions.
+   */
+  moduleKey?: string;
+  /** Which edition of the module this listing is. Absent like `moduleKey`. */
+  edition?: number;
 }
 
 export interface MarketplaceModuleDetail extends MarketplaceModuleSummary {
@@ -263,6 +271,12 @@ function parseSummary(raw: unknown): MarketplaceModuleSummary | null {
   }
   if (typeof obj.updatedAt === "string") {
     summary.updatedAt = obj.updatedAt;
+  }
+  if (typeof obj.moduleKey === "string" && obj.moduleKey.trim() !== "") {
+    summary.moduleKey = obj.moduleKey.trim();
+  }
+  if (typeof obj.edition === "number" && Number.isInteger(obj.edition) && obj.edition >= 1) {
+    summary.edition = obj.edition;
   }
   return summary;
 }
@@ -463,6 +477,7 @@ async function installFromMarketplace(
 ): Promise<MarketplaceInstallResult> {
   const viaEngine = await marketplaceModuleEngineFor(ctx, instanceId, marketplaceModuleId);
   if (viaEngine) {
+    const { listing } = viaEngine;
     return await installModuleThroughEngine(
       {
         engine: () => marketplaceEngineSession(viaEngine.engine),
@@ -478,11 +493,20 @@ async function installFromMarketplace(
             since,
           });
         },
+        recordInstall: async (moduleKey) => {
+          await ctx.runMutation(internal.marketplaceInstalls.record, {
+            instanceId,
+            moduleKey,
+            listingId: listing.id,
+            edition: listing.edition,
+          });
+        },
         now: Date.now,
       },
       {
         listingId: marketplaceModuleId,
-        listingName: viaEngine.listing.name,
+        listingName: listing.name,
+        manifestId: listingManifestId(listing),
         approvedPermissions,
         approvedLocalEndpoints,
       }
@@ -527,7 +551,16 @@ async function installFromMarketplace(
   // counts the install.
   await acquireListing(ctx, instanceId, marketplaceModuleId, detail.name);
 
-  const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
+  // Keyed by manifest id, which barkloader computes from the archive and
+  // insists on: a later edition installs under its first edition's id and
+  // replaces it in place.
+  const moduleKey = marketplaceInstallKey(listingManifestId(detail), detail.version, download.sha256);
+  await ctx.runMutation(internal.marketplaceInstalls.record, {
+    instanceId,
+    moduleKey,
+    listingId: marketplaceModuleId,
+    edition: detail.edition,
+  });
 
   const progress = moduleInstallProgress(moduleKey, detail.name, detail.version);
   await ctx.runMutation(internal.transientEvents.emit, {
