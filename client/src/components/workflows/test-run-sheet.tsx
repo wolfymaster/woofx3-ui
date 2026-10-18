@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import { dryRunWouldDo } from "@convex/lib/engineTestRun";
 import { TEST_RUN_ORIGIN } from "@convex/lib/manualRunOrigin";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { AlertCircle, AlertTriangle, CheckCircle2, ExternalLink, Loader2, Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -28,6 +28,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useTransientEvents } from "@/engine/hooks/use-correlated-request";
+import { useTriggerWorkflowRequest } from "@/engine/hooks/use-workflows";
+import type { WorkflowTriggerResult } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -299,7 +301,7 @@ function SampleEventTest({
 interface DirectAttempt {
   triggerData: Record<string, unknown> | undefined;
   dryRun: boolean;
-  result: FunctionReturnType<typeof api.workflowActions.trigger>;
+  result: WorkflowTriggerResult;
 }
 
 function DirectTest({
@@ -315,7 +317,7 @@ function DirectTest({
 }) {
   const { instance } = useInstance();
   const { toast } = useToast();
-  const trigger = useAction(api.workflowActions.trigger);
+  const trigger = useTriggerWorkflowRequest();
   const takesOptions = optionsState === "supported";
   const takesDryRun = takesOptions && dryRunState === "supported";
   const [busy, setBusy] = useState(false);
@@ -338,8 +340,7 @@ function DirectTest({
     setAttempt(null);
     try {
       const result = await withinTimeout(
-        trigger({
-          instanceId: instance._id,
+        trigger(instance._id, {
           workflowNameOrId: engineWorkflowId,
           origin: TEST_RUN_ORIGIN,
           options: takesOptions
