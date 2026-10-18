@@ -1,5 +1,6 @@
 import type { ConditionConfig, ConditionOperator } from "@woofx3/api";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
+import { nameWithThing, type StepTarget } from "@/lib/action-objects";
 import { conditionValueText } from "@/lib/condition-value";
 import { describeWaitTimeout, isDelayWait, waitNodeLabel } from "@/lib/wait-config";
 import { actionNodeSummary } from "@/lib/workflow-node-summary";
@@ -20,6 +21,12 @@ export interface StepSummaryContext {
   action?: CatalogActionRow;
   /** Display names of the streamer's counters, timers and queues, by canonical id. */
   resourceLabels?: Map<string, string>;
+  /**
+   * The thing an action step points at (see stepTarget). Its name goes into the
+   * title the way the picker words the step, "Increment Hype counter", and its
+   * setting leaves the details.
+   */
+  target?: StepTarget;
 }
 
 const OPERATOR_PHRASES: Record<ConditionOperator, string> = {
@@ -82,8 +89,11 @@ function stepFlags(step: StepNode): string[] {
 function baseSummary(step: StepNode, context: StepSummaryContext): Pick<StepSummary, "title" | "details"> {
   switch (step.type) {
     case "action": {
-      const title = context.action?.name ?? step.action ?? "Action";
-      const details = context.action ? actionNodeSummary(step, [context.action], context.resourceLabels) : [];
+      const name = context.action?.name ?? step.action ?? "Action";
+      const target = context.action ? context.target : undefined;
+      const title = target ? nameWithThing(name, target.field, target.label) : name;
+      const omit = target ? new Set([target.field.id]) : undefined;
+      const details = context.action ? actionNodeSummary(step, [context.action], context.resourceLabels, omit) : [];
       return { title, details };
     }
     case "condition": {

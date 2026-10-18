@@ -52,6 +52,18 @@ const MAX_SEARCH_HITS = 8;
 /** Marks the controls the arrow keys move between inside one list. */
 const ITEM_ATTRIBUTE = "data-picker-item";
 
+/** Marks the picker's root, so a dialog it sits in can leave Escape to it. Must match the attribute on the root. */
+const ROOT_ATTRIBUTE = "data-object-action-picker";
+
+/**
+ * Whether a key event started inside a picker, which uses Escape to step back.
+ * A dialog holding a picker keeps itself open for such an Escape (by preventing
+ * the event in its onEscapeKeyDown); the picker still steps back.
+ */
+export function isInsideActionPicker(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(`[${ROOT_ATTRIBUTE}]`) !== null;
+}
+
 const itemClass =
   "rounded-lg text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
@@ -118,7 +130,11 @@ export function ObjectActionPicker({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
-    if (event.key !== "Escape" || event.defaultPrevented) {
+    // The picker's own parts that use Escape stop it. One from a menu portaled out
+    // of the picker (a select's options) closes that menu only, so it is ignored by
+    // where it started; defaultPrevented cannot tell, since a dialog holding the
+    // picker prevents every Escape inside it to stay open.
+    if (event.key !== "Escape" || !event.currentTarget.contains(event.target as Node)) {
       return;
     }
     event.preventDefault();
@@ -148,6 +164,7 @@ export function ObjectActionPicker({
       aria-label={object ? object.label : heading}
       className="flex flex-col gap-3.5 rounded-xl border border-primary/40 bg-card px-4 pb-4 pt-3.5 text-card-foreground"
       onKeyDown={handleKeyDown}
+      data-object-action-picker=""
       data-testid="object-action-picker"
     >
       <div className="flex items-center gap-2.5">
@@ -549,6 +566,7 @@ function InlineCreateInstance({
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.preventDefault();
+            event.stopPropagation();
             onCancel();
           }
         }}
@@ -625,6 +643,7 @@ function InlineCreateForm({
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
+          event.stopPropagation();
           onCancel();
         }
       }}

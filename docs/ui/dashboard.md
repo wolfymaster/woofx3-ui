@@ -408,13 +408,37 @@ the same `planMacroRun` / `executeMacroPlan` path a remote trigger uses
 calls the engine's `triggerWorkflowByName`; a chat-command macro must be a
 `!command` and calls the engine's `executeCommand` as the linked Twitch
 broadcaster, exactly as if they had typed it — the engine cannot post a plain chat
-message. An action macro holds one action picked from the instance's catalog (the
-workflow builder's action picker) with its settings filled in through the same form
-a workflow step uses, and calls the engine's `runActions` with that one step. The
-engine records no run for it, so there is no outcome to watch. The step is stored
+message. An action macro holds one action and calls the engine's `runActions` with
+that one step. The engine records no run for it, so there is no outcome to watch. The step is stored
 with `$ref` as `ref`, since Convex refuses `$` field names, and is converted back
 just before the RPC (`macroActionToEngineStep`). `http-request` fetches straight from the browser, so it is subject to
 CORS and its headers are visible to anyone with dashboard access.
+
+### Action buttons
+
+The **Action** tab of the button editor (`macro-action-step.tsx`) picks and edits the
+one action in place, inside the editor, with no second dialog:
+
+- With no action yet, it shows the flow editor's object-first picker
+  (`ObjectActionPicker`) offering actions only (`flowSteps={[]}`), since a button
+  runs one action and has no pauses, waits or conditions. The thing chosen in the
+  picker ("Which counter?") fills the action's setting, as when a flow adds a step.
+- Once picked it collapses to the action, worded as the step reads in the flow, with
+  **Change** to reopen the picker and the action's settings below. The settings are
+  `StepInlineEditor`, the flow's own step editor, on the action as a step
+  (`macroStepNode` / `macroStepFromNode` in `lib/macro-pad.ts`), without a step id
+  field: only the action, its `function`, `ref` and settings are stored, in the same
+  shape as before.
+- Escape steps back through the picker rather than closing the button editor: the
+  dialog leaves Escape to the picker (`isInsideActionPicker`).
+
+The label of an action button follows its step's sentence ("Add to Hype counter")
+until the streamer types a label of their own. The sentence is `stepSummary`'s
+title with the thing the action points at read into it (`useMacroActionSentence`,
+`stepTarget` in `lib/action-objects.ts`). The label is stored as text either way,
+so the pad shows it without the catalog. An opened button whose stored label is the
+sentence keeps following it as the action changes (`typedMacroLabel`); clearing the
+label goes back to the sentence (`macroButtonLabel`).
 
 ### Trigger macros from a Stream Deck or phone
 
