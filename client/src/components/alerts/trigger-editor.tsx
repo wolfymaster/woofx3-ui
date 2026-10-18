@@ -11,6 +11,7 @@ import { FlowEditor } from "@/components/flow/flow-editor";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { type TriggerPin, triggerFieldValues, withFieldConditions } from "@/lib/alert-triggers";
 import { type OptionLabels, sentenceParts, sentenceText } from "@/lib/condition-sentence";
@@ -83,6 +84,7 @@ export function TriggerEditor({
   const setEnabled = useAction(api.workflowActions.setEnabled);
   const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
   const resourceInstances = useQuery(api.moduleResourceInstances.listForInstance, { instanceId });
+  const conditionSupport = useEngineConditionSupport(instanceId);
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -231,6 +233,7 @@ export function TriggerEditor({
         catalogLoading={catalogLoading}
         actionPresets={actionPresets}
         resourceLabels={resourceLabels}
+        conditionSupport={conditionSupport}
         removeBlockedReason={saved ? lastStepReason : undefined}
         when={
           <TriggerWhenCard
