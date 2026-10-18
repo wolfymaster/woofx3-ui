@@ -10,6 +10,7 @@ import { convexRequestsGateway } from "./requests";
 import { convexResourcesGateway } from "./resources";
 import { convexScenesGateway } from "./scenes";
 import { convexStatusGateway } from "./status";
+import { convexStreamOpsGateway } from "./stream-ops";
 import { convexWorkflowsGateway } from "./workflows";
 
 /**
@@ -31,4 +32,5 @@ export const convexEngineGateway: EngineGateway = {
   workflows: convexWorkflowsGateway,
   requests: convexRequestsGateway,
   macros: convexMacrosGateway,
+  streamOps: convexStreamOpsGateway,
 };

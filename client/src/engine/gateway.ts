@@ -46,7 +46,9 @@ import type {
   NewScene,
   NotRunningWorkflow,
   ObsStatus,
+  OpenSessionRefresh,
   Paginated,
+  RecapTimelineEvents,
   RecordedWorkflowRun,
   Resource,
   ResourceChanges,
@@ -59,6 +61,7 @@ import type {
   SceneRecord,
   SceneWidgetCatalogRow,
   StreamEventFrame,
+  StreamRecapEngineDetail,
   TestRunCapabilities,
   TransientEvent,
   UploadGrant,
@@ -101,6 +104,7 @@ export interface EngineGateway {
   readonly workflows: WorkflowsGateway;
   readonly requests: RequestsGateway;
   readonly macros: MacrosGateway;
+  readonly streamOps: StreamOpsGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -466,6 +470,31 @@ export interface MacrosGateway {
    * chat-command macro pressed by someone who does not manage the instance.
    */
   useRunRequest(): (instanceId: InstanceId, macroId: MacroId, values: MacroVariableValue[]) => Promise<MacroRunResult>;
+}
+
+/**
+ * What the engine records about the channel's streams, read on demand: no
+ * webhook mirrors these figures into Convex. A recap's stored summary is
+ * Convex data, and its clips and markers come from Twitch, not the engine.
+ */
+export interface StreamOpsGateway {
+  /**
+   * A recapped session's per-minute viewer samples and top cheerers and
+   * gifters. An engine that is unregistered or cannot answer resolves with
+   * that status rather than rejecting.
+   */
+  useRecapEngineDetailRequest(): (instanceId: InstanceId, sessionId: string) => Promise<StreamRecapEngineDetail>;
+  /**
+   * A recapped session's counted events in time order. Needs
+   * `analytics.sessionEvents`; resolves with the failure like the detail.
+   */
+  useRecapTimelineEventsRequest(): (instanceId: InstanceId, sessionId: string) => Promise<RecapTimelineEvents>;
+  /**
+   * Stores a snapshot of the engine's open session as its summary, unless a
+   * fresh one is stored already; the summary itself arrives through the
+   * stored-summary reads.
+   */
+  useOpenSessionRefreshRequest(): (instanceId: InstanceId) => Promise<OpenSessionRefresh>;
 }
 
 export interface OptimisticInstance {
