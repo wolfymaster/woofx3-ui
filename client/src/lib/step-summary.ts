@@ -4,6 +4,7 @@ import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-c
 import { nameWithThing, type StepTarget } from "@/lib/action-objects";
 import { actionSentenceParts } from "@/lib/action-sentence";
 import { missingSettings } from "@/lib/action-settings";
+import { type ConditionField, conditionsSentence } from "@/lib/condition-builder";
 import { type OptionLabels, type SentencePart, sentenceText } from "@/lib/condition-sentence";
 import { conditionValueText } from "@/lib/condition-value";
 import { parseConfigFields } from "@/lib/parse-config-fields";
@@ -42,6 +43,8 @@ export interface StepSummaryContext {
   target?: StepTarget;
   /** The events a wait can listen for, which name its event and its settings. */
   catalogTriggers?: CatalogTriggerRow[];
+  /** What a condition step can check, so its rows read by their labels. */
+  conditionFields?: readonly ConditionField[];
 }
 
 const OPERATOR_PHRASES: Record<ConditionOperator, string> = {
@@ -157,8 +160,11 @@ function baseSummary(step: StepNode, context: StepSummaryContext): BaseSummary {
     case "action":
       return actionSummary(step, context);
     case "condition": {
-      const all = [...step.conditions, ...(step.condition ? [step.condition] : [])];
-      const text = conditionsText(all, step.conditionLogic);
+      // The engine evaluates `condition` before `conditions`; the builder lists them so too.
+      const all = [...(step.condition ? [step.condition] : []), ...step.conditions];
+      const text = context.conditionFields
+        ? conditionsSentence(all, step.conditionLogic, context.conditionFields)
+        : conditionsText(all, step.conditionLogic);
       return { title: text ? `If ${text}` : "If …", details: text ? [] : ["No conditions yet"] };
     }
     case "wait": {

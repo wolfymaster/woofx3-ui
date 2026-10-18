@@ -7,6 +7,7 @@ import { FlowEditor } from "@/components/flow/flow-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
 import { useToast } from "@/hooks/use-toast";
+import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys, unescapeDollarKeys } from "@/lib/dollar-keys";
 import {
@@ -39,6 +40,7 @@ function lastActionReason(steps: StepNode[], id: string): string | null {
 export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionChange }: WorkflowFlowEditorProps) {
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const { toast } = useToast();
+  const conditionSupport = useEngineConditionSupport(instanceId);
   const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
   const workflow = useQuery(api.workflows.getByEngineId, { instanceId, engineWorkflowId });
   const resourceInstances = useQuery(api.moduleResourceInstances.listForInstance, { instanceId });
@@ -129,6 +131,7 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
             resourceLabels={resourceLabels}
             scenes={scenes}
             removeBlockedReason={lastActionReason}
+            conditionSupport={conditionSupport}
           />
         ) : notEditableReason ? (
           <WorkflowNotEditable reason={notEditableReason} />
