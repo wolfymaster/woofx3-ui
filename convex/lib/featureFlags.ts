@@ -21,14 +21,7 @@ export interface FeatureFlagDefinition {
  * written for it, so a flag cannot be turned on by a typo, and a row whose
  * key is gone from this list is ignored.
  */
-export const FEATURE_FLAGS = {
-  "marketplace.engineInstall": {
-    description:
-      "Marketplace installs, install reviews and setup platform reviews run on the engine (installMarketplaceListing and friends) with a buyer token, instead of Convex downloading the archive. Only for engines reporting modules.marketplaceInstall and instances without dev marketplace access; roll out to managed engines first.",
-    owner: "wolfy",
-    removeBy: "2027-03-31",
-  },
-} as const satisfies Record<string, FeatureFlagDefinition>;
+export const FEATURE_FLAGS = {} as const satisfies Record<string, FeatureFlagDefinition>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
 

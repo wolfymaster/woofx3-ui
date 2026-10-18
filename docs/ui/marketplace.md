@@ -161,8 +161,8 @@ acquiring anything.
 
 ### Installing on the engine
 
-Behind flag `marketplace.engineInstall`, the engine does the fetching and the
-acquire instead (`convex/lib/marketplaceEngineInstall.ts`).
+On an engine that supports it, the engine does the fetching and the acquire
+instead (`convex/lib/marketplaceEngineInstall.ts`).
 `marketplaceEngineFor` picks the path per call, and takes the engine only when
 all of these hold, checked cheapest first:
 
@@ -170,12 +170,10 @@ all of these hold, checked cheapest first:
   `/catalog/{id}` anonymously, where dev-tier listings do not exist);
 - `MARKETPLACE_BUYER_SIGNING_KEY` and `_KEY_ID` are set, so a buyer token can
   be minted;
-- the flag is on for the instance (`featureFlags.isOnForInstance`, so percent
-  rollouts bucket by account and `hosting: "managed"` targets managed engines);
 - the engine reports capability `modules.marketplaceInstall`.
 
-Otherwise everything above runs unchanged, with no extra marketplace or engine
-call. On the engine path, the module install (`installMarketplaceListing`),
+Otherwise everything above runs unchanged. An engine that cannot answer for
+its capabilities also gets the Convex path. On the engine path, the module install (`installMarketplaceListing`),
 the bundle install (`installMarketplaceBundle`), the file list of a module not
 yet installed and the setup platform review (`inspectMarketplaceListing`) each
 get a fresh buyer token. The engine calls `acquire` itself with that token,

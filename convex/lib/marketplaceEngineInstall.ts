@@ -31,7 +31,6 @@ import {
   hasEngineCapability,
 } from "./engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
-import type { FeatureFlagKey } from "./featureFlags";
 import type { LocalEndpointSummary, LocalProtocol } from "./localEndpoints";
 import { type MarketplaceAccess, marketplaceAccessFor } from "./marketplaceAccess";
 import { marketplaceGet } from "./marketplaceApi";
@@ -39,7 +38,6 @@ import { BUYER_SIGNING_KEY_ENV, BUYER_SIGNING_KEY_ID_ENV } from "./marketplaceBu
 import { type CatalogListing, isModuleListing, parseCatalogDetail } from "./marketplaceCatalog";
 import { notBoughtMessage } from "./marketplaceEntitlement";
 
-export const ENGINE_INSTALL_FLAG: FeatureFlagKey = "marketplace.engineInstall";
 export const ENGINE_INSTALL_CAPABILITY: EngineCapability = "modules.marketplaceInstall";
 
 export interface EngineCredentials {
@@ -84,7 +82,6 @@ export interface EngineInstallGate {
   access: MarketplaceAccess;
   /** Whether this deployment can mint buyer tokens at all. */
   buyerTokens: boolean;
-  flagOn(): Promise<boolean>;
   capabilities(): Promise<EngineCapabilityReport>;
 }
 
@@ -94,8 +91,8 @@ export interface EngineInstallGate {
  * Dev access keeps the Convex path: the engine reads `/catalog/{id}`
  * anonymously, where dev-tier listings do not exist. A deployment without
  * the buyer signing key keeps it too, because the engine could then only
- * install free listings and would claim nothing for the buyer. The engine is
- * asked for its capabilities last, so an instance outside the rollout costs no
+ * install free listings and would claim nothing for the buyer. Both are
+ * checked before the engine is asked for its capabilities, so they cost no
  * engine round trip.
  *
  * An engine that cannot answer for its capabilities gets the Convex path:
@@ -104,9 +101,6 @@ export interface EngineInstallGate {
  */
 export async function routeThroughEngine(gate: EngineInstallGate): Promise<boolean> {
   if (gate.access === "dev" || !gate.buyerTokens) {
-    return false;
-  }
-  if (!(await gate.flagOn())) {
     return false;
   }
   let report: EngineCapabilityReport;
@@ -141,7 +135,6 @@ export async function marketplaceEngineFor(
   const useEngine = await routeThroughEngine({
     access: marketplaceAccessFor(instance),
     buyerTokens: buyerTokensConfigured(),
-    flagOn: () => ctx.runQuery(internal.featureFlags.isOnForInstance, { key: ENGINE_INSTALL_FLAG, instanceId }),
     capabilities: () => fetchEngineCapabilities(engine),
   });
   return useEngine ? engine : null;
@@ -158,8 +151,7 @@ export async function marketplaceEngineFor(
  *   barkloader computes the key it accepts from the manifest id, the engine
  *   sends `{listingId}:{version}:{sha7}`, and barkloader refuses the archive
  *   with ModuleKeyMismatch. The Convex path sends the same key, so it fails
- *   there too; keeping it there only keeps one behaviour while the flag rolls
- *   out.
+ *   there too; keeping it there means an edition fails one way, not two.
  */
 export function moduleListingStaysOnConvex(listing: CatalogListing): string | null {
   if (!isModuleListing(listing.type)) {
@@ -176,7 +168,7 @@ export function moduleListingStaysOnConvex(listing: CatalogListing): string | nu
  * the catalog describes it, or null for the Convex path.
  *
  * Reads `/catalog/{id}` only once the instance is routed to the engine, so
- * with the flag off nothing more is asked of the marketplace. A listing that
+ * an instance on the Convex path asks nothing more of the marketplace. A listing that
  * cannot be read keeps the Convex path, which then reports the failure the
  * way it always has.
  */
