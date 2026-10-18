@@ -14,26 +14,96 @@ const increment: CatalogActionRow = {
   color: "#888",
   icon: "Plus",
   configFields: [
-    { id: "target", label: "Counter", type: "resource_ref", resourceKind: "counter" },
+    { id: "target", label: "Counter", type: "resource_ref", resourceKind: "counter", required: true },
     { id: "amount", label: "Amount", type: "number" },
   ],
 };
 
 describe("stepSummary", () => {
-  test("an action reads as its catalog name and configured settings", () => {
+  const incrementStep = (parameters: Record<string, unknown>): StepNode => ({
+    type: "action",
+    id: "inc",
+    action: "function",
+    function: "woofx3:function:counter.increment",
+    ref: "woofx3:action:counter.increment",
+    parameters,
+  });
+  const hypeLabels = new Map([["woofx3:counter:hype", "Hype"]]);
+
+  test("an action reads as its sentence, filled from its settings", () => {
+    const summary = stepSummary(incrementStep({ target: "woofx3:counter:hype", amount: 2 }), {
+      action: { ...increment, sentence: "Add {amount} to {target}" },
+      resourceLabels: hypeLabels,
+    });
+    expect(summary.title).toBe("Add 2 to Hype");
+    expect(summary.parts?.map((part) => part.text)).toEqual(["Add ", "2", " to ", "Hype"]);
+    expect(summary.needs).toBeUndefined();
+  });
+
+  test("an action declaring no sentence reads as its name and settings", () => {
+    const summary = stepSummary(incrementStep({ target: "woofx3:counter:hype", amount: 2 }), {
+      action: increment,
+      resourceLabels: hypeLabels,
+    });
+    expect(summary.title).toBe("Increment counter: counter Hype, amount 2");
+    expect(summary.details).toEqual([]);
+  });
+
+  test("an action names the required settings it still needs", () => {
+    const summary = stepSummary(incrementStep({}), { action: { ...increment, sentence: "Add {amount} to {target}" } });
+    expect(summary.title).toBe("Add the default amount to a counter");
+    expect(summary.needs).toEqual(["Counter"]);
+  });
+
+  test("a scene and its widget read by name", () => {
+    const visibility: CatalogActionRow = {
+      ...increment,
+      name: "Set widget visibility",
+      sentence: "Show or hide {placementId} on {sceneId}",
+      configFields: [
+        { id: "sceneId", label: "Scene", type: "text", required: true, source: { kind: "scenes" } },
+        {
+          id: "placementId",
+          label: "Widget",
+          type: "text",
+          required: true,
+          source: { kind: "scenePlacements", sceneField: "sceneId" },
+        },
+      ],
+    };
+    const step: StepNode = {
+      type: "action",
+      id: "v",
+      action: "scene.widget.visibility",
+      parameters: { sceneId: "s1", placementId: "p1" },
+    };
+    const scenes = [{ engineSceneId: "s1", name: "Main overlay", widgets: [{ id: "p1", name: "Camera" }] }];
+    expect(stepSummary(step, { action: visibility, scenes }).title).toBe("Show or hide Camera on Main overlay");
+  });
+
+  test("an action without a sentence reads with the thing it points at in its name, and drops that setting", () => {
     const step: StepNode = {
       type: "action",
       id: "inc",
       action: "function",
-      function: "woofx3:function:counter.increment",
       ref: "woofx3:action:counter.increment",
       parameters: { target: "woofx3:counter:hype", amount: 2 },
     };
-    const summary = stepSummary(step, {
-      action: increment,
-      resourceLabels: new Map([["woofx3:counter:hype", "Hype"]]),
-    });
-    expect(summary).toEqual({ title: "Increment counter", details: ["Counter: Hype", "Amount: 2"], editable: true });
+    const target = { field: { id: "target", label: "Counter", type: "resource_ref" as const }, label: "Hype" };
+    expect(stepSummary(step, { action: increment, target }).title).toBe("Increment Hype counter: amount 2");
+  });
+
+  test("an action's sentence names the thing it points at in that setting's place", () => {
+    const step: StepNode = {
+      type: "action",
+      id: "inc",
+      action: "function",
+      ref: "woofx3:action:counter.increment",
+      parameters: { target: "woofx3:counter:hype", amount: 2 },
+    };
+    const target = { field: { id: "target", label: "Counter", type: "resource_ref" as const }, label: "Hype" };
+    const action = { ...increment, sentence: "Add {amount} to {target}" };
+    expect(stepSummary(step, { action, target }).title).toBe("Add 2 to Hype");
   });
 
   test("an action the catalog lacks reads as its handler", () => {
@@ -66,7 +136,7 @@ describe("stepSummary", () => {
       "Pause for 5s"
     );
     const wait = stepSummary({ type: "wait", id: "w", wait: { type: "event", event: "follow", timeout: "1m" } });
-    expect(wait.title).toBe("Wait until follow");
+    expect(wait.title).toBe("Wait until follow happens");
     expect(wait.details).toEqual(["Gives up after 1m, then fails the workflow"]);
   });
 

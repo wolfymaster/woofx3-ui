@@ -36,12 +36,14 @@ export const ENGINE_CAPABILITY_IDS = [
   "scenes.editorSync",
   "twitch.dashboardTokens",
   "widgets.themes",
+  "workflow.conditionListReferences",
   "workflow.delayWait",
   "workflow.dryRun",
   "workflow.health",
   "workflow.realCancel",
   "workflow.reservedSubjects",
   "workflow.testRunOptions",
+  "workflow.viewerFacts",
 ] as const;
 
 export type EngineCapability = (typeof ENGINE_CAPABILITY_IDS)[number];

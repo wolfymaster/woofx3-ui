@@ -43,7 +43,7 @@ interface StepConfigPanelProps {
 
 /** Editable step id, committed on blur/Enter rather than per keystroke — renaming mid-tree updates the
  * tree, autosaves, and re-selects under the new id, which would be disruptive on every character typed. */
-function StepIdField({
+export function StepIdField({
   id,
   existingStepIds,
   onUpdateActionId,
@@ -163,7 +163,8 @@ export function ActionConfigPanel({
   existingStepIds: ReadonlySet<string>;
   availableVariables: VariableOption[];
   onUpdateActionParameters: (id: string, parameters: Record<string, unknown>) => void;
-  onUpdateActionId: (oldId: string, newId: string) => void;
+  /** Absent where a step has no id of its own to edit, as on a macro button. */
+  onUpdateActionId?: (oldId: string, newId: string) => void;
 }) {
   const catalogRow = resolveCatalogAction(node, catalog);
   const configFields = catalogRow?.configFields;
@@ -179,9 +180,13 @@ export function ActionConfigPanel({
   );
   return (
     <div className="space-y-6">
-      <StepIdField id={node.id} existingStepIds={existingStepIds} onUpdateActionId={onUpdateActionId} />
+      {onUpdateActionId && (
+        <StepIdField id={node.id} existingStepIds={existingStepIds} onUpdateActionId={onUpdateActionId} />
+      )}
       {fields.length === 0 ? (
-        <p className="text-sm text-muted-foreground">This action has no other configurable settings.</p>
+        <p className="text-sm text-muted-foreground">
+          {onUpdateActionId ? "This action has no other configurable settings." : "This action has no settings."}
+        </p>
       ) : (
         <TriggerConfigForm
           fields={fields}
