@@ -3,6 +3,7 @@ import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-c
 import { parseConfigFields, parseDataShapeFields } from "@/lib/parse-config-fields";
 import type { ProjectedAction } from "@/lib/trigger-projection";
 import type { WaitConfig } from "@/lib/wait-config";
+import { payloadFieldLabel, resolveWaitEvent } from "@/lib/wait-event";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
 import type { StepNode, WaitNode, WorkflowTree } from "@/lib/workflow-tree";
@@ -202,12 +203,12 @@ export function triggerPresetVariables(trigger: TriggerPreset): VariableOption[]
   return triggerDataVariables(trigger.emits ?? [], trigger.config?.fields ?? []);
 }
 
-/** The catalog's description of the payload an event carries, when a trigger declares that event. */
+/**
+ * The catalog's description of the payload an event carries, when a trigger declares
+ * that event; a chat command's `chat.command.hug` is described by `chat.command.*`.
+ */
 function eventPayloadFields(event: string, catalogTriggers: CatalogTriggerRow[]): DataShapeField[] {
-  if (event.trim() === "") {
-    return [];
-  }
-  return parseDataShapeFields(resolveCatalogTrigger({ event: event.trim() }, catalogTriggers)?.emits);
+  return resolveWaitEvent(event, catalogTriggers)?.choice.emits ?? [];
 }
 
 /**
@@ -232,10 +233,10 @@ export function waitEventVariables(event: string, catalogTriggers: CatalogTrigge
 
 /**
  * What a finished wait hands later steps, as `${waitId.field}`. Must match GetExports in
- * the engine's workflow/internal/tasks/wait.go. The engine exports `count` and `sum` for
- * every aggregation but only advances the one its strategy uses, so only that one is
- * offered. A delay's exports never vary (always satisfied, never an event), so it offers
- * none.
+ * the engine's workflow/internal/tasks/wait.go: every aggregation keeps both `count` and
+ * `sum`, whichever strategy decides it, and a wait that ends without an event has an
+ * empty `data` whose fields read as empty. A delay's exports never vary (always
+ * satisfied, never an event), so it offers none.
  */
 export function waitExportVariables(step: WaitNode, catalogTriggers: CatalogTriggerRow[]): VariableOption[] {
   const wait: WaitConfig = step.wait;
@@ -245,46 +246,48 @@ export function waitExportVariables(step: WaitNode, catalogTriggers: CatalogTrig
   const group = `Wait (${step.id})`;
   const ref = (path: string) => `\${${step.id}.${path}}`;
   const noEventNote =
-    wait.timeout && wait.onTimeout === "continue" ? " Missing if it timed out before any event matched." : "";
+    wait.timeout && wait.onTimeout === "continue" ? " Empty if it gave up before any event matched." : "";
 
   const options: VariableOption[] = [
     {
       value: ref("satisfied"),
-      label: "satisfied",
+      label: "Whether it happened",
       group,
       type: "boolean",
       description: "Whether the wait got what it was waiting for.",
     },
     {
       value: ref("timedOut"),
-      label: "timedOut",
+      label: "Whether it gave up",
       group,
       type: "boolean",
-      description: "Whether the wait gave up when its timeout ran out.",
+      description: "Whether the wait gave up when its time limit ran out.",
     },
-    { value: ref("events"), label: "events", group, type: "array", description: "Every event that matched." },
+    { value: ref("events"), label: "Every match", group, type: "array", description: "Every event that matched." },
   ];
-  if (wait.type === "aggregation" && wait.aggregation?.strategy === "count") {
-    options.push({
-      value: ref("count"),
-      label: "count",
-      group,
-      type: "number",
-      description: "How many events matched.",
-    });
-  }
-  if (wait.type === "aggregation" && wait.aggregation?.strategy === "sum") {
-    options.push({
-      value: ref("sum"),
-      label: "sum",
-      group,
-      type: "number",
-      description: "The total of the summed field.",
-    });
+  if (wait.aggregation) {
+    options.push(
+      {
+        value: ref("count"),
+        label: "How many happened",
+        group,
+        type: "number",
+        description: "How many events matched.",
+      },
+      {
+        value: ref("sum"),
+        label: "Their total",
+        group,
+        type: "number",
+        description: wait.aggregation.field
+          ? `The total of their ${wait.aggregation.field.replace(/^data\./, "")}.`
+          : "The total of their amount, or of their value.",
+      }
+    );
   }
   options.push({
     value: ref("lastEvent"),
-    label: "lastEvent",
+    label: "The last match",
     group,
     type: "object",
     description: `The last event that matched.${noEventNote}`,
@@ -294,7 +297,7 @@ export function waitExportVariables(step: WaitNode, catalogTriggers: CatalogTrig
   if (payload.length === 0) {
     options.push({
       value: ref("data"),
-      label: "data",
+      label: "Its details",
       group,
       type: "object",
       description: `The last matching event's payload.${noEventNote}`,
@@ -304,7 +307,7 @@ export function waitExportVariables(step: WaitNode, catalogTriggers: CatalogTrig
       const description = field.description ?? "From the last matching event.";
       options.push({
         value: ref(`data.${field.path}`),
-        label: `data.${field.path}`,
+        label: payloadFieldLabel(field.path),
         group,
         type: field.type,
         description: `${description}${noEventNote}`,

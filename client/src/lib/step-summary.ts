@@ -1,7 +1,8 @@
 import type { ConditionConfig, ConditionOperator } from "@woofx3/api";
-import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
+import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { conditionValueText } from "@/lib/condition-value";
 import { describeWaitTimeout, isDelayWait, waitNodeLabel } from "@/lib/wait-config";
+import { waitEventIncomplete, waitSentence } from "@/lib/wait-event";
 import { actionNodeSummary } from "@/lib/workflow-node-summary";
 import { isEditableStep, type StepNode, stepKindLabel } from "@/lib/workflow-tree";
 
@@ -20,6 +21,8 @@ export interface StepSummaryContext {
   action?: CatalogActionRow;
   /** Display names of the streamer's counters, timers and queues, by canonical id. */
   resourceLabels?: Map<string, string>;
+  /** The events a wait can listen for, which name its event and its settings. */
+  catalogTriggers?: CatalogTriggerRow[];
 }
 
 const OPERATOR_PHRASES: Record<ConditionOperator, string> = {
@@ -57,10 +60,6 @@ export function conditionsText(conditions: readonly ConditionConfig[], logic: "a
   return conditions.map(conditionText).join(logic === "or" ? " or " : " and ");
 }
 
-function lowerFirst(text: string): string {
-  return text.charAt(0).toLowerCase() + text.slice(1);
-}
-
 /** The conditions a non-condition step is skipped without, and whether it is turned off. */
 function stepFlags(step: StepNode): string[] {
   if (step.type === "unknown") {
@@ -95,7 +94,13 @@ function baseSummary(step: StepNode, context: StepSummaryContext): Pick<StepSumm
       if (isDelayWait(step.wait)) {
         return { title: `Pause for ${waitNodeLabel(step.wait)}`, details: [] };
       }
-      return { title: `Wait ${lowerFirst(waitNodeLabel(step.wait))}`, details: [describeWaitTimeout(step.wait)] };
+      const details = [describeWaitTimeout(step.wait)];
+      if (step.wait.event.trim() === "") {
+        details.unshift("Pick what to wait for");
+      } else if (waitEventIncomplete(step.wait.event)) {
+        details.unshift("Name which one to wait for");
+      }
+      return { title: waitSentence(step.wait, context.catalogTriggers ?? [], context.resourceLabels), details };
     }
     case "log": {
       const message = step.parameters?.message;

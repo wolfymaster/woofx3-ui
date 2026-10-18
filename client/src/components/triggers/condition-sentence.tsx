@@ -105,7 +105,7 @@ interface ConditionValueEditorProps {
  * PILL_LIMIT, with Any alongside the options. Every other field type reuses the form's
  * control for it, which already knows numbers, ranges and toggles and has its own Any.
  */
-function ConditionValueEditor({ field, value, loaded, onChange, onChosen }: ConditionValueEditorProps) {
+export function ConditionValueEditor({ field, value, loaded, onChange, onChosen }: ConditionValueEditorProps) {
   if (field.type !== "select") {
     return (
       <div className="p-4">

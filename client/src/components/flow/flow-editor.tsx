@@ -329,6 +329,7 @@ export function FlowEditor({
       stepSummary(step, {
         action: step.type === "action" ? resolveCatalogAction(step, catalogActions) : undefined,
         resourceLabels,
+        catalogTriggers,
       }),
     iconOf: (step) => stepIcon(step, catalogActions),
     placeOf: (id) => findStepPlace(tree.steps, id),

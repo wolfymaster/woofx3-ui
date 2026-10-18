@@ -62,10 +62,24 @@ The Steps tab is **`WorkflowFlowEditor`**, which loads the workflow, reads it in
 - A **When** card shows the trigger's name and configured values (`triggerNodeLabel`, `triggerNodeSummary`); **Change** opens the trigger's settings inside the card.
 - Steps are numbered rows: 1, 2, 3 at the top and 2.1, 2.2 inside step 2's branches, running on from Then into Otherwise so every number names one step (`stepNumbers` in `lib/flow-tree.ts`). A condition's **Then** and **Otherwise** branches are indented below it, nested to any depth.
 - **Add a step** at the end of every list, and a point before each step that shows on hover or Tab, turns into the object-first picker (`ObjectActionPicker`) in place. An action is added with the picker's parameters; Pause adds a 5 second delay wait, Wait for something an event wait with no event yet, Check a condition an empty condition (`stepForPick`).
-- A collapsed row reads as `stepSummary` (`lib/step-summary.ts`): an action's catalog name and its configured settings, a condition's conditions as text, a wait's wait label. Log, sub-workflow and unknown steps say they are kept as is on save and have no settings.
-- Clicking a row opens its settings inside the row. `StepInlineEditor` (`components/flow/step-inline-editor.tsx`) is the one place that picks a step kind's editor; today it renders the step config panel's action, condition and wait bodies.
+- A collapsed row reads as `stepSummary` (`lib/step-summary.ts`): an action's catalog name and its configured settings, a condition's conditions as text, a wait as a sentence (see Wait steps below). Log, sub-workflow and unknown steps say they are kept as is on save and have no settings.
+- Clicking a row opens its settings inside the row. `StepInlineEditor` (`components/flow/step-inline-editor.tsx`) is the one place that picks a step kind's editor; today it renders the step config panel's action and condition bodies, and `WaitStepEditor` for waits.
 - Each row moves up or down within its own list and is removed after an inline confirmation. The last action can't be removed.
 - Saving: edits stay local until the open step closes (saved only if it changed; a new step always saves), a remove or move saves at once, and the header's **Save** saves the current draft. A failed save keeps the step open with its edits.
+
+#### Wait steps
+
+`WaitStepEditor` (`components/flow/wait-step-editor.tsx`, model in `lib/wait-event.ts`) edits a wait inside its row. It exposes what the engine's wait task supports (`workflow/internal/tasks/wait.go`) and nothing else:
+
+- **Wait for something to happen** or **Pause for a set time**. A pause is a delay wait: a duration of up to 24 hours, then the next step runs. Switching between the two starts the other shape fresh, since a delay carries none of an event wait's fields.
+- **What to wait for** lists the trigger catalog's events in place, grouped by platform (Twitch) or by what they are about (Chat, Counters, Timers, Queues, from `system.*` taxonomy), with a search. Only bus events are listed: a schedule never reaches a waiting run. An event named with a wildcard (`chat.command.*`) asks which one, because the engine matches a wait's event exactly; until it is named, the row says so and nothing ends the wait.
+- The event's own settings read as its trigger sentence (`sentenceParts`), each setting a slot whose picker opens below the sentence. They are saved as conditions on `${event.data.…}` (`fieldValuesToConditions` with the `event` source).
+- **Also check its details** adds checks on the event's payload fields only (its `emits`): the engine checks a wait's conditions against the waited event alone. Comparisons follow the field's type. A saved condition the rows can't show (another source, a compound expression, a list or range) stays as written and can be removed.
+- Reopening splits the stored conditions back (`splitWaitConditions`): a condition counts as a setting only if the setting would save it back exactly, so nothing is reinterpreted. Conditions are rewritten only when the settings or checks are edited.
+- **How many**: the first one (an event wait), a number of them (`count`), until they add up (`sum` of a numeric payload field) or one big enough (`threshold`: the first event whose field is at least the amount). Read from the presence of `aggregation`, as the engine does. The last two are offered only when the event carries a number. A counting wait can limit itself to the first part of the wait (`timeWindow`).
+- **If it doesn't happen**: an optional time limit (`timeout`, at least a second) that either carries on with the next step or stops the workflow (`onTimeout`). Without one the wait lasts until the event arrives.
+- Later steps are offered the wait's outputs through the variable menu (`waitExportVariables`): whether it happened, whether it gave up, every match, the last match and its payload fields, plus how many happened and their total for a counting wait. Every counting strategy keeps both current, and after a time limit that carries on the payload fields read as empty.
+- Collapsed, a wait reads as a sentence (`waitSentence`): "Wait until Hype changes 3 times", "Wait until cheer happens where message contains “hype”, until the total of their bits reaches 500 within 5m", with its time limit below.
 
 ### Test run
 

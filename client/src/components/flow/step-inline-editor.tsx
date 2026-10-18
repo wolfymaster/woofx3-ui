@@ -1,5 +1,6 @@
 import type { ConditionConfig } from "@woofx3/api";
-import { ActionConfigPanel, ConditionConfigPanel, WaitConfigPanel } from "@/components/workflows/step-config-panel";
+import { WaitStepEditor } from "@/components/flow/wait-step-editor";
+import { ActionConfigPanel, ConditionConfigPanel } from "@/components/workflows/step-config-panel";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import type { WaitConfig } from "@/lib/wait-config";
 import type { StepNode } from "@/lib/workflow-tree";
@@ -56,10 +57,11 @@ export function StepInlineEditor({
       );
     case "wait":
       return (
-        <WaitConfigPanel
-          node={step}
+        <WaitStepEditor
+          key={step.id}
+          step={step}
           catalogTriggers={catalogTriggers}
-          onUpdateWaitConfig={(_id, wait: WaitConfig) => onChange({ ...step, wait })}
+          onChange={(wait: WaitConfig) => onChange({ ...step, wait })}
         />
       );
     default:
