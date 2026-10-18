@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, type MutationCtx } from "./_generated/server";
+import { internalMutation, type MutationCtx, query } from "./_generated/server";
+import { isInstanceMember } from "./lib/teamAccess";
 
 const assetValidator = v.object({
   id: v.string(),
@@ -45,6 +46,33 @@ async function resolveModuleId(
     .first();
   return byNameVersion?._id;
 }
+
+/** Past this many, a module's asset picker stops being a short list to choose from. */
+const MAX_ASSETS_PER_MODULE = 500;
+
+/**
+ * The assets one module declares, for an `asset` field of that module: the
+ * spec scopes such a field to the declaring module's own `assets[]`, so a
+ * field never lists another module's files. Optionally narrowed to `kinds`.
+ */
+export const listForModule = query({
+  args: { moduleId: v.id("moduleRepository"), kinds: v.optional(v.array(v.string())) },
+  handler: async (ctx, { moduleId, kinds }) => {
+    const module = await ctx.db.get(moduleId);
+    if (!module?.instanceId || !(await isInstanceMember(ctx, module.instanceId))) {
+      return [];
+    }
+    const rows = await ctx.db
+      .query("moduleAssets")
+      .withIndex("by_module", (q) => q.eq("moduleId", moduleId))
+      .take(MAX_ASSETS_PER_MODULE);
+    const wanted = kinds && kinds.length > 0 ? new Set(kinds) : null;
+    return rows
+      .filter((row) => wanted === null || (row.kind !== undefined && wanted.has(row.kind)))
+      .map((row) => ({ canonicalId: row.canonicalId, name: row.name, kind: row.kind, description: row.description }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+});
 
 export const upsertFromWebhook = internalMutation({
   args: {

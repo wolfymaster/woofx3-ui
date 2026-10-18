@@ -97,6 +97,11 @@ export interface ActionPreset {
   source: string;
   /** Declared classification axes, e.g. `["system.workflow"]` — see TriggerPreset.taxonomy. */
   taxonomy?: string[];
+  /**
+   * How a configured step running this action reads, e.g. "Add {amount} to {target}", with a
+   * `{fieldId}` placeholder per setting. Declared by the module; see lib/action-sentence.ts.
+   */
+  sentence?: string;
   config?: {
     fields: ConfigField[];
     /** DataShapeField[] naming what this action's function hands back (e.g. {next, previous}).

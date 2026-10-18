@@ -1,6 +1,7 @@
 import type { ConditionConfig } from "@woofx3/api";
+import { ActionSettingsEditor } from "@/components/flow/action-settings-editor";
 import { WaitStepEditor } from "@/components/flow/wait-step-editor";
-import { ActionConfigPanel, ConditionConfigPanel } from "@/components/workflows/step-config-panel";
+import { ConditionConfigPanel } from "@/components/workflows/step-config-panel";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import type { WaitConfig } from "@/lib/wait-config";
 import type { StepNode } from "@/lib/workflow-tree";
@@ -15,7 +16,8 @@ export interface StepInlineEditorProps {
   /** Values of the trigger and of earlier steps this step can read. */
   availableVariables: VariableOption[];
   onChange: (step: StepNode) => void;
-  onRename: (oldId: string, newId: string) => void;
+  /** Absent where steps have no ids the streamer edits, as on a macro button. */
+  onRename?: (oldId: string, newId: string) => void;
 }
 
 /**
@@ -38,13 +40,13 @@ export function StepInlineEditor({
   switch (step.type) {
     case "action":
       return (
-        <ActionConfigPanel
-          node={step}
-          catalog={catalogActions}
+        <ActionSettingsEditor
+          step={step}
+          catalogActions={catalogActions}
           existingStepIds={existingStepIds}
           availableVariables={availableVariables}
-          onUpdateActionParameters={(_id, parameters: Record<string, unknown>) => onChange({ ...step, parameters })}
-          onUpdateActionId={onRename}
+          onChange={onChange}
+          onRename={onRename}
         />
       );
     case "condition":

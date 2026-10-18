@@ -41,9 +41,11 @@ Curated sets of workflows and chat commands (raid welcome, follower thanks, sub 
 - A full-width screen with a back link, wrapping **`BasicWorkflowEditor`**: a step-based wizard driven by presets (`client/src/lib/workflow-presets.ts`) and `useWorkflowCatalog` for trigger/action definitions.
 - On save it navigates to the new workflow's editor.
 
-## Action picker
+## Action groups
 
-`components/workflows/action-picker-dialog.tsx` is where an action is chosen, from the workflow builder and from an alert's trigger card. `lib/action-menu.ts` decides where each action is listed, from its first `taxonomy` entry: the first segment is the section in the left rail, the second the heading inside it. Sections are by purpose, not by the module that ships the action: the bundled actions file as `workflow` (Function, Print), `chat`, `overlay.alerts` / `overlay.scenes` (**Overlays**), and `tools.counter` / `tools.timer` / `tools.queue` (**Stream tools › Counters**, etc.); a platform integration's `platform.obs` lists under **Platforms › OBS**. **Workflow** leads, then sections alphabetically. An older engine's `system` family is labelled **Built-in** and also leads. An action with no taxonomy, or a malformed first entry, is listed under its module as a section of its own, so an engine that sends no action taxonomy shows one section per module. The step tiles on alert triggers and command steps, and the basic workflow wizard, use the same groups and headings (`actionGroupHeading`). Search matches name, then description, then the section, heading or module, across every section; the rail counts each section's matches. The manifest side is documented in the engine's `docs/barkloader/modules.md` (Taxonomy).
+`lib/action-menu.ts` decides where each action is listed in the step tiles on alert triggers and command steps, and in the basic workflow wizard, from its first `taxonomy` entry: the first segment is the section, the second the heading inside it (`actionGroupHeading`). Sections are by purpose, not by the module that ships the action: the bundled actions file as `workflow` (Function, Print), `chat`, `overlay.alerts` / `overlay.scenes` (**Overlays**), and `tools.counter` / `tools.timer` / `tools.queue` (**Stream tools › Counters**, etc.); a platform integration's `platform.obs` lists under **Platforms › OBS**. **Workflow** leads, then sections alphabetically. An older engine's `system` family is labelled **Built-in** and also leads. An action with no taxonomy, or a malformed first entry, is listed under its module as a section of its own, so an engine that sends no action taxonomy shows one section per module. The manifest side is documented in the engine's `docs/barkloader/modules.md` (Taxonomy).
+
+The flow editor and the macro pad choose actions with the object-first picker instead (`ObjectActionPicker`, below).
 
 ## Editor (`/stream/workflows/:id`)
 
@@ -62,8 +64,11 @@ The Steps tab is **`WorkflowFlowEditor`**, which loads the workflow, reads it in
 - A **When** card shows the trigger's name and configured values (`triggerNodeLabel`, `triggerNodeSummary`); **Change** opens the trigger's settings inside the card.
 - Steps are numbered rows: 1, 2, 3 at the top and 2.1, 2.2 inside step 2's branches, running on from Then into Otherwise so every number names one step (`stepNumbers` in `lib/flow-tree.ts`). A condition's **Then** and **Otherwise** branches are indented below it, nested to any depth.
 - **Add a step** at the end of every list, and a point before each step that shows on hover or Tab, turns into the object-first picker (`ObjectActionPicker`) in place. An action is added with the picker's parameters; Pause adds a 5 second delay wait, Wait for something an event wait with no event yet, Check a condition an empty condition (`stepForPick`).
-- A collapsed row reads as `stepSummary` (`lib/step-summary.ts`): an action's catalog name and its configured settings, a condition's conditions as text, a wait as a sentence (see Wait steps below). Log, sub-workflow and unknown steps say they are kept as is on save and have no settings.
-- Clicking a row opens its settings inside the row. `StepInlineEditor` (`components/flow/step-inline-editor.tsx`) is the one place that picks a step kind's editor; today it renders the step config panel's action and condition bodies, and `WaitStepEditor` for waits.
+  - A new action step starts with only the defaults its settings declare and the thing chosen in the picker (`initialParameters`). A setting with no declared default starts empty, because empty means something: Increment counter with no amount adds the counter's own step.
+  - The thing chosen fills the action's first `resource_ref` of the object's kind, or the action's only `resource_ref` when it names another kind (a module's own counter-like kind filed under Counters), or the first `scenes` / `alertWidgets` source (`findTargetField`).
+  - Once a thing is chosen, only the verbs that can take it are listed, plus those that act on no thing at all (`verbsFor`). Two actions of one object with the same name each end with their module's display name, as "Reset counter (Tally)" (`verbLabel`).
+- A collapsed row reads as `stepSummary` (`lib/step-summary.ts`): an action's sentence (below), a condition's conditions as text, a wait as a sentence (see Wait steps below). An action still missing a required setting shows a **Needs:** badge naming those settings (`missingSettings`). Given the thing an action points at (`target`, as the macro pad's action buttons pass it), the sentence names it in that setting's place; an action without a sentence reads the way the picker words it, "Increment Hype counter", without that setting. Log, sub-workflow and unknown steps say they are kept as is on save and have no settings.
+- Clicking a row opens its settings inside the row. `StepInlineEditor` (`components/flow/step-inline-editor.tsx`) is the one place that picks a step kind's editor. Actions get `ActionSettingsEditor` (below), waits `WaitStepEditor`; conditions render the step config panel's condition body.
 - Each row moves up or down within its own list and is removed after an inline confirmation. The last action can't be removed.
 - Saving: edits stay local until the open step closes (saved only if it changed; a new step always saves), a remove or move saves at once, and the header's **Save** saves the current draft. A failed save keeps the step open with its edits.
 
@@ -80,6 +85,34 @@ The Steps tab is **`WorkflowFlowEditor`**, which loads the workflow, reads it in
 - **If it doesn't happen**: an optional time limit (`timeout`, at least a second) that either carries on with the next step or stops the workflow (`onTimeout`). Without one the wait lasts until the event arrives.
 - Later steps are offered the wait's outputs through the variable menu (`waitExportVariables`): whether it happened, whether it gave up, every match, the last match and its payload fields, plus how many happened and their total for a counting wait. Every counting strategy keeps both current, and after a time limit that carries on the payload fields read as empty.
 - Collapsed, a wait reads as a sentence (`waitSentence`): "Wait until Hype changes 3 times", "Wait until cheer happens where message contains “hype”, until the total of their bits reaches 500 within 5m", with its time limit below.
+
+### Action sentences
+
+A collapsed action reads as one line, built by `actionSentenceParts` (`lib/action-sentence.ts`). The module declares the template on the action as `sentence` ("Add {amount} to {target}"); the engine sync and the `module.action.registered` webhook carry it into `actionDefinitions.sentence`, and the workflow catalog hands it on with the action. It shares the trigger sentence's grammar and filling (`fillSentence`, `displayValue` in `lib/condition-sentence.ts`). Each `{fieldId}` shows:
+
+- the configured value: an option's label, a counter, scene or placed widget by its name (`actionOptionLabels`), chat text in quotes with its variables as `{name}`
+- a switch as its label, or "not" and its label ("visible", "not visible")
+- a value taken from earlier by its short name, `{next}` for `${increment.next}`
+- while a required setting is empty, the field's `missingText`, or "a counter", marked in amber
+- while an optional setting is empty, "the default amount": the action then uses its own default, so the sentence says that rather than leaving a gap
+
+An action declaring no sentence reads as its name and the settings it has: "Increment counter: counter Deaths, amount 5". Empty optional settings are left out of that form.
+
+### Action settings
+
+`ActionSettingsEditor` (`components/flow/action-settings-editor.tsx`) draws each setting with the same renderer every other form uses: `ConfigurationForm` one field at a time, with `configFieldRenderers` from `trigger-config-form.tsx`. Around each one it adds:
+
+- the field's `description` below it, and its `hint` and `examplePayload` behind **More about this setting**, shown in place rather than in a popover
+- a message while a required setting is empty, or a number or range is outside its `min` / `max` (`settingProblem` in `lib/action-settings.ts`); the step can still be saved, and its row shows what it needs
+- **Use a value from earlier** on every setting that holds one value: the trigger's fields, earlier steps' outputs and earlier waits' outputs (`computeAvailableVariables`), narrowed to numbers for a number and yes/no values for a switch (`variablesForSetting`). Text takes them written in (**Insert a value from earlier**, or type `{`); any other setting swaps its control for a choice of values. Lists, layouts, buttons and themes hold no single value and take none; a layout's widgets take them in their own settings.
+
+A cleared setting is removed from the step's parameters rather than stored empty (`withSetting`), so the action sees it unset. Field types the step renders its own way:
+
+- `asset` lists the files the action's own module ships, narrowed to the field's `kinds` (`moduleAssets.listForModule`), and stores the asset's canonical id. Everywhere else an `asset` still opens the streamer's asset library.
+- `layout` reads `surface`: an `alert` layout opens the alert editor; a surface nothing edits per step is shown and kept as it is.
+- `button` fires its `action` (`ConfigButtonField`, shared by every form): an `internal` request through `fieldOptions.dispatch`, addressed by the field's declaration (`withFieldOptionsOwner` gives the action its reference), or an `integration`'s account connection through `moduleOAuth.start`.
+
+The step's id stays editable below the settings, as later steps refer to its outputs by it.
 
 ### Test run
 
