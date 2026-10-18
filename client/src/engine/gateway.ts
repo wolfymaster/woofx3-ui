@@ -41,8 +41,10 @@ import type {
   NewLibraryAlert,
   NewModuleResourceInstance,
   NewScene,
+  NotRunningWorkflow,
   ObsStatus,
   Paginated,
+  RecordedWorkflowRun,
   Resource,
   ResourceChanges,
   ResourceKindDefinition,
@@ -64,7 +66,11 @@ import type {
   Workflow,
   WorkflowCancelResult,
   WorkflowCatalog,
+  WorkflowHealthResyncResult,
+  WorkflowHealthResyncTrigger,
   WorkflowReplay,
+  WorkflowRun,
+  WorkflowRunDetail,
   WorkflowTrigger,
   WorkflowTriggerResult,
 } from "@/engine/types";
@@ -401,6 +407,25 @@ export interface WorkflowsGateway {
   useReplayRequest(): (instanceId: InstanceId, replay: WorkflowReplay) => Promise<{ triggerId: string }>;
   /** Stops a recorded run. */
   useCancelRunRequest(): (instanceId: InstanceId, engineRunId: string) => Promise<WorkflowCancelResult>;
+  /**
+   * A recorded run with its steps, kept current by the run webhooks. Skipped
+   * (always loading) for a null id or run id.
+   */
+  useRun(instanceId: InstanceId | null, engineRunId: string | null): Live<WorkflowRunDetail>;
+  /** A workflow's recorded runs, newest first, at most `limit`. */
+  useRuns(instanceId: InstanceId, engineWorkflowId: string, limit: number): Live<RecordedWorkflowRun[]>;
+  /** Subscribes to runs as the engine pushes them; returns the unsubscribe. */
+  useRunsSubscription(): (instanceId: string, onRun: (run: WorkflowRun) => void) => () => void;
+  /**
+   * Enabled workflows the engine reported it could not set up. Empty when the
+   * caller cannot see the instance; skipped (always loading) for a null id.
+   */
+  useNotRunning(instanceId: InstanceId | null): Live<NotRunningWorkflow[]>;
+  /** Asks the engine for current workflow health. Throttled per instance; never rejects for an engine problem. */
+  useHealthResyncRequest(): (
+    instanceId: InstanceId,
+    trigger: WorkflowHealthResyncTrigger
+  ) => Promise<WorkflowHealthResyncResult>;
 }
 
 /**

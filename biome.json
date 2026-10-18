@@ -102,11 +102,7 @@
         "client/src/hooks/use-sync-engine-transport.ts",
         "client/src/components/dashboard/widgets/ad-breaks.tsx",
         "client/src/components/dashboard/widgets/stream-stats.tsx",
-        "client/src/components/dashboard/widgets/workflow-runs.tsx",
-        "client/src/hooks/use-engine-upgrading.ts",
-        "client/src/hooks/use-workflow-health.ts",
-        "client/src/lib/workflow-run-list.test.ts",
-        "client/src/lib/workflow-run-list.ts"
+        "client/src/hooks/use-engine-upgrading.ts"
       ],
       "linter": {
         "rules": {
