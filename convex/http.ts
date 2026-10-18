@@ -10,6 +10,7 @@ import { escapeDollarKeys } from "./lib/dollarKeys";
 import { ALERT_PLAYING_EVENT_TYPE, readAlertSnapshot } from "./lib/engineAlertLifecycle";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
 import { RELAY_CREDENTIAL_REQUESTED_EVENT_TYPE } from "./lib/engineRelay";
+import { engineActivityPatch } from "./lib/engineSync/activity";
 import { WORKFLOW_RUN_CANCELLED_EVENT_TYPE } from "./lib/engineTestRun";
 import { parseInboundWebhookPath } from "./lib/inboundWebhookPath";
 import {
@@ -423,6 +424,22 @@ http.route({
     if (!instance) {
       logger.warn("webhook: unauthorized - no instance found for provided secret");
       return corsJson({ error: "Unauthorized" }, 401);
+    }
+
+    // Any authenticated callback, a request included, shows the engine is
+    // running and may hold changes a scheduled sync would mirror. Checked here
+    // first so a busy engine's callbacks do not each run a mutation.
+    if (engineActivityPatch(instance.lastEngineActivityAt, Date.now())) {
+      try {
+        await ctx.runMutation(internal.instances.recordEngineActivity, { instanceId: instance._id });
+      } catch (error) {
+        // Safe to carry on: a missed write only delays scheduled syncs until a
+        // later callback records the activity, and the event must not be lost.
+        logger.warn("webhook: could not record engine activity", {
+          instanceId: instance._id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     // Envelope shape is @woofx3/api/webhooks CallbackEnvelope; `data` is the
