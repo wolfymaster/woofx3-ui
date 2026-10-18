@@ -15,7 +15,8 @@ export interface StepInlineEditorProps {
   /** Values of the trigger and of earlier steps this step can read. */
   availableVariables: VariableOption[];
   onChange: (step: StepNode) => void;
-  onRename: (oldId: string, newId: string) => void;
+  /** Absent where steps have no ids the streamer edits, as on a macro button. */
+  onRename?: (oldId: string, newId: string) => void;
 }
 
 /**

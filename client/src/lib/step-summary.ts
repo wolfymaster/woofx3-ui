@@ -1,6 +1,7 @@
 import type { ConditionConfig, ConditionOperator } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
+import { nameWithThing, type StepTarget } from "@/lib/action-objects";
 import { actionSentenceParts } from "@/lib/action-sentence";
 import { missingSettings } from "@/lib/action-settings";
 import { type OptionLabels, type SentencePart, sentenceText } from "@/lib/condition-sentence";
@@ -31,6 +32,13 @@ export interface StepSummaryContext {
   resourceLabels?: Map<string, string>;
   /** The streamer's scenes, for the names of a scene and the widgets placed on it. */
   scenes?: readonly SceneRow[];
+  /**
+   * The thing an action step points at (see stepTarget), for callers that know its
+   * name but not every resource label. The sentence names it in that setting's place;
+   * an action without a sentence reads the way the picker words it, "Increment Hype
+   * counter", and leaves that setting out.
+   */
+  target?: StepTarget;
 }
 
 const OPERATOR_PHRASES: Record<ConditionOperator, string> = {
@@ -125,12 +133,22 @@ function actionSummary(step: ActionNode, context: StepSummaryContext): BaseSumma
     return { title: step.action ?? "Action", details: [] };
   }
   const fields = parseConfigFields(action.configFields);
-  const parts = actionSentenceParts(
-    action,
-    fields,
-    step.parameters,
-    actionOptionLabels(fields, step.parameters, context)
-  );
+  const labels = new Map(actionOptionLabels(fields, step.parameters, context));
+  const target = context.target;
+  const value = target ? step.parameters[target.field.id] : undefined;
+  if (target && typeof value === "string") {
+    labels.set(target.field.id, new Map([[value, target.label]]));
+  }
+  const declaresSentence = action.sentence !== undefined && action.sentence.trim() !== "";
+  const parts =
+    target && !declaresSentence
+      ? actionSentenceParts(
+          { name: nameWithThing(action.name, target.field, target.label) },
+          fields.filter((field) => field.id !== target.field.id),
+          step.parameters,
+          labels
+        )
+      : actionSentenceParts(action, fields, step.parameters, labels);
   const needs = missingSettings(fields, step.parameters).map((field) => field.label);
   return { title: sentenceText(parts), parts, details: [], needs };
 }

@@ -81,6 +81,31 @@ describe("stepSummary", () => {
     expect(stepSummary(step, { action: visibility, scenes }).title).toBe("Show or hide Camera on Main overlay");
   });
 
+  test("an action without a sentence reads with the thing it points at in its name, and drops that setting", () => {
+    const step: StepNode = {
+      type: "action",
+      id: "inc",
+      action: "function",
+      ref: "woofx3:action:counter.increment",
+      parameters: { target: "woofx3:counter:hype", amount: 2 },
+    };
+    const target = { field: { id: "target", label: "Counter", type: "resource_ref" as const }, label: "Hype" };
+    expect(stepSummary(step, { action: increment, target }).title).toBe("Increment Hype counter: amount 2");
+  });
+
+  test("an action's sentence names the thing it points at in that setting's place", () => {
+    const step: StepNode = {
+      type: "action",
+      id: "inc",
+      action: "function",
+      ref: "woofx3:action:counter.increment",
+      parameters: { target: "woofx3:counter:hype", amount: 2 },
+    };
+    const target = { field: { id: "target", label: "Counter", type: "resource_ref" as const }, label: "Hype" };
+    const action = { ...increment, sentence: "Add {amount} to {target}" };
+    expect(stepSummary(step, { action, target }).title).toBe("Add 2 to Hype");
+  });
+
   test("an action the catalog lacks reads as its handler", () => {
     const step: StepNode = { type: "action", id: "x", action: "alert", parameters: {} };
     expect(stepSummary(step).title).toBe("alert");

@@ -17,6 +17,7 @@ import {
   type ResourceInstanceRow,
   resourceObjectInstances,
   searchActionObjects,
+  stepTarget,
   verbLabel,
   verbsFor,
   whichPrompt,
@@ -615,5 +616,38 @@ describe("searchActionObjects", () => {
 
   test("returns nothing for a blank query", () => {
     expect(labels("   ")).toEqual([]);
+  });
+});
+
+describe("stepTarget", () => {
+  const objects = actionObjects(CATALOG);
+  const loaded = new Map<string, readonly ObjectInstance[] | undefined>([
+    ["counters", [DEATHS, HYPE]],
+    ["queues", [SONGS]],
+  ]);
+
+  test("finds the thing a configured action points at", () => {
+    const { target, ready } = stepTarget(objects, loaded, INCREMENT, { target: HYPE.value, amount: 1 });
+    expect(ready).toBe(true);
+    expect(target?.label).toBe("Hype");
+    expect(target?.field.id).toBe("target");
+  });
+
+  test("is not ready while the object's things load", () => {
+    const loading = new Map<string, readonly ObjectInstance[] | undefined>([["counters", undefined]]);
+    expect(stepTarget(objects, loading, INCREMENT, { target: HYPE.value })).toEqual({ ready: false });
+  });
+
+  test("points at nothing for an unset target, a thing that is gone, or an action without one", () => {
+    expect(stepTarget(objects, loaded, INCREMENT, { target: "" })).toEqual({ ready: true });
+    expect(stepTarget(objects, loaded, INCREMENT, { target: "woofx3:counter:gone" })).toEqual({ ready: true });
+    expect(stepTarget(objects, loaded, CHAT_REPLY, { message: "hi" })).toEqual({ ready: true });
+  });
+
+  test("ignores a thing of a kind the action cannot take", () => {
+    const tally = actionObjects([...CATALOG, BUMP_TALLY]);
+    const both = new Map<string, readonly ObjectInstance[] | undefined>([["counters", [HYPE, TALLY_HYPE]]]);
+    expect(stepTarget(tally, both, BUMP_TALLY, { target: HYPE.value })).toEqual({ ready: true });
+    expect(stepTarget(tally, both, BUMP_TALLY, { target: TALLY_HYPE.value }).target?.label).toBe("Hype (tally)");
   });
 });
