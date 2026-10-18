@@ -847,6 +847,23 @@ export function ConditionStepEditor({
   onChange: (step: ConditionNode) => void;
 }) {
   const rows = step.condition ? [step.condition, ...step.conditions] : step.conditions;
+  // A typed row can reference the viewer's facts too, which computeAvailableVariables
+  // does not list since they come from the engine rather than the workflow.
+  const typedVariables = useMemo(
+    () => [
+      ...availableVariables,
+      ...sources.fields
+        .filter((field) => field.group === VIEWER_GROUP)
+        .map((field) => ({
+          value: field.ref,
+          label: field.label,
+          group: VIEWER_GROUP,
+          type: field.kind === "number" ? "number" : "string",
+          ...(field.description ? { description: field.description } : {}),
+        })),
+    ],
+    [availableVariables, sources.fields]
+  );
   return (
     <ConditionBuilder
       conditions={rows}
@@ -861,7 +878,7 @@ export function ConditionStepEditor({
       namesViewer={sources.namesViewer}
       viewerFacts={sources.support.viewerFacts}
       listReferences={sources.support.listReferences}
-      availableVariables={availableVariables}
+      availableVariables={typedVariables}
     />
   );
 }
