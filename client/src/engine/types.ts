@@ -18,6 +18,7 @@ export type {
   ResourceDto as Resource,
 } from "@convex/resources";
 export type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
+export type { NotRunningWorkflow } from "@convex/workflowHealth";
 export type {
   EngineInfo,
   EventLogPage,
@@ -29,6 +30,7 @@ export type {
   StreamEventFrame,
   UploadGrant,
 } from "@woofx3/api";
+export type { WorkflowRun } from "@/lib/transport";
 
 /** The Convex `_id` of the instance record, which is the instance's only identity. */
 export type InstanceId = Id<"instances">;
@@ -227,6 +229,17 @@ export type WorkflowReplay = Omit<FunctionArgs<typeof api.workflowActions.replay
 
 /** How stopping a run went: the engine's outcome, or `marked` when an older engine only marked the row. */
 export type WorkflowCancelResult = FunctionReturnType<typeof api.workflowActions.cancelRun>;
+
+/** A recorded run with its steps and the alerts it played; null when it is not recorded or not the caller's. */
+export type WorkflowRunDetail = FunctionReturnType<typeof api.workflowRuns.runWithSteps>;
+
+/** One recorded run of a workflow, as its run history lists it. */
+export type RecordedWorkflowRun = FunctionReturnType<typeof api.workflowRuns.listForWorkflow>[number];
+
+/** What prompted a workflow health resync; the server throttles repeats per instance. */
+export type WorkflowHealthResyncTrigger = FunctionArgs<typeof api.workflowHealth.resync>["trigger"];
+
+export type WorkflowHealthResyncResult = FunctionReturnType<typeof api.workflowHealth.resync>;
 
 /** The instance's stream state, kept current by engine callbacks and polls. */
 export type InstanceLiveState = Doc<"instanceLiveState">;

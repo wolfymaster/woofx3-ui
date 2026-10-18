@@ -56,3 +56,27 @@ export function useReplayWorkflowRunRequest() {
 export function useCancelWorkflowRunRequest() {
   return useEngineGateway().workflows.useCancelRunRequest();
 }
+
+/** A recorded run with its steps; a null id or run id skips the read. */
+export function useWorkflowRun(instanceId: InstanceId | null, engineRunId: string | null) {
+  return useEngineGateway().workflows.useRun(instanceId, engineRunId);
+}
+
+/** A workflow's recorded runs, newest first. */
+export function useWorkflowRuns(instanceId: InstanceId, engineWorkflowId: string, limit: number) {
+  return useEngineGateway().workflows.useRuns(instanceId, engineWorkflowId, limit);
+}
+
+/** Subscribes to runs as the engine pushes them; the returned function unsubscribes. */
+export function useWorkflowRunsSubscription() {
+  return useEngineGateway().workflows.useRunsSubscription();
+}
+
+/** Enabled workflows the engine could not set up; a null id skips the read. */
+export function useNotRunningWorkflowList(instanceId: InstanceId | null) {
+  return useEngineGateway().workflows.useNotRunning(instanceId);
+}
+
+export function useWorkflowHealthResyncRequest() {
+  return useEngineGateway().workflows.useHealthResyncRequest();
+}
