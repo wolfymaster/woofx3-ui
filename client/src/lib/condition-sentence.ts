@@ -21,10 +21,10 @@ export type SentencePart =
  * The config field properties a sentence reads. `anyText` and `missingText` are the
  * module author's wording; without them the field's label supplies generic words.
  */
-export type SentenceField = Pick<ConfigField, "id" | "label" | "type" | "unit" | "operator" | "options"> & {
-  anyText?: string;
-  missingText?: string;
-};
+export type SentenceField = Pick<
+  ConfigField,
+  "id" | "label" | "type" | "unit" | "operator" | "options" | "anyText" | "missingText"
+>;
 
 /** Labels for options that load at runtime (a reward list), by field id then value. */
 export type OptionLabels = ReadonlyMap<string, ReadonlyMap<string, string>>;
