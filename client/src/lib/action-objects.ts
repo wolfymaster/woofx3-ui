@@ -341,11 +341,14 @@ export function initialParameters(action: ObjectAction, instance?: ObjectInstanc
  * action cannot take, the step is the action's name as it is.
  */
 export function verbLabel(action: ObjectAction, instance?: ObjectInstance): string {
-  const name = action.preset.name;
-  const field = action.targetField;
-  if (!instance || !field || !acceptsInstance(action, instance)) {
-    return name;
+  if (!instance || !action.targetField || !acceptsInstance(action, instance)) {
+    return action.preset.name;
   }
+  return nameWithThing(action.preset.name, action.targetField, instance.label);
+}
+
+/** An action's name with one of the streamer's things in it, worded as verbLabel describes. */
+export function nameWithThing(name: string, field: ConfigField, thing: string): string {
   const nouns = new Set([field.label.trim().toLowerCase()]);
   if (field.type === "resource_ref" && field.resourceKind) {
     nouns.add(bareKind(field.resourceKind).toLowerCase());
@@ -358,10 +361,48 @@ export function verbLabel(action: ObjectAction, instance?: ObjectInstance): stri
     const match = pattern.exec(name);
     if (match) {
       const start = match.index;
-      return `${name.slice(0, start)}${instance.label} ${name.slice(start)}`;
+      return `${name.slice(0, start)}${thing} ${name.slice(start)}`;
     }
   }
-  return `${name} on ${instance.label}`;
+  return `${name} on ${thing}`;
+}
+
+/** The thing a configured step points at: the setting that holds it and the thing's name. */
+export interface StepTarget {
+  field: ConfigField;
+  label: string;
+}
+
+/**
+ * The thing an already configured action points at, read the way the picker
+ * offers it: `preset` under its object, and the instance whose value its target
+ * setting holds. `ready` is false while that object's things are still loading,
+ * so "points at nothing" can be told from "not known yet".
+ */
+export function stepTarget(
+  objects: readonly ActionObject[],
+  instances: ObjectInstancesByKey,
+  preset: Pick<ActionPreset, "id">,
+  parameters: Readonly<Record<string, unknown>>
+): { target?: StepTarget; ready: boolean } {
+  for (const object of objects) {
+    const action = object.actions.find((candidate) => candidate.preset.id === preset.id);
+    if (!action) {
+      continue;
+    }
+    const field = action.targetField;
+    const value = field ? parameters[field.id] : undefined;
+    if (!field || !object.target || typeof value !== "string" || value === "") {
+      return { ready: true };
+    }
+    const list = instances.get(object.key);
+    if (list === undefined) {
+      return { ready: false };
+    }
+    const instance = list.find((candidate) => candidate.value === value && acceptsInstance(action, candidate));
+    return instance ? { target: { field, label: instance.label }, ready: true } : { ready: true };
+  }
+  return { ready: true };
 }
 
 /**

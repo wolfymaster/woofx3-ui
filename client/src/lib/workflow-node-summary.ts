@@ -102,7 +102,8 @@ export function triggerNodeSummary(
 export function actionNodeSummary(
   node: ActionNode,
   catalog: CatalogActionRow[],
-  resourceLabels?: Map<string, string>
+  resourceLabels?: Map<string, string>,
+  omitFieldIds?: ReadonlySet<string>
 ): string[] {
   const catalogAction = resolveCatalogAction(node, catalog);
   const fields = parseConfigFields(catalogAction?.configFields);
@@ -111,6 +112,9 @@ export function actionNodeSummary(
   }
   const parts: string[] = [];
   for (const field of fields) {
+    if (omitFieldIds?.has(field.id)) {
+      continue;
+    }
     const formatted = formatFieldSummaryValue(field, node.parameters[field.id], resourceLabels);
     if (formatted) {
       parts.push(`${field.label}: ${formatted}`);

@@ -36,6 +36,22 @@ describe("stepSummary", () => {
     expect(summary).toEqual({ title: "Increment counter", details: ["Counter: Hype", "Amount: 2"], editable: true });
   });
 
+  test("an action reads with the thing it points at in its title, and drops that setting", () => {
+    const step: StepNode = {
+      type: "action",
+      id: "inc",
+      action: "function",
+      ref: "woofx3:action:counter.increment",
+      parameters: { target: "woofx3:counter:hype", amount: 2 },
+    };
+    const target = { field: { id: "target", label: "Counter", type: "resource_ref" as const }, label: "Hype" };
+    expect(stepSummary(step, { action: increment, target })).toEqual({
+      title: "Increment Hype counter",
+      details: ["Amount: 2"],
+      editable: true,
+    });
+  });
+
   test("an action the catalog lacks reads as its handler", () => {
     const step: StepNode = { type: "action", id: "x", action: "alert", parameters: {} };
     expect(stepSummary(step).title).toBe("alert");

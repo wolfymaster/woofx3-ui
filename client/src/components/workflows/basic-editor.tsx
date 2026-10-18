@@ -256,7 +256,7 @@ function ActionCardGroups({ actions, selectedId, onSelect, headingClassName }: A
     <div className="space-y-4">
       {groups.map((group, index) => (
         <div key={group.groupKey}>
-          <h4 className={headingClassName}>{actionGroupHeading(group, groups[index - 1], true)}</h4>
+          <h4 className={headingClassName}>{actionGroupHeading(group, groups[index - 1])}</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {group.actions.map((action) => (
               <PresetCard
