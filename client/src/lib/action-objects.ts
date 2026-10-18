@@ -3,7 +3,7 @@ import { Braces, Clock, Hourglass, type LucideIcon, MessageSquare, Puzzle, Radio
 import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
 import { taxonomyLabel } from "@/lib/alert-groups";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
-import { type ActionPreset, type ConfigField, getDefaultConfigValues } from "@/lib/workflow-presets";
+import type { ActionPreset, ConfigField } from "@/lib/workflow-presets";
 
 type SourceTarget = { type: "source"; source: "scenes" | "alertWidgets" };
 
@@ -45,6 +45,11 @@ export interface ObjectAction {
   preset: ActionPreset;
   /** Absent when the action has no setting for the object's things. */
   targetField?: ConfigField;
+  /**
+   * The providing module's display name, present when another action of the same object
+   * has the same name, so the two can be told apart.
+   */
+  qualifier?: string;
 }
 
 /** What the picker offers first: something that can change, and the actions that change it. */
@@ -214,9 +219,25 @@ export function actionObjects(presets: readonly ActionPreset[]): ActionObject[] 
         ...(definition?.noun ? { noun: definition.noun } : {}),
         ...(definition?.instancesLead ? { instancesLead: definition.instancesLead } : {}),
         ...(definition?.noInstances ? { noInstances: definition.noInstances } : {}),
-        actions: actions.sort((a, b) => a.preset.name.localeCompare(b.preset.name)),
+        actions: qualifySharedNames(actions).sort(
+          (a, b) => a.preset.name.localeCompare(b.preset.name) || (a.qualifier ?? "").localeCompare(b.qualifier ?? "")
+        ),
       };
     });
+}
+
+/** Each action whose name another action of the object shares, given its module's name. */
+function qualifySharedNames(actions: readonly ObjectAction[]): ObjectAction[] {
+  const counts = new Map<string, number>();
+  for (const action of actions) {
+    const name = action.preset.name.trim().toLowerCase();
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return actions.map((action) =>
+    (counts.get(action.preset.name.trim().toLowerCase()) ?? 0) > 1
+      ? { ...action, qualifier: action.preset.source }
+      : action
+  );
 }
 
 /**
@@ -243,17 +264,22 @@ function objectTarget(target: DefinitionTarget, actions: readonly ObjectAction[]
  * kind of the object's name (`counter`, from any module, or bare as a module
  * installed before kinds were qualified names it), or the first field whose
  * options come from the target's source.
+ *
+ * An action filed under a resource object whose one `resource_ref` names a kind
+ * of another name (a module's `tally` filed under Counters) acts on that kind:
+ * the module put it there, and the setting can hold nothing else.
  */
 export function findTargetField(
   preset: Pick<ActionPreset, "config">,
   target: DefinitionTarget
 ): ConfigField | undefined {
-  return preset.config?.fields.find((field) => {
-    if (target.type === "resource") {
-      return field.type === "resource_ref" && parseKindRef(field.resourceKind ?? "")?.kind === target.kindName;
-    }
-    return field.source?.kind === target.source;
-  });
+  const fields = preset.config?.fields ?? [];
+  if (target.type === "source") {
+    return fields.find((field) => field.source?.kind === target.source);
+  }
+  const refs = fields.filter((field) => field.type === "resource_ref");
+  const named = refs.find((field) => parseKindRef(field.resourceKind ?? "")?.kind === target.kindName);
+  return named ?? (refs.length === 1 ? refs[0] : undefined);
 }
 
 /**
@@ -271,6 +297,18 @@ export function acceptsInstance(action: ObjectAction, instance: ObjectInstance):
     return field.type !== "resource_ref";
   }
   return field.type === "resource_ref" && resourceKindMatches(field.resourceKind, instance.kind);
+}
+
+/**
+ * The actions offered once `chosen` is picked: those that can be pointed at it, and
+ * those that act on none of the object's things (making a new one), which fit any
+ * choice. An action that can only take another kind of thing is left out.
+ */
+export function verbsFor(object: Pick<ActionObject, "actions">, chosen: ObjectInstance | undefined): ObjectAction[] {
+  if (!chosen) {
+    return object.actions;
+  }
+  return object.actions.filter((action) => !action.targetField || acceptsInstance(action, chosen));
 }
 
 /** The instances `action` can be pointed at, in the order given. */
@@ -320,9 +358,19 @@ export function whichPrompt(object: Pick<ActionObject, "noun">): string {
   return `Which ${object.noun ?? "one"}?`;
 }
 
-/** The parameters a new step starts with: the settings' defaults, and the chosen thing in its setting. */
+/**
+ * The parameters a new step starts with: the defaults its settings declare, and the
+ * chosen thing in its setting. A setting declaring no default starts empty, since an
+ * empty optional setting means something to the action (Increment counter uses the
+ * counter's own step), which a made-up starting value would silently replace.
+ */
 export function initialParameters(action: ObjectAction, instance?: ObjectInstance): Record<string, unknown> {
-  const parameters = getDefaultConfigValues(action.preset.config?.fields ?? []) as Record<string, unknown>;
+  const parameters: Record<string, unknown> = {};
+  for (const field of action.preset.config?.fields ?? []) {
+    if (field.defaultValue !== undefined) {
+      parameters[field.id] = field.defaultValue;
+    }
+  }
   if (instance && action.targetField && acceptsInstance(action, instance)) {
     parameters[action.targetField.id] = instance.value;
   }
@@ -338,9 +386,15 @@ export function initialParameters(action: ObjectAction, instance?: ObjectInstanc
  * target field's label and, for a resource, as its kind ("counter" for
  * `woofx3:counter`). A name without either word gets the thing after it:
  * "Set widget visibility on Main overlay". With nothing chosen, or a thing the
- * action cannot take, the step is the action's name as it is.
+ * action cannot take, the step is the action's name as it is. An action sharing its
+ * name with another of its object's ends with its module's name: "Reset counter (Tally)".
  */
 export function verbLabel(action: ObjectAction, instance?: ObjectInstance): string {
+  const label = instanceVerbLabel(action, instance);
+  return action.qualifier ? `${label} (${action.qualifier})` : label;
+}
+
+function instanceVerbLabel(action: ObjectAction, instance?: ObjectInstance): string {
   const name = action.preset.name;
   const field = action.targetField;
   if (!instance || !field || !acceptsInstance(action, instance)) {

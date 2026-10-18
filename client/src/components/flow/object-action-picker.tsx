@@ -26,6 +26,7 @@ import {
   type ResourceInstanceRow,
   searchActionObjects,
   verbLabel,
+  verbsFor,
   whichPrompt,
 } from "@/lib/action-objects";
 import { cn } from "@/lib/utils";
@@ -406,7 +407,7 @@ function ObjectVerbs({
         className="flex flex-col"
         onKeyDown={moveFocus}
       >
-        {object.actions.map((action) => {
+        {verbsFor(object, chosen).map((action) => {
           const instance = chosen && acceptsInstance(action, chosen) ? chosen : undefined;
           return (
             <li key={action.preset.id}>
