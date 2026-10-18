@@ -7,7 +7,7 @@
  * holds every other file to that. An entry naming a function (`macros.run`)
  * claims that function alone, leaving the rest of the module cloud-owned.
  *
- * Cloud-owned modules (accounts, instances, provisioning, marketplace, Twitch
+ * Cloud-owned modules (accounts, instances, provisioning, the marketplace catalog, Twitch
  * Helix proxies, dashboard preferences) are not engine access and stay out.
  */
 export const ENGINE_NAMESPACE_MODULES = {
@@ -26,7 +26,14 @@ export const ENGINE_NAMESPACE_MODULES = {
   alertLibrary: ["alertCompositions", "alertCompositionActions", "compositionPreview"],
   commands: ["chatCommands", "chatCommandGroups", "chatCommandActions"],
   moduleResources: ["moduleResourceActions", "moduleResourceInstances", "resourceValues", "resourceKinds"],
-  modules: ["moduleEngine", "moduleSettingsActions", "moduleFiles", "moduleDetail"],
+  modules: [
+    "moduleEngine",
+    "moduleSettingsActions",
+    "moduleFiles",
+    "moduleDetail",
+    // The rest of marketplace is the catalog, which the cloud serves.
+    "marketplace.installModule",
+  ],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],
   workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog"],

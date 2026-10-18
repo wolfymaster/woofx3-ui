@@ -1,9 +1,9 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
-import { useAction, useQuery } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
 import type { PermissionApprovalMode } from "@/components/modules/module-permissions";
+import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
+import { useMarketplaceInstallRequest } from "@/engine/hooks/use-modules";
 import { actionErrorMessage } from "@/lib/action-error";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 
@@ -88,7 +88,7 @@ export function useModuleInstall(
   instanceId: Id<"instances"> | undefined,
   onInstalled?: (moduleKey: string) => void
 ): ModuleInstall {
-  const installMarketplaceModule = useAction(api.marketplace.installModule);
+  const installMarketplaceModule = useMarketplaceInstallRequest();
   const [isInstalling, setIsInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingModuleKey, setPendingModuleKey] = useState<string | null>(null);
@@ -97,10 +97,7 @@ export function useModuleInstall(
   // The engine reports progress through transient events keyed by the module
   // key, so the install is watched rather than awaited: the action returns as
   // soon as the engine accepts the work.
-  const installEvent = useQuery(
-    api.transientEvents.get,
-    instanceId && pendingModuleKey ? { instanceId, correlationKey: pendingModuleKey } : "skip"
-  );
+  const installEvent = useTransientEvent(instanceId ?? null, pendingModuleKey || null);
 
   const run = useCallback(
     async (marketplaceId: string, approvedPermissions: string[], approvedLocalEndpoints: string[]) => {
@@ -110,12 +107,12 @@ export function useModuleInstall(
       setIsInstalling(true);
       setError(null);
       try {
-        const { moduleKey } = await installMarketplaceModule({
+        const { moduleKey } = await installMarketplaceModule(
           instanceId,
-          marketplaceModuleId: marketplaceId,
+          marketplaceId,
           approvedPermissions,
-          approvedLocalEndpoints,
-        });
+          approvedLocalEndpoints
+        );
         setPendingModuleKey(moduleKey);
       } catch (err) {
         setError(actionErrorMessage(err));
