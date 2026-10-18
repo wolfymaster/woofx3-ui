@@ -9,6 +9,7 @@ export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engin
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
 export type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 export type { SceneEditorSession as SceneEditorGrant } from "@convex/lib/sceneEditorSession";
+export type { RecapTimelineEvents, StreamRecapEngineDetail } from "@convex/lib/streamRecap";
 export type { WidgetThemes } from "@convex/lib/widgetThemes";
 export type { ModuleDetailResult as ModuleDetail } from "@convex/moduleDetail";
 export type { ModuleSettingValue } from "@convex/moduleSettingsActions";
@@ -18,6 +19,7 @@ export type {
   ResourceDto as Resource,
 } from "@convex/resources";
 export type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
+export type { OpenSessionRefresh } from "@convex/streamRecap";
 export type { NotRunningWorkflow } from "@convex/workflowHealth";
 export type {
   EngineInfo,

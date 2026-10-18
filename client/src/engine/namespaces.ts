@@ -31,7 +31,14 @@ export const ENGINE_NAMESPACE_MODULES = {
   requests: ["transientEvents"],
   workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog"],
   macros: ["macros.run"],
-  streamOps: ["streamRecap", "supporters", "debug"],
+  streamOps: [
+    // The rest of streamRecap asks Twitch for clips and markers.
+    "streamRecap.loadEngineDetail",
+    "streamRecap.loadTimelineEvents",
+    "streamRecap.refreshOpenSession",
+    "supporters",
+    "debug",
+  ],
   config: ["configBackup", "storage", "fieldOptions"],
 } as const satisfies Record<string, readonly string[]>;
 
