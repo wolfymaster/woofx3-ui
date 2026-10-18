@@ -334,6 +334,7 @@ export function FlowEditor({
       stepSummary(step, {
         action: step.type === "action" ? resolveCatalogAction(step, catalogActions) : undefined,
         resourceLabels,
+        catalogTriggers,
         scenes,
       }),
     iconOf: (step) => stepIcon(step, catalogActions),

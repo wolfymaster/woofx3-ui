@@ -1,6 +1,6 @@
 import type { ConditionConfig, ConditionOperator } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
+import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { nameWithThing, type StepTarget } from "@/lib/action-objects";
 import { actionSentenceParts } from "@/lib/action-sentence";
 import { missingSettings } from "@/lib/action-settings";
@@ -9,6 +9,7 @@ import { conditionValueText } from "@/lib/condition-value";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { placementChoices, type SceneRow, sceneChoices } from "@/lib/scene-field-options";
 import { describeWaitTimeout, isDelayWait, waitNodeLabel } from "@/lib/wait-config";
+import { waitEventIncomplete, waitSentence } from "@/lib/wait-event";
 import { type ActionNode, isEditableStep, type StepNode, stepKindLabel } from "@/lib/workflow-tree";
 
 /** How a collapsed step reads in the flow. */
@@ -39,6 +40,8 @@ export interface StepSummaryContext {
    * counter", and leaves that setting out.
    */
   target?: StepTarget;
+  /** The events a wait can listen for, which name its event and its settings. */
+  catalogTriggers?: CatalogTriggerRow[];
 }
 
 const OPERATOR_PHRASES: Record<ConditionOperator, string> = {
@@ -74,10 +77,6 @@ export function conditionText(condition: ConditionConfig): string {
 /** Conditions joined the way the engine combines them; empty when there are none. */
 export function conditionsText(conditions: readonly ConditionConfig[], logic: "and" | "or" | undefined): string {
   return conditions.map(conditionText).join(logic === "or" ? " or " : " and ");
-}
-
-function lowerFirst(text: string): string {
-  return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
 /** The conditions a non-condition step is skipped without, and whether it is turned off. */
@@ -166,7 +165,13 @@ function baseSummary(step: StepNode, context: StepSummaryContext): BaseSummary {
       if (isDelayWait(step.wait)) {
         return { title: `Pause for ${waitNodeLabel(step.wait)}`, details: [] };
       }
-      return { title: `Wait ${lowerFirst(waitNodeLabel(step.wait))}`, details: [describeWaitTimeout(step.wait)] };
+      const details = [describeWaitTimeout(step.wait)];
+      if (step.wait.event.trim() === "") {
+        details.unshift("Pick what to wait for");
+      } else if (waitEventIncomplete(step.wait.event)) {
+        details.unshift("Name which one to wait for");
+      }
+      return { title: waitSentence(step.wait, context.catalogTriggers ?? [], context.resourceLabels), details };
     }
     case "log": {
       const message = step.parameters?.message;

@@ -136,7 +136,7 @@ describe("stepSummary", () => {
       "Pause for 5s"
     );
     const wait = stepSummary({ type: "wait", id: "w", wait: { type: "event", event: "follow", timeout: "1m" } });
-    expect(wait.title).toBe("Wait until follow");
+    expect(wait.title).toBe("Wait until follow happens");
     expect(wait.details).toEqual(["Gives up after 1m, then fails the workflow"]);
   });
 
