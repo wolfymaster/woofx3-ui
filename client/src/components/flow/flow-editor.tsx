@@ -65,6 +65,11 @@ export interface FlowEditorProps {
   resourceLabels?: Map<string, string>;
   /** Why a step can't be removed from `steps`, or null when it can. */
   removeBlockedReason?: (steps: StepNode[], id: string) => string | null;
+  /**
+   * The "When" card, from a surface that words and edits its trigger itself (an alert
+   * trigger's sentence). Without it the flow shows the trigger's own card.
+   */
+  when?: ReactNode;
 }
 
 /** What every row in the flow reads and calls; held in context so nested branches need no prop chains. */
@@ -117,6 +122,7 @@ export function FlowEditor({
   actionPresets,
   resourceLabels,
   removeBlockedReason,
+  when,
 }: FlowEditorProps) {
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -352,15 +358,17 @@ export function FlowEditor({
   return (
     <FlowContext.Provider value={state}>
       <div ref={rootRef} className="flex flex-col gap-1.5" data-testid="flow-editor">
-        <WhenCard
-          tree={tree}
-          expanded={expandedId === triggerId}
-          onToggle={() => toggle(triggerId)}
-          catalogTriggers={catalogTriggers}
-          catalogLoading={catalogLoading}
-          resourceLabels={resourceLabels}
-          onConditionsChange={(conditions) => onChange({ ...tree, trigger: { ...tree.trigger, conditions } })}
-        />
+        {when ?? (
+          <WhenCard
+            tree={tree}
+            expanded={expandedId === triggerId}
+            onToggle={() => toggle(triggerId)}
+            catalogTriggers={catalogTriggers}
+            catalogLoading={catalogLoading}
+            resourceLabels={resourceLabels}
+            onConditionsChange={(conditions) => onChange({ ...tree, trigger: { ...tree.trigger, conditions } })}
+          />
+        )}
         <FlowList steps={tree.steps} path={null} />
       </div>
     </FlowContext.Provider>
