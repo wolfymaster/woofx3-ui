@@ -32,6 +32,27 @@ export async function featureFlagSubject(
   };
 }
 
+/**
+ * The subject an instance is evaluated as when no user is involved, such as
+ * an install that runs on the instance's behalf. Percent rollouts bucket by
+ * the instance's account, as they do for a signed-in user.
+ */
+export async function instanceFeatureFlagSubject(
+  ctx: QueryCtx,
+  instanceId: Id<"instances">
+): Promise<FeatureFlagSubject | null> {
+  const instance = await ctx.db.get(instanceId);
+  if (!instance) {
+    return null;
+  }
+  return {
+    accountId: instance.accountId,
+    instanceId,
+    hosting: instance.hosting ?? "external",
+    entitlements: (await accountEntitlements(ctx, instance.accountId)).features,
+  };
+}
+
 export async function isFeatureFlagOn(
   ctx: QueryCtx,
   key: FeatureFlagKey,
