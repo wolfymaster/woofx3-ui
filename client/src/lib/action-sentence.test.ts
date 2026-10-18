@@ -36,6 +36,15 @@ describe("actionSentenceParts with a declared sentence", () => {
     });
   });
 
+  test("words an empty optional setting the way its author declares", () => {
+    const worded = { ...amount, missingText: "the counter's step" };
+    const parts = actionSentenceParts(increment, [target, worded], { target: "woofx3:counter:deaths" }, labels);
+    expect(sentenceText(parts)).toBe("Add the counter's step to Deaths");
+    expect(parts.find((part) => part.kind === "field" && part.fieldId === "amount")).toMatchObject({
+      state: "default",
+    });
+  });
+
   test("marks an empty required setting, in the author's words when given", () => {
     const parts = actionSentenceParts(increment, [target, amount], { amount: 2 }, labels);
     expect(sentenceText(parts)).toBe("Add 2 to a counter");

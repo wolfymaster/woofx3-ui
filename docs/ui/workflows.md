@@ -110,7 +110,7 @@ A collapsed action reads as one line, built by `actionSentenceParts` (`lib/actio
 - a switch as its label, or "not" and its label ("visible", "not visible")
 - a value taken from earlier by its short name, `{next}` for `${increment.next}`
 - while a required setting is empty, the field's `missingText`, or "a counter", marked in amber
-- while an optional setting is empty, "the default amount": the action then uses its own default, so the sentence says that rather than leaving a gap
+- while an optional setting is empty, the field's `missingText` ("the counter's step"), or else "the default amount": the action then uses its own default, so the sentence says what that is rather than leaving a gap
 
 An action declaring no sentence reads as its name and the settings it has: "Increment counter: counter Deaths, amount 5". Empty optional settings are left out of that form.
 
