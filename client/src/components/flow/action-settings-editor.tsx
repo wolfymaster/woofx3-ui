@@ -31,7 +31,8 @@ export interface ActionSettingsEditorProps {
   /** Values of the trigger and of earlier steps this step can read. */
   availableVariables: VariableOption[];
   onChange: (step: ActionNode) => void;
-  onRename: (oldId: string, newId: string) => void;
+  /** Renames the step; without it the step's id isn't offered for editing (the macro pad). */
+  onRename?: (oldId: string, newId: string) => void;
 }
 
 /**
@@ -98,9 +99,11 @@ export function ActionSettingsEditor({
           Later steps can use: {outputs.map((output) => output.path).join(", ")}.
         </p>
       )}
-      <div className="border-t pt-4">
-        <StepIdField id={step.id} existingStepIds={existingStepIds} onUpdateActionId={onRename} />
-      </div>
+      {onRename && (
+        <div className="border-t pt-4">
+          <StepIdField id={step.id} existingStepIds={existingStepIds} onUpdateActionId={onRename} />
+        </div>
+      )}
     </div>
   );
 }
