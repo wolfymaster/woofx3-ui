@@ -1,89 +1,82 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
 import { useQuery } from "convex/react";
 import { useMemo } from "react";
 import { useInstance } from "@/hooks/use-instance";
-import type { ActionObject, ActionObjectTarget, ObjectInstance, ObjectInstancesByKey } from "@/lib/action-objects";
+import {
+  type ActionObject,
+  type ObjectInstance,
+  type ObjectInstancesByKey,
+  type ResourceInstanceRow,
+  resourceObjectInstances,
+} from "@/lib/action-objects";
 import { sceneChoices } from "@/lib/scene-field-options";
+
+const NONE_CREATED: readonly ResourceInstanceRow[] = [];
 
 /**
  * The streamer's own things each object's "Which one?" offers, by object key, from
- * the same queries the settings form's pickers read, so a chip stores the value
- * that form would: a resource instance's canonical id (`moduleResourceInstances.
- * listByKind`), a scene's engine id (`scenes.list`), an alert widget's name
- * (`sceneWidgets.alertWidgetNames`). `undefined` while a list loads.
+ * the same data the settings form's pickers read, so a chip stores the value
+ * that form would: a resource instance's canonical id, a scene's engine id
+ * (`scenes.list`), an alert widget's name (`sceneWidgets.alertWidgetNames`).
+ * `undefined` while a list loads.
  *
- * A query runs only when some object in `objects` needs it.
+ * Resource instances come from one `moduleResourceInstances.listByKinds` query
+ * for every kind any object's actions name, since which kinds those are depends
+ * on the installed modules. `created` are instances made in the picker that the
+ * mirror may not hold yet. A query runs only when some object needs it.
  */
-export function useActionObjectInstances(objects: readonly ActionObject[]): ObjectInstancesByKey {
+export function useActionObjectInstances(
+  objects: readonly ActionObject[],
+  created: readonly ResourceInstanceRow[] = NONE_CREATED
+): ObjectInstancesByKey {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const needs = (target: ActionObjectTarget) => objects.some((object) => sameTarget(object.target, target));
 
-  // One query per kind in RESOURCE_OBJECT_KINDS (action-objects.ts); hooks cannot run in a loop.
-  const counters = useResourceInstances(instanceId, COUNTER_KIND, needs({ type: "resource", kind: COUNTER_KIND }));
-  const timers = useResourceInstances(instanceId, TIMER_KIND, needs({ type: "resource", kind: TIMER_KIND }));
-  const queues = useResourceInstances(instanceId, QUEUE_KIND, needs({ type: "resource", kind: QUEUE_KIND }));
-  const scenes = useQuery(
-    api.scenes.list,
-    instanceId && needs({ type: "source", source: "scenes" }) ? { instanceId } : "skip"
+  const kinds = useMemo(() => {
+    const all = new Set<string>();
+    for (const object of objects) {
+      if (object.target?.type === "resource") {
+        for (const kind of object.target.kinds) {
+          all.add(kind);
+        }
+      }
+    }
+    return [...all].sort();
+  }, [objects]);
+  const needsSource = (source: "scenes" | "alertWidgets") =>
+    objects.some((object) => object.target?.type === "source" && object.target.source === source);
+
+  const resourceRows = useQuery(
+    api.moduleResourceInstances.listByKinds,
+    instanceId && kinds.length > 0 ? { instanceId, kinds } : "skip"
   );
+  const scenes = useQuery(api.scenes.list, instanceId && needsSource("scenes") ? { instanceId } : "skip");
   const alertWidgetNames = useQuery(
     api.sceneWidgets.alertWidgetNames,
-    instanceId && needs({ type: "source", source: "alertWidgets" }) ? { instanceId } : "skip"
+    instanceId && needsSource("alertWidgets") ? { instanceId } : "skip"
   );
 
   return useMemo(() => {
-    const byTarget = (target: ActionObjectTarget): readonly ObjectInstance[] | undefined => {
-      if (target.type === "source") {
-        if (target.source === "scenes") {
-          return scenes === undefined ? undefined : sceneChoices(scenes);
-        }
-        return alertWidgetNames?.map((name) => ({ value: name, label: name }));
-      }
-      if (target.kind === COUNTER_KIND) {
-        return counters;
-      }
-      if (target.kind === TIMER_KIND) {
-        return timers;
-      }
-      if (target.kind === QUEUE_KIND) {
-        return queues;
-      }
-      return [];
-    };
     const result = new Map<string, readonly ObjectInstance[] | undefined>();
     for (const object of objects) {
-      if (object.target) {
-        result.set(object.key, byTarget(object.target));
+      const target = object.target;
+      if (!target) {
+        continue;
+      }
+      if (target.type === "resource") {
+        result.set(
+          object.key,
+          resourceRows === undefined ? undefined : resourceObjectInstances(object, [...resourceRows, ...created])
+        );
+      } else if (target.source === "scenes") {
+        result.set(object.key, scenes === undefined ? undefined : sceneChoices(scenes));
+      } else {
+        result.set(
+          object.key,
+          alertWidgetNames?.map((name) => ({ value: name, label: name }))
+        );
       }
     }
     return result;
-  }, [objects, counters, timers, queues, scenes, alertWidgetNames]);
-}
-
-function useResourceInstances(
-  instanceId: Id<"instances"> | undefined,
-  kind: string,
-  wanted: boolean
-): ObjectInstance[] | undefined {
-  const rows = useQuery(api.moduleResourceInstances.listByKind, instanceId && wanted ? { instanceId, kind } : "skip");
-  return useMemo(
-    () =>
-      rows
-        ?.map((row) => ({ value: row.canonicalId, label: row.displayName }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [rows]
-  );
-}
-
-function sameTarget(a: ActionObjectTarget | undefined, b: ActionObjectTarget): boolean {
-  if (!a || a.type !== b.type) {
-    return false;
-  }
-  if (a.type === "resource" && b.type === "resource") {
-    return a.kind === b.kind;
-  }
-  return a.type === "source" && b.type === "source" && a.source === b.source;
+  }, [objects, resourceRows, created, scenes, alertWidgetNames]);
 }
