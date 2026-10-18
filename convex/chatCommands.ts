@@ -94,6 +94,8 @@ export const upsertFromWebhook = internalMutation({
     engineCommandId: v.string(),
     command: v.string(),
     actions: v.array(v.any()),
+    engineWorkflowId: v.string(),
+    steps: v.array(v.any()),
     cooldown: v.number(),
     priority: v.number(),
     enabled: v.boolean(),
@@ -113,6 +115,8 @@ export const upsertFromWebhook = internalMutation({
     const fields = {
       command: args.command,
       actions: args.actions,
+      engineWorkflowId: args.engineWorkflowId || undefined,
+      steps: args.steps,
       cooldown: args.cooldown,
       priority: args.priority,
       enabled: args.enabled,

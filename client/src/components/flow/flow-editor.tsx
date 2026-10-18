@@ -47,7 +47,13 @@ import {
   updateStepInTree,
   type WorkflowTree,
 } from "@/lib/workflow-tree";
-import { collectStepIds, computeAvailableVariables, isStepIdReferenced, isValidStepId } from "@/lib/workflow-variables";
+import {
+  collectStepIds,
+  computeAvailableVariables,
+  isStepIdReferenced,
+  isValidStepId,
+  type VariableOption,
+} from "@/lib/workflow-variables";
 
 export interface FlowEditorProps {
   tree: WorkflowTree;
@@ -65,6 +71,17 @@ export interface FlowEditorProps {
   resourceLabels?: Map<string, string>;
   /** Why a step can't be removed from `steps`, or null when it can. */
   removeBlockedReason?: (steps: StepNode[], id: string) => string | null;
+  /**
+   * The "When" card, for a surface whose steps start from something other than a catalog
+   * trigger, such as a chat command. Build it from FlowWhenCard so it reads like the rest of
+   * the flow. Without it, the card shows the tree's trigger and edits its conditions.
+   */
+  when?: ReactNode;
+  /**
+   * What the start of the flow hands its steps, offered to every step ahead of earlier steps'
+   * outputs. Without it, the fields the tree's catalog trigger emits.
+   */
+  triggerVariables?: VariableOption[];
 }
 
 /** What every row in the flow reads and calls; held in context so nested branches need no prop chains. */
@@ -117,6 +134,8 @@ export function FlowEditor({
   actionPresets,
   resourceLabels,
   removeBlockedReason,
+  when,
+  triggerVariables,
 }: FlowEditorProps) {
   const { toast } = useToast();
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -311,12 +330,12 @@ export function FlowEditor({
         catalogActions={catalogActions}
         catalogLoading={catalogLoading}
         existingStepIds={existingStepIds}
-        availableVariables={computeAvailableVariables(tree, step.id, catalogActions, catalogTriggers)}
+        availableVariables={computeAvailableVariables(tree, step.id, catalogActions, catalogTriggers, triggerVariables)}
         onChange={(next) => onChange({ ...tree, steps: updateStepInTree(tree.steps, step.id, () => next) })}
         onRename={rename}
       />
     ),
-    [tree, catalogTriggers, catalogActions, catalogLoading, existingStepIds, onChange, rename]
+    [tree, catalogTriggers, catalogActions, catalogLoading, existingStepIds, triggerVariables, onChange, rename]
   );
 
   const state: FlowState = {
@@ -352,15 +371,17 @@ export function FlowEditor({
   return (
     <FlowContext.Provider value={state}>
       <div ref={rootRef} className="flex flex-col gap-1.5" data-testid="flow-editor">
-        <WhenCard
-          tree={tree}
-          expanded={expandedId === triggerId}
-          onToggle={() => toggle(triggerId)}
-          catalogTriggers={catalogTriggers}
-          catalogLoading={catalogLoading}
-          resourceLabels={resourceLabels}
-          onConditionsChange={(conditions) => onChange({ ...tree, trigger: { ...tree.trigger, conditions } })}
-        />
+        {when ?? (
+          <TriggerWhenCard
+            tree={tree}
+            expanded={expandedId === triggerId}
+            onToggle={() => toggle(triggerId)}
+            catalogTriggers={catalogTriggers}
+            catalogLoading={catalogLoading}
+            resourceLabels={resourceLabels}
+            onConditionsChange={(conditions) => onChange({ ...tree, trigger: { ...tree.trigger, conditions } })}
+          />
+        )}
         <FlowList steps={tree.steps} path={null} />
       </div>
     </FlowContext.Provider>
@@ -386,7 +407,58 @@ function stepIcon(step: StepNode, catalogActions: CatalogActionRow[]): LucideIco
   }
 }
 
-function WhenCard({
+export interface FlowWhenCardProps {
+  /** What starts the flow, as a sentence. */
+  title: ReactNode;
+  /** Short facts about it, shown under the title. */
+  options: readonly string[];
+  expanded: boolean;
+  onToggle: () => void;
+  /** Marks the toggle for the flow's focus handling; any id no step uses. */
+  toggleId: string;
+  /** The card's settings, shown while it is expanded. */
+  children: ReactNode;
+}
+
+/** The card at the top of a flow that says what starts it, and opens in place to change that. */
+export function FlowWhenCard({ title, options, expanded, onToggle, toggleId, children }: FlowWhenCardProps) {
+  return (
+    <section
+      aria-label="When this runs"
+      className="mb-2 rounded-xl border bg-card text-card-foreground"
+      data-testid="flow-when-card"
+    >
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
+        <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">When</span>
+        <span className="min-w-0 text-base font-semibold">{title}</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="ml-auto"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          data-step-toggle={toggleId}
+          data-testid="button-flow-when-toggle"
+        >
+          {expanded ? "Done" : "Change"}
+        </Button>
+        {options.length > 0 && (
+          <div className="flex w-full flex-wrap gap-2">
+            {options.map((option) => (
+              <span key={option} className="rounded-md bg-muted px-2.5 py-1 text-[13px] text-muted-foreground">
+                {option}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      {expanded && <div className="border-t px-4 pb-4 pt-3">{children}</div>}
+    </section>
+  );
+}
+
+function TriggerWhenCard({
   tree,
   expanded,
   onToggle,
@@ -403,53 +475,24 @@ function WhenCard({
   resourceLabels?: Map<string, string>;
   onConditionsChange: Parameters<typeof TriggerConfigPanel>[0]["onUpdateTriggerConditions"];
 }) {
-  const title = triggerNodeLabel(tree.trigger, catalogTriggers);
-  const options = triggerNodeSummary(tree.trigger, catalogTriggers, resourceLabels);
   return (
-    <section
-      aria-label="When this runs"
-      className="mb-2 rounded-xl border bg-card text-card-foreground"
-      data-testid="flow-when-card"
+    <FlowWhenCard
+      title={triggerNodeLabel(tree.trigger, catalogTriggers)}
+      options={triggerNodeSummary(tree.trigger, catalogTriggers, resourceLabels)}
+      expanded={expanded}
+      onToggle={onToggle}
+      toggleId={tree.trigger.id}
     >
-      <div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
-        <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">When</span>
-        <span className="text-base font-semibold">{title}</span>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="ml-auto"
-          onClick={onToggle}
-          aria-expanded={expanded}
-          data-step-toggle={tree.trigger.id}
-          data-testid="button-flow-when-toggle"
-        >
-          {expanded ? "Done" : "Change"}
-        </Button>
-        {options.length > 0 && (
-          <div className="flex w-full flex-wrap gap-2">
-            {options.map((option) => (
-              <span key={option} className="rounded-md bg-muted px-2.5 py-1 text-[13px] text-muted-foreground">
-                {option}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-      {expanded && (
-        <div className="border-t px-4 pb-4 pt-3">
-          {catalogLoading ? (
-            <p className="text-sm text-muted-foreground">Loading catalog…</p>
-          ) : (
-            <TriggerConfigPanel
-              node={tree.trigger}
-              catalog={catalogTriggers}
-              onUpdateTriggerConditions={onConditionsChange}
-            />
-          )}
-        </div>
+      {catalogLoading ? (
+        <p className="text-sm text-muted-foreground">Loading catalog…</p>
+      ) : (
+        <TriggerConfigPanel
+          node={tree.trigger}
+          catalog={catalogTriggers}
+          onUpdateTriggerConditions={onConditionsChange}
+        />
       )}
-    </section>
+    </FlowWhenCard>
   );
 }
 

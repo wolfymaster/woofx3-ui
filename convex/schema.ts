@@ -475,6 +475,12 @@ export default defineSchema({
     // other engine JSON Convex holds (see lib/dollarKeys.ts), and validated by
     // the engine, which is the authority on what it can run.
     actions: v.array(v.any()),
+    // The stored workflow the command runs, by engine id, and that workflow's
+    // tasks (escaped like `actions`). A command with steps has a workflow and
+    // an empty `actions`; one the engine has not linked yet runs `actions`
+    // instead. Optional for rows written before commands had workflows.
+    engineWorkflowId: v.optional(v.string()),
+    steps: v.optional(v.array(v.any())),
     // "{variable}" placeholders parsed out of user input after the command
     // word, e.g. "{songTitle}" — extracted values are merged into the
     // function's invoke payload (or usable in a "text" response). Empty

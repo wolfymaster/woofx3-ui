@@ -45,6 +45,8 @@ export const reconcileCommands = internalMutation({
         engineCommandId: v.string(),
         command: v.string(),
         actions: v.array(v.any()),
+        engineWorkflowId: v.string(),
+        steps: v.array(v.any()),
         cooldown: v.number(),
         priority: v.number(),
         enabled: v.boolean(),
@@ -75,6 +77,8 @@ export const reconcileCommands = internalMutation({
       const fields = {
         command: snap.command,
         actions: snap.actions,
+        engineWorkflowId: snap.engineWorkflowId || undefined,
+        steps: snap.steps,
         cooldown: snap.cooldown,
         priority: snap.priority,
         enabled: snap.enabled,
