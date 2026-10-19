@@ -1,4 +1,4 @@
-import { ChevronDown, Loader2, Radio, Undo2, Upload } from "lucide-react";
+import { ChevronDown, Loader2, Undo2, Upload } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import {
   AlertDialog,
@@ -15,10 +15,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { DraftSaveStatus } from "@/lib/draft-save-status";
 import { cn } from "@/lib/utils";
 
 export type DraftCommand = "publish" | "discard";
@@ -38,7 +40,7 @@ export interface DraftLiveCopy {
 }
 
 export interface DraftLiveTestIds {
-  /** The menu item that turns live updating on or off. */
+  /** The switch that turns live updating on or off. */
   live: string;
   discard: string;
   /** The confirmation's Discard button. */
@@ -54,18 +56,18 @@ interface DraftLiveControlsProps {
   pendingCommand: DraftCommand | null;
   onCommand: (command: DraftCommand) => void;
   hasDraft: boolean;
-  /** Edits not yet where the current mode puts them: still sending, or waiting in a draft. */
-  unsaved: boolean;
+  saveStatus: DraftSaveStatus;
   copy: DraftLiveCopy;
   testIds: DraftLiveTestIds;
 }
 
 /**
- * A sync editor's status and Publish button. The status says whether edits go live as
- * they are made and whether any are still unsaved; Publish carries a menu with the rarer
- * commands, turning live updating on or off and discarding the draft. Publish has a fixed
- * width, so starting a command never moves anything in the header. A draft cannot be
- * brought back once discarded, so Discard asks first.
+ * A sync editor's live updating switch, save status and Publish button. The switch sits
+ * in the header, not a menu, because it decides where every edit goes. The status says
+ * whether edits have been saved and, while not live updating, that saved edits wait in a
+ * draft until published. Publish carries a menu with the rarer command, discarding the
+ * draft, and has a fixed width, so starting a command never moves anything in the header.
+ * A draft cannot be brought back once discarded, so Discard asks first.
  */
 export function DraftLiveControls({
   live,
@@ -74,7 +76,7 @@ export function DraftLiveControls({
   pendingCommand,
   onCommand,
   hasDraft,
-  unsaved,
+  saveStatus,
   copy,
   testIds,
 }: DraftLiveControlsProps) {
@@ -83,16 +85,18 @@ export function DraftLiveControls({
   return (
     <>
       <div className="flex items-center gap-3">
-        <StatusIndicator ok={live} tooltip={live ? copy.live : copy.draft} testId="status-live-updating">
-          Live Updating: {live ? "ON" : "OFF"}
-        </StatusIndicator>
-        <StatusIndicator
-          ok={!unsaved}
-          tooltip={unsaved ? (live ? "Your latest edits are still being sent" : copy.publish) : undefined}
-          testId="status-saved"
-        >
-          {unsaved ? "Unsaved changes" : "All changes saved"}
-        </StatusIndicator>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="flex items-center gap-2">
+              <Switch id={testIds.live} checked={live} onCheckedChange={onLiveChange} data-testid={testIds.live} />
+              <Label htmlFor={testIds.live} className="cursor-pointer whitespace-nowrap text-xs font-normal">
+                Live Update
+              </Label>
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>{live ? copy.live : copy.draft}</TooltipContent>
+        </Tooltip>
+        <SaveStatusIndicator status={saveStatus} live={live} copy={copy} />
       </div>
       <div className="flex items-center">
         {/* The span carries the tooltip, which a disabled button cannot. */}
@@ -128,11 +132,6 @@ export function DraftLiveControls({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem onClick={() => onLiveChange(!live)} data-testid={testIds.live}>
-              <Radio className="h-4 w-4 mr-2" />
-              {live ? "Disable Live Update" : "Enable Live Update"}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={() => setConfirmingDiscard(true)}
               disabled={disabled}
@@ -166,14 +165,44 @@ export function DraftLiveControls({
   );
 }
 
-/** A label with a green dot when `ok`, red otherwise. */
+const SAVE_STATUS_TONE: Record<DraftSaveStatus, StatusTone> = {
+  sending: "waiting",
+  retrying: "attention",
+  draft: "waiting",
+  saved: "ok",
+};
+
+function SaveStatusIndicator({ status, live, copy }: { status: DraftSaveStatus; live: boolean; copy: DraftLiveCopy }) {
+  const [label, tooltip] = {
+    sending: [live ? "Saving…" : "Saving draft…", "Your latest edits are still being sent"],
+    retrying: ["Retrying save…", "A save didn't go through and is being sent again"],
+    draft: ["Draft saved, not published", copy.publish],
+    saved: ["All changes saved", undefined],
+  }[status];
+  return (
+    <StatusIndicator tone={SAVE_STATUS_TONE[status]} tooltip={tooltip} testId="status-saved">
+      {label}
+    </StatusIndicator>
+  );
+}
+
+/** `ok`: nothing to do. `waiting`: fine, but not finished. `attention`: something needs looking at. */
+export type StatusTone = "ok" | "waiting" | "attention";
+
+const TONE_DOT: Record<StatusTone, string> = {
+  ok: "bg-green-500",
+  waiting: "bg-amber-500",
+  attention: "bg-red-500",
+};
+
+/** A label with a dot colored by its tone. */
 export function StatusIndicator({
-  ok,
+  tone,
   tooltip,
   testId,
   children,
 }: {
-  ok: boolean;
+  tone: StatusTone;
   tooltip?: string;
   testId?: string;
   children: ReactNode;
@@ -181,10 +210,10 @@ export function StatusIndicator({
   const label = (
     <span
       className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground"
-      data-state={ok ? "ok" : "attention"}
+      data-state={tone}
       data-testid={testId}
     >
-      <span className={cn("h-2 w-2 shrink-0 rounded-full", ok ? "bg-green-500" : "bg-red-500")} aria-hidden="true" />
+      <span className={cn("h-2 w-2 shrink-0 rounded-full", TONE_DOT[tone])} aria-hidden="true" />
       {children}
     </span>
   );

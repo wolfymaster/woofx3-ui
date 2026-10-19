@@ -168,7 +168,7 @@ export function AlertLayoutEditor({
         library={library}
         actions={
           <>
-            <StatusIndicator ok={!session.isDirty} testId="status-saved">
+            <StatusIndicator tone={session.isDirty ? "attention" : "ok"} testId="status-saved">
               {session.isDirty ? "Unsaved changes" : "All changes saved"}
             </StatusIndicator>
             <Button variant="ghost" onClick={leave}>
