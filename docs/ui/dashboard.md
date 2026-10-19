@@ -681,11 +681,12 @@ countdown to the next scheduled ad, when the last one ran, the preroll-free
 time left, and a snooze button with the snoozes left and when the next one
 refills. While an ad plays the widget shows "Ad running, back in m:ss".
 
-The schedule and the snooze go straight to Helix from `convex/adBreaks.ts`
-(Get Ad Schedule under `channel:read:ads`, Snooze Next Ad under
-`channel:manage:ads`), the same pattern as pins and stream info: Convex holds
-a refreshable broadcaster token, and the generic engine surface carries
-nothing Twitch-specific. `authorizeTwitch` checks membership and the scope.
+The schedule and the snooze go to Helix from `convex/adBreaks.ts` (Get Ad
+Schedule under `channel:read:ads`, Snooze Next Ad under `channel:manage:ads`),
+or through an engine with `twitch.ads` (see
+[Helix calls through the engine](#helix-calls-through-the-engine)). A snooze
+the engine could not confirm is not resent, since a second one would spend
+another snooze. `authorizeTwitch` checks membership and the scope.
 Any member may snooze: a snooze only pushes the next ad back, and it is a call
 a moderator running the stream makes on the spot. Helix documents its ad
 times as RFC3339 but also answers with epoch seconds (a number or a numeric
