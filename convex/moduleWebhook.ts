@@ -11,6 +11,8 @@ import {
   pruneWidgetDefinitions,
   uniqueIds,
 } from "./lib/definitionCatalog";
+import { resolveProvenance } from "./lib/marketplaceInstallIdentity";
+import { recordedProvenance } from "./lib/marketplaceInstallRecords";
 import { bareModuleKey } from "./lib/moduleKey";
 import { triggerDefinitionRow } from "./lib/triggerDefinitionRow";
 import { webhookEndpointKey } from "./lib/webhookEndpointKey";
@@ -272,27 +274,40 @@ export const processModuleInstalled = internalMutation({
 
     const superseded = record ? null : await findSupersededModule(ctx, instanceId, correlationKey);
 
+    // Which listing the build is: what Convex recorded when it started the
+    // install, or, for a row whose key is unchanged, what the row already says.
+    // The callback itself carries neither.
+    const existing = record ?? superseded;
+    const moduleKey = record?.moduleKey ?? correlationKey;
+    const provenance = resolveProvenance({
+      moduleKey,
+      recorded: await recordedProvenance(ctx, instanceId, moduleKey),
+      existing,
+    });
+
     let moduleId: Id<"moduleRepository">;
     if (record) {
       await ctx.db.patch(record._id, {
         status: "installed" as const,
         statusMessage: undefined,
-        moduleKey: record.moduleKey ?? correlationKey,
+        moduleKey,
+        ...provenance,
       });
       moduleId = record._id;
     } else if (superseded) {
       await ctx.db.patch(superseded._id, {
         status: "installed" as const,
         statusMessage: undefined,
-        moduleKey: correlationKey,
+        moduleKey,
         name: moduleName,
         version: moduleVersion,
+        ...provenance,
       });
       moduleId = superseded._id;
     } else {
       moduleId = await ctx.db.insert("moduleRepository", {
         instanceId,
-        moduleKey: correlationKey,
+        moduleKey,
         name: moduleName,
         description: "",
         version: moduleVersion,
@@ -300,6 +315,7 @@ export const processModuleInstalled = internalMutation({
         manifest: {},
         archiveKey: "",
         status: "installed" as const,
+        ...provenance,
       });
     }
 

@@ -3,10 +3,13 @@
 import { type ConfigField, LIST_ITEM_FIELD_TYPES, parseFieldList } from "@woofx3/api/ui-schema";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { action } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action } from "./_generated/server";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { type LocalEndpointSummary, localEndpointSummaries } from "./lib/localEndpoints";
 import type { MarketplaceAccess } from "./lib/marketplaceAccess";
+import { buyerRefFor } from "./lib/marketplaceEntitlement";
+import { installedListing } from "./lib/marketplaceInstallIdentity";
 import {
   installedFunctionSummaries,
   type ModuleFunctionSummary,
@@ -121,10 +124,10 @@ export const getModuleDetail = action({
       // The DB is authoritative for installed modules, but we do not store the README. Fetch it
       // (and the icon / latest version / workflows) from the marketplace alongside the DB queries —
       // run concurrently rather than after, since the external marketplace call can take seconds
-      // (up to MARKETPLACE_TIMEOUT_MS) and gains nothing from waiting on the DB queries first. Only
-      // attempted when the moduleKey carries a real marketplace id; a marketplace miss must not fail
-      // the detail.
-      const marketplaceId = installedModule.moduleKey?.split(":")[0];
+      // (up to MARKETPLACE_TIMEOUT_MS) and gains nothing from waiting on the DB queries first. Read
+      // from the listing the module was installed from, so a later edition reports its own latest
+      // version rather than its first edition's; a marketplace miss must not fail the detail.
+      const marketplaceId = installedListing(installedModule)?.listingId;
       const [triggers, actions, functions, widgets, marketplaceMeta] = await Promise.all([
         ctx.runQuery(internal.triggerDefinitions.listByModule, { moduleId: installedModule._id }),
         ctx.runQuery(internal.actionDefinitions.listByModule, { moduleId: installedModule._id }),
@@ -145,7 +148,7 @@ export const getModuleDetail = action({
         applyMarketplaceMetadata(detail, marketplaceMeta);
       }
       if (marketplaceId && detail.latestVersion !== undefined && detail.latestVersion !== detail.version) {
-        const latest = manifestDeclarations(await readMarketplaceManifest(marketplaceId, access));
+        const latest = manifestDeclarations(await readMarketplaceManifest(ctx, instanceId, marketplaceId, access));
         detail.latestPermissions = latest.permissions;
         detail.latestLocalEndpoints = latest.localEndpoints;
       }
@@ -154,21 +157,28 @@ export const getModuleDetail = action({
 
     const [payload, manifest] = await Promise.all([
       marketplaceFetch(`/modules/${encodeURIComponent(moduleId)}`, access),
-      readMarketplaceManifest(moduleId, access),
+      readMarketplaceManifest(ctx, instanceId, moduleId, access),
     ]);
     return { ...formatMarketplaceDetail(moduleId, payload, manifest), ...manifestDeclarations(manifest) };
   },
 });
 
 /**
- * Null when the archive cannot be read. The detail view still renders: the
- * permissions and local endpoints show as unknown, and functions lose their
- * file paths. Install does not depend on this read: it re-reads the archive
- * and refuses permissions the streamer did not approve.
+ * Null when the archive cannot be read, which includes a paid module this
+ * account has not bought: its archive is the product. The detail view still
+ * renders: the permissions and local endpoints show as unknown, and functions
+ * lose their file paths. Install does not depend on this read: it re-reads the
+ * archive and refuses permissions the streamer did not approve.
  */
-async function readMarketplaceManifest(marketplaceId: string, access: MarketplaceAccess): Promise<unknown> {
+async function readMarketplaceManifest(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  marketplaceId: string,
+  access: MarketplaceAccess
+): Promise<unknown> {
   try {
-    return await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId, access));
+    const content = { access, buyerRef: await buyerRefFor(ctx, instanceId) };
+    return await fetchMarketplaceArchiveManifest(await fetchMarketplaceDownload(marketplaceId, content));
   } catch (err) {
     logger.warn("could not read marketplace module manifest", {
       marketplaceId,
@@ -260,6 +270,8 @@ function formatInstalledDetail(
     category?: string;
     tags: string[];
     moduleKey?: string;
+    marketplaceListingId?: string;
+    marketplaceEdition?: number;
     status?: string;
   },
   triggers: Array<{ slug: string; name: string; description: string; color: string }>,
@@ -268,7 +280,7 @@ function formatInstalledDetail(
   widgets: Array<{ widgetId: string; name: string }>,
   manifest: unknown
 ): ModuleDetailResult {
-  const mpId = module.moduleKey?.split(":")[0] ?? module.name;
+  const mpId = installedListing(module)?.listingId ?? module.name;
   return {
     id: mpId,
     name: module.name,

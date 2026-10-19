@@ -218,6 +218,8 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - **Less code, more foresight**: design APIs and boundaries that tolerate future change; avoid speculative features.
 - **Iterate with git**: if something feels wrong, commit or branch and try another shape—comparison is cheap.
 - **No Co-Authored-By lines**: never add `Co-Authored-By` trailers to commits. AI agents do not get credit for work.
+- **No plan documents in the repository**: effort plans, phase breakdowns, task lists and design notes for work in flight live outside the repository. `docs/` describes how the app works, not what is planned for it. A release branch gets its first commit from its first feature PR, not from a plan.
+- **No links to private or tool-hosted pages**: never put claude.ai artifacts, mockups or chat-shared plans in a commit message, a pull request title, description or comment, or a committed file. Readers of the repository cannot open them. Put what matters into the PR description or the docs instead.
 - **Verify before moving on**: run `bun run check`, `bunx biome check .`, and any tests or Convex checks relevant to your edits; keep them passing before layering new behavior.
 - **Have fun**: the best code is often written when you can be creative and express yourself—pair that with the discipline above.
 

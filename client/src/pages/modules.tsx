@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
+import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
 import { oauthErrorMessage } from "@convex/lib/oauthErrors";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { useAction, useConvexAuth, useQuery } from "convex/react";
@@ -18,8 +18,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
+import { useModuleInstall } from "@/hooks/use-module-install";
 import { bareModuleKey } from "@/lib/module-key";
-import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 
 interface ModuleListItem {
   _id: Id<"moduleRepository">;
@@ -47,18 +47,6 @@ type OAuthResult =
 /** The provider's name for messages: the integration id, capitalized. */
 function integrationLabel(integration: string): string {
   return integration.charAt(0).toUpperCase() + integration.slice(1);
-}
-
-interface PendingPermissionApproval {
-  mode: PermissionApprovalMode;
-  /** Shown to the streamer: what this install or update newly allows. */
-  toApprove: string[];
-  /** Shown with it: devices on the streamer's network the module newly reaches. */
-  localEndpointsToApprove: LocalEndpointSummary[];
-  /** Sent with the install: everything the module may hold once it succeeds. */
-  approved: string[];
-  /** Sent with it: the ids of every endpoint the module may reach once it succeeds. */
-  approvedLocalEndpoints: string[];
 }
 
 type SelectedModule =
@@ -151,14 +139,7 @@ export default function Modules() {
     version: string;
     moduleKey?: string;
   } | null>(null);
-  const [isInstalling, setIsInstalling] = useState(false);
-  const [installError, setInstallError] = useState<string | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
-  const [pendingModuleKey, setPendingModuleKey] = useState<string | null>(null);
-  const dismissInstallError = useCallback(() => {
-    setInstallError(null);
-    setShowErrorDetails(false);
-  }, []);
 
   const getModuleDetail = useAction(api.moduleDetail.getModuleDetail);
   const [moduleDetail, setModuleDetail] = useState<ModuleDetailResult | null>(null);
@@ -169,21 +150,20 @@ export default function Modules() {
   // (and its "Update available" notice). Bumped when a module event reports success, to refetch.
   const [detailRefreshKey, setDetailRefreshKey] = useState(0);
 
+  // The install flow itself lives in useModuleInstall, shared with the
+  // marketplace storefront: the approval gate, the engine's progress events
+  // and the timeout have to stay together to be correct, and two copies of
+  // that would drift.
+  const install = useModuleInstall(instance?._id, () => setDetailRefreshKey((key) => key + 1));
+
   const prevSelectedRef = useRef(selectedModule);
   useEffect(() => {
     if (prevSelectedRef.current !== selectedModule) {
-      setInstallError(null);
+      install.dismissError();
       setShowErrorDetails(false);
       prevSelectedRef.current = selectedModule;
     }
-  }, [selectedModule]);
-
-  const installMarketplaceModule = useAction(api.marketplace.installModule);
-
-  const installEvent = useQuery(
-    api.transientEvents.get,
-    instance && pendingModuleKey ? { instanceId: instance._id, correlationKey: pendingModuleKey } : "skip"
-  );
+  }, [selectedModule, install]);
 
   const repoModules = useQuery(api.moduleRepository.list, instance ? { instanceId: instance._id } : "skip");
 
@@ -237,42 +217,14 @@ export default function Modules() {
   // matches would just churn the detail fetch below, and someone who has browsed back to the store
   // in the meantime should not be yanked out of it.
   useEffect(() => {
-    if (installEvent?.status !== "success" || !pendingModuleKey || routeModuleId === undefined) {
+    if (!install.succeeded || !install.pendingModuleKey || routeModuleId === undefined) {
       return;
     }
-    const marketplaceId = bareModuleKey(pendingModuleKey);
+    const marketplaceId = bareModuleKey(install.pendingModuleKey);
     if (marketplaceId && marketplaceId !== routeModuleId) {
       navigate(`/modules/${marketplaceId}`);
     }
-  }, [installEvent, pendingModuleKey, routeModuleId, navigate]);
-
-  useEffect(() => {
-    if (installEvent?.status === "success") {
-      const timer = setTimeout(() => {
-        setIsInstalling(false);
-        setPendingModuleKey(null);
-        setDetailRefreshKey((key) => key + 1);
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-    if (installEvent?.status === "error") {
-      setInstallError(installEvent.message || "Module installation failed on the engine.");
-      setIsInstalling(false);
-      setPendingModuleKey(null);
-    }
-  }, [installEvent]);
-
-  useEffect(() => {
-    if (!isInstalling || !pendingModuleKey) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      setInstallError("Installation timed out. The engine did not respond within 60 seconds.");
-      setIsInstalling(false);
-      setPendingModuleKey(null);
-    }, 60_000);
-    return () => clearTimeout(timer);
-  }, [isInstalling, pendingModuleKey]);
+  }, [install.succeeded, install.pendingModuleKey, routeModuleId, navigate]);
 
   // A stable primitive (not the selectedModule object itself, which gets a new reference on every
   // reactive repoModules update even when the logical selection hasn't changed) — keeps the fetch
@@ -318,80 +270,43 @@ export default function Modules() {
     };
   }, [detailModuleId, detailRefreshKey, instance, getModuleDetail]);
 
-  // Installing and updating are the same marketplace operation, and both need only the module's
-  // marketplace id. An installed selection carries that id in its moduleKey, so deriving it here —
-  // rather than reading it off a `source: "marketplace"` selection — is what makes Update reachable
-  // from the Installed list and not only from the Store.
+  // Installing and updating are the same marketplace operation, and both need only the listing id.
+  // For an installed module that is the listing it was installed from, derived here from its row —
+  // rather than read off a `source: "marketplace"` selection — which is what makes Update reachable
+  // from the Installed list and not only from the Store. Modules are routed by manifest id, which
+  // every edition shares, so the route alone would update a later edition from its first.
   const selectedMarketplaceId = useMemo(() => {
     if (!selectedModule) {
       return null;
     }
     if (selectedModule.source === "marketplace") {
-      return selectedModule.marketplaceId;
+      const { marketplaceId } = selectedModule;
+      const installed = repoModules?.find((m) => m.moduleKey?.startsWith(`${marketplaceId}:`));
+      return (installed && installedListing(installed)?.listingId) ?? marketplaceId;
     }
-    return bareModuleKey(selectedModule.module.moduleKey) ?? null;
-  }, [selectedModule]);
+    const { module } = selectedModule;
+    const row = repoModules?.find((m) => m._id === module._id) ?? module;
+    return installedListing(row)?.listingId ?? null;
+  }, [selectedModule, repoModules]);
 
-  const runMarketplaceInstall = useCallback(
-    async (approvedPermissions: string[], approvedLocalEndpoints: string[]) => {
-      if (!instance || !selectedMarketplaceId) {
-        return;
-      }
-      setIsInstalling(true);
-      setInstallError(null);
-      try {
-        const { moduleKey } = await installMarketplaceModule({
-          instanceId: instance._id,
-          marketplaceModuleId: selectedMarketplaceId,
-          approvedPermissions,
-          approvedLocalEndpoints,
-        });
-        setPendingModuleKey(moduleKey);
-      } catch (err) {
-        setInstallError(err instanceof Error ? err.message : "Failed to install marketplace module.");
-        setIsInstalling(false);
-      }
-    },
-    [instance, selectedMarketplaceId, installMarketplaceModule]
-  );
-
-  const [pendingApproval, setPendingApproval] = useState<PendingPermissionApproval | null>(null);
-
-  // Permissions that could not be read are approved as "none new": the install
-  // action reads the archive itself and refuses one that declares anything
-  // outside the approved list, so an unreadable listing can never install a
-  // permission the streamer did not see.
   const requestMarketplaceInstall = useCallback(
     (mode: PermissionApprovalMode) => {
-      if (!moduleDetail) {
+      if (!moduleDetail || !selectedMarketplaceId) {
         return;
       }
-      const installed = mode === "update" ? moduleDetail.permissions : null;
-      const next = mode === "update" ? moduleDetail.latestPermissions : moduleDetail.permissions;
-      const installedEndpoints = mode === "update" ? moduleDetail.localEndpoints : null;
-      const installedEndpointIds = (installedEndpoints ?? []).map((endpoint) => endpoint.id);
-      if (next === null || next === undefined) {
-        void runMarketplaceInstall(installed ?? [], installedEndpointIds);
-        return;
-      }
-      const toApprove = permissionsToApprove(next, installed);
-      const nextEndpoints = mode === "update" ? moduleDetail.latestLocalEndpoints : moduleDetail.localEndpoints;
-      const endpointsToApprove = nextEndpoints ? localEndpointsToApprove(nextEndpoints, installedEndpoints) : [];
-      // Endpoints that could not be read are approved as "none new", like permissions.
-      const approvedEndpointIds = nextEndpoints ? nextEndpoints.map((endpoint) => endpoint.id) : installedEndpointIds;
-      if (toApprove.length === 0 && endpointsToApprove.length === 0) {
-        void runMarketplaceInstall(next, approvedEndpointIds);
-        return;
-      }
-      setPendingApproval({
+      install.request({
+        marketplaceId: selectedMarketplaceId,
         mode,
-        toApprove,
-        localEndpointsToApprove: endpointsToApprove,
-        approved: next,
-        approvedLocalEndpoints: approvedEndpointIds,
+        moduleName: moduleDetail.name,
+        permissionSets: {
+          permissions: moduleDetail.permissions,
+          latestPermissions: moduleDetail.latestPermissions,
+          localEndpoints: moduleDetail.localEndpoints,
+          latestLocalEndpoints: moduleDetail.latestLocalEndpoints,
+        },
       });
     },
-    [moduleDetail, runMarketplaceInstall]
+    [moduleDetail, selectedMarketplaceId, install]
   );
 
   const installedModuleForMarketplace = useMemo(() => {
@@ -560,13 +475,16 @@ export default function Modules() {
                     }
                     onInstall={selectedMarketplaceId ? () => requestMarketplaceInstall("install") : undefined}
                     onUpdate={selectedMarketplaceId ? () => requestMarketplaceInstall("update") : undefined}
-                    isInstalling={isInstalling}
+                    isInstalling={install.isInstalling}
                     installDisabled={meta.isInstalled}
                     installDisabledReason={meta.isInstalled ? "Already installed" : undefined}
-                    installProgressMessage={isInstalling ? (installEvent?.message ?? null) : null}
-                    installSucceeded={installEvent?.status === "success"}
-                    installError={installError}
-                    onDismissError={dismissInstallError}
+                    installProgressMessage={install.progressMessage}
+                    installSucceeded={install.succeeded}
+                    installError={install.error}
+                    onDismissError={() => {
+                      install.dismissError();
+                      setShowErrorDetails(false);
+                    }}
                   />
                 </div>
               </div>
@@ -591,24 +509,11 @@ export default function Modules() {
           <DialogHeader>
             <DialogTitle>Install Failed</DialogTitle>
           </DialogHeader>
-          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{installError}</pre>
+          <pre className="mt-2 whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">{install.error}</pre>
         </DialogContent>
       </Dialog>
 
-      <ApproveModulePermissionsDialog
-        open={pendingApproval !== null}
-        mode={pendingApproval?.mode ?? "install"}
-        moduleName={meta?.name ?? "This module"}
-        permissions={pendingApproval?.toApprove ?? []}
-        localEndpoints={pendingApproval?.localEndpointsToApprove ?? []}
-        onApprove={() => {
-          if (pendingApproval) {
-            void runMarketplaceInstall(pendingApproval.approved, pendingApproval.approvedLocalEndpoints);
-          }
-          setPendingApproval(null);
-        }}
-        onCancel={() => setPendingApproval(null)}
-      />
+      <ApproveModulePermissionsDialog {...install.approvalDialogProps} />
 
       {instance && (
         <UninstallModuleDialog

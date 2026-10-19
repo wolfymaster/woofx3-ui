@@ -10,6 +10,22 @@ function asStringArray(value: unknown): string[] {
 }
 
 /**
+ * The listing an installed module came from, as the engine reports it.
+ * An engine that predates install provenance sends neither field, and its
+ * absence is the only sign of that: no capability advertises it.
+ */
+function reportedProvenance(module: { marketplaceListingId?: unknown; marketplaceEdition?: unknown }) {
+  const provenance: { marketplaceListingId?: string; marketplaceEdition?: number } = {};
+  if (typeof module.marketplaceListingId === "string" && module.marketplaceListingId !== "") {
+    provenance.marketplaceListingId = module.marketplaceListingId;
+  }
+  if (typeof module.marketplaceEdition === "number" && Number.isFinite(module.marketplaceEdition)) {
+    provenance.marketplaceEdition = module.marketplaceEdition;
+  }
+  return provenance;
+}
+
+/**
  * modulesStep — full-snapshot reconciliation of installed modules.
  *
  * Calls `listEngineModules()` for every module the engine has installed, with
@@ -43,6 +59,7 @@ export const modulesStep: SyncStep = {
         author: asString(manifest.author),
         category: asString(manifest.category),
         tags: asStringArray(manifest.taxonomy),
+        ...reportedProvenance(module),
       };
     });
     return await ctx.runMutation(internal.engineSyncInternal.reconcileModules, { instanceId, snapshots });
