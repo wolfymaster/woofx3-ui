@@ -533,12 +533,30 @@ accepted runs bump `lastUsedAt` / `useCount`, refused or failed ones set
 `lastFailedAt` / `lastFailure`. The decision logic is pure and tested in
 `convex/lib/macroTrigger.test.ts`.
 
+## Helix calls through the engine
+
+The widgets below call Twitch Helix from Convex with the broadcaster's link
+token. An engine that advertises a `twitch.*` capability can make the same
+calls itself, with the same link's token, and answer with Twitch's own status
+and body. `convex/lib/twitchEngineHelix.ts` is the one place that chooses:
+
+- `twitchHelixRoute` picks the engine only when it is registered and lists the
+  capability (asked once per action, with a 3s limit).
+- `helixResponse` hands the engine's answer back as a `Response`, so each
+  module's status checks, parsers and error sentences are the same on both
+  paths.
+- When the engine has no answer from Twitch (`not_linked`, `unavailable`,
+  `invalid_arguments`, or the engine is unreachable) the call goes to Helix
+  directly, and the fallback is logged. A read also falls back after `timeout`
+  or `failed`. A write does not: Twitch may already have applied it, so it
+  fails as a Twitch 504 (timeout) or 502 (failed) instead of being sent twice.
+
 ## Stream info
 
 Edits the channel's title, category and tags, and drops stream markers, without
-leaving for Twitch's own dashboard. Everything goes straight to Helix from
-`convex/streamInfo.ts`, like the other Helix actions here, so it keeps working
-while no engine is running. Every call needs one scope,
+leaving for Twitch's own dashboard. Every call goes to Helix from
+`convex/streamInfo.ts`, or through an engine with `twitch.streamInfo` (see
+above), so it keeps working while no engine is running. Every call needs one scope,
 `channel:manage:broadcast` — reads included, although Get Channel Information
 needs none, so a link missing the scope shows a single "reconnect Twitch" state
 instead of a card that shows data and refuses every button.
