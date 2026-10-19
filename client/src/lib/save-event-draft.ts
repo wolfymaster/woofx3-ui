@@ -2,7 +2,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { type EventEditorState, getDraft, setDraft } from "@/lib/event-drafts";
-import { buildWorkflowDefinition, UNCONDITIONAL_TRIGGER_ID } from "@/lib/trigger-projection";
+import { editorStateOfProjection } from "@/lib/event-workflow-state";
+import { buildWorkflowDefinition, projectWorkflow, UNCONDITIONAL_TRIGGER_ID } from "@/lib/trigger-projection";
 import { fieldValuesToConditions, incompleteConditionFields } from "@/lib/workflow-presets-json";
 
 /** A trigger that can't be saved yet, and the condition fields it still needs a value for. */
@@ -48,7 +49,13 @@ export interface EngineWorkflowWriters {
 
 /**
  * Writes one event's draft to the engine as a single workflow, then re-baselines the
- * draft so the screen reads as saved.
+ * draft on the saved workflow as it reads back, so the screen reads as saved.
+ *
+ * Reading back is what keeps step links valid: a trigger left on "Any" is saved with
+ * no condition task, so its steps read back under the unconditional trigger rather than
+ * the id the draft gave it, and a first save is what mints the workflow's id. A draft
+ * keeping its own ids would link "Edit alert" to a trigger the engine's copy, and so
+ * the alert editor, does not have.
  *
  * Throws whatever the engine call threw; the caller decides how to say so. A workflow
  * created here is enabled straight away, because a trigger the user just wrote is meant
@@ -77,18 +84,22 @@ export async function saveEventDraft(
     engineWorkflowId: state.engineWorkflowId,
   });
 
+  const stored = escapeDollarKeys(definition);
   let enabled = true;
+  let engineWorkflowId: string;
   if (state.engineWorkflowId) {
+    engineWorkflowId = state.engineWorkflowId;
     await writers.updateFromDefinition({
       instanceId: writers.instanceId,
-      engineWorkflowId: state.engineWorkflowId,
-      definition: escapeDollarKeys(definition) as never,
+      engineWorkflowId,
+      definition: stored as never,
     });
   } else {
     const created = await writers.createFromDefinition({
       instanceId: writers.instanceId,
-      definition: escapeDollarKeys(definition) as never,
+      definition: stored as never,
     });
+    engineWorkflowId = created.engineWorkflowId;
     try {
       await writers.setEnabled({
         instanceId: writers.instanceId,
@@ -100,9 +111,38 @@ export async function saveEventDraft(
     }
   }
 
-  const saved = getDraft(event);
-  if (saved) {
-    setDraft(event, { ...saved, baseline: JSON.stringify(saved.value) });
+  const current = getDraft(event);
+  if (current) {
+    setDraft(event, rebaselined(current.value, state, savedState(stored, engineWorkflowId, conditionFields)));
   }
   return { enabled };
+}
+
+/**
+ * The saved workflow as the editor will read it from the engine's copy. Null if it does
+ * not project, which a definition built from a projection always does.
+ */
+function savedState(
+  stored: unknown,
+  engineWorkflowId: string,
+  conditionFields: ConfigField[]
+): EventEditorState | null {
+  const projected = projectWorkflow({ engineWorkflowId, definition: stored, isEnabled: true });
+  return projected.ok ? editorStateOfProjection(projected.projection, conditionFields) : null;
+}
+
+/**
+ * The draft after a save of `sent`. Edits made while the save was in flight stay, unsaved,
+ * over the new baseline; otherwise the draft becomes what was saved.
+ */
+function rebaselined(
+  current: EventEditorState,
+  sent: EventEditorState,
+  saved: EventEditorState | null
+): { value: EventEditorState; baseline: string } {
+  const editedMeanwhile = JSON.stringify(current) !== JSON.stringify(sent);
+  if (saved === null) {
+    return { value: current, baseline: JSON.stringify(sent) };
+  }
+  return { value: editedMeanwhile ? current : saved, baseline: JSON.stringify(saved) };
 }

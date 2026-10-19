@@ -3,7 +3,7 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { EventEditorState } from "@/lib/event-drafts";
 import { isCommandsSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
-import { nextTaskId, type ProjectedAction, projectWorkflow } from "@/lib/trigger-projection";
+import { nextTaskId, type ProjectedAction, projectWorkflow, type WorkflowProjection } from "@/lib/trigger-projection";
 import { type ActionPreset, getDefaultConfigValues, type TriggerPreset } from "@/lib/workflow-presets";
 import { conditionsToFieldValues } from "@/lib/workflow-presets-json";
 
@@ -84,18 +84,25 @@ export function eventEditorStateFor(
   const { primary } = eventWorkflowTarget(workflows, triggerPreset.event ?? "");
   const projected = primary ? projectWorkflow(primary) : undefined;
   if (projected?.ok === true) {
-    const { projection } = projected;
-    return {
-      engineWorkflowId: projection.engineWorkflowId,
-      name: projection.name,
-      triggers: projection.triggers,
-      shared: projection.shared,
-      conditionValues: Object.fromEntries(
-        projection.triggers.map((trigger) => [trigger.id, conditionsToFieldValues(conditionFields, trigger.conditions)])
-      ),
-    };
+    return editorStateOfProjection(projected.projection, conditionFields);
   }
   return { name: `${triggerPreset.name} triggers`, triggers: [], shared: [], conditionValues: {} };
+}
+
+/** The editor state a projected workflow reads as. */
+export function editorStateOfProjection(
+  projection: WorkflowProjection,
+  conditionFields: ConfigField[]
+): EventEditorState {
+  return {
+    engineWorkflowId: projection.engineWorkflowId,
+    name: projection.name,
+    triggers: projection.triggers,
+    shared: projection.shared,
+    conditionValues: Object.fromEntries(
+      projection.triggers.map((trigger) => [trigger.id, conditionsToFieldValues(conditionFields, trigger.conditions)])
+    ),
+  };
 }
 
 /** Every task id in use, so a new step never collides with one already in the workflow. */

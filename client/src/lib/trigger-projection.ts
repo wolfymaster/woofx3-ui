@@ -82,7 +82,10 @@ type EngineTask = TaskDefinition & { function?: string; $ref?: string; disabled?
 
 const RESULT_REFERENCE = /^\$\{([A-Za-z0-9_-]+)\.result\}$/;
 
-export function projectWorkflow(row: Doc<"workflows">): ProjectionResult {
+/** What projecting reads from a workflow row; a definition just saved projects the same way. */
+export type ProjectableWorkflow = Pick<Doc<"workflows">, "engineWorkflowId" | "definition" | "isEnabled">;
+
+export function projectWorkflow(row: ProjectableWorkflow): ProjectionResult {
   const definition = unescapeDollarKeys(row.definition) as WorkflowDefinition | undefined;
   const trigger = definition?.trigger;
   if (!definition || !trigger) {
