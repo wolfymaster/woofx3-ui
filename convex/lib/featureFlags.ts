@@ -21,7 +21,14 @@ export interface FeatureFlagDefinition {
  * written for it, so a flag cannot be turned on by a typo, and a row whose
  * key is gone from this list is ignored.
  */
-export const FEATURE_FLAGS = {} as const satisfies Record<string, FeatureFlagDefinition>;
+export const FEATURE_FLAGS = {
+  "twitch.engineModeration": {
+    description:
+      "The Moderation widget's writes (blocked terms, timeouts, bans, unbans, chat modes) are made by the engine's twitch.moderation methods instead of Convex calling Helix. Only for engines reporting twitch.moderation; reads follow the capability alone. Roll out to managed engines first.",
+    owner: "wolfy",
+    removeBy: "2027-03-31",
+  },
+} as const satisfies Record<string, FeatureFlagDefinition>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
 
