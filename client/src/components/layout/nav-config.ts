@@ -16,12 +16,12 @@ import {
   MessageSquarePlus,
   PackagePlus,
   Palette,
-  Puzzle,
   Radio,
   Rocket,
   ScrollText,
   Server,
   Settings,
+  Store,
   Tally5,
   Timer,
   Users,
@@ -30,6 +30,7 @@ import {
 import { ALERT_EDITOR_BASE, ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { FEEDBACK_PATH } from "@/lib/feedback";
+import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
 import { STREAM_RECAPS_PATH } from "@/lib/stream-recap-route";
 
 export const STARTER_PACKS_PATH = "/stream/starter-packs";
@@ -128,7 +129,9 @@ export const MAIN_NAV_SECTIONS: NavSection[] = [
   // Lands on Alerts, like the /stream redirect in App.tsx, rather than on the
   // first entry: Go live leads the list for visibility, not as the section's home.
   { id: "stream", label: "Stream", icon: Radio, href: "/stream/alerts", children: STREAM_ITEMS },
-  { id: "modules", label: "Modules", icon: Puzzle, href: "/modules" },
+  // The storefront is /marketplace; /modules is still the install surface and
+  // is reached from a listing, so the section owns both paths.
+  { id: "marketplace", label: "Marketplace", icon: Store, href: MARKETPLACE_PATH, owns: ["/modules"] },
   { id: "help", label: "Help", icon: CircleHelp, href: HELP_ITEMS[0].href, children: HELP_ITEMS },
 ];
 
@@ -148,7 +151,10 @@ export function isSectionActive(section: NavSection, location: string): boolean 
   if (root === "/") {
     return location === "/";
   }
-  return location === root || location.startsWith(`${root}/`);
+  // `owns` counts here as well as on a sidebar entry: Marketplace owns
+  // /modules, which is where a listing's install flow lives, and the section
+  // should stay marked while the streamer is in it.
+  return [root, ...(section.owns ?? [])].some((path) => location === path || location.startsWith(`${path}/`));
 }
 
 export function isNavItemActive(item: NavItem, location: string): boolean {

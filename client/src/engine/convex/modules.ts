@@ -67,6 +67,19 @@ function useWorkflowsRequest() {
   return useCallback((instanceId: InstanceId) => listWorkflows({ instanceId }), [listWorkflows]);
 }
 
+function useMarketplaceInstallRequest() {
+  const installModule = useAction(api.marketplace.installModule);
+  return useCallback(
+    (
+      instanceId: InstanceId,
+      marketplaceModuleId: string,
+      approvedPermissions: string[],
+      approvedLocalEndpoints: string[]
+    ) => installModule({ instanceId, marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }),
+    [installModule]
+  );
+}
+
 export const convexModulesGateway: ModulesGateway = {
   useDetailRequest,
   useSettingsRequest,
@@ -76,4 +89,5 @@ export const convexModulesGateway: ModulesGateway = {
   useUninstallRequest,
   useReconcileUninstallRequest,
   useWorkflowsRequest,
+  useMarketplaceInstallRequest,
 };

@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, internalMutation } from "./_generated/server";
+import { installedListing } from "./lib/marketplaceInstallIdentity";
 import { APPLY_CLAIM_TTL_MS, nextApplyDelay, packStatusFromOutcomes } from "./lib/setupApply";
 import { starterPacksForInterests } from "./lib/setupInterests";
 import { logger } from "./logger";
@@ -68,14 +69,18 @@ export const claim = internalMutation({
 
     // A module the engine already has, e.g. on an instance set up before this
     // wizard existed, counts as installed rather than being installed again.
+    // Any edition of it counts: a platform named by its first edition's
+    // listing id must not reinstall that edition over a later one.
     const repository = await ctx.db
       .query("moduleRepository")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
       .take(MAX_INSTALLED_MODULES);
     const alreadyInstalled = new Map<string, string>();
     for (const module of repository) {
-      if (module.status === "installed" && module.moduleKey) {
-        alreadyInstalled.set(module.moduleKey.split(":")[0], module.moduleKey);
+      const installed = installedListing(module);
+      if (module.status === "installed" && module.moduleKey && installed) {
+        alreadyInstalled.set(installed.manifestId, module.moduleKey);
+        alreadyInstalled.set(installed.listingId, module.moduleKey);
       }
     }
     const recorded = new Map((row.moduleInstalls ?? []).map((entry) => [entry.marketplaceModuleId, entry]));
