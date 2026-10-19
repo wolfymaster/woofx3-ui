@@ -4,6 +4,7 @@ import {
   hasEngineCapability,
   isLegacyCapabilitiesError,
   parseEngineCapabilities,
+  parseReportedCapabilityIds,
 } from "./engineCapabilities";
 
 describe("parseEngineCapabilities", () => {
@@ -20,6 +21,13 @@ describe("parseEngineCapabilities", () => {
   test("ignores ids this dashboard does not know", () => {
     const report = parseEngineCapabilities({ schema: 1, capabilities: ["future.feature", 7, "config.bundles"] });
     expect(report.capabilities).toEqual(["config.bundles"]);
+  });
+
+  test("reports every id the engine listed, known or not", () => {
+    expect(
+      parseReportedCapabilityIds({ schema: 1, capabilities: ["future.feature", 7, "config.bundles", "future.feature"] })
+    ).toEqual(["config.bundles", "future.feature"]);
+    expect(() => parseReportedCapabilityIds({ schema: 2, capabilities: [] })).toThrow("schema 2");
   });
 
   test("refuses a response shape it cannot read", () => {

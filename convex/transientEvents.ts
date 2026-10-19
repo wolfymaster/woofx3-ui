@@ -1,6 +1,7 @@
-import { v } from "convex/values";
+import { type ObjectType, v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalMutation, query } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { internalMutation, type MutationCtx, query } from "./_generated/server";
 import { isInstanceMember } from "./lib/teamAccess";
 
 const DEFAULT_TTL_MS = 60_000; // 60 seconds
@@ -59,37 +60,67 @@ export const listByCorrelation = query({
   },
 });
 
+const emitArgs = {
+  instanceId: v.id("instances"),
+  correlationKey: v.string(),
+  type: v.string(),
+  status: v.union(v.literal("progress"), v.literal("success"), v.literal("error")),
+  message: v.optional(v.string()),
+  data: v.optional(v.any()),
+  ttlMs: v.optional(v.number()),
+};
+
+async function insertEvent(ctx: MutationCtx, args: ObjectType<typeof emitArgs>): Promise<Id<"transientEvents">> {
+  const ttl = args.ttlMs ?? DEFAULT_TTL_MS;
+  const expiresAt = Date.now() + ttl;
+
+  const eventId = await ctx.db.insert("transientEvents", {
+    instanceId: args.instanceId,
+    correlationKey: args.correlationKey,
+    type: args.type,
+    status: args.status,
+    message: args.message,
+    data: args.data,
+    expiresAt,
+  });
+
+  // Schedule cleanup
+  await ctx.scheduler.runAt(expiresAt, internal.transientEvents.deleteEvent, { eventId });
+
+  return eventId;
+}
+
 /**
  * Emit a transient event. The event is automatically scheduled for cleanup after TTL.
  */
 export const emit = internalMutation({
-  args: {
-    instanceId: v.id("instances"),
-    correlationKey: v.string(),
-    type: v.string(),
-    status: v.union(v.literal("progress"), v.literal("success"), v.literal("error")),
-    message: v.optional(v.string()),
-    data: v.optional(v.any()),
-    ttlMs: v.optional(v.number()),
-  },
+  args: emitArgs,
   handler: async (ctx, args) => {
-    const ttl = args.ttlMs ?? DEFAULT_TTL_MS;
-    const expiresAt = Date.now() + ttl;
+    return await insertEvent(ctx, args);
+  },
+});
 
-    const eventId = await ctx.db.insert("transientEvents", {
-      instanceId: args.instanceId,
-      correlationKey: args.correlationKey,
-      type: args.type,
-      status: args.status,
-      message: args.message,
-      data: args.data,
-      expiresAt,
-    });
-
-    // Schedule cleanup
-    await ctx.scheduler.runAt(expiresAt, internal.transientEvents.deleteEvent, { eventId });
-
-    return eventId;
+/**
+ * Emit a transient event unless one was already written under the key at or
+ * after `since`. For an event that can only be sent after the work it
+ * describes started elsewhere: `get` answers with the newest row, so a late
+ * "progress" written after the engine's own "success" or "error" callback
+ * would mask the outcome.
+ */
+export const emitUnlessNewer = internalMutation({
+  args: { ...emitArgs, since: v.number() },
+  handler: async (ctx, { since, ...args }): Promise<Id<"transientEvents"> | null> => {
+    const latest = await ctx.db
+      .query("transientEvents")
+      .withIndex("by_instance_correlation", (q) =>
+        q.eq("instanceId", args.instanceId).eq("correlationKey", args.correlationKey)
+      )
+      .order("desc")
+      .first();
+    if (latest !== null && latest._creationTime >= since) {
+      return null;
+    }
+    return await insertEvent(ctx, args);
   },
 });
 
