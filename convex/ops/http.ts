@@ -5,6 +5,7 @@ import { authenticateOps, OPS_SECRET_ENV, OPS_SECRET_NEXT_ENV } from "../lib/ops
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { type AssignmentRow, tallyPlanAccounts } from "../lib/ops/planCounts";
 import { matchOpsRoute } from "../lib/ops/routes";
+import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
 
 /**
@@ -83,6 +84,21 @@ export const opsHandler = httpAction(async (ctx, request) => {
       const outcome = await ctx.runAction(internal.ops.engines.act, {
         instanceId: route.instanceId,
         action: route.action,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "instances.setStorageLimits": {
+      const body = await request.json().catch(() => null);
+      const parsed = parseStorageLimitsRequest(body);
+      if (!parsed.ok) {
+        return error(400, "invalid_storage_limits", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.storageLimits.set, {
+        instanceId: route.instanceId,
+        limits: parsed.value,
         actor: auth.actor,
         reason: auth.reason ?? "",
       });

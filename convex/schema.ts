@@ -5,6 +5,7 @@ import { syncTriggerValidator } from "./lib/engineSync/trigger";
 import { limitValuesValidator } from "./lib/entitlements";
 import { featureFlagRulesValidator, featureFlagStateValidator } from "./lib/featureFlags";
 import { feedbackKindValidator, feedbackStatusValidator } from "./lib/feedback";
+import { hostedStorageOverrideValidator } from "./lib/hostedStorage";
 import { notificationAudienceValidator } from "./lib/notifications";
 import { widgetBehaviorKindsValidator } from "./lib/widgetBehaviorKinds";
 
@@ -189,6 +190,10 @@ export default defineSchema({
     // owner could otherwise opt their own instance in. See
     // lib/marketplaceAccess.ts.
     marketplaceDevAccess: v.optional(v.boolean()),
+    // Hosted storage limits for this engine alone, winning over its account's
+    // entitlements. Operator-only: set through the ops API, never from the
+    // dashboard. See lib/hostedStorage.ts.
+    hostedStorageLimits: v.optional(hostedStorageOverrideValidator),
   })
     .index("by_account", ["accountId"])
     .index("by_webhook_secret", ["webhookSecret"]),

@@ -55,6 +55,15 @@ describe("matchOpsRoute", () => {
     expect(matchOpsRoute("GET", "/api/ops/engines/i1/upgrade")).toBeNull();
   });
 
+  it("names the storage limits write", () => {
+    expect(matchOpsRoute("POST", "/api/ops/instances/i1/storage-limits")).toEqual({
+      method: "POST",
+      name: "instances.setStorageLimits",
+      instanceId: "i1",
+    });
+    expect(matchOpsRoute("GET", "/api/ops/instances/i1/storage-limits")).toBeNull();
+  });
+
   it("serves nothing else", () => {
     expect(matchOpsRoute("POST", "/api/ops/users")).toBeNull();
     expect(matchOpsRoute("GET", "/api/ops/")).toBeNull();

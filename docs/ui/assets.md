@@ -15,7 +15,7 @@
 
 ## Hosted storage limits
 
-A managed engine on the storage maintenance provisioned for it is limited by the account's plan: `storage.hostedAssetBytes` in total and `storage.hostedFileBytes` per file (defaults 50 MB and 10 MB; see [Entitlements](../patterns/entitlements.md)). `requestUpload` refuses an upload that would pass either, with a sentence the upload dialog shows. Self-hosted engines, and managed ones whose admin has moved them onto a bucket and credentials of their own, have no limit (`isOnHostedStorage` in `convex/lib/hostedStorage.ts`).
+A managed engine on the storage maintenance provisioned for it is limited by the account's plan: `storage.hostedAssetBytes` in total and `storage.hostedFileBytes` per file (defaults 50 MB and 10 MB; see [Entitlements](../patterns/entitlements.md)). Operators can set either limit for one engine from the backoffice (`instances.hostedStorageLimits`, through the [ops API](../patterns/ops-api.md)); a limit the engine sets wins over its account's, and one it leaves out is the account's. `requestUpload` refuses an upload that would pass either, with a sentence the upload dialog shows. Self-hosted engines, and managed ones whose admin has moved them onto a bucket and credentials of their own, have no limit (`isOnHostedStorage` in `convex/lib/hostedStorage.ts`).
 
 Usage is the engine's own total of its resources (`getResourceUsage`) plus reservations in `hostedStorageReservations`, held while each grant is issued so concurrent uploads cannot all pass against the same total. The Assets page shows a meter (`hostedStorageUsage`) when a limit applies.
 
