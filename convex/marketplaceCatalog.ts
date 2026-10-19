@@ -1,0 +1,483 @@
+import { ConvexError, v } from "convex/values";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, action, internalAction } from "./_generated/server";
+import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { requireInstanceRoleInAction } from "./lib/instanceAccess";
+import {
+  MarketplaceError,
+  marketplaceAuthed,
+  marketplaceGet,
+  queryString,
+  withClientErrors,
+} from "./lib/marketplaceApi";
+import {
+  type AuthorPage,
+  type CatalogCounts,
+  type CatalogListingDetail,
+  type CatalogPage,
+  isBundleListing,
+  LISTING_TYPES,
+  type ListingQuote,
+  parseAuthorPage,
+  parseBundle,
+  parseCatalogCounts,
+  parseCatalogDetail,
+  parseCatalogPage,
+  parseQuote,
+} from "./lib/marketplaceCatalog";
+import {
+  type InstallBundleResult,
+  installBundleThroughEngine,
+  marketplaceEngineFor,
+  marketplaceEngineSession,
+} from "./lib/marketplaceEngineInstall";
+import {
+  acquireListing,
+  buyerRefFor,
+  buyerTokenFor,
+  commerceConfigured,
+  contentAccessFor,
+  contentRefusal,
+  fetchListingContent,
+  marketplaceAccessForInstanceId,
+} from "./lib/marketplaceEntitlement";
+
+// The marketplace storefront, across every listing type.
+//
+// The marketplace API owns the catalog; this file is the proxy in front of it.
+// Its one addition is identity: the marketplace has no user model, so the
+// buyer is an opaque `account:{id}` minted here, and the acquire, quote,
+// entitlement and checkout calls that depend on it carry the write token,
+// which never leaves the server.
+
+const listingTypeValidator = v.union(
+  v.literal("module"),
+  v.literal("theme"),
+  v.literal("emote"),
+  v.literal("overlay"),
+  v.literal("alert")
+);
+
+// Two popularity orders, because they are two different questions: "popular"
+// is the lifetime chart, "trending" is the last seven days. The storefront
+// asks the marketplace for either rather than sorting a page it already paged,
+// since the answer depends on rows it never fetched.
+const sortValidator = v.union(
+  v.literal("relevance"),
+  v.literal("newest"),
+  v.literal("name"),
+  v.literal("popular"),
+  v.literal("trending")
+);
+
+/** Searches and browses the whole marketplace: one query, every listing type. */
+export const search = action({
+  args: {
+    instanceId: v.id("instances"),
+    query: v.optional(v.string()),
+    types: v.optional(v.array(listingTypeValidator)),
+    category: v.optional(v.string()),
+    authorSlug: v.optional(v.string()),
+    /** Only curated listings, in `featuredRank` order. Drives the hero. */
+    featured: v.optional(v.boolean()),
+    sort: v.optional(sortValidator),
+    limit: v.optional(v.number()),
+    offset: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<CatalogPage> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const path = `/catalog${queryString({
+        q: args.query,
+        type: args.types?.join(","),
+        category: args.category,
+        author: args.authorSlug,
+        // Sent only when asked for: `featured=false` is not a filter, and the
+        // marketplace reads the parameter's presence.
+        featured: args.featured === true ? "true" : undefined,
+        sort: args.sort,
+        limit: args.limit,
+        offset: args.offset,
+      })}`;
+      return parseCatalogPage(await marketplaceGet(path, await marketplaceAccessForInstanceId(ctx, args.instanceId)));
+    }),
+});
+
+/**
+ * How many listings of each type the catalog holds, for the category tiles.
+ *
+ * Returns null rather than throwing when the marketplace has no counts route
+ * yet: the tiles then count what the storefront already fetched instead of the
+ * page failing over a number beside a label.
+ */
+export const counts = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<CatalogCounts | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      try {
+        return parseCatalogCounts(
+          await marketplaceGet("/catalog/counts", await marketplaceAccessForInstanceId(ctx, args.instanceId))
+        );
+      } catch (err) {
+        if (err instanceof MarketplaceError && (err.status === 404 || err.status === 400)) {
+          return null;
+        }
+        throw err;
+      }
+    }),
+});
+
+/** One listing with everything its page shows. */
+export const getListing = action({
+  args: { instanceId: v.id("instances"), listingId: v.string() },
+  handler: async (ctx, args): Promise<CatalogListingDetail | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      try {
+        const payload = await marketplaceGet(
+          `/catalog/${encodeURIComponent(args.listingId)}`,
+          await marketplaceAccessForInstanceId(ctx, args.instanceId)
+        );
+        const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+        return parseCatalogDetail(obj.listing);
+      } catch (err) {
+        // A listing that is missing, dev-tier or unpublished answers 404
+        // identically, so the page shows "not found" rather than an error.
+        if (err instanceof MarketplaceError && err.status === 404) {
+          return null;
+        }
+        throw err;
+      }
+    }),
+});
+
+/**
+ * An author's page: the profile, and one page of the listings of every type
+ * published under that username, newest first.
+ */
+export const getAuthor = action({
+  args: {
+    instanceId: v.id("instances"),
+    slug: v.string(),
+    limit: v.optional(v.number()),
+    offset: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<AuthorPage | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      try {
+        return parseAuthorPage(
+          await marketplaceGet(
+            `/authors/${encodeURIComponent(args.slug)}${queryString({ limit: args.limit, offset: args.offset })}`,
+            await marketplaceAccessForInstanceId(ctx, args.instanceId)
+          )
+        );
+      } catch (err) {
+        if (err instanceof MarketplaceError && err.status === 404) {
+          return null;
+        }
+        throw err;
+      }
+    }),
+});
+
+/**
+ * What this account must do to hold one listing: the listing page's button.
+ *
+ * Without the write token nothing can be bought or recorded, so the answer is
+ * read off the public pricing instead: a free listing installs, anything else
+ * is unavailable on this deployment. Null for a listing that is not there.
+ */
+export const quote = action({
+  args: { instanceId: v.id("instances"), listingId: v.string() },
+  handler: async (ctx, args): Promise<ListingQuote | null> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const path = `/catalog/${encodeURIComponent(args.listingId)}`;
+      try {
+        if (!commerceConfigured()) {
+          const payload = await marketplaceGet(path, await marketplaceAccessForInstanceId(ctx, args.instanceId));
+          const listing = parseCatalogDetail((payload as Record<string, unknown> | null)?.listing);
+          if (!listing) {
+            return null;
+          }
+          return listing.pricing?.mode === "free"
+            ? { kind: "free" }
+            : { kind: "unavailable", reason: "commerce_unconfigured" };
+        }
+        const buyerRef = await buyerRefFor(ctx, args.instanceId);
+        const payload = await marketplaceAuthed(`${path}/quote${queryString({ buyerRef })}`, "GET");
+        const parsed = parseQuote((payload as Record<string, unknown> | null)?.quote);
+        if (!parsed) {
+          throw new ConvexError("The marketplace sent a quote this app does not understand");
+        }
+        return parsed;
+      } catch (err) {
+        if (err instanceof MarketplaceError && err.status === 404) {
+          return null;
+        }
+        throw err;
+      }
+    }),
+});
+
+/**
+ * Every listing this account holds, free claims included.
+ *
+ * Fetched once for a whole grid rather than per card: the storefront needs to
+ * know which paid listings say Install and which say Buy, and that is one
+ * answer.
+ */
+export const entitlements = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, args): Promise<string[]> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+      const buyerRef = await buyerRefFor(ctx, args.instanceId);
+      const payload = await marketplaceAuthed(`/entitlements${queryString({ buyerRef })}`, "GET");
+      const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const ids = Array.isArray(obj.listingIds) ? obj.listingIds : [];
+      return ids.filter((id): id is string => typeof id === "string");
+    }),
+});
+
+export type CheckoutResult =
+  | { status: "redirect"; url: string }
+  /** Already bought. The button becomes Install without a round trip to Stripe. */
+  | { status: "already_entitled" }
+  /** Nothing to pay -- a free upgrade, say. The listing installs as it is. */
+  | { status: "no_payment_needed" }
+  /** Commerce is not configured on this deployment. */
+  | { status: "unavailable"; message: string };
+
+/**
+ * `returnPath` is a path within this app, never a URL.
+ *
+ * Joining it onto a configured origin here is what makes an open redirect
+ * impossible: a caller cannot name another host, so a Stripe payment page can
+ * only ever send the buyer back into woofx3. The marketplace's own
+ * `CHECKOUT_RETURN_ORIGINS` is the second layer.
+ */
+function returnUrl(returnPath: string): string {
+  const base = process.env.APP_BASE_URL?.replace(/\/$/, "");
+  if (!base) {
+    throw new ConvexError("Checkout is not configured: set APP_BASE_URL");
+  }
+  if (!returnPath.startsWith("/") || returnPath.startsWith("//")) {
+    throw new ConvexError("Invalid return path");
+  }
+  return `${base}${returnPath}`;
+}
+
+/** Starts a Stripe checkout for a paid listing. */
+export const createCheckout = action({
+  args: {
+    instanceId: v.id("instances"),
+    listingId: v.string(),
+    /** Path in this app to come back to, e.g. `/marketplace/cozy-cats`. */
+    returnPath: v.string(),
+  },
+  handler: async (ctx, args): Promise<CheckoutResult> =>
+    withClientErrors(async () => {
+      // A purchase spends the account's money, so it takes more than membership.
+      await requireInstanceRoleInAction(ctx, args.instanceId, "admin");
+      const buyerRef = await buyerRefFor(ctx, args.instanceId);
+      const base = returnUrl(args.returnPath);
+      const separator = base.includes("?") ? "&" : "?";
+
+      try {
+        const payload = await marketplaceAuthed("/checkout/sessions", "POST", {
+          listingId: args.listingId,
+          buyerRef,
+          successUrl: `${base}${separator}purchase=success`,
+          cancelUrl: `${base}${separator}purchase=cancelled`,
+        });
+        const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+        if (obj.alreadyEntitled === true) {
+          return { status: "already_entitled" };
+        }
+        if (typeof obj.url !== "string" || obj.url === "") {
+          throw new ConvexError("The marketplace did not return a checkout URL");
+        }
+        return { status: "redirect", url: obj.url };
+      } catch (err) {
+        if (err instanceof MarketplaceError && err.status === 503) {
+          return {
+            status: "unavailable",
+            message: "Purchases aren't available yet on this deployment.",
+          };
+        }
+        if (err instanceof MarketplaceError && err.code === "no_payment_needed") {
+          return { status: "no_payment_needed" };
+        }
+        if (err instanceof MarketplaceError && err.code === "listing_unavailable") {
+          return { status: "unavailable", message: err.message };
+        }
+        throw err;
+      }
+    }),
+});
+
+export type { InstallBundleResult };
+
+/**
+ * Installs an overlay or alert listing.
+ *
+ * These are not modules: the listing carries the scene or alert-composition
+ * document itself, so installing one is writing that document through the
+ * engine calls the scene editor and the alert library already use. Nothing is
+ * loaded into the module runtime, which is the whole reason they are not
+ * modules.
+ *
+ * Runs on the engine when `marketplaceEngineFor` routes it there; the engine
+ * then claims the listing for the buyer, fetches the bundle and writes the
+ * document. The listing is read and its type checked here on either path.
+ */
+export const installBundle = action({
+  args: { instanceId: v.id("instances"), listingId: v.string() },
+  handler: async (ctx, args): Promise<InstallBundleResult> =>
+    withClientErrors(async () => {
+      await requireInstanceRoleInAction(ctx, args.instanceId);
+
+      const payload = await marketplaceGet(
+        `/catalog/${encodeURIComponent(args.listingId)}`,
+        await marketplaceAccessForInstanceId(ctx, args.instanceId)
+      );
+      const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+      const listing = parseCatalogDetail(obj.listing);
+      if (!listing) {
+        throw new ConvexError(`Marketplace listing ${args.listingId} was not found`);
+      }
+      if (!isBundleListing(listing.type)) {
+        throw new ConvexError(`${listing.name} is a ${listing.type} listing and does not install as a bundle`);
+      }
+      const viaEngine = await marketplaceEngineFor(ctx, args.instanceId);
+      if (viaEngine) {
+        return await installBundleThroughEngine(
+          { engine: () => marketplaceEngineSession(viaEngine), buyerToken: () => buyerTokenFor(ctx, args.instanceId) },
+          listing.id
+        );
+      }
+      // The same gate the module install uses: the account must hold the
+      // listing, and a free one is claimed here, which also counts the install.
+      // The marketplace serves a paid bundle only to its holder regardless.
+      await acquireListing(ctx, args.instanceId, listing.id, listing.name);
+      let bundlePayload: unknown;
+      try {
+        bundlePayload = await fetchListingContent(
+          `/catalog/${encodeURIComponent(listing.id)}/bundle`,
+          await contentAccessFor(ctx, args.instanceId)
+        );
+      } catch (err) {
+        const refusal = contentRefusal(err, listing.name);
+        if (refusal !== null) {
+          throw new ConvexError(refusal);
+        }
+        throw err;
+      }
+      const bundle = parseBundle(bundlePayload);
+      if (!bundle) {
+        throw new ConvexError(`${listing.name} carries no bundle to install`);
+      }
+      const layoutJson = JSON.stringify(bundle.layout ?? {});
+      const widgetsJson = JSON.stringify(bundle.widgets ?? []);
+
+      if (listing.type === "overlay") {
+        const { engineSceneId } = await ctx.runAction(internal.marketplaceCatalog.createSceneFromBundle, {
+          instanceId: args.instanceId,
+          name: listing.name,
+          description: listing.description,
+          layoutJson,
+          widgetsJson,
+        });
+        return { listingId: listing.id, engineId: engineSceneId, kind: "scene" };
+      }
+
+      const { engineCompositionId } = await ctx.runAction(internal.marketplaceCatalog.createAlertFromBundle, {
+        instanceId: args.instanceId,
+        name: listing.name,
+        description: listing.description,
+        layoutJson,
+        widgetsJson,
+        behaviorsJson: JSON.stringify(bundle.behaviors ?? {}),
+        inputsJson: JSON.stringify(bundle.inputs ?? []),
+      });
+      return { listingId: listing.id, engineId: engineCompositionId, kind: "alert" };
+    }),
+});
+
+// --- engine writes ---
+//
+// Split into internal actions rather than called inline so the bundle install
+// reads as one sequence. Each gets its own capnweb session, because an HTTP
+// batch is spent by its first call.
+
+export const createSceneFromBundle = internalAction({
+  args: {
+    instanceId: v.id("instances"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    layoutJson: v.string(),
+    widgetsJson: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ engineSceneId: string }> => {
+    const engine = await engineFor(ctx, args.instanceId);
+    const result = await createEngineRpcSession<EngineApi>(
+      engine.url,
+      engine.clientId,
+      engine.clientSecret
+    ).createScene({
+      name: args.name,
+      description: args.description,
+      widgetsJson: args.widgetsJson,
+      layoutJson: args.layoutJson,
+      correlationKey: crypto.randomUUID(),
+    });
+    return { engineSceneId: result.id };
+  },
+});
+
+export const createAlertFromBundle = internalAction({
+  args: {
+    instanceId: v.id("instances"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    layoutJson: v.string(),
+    widgetsJson: v.string(),
+    behaviorsJson: v.string(),
+    inputsJson: v.string(),
+  },
+  handler: async (ctx, args): Promise<{ engineCompositionId: string }> => {
+    const engine = await engineFor(ctx, args.instanceId);
+    const result = await createEngineRpcSession<EngineApi>(
+      engine.url,
+      engine.clientId,
+      engine.clientSecret
+    ).createAlertComposition({
+      name: args.name,
+      description: args.description,
+      widgetsJson: args.widgetsJson,
+      layoutJson: args.layoutJson,
+      behaviorsJson: args.behaviorsJson,
+      inputsJson: args.inputsJson,
+      correlationKey: crypto.randomUUID(),
+    });
+    return { engineCompositionId: result.id };
+  },
+});
+
+async function engineFor(ctx: ActionCtx, instanceId: Id<"instances">) {
+  const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
+  if (!instance) {
+    throw new ConvexError(`Instance ${instanceId} not found`);
+  }
+  if (!instance.clientId || !instance.clientSecret) {
+    throw new ConvexError("Instance is not registered with the engine");
+  }
+  return { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
+}
+
+/** Every listing type, for a client that renders one tab or filter per type. */
+export const listingTypes = LISTING_TYPES;

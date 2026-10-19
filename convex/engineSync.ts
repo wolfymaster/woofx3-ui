@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalAction, internalMutation, query } from "./_generated/server";
 import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl";
+import { isEngineActive } from "./lib/engineSync/activity";
 import { ENGINE_SYNC_CONFIG } from "./lib/engineSync/config";
 import { SYNC_STEPS } from "./lib/engineSync/steps";
 import { syncTriggerValidator } from "./lib/engineSync/trigger";
@@ -94,15 +95,14 @@ export const runSync = internalAction({
  * however many instances exist. Instances get their row at registration (see
  * ensureSyncRow), so nothing here has to look for instances without one.
  *
- * An instance whose engine has reported nothing within the inactivity window
- * is pushed out by that window instead of synced: nothing on it has changed
- * for a sync to pick up.
+ * An instance whose engine has not called the woofx3 webhook within the
+ * inactivity window is pushed out by that window instead of synced: nothing
+ * on it has changed for a sync to pick up.
  */
 export const sweep = internalMutation({
   args: {},
   handler: async (ctx): Promise<{ scheduled: number; deferred: number }> => {
     const now = Date.now();
-    const inactivityCutoff = now - ENGINE_SYNC_CONFIG.inactivityThresholdMs;
     const due = await ctx.db
       .query("instanceSync")
       .withIndex("by_next_eligible", (q) => q.lte("nextEligibleAt", now))
@@ -125,7 +125,7 @@ export const sweep = internalMutation({
         await ctx.db.delete(row._id);
         continue;
       }
-      if ((instance.lastEngineActivityAt ?? 0) < inactivityCutoff) {
+      if (!isEngineActive(instance.lastEngineActivityAt, now)) {
         await ctx.db.patch(row._id, { nextEligibleAt: now + ENGINE_SYNC_CONFIG.inactivityThresholdMs });
         deferred++;
         continue;
