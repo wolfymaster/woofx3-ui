@@ -25,7 +25,7 @@ The menu is declared in one place — `client/src/components/layout/nav-config.t
 | Section | Route prefix | Sub-items |
 |---------|--------------|-----------|
 | Dashboard | `/` | — |
-| Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Supporters, Assets, Workflows |
+| Stream | `/stream` | Alerts, Commands, Counters, Scenes, Timers, Queues, Supporters, Media, Workflows |
 | Marketplace | `/marketplace` | — (the page renders its own category sidebar) |
 | Help | `/help` | Learning, Setup, Logs, Feedback |
 | Admin | `/admin` | Engine, Integrations, Storage, Appearance |
@@ -74,7 +74,7 @@ When you touch a screen, check imports: `from "convex/react"` vs `@/lib/transpor
 - [Marketplace](./marketplace.md)
 - [Modules](./modules.md)
 - [Workflows](./workflows.md)
-- [Assets](./assets.md)
+- [Media](./assets.md)
 - [Scenes](./scenes.md)
 - [Admin & team](./admin-team.md)
 - [Auth & onboarding](./auth-onboarding.md)

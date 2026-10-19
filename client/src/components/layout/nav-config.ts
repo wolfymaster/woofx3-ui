@@ -105,7 +105,7 @@ export const STREAM_ITEMS: NavItem[] = [
   { id: "scenes", label: "Scenes", icon: Layers, href: "/stream/scenes" },
   { id: "recaps", label: "Recaps", icon: History, href: STREAM_RECAPS_PATH },
   { id: "supporters", label: "Supporters", icon: HandHeart, href: "/stream/supporters" },
-  { id: "assets", label: "Assets", icon: FolderOpen, href: "/stream/assets" },
+  { id: "assets", label: "Media", icon: FolderOpen, href: "/stream/assets" },
   { id: "starter-packs", label: "Starter Packs", icon: PackagePlus, href: STARTER_PACKS_PATH },
 ];
 

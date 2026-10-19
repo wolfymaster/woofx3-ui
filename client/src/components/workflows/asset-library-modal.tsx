@@ -72,7 +72,7 @@ export function AssetLibraryModal({
   const { instance } = useInstance();
   const { toast } = useToast();
 
-  const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: "Assets" }]);
+  const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: "Media" }]);
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<Resource | null>(null);
   const [tab, setTab] = useState("library");
