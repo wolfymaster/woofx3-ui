@@ -5,6 +5,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
 import { resyncRelayIfBridging } from "./lib/companionEndpoints";
 import { deleteCompanion } from "./lib/companionRecords";
+import { engineActivityPatch } from "./lib/engineSync/activity";
 import { ensureSyncRow } from "./lib/engineSync/syncRow";
 import type { InstanceRole } from "./lib/instanceRoles";
 import { deleteInstanceAndEngine } from "./lib/instanceTeardown";
@@ -359,6 +360,25 @@ export const applyRegistration = internalMutation({
     // engine registered again (a new deployment, or one whose database was
     // reset) has no relay configuration until it is told.
     await resyncRelayIfBridging(ctx, instanceId);
+  },
+});
+
+/**
+ * Record that the engine called Convex, which is what the engine sync sweep
+ * reads as the instance being active. Throttled by engineActivityPatch; the
+ * caller checks the stored value first too, so most callbacks never get here.
+ */
+export const recordEngineActivity = internalMutation({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }) => {
+    const instance = await ctx.db.get(instanceId);
+    if (!instance) {
+      return;
+    }
+    const patch = engineActivityPatch(instance.lastEngineActivityAt, Date.now());
+    if (patch) {
+      await ctx.db.patch(instanceId, patch);
+    }
   },
 });
 

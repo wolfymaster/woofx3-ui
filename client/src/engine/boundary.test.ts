@@ -63,6 +63,8 @@ describe("engine boundary", () => {
     expect(pattern.test("useAction(api.engineSync.syncNow)")).toBe(true);
     expect(pattern.test("useAction(api.macros.run)")).toBe(true);
     expect(pattern.test("useQuery(api.macros.list)")).toBe(false);
+    expect(pattern.test("useAction(api.marketplace.installModule)")).toBe(true);
+    expect(pattern.test("useAction(api.marketplace.listModules)")).toBe(false);
     expect(pattern.test("useQuery(api.scenesLibrary.list)")).toBe(false);
     expect(pattern.test("useQuery(api.instances.listForCurrentUser)")).toBe(false);
   });

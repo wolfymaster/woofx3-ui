@@ -342,6 +342,18 @@ export interface ModulesGateway {
   ) => Promise<{ stillInstalled: boolean }>;
   /** The engine's workflows, by id and name. */
   useWorkflowsRequest(): (instanceId: InstanceId) => Promise<EngineWorkflowOption[]>;
+  /**
+   * Installs or updates a marketplace module; resolves with the key its
+   * progress and outcome are reported under (`transientEvents`), not when it
+   * is installed. Rejects when the archive declares a permission or local
+   * endpoint (by id) outside the approved lists.
+   */
+  useMarketplaceInstallRequest(): (
+    instanceId: InstanceId,
+    marketplaceModuleId: string,
+    approvedPermissions: string[],
+    approvedLocalEndpoints: string[]
+  ) => Promise<{ moduleKey: string }>;
 }
 
 /**

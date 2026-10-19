@@ -34,3 +34,8 @@ export function useReconcileModuleUninstallRequest() {
 export function useEngineWorkflowsRequest() {
   return useEngineGateway().modules.useWorkflowsRequest();
 }
+
+/** Starts a marketplace install or update; its progress and outcome arrive under the returned key. */
+export function useMarketplaceInstallRequest() {
+  return useEngineGateway().modules.useMarketplaceInstallRequest();
+}
