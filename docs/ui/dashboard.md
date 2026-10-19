@@ -646,6 +646,17 @@ an inline hint. These endpoints have been in open beta since 2026-05-15.
 Queues Twitch shoutouts and sends them one at a time within the endpoint's
 cooldown.
 
+The chatter list, the confirmation lookup and each send go to Helix, or through
+an engine with `twitch.chat` (see
+[Helix calls through the engine](#helix-calls-through-the-engine)). Reads take
+the engine path on the capability alone; sends, from this queue and from
+Broadcast Controls, also need the `twitch.engineShoutouts` flag. Chat messages
+and announcements (Broadcast Controls, the macro pad and the Go live
+announcement) need `twitch.engineChat`. The queue itself stays in Convex. A
+queued shoutout the engine could not confirm fails like a Twitch 5xx and is
+retried after its backoff, which cannot shout out twice: Twitch refuses a
+second shoutout to the same channel within the hour.
+
 The autocomplete lists **who is currently in chat**. Nothing in woofx3 tracks
 chat presence — the only signal anywhere is the per-message chat event, and no
 service accumulates it — so the roster comes from Twitch's

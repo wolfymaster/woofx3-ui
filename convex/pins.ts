@@ -7,6 +7,7 @@ import { planRepin } from "./lib/pinStrategy";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { authorizeTwitch } from "./lib/twitchAuth";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
+import { directHelixRoute } from "./lib/twitchEngineHelix";
 import { parsePinsResponse, type TwitchPin } from "./lib/twitchPins";
 
 // Twitch chat pinning, and the local history it is driven from.
@@ -299,7 +300,7 @@ export const pinNewMessage = action({
     const twitch = await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
     await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
 
-    const messageId = await sendChatMessage(twitch, text, { pin: true });
+    const messageId = await sendChatMessage(twitch, text, { pin: true }, directHelixRoute(args.instanceId));
     await ctx.runMutation(internal.pins.recordPinned, {
       instanceId: args.instanceId,
       userId,
@@ -362,7 +363,7 @@ export const repinFromHistory = action({
 
     if (resent) {
       await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
-      messageId = await sendChatMessage(twitch, entry.content, { pin: true });
+      messageId = await sendChatMessage(twitch, entry.content, { pin: true }, directHelixRoute(args.instanceId));
     }
 
     await ctx.runMutation(internal.pins.recordPinned, {

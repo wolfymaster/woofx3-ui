@@ -36,6 +36,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "scenes.editorSessions",
   "scenes.editorSync",
   "twitch.ads",
+  "twitch.chat",
   "twitch.dashboardTokens",
   "twitch.moderation",
   "twitch.streamInfo",
