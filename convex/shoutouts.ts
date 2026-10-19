@@ -23,7 +23,8 @@ import {
   SHOUTOUT_COOLDOWN_MS,
 } from "./lib/shoutoutSchedule";
 import { getInstanceMembership } from "./lib/teamAccess";
-import { authorizeTwitch, authorizeTwitchUnattended } from "./lib/twitchAuth";
+import { type AuthorizedTwitchCall, authorizeTwitch, authorizeTwitchUnattended } from "./lib/twitchAuth";
+import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
 
 const TWITCH_CHATTERS_URL = "https://api.twitch.tv/helix/chat/chatters";
@@ -103,26 +104,38 @@ export const listQueue = query({
 export const listChatters = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<Array<{ userId: string; login: string; displayName: string }>> => {
-    const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(ctx, args.instanceId, CHATTERS_SCOPE);
-
-    const url = `${TWITCH_CHATTERS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}&first=${CHATTERS_PAGE_SIZE}`;
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
-    });
-    if (!response.ok) {
-      throw new Error(`Twitch chatters lookup failed: ${response.status} ${await response.text()}`);
-    }
-
-    const body = (await response.json()) as {
-      data: Array<{ user_id: string; user_login: string; user_name: string }>;
-    };
-    return body.data.map((chatter) => ({
-      userId: chatter.user_id,
-      login: chatter.user_login,
-      displayName: chatter.user_name,
-    }));
+    const call = await authorizeTwitch(ctx, args.instanceId, CHATTERS_SCOPE);
+    return fetchChatters(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"));
   },
 });
+
+export async function fetchChatters(
+  { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
+  route: TwitchHelixRoute
+): Promise<Array<{ userId: string; login: string; displayName: string }>> {
+  const url = `${TWITCH_CHATTERS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}&first=${CHATTERS_PAGE_SIZE}`;
+  const response = await helixResponse(route, {
+    operation: "getChatters",
+    kind: "read",
+    viaEngine: (engine) => engine.twitchGetChatters({ first: CHATTERS_PAGE_SIZE }),
+    direct: () =>
+      fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
+      }),
+  });
+  if (!response.ok) {
+    throw new Error(`Twitch chatters lookup failed: ${response.status} ${await response.text()}`);
+  }
+
+  const body = (await response.json()) as {
+    data: Array<{ user_id: string; user_login: string; user_name: string }>;
+  };
+  return body.data.map((chatter) => ({
+    userId: chatter.user_id,
+    login: chatter.user_login,
+    displayName: chatter.user_name,
+  }));
+}
 
 /**
  * Identity for the confirmation step: who is about to be shouted out, and are
@@ -141,7 +154,11 @@ export const lookupUser = action({
     // here means a missing permission surfaces at confirmation time rather than
     // two minutes later inside the queue processor.
     const { accessToken, clientId } = await authorizeTwitch(ctx, args.instanceId, SHOUTOUT_SCOPE);
-    return fetchTwitchUser({ accessToken, clientId }, { login });
+    return fetchTwitchUser(
+      { accessToken, clientId },
+      { login },
+      await twitchHelixRoute(ctx, args.instanceId, "twitch.chat")
+    );
   },
 });
 
@@ -469,12 +486,34 @@ export const sweepStalledQueues = internalMutation({
 });
 
 async function sendShoutoutNow(ctx: ActionCtx, instanceId: Id<"instances">, toBroadcasterId: string): Promise<void> {
-  const { accessToken, broadcasterUserId, clientId } = await authorizeTwitchUnattended(ctx, instanceId, SHOUTOUT_SCOPE);
+  const call = await authorizeTwitchUnattended(ctx, instanceId, SHOUTOUT_SCOPE);
+  await sendQueuedShoutout(
+    call,
+    await twitchHelixRoute(ctx, instanceId, "twitch.chat", "twitch.engineShoutouts"),
+    toBroadcasterId
+  );
+}
 
+/**
+ * A failure is retried by the queue after its backoff, whether Twitch refused
+ * it or the engine could not confirm it; Twitch refuses a second shoutout to
+ * the same channel within the hour, so a retry cannot shout out twice.
+ */
+export async function sendQueuedShoutout(
+  { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  toBroadcasterId: string
+): Promise<void> {
   const url = `${TWITCH_SHOUTOUTS_URL}?from_broadcaster_id=${broadcasterUserId}&to_broadcaster_id=${toBroadcasterId}&moderator_id=${broadcasterUserId}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
+  const response = await helixResponse(route, {
+    operation: "sendShoutout",
+    kind: "write",
+    viaEngine: (engine) => engine.twitchSendShoutout({ to_broadcaster_id: toBroadcasterId }),
+    direct: () =>
+      fetch(url, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
+      }),
   });
 
   if (response.status === 429) {

@@ -15,8 +15,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import {
+  useSupporterLeaderboardRequest,
+  useSupporterStreamsRequest,
+  useViewerSupportTotalsRequest,
+} from "@/engine/hooks/use-supporters";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
 import { SUPPORTER_CAPABILITIES } from "@/lib/engine-capabilities";
@@ -128,8 +133,8 @@ export default function Supporters() {
 }
 
 function SupportersView({ instanceId }: { instanceId: InstanceId }) {
-  const listStreams = useAction(api.supporters.listStreams);
-  const readLeaderboard = useAction(api.supporters.leaderboard);
+  const listStreams = useSupporterStreamsRequest();
+  const readLeaderboard = useSupporterLeaderboardRequest();
 
   const [metric, setMetric] = useState<SupporterMetric>("bits");
   const [range, setRange] = useState<SupporterRange>(LIFETIME);
@@ -139,7 +144,7 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
   const settledMinTotal = useDebouncedValue(minTotal, MIN_TOTAL_DEBOUNCE_MS);
   const [selected, setSelected] = useState<SelectedViewer | null>(null);
 
-  const streams = useActionResult(instanceId, () => listStreams({ instanceId }));
+  const streams = useActionResult(instanceId, () => listStreams(instanceId));
   useEffect(() => {
     if (streams.data) {
       setRange((current) => reconcileRange(current, streams.data ?? []));
@@ -148,8 +153,7 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
 
   const sessionId = rangeSessionId(range);
   const board = useActionResult(`${instanceId}|${metric}|${rangeValue(range)}|${settledMinTotal}`, () =>
-    readLeaderboard({
-      instanceId,
+    readLeaderboard(instanceId, {
       metric,
       minTotal: settledMinTotal,
       ...(sessionId !== undefined ? { sessionId } : {}),
@@ -448,14 +452,14 @@ function ViewerCard({
 }
 
 function ViewerDetail({ instanceId, viewer }: { instanceId: InstanceId; viewer: SelectedViewer }) {
-  const readViewerTotals = useAction(api.supporters.viewerTotals);
+  const readViewerTotals = useViewerSupportTotalsRequest();
   const findTwitchViewer = useAction(api.supporters.findTwitchViewer);
   const enqueueShoutout = useMutation(api.shoutouts.enqueue);
   const canShoutOut = useQuery(api.supporters.canShoutOut, { instanceId });
   const [queueing, setQueueing] = useState(false);
 
   const totals = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
-    readViewerTotals({ instanceId, platformUserId: viewer.platformUserId })
+    readViewerTotals(instanceId, viewer.platformUserId)
   );
   const twitch = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
     findTwitchViewer({ instanceId, by: { twitchUserId: viewer.platformUserId } })

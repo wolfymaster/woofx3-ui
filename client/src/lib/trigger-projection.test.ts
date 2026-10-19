@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { WorkflowRecord } from "@/engine/types";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import {
   buildWorkflowDefinition,
@@ -9,13 +9,13 @@ import {
   UNCONDITIONAL_TRIGGER_ID,
 } from "@/lib/trigger-projection";
 
-function row(definition: unknown, overrides: Partial<Doc<"workflows">> = {}): Doc<"workflows"> {
+function row(definition: unknown, overrides: Partial<WorkflowRecord> = {}): WorkflowRecord {
   return {
     engineWorkflowId: "wf-1",
     isEnabled: true,
     definition: escapeDollarKeys(definition),
     ...overrides,
-  } as Doc<"workflows">;
+  };
 }
 
 function action(id: string, extra: Record<string, unknown> = {}) {

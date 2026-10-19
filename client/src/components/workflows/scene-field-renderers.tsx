@@ -1,14 +1,13 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useScenes } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import { placementChoices, type SceneOption, sceneChoices } from "@/lib/scene-field-options";
 
 function useInstanceScenes() {
   const { instance } = useInstance();
-  return useQuery(api.scenes.list, instance ? { instanceId: instance._id } : "skip");
+  return useScenes(instance ? instance._id : null);
 }
 
 function OptionSelect({

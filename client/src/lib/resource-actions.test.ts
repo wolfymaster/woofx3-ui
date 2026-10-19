@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { WorkflowRecord } from "@/engine/types";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import {
   eventsChangingResource,
@@ -102,12 +102,12 @@ describe("resourceActions", () => {
   });
 });
 
-function workflow(event: string, tasks: unknown[], engineWorkflowId = "wf-1"): Doc<"workflows"> {
+function workflow(event: string, tasks: unknown[], engineWorkflowId = "wf-1"): WorkflowRecord {
   return {
     engineWorkflowId,
     isEnabled: true,
     definition: escapeDollarKeys({ name: event, trigger: { type: "event", event }, tasks }),
-  } as Doc<"workflows">;
+  };
 }
 
 function step(id: string, parameters: Record<string, unknown>, extra: Record<string, unknown> = {}) {

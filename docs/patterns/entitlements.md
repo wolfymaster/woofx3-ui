@@ -6,7 +6,7 @@ A paid plan sells features ("advanced reports", a dashboard tool) and amounts ("
 
 | Question | Answered by | Lifetime |
 |---|---|---|
-| Can this engine build do X? | Engine capabilities (`useEngineCapabilities`, `EngineFeatureGate`) | Permanent |
+| Can this engine build do X? | [Engine capabilities](./engine-capabilities.md) (`useEngineCapabilities`, `EngineFeatureGate`) | Until every engine in use has it |
 | Does this account's plan include X, and how much? | An entitlement (this page) | As long as the plan |
 | Should this viewer see new UI Y yet? | A [feature flag](./feature-flags.md) | Until the rollout ends |
 

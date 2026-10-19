@@ -21,7 +21,38 @@ export interface FeatureFlagDefinition {
  * written for it, so a flag cannot be turned on by a typo, and a row whose
  * key is gone from this list is ignored.
  */
-export const FEATURE_FLAGS = {} as const satisfies Record<string, FeatureFlagDefinition>;
+export const FEATURE_FLAGS = {
+  "twitch.engineModeration": {
+    description:
+      "The Moderation widget's writes (blocked terms, timeouts, bans, unbans, chat modes) are made by the engine's twitch.moderation methods instead of Convex calling Helix. Only for engines reporting twitch.moderation; reads follow the capability alone. Roll out to managed engines first.",
+    owner: "wolfy",
+    removeBy: "2027-03-31",
+  },
+  "twitch.engineChat": {
+    description:
+      "Chat messages and announcements sent from the dashboard (Broadcast Controls, macro pad, the Go live announcement) are sent by the engine's twitch.chat methods instead of Convex calling Helix. Only for engines reporting twitch.chat. Roll out to managed engines first.",
+    owner: "wolfy",
+    removeBy: "2027-03-31",
+  },
+  "twitch.enginePins": {
+    description:
+      "The Pins widget's writes (pin, unpin, post-and-pin) are made by the engine's twitch.pins methods instead of Convex calling Helix; the pin history stays in Convex. Only for engines reporting twitch.pins; reading the current pin follows the capability alone. Roll out to managed engines first.",
+    owner: "wolfy",
+    removeBy: "2027-03-31",
+  },
+  "twitch.engineClips": {
+    description:
+      "The command bar's Clip button creates the clip with the engine's twitchCreateClip instead of Convex calling Helix. Only for engines reporting twitch.clips; stream recap clips stay in Convex. Roll out to managed engines first.",
+    owner: "wolfy",
+    removeBy: "2027-03-31",
+  },
+  "twitch.engineShoutouts": {
+    description:
+      "Shoutouts, from Broadcast Controls and from the shoutout queue, are sent by the engine's twitchSendShoutout instead of Convex calling Helix; the queue stays in Convex. Only for engines reporting twitch.chat. Roll out to managed engines first.",
+    owner: "wolfy",
+    removeBy: "2027-03-31",
+  },
+} as const satisfies Record<string, FeatureFlagDefinition>;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAGS;
 

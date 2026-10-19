@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { bareKind } from "@convex/lib/resourceKinds";
-import { useAction, useQuery } from "convex/react";
 import { Loader2, Plus } from "lucide-react";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import type { ResourceInstanceDoc } from "@/components/resources/resource-kind-page";
@@ -12,6 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  useCreateWorkflowRequest,
+  useSetWorkflowEnabledRequest,
+  useUpdateWorkflowRequest,
+  useWorkflows,
+} from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -37,10 +41,10 @@ export function ResourceActionEditors({ kind, instance }: { kind: string; instan
   const { instance: engineInstance } = useInstance();
   const { toast } = useToast();
   const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
-  const workflows = useQuery(api.workflows.list, engineInstance ? { instanceId: engineInstance._id } : "skip");
-  const createFromDefinition = useAction(api.workflowActions.createFromDefinition);
-  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
-  const setEnabled = useAction(api.workflowActions.setEnabled);
+  const workflows = useWorkflows(engineInstance ? engineInstance._id : null);
+  const createFromDefinition = useCreateWorkflowRequest();
+  const updateFromDefinition = useUpdateWorkflowRequest();
+  const setEnabled = useSetWorkflowEnabledRequest();
 
   const [addedEvents, setAddedEvents] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);

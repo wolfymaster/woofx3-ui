@@ -32,6 +32,7 @@ import {
 } from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
+import { twitchHelixRoute } from "./lib/twitchEngineHelix";
 import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
 
 // The Go live checklist: a pre-flight run just before a stream starts, so a
@@ -393,7 +394,12 @@ export const complete = action({
     if (announcementText) {
       try {
         requireScope(SEND_SCOPE);
-        await sendChatMessage(twitch, announcementText, { pin: false });
+        await sendChatMessage(
+          twitch,
+          announcementText,
+          { pin: false },
+          await twitchHelixRoute(ctx, args.instanceId, "twitch.chat", "twitch.engineChat")
+        );
         announcement = { status: "done" };
       } catch (error) {
         announcement = { status: "failed", message: messageOf(error) };

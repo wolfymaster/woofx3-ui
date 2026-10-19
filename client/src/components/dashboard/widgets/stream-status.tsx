@@ -1,6 +1,6 @@
 import { Clock, Radio, Users } from "lucide-react";
 import { Uptime } from "@/components/common/uptime";
-import { useLiveState } from "@/hooks/use-live-state";
+import { useLiveState } from "@/engine/hooks/use-live-state";
 
 export function StreamStatusWidget() {
   const liveState = useLiveState();

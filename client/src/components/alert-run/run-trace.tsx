@@ -1,11 +1,10 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useQuery } from "convex/react";
 import { AlertCircle, BellRing, Clock, type LucideIcon, Zap } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useWorkflowRun } from "@/engine/hooks/use-workflows";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { engineAlertStyle } from "@/lib/alert-status";
 import { alertTone, buildTrace, initialSpanId, type RunAlertRecord, type TraceSpan } from "@/lib/run-trace";
@@ -37,7 +36,7 @@ interface RunTraceProps {
  * people come here.
  */
 export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
-  const data = useQuery(api.workflowRuns.runWithSteps, { instanceId, engineRunId });
+  const data = useWorkflowRun(instanceId, engineRunId);
   const timeline = useMemo(() => (data ? buildTimeline(data.run, data.steps) : null), [data]);
   const trace = useMemo(
     () => (data && timeline ? buildTrace(data.run, timeline, data.alerts) : null),

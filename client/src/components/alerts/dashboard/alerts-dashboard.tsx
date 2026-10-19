@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import { isFailureStatus } from "@convex/lib/engineAlertLifecycle";
-import { useQuery } from "convex/react";
 import { BellRing, Zap } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AlertQueueControls } from "@/components/alerts/alert-queue-controls";
@@ -12,6 +10,7 @@ import { TestEventPicker } from "@/components/test-events/test-event-picker";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { useAlertOverview, useEngineAlerts } from "@/engine/hooks/use-alert-queue";
 import { useInstance } from "@/hooks/use-instance";
 import { useLastLoaded } from "@/hooks/use-last-loaded";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
@@ -41,11 +40,8 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
   // The overview's window ends with the current hour. Only the hour is sent, so
   // the query's arguments change once an hour rather than every minute.
   const hourStart = Math.floor(useMinuteClock() / HOUR_MS) * HOUR_MS;
-  const overview = useLastLoaded(
-    useQuery(api.engineAlerts.overview, instanceId ? { instanceId, hourStart } : "skip"),
-    instanceId
-  );
-  const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: FEED_LIMIT } : "skip");
+  const overview = useLastLoaded(useAlertOverview(instanceId ?? null, hourStart), instanceId);
+  const alerts = useEngineAlerts(instanceId ?? null, FEED_LIMIT);
 
   const [failuresOnly, setFailuresOnly] = useState(false);
   // Null until something is picked; the first trigger stands in so the card is

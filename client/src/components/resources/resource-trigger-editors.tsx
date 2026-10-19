@@ -1,11 +1,10 @@
-import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { bareKind } from "@convex/lib/resourceKinds";
-import { useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import type { ResourceInstanceDoc } from "@/components/resources/resource-kind-page";
 import { EventWorkflowEditor } from "@/components/triggers/event-workflow-editor";
+import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { resourceTriggers } from "@/lib/resource-triggers";
@@ -32,7 +31,7 @@ export function ResourceTriggerEditors({
 }) {
   const { instance: engineInstance } = useInstance();
   const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
-  const workflows = useQuery(api.workflows.list, engineInstance ? { instanceId: engineInstance._id } : "skip");
+  const workflows = useWorkflows(engineInstance ? engineInstance._id : null);
   const triggers = useMemo(() => resourceTriggers(triggerPresets, kind), [triggerPresets, kind]);
 
   if (loading || workflows === undefined) {

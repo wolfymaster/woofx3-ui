@@ -1,8 +1,5 @@
-import { api } from "@convex/_generated/api";
 import { dryRunWouldDo } from "@convex/lib/engineTestRun";
 import { TEST_RUN_ORIGIN } from "@convex/lib/manualRunOrigin";
-import { useAction, useQuery } from "convex/react";
-import type { FunctionReturnType } from "convex/server";
 import { AlertCircle, AlertTriangle, CheckCircle2, ExternalLink, Loader2, Play } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -27,6 +24,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useTransientEvents } from "@/engine/hooks/use-correlated-request";
+import { useTriggerWorkflowRequest, useWorkflowRun } from "@/engine/hooks/use-workflows";
+import type { WorkflowRunDetail, WorkflowTriggerResult } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -298,7 +298,7 @@ function SampleEventTest({
 interface DirectAttempt {
   triggerData: Record<string, unknown> | undefined;
   dryRun: boolean;
-  result: FunctionReturnType<typeof api.workflowActions.trigger>;
+  result: WorkflowTriggerResult;
 }
 
 function DirectTest({
@@ -314,7 +314,7 @@ function DirectTest({
 }) {
   const { instance } = useInstance();
   const { toast } = useToast();
-  const trigger = useAction(api.workflowActions.trigger);
+  const trigger = useTriggerWorkflowRequest();
   const takesOptions = optionsState === "supported";
   const takesDryRun = takesOptions && dryRunState === "supported";
   const [busy, setBusy] = useState(false);
@@ -337,8 +337,7 @@ function DirectTest({
     setAttempt(null);
     try {
       const result = await withinTimeout(
-        trigger({
-          instanceId: instance._id,
+        trigger(instance._id, {
           workflowNameOrId: engineWorkflowId,
           origin: TEST_RUN_ORIGIN,
           options: takesOptions
@@ -559,14 +558,8 @@ function TestRunOutcome({
   const { waitElapsed, gaveUp } = useTestEventWaits();
   const [executionId, setExecutionId] = useState<string | null>(knownExecutionId);
   const [sticky, setSticky] = useState<TestEventOutcome | null>(null);
-  const rows = useQuery(
-    api.transientEvents.listByCorrelation,
-    instance ? { instanceId: instance._id, correlationKey: triggerId } : "skip"
-  );
-  const recorded = useQuery(
-    api.workflowRuns.runWithSteps,
-    instance && executionId ? { instanceId: instance._id, engineRunId: executionId } : "skip"
-  );
+  const rows = useTransientEvents(instance?._id ?? null, triggerId);
+  const recorded = useWorkflowRun(instance ? instance._id : null, executionId || null);
 
   const progress = testRunProgress(rows, engineWorkflowId, waitElapsed);
   const liveOutcome = progress.outcome;
@@ -644,7 +637,7 @@ function TestRunOutcome({
   );
 }
 
-type RecordedRun = FunctionReturnType<typeof api.workflowRuns.runWithSteps>;
+type RecordedRun = WorkflowRunDetail;
 
 /**
  * The run's steps as the engine records them. Read from the recorded run
