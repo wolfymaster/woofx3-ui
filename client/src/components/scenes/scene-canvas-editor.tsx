@@ -31,6 +31,7 @@ import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
+import { draftSaveStatus } from "@/lib/draft-save-status";
 import {
   type CanvasSettings,
   canvasSettingsOf,
@@ -597,7 +598,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             pendingCommand={pendingCommand}
             onCommand={runDraftCommand}
             hasDraft={syncState?.hasDraft ?? false}
-            unsaved={hasUnsavedEdits(syncState, live)}
+            saveStatus={draftSaveStatus(syncState, live)}
             copy={SCENE_DRAFT_COPY}
             testIds={SCENE_DRAFT_TEST_IDS}
           />
@@ -818,17 +819,6 @@ export function sessionNotice(state: SceneSyncState | null, noun = "scene"): str
   return null;
 }
 
-/**
- * Edits not yet where this editor's mode puts them: still on their way to the scene
- * manager, or, while not live updating, waiting in a draft that has not been published.
- */
-export function hasUnsavedEdits(state: SceneSyncState | null, live: boolean): boolean {
-  if (state === null) {
-    return false;
-  }
-  return state.pendingItems > 0 || state.retrying || (!live && state.hasDraft);
-}
-
 type FetchedScene = NonNullable<FunctionReturnType<typeof api.scenes.getByEngineSceneId>>;
 
 function sceneOf(fetchedScene: FetchedScene): Scene {
@@ -858,7 +848,7 @@ const SCENE_DRAFT_COPY: DraftLiveCopy = {
 };
 
 const SCENE_DRAFT_TEST_IDS: DraftLiveTestIds = {
-  live: "menu-scene-live-update",
+  live: "switch-scene-live-update",
   discard: "button-discard-draft",
   confirmDiscard: "button-confirm-discard-draft",
   publish: "button-publish-scene",

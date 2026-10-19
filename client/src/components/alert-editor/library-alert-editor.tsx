@@ -13,13 +13,14 @@ import {
   type DraftLiveCopy,
   type DraftLiveTestIds,
 } from "@/components/scenes/draft-live-controls";
-import { hasUnsavedEdits, sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
+import { sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
 import { Button } from "@/components/ui/button";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert, inputVariableOptions, libraryPreviewInputs } from "@/lib/alert-library";
+import { draftSaveStatus } from "@/lib/draft-save-status";
 import { catalogOfRows } from "@/lib/scene-composition";
 
 interface LibraryAlertEditorProps {
@@ -165,7 +166,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
           pendingCommand={pendingCommand}
           onCommand={runDraftCommand}
           hasDraft={syncState?.hasDraft ?? false}
-          unsaved={hasUnsavedEdits(syncState, live)}
+          saveStatus={draftSaveStatus(syncState, live)}
           copy={ALERT_DRAFT_COPY}
           testIds={ALERT_DRAFT_TEST_IDS}
         />
@@ -196,7 +197,7 @@ const ALERT_DRAFT_COPY: DraftLiveCopy = {
 };
 
 const ALERT_DRAFT_TEST_IDS: DraftLiveTestIds = {
-  live: "menu-alert-live-update",
+  live: "switch-alert-live-update",
   discard: "button-discard-alert-draft",
   confirmDiscard: "button-confirm-discard-alert-draft",
   publish: "button-publish-alert",
