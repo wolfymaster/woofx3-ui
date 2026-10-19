@@ -189,9 +189,19 @@ export default defineSchema({
     // owner could otherwise opt their own instance in. See
     // lib/marketplaceAccess.ts.
     marketplaceDevAccess: v.optional(v.boolean()),
+    // What the engine last reported about itself, recorded for operators
+    // deciding when a capability check can be retired; gating never reads
+    // them. See lib/engineReport.ts. engineSeenAt is the last time it
+    // answered either call, and is the ops API's measure of a recently
+    // active instance.
+    engineVersion: v.optional(v.string()),
+    engineCapabilityIds: v.optional(v.array(v.string())),
+    engineCapabilitiesSeenAt: v.optional(v.number()),
+    engineSeenAt: v.optional(v.number()),
   })
     .index("by_account", ["accountId"])
-    .index("by_webhook_secret", ["webhookSecret"]),
+    .index("by_webhook_secret", ["webhookSecret"])
+    .index("by_engine_seen", ["engineSeenAt"]),
 
   // instanceLiveState: live stream presence per instance, driven by STREAM_ONLINE/OFFLINE
   // engine events (and best-effort poll fallback). One row per instance.
@@ -610,10 +620,16 @@ export default defineSchema({
 
   // moduleRepository: directory of all available modules (seeded by admins or uploaded).
   // Rows are per-tenant, and neither `name`+`version` nor `moduleKey` is unique
-  // across tenants — moduleKey is `{marketplaceId}:{version}:{sha7}`, built from
+  // across tenants — moduleKey is `{manifest id}:{version}:{sha7}`, built from
   // the archive hash, so two instances installing the same module produce the
   // same key. Every lookup must therefore be scoped by instanceId; the two
   // indexes below are the only supported way to resolve a row from a webhook.
+  //
+  // Every edition of a marketplace module installs under the same manifest id,
+  // so the key does not say which listing is installed. marketplaceListingId
+  // and marketplaceEdition do, for the build under the row's current moduleKey
+  // only; read them through installedListing in
+  // convex/lib/marketplaceInstallIdentity.ts, which falls back to the key.
   moduleRepository: defineTable({
     instanceId: v.optional(v.id("instances")),
     moduleKey: v.optional(v.string()),
@@ -629,10 +645,25 @@ export default defineSchema({
       v.union(v.literal("pending"), v.literal("delivering"), v.literal("installed"), v.literal("failed"))
     ),
     statusMessage: v.optional(v.string()),
+    marketplaceListingId: v.optional(v.string()),
+    marketplaceEdition: v.optional(v.number()),
   })
     .index("by_instance", ["instanceId"])
     .index("by_instance_name_version", ["instanceId", "name", "version"])
     .index("by_instance_module_key", ["instanceId", "moduleKey"]),
+
+  // marketplaceInstalls: the listing and edition each marketplace install
+  // Convex started was for, by the key it installs under. The engine's
+  // module.installed callback carries neither, and an engine installing from a
+  // URL records no provenance, so this is how a row learns which listing it
+  // is (see moduleWebhook.processModuleInstalled). One row per manifest id per
+  // instance: a newer install of the same module replaces the older record.
+  marketplaceInstalls: defineTable({
+    instanceId: v.id("instances"),
+    moduleKey: v.string(),
+    listingId: v.string(),
+    edition: v.optional(v.number()),
+  }).index("by_instance_module_key", ["instanceId", "moduleKey"]),
 
   // dashboardLayouts: the dashboard canvas panels for a user/instance. Each panel
   // picks a predefined layout (client/src/lib/dashboard-layouts.ts) and places

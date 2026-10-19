@@ -28,6 +28,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "events.log",
   "modules.files",
   "modules.localEndpoints",
+  "modules.marketplaceInstall",
   "modules.oauth",
   "obs.control",
   "obs.status",
@@ -88,11 +89,12 @@ export function isLegacyCapabilitiesError(error: unknown): boolean {
 }
 
 /**
- * Reads an engine's answer, keeping only ids this UI knows. Throws on a shape
- * it cannot read: a new `schema` means the answer is no longer a flat id list,
- * and guessing at it could show a feature the engine does not have.
+ * Every id in an engine's answer, sorted and unique, whether or not this UI
+ * knows it. Throws on a shape it cannot read: a new `schema` means the answer
+ * is no longer a flat id list, and guessing at it could show a feature the
+ * engine does not have.
  */
-export function parseEngineCapabilities(raw: unknown): EngineCapabilityReport {
+export function parseReportedCapabilityIds(raw: unknown): string[] {
   if (typeof raw !== "object" || raw === null) {
     throw new Error(`Engine answered ${CAPABILITIES_METHOD} with ${JSON.stringify(raw)}`);
   }
@@ -105,17 +107,37 @@ export function parseEngineCapabilities(raw: unknown): EngineCapabilityReport {
   if (!Array.isArray(body.capabilities)) {
     throw new Error(`Engine answered ${CAPABILITIES_METHOD} without a capabilities list`);
   }
-  const known = new Set<EngineCapability>();
+  const ids = new Set<string>();
   for (const id of body.capabilities) {
-    if (typeof id === "string" && KNOWN_IDS.has(id)) {
-      known.add(id as EngineCapability);
+    if (typeof id === "string") {
+      ids.add(id);
     }
   }
-  return { legacy: false, capabilities: Array.from(known).sort() };
+  return Array.from(ids).sort();
+}
+
+/** Reads an engine's answer, keeping only ids this UI knows. */
+export function parseEngineCapabilities(raw: unknown): EngineCapabilityReport {
+  return knownCapabilities(parseReportedCapabilityIds(raw));
+}
+
+function knownCapabilities(reported: readonly string[]): EngineCapabilityReport {
+  const known = reported.filter((id): id is EngineCapability => KNOWN_IDS.has(id));
+  return { legacy: false, capabilities: known };
 }
 
 export function hasEngineCapability(report: EngineCapabilityReport, id: EngineCapability): boolean {
   return report.capabilities.includes(id);
+}
+
+/**
+ * What an engine answered, before this UI's filter: `reported` holds every id
+ * it listed, including ones this UI does not gate on, and is empty for a
+ * legacy engine.
+ */
+export interface ReportedEngineCapabilities {
+  report: EngineCapabilityReport;
+  reported: string[];
 }
 
 /**
@@ -127,16 +149,26 @@ export async function fetchEngineCapabilities(engine: {
   clientId: string;
   clientSecret: string;
 }): Promise<EngineCapabilityReport> {
+  return (await fetchReportedEngineCapabilities(engine)).report;
+}
+
+/** `fetchEngineCapabilities`, also returning every id the engine listed. */
+export async function fetchReportedEngineCapabilities(engine: {
+  url: string;
+  clientId: string;
+  clientSecret: string;
+}): Promise<ReportedEngineCapabilities> {
   try {
     const raw = await createEngineRpcSession<EngineCapabilitiesApi>(
       engine.url,
       engine.clientId,
       engine.clientSecret
     ).getEngineCapabilities();
-    return parseEngineCapabilities(raw);
+    const reported = parseReportedCapabilityIds(raw);
+    return { report: knownCapabilities(reported), reported };
   } catch (error) {
     if (isLegacyCapabilitiesError(error)) {
-      return LEGACY_ENGINE_REPORT;
+      return { report: LEGACY_ENGINE_REPORT, reported: [] };
     }
     throw error;
   }

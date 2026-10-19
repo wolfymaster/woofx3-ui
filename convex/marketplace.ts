@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, internalAction } from "./_generated/server";
@@ -10,7 +10,24 @@ import { createEngineRpcSession } from "./lib/engineInstanceUrl";
 import { requireInstanceRoleInAction } from "./lib/instanceAccess";
 import { unapprovedLocalEndpointIds } from "./lib/localEndpoints";
 import { type MarketplaceAccess, marketplaceRequestHeaders } from "./lib/marketplaceAccess";
+import {
+  type EngineCredentials,
+  installModuleThroughEngine,
+  type MarketplaceInstallResult,
+  marketplaceEngineSession,
+  marketplaceModuleEngineFor,
+  moduleInstallProgress,
+} from "./lib/marketplaceEngineInstall";
+import {
+  acquireListing,
+  buyerTokenFor,
+  type ContentAccess,
+  contentAccessFor,
+  contentRefusal,
+  fetchListingContent,
+} from "./lib/marketplaceEntitlement";
 import { type MarketplaceImages, parseFeaturedRank, parseMarketplaceImages } from "./lib/marketplaceImages";
+import { listingManifestId, marketplaceInstallKey } from "./lib/marketplaceInstallIdentity";
 import { parseManifestPermissions, readArchiveManifest, unapprovedPermissions } from "./lib/modulePermissions";
 import type { LocalEngineApi } from "./moduleEngine";
 
@@ -72,6 +89,13 @@ export interface MarketplaceModuleSummary {
    * instance with marketplace dev access is ever sent one.
    */
   tier: "public" | "dev";
+  /**
+   * The manifest id every edition of the module shares, which it installs
+   * under. Absent from a marketplace that predates editions.
+   */
+  moduleKey?: string;
+  /** Which edition of the module this listing is. Absent like `moduleKey`. */
+  edition?: number;
 }
 
 export interface MarketplaceModuleDetail extends MarketplaceModuleSummary {
@@ -128,11 +152,15 @@ export interface MarketplaceDownload {
   sha256: string;
 }
 
+/**
+ * A presigned URL for a module's archive. A module that is not free is only
+ * handed out for an account that holds it (see `fetchListingContent`).
+ */
 export async function fetchMarketplaceDownload(
   marketplaceModuleId: string,
-  access: MarketplaceAccess
+  content: ContentAccess
 ): Promise<MarketplaceDownload> {
-  const payload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`, access);
+  const payload = await fetchListingContent(`/modules/${encodeURIComponent(marketplaceModuleId)}/download`, content);
   const obj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
   const url = asString(obj.url);
   if (!url) {
@@ -243,6 +271,12 @@ function parseSummary(raw: unknown): MarketplaceModuleSummary | null {
   }
   if (typeof obj.updatedAt === "string") {
     summary.updatedAt = obj.updatedAt;
+  }
+  if (typeof obj.moduleKey === "string" && obj.moduleKey.trim() !== "") {
+    summary.moduleKey = obj.moduleKey.trim();
+  }
+  if (typeof obj.edition === "number" && Number.isInteger(obj.edition) && obj.edition >= 1) {
+    summary.edition = obj.edition;
   }
   return summary;
 }
@@ -414,33 +448,16 @@ export const getModule = action({
   },
 });
 
-export type MarketplaceInstallResult =
-  | { status: "installed"; moduleKey: string }
-  | {
-      /**
-       * The archive declares permissions or local endpoints nobody approved,
-       * e.g. because the listing was republished after the streamer reviewed
-       * it. Nothing was sent to the engine.
-       */
-      status: "needs_approval";
-      name: string;
-      version: string;
-      unapproved: string[];
-      /** Ids of `local[]` endpoints outside the approval. */
-      unapprovedLocalEndpoints: string[];
-    };
-
-interface EngineCredentials {
-  url: string;
-  clientId: string;
-  clientSecret: string;
-}
+export type { MarketplaceInstallResult };
 
 /**
  * Installs the marketplace's current build of a module on an engine, provided
  * every permission its archive declares is in `approvedPermissions` and every
  * local endpoint in `approvedLocalEndpoints`. Callers decide who may install;
  * this only checks consent. Engine and marketplace failures throw.
+ *
+ * Runs on the engine when `marketplaceModuleEngineFor` routes it there, and
+ * otherwise downloads and checks the archive here and hands the engine its URL.
  */
 async function installFromMarketplace(
   ctx: ActionCtx,
@@ -458,6 +475,44 @@ async function installFromMarketplace(
     approvedLocalEndpoints: readonly string[];
   }
 ): Promise<MarketplaceInstallResult> {
+  const viaEngine = await marketplaceModuleEngineFor(ctx, instanceId, marketplaceModuleId);
+  if (viaEngine) {
+    const { listing } = viaEngine;
+    return await installModuleThroughEngine(
+      {
+        engine: () => marketplaceEngineSession(viaEngine.engine),
+        buyerToken: () => buyerTokenFor(ctx, instanceId),
+        emitProgress: async (progress, since) => {
+          await ctx.runMutation(internal.transientEvents.emitUnlessNewer, {
+            instanceId,
+            correlationKey: progress.moduleKey,
+            type: "module.install",
+            status: "progress",
+            message: progress.message,
+            data: progress.data,
+            since,
+          });
+        },
+        recordInstall: async (moduleKey) => {
+          await ctx.runMutation(internal.marketplaceInstalls.record, {
+            instanceId,
+            moduleKey,
+            listingId: listing.id,
+            edition: listing.edition,
+          });
+        },
+        now: Date.now,
+      },
+      {
+        listingId: marketplaceModuleId,
+        listingName: listing.name,
+        manifestId: listingManifestId(listing),
+        approvedPermissions,
+        approvedLocalEndpoints,
+      }
+    );
+  }
+
   const access = await marketplaceAccessForInstance(ctx, instanceId);
   const detailPayload = await marketplaceFetch(`/modules/${encodeURIComponent(marketplaceModuleId)}`, access);
   const rawModule =
@@ -467,7 +522,16 @@ async function installFromMarketplace(
     throw new Error(`Marketplace module ${marketplaceModuleId} response was malformed`);
   }
 
-  const download = await fetchMarketplaceDownload(marketplaceModuleId, access);
+  let download: MarketplaceDownload;
+  try {
+    download = await fetchMarketplaceDownload(marketplaceModuleId, await contentAccessFor(ctx, instanceId));
+  } catch (err) {
+    const refusal = contentRefusal(err, detail.name);
+    if (refusal !== null) {
+      throw new ConvexError(refusal);
+    }
+    throw err;
+  }
   const manifest = await fetchMarketplaceArchiveManifest(download);
   const unapproved = unapprovedPermissions(parseManifestPermissions(manifest), approvedPermissions);
   const unapprovedLocalEndpoints = unapprovedLocalEndpointIds(manifest, approvedLocalEndpoints);
@@ -480,15 +544,32 @@ async function installFromMarketplace(
       unapprovedLocalEndpoints,
     };
   }
-  const moduleKey = `${marketplaceModuleId}:${detail.version}:${download.sha256.slice(0, 7)}`;
+  // After consent, so a streamer who backs out of the permission prompt has
+  // not acquired anything; before the engine, because a listing the account
+  // does not hold must not install, and the browser's Buy button is not a
+  // guard -- this is. A free listing is claimed here, which is also what
+  // counts the install.
+  await acquireListing(ctx, instanceId, marketplaceModuleId, detail.name);
 
+  // Keyed by manifest id, which barkloader computes from the archive and
+  // insists on: a later edition installs under its first edition's id and
+  // replaces it in place.
+  const moduleKey = marketplaceInstallKey(listingManifestId(detail), detail.version, download.sha256);
+  await ctx.runMutation(internal.marketplaceInstalls.record, {
+    instanceId,
+    moduleKey,
+    listingId: marketplaceModuleId,
+    edition: detail.edition,
+  });
+
+  const progress = moduleInstallProgress(moduleKey, detail.name, detail.version);
   await ctx.runMutation(internal.transientEvents.emit, {
     instanceId,
     correlationKey: moduleKey,
     type: "module.install",
     status: "progress",
-    message: `Installing ${detail.name}@${detail.version} from marketplace...`,
-    data: { moduleName: detail.name, moduleVersion: detail.version, source: "marketplace" },
+    message: progress.message,
+    data: progress.data,
   });
 
   try {
