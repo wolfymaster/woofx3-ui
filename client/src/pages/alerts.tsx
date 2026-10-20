@@ -1,16 +1,15 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
-import { useQuery } from "convex/react";
 import { Bell, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { AlertGroupRail } from "@/components/alerts/alert-group-rail";
 import { AlertsDashboard } from "@/components/alerts/dashboard/alerts-dashboard";
+import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { TestEventSheet } from "@/components/test-events/test-event-sheet";
-import { EventWorkflowEditor } from "@/components/triggers/event-workflow-editor";
+import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -24,9 +23,9 @@ import {
   subtreePresets,
   taxonomyLabel,
 } from "@/lib/alert-groups";
+import { eventTriggers } from "@/lib/alert-triggers";
 import { decodeSegment, subPathSegments } from "@/lib/route-subpath";
 import { $hideUnusedAlerts } from "@/lib/stores";
-import { projectWorkflow } from "@/lib/trigger-projection";
 import { cn } from "@/lib/utils";
 
 const BASE_PATH = "/stream/alerts";
@@ -34,14 +33,14 @@ const BASE_PATH = "/stream/alerts";
 /**
  * Triggers, grouped by platform and then by what happened.
  *
- * Each event's configured triggers live in one workflow, so this screen is a projection
- * of the engine's own records — see lib/trigger-projection.ts. Nothing is stored here.
+ * Each configured trigger is a workflow of its own on its event, so this screen reads the
+ * engine's own records — see lib/alert-triggers.ts. Nothing is stored here.
  */
 export default function Alerts() {
   const [location, navigate] = useLocation();
   const { instance } = useInstance();
-  const { triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
+  const { triggerPresets, loading: catalogLoading } = useWorkflowCatalog();
+  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
 
   // The trigger stays selected while the sheet closes, so its contents don't blank
   // out mid-animation.
@@ -83,23 +82,16 @@ export default function Alerts() {
   // Paused triggers count: pausing is not deleting, and the rail must still lead to a
   // paused alert so it can be resumed.
   const { counts, configuredEvents } = useMemo(() => {
-    const perWorkflow: [string[], number][] = [];
+    const perEvent: [string[], number][] = [];
     const events = new Set<string>();
-    for (const row of rows) {
-      const projected = projectWorkflow(row);
-      if (!projected.ok) {
-        continue;
-      }
-      const { event, triggers } = projected.projection;
-      const path = menuPathByEvent.get(event);
-      if (path) {
-        perWorkflow.push([path, triggers.length]);
-      }
-      if (triggers.length > 0) {
+    for (const [event, path] of menuPathByEvent) {
+      const triggers = eventTriggers(rows, event).length;
+      if (triggers > 0) {
+        perEvent.push([path, triggers]);
         events.add(event);
       }
     }
-    return { counts: countAlertsByNode(perWorkflow), configuredEvents: events };
+    return { counts: countAlertsByNode(perEvent), configuredEvents: events };
   }, [rows, menuPathByEvent]);
 
   // Everything below the Alerts route is the selected menu path, as deep as the taxonomy nests.
@@ -131,8 +123,8 @@ export default function Alerts() {
     }
   }, [selectedId]);
 
-  // Waits two frames before scrolling: each section opens its draft in an effect, and
-  // the sections above the target must reach their full height first or it lands short.
+  // Waits two frames before scrolling: the sections above the target must reach their
+  // full height first, which their option lists settle in effects, or it lands short.
   useEffect(() => {
     if (!scrollRequest || loading) {
       return;
@@ -200,10 +192,9 @@ export default function Alerts() {
                 <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-4xl">{nodeTrail}</h1>
               )}
               {nodePresets.map((preset) => (
-                <EventWorkflowEditor
+                <EventTriggerList
                   key={preset.id}
                   triggerPreset={preset}
-                  actionPresets={actionPresets}
                   workflows={rows}
                   breadcrumb={nodePresets.length > 1 ? [] : breadcrumb}
                   headingLevel={nodePresets.length > 1 ? "h2" : "h1"}

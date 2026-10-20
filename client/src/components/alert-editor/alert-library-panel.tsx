@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AlertLayoutPreview } from "@/components/alerts/alert-layout-preview";
@@ -21,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useRemoveLibraryAlertRequest } from "@/engine/hooks/use-alert-library";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert } from "@/lib/alert-library";
@@ -180,7 +179,7 @@ export function LibraryAlertPreview({ alert, className }: { alert: LibraryAlert;
 function DeleteLibraryAlertDialog({ alert, onClose }: { alert: LibraryAlert | null; onClose: () => void }) {
   const { instance } = useInstance();
   const { toast } = useToast();
-  const remove = useAction(api.alertCompositionActions.remove);
+  const remove = useRemoveLibraryAlertRequest();
   const [pending, setPending] = useState(false);
 
   const confirm = async () => {
@@ -189,7 +188,7 @@ function DeleteLibraryAlertDialog({ alert, onClose }: { alert: LibraryAlert | nu
     }
     setPending(true);
     try {
-      const result = await remove({ instanceId: instance._id, engineCompositionId: alert.engineCompositionId });
+      const result = await remove(instance._id, alert.engineCompositionId);
       if (!result.success) {
         toast({ title: "The alert wasn't deleted", description: "The engine refused.", variant: "destructive" });
         return;

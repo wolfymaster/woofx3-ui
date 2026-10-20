@@ -1,7 +1,8 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { isInsideActionPicker } from "@/components/flow/object-action-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,20 +27,22 @@ import {
   type MacroButton,
   type MacroHttpMethod,
   type MacroInput,
+  macroButtonLabel,
+  typedMacroLabel,
 } from "@/lib/macro-pad";
-import { MacroActionStepEditor } from "./macro-action-step";
+import { MacroActionStepEditor, useMacroActionSentence } from "./macro-action-step";
 import { MacroColorPicker } from "./macro-color-picker";
 import { MacroIconPicker } from "./macro-icon-picker";
 import { MacroRemoteTrigger } from "./macro-remote-trigger";
 
 /**
  * Minimal shape the picker needs — only `id` + `name` are read. Sourced from
- * `api.moduleEngine.listWorkflows`, which projects the engine's
- * PaginatedWorkflows into this.
+ * `useEngineWorkflowsRequest`, which projects the engine's PaginatedWorkflows
+ * into this.
  */
 type WorkflowOption = { id: string; name: string };
 
-/** A chat command the "Chat Command" dropdown offers, from `api.chatCommands.list`. */
+/** A chat command the "Chat Command" dropdown offers, from `useChatCommands`. */
 type CommandOption = { command: string; argumentPattern?: string; enabled: boolean };
 
 interface MacroConfigModalProps {
@@ -62,7 +65,12 @@ export function MacroConfigModal({
   commands,
   onSave,
 }: MacroConfigModalProps) {
-  const [label, setLabel] = useState("");
+  // What the streamer typed as the label; null while a run-action button's label
+  // follows its step's sentence.
+  const [typedLabel, setTypedLabel] = useState<string | null>(null);
+  // Whether an opened button's stored label has been compared with its step's
+  // sentence, which can only happen once the catalog has loaded.
+  const typedLabelSettled = useRef(true);
   const [icon, setIcon] = useState<string | undefined>(undefined);
   const [color, setColor] = useState<string | undefined>(undefined);
   const [type, setType] = useState<MacroActionType>("send-message");
@@ -76,7 +84,15 @@ export function MacroConfigModal({
   const [httpBody, setHttpBody] = useState("");
   // Held with its settings' `$` keys restored; escaped again on save.
   const [actionStep, setActionStep] = useState<MacroActionStep | null>(null);
-  const { actionPresets, loading: catalogLoading } = useWorkflowCatalog();
+  const { actionPresets, catalogActions, loading: catalogLoading } = useWorkflowCatalog();
+  const actionSentence = useMacroActionSentence(
+    open ? actionStep : null,
+    actionPresets,
+    catalogActions,
+    catalogLoading
+  );
+  const sentence = type === "run-action" ? actionSentence.sentence : "";
+  const label = macroButtonLabel(typedLabel, sentence);
 
   // A macro with a trigger URL does, from anywhere, whatever it is set to do;
   // macros.updateMacro enforces that only a manager may change that.
@@ -87,12 +103,24 @@ export function MacroConfigModal({
     !triggerStatus.canManage &&
     triggerStatus.triggers.some((trigger) => trigger.macroId === macro.id);
 
+  // A stored label that is its step's sentence keeps following the step. Declared
+  // before the reset below so it never compares a just-opened button's label with
+  // the step of the button opened before it.
+  useEffect(() => {
+    if (typedLabelSettled.current || !actionSentence.ready || actionStep === null) {
+      return;
+    }
+    typedLabelSettled.current = true;
+    setTypedLabel((typed) => (typed === null ? null : typedMacroLabel(typed, actionSentence.sentence)));
+  }, [actionSentence.ready, actionSentence.sentence, actionStep]);
+
   // `open` deliberately triggers the reset branch even when `macro` (e.g.
   // repeatedly null for "Add Macro") doesn't change identity between opens.
   // biome-ignore lint/correctness/useExhaustiveDependencies: open is a deliberate re-run trigger for the form reset
   useEffect(() => {
     if (macro) {
-      setLabel(macro.label);
+      setTypedLabel(macro.label);
+      typedLabelSettled.current = macro.type !== "run-action";
       setIcon(macro.icon);
       setColor(macro.color);
       setType(macro.type);
@@ -114,7 +142,8 @@ export function MacroConfigModal({
           : null
       );
     } else {
-      setLabel("");
+      setTypedLabel(null);
+      typedLabelSettled.current = true;
       setIcon(undefined);
       setColor(undefined);
       setType("send-message");
@@ -175,7 +204,7 @@ export function MacroConfigModal({
     }
 
     const newMacro: MacroInput = {
-      label: label.trim(),
+      label,
       icon,
       color,
       type,
@@ -207,7 +236,14 @@ export function MacroConfigModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+        onEscapeKeyDown={(event) => {
+          if (isInsideActionPicker(event.target)) {
+            event.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{macro ? "Edit Macro" : "Add Macro"}</DialogTitle>
           <DialogDescription>Configure a macro button that can execute actions when pressed.</DialogDescription>
@@ -219,11 +255,19 @@ export function MacroConfigModal({
               <Label htmlFor="macro-label">Label</Label>
               <Input
                 id="macro-label"
-                placeholder="e.g., Send Hello"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
+                placeholder={sentence || "e.g., Send Hello"}
+                value={typedLabel ?? sentence}
+                onChange={(e) => {
+                  typedLabelSettled.current = true;
+                  setTypedLabel(e.target.value);
+                }}
                 data-testid="input-macro-label"
               />
+              {sentence !== "" && !typedLabel && (
+                <p className="text-xs text-muted-foreground" data-testid="text-macro-label-follows">
+                  Named after its action until you type your own.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -335,7 +379,9 @@ export function MacroConfigModal({
                   value={actionStep}
                   onChange={setActionStep}
                   actionPresets={actionPresets}
+                  catalogActions={catalogActions}
                   catalogLoading={catalogLoading}
+                  sentence={actionSentence.sentence}
                 />
                 <p className="text-xs text-muted-foreground">
                   Runs this one action on the engine, the same way a workflow step would.

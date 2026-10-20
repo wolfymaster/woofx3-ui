@@ -13,7 +13,14 @@ import {
   fieldValuesToConditions,
   incompleteConditionFields,
 } from "@/lib/workflow-presets-json";
-import type { ActionNode, ConditionNode, StepNode, TriggerNode, WaitNode } from "@/lib/workflow-tree";
+import {
+  type ActionNode,
+  type ConditionNode,
+  type StepNode,
+  stepKindLabel,
+  type TriggerNode,
+  type WaitNode,
+} from "@/lib/workflow-tree";
 import { isValidStepId, type VariableOption } from "@/lib/workflow-variables";
 import { ConditionEditor } from "./condition-editor";
 import { TriggerConfigForm } from "./trigger-config-form";
@@ -36,7 +43,7 @@ interface StepConfigPanelProps {
 
 /** Editable step id, committed on blur/Enter rather than per keystroke — renaming mid-tree updates the
  * tree, autosaves, and re-selects under the new id, which would be disruptive on every character typed. */
-function StepIdField({
+export function StepIdField({
   id,
   existingStepIds,
   onUpdateActionId,
@@ -98,7 +105,7 @@ function StepIdField({
   );
 }
 
-function TriggerConfigPanel({
+export function TriggerConfigPanel({
   node,
   catalog,
   onUpdateTriggerConditions,
@@ -143,7 +150,7 @@ function TriggerConfigPanel({
   );
 }
 
-function ActionConfigPanel({
+export function ActionConfigPanel({
   node,
   catalog,
   existingStepIds,
@@ -156,7 +163,8 @@ function ActionConfigPanel({
   existingStepIds: ReadonlySet<string>;
   availableVariables: VariableOption[];
   onUpdateActionParameters: (id: string, parameters: Record<string, unknown>) => void;
-  onUpdateActionId: (oldId: string, newId: string) => void;
+  /** Absent where a step has no id of its own to edit, as on a macro button. */
+  onUpdateActionId?: (oldId: string, newId: string) => void;
 }) {
   const catalogRow = resolveCatalogAction(node, catalog);
   const configFields = catalogRow?.configFields;
@@ -172,9 +180,13 @@ function ActionConfigPanel({
   );
   return (
     <div className="space-y-6">
-      <StepIdField id={node.id} existingStepIds={existingStepIds} onUpdateActionId={onUpdateActionId} />
+      {onUpdateActionId && (
+        <StepIdField id={node.id} existingStepIds={existingStepIds} onUpdateActionId={onUpdateActionId} />
+      )}
       {fields.length === 0 ? (
-        <p className="text-sm text-muted-foreground">This action has no other configurable settings.</p>
+        <p className="text-sm text-muted-foreground">
+          {onUpdateActionId ? "This action has no other configurable settings." : "This action has no settings."}
+        </p>
       ) : (
         <TriggerConfigForm
           fields={fields}
@@ -187,7 +199,7 @@ function ActionConfigPanel({
   );
 }
 
-function ConditionConfigPanel({
+export function ConditionConfigPanel({
   node,
   availableVariables,
   onUpdateConditionConditions,
@@ -210,13 +222,13 @@ function ConditionConfigPanel({
   );
 }
 
-function WaitConfigPanel({
+export function WaitConfigPanel({
   node,
-  availableVariables,
+  catalogTriggers,
   onUpdateWaitConfig,
 }: {
   node: WaitNode;
-  availableVariables: VariableOption[];
+  catalogTriggers: CatalogTriggerRow[];
   onUpdateWaitConfig: (id: string, wait: WaitConfig) => void;
 }) {
   return (
@@ -224,7 +236,7 @@ function WaitConfigPanel({
       key={node.id}
       wait={node.wait}
       onChange={(wait) => onUpdateWaitConfig(node.id, wait)}
-      availableVariables={availableVariables}
+      catalogTriggers={catalogTriggers}
     />
   );
 }
@@ -271,7 +283,12 @@ export function StepConfigPanel({
       />
     );
   }
+  if (node.type === "wait") {
+    return <WaitConfigPanel node={node} catalogTriggers={catalogTriggers} onUpdateWaitConfig={onUpdateWaitConfig} />;
+  }
   return (
-    <WaitConfigPanel node={node} availableVariables={availableVariables} onUpdateWaitConfig={onUpdateWaitConfig} />
+    <p className="text-sm text-muted-foreground" data-testid="text-step-not-editable">
+      {stepKindLabel(node)} steps can't be edited here yet. The step is kept as it is when the workflow is saved.
+    </p>
   );
 }

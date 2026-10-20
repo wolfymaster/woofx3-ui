@@ -1,8 +1,10 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { TwitchHelixResult } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action, query } from "./_generated/server";
+import type { EngineApi } from "./lib/engineInstanceUrl";
 import {
   CAPABILITY_RULES,
   type CapabilityStatus,
@@ -10,6 +12,7 @@ import {
   chatSettingsFromHelix,
   chatSettingsToHelix,
   describeModerationError,
+  type HelixChatSettingsPatch,
   helixErrorMessage,
   MODERATION_SCOPES,
   type ModerationCapability,
@@ -21,12 +24,13 @@ import {
 } from "./lib/moderation";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
+import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/twitchUsers";
 
 // Moderation for the dashboard widget: blocked terms, timeouts and bans, and
 // chat lockdown modes. Straight to Helix with the broadcaster's token, the same
-// shape as convex/twitchBroadcast.ts: the engine exposes no moderation methods,
-// and these are one-shot calls a streamer makes by hand mid-stream.
+// shape as convex/twitchBroadcast.ts, or through an engine that advertises
+// twitch.moderation (convex/lib/twitchEngineHelix.ts).
 //
 // Who may do what is decided by CAPABILITY_RULES in convex/lib/moderation.ts;
 // every action enforces it here, and the widget reads the same rules through
@@ -97,22 +101,100 @@ function moderationParams(auth: AuthorizedTwitchCall, extra: Record<string, stri
   }).toString();
 }
 
-async function helix(
+/**
+ * One moderation call, described for both paths: the Helix request Convex
+ * sends itself, and the engine method that sends the same one.
+ */
+export interface ModerationRequest {
+  operation: ModerationOperation;
+  method: "GET" | "POST" | "PATCH" | "DELETE";
+  url: string;
+  body?: unknown;
+  viaEngine: (engine: EngineApi) => Promise<TwitchHelixResult>;
+}
+
+export const moderationRequests = {
+  listTerms: (auth: AuthorizedTwitchCall, cursor: string | undefined): ModerationRequest => ({
+    operation: "list-terms",
+    method: "GET",
+    url: `${BLOCKED_TERMS_URL}?${moderationParams(auth, {
+      first: String(BLOCKED_TERMS_PAGE_SIZE),
+      ...(cursor ? { after: cursor } : {}),
+    })}`,
+    viaEngine: (engine) =>
+      engine.twitchGetBlockedTerms({ first: BLOCKED_TERMS_PAGE_SIZE, ...(cursor ? { after: cursor } : {}) }),
+  }),
+  addTerm: (auth: AuthorizedTwitchCall, text: string): ModerationRequest => ({
+    operation: "add-term",
+    method: "POST",
+    url: `${BLOCKED_TERMS_URL}?${moderationParams(auth)}`,
+    body: { text },
+    viaEngine: (engine) => engine.twitchAddBlockedTerm({ text }),
+  }),
+  removeTerm: (auth: AuthorizedTwitchCall, termId: string): ModerationRequest => ({
+    operation: "remove-term",
+    method: "DELETE",
+    url: `${BLOCKED_TERMS_URL}?${moderationParams(auth, { id: termId })}`,
+    viaEngine: (engine) => engine.twitchRemoveBlockedTerm({ id: termId }),
+  }),
+  timeout: (auth: AuthorizedTwitchCall, userId: string, duration: number): ModerationRequest => ({
+    operation: "timeout",
+    method: "POST",
+    url: `${BANS_URL}?${moderationParams(auth)}`,
+    body: { data: { user_id: userId, duration } },
+    viaEngine: (engine) => engine.twitchBanUser({ user_id: userId, duration }),
+  }),
+  ban: (auth: AuthorizedTwitchCall, userId: string, reason: string): ModerationRequest => ({
+    operation: "ban",
+    method: "POST",
+    url: `${BANS_URL}?${moderationParams(auth)}`,
+    body: { data: { user_id: userId, reason } },
+    viaEngine: (engine) => engine.twitchBanUser({ user_id: userId, reason }),
+  }),
+  unban: (auth: AuthorizedTwitchCall, userId: string): ModerationRequest => ({
+    operation: "unban",
+    method: "DELETE",
+    url: `${BANS_URL}?${moderationParams(auth, { user_id: userId })}`,
+    viaEngine: (engine) => engine.twitchUnbanUser({ user_id: userId }),
+  }),
+  readSettings: (auth: AuthorizedTwitchCall): ModerationRequest => ({
+    operation: "read-settings",
+    method: "GET",
+    url: `${CHAT_SETTINGS_URL}?${moderationParams(auth)}`,
+    viaEngine: (engine) => engine.twitchGetChatSettings(),
+  }),
+  updateSettings: (auth: AuthorizedTwitchCall, patch: HelixChatSettingsPatch): ModerationRequest => ({
+    operation: "update-settings",
+    method: "PATCH",
+    url: `${CHAT_SETTINGS_URL}?${moderationParams(auth)}`,
+    body: patch,
+    viaEngine: (engine) => engine.twitchUpdateChatSettings(patch),
+  }),
+};
+
+const READ_OPERATIONS: ReadonlySet<ModerationOperation> = new Set(["list-terms", "read-settings"]);
+
+export async function helix(
   auth: AuthorizedTwitchCall,
-  operation: ModerationOperation,
-  method: "GET" | "POST" | "PATCH" | "DELETE",
-  url: string,
-  body?: unknown
+  route: TwitchHelixRoute,
+  request: ModerationRequest
 ): Promise<unknown> {
+  const { operation, method, url, body } = request;
   const headers: Record<string, string> = { Authorization: `Bearer ${auth.accessToken}`, "Client-Id": auth.clientId };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
   }
   const response = await readable(
-    fetch(url, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+    helixResponse(route, {
+      operation,
+      kind: READ_OPERATIONS.has(operation) ? "read" : "write",
+      viaEngine: request.viaEngine,
+      direct: () =>
+        fetch(url, {
+          method,
+          headers,
+          body: body === undefined ? undefined : JSON.stringify(body),
+        }),
     })
   );
   if (!response.ok) {
@@ -125,12 +207,16 @@ async function helix(
   return readable(response.json());
 }
 
-async function resolveTarget(auth: AuthorizedTwitchCall, input: string): Promise<TwitchUser> {
+export async function resolveTarget(
+  auth: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  input: string
+): Promise<TwitchUser> {
   const login = normalizeTwitchLogin(input);
   if (!login) {
     throw new ConvexError(`"${input.trim()}" is not a Twitch username`);
   }
-  const user = await readable(fetchTwitchUser(auth, { login }));
+  const user = await readable(fetchTwitchUser(auth, { login }, route));
   if (!user) {
     throw new ConvexError(`No Twitch user called "${login}"`);
   }
@@ -189,15 +275,12 @@ export const listBlockedTerms = action({
   handler: async (ctx, args): Promise<{ terms: BlockedTerm[]; truncated: boolean }> => {
     // Anyone who may add a term may see the list they are adding to.
     const auth = await authorizeModeration(ctx, args.instanceId, "addBlockedTerm");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
 
     const terms: BlockedTerm[] = [];
     let cursor: string | undefined;
     for (let page = 0; page < BLOCKED_TERMS_MAX_PAGES; page++) {
-      const params = moderationParams(auth, {
-        first: String(BLOCKED_TERMS_PAGE_SIZE),
-        ...(cursor ? { after: cursor } : {}),
-      });
-      const body = (await helix(auth, "list-terms", "GET", `${BLOCKED_TERMS_URL}?${params}`)) as HelixBlockedTermsPage;
+      const body = (await helix(auth, route, moderationRequests.listTerms(auth, cursor))) as HelixBlockedTermsPage;
       for (const term of body.data ?? []) {
         terms.push({
           id: term.id,
@@ -223,9 +306,8 @@ export const addBlockedTerm = action({
       throw new ConvexError(validated.error);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "addBlockedTerm");
-    const body = (await helix(auth, "add-term", "POST", `${BLOCKED_TERMS_URL}?${moderationParams(auth)}`, {
-      text: validated.value,
-    })) as HelixBlockedTermsPage;
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
+    const body = (await helix(auth, route, moderationRequests.addTerm(auth, validated.value))) as HelixBlockedTermsPage;
     const term = body.data?.[0];
     if (!term) {
       throw new ConvexError("Twitch accepted the term but returned nothing");
@@ -241,7 +323,8 @@ export const removeBlockedTerm = action({
       throw new ConvexError("No blocked term to remove");
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "removeBlockedTerm");
-    await helix(auth, "remove-term", "DELETE", `${BLOCKED_TERMS_URL}?${moderationParams(auth, { id: args.termId })}`);
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
+    await helix(auth, route, moderationRequests.removeTerm(auth, args.termId));
     return { ok: true };
   },
 });
@@ -267,10 +350,9 @@ export const timeoutUser = action({
       throw new ConvexError(duration.error);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "timeout");
-    const target = await resolveTarget(auth, args.login);
-    await helix(auth, "timeout", "POST", `${BANS_URL}?${moderationParams(auth)}`, {
-      data: { user_id: target.twitchUserId, duration: duration.value },
-    });
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
+    const target = await resolveTarget(auth, route, args.login);
+    await helix(auth, route, moderationRequests.timeout(auth, target.twitchUserId, duration.value));
     return { login: target.login, displayName: target.displayName };
   },
 });
@@ -283,10 +365,9 @@ export const banUser = action({
       throw new ConvexError(reason.error);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "ban");
-    const target = await resolveTarget(auth, args.login);
-    await helix(auth, "ban", "POST", `${BANS_URL}?${moderationParams(auth)}`, {
-      data: { user_id: target.twitchUserId, reason: reason.value },
-    });
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
+    const target = await resolveTarget(auth, route, args.login);
+    await helix(auth, route, moderationRequests.ban(auth, target.twitchUserId, reason.value));
     return { login: target.login, displayName: target.displayName };
   },
 });
@@ -296,8 +377,9 @@ export const unbanUser = action({
   args: { instanceId: v.id("instances"), login: v.string() },
   handler: async (ctx, args): Promise<ModeratedUser> => {
     const auth = await authorizeModeration(ctx, args.instanceId, "ban");
-    const target = await resolveTarget(auth, args.login);
-    await helix(auth, "unban", "DELETE", `${BANS_URL}?${moderationParams(auth, { user_id: target.twitchUserId })}`);
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
+    const target = await resolveTarget(auth, route, args.login);
+    await helix(auth, route, moderationRequests.unban(auth, target.twitchUserId));
     return { login: target.login, displayName: target.displayName };
   },
 });
@@ -315,7 +397,8 @@ export const getChatSettings = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<ChatSettings> => {
     const auth = await readable(authorizeTwitch(ctx, args.instanceId, MODERATION_SCOPES.readChatSettings));
-    const body = await helix(auth, "read-settings", "GET", `${CHAT_SETTINGS_URL}?${moderationParams(auth)}`);
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
+    const body = await helix(auth, route, moderationRequests.readSettings(auth));
     const settings = chatSettingsFromHelix(body);
     if (!settings) {
       throw new ConvexError("Twitch returned no chat settings for this channel");
@@ -342,13 +425,8 @@ export const updateChatSettings = action({
       throw new ConvexError(body.error);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "chatSettings");
-    const response = await helix(
-      auth,
-      "update-settings",
-      "PATCH",
-      `${CHAT_SETTINGS_URL}?${moderationParams(auth)}`,
-      body.value
-    );
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
+    const response = await helix(auth, route, moderationRequests.updateSettings(auth, body.value));
     const settings = chatSettingsFromHelix(response);
     if (!settings) {
       throw new ConvexError("Twitch changed chat settings but returned none");

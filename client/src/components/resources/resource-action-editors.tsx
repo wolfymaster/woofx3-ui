@@ -1,25 +1,23 @@
-import { api } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Doc } from "@convex/_generated/dataModel";
 import { bareKind } from "@convex/lib/resourceKinds";
-import { useAction, useQuery } from "convex/react";
 import { Loader2, Plus } from "lucide-react";
-import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  EventTriggerList,
+  type NewTriggerRequest,
+  type TriggerActionScope,
+} from "@/components/alerts/event-trigger-list";
 import type { ResourceInstanceDoc } from "@/components/resources/resource-kind-page";
 import { TriggerPicker } from "@/components/test-events/trigger-picker";
-import { EventWorkflowEditor } from "@/components/triggers/event-workflow-editor";
-import { SaveState } from "@/components/triggers/save-state";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
-import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import type { AlertMenuSection } from "@/lib/alert-groups";
-import { getDraft, isDraftDirty, setDraft, subscribeToDrafts } from "@/lib/event-drafts";
-import { type ActionScope, conditionFieldsOf, eventEditorStateFor, withNewTrigger } from "@/lib/event-workflow-state";
 import { eventsChangingResource, resourceActions } from "@/lib/resource-actions";
-import { firstIncompleteTrigger, saveEventDraft } from "@/lib/save-event-draft";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
 /**
@@ -29,121 +27,42 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
  *
  * The mirror of ResourceTriggerEditors, which shows what this instance's *own* events
  * set off. Both edit the same workflows the Alerts screen and the workflow builder do:
- * one per event, a condition task per trigger. This screen is one list across many
- * events, so it borrows each event's editor without its heading and Save bar (`bare`)
- * and saves them together — each event is still its own workflow, written in turn.
+ * one per trigger. This screen is one list across many events, so it borrows each
+ * event's list without its heading (`bare`).
  */
 export function ResourceActionEditors({ kind, instance }: { kind: string; instance: ResourceInstanceDoc }) {
   const { instance: engineInstance } = useInstance();
-  const { toast } = useToast();
   const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
-  const workflows = useQuery(api.workflows.list, engineInstance ? { instanceId: engineInstance._id } : "skip");
-  const createFromDefinition = useAction(api.workflowActions.createFromDefinition);
-  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
-  const setEnabled = useAction(api.workflowActions.setEnabled);
+  const workflows = useWorkflows(engineInstance ? engineInstance._id : null);
 
-  const [addedEvents, setAddedEvents] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  // The trigger being added, on its event's list, until it is saved or dropped.
+  const [adding, setAdding] = useState<{ event: string; request: NewTriggerRequest } | null>(null);
 
   const actions = useMemo(() => resourceActions(actionPresets, kind), [actionPresets, kind]);
-  const actionScope = useMemo<ActionScope>(
+  const actionScope = useMemo<TriggerActionScope>(
     () => ({ actions, value: instance.canonicalId }),
     [actions, instance.canonicalId]
   );
 
-  // An event is listed once it has a trigger changing this instance, or once this
-  // session added one — a trigger that is not saved yet is in the draft, not the engine.
+  // An event is listed once it has a trigger changing this instance, or while one is
+  // being added to it — a trigger with no saved step exists only in its editor.
   const events = useMemo(() => {
     const stored = eventsChangingResource((workflows as Doc<"workflows">[]) ?? [], actions, instance.canonicalId);
-    return Array.from(new Set([...stored, ...addedEvents])).sort();
-  }, [workflows, actions, instance.canonicalId, addedEvents]);
+    return Array.from(new Set([...stored, ...(adding ? [adding.event] : [])])).sort();
+  }, [workflows, actions, instance.canonicalId, adding]);
 
   const presetFor = useCallback(
     (event: string) => triggerPresets.find((preset) => preset.event === event),
     [triggerPresets]
   );
 
-  const isDirty = useSyncExternalStore(
-    subscribeToDrafts,
-    useCallback(() => events.some((event) => isDraftDirty(getDraft(event))), [events])
-  );
-
   const addTrigger = (triggerPreset: TriggerPreset, actionPresetId: string) => {
-    const event = triggerPreset.event;
     const seed = actions.find((candidate) => candidate.preset.id === actionPresetId)?.preset;
-    if (!event || !seed || workflows === undefined) {
+    if (!triggerPreset.event || !seed) {
       return;
     }
-    const conditionFields = conditionFieldsOf(triggerPreset);
-    const open = getDraft(event);
-    // A draft already open for this event carries edits the outbound section or the
-    // Alerts screen may have made; the new trigger joins them rather than replacing them.
-    const base = open?.value ?? eventEditorStateFor(workflows as Doc<"workflows">[], triggerPreset, conditionFields);
-    const baseline = open?.baseline ?? JSON.stringify(base);
-    const { state } = withNewTrigger(base, conditionFields, { actionScope, seed });
-    setDraft(event, { value: state, baseline });
-    setAddedEvents((previous) => (previous.includes(event) ? previous : [...previous, event]));
+    setAdding({ event: triggerPreset.event, request: { key: Date.now(), seed } });
   };
-
-  const handleDiscard = () => {
-    for (const event of events) {
-      const draft = getDraft(event);
-      if (draft) {
-        setDraft(event, { value: JSON.parse(draft.baseline), baseline: draft.baseline });
-      }
-    }
-    setAddedEvents([]);
-  };
-
-  async function handleSave() {
-    if (!engineInstance) {
-      return;
-    }
-    setIsSaving(true);
-    try {
-      // One event at a time: each is its own workflow and its own engine round trip, so
-      // a failure names the event it stopped on and leaves the rest as they were.
-      for (const event of events) {
-        const triggerPreset = presetFor(event);
-        const draft = getDraft(event);
-        if (!triggerPreset || !draft || !isDraftDirty(draft)) {
-          continue;
-        }
-        const conditionFields = conditionFieldsOf(triggerPreset);
-        const incomplete = firstIncompleteTrigger(draft.value, conditionFields);
-        if (incomplete) {
-          toast({
-            title: `${triggerPreset.name} isn't finished`,
-            description: `Choose ${incomplete.fields.map((field) => field.label.toLowerCase()).join(", ")}, or pick Any.`,
-            variant: "destructive",
-          });
-          return;
-        }
-        const { enabled } = await saveEventDraft(event, draft.value, conditionFields, {
-          instanceId: engineInstance._id as Id<"instances">,
-          createFromDefinition,
-          updateFromDefinition,
-          setEnabled,
-        });
-        if (!enabled) {
-          toast({
-            title: "Saved, but not enabled",
-            description: `Enable the ${triggerPreset.name} workflow from the Workflows screen.`,
-            variant: "destructive",
-          });
-        }
-      }
-      setAddedEvents([]);
-    } catch (err) {
-      toast({
-        title: "Save failed",
-        description: err instanceof Error ? err.message : String(err),
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  }
 
   if (loading || workflows === undefined) {
     return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
@@ -158,8 +77,7 @@ export function ResourceActionEditors({ kind, instance }: { kind: string; instan
       <div className="flex flex-col gap-2.5">
         <h2 className="text-2xl font-semibold leading-tight tracking-[-0.02em]">What changes {label}</h2>
         <p className="text-sm text-muted-foreground">
-          Every trigger that runs one of these actions on it. The {bareKind(kind)} is already chosen, so a step here
-          only asks for the rest.
+          Every trigger that runs one of these actions on it. A step added here starts aimed at this {bareKind(kind)}.
         </p>
       </div>
 
@@ -175,15 +93,15 @@ export function ResourceActionEditors({ kind, instance }: { kind: string; instan
               return null;
             }
             return (
-              <EventWorkflowEditor
+              <EventTriggerList
                 key={event}
                 bare
                 triggerPreset={triggerPreset}
-                actionPresets={actionPresets}
                 workflows={workflows as Doc<"workflows">[]}
                 breadcrumb={[]}
                 headingLevel="h2"
                 actionScope={actionScope}
+                startNew={adding?.event === event ? adding.request : undefined}
               />
             );
           })}
@@ -191,7 +109,6 @@ export function ResourceActionEditors({ kind, instance }: { kind: string; instan
       )}
 
       <AddTriggerButton triggerPresets={triggerPresets} actions={actions} onAdd={addTrigger} />
-      <SaveState isDirty={isDirty} isSaving={isSaving} onSave={handleSave} onDiscard={handleDiscard} />
     </section>
   );
 }

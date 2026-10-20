@@ -16,6 +16,10 @@ describe("matchOpsRoute", () => {
       accountId: "k1",
     });
     expect(matchOpsRoute("GET", "/api/ops/engines")).toEqual({ method: "GET", name: "engines.list" });
+    expect(matchOpsRoute("GET", "/api/ops/engines/capabilities")).toEqual({
+      method: "GET",
+      name: "engines.capabilities",
+    });
     expect(matchOpsRoute("GET", "/api/ops/engines/by-maintenance-id/0a1b2c3d-4e5f")).toEqual({
       method: "GET",
       name: "engines.byMaintenanceId",

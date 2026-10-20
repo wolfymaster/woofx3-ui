@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useAction, useQuery } from "convex/react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -15,6 +13,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
+import { useReconcileModuleUninstallRequest, useUninstallModuleRequest } from "@/engine/hooks/use-modules";
 import { usedByContext, usedByHeading } from "@/lib/uninstall-conflicts";
 
 const ENGINE_RESPONSE_TIMEOUT_MS = 60_000;
@@ -66,17 +66,14 @@ function groupConflicts(conflicts: ConflictResource[]): Array<[string, ConflictR
 }
 
 export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, onSuccess }: Props) {
-  const requestModuleUninstall = useAction(api.moduleEngine.requestModuleUninstall);
-  const reconcileUninstall = useAction(api.moduleEngine.reconcileUninstall);
+  const requestModuleUninstall = useUninstallModuleRequest();
+  const reconcileUninstall = useReconcileModuleUninstallRequest();
   const [phase, setPhase] = useState<Phase>("confirm");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<ConflictResource[]>([]);
 
-  const uninstallEvent = useQuery(
-    api.transientEvents.get,
-    pendingKey ? { instanceId, correlationKey: pendingKey } : "skip"
-  );
+  const uninstallEvent = useTransientEvent(instanceId, pendingKey || null);
 
   const reset = useCallback(() => {
     setPhase("confirm");
@@ -129,7 +126,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
       // the dialog (and the stale Convex record) stuck on a webhook that may
       // never come.
       try {
-        const result = await reconcileUninstall({ instanceId, moduleId: module._id, correlationKey: key });
+        const result = await reconcileUninstall(instanceId, module._id, key);
         if (!result.stillInstalled) {
           setPendingKey(null);
           onOpenChange(false);
@@ -162,7 +159,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
     setErrorMessage(null);
     setConflicts([]);
     try {
-      const result = await requestModuleUninstall({ instanceId, moduleId: module._id });
+      const result = await requestModuleUninstall(instanceId, module._id);
       setPendingKey(result.moduleKey);
       setPhase("awaiting-engine");
     } catch (err) {

@@ -1,5 +1,5 @@
 import { Loader2, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type ElementType, type ReactNode, useId, useMemo, useState } from "react";
 import { ConfigurationForm, type FieldDescriptor, type FieldValues } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -25,6 +25,11 @@ interface CreateResourceDialogProps {
   onCreate: (resourceInstanceId: string, displayName: string, settings: Record<string, unknown>) => Promise<void>;
 }
 
+interface CreateResourceFormProps extends CreateResourceDialogProps {
+  /** What holds Cancel and Create: the dialog's footer, or a plain row where the form sits inline. */
+  actionsAs?: ElementType;
+}
+
 /** Characters an instance id may use: the engine's canonical-id segment rule. */
 const INSTANCE_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
@@ -45,7 +50,40 @@ export function suggestInstanceId(displayName: string): string {
  * counter and do not care what it is called internally — but it is shown,
  * since workflows reference it and it can never change.
  */
-export function CreateResourceDialog({ moduleId, kind, onClose, onCreate }: CreateResourceDialogProps) {
+export function CreateResourceDialog(props: CreateResourceDialogProps) {
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          props.onClose();
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New {props.kind.name.toLowerCase()}</DialogTitle>
+        </DialogHeader>
+        <CreateResourceForm {...props} actionsAs={DialogFooter} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * The create form on its own, for a surface that shows it in place rather than in
+ * a dialog. `onClose` runs after a successful create and on Cancel.
+ */
+export function CreateResourceForm({
+  moduleId,
+  kind,
+  onClose,
+  onCreate,
+  actionsAs: Actions = InlineActions,
+}: CreateResourceFormProps) {
+  const idPrefix = useId();
+  const nameInputId = `${idPrefix}-name`;
+  const idInputId = `${idPrefix}-id`;
   const fields = useMemo(
     () => withFieldOptionsOwner(parseConfigFields(kind.schema), resourceKindFieldOptionsOwner(moduleId, kind.kind)),
     [kind.schema, moduleId, kind.kind]
@@ -81,74 +119,66 @@ export function CreateResourceDialog({ moduleId, kind, onClose, onCreate }: Crea
   }
 
   return (
-    <Dialog
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-    >
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New {kind.name.toLowerCase()}</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          {error && (
-            <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-              {error}
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="new-resource-name">Name</Label>
-            <Input
-              id="new-resource-name"
-              placeholder="e.g. Deaths"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              autoFocus
-              data-testid="input-resource-name"
-            />
+    <>
+      <div className="space-y-4 py-2">
+        {error && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            {error}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-resource-id">ID</Label>
-            <Input
-              id="new-resource-id"
-              placeholder="e.g. deaths"
-              value={resourceInstanceId}
-              onChange={(e) => setEditedId(e.target.value)}
-              className="font-mono"
-              data-testid="input-resource-id"
-            />
-            <p
-              className={
-                idIsValid || resourceInstanceId === "" ? "text-xs text-muted-foreground" : "text-xs text-destructive"
-              }
-            >
-              {idIsValid || resourceInstanceId === ""
-                ? "What workflows and actions refer to it by. It can't be changed later."
-                : "Use only letters, numbers, dots, dashes and underscores."}
-            </p>
-          </div>
-          {fields.length > 0 && (
-            <ConfigurationForm
-              fields={fields as unknown as FieldDescriptor[]}
-              values={settings}
-              onChange={setSettings}
-              customRenderers={configFieldRenderers}
-            />
-          )}
+        )}
+        <div className="space-y-2">
+          <Label htmlFor={nameInputId}>Name</Label>
+          <Input
+            id={nameInputId}
+            placeholder="e.g. Deaths"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            autoFocus
+            data-testid="input-resource-name"
+          />
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button disabled={!canCreate} onClick={() => void handleCreate()} data-testid="button-create-resource">
-            {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
-            Create
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <div className="space-y-2">
+          <Label htmlFor={idInputId}>ID</Label>
+          <Input
+            id={idInputId}
+            placeholder="e.g. deaths"
+            value={resourceInstanceId}
+            onChange={(e) => setEditedId(e.target.value)}
+            className="font-mono"
+            data-testid="input-resource-id"
+          />
+          <p
+            className={
+              idIsValid || resourceInstanceId === "" ? "text-xs text-muted-foreground" : "text-xs text-destructive"
+            }
+          >
+            {idIsValid || resourceInstanceId === ""
+              ? "What workflows and actions refer to it by. It can't be changed later."
+              : "Use only letters, numbers, dots, dashes and underscores."}
+          </p>
+        </div>
+        {fields.length > 0 && (
+          <ConfigurationForm
+            fields={fields as unknown as FieldDescriptor[]}
+            values={settings}
+            onChange={setSettings}
+            customRenderers={configFieldRenderers}
+          />
+        )}
+      </div>
+      <Actions>
+        <Button variant="outline" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button disabled={!canCreate} onClick={() => void handleCreate()} data-testid="button-create-resource">
+          {creating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+          Create
+        </Button>
+      </Actions>
+    </>
   );
+}
+
+function InlineActions({ children }: { children: ReactNode }) {
+  return <div className="flex justify-end gap-2">{children}</div>;
 }

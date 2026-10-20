@@ -1,5 +1,3 @@
-import { api } from "@convex/_generated/api";
-import { useAction } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -13,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCreateSceneRequest } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
@@ -30,7 +29,7 @@ export function CreateSceneDialog({ open, onOpenChange, onCreated }: CreateScene
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const createScene = useAction(api.sceneActions.createScene);
+  const createScene = useCreateSceneRequest();
 
   const handleCreate = async () => {
     if (!name.trim() || !instance) {
@@ -38,8 +37,7 @@ export function CreateSceneDialog({ open, onOpenChange, onCreated }: CreateScene
     }
     setIsCreating(true);
     try {
-      const { engineSceneId } = await createScene({
-        instanceId: instance._id,
+      const { engineSceneId } = await createScene(instance._id, {
         name: name.trim(),
         layoutJson: JSON.stringify({ width: 1920, height: 1080, backgroundColor: "transparent" }),
       });

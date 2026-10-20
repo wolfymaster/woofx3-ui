@@ -6,7 +6,7 @@ A paid plan sells features ("advanced reports", a dashboard tool) and amounts ("
 
 | Question | Answered by | Lifetime |
 |---|---|---|
-| Can this engine build do X? | Engine capabilities (`useEngineCapabilities`, `EngineFeatureGate`) | Permanent |
+| Can this engine build do X? | [Engine capabilities](./engine-capabilities.md) (`useEngineCapabilities`, `EngineFeatureGate`) | Until every engine in use has it |
 | Does this account's plan include X, and how much? | An entitlement (this page) | As long as the plan |
 | Should this viewer see new UI Y yet? | A [feature flag](./feature-flags.md) | Until the rollout ends |
 
@@ -37,6 +37,6 @@ bunx convex run entitlements:get '{"accountId": "…"}'
 - Adding a feature or limit is a code change. Changing what a plan includes, or which plan an account is on, is not, and takes effect on the next query.
 - Editing a plan changes it for every account on it. To keep existing accounts on the old terms, copy the plan, change the copy, stop offering the old one, and move accounts deliberately.
 - A plan cannot be deleted while it is the default or any account is on it.
-- A limit that bounds a hosted resource is enforced where it is granted, never in the engine. Hosted asset storage (`storage.hostedAssetBytes`, `storage.hostedFileBytes`) is checked by `resources.requestUpload` before the engine issues a size-bound upload grant; see [Assets](../ui/assets.md#hosted-storage-limits).
+- A limit that bounds a hosted resource is enforced where it is granted, never in the engine. Hosted asset storage (`storage.hostedAssetBytes`, `storage.hostedFileBytes`) is checked by `resources.requestUpload` before the engine issues a size-bound upload grant; see [Media](../ui/assets.md#hosted-storage-limits).
 - Prices live in billing, not here: a plan says what is included, not what it costs.
 - Before plans existed, account creation wrote a `licenses` row per account; `migrations/dropLegacyLicenses` deletes them, and the table goes after that has run.

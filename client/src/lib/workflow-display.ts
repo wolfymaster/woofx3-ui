@@ -1,9 +1,9 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
+import type { WorkflowRecord } from "@/engine/types";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { triggerNodeLabel } from "@/lib/workflow-node-label";
 
-type WorkflowRow = Doc<"workflows">;
+type WorkflowRow = WorkflowRecord;
 
 /** Trigger label shown for workflows whose trigger is not an engine event. */
 export const UNTRIGGERED_LABEL = "Other";

@@ -1,12 +1,11 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useAction, useQuery } from "convex/react";
 import { formatDistanceToNow } from "date-fns";
 import { CheckCircle2, Circle, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
 
 interface EngineSyncCardProps {
   instanceId: Id<"instances">;
@@ -28,8 +27,8 @@ function StepIcon({ status }: { status: StepStatus }) {
 }
 
 export function EngineSyncCard({ instanceId }: EngineSyncCardProps) {
-  const state = useQuery(api.engineSync.getSyncState, { instanceId });
-  const syncNow = useAction(api.engineSync.syncNow);
+  const state = useEngineSyncState(instanceId);
+  const syncNow = useEngineSyncRequest();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -37,7 +36,7 @@ export function EngineSyncCard({ instanceId }: EngineSyncCardProps) {
     setError(null);
     setPending(true);
     try {
-      const res = await syncNow({ instanceId });
+      const res = await syncNow(instanceId);
       if (!res.scheduled) {
         setError("A sync is already in progress.");
       }

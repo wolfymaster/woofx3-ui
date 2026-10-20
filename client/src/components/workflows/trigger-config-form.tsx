@@ -1,10 +1,9 @@
-import { api } from "@convex/_generated/api";
 import { bareKind, parseKindRef } from "@convex/lib/resourceKinds";
 import { THEME_FIELD_TYPE } from "@convex/lib/widgetThemes";
-import { useAction, useQuery } from "convex/react";
 import { FileAudio, FileImage, FileVideo, Link2, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
+import { ConfigButtonFieldRenderer } from "@/components/common/config-button-field";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
@@ -17,6 +16,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  useCreateResourceInstanceRequest,
+  useResourceInstancesOfKind,
+  useResourceKind,
+} from "@/engine/hooks/use-module-resources";
+import { useAlertWidgetNames } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import { alertTargetChoices } from "@/lib/alert-target";
 import { isExternalMediaValue, toMediaValue } from "@/lib/media-value";
@@ -113,18 +118,12 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
   const moduleName = typeof field.moduleName === "string" ? field.moduleName : undefined;
   const [createOpen, setCreateOpen] = useState(false);
 
-  const instances = useQuery(
-    api.moduleResourceInstances.listByKind,
-    instanceId && resourceKind ? { instanceId, kind: resourceKind } : "skip"
-  );
-  const createAction = useAction(api.moduleResourceActions.createResourceInstance);
+  const instances = useResourceInstancesOfKind(instanceId ?? null, resourceKind || null);
+  const createAction = useCreateResourceInstanceRequest();
   // The kind's declaration: the module an instance made from here belongs to,
   // and its create form, so it is configured the same way as one made on the
   // kind's own page.
-  const kindDefinition = useQuery(
-    api.resourceKinds.getForInstance,
-    instanceId && resourceKind ? { instanceId, kind: resourceKind } : "skip"
-  );
+  const kindDefinition = useResourceKind(instanceId ?? null, resourceKind || null);
   // Until the kind's declaration is known, a qualified kind still names its
   // module, and a bare one is taken to be the field's own module's.
   const owner =
@@ -190,8 +189,7 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
           kind={{ kind: bareKind(resourceKind), name: field.label, schema: kindDefinition?.schema }}
           onClose={() => setCreateOpen(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            const created = await createAction({
-              instanceId,
+            const created = await createAction(instanceId, {
               moduleName: owner,
               kind: bareKind(resourceKind),
               resourceInstanceId,
@@ -217,7 +215,7 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = (props) => <ResourceRefFie
 
 function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
   const { instance } = useInstance();
-  const names = useQuery(api.sceneWidgets.alertWidgetNames, instance ? { instanceId: instance._id } : "skip");
+  const names = useAlertWidgetNames(instance ? instance._id : null);
   const { selected, options, stale } = alertTargetChoices(names, value);
   const noWidgets = names !== undefined && options.length === 0;
 
@@ -269,7 +267,24 @@ const AlertWidgetNameRenderer: CustomFieldRenderer = (props) => <AlertWidgetName
 // does everywhere else.
 // ---------------------------------------------------------------------------
 
-const LayoutFieldRenderer: CustomFieldRenderer = (props) => <AlertLayoutField {...props} />;
+/**
+ * A layout places the widgets of one surface. Only alerts are laid out per step; a
+ * field naming another surface is shown, not edited, and its value is kept as it is.
+ */
+const LayoutFieldRenderer: CustomFieldRenderer = (props) => {
+  const surface = props.field.surface;
+  if (surface === undefined || surface === "alert") {
+    return <AlertLayoutField {...props} />;
+  }
+  return (
+    <div className="space-y-1">
+      <Label>{props.field.label}</Label>
+      <p className="text-xs text-muted-foreground" data-testid={`text-layout-unsupported-${props.field.id}`}>
+        A {String(surface)} layout can't be edited here yet. Whatever it holds is kept as it is.
+      </p>
+    </div>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // TriggerConfigForm — thin wrapper around ConfigurationForm
@@ -303,6 +318,8 @@ export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   asset: MediaFieldRenderer,
   resource_ref: ResourceRefFieldRenderer,
   "field:layout": LayoutFieldRenderer,
+  // A button stores nothing, so there is no value for a variable to stand in for.
+  "field:button": ConfigButtonFieldRenderer,
   "source:alertWidgets": AlertWidgetNameRenderer,
   "source:scenes": ScenesFieldRenderer,
   "source:scenePlacements": ScenePlacementsFieldRenderer,

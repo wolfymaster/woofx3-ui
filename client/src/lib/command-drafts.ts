@@ -1,4 +1,4 @@
-import type { ActionStep } from "@woofx3/api";
+import { type CommandFlow, commandFlow } from "@/lib/command-steps";
 
 export type CommandVisibility = "public" | "restricted";
 
@@ -6,7 +6,8 @@ export type CommandVisibility = "public" | "restricted";
 export interface CommandEditorState {
   /** The command word and its argument pattern as one field — see lib/command-input.ts. */
   command: string;
-  actions: ActionStep[];
+  /** Its steps in the flow editor, or why they can't be edited there and are kept as they are. */
+  flow: CommandFlow;
   cooldown: number;
   priority: number;
   enabled: boolean;
@@ -24,20 +25,10 @@ export interface CommandDraft {
 /** What a command being created is keyed under, before the engine has given it an id. */
 export const NEW_COMMAND_KEY = "new";
 
-/**
- * How a step is addressed within its command — in the editor's row keys, in the route of
- * the step's own alert editor, and in the `${stepId.field}` references later steps make
- * to its output. A step written before ids were assigned has none, so its position stands
- * in, named as the engine names it (sequentialTasks in workflow/internal/engine/
- * actions_run.go) — otherwise a reference to that step would never resolve.
- */
-export function commandStepId(step: ActionStep, index: number): string {
-  return step.id ?? `action-${index + 1}`;
-}
-
+/** A command being created: no steps yet, so the flow opens with only "Add a step". */
 export const emptyCommand: CommandEditorState = {
   command: "",
-  actions: [],
+  flow: commandFlow("", [], []),
   cooldown: 5,
   priority: 0,
   enabled: true,
@@ -47,11 +38,9 @@ export const emptyCommand: CommandEditorState = {
 };
 
 /**
- * Drafts live outside any component, keyed by engine command id (or NEW_COMMAND_KEY),
- * because editing a step's alert content leaves the command editor for its own route.
- * A draft held in page state would be lost on the way there, and the alert editor's Done
- * hands its change back to this draft rather than saving, so the page's Save covers it
- * like any other edit.
+ * Drafts live outside any component, keyed by engine command id (or NEW_COMMAND_KEY), so
+ * the edits of a command stay put while the list it was opened from re-renders under a
+ * webhook, and nothing is written until the page's Save.
  *
  * Nothing is persisted: a reload starts again from the engine's copy. A draft is dropped
  * on Save and on leaving the editor, so reopening a command always shows what is stored.

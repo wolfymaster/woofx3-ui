@@ -10,6 +10,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useChatCommands } from "@/engine/hooks/use-chat-commands";
+import { useRunMacroRequest } from "@/engine/hooks/use-macros";
+import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -175,8 +178,8 @@ export function MacroPadModule() {
   const [isExecuting, setIsExecuting] = useState<string | null>(null);
   const [pendingMacro, setPendingMacro] = useState<MacroButton | null>(null);
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
-  const listEngineWorkflows = useAction(api.moduleEngine.listWorkflows);
-  const runMacroOnServer = useAction(api.macros.run);
+  const listEngineWorkflows = useEngineWorkflowsRequest();
+  const runMacroOnServer = useRunMacroRequest();
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
   const { toast } = useToast();
 
@@ -184,7 +187,7 @@ export function MacroPadModule() {
   const listArgs = instanceId ? { instanceId } : "skip";
 
   const macros = useQuery(api.macros.list, listArgs);
-  const commands = useQuery(api.chatCommands.list, listArgs);
+  const commands = useChatCommands(instanceId ?? null);
   const remoteTriggers = useQuery(api.macroTriggers.listForInstance, listArgs);
   const addMacro = useMutation(api.macros.addMacro);
   const updateMacro = useMutation(api.macros.updateMacro);
@@ -210,7 +213,7 @@ export function MacroPadModule() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: depends on instance?._id (not the instance object) so it doesn't re-fetch on every reference change
   useEffect(() => {
     if (!instance) return;
-    listEngineWorkflows({ instanceId: instance._id }).then(setWorkflows).catch(console.error);
+    listEngineWorkflows(instance._id).then(setWorkflows).catch(console.error);
   }, [instance?._id, listEngineWorkflows]);
 
   const variableCounts = useMemo(() => {
@@ -310,11 +313,11 @@ export function MacroPadModule() {
           const resolved = applyMacroVariables(macro.config, values);
           await sendChatMessage({ instanceId, message: resolved.message ?? "" });
         } else {
-          await runMacroOnServer({
+          await runMacroOnServer(
             instanceId,
-            macroId: macro.id as Id<"macros">,
-            values: Object.entries(values).map(([name, value]) => ({ name, value })),
-          });
+            macro.id as Id<"macros">,
+            Object.entries(values).map(([name, value]) => ({ name, value }))
+          );
         }
       } catch (error) {
         toast({

@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { useEngineConnectionTest } from "@/engine/hooks/use-engine-status";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { $engineUrl } from "@/lib/stores";
@@ -31,7 +32,7 @@ type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
 function EngineSettings() {
   const { instance, isLoading: instanceLoading } = useInstance();
-  const testConnectionAction = useAction(api.engineHealth.testConnection);
+  const testConnectionAction = useEngineConnectionTest();
   const registerInstance = useAction(api.registration.registerInstance);
   const updateInstance = useConvexMutation(api.instances.update);
   const [status, setStatus] = useState<ConnectionStatus>("idle");
@@ -106,7 +107,7 @@ function EngineSettings() {
     }
 
     try {
-      const result = await testConnectionAction({ url: effectiveUrl });
+      const result = await testConnectionAction(effectiveUrl);
       if (result.ok) {
         setStatus("success");
       } else {
