@@ -2,22 +2,25 @@ import { api } from "@convex/_generated/api";
 import type { CatalogListingDetail } from "@convex/lib/marketplaceCatalog";
 import { isBundleListing, isModuleListing } from "@convex/lib/marketplaceCatalog";
 import {
+  installedListing,
   installedVersionsByListing,
   laterEditionInstalled,
   moduleInstalled,
 } from "@convex/lib/marketplaceInstallIdentity";
-import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { useQuery } from "convex/react";
-import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { CreditsCard } from "@/components/marketplace/credits-card";
 import { EmoteGrid } from "@/components/marketplace/emote-grid";
 import { ListingArt } from "@/components/marketplace/listing-art";
 import { ListingInstallButton } from "@/components/marketplace/listing-install-button";
+import { ListingModuleTabs, type ModuleDetailLoad } from "@/components/marketplace/listing-module-tabs";
 import { PreviewButton } from "@/components/marketplace/listing-preview";
 import { ModuleIconImage } from "@/components/modules/module-image";
+import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog } from "@/components/modules/module-permissions";
+import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -26,6 +29,8 @@ import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
+import { useModuleOAuthReturn } from "@/hooks/use-module-oauth-return";
+import { actionErrorMessage } from "@/lib/action-error";
 import { listingInstallState } from "@/lib/listing-install-state";
 import { listingTypeColor, listingTypeIcon, listingTypeMeta, pricingLabel } from "@/lib/listing-type";
 import { MARKETPLACE_PATH, marketplaceAuthorPath, marketplaceListingPath } from "@/lib/marketplace-route";
@@ -46,6 +51,9 @@ export default function MarketplaceListing() {
 
   const { listing, notFound, loading, error, refetch } = useMarketplaceListing(instance?._id ?? null, listingId);
   const quote = useMarketplaceQuote(instance?._id ?? null, listingId);
+  // A connect button on the settings tab returns here, so the connect
+  // finishes on this page and the streamer lands back on that tab.
+  const [oauthResult, dismissOauthResult] = useModuleOAuthReturn("?tab=settings");
 
   // Stripe sends the buyer back here. The webhook that grants the entitlement
   // is a separate round trip from Stripe to the marketplace, so it may not
@@ -77,6 +85,7 @@ export default function MarketplaceListing() {
           </Banner>
         )}
         {purchaseOutcome === "cancelled" && <Banner tone="muted">Checkout cancelled. Nothing was charged.</Banner>}
+        {oauthResult && <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} />}
 
         {error && (
           <Card className="border-destructive/30 bg-destructive/5">
@@ -145,6 +154,10 @@ function ListingBody({
     () => installedVersionsByListing(repoModules ?? []).get(listing.id),
     [repoModules, listing.id]
   );
+  const installedRow = useMemo(
+    () => (repoModules ?? []).find((row) => installedListing(row)?.listingId === listing.id),
+    [repoModules, listing.id]
+  );
   const newerEditionInstalled = useMemo(
     () => laterEditionInstalled(repoModules ?? [], listing),
     [repoModules, listing]
@@ -157,37 +170,49 @@ function ListingBody({
     return moduleInstalled(repoModules ?? [], listing.baseModuleId);
   }, [repoModules, listing.baseModuleId]);
 
-  // A module or theme install needs the permissions its archive declares,
-  // which the catalog does not carry — this is the same action the module
-  // page uses, so the two surfaces ask the streamer the same question.
+  // The README, settings, declarations and permissions come from the same
+  // action the installed-module page uses, so the two surfaces show the same
+  // module and ask the streamer the same permission question. It is read
+  // again whenever the installed version changes, since an install or update
+  // turns on the settings and resources tabs.
   const getModuleDetail = useModuleDetailRequest();
-  const [moduleDetail, setModuleDetail] = useState<ModuleDetailResult | null>(null);
+  // Stamped with its listing, so opening another listing never shows this one's README.
+  const [loadedDetail, setLoadedDetail] = useState<{ listingId: string; load: ModuleDetailLoad } | null>(null);
+  const [detailAttempt, setDetailAttempt] = useState(0);
   useEffect(() => {
     if (!instance || !isModuleListing(listing.type)) {
-      setModuleDetail(null);
       return;
     }
+    // Read again on a retry and whenever the installed version changes. The
+    // detail already on screen stays there until the new one lands.
+    void detailAttempt;
+    void installedVersion;
     let cancelled = false;
-    void getModuleDetail(instance._id, listing.id)
+    const listingId = listing.id;
+    getModuleDetail(instance._id, listingId)
       .then((detail) => {
         if (!cancelled) {
-          setModuleDetail(detail);
+          setLoadedDetail({ listingId, load: { status: "ready", detail } });
         }
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         // The install path refuses anything declaring an unapproved
         // permission anyway, so a failed read costs the approval preview,
         // not safety. The button stays usable.
         if (!cancelled) {
-          setModuleDetail(null);
+          setLoadedDetail({ listingId, load: { status: "error", message: actionErrorMessage(err) } });
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [getModuleDetail, instance, listing.id, listing.type]);
+  }, [getModuleDetail, instance, listing.id, listing.type, installedVersion, detailAttempt]);
+  const detailLoad: ModuleDetailLoad =
+    loadedDetail?.listingId === listing.id ? loadedDetail.load : { status: "loading" };
+  const moduleDetail = detailLoad.status === "ready" ? detailLoad.detail : null;
 
   const install = useModuleInstall(instance?._id, onRefetch);
+  const [removing, setRemoving] = useState(false);
   const [bundleInstalled, setBundleInstalled] = useState<{ kind: "scene" | "alert" } | null>(null);
 
   const state = listingInstallState({
@@ -300,6 +325,12 @@ function ListingBody({
             onQuoteStale={() => void quote.refetch()}
           />
           <PreviewButton listing={listing} className="w-full" />
+          {installedRow && (
+            <Button variant="outline" className="w-full gap-2 text-destructive" onClick={() => setRemoving(true)}>
+              <Trash2 className="h-4 w-4" />
+              Remove
+            </Button>
+          )}
           {install.isInstalling && install.progressMessage && (
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin" />
@@ -341,7 +372,21 @@ function ListingBody({
         </Banner>
       )}
 
-      <CreditsCard credits={listing.credits} listingName={listing.name} />
+      {isModuleListing(listing.type) ? (
+        <ListingModuleTabs
+          instanceId={instance?._id}
+          load={detailLoad}
+          onRetry={() => setDetailAttempt((attempt) => attempt + 1)}
+        >
+          <CreditsCard credits={listing.credits} listingName={listing.name} />
+          {listing.type === "theme" && listing.module && <ThemeSection listing={listing} />}
+          {listing.type === "module" && listing.module && (
+            <ModuleSections module={listing.module} showDeclarations={detailLoad.status === "error"} />
+          )}
+        </ListingModuleTabs>
+      ) : (
+        <CreditsCard credits={listing.credits} listingName={listing.name} />
+      )}
 
       {listing.type === "emote" && (
         <Section title="What's in the pack">
@@ -365,41 +410,76 @@ function ListingBody({
         </Section>
       )}
 
-      {listing.type === "theme" && listing.module && (
-        <Section title="What this theme reskins">
-          {listing.baseModuleId && (
-            <p className="text-sm">
-              Themes{" "}
-              <button
-                type="button"
-                className="font-medium underline"
-                onClick={() => navigate(marketplaceListingPath(listing.baseModuleId as string))}
-              >
-                {listing.baseModuleId}
-              </button>
-              , which has to be installed first.
-            </p>
-          )}
-          <ul className="mt-3 space-y-2">
-            {listing.module.themes.map((theme) => (
-              <li key={theme.id} className="rounded-lg border p-3">
-                <p className="text-sm font-medium">{theme.name}</p>
-                {theme.description && <p className="text-xs text-muted-foreground">{theme.description}</p>}
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">{theme.target}</p>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
-
-      {listing.type === "module" && listing.module && <ModuleSections module={listing.module} />}
-
       <ApproveModulePermissionsDialog {...install.approvalDialogProps} />
+
+      {instance && (
+        <UninstallModuleDialog
+          open={removing && installedRow !== undefined}
+          onOpenChange={setRemoving}
+          instanceId={instance._id}
+          module={
+            installedRow
+              ? {
+                  _id: installedRow._id,
+                  name: installedRow.name,
+                  version: installedRow.version,
+                  moduleKey: installedRow.moduleKey,
+                }
+              : null
+          }
+          onSuccess={() => {
+            setRemoving(false);
+            onRefetch();
+          }}
+        />
+      )}
     </>
   );
 }
 
-function ModuleSections({ module }: { module: NonNullable<CatalogListingDetail["module"]> }) {
+function ThemeSection({ listing }: { listing: CatalogListingDetail }) {
+  const [, navigate] = useLocation();
+  return (
+    <Section title="What this theme reskins">
+      {listing.baseModuleId && (
+        <p className="text-sm">
+          Themes{" "}
+          <button
+            type="button"
+            className="font-medium underline"
+            onClick={() => navigate(marketplaceListingPath(listing.baseModuleId as string))}
+          >
+            {listing.baseModuleId}
+          </button>
+          , which has to be installed first.
+        </p>
+      )}
+      <ul className="mt-3 space-y-2">
+        {(listing.module?.themes ?? []).map((theme) => (
+          <li key={theme.id} className="rounded-lg border p-3">
+            <p className="text-sm font-medium">{theme.name}</p>
+            {theme.description && <p className="text-xs text-muted-foreground">{theme.description}</p>}
+            <p className="mt-1 font-mono text-[11px] text-muted-foreground">{theme.target}</p>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
+/**
+ * The catalog's sections for a module listing. Its triggers, actions, widgets
+ * and functions live in the "What's inside" tab; they are listed here from
+ * the catalog only when that tab has nothing to show because the module's
+ * detail could not be read.
+ */
+function ModuleSections({
+  module,
+  showDeclarations,
+}: {
+  module: NonNullable<CatalogListingDetail["module"]>;
+  showDeclarations: boolean;
+}) {
   const groups: { title: string; items: { id: string; name: string; description?: string }[] }[] = [
     { title: "Triggers", items: module.triggers },
     { title: "Actions", items: module.actions },
@@ -441,7 +521,7 @@ function ModuleSections({ module }: { module: NonNullable<CatalogListingDetail["
       )}
 
       {groups
-        .filter((group) => group.items.length > 0)
+        .filter((group) => showDeclarations && group.items.length > 0)
         .map((group) => (
           <Section key={group.title} title={group.title}>
             <ul className="grid gap-2 sm:grid-cols-2">
@@ -461,7 +541,7 @@ function ModuleSections({ module }: { module: NonNullable<CatalogListingDetail["
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
+      <h2 className="text-base font-semibold">{title}</h2>
       {children}
     </section>
   );

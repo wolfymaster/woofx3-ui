@@ -44,6 +44,30 @@ until that module is present — the engine enforces `requires` at install, so
 without this the failure would surface as an engine error with the real reason
 buried.
 
+## Module and theme listing pages
+
+A module or theme listing's page is the module's whole page, not a summary of
+it. Under the header it has tabs (`ListingModuleTabs`, with the tab in
+`?tab=`):
+
+- **Overview**: the README, with what the module may do and reach beside it
+  (its permissions, its local endpoints, and what an update would add), plus the
+  catalog's credits, themes and requirements.
+- **What's inside**: its actions, functions, triggers, widgets and workflows.
+  A function opens its source file.
+- **Files**: the module's file browser.
+- **Settings** and **Resources**, once it is installed: the same settings,
+  webhook endpoints, local endpoint routing and resource instances as
+  `/modules/:id`.
+
+These come from `moduleDetail.getModuleDetail` for the listing, the action
+`/modules/:id` uses, and the tabs reuse that page's components
+(`module-detail-panel.tsx`). The page reads the detail again whenever the
+installed version changes, so installing turns on the settings tab. An
+integration's connect button returns to the page, which finishes the connect
+(`useModuleOAuthReturn`) and opens the settings tab. Remove opens the same
+`UninstallModuleDialog` as the installed-module page.
+
 ## Search and categories
 
 One box for the whole marketplace: name, description, author and tags, across

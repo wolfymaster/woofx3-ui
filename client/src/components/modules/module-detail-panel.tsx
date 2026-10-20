@@ -182,21 +182,12 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
-  const [resourceTab, setResourceTab] = useState<ResourceType>("actions");
   const moduleFiles = useModuleFiles({
     instanceId,
     moduleId: module.identifier,
     isInstalled: module.isInstalled,
     version: module.version,
   });
-
-  const resourceCounts: Record<ResourceType, number | undefined> = {
-    actions: actions?.length,
-    triggers: triggers?.length,
-    workflows: workflows?.length,
-    widgets: widgets?.length,
-    functions: functions?.length,
-  };
 
   const updateAvailable =
     module.isInstalled && !!module.latestVersion && isNewerVersion(module.latestVersion, module.version);
@@ -281,10 +272,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
                 }
               />
             ) : topTab === "definitions" ? (
-              <ResourcesTab
-                activeType={resourceTab}
-                onSelectType={setResourceTab}
-                counts={resourceCounts}
+              <ModuleDefinitions
                 triggers={triggers}
                 actions={actions}
                 functions={functions}
@@ -295,20 +283,12 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
             ) : topTab === "files" ? (
               <ModuleFilesTab files={moduleFiles} />
             ) : topTab === "settings" ? (
-              <div className="flex-1 min-h-0 flex flex-col gap-6 overflow-hidden">
-                {instanceId && module.identifier && (
-                  <ModuleWebhookEndpoints instanceId={instanceId} modulePrefix={module.identifier} />
-                )}
-                {instanceId && module.identifier && (
-                  <LocalEndpointPanel instanceId={instanceId} moduleId={module.identifier} />
-                )}
-                {instanceId && module.identifier === OBS_MODULE_ID && <ObsConnectionStatus instanceId={instanceId} />}
-                <SettingsTab
-                  instanceId={instanceId}
-                  moduleId={module.identifier ?? ""}
-                  manifestSettings={manifestSettings ?? []}
-                />
-              </div>
+              <ModuleSettingsSections
+                instanceId={instanceId}
+                moduleId={module.identifier ?? ""}
+                manifestSettings={manifestSettings ?? []}
+                className="flex-1 min-h-0 overflow-hidden"
+              />
             ) : (
               <ManageResourcesTab
                 instanceId={instanceId}
@@ -475,29 +455,68 @@ function DetailsTab({
   return (
     <ScrollArea className="flex-1 h-full pr-4">
       {module.identifier && <h3 className="text-xl font-bold font-mono mb-4">{module.identifier}</h3>}
-      {permissions !== undefined && (
-        <div className="mb-4 space-y-2">
-          <ModulePermissionsSection permissions={permissions} />
-          {localEndpoints !== undefined && <ModuleLocalEndpointsSection endpoints={localEndpoints} />}
-          {(updatePermissions.length > 0 || updateLocalEndpoints.length > 0) && (
-            <section className="rounded-md border border-amber-500/40 p-3 space-y-2">
-              <h4 className="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                Updating to v{module.latestVersion} also lets it:
-              </h4>
-              {updatePermissions.length > 0 && <ModulePermissionList permissions={updatePermissions} />}
-              {updateLocalEndpoints.length > 0 && <ModuleLocalEndpointList endpoints={updateLocalEndpoints} />}
-            </section>
-          )}
-        </div>
-      )}
-      <div className="prose prose-sm dark:prose-invert max-w-none">
-        {module.readme ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{module.readme}</ReactMarkdown>
-        ) : (
-          <p className="text-sm text-muted-foreground not-prose">No README provided.</p>
-        )}
-      </div>
+      <ModuleAccessSummary
+        className="mb-4"
+        permissions={permissions}
+        localEndpoints={localEndpoints}
+        updatePermissions={updatePermissions}
+        updateLocalEndpoints={updateLocalEndpoints}
+        latestVersion={module.latestVersion}
+      />
+      <ModuleReadme readme={module.readme} />
     </ScrollArea>
+  );
+}
+
+/**
+ * What a module may do and reach: its permissions, the services it connects to
+ * on the streamer's network, and what an update to `latestVersion` would add.
+ * Renders nothing until the permissions have been read.
+ */
+export function ModuleAccessSummary({
+  permissions,
+  localEndpoints,
+  updatePermissions,
+  updateLocalEndpoints,
+  latestVersion,
+  className,
+}: {
+  permissions: string[] | null | undefined;
+  localEndpoints: LocalEndpointSummary[] | null | undefined;
+  updatePermissions: string[];
+  updateLocalEndpoints: LocalEndpointSummary[];
+  latestVersion: string | undefined;
+  className?: string;
+}) {
+  if (permissions === undefined) {
+    return null;
+  }
+  return (
+    <div className={cn("space-y-2", className)}>
+      <ModulePermissionsSection permissions={permissions} />
+      {localEndpoints !== undefined && <ModuleLocalEndpointsSection endpoints={localEndpoints} />}
+      {(updatePermissions.length > 0 || updateLocalEndpoints.length > 0) && (
+        <section className="rounded-md border border-amber-500/40 p-3 space-y-2">
+          <h4 className="text-xs font-semibold text-amber-600 dark:text-amber-400">
+            Updating to v{latestVersion} also lets it:
+          </h4>
+          {updatePermissions.length > 0 && <ModulePermissionList permissions={updatePermissions} />}
+          {updateLocalEndpoints.length > 0 && <ModuleLocalEndpointList endpoints={updateLocalEndpoints} />}
+        </section>
+      )}
+    </div>
+  );
+}
+
+export function ModuleReadme({ readme }: { readme: string | undefined }) {
+  return (
+    <div className="prose prose-sm dark:prose-invert max-w-none">
+      {readme ? (
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{readme}</ReactMarkdown>
+      ) : (
+        <p className="text-sm text-muted-foreground not-prose">No README provided.</p>
+      )}
+    </div>
   );
 }
 
@@ -571,10 +590,7 @@ const RESOURCE_NAV: Array<{ type: ResourceType; label: string }> = [
   { type: "workflows", label: "Workflows" },
 ];
 
-interface ResourcesTabProps {
-  activeType: ResourceType;
-  onSelectType: (type: ResourceType) => void;
-  counts: Record<ResourceType, number | undefined>;
+interface ModuleDefinitionsProps {
   triggers: ModuleDetailTrigger[] | undefined;
   actions: ModuleDetailAction[] | undefined;
   functions: ModuleDetailFunction[] | undefined;
@@ -583,8 +599,17 @@ interface ResourcesTabProps {
   files: ModuleFiles;
 }
 
-function ResourcesTab(props: ResourcesTabProps) {
-  const { activeType, onSelectType, counts, triggers, actions, functions, widgets, workflows, files } = props;
+/** What a module declares, one kind at a time. A function opens its source file when the file list has it. */
+export function ModuleDefinitions(props: ModuleDefinitionsProps) {
+  const { triggers, actions, functions, widgets, workflows, files } = props;
+  const [activeType, setActiveType] = useState<ResourceType>("actions");
+  const counts: Record<ResourceType, number | undefined> = {
+    actions: actions?.length,
+    triggers: triggers?.length,
+    workflows: workflows?.length,
+    widgets: widgets?.length,
+    functions: functions?.length,
+  };
   return (
     <div className="flex-1 min-h-0 grid grid-cols-4 gap-6">
       <div className="col-span-1 space-y-1">
@@ -595,7 +620,7 @@ function ResourcesTab(props: ResourcesTabProps) {
             <button
               type="button"
               key={item.type}
-              onClick={() => onSelectType(item.type)}
+              onClick={() => setActiveType(item.type)}
               className={cn(
                 "w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors text-left",
                 isActive
@@ -873,6 +898,27 @@ function SettingSourceNote({ source, onReturn }: { source: SettingSource | undef
     );
   }
   return null;
+}
+
+/**
+ * Everything a streamer configures on an installed module: its webhook
+ * endpoints, the services it reaches on their PC, the OBS connection for the
+ * OBS module, and the settings its manifest declares.
+ */
+export function ModuleSettingsSections({
+  instanceId,
+  moduleId,
+  manifestSettings,
+  className,
+}: SettingsTabProps & { className?: string }) {
+  return (
+    <div className={cn("flex flex-col gap-6", className)}>
+      {instanceId && moduleId && <ModuleWebhookEndpoints instanceId={instanceId} modulePrefix={moduleId} />}
+      {instanceId && moduleId && <LocalEndpointPanel instanceId={instanceId} moduleId={moduleId} />}
+      {instanceId && moduleId === OBS_MODULE_ID && <ObsConnectionStatus instanceId={instanceId} />}
+      <SettingsTab instanceId={instanceId} moduleId={moduleId} manifestSettings={manifestSettings} />
+    </div>
+  );
 }
 
 interface SettingsTabProps {
@@ -1457,7 +1503,12 @@ interface ManageResourcesTabProps {
   manifestResourceKinds: ManifestResourceKind[];
 }
 
-function ManageResourcesTab({ instanceId, moduleDbId, moduleName, manifestResourceKinds }: ManageResourcesTabProps) {
+export function ManageResourcesTab({
+  instanceId,
+  moduleDbId,
+  moduleName,
+  manifestResourceKinds,
+}: ManageResourcesTabProps) {
   const [createDialogKind, setCreateDialogKind] = useState<ManifestResourceKind | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     canonicalId: string;
