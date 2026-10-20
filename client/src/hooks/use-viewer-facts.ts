@@ -1,8 +1,7 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useViewerFactsRequest } from "@/engine/hooks/use-workflows";
 import type { EngineConditionSupport } from "@/lib/condition-builder";
 import type { ViewerFact, ViewerFactsState } from "@/lib/viewer-facts";
 
@@ -12,7 +11,7 @@ import type { ViewerFact, ViewerFactsState } from "@/lib/viewer-facts";
  */
 export function useViewerFacts(instanceId: Id<"instances"> | undefined, enabled: boolean): ViewerFactsState {
   const support = useEngineCapabilities(instanceId).support("workflow.viewerFacts");
-  const listFacts = useAction(api.viewerFacts.list);
+  const listFacts = useViewerFactsRequest();
   const [loaded, setLoaded] = useState<{ instanceId: string; result: ViewerFact[] | "failed" } | null>(null);
   const ask = Boolean(instanceId) && enabled && support === "supported";
   const current = loaded && loaded.instanceId === instanceId ? loaded.result : null;
@@ -22,7 +21,7 @@ export function useViewerFacts(instanceId: Id<"instances"> | undefined, enabled:
       return;
     }
     let cancelled = false;
-    listFacts({ instanceId })
+    listFacts(instanceId)
       .then((facts) => {
         if (!cancelled) {
           setLoaded({ instanceId, result: facts });

@@ -253,6 +253,9 @@ export type SceneChanges = Omit<FunctionArgs<typeof api.sceneActions.updateScene
  */
 export type WorkflowRecord = Pick<Doc<"workflows">, "engineWorkflowId" | "definition" | "isEnabled" | "nodes">;
 
+/** A value `${viewer.*}` resolves on the engine, for the condition builder. */
+export type ViewerFact = FunctionReturnType<typeof api.viewerFacts.list>[number];
+
 /** A workflow on the engine, mirrored from its webhooks. */
 export type Workflow = Doc<"workflows">;
 

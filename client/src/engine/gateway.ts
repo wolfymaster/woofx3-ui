@@ -77,6 +77,7 @@ import type {
   TransientEvent,
   UploadGrant,
   UploadRequest,
+  ViewerFact,
   ViewerSupportTotals,
   WebhookEventId,
   WebhookEventSummary,
@@ -441,6 +442,8 @@ export interface WorkflowsGateway {
   useTriggerRequest(): (instanceId: InstanceId, run: WorkflowTrigger) => Promise<WorkflowTriggerResult>;
   /** Probes whether the engine takes test-run options, without starting a run. */
   useTestRunCapabilitiesRequest(): (instanceId: InstanceId) => Promise<TestRunCapabilities>;
+  /** The values `${viewer.*}` resolves on the engine. Needs `workflow.viewerFacts`. */
+  useViewerFactsRequest(): (instanceId: InstanceId) => Promise<ViewerFact[]>;
   /** Runs a recorded run again and resolves at once with its key, like a manual run. */
   useReplayRequest(): (instanceId: InstanceId, replay: WorkflowReplay) => Promise<{ triggerId: string }>;
   /** Stops a recorded run. */

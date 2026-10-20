@@ -36,7 +36,7 @@ export const ENGINE_NAMESPACE_MODULES = {
   ],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],
-  workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog"],
+  workflows: ["workflows", "workflowActions", "workflowRuns", "workflowHealth", "workflowCatalog", "viewerFacts"],
   macros: ["macros.run"],
   streamOps: [
     // The rest of streamRecap asks Twitch for clips and markers.
