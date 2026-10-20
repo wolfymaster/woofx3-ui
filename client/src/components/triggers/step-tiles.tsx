@@ -28,7 +28,7 @@ export function StepTiles({ actionPresets, onAdd }: StepTilesProps) {
       {groups.map((group, index) => (
         <section key={group.groupKey} aria-label={group.groupLabel}>
           <h4 className="mb-2 text-xs font-medium text-muted-foreground">
-            {actionGroupHeading(group, groups[index - 1], true)}
+            {actionGroupHeading(group, groups[index - 1])}
           </h4>
           <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
             {group.actions.map((preset) => (

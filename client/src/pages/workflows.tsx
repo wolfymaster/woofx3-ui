@@ -50,8 +50,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
-import StepListEditor from "@/components/workflows/step-list-editor";
 import { TestRunSheet } from "@/components/workflows/test-run-sheet";
+import { WorkflowFlowEditor } from "@/components/workflows/workflow-flow-editor";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
 import {
   useDeleteWorkflowRequest,
@@ -681,7 +681,17 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
 
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
-        <StepListEditor onDefinitionChange={setCurrentDefinition} />
+        {instance ? (
+          <WorkflowFlowEditor
+            instanceId={instance._id as Id<"instances">}
+            engineWorkflowId={engineWorkflowId}
+            onDefinitionChange={setCurrentDefinition}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
       </div>
       {tab === "runs" && instance && (
         <div className="flex-1 overflow-hidden">

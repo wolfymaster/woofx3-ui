@@ -9,14 +9,13 @@ Everything in this area is its own route. Nothing is edited in a dialog: a dialo
 | `/stream/commands` | `pages/commands.tsx` | Commands list |
 | `/stream/commands/new` | `pages/command-editor.tsx` | Create a command |
 | `/stream/commands/:engineCommandId` | `pages/command-editor.tsx` | Edit a command |
-| `/stream/commands/:engineCommandId/steps/:actionId/alert` | `pages/command-step-alert-editor.tsx` | That step's alert content |
 | `/stream/commands/groups` | `pages/commands.tsx` | Groups list |
 | `/stream/commands/groups/new` | `pages/command-group-editor.tsx` | Create a group |
 | `/stream/commands/groups/:engineGroupId` | `pages/command-group-editor.tsx` | Edit a group and its members |
 
 All of them are built by `lib/command-editor-route.ts` — build paths there rather than by hand. They nest under the list so the Commands menu entry stays marked active throughout (`isNavItemActive` matches on the path prefix).
 
-**Order matters when these are registered in `App.tsx`.** The fixed segments (`new`, `groups`, `.../steps/...`) must be matched before `:engineCommandId`, or a literal path is read as a command id. Engine ids are uuids and never collide with them, but the router decides by order regardless.
+**Order matters when these are registered in `App.tsx`.** The fixed segments (`new`, `groups`) must be matched before `:engineCommandId`, or a literal path is read as a command id. Engine ids are uuids and never collide with them, but the router decides by order regardless.
 
 The Commands/Groups tabs are links, not local state — the group pages need somewhere definite to go back to, and a reload lands where it left off.
 
@@ -26,40 +25,39 @@ The engine is the authority. `chatCommands` and `chatCommandGroups` in Convex ar
 
 No screen has a per-id query: each reads the list and finds its row, the same way the Alerts screen finds its workflow in `workflows.list`.
 
+A command's steps are a stored workflow of its own in the engine, whose trigger has type `"command"`: only the command starts it, after its cooldown and permission checks, so it runs once per use however many workflows also listen for the command (the engine's `docs/services/commands-ui.md`, "How a command runs its steps"). The `chatCommands` row holds that workflow's id (`engineWorkflowId`) and its tasks (`steps`), so the editor needs nothing else. A command the engine has not linked to a workflow yet still has its `actions`, which open as the same steps and become the workflow when saved. The workflow also reaches the `workflows` table through the usual sync, but `workflows.list` leaves it out (`lib/commandWorkflow.ts`): it is edited as its command, and listing it under Workflows would offer a second editor for the same steps.
+
+When the engine could not give a command its workflow (its actions failed to convert on upgrade, or the workflow it pointed at is gone), the row carries the engine's reason as `workflowError`. The list marks the command "Steps need attention" and the editor shows the reason above the steps; saving the command sends its steps again, which is how the engine relinks it.
+
+Every save of a command sends its whole `steps`; a save that sends none (turning a command on or off from the list or the command palette) leaves them as they are.
+
 ## Drafts
 
 Edits to a command collect in `lib/command-drafts.ts`, a store outside any component keyed by engine command id (or `NEW_COMMAND_KEY` for one being created), with the snapshot they started from. The page has unsaved changes exactly when the value no longer serializes to the baseline.
 
-They live outside the component because editing a step's alert content **leaves the page for its own route**. Page state would be lost on the way there. The alert editor's Done hands its layout back to the draft rather than saving, so the command's own Save covers it like any other edit. This mirrors `lib/event-drafts.ts`, which does the same job for the Alerts screen.
-
-A draft is seeded from the engine's copy the first time a page needs it and dropped on Save and on leaving the editor, so reopening a command always shows what is stored. Nothing is persisted — a reload starts again from the engine's copy. One consequence: a command still being created lives only in its draft, so a deep link to its step's alert editor has nothing to open and says so.
+A draft is seeded from the engine's copy the first time the page needs it and dropped on Save and on leaving the editor, so reopening a command always shows what is stored, and a webhook refreshing the list while the page is open does not overwrite edits in progress. Nothing is persisted — a reload starts again from the engine's copy.
 
 ## The command editor
 
-- **Command** — one field. Everything up to the first space is the command word; the rest is the `argumentPattern` (`sr {songTitle}` → command `sr`, pattern `{songTitle}`). Split and rejoined by `lib/command-input.ts`; the engine's extraction rule is `CommandSnapshot.argumentPattern` in `@woofx3/api`.
-- **Then** — the steps, see below.
-- **Who can use it** — public, or restricted to groups (`GroupMultiSelect`) and named chatters.
-- **How it runs** — cooldown, priority, enabled.
+The page is the unified step editor, `components/flow/flow-editor.tsx`, the same one the workflow editor uses (see [Workflows](./workflows.md)). A command differs from a workflow only in what the flow starts from, so the page hands `FlowEditor` two things and nothing else changes:
 
-Nothing reaches the engine until Save. Back and Cancel drop the draft, asking first when it has changed.
+- **`when`** — the "When" card, `components/commands/command-when-card.tsx`, built from `FlowWhenCard` so it looks and opens like a workflow's. Collapsed, it reads "A chatter types !sr {songTitle}" with who can use it, the cooldown and what each argument captures under it (`lib/command-when.ts`). "Change" opens, in place:
+  - **Command** — one field. Everything up to the first space is the command word; the rest is the `argumentPattern` (`sr {songTitle}` → command `sr`, pattern `{songTitle}`). Split and rejoined by `lib/command-input.ts`; the engine's extraction rule is `CommandSnapshot.argumentPattern` in `@woofx3/api`.
+  - **Cooldown** and **priority**.
+  - **Who can use it** — anyone in chat, or only the groups (`GroupMultiSelect`) and people picked.
+  - **Turned on**.
+  A command being created opens with the card open.
+- **`triggerVariables`** — what the steps can read from the start of the run: the chatter, the message, and each argument (`commandActionVariables` in `lib/command-variables.ts`), followed as the command field is typed.
 
-## Steps
+The steps below are any the flow offers: actions picked object first, pauses, waits and conditions with their branches. The page reads the command's steps into a `WorkflowTree` (`commandFlow` in `lib/command-steps.ts`, through `definitionToTree`) and Save writes the tree's tasks back as `steps` (`commandSteps`), so the round trip is the workflow editor's. Steps the tree can't hold are shown as not editable here and left as they are on Save. Nothing reaches the engine until Save, which writes the command and its steps together: `onCommit` only keeps the edit in the draft. Back and Cancel drop the draft, asking first when it has changed.
 
-A command's steps are the same UI the Alerts screen uses for a trigger's actions — `components/triggers/action-row.tsx` for the numbered rows and `components/triggers/step-tiles.tsx` for the always-visible catalog tiles — wrapped by `components/commands/command-steps-editor.tsx`. An action configured on a command and the same action configured on an alert offer identical controls, since both render the action's declared fields through `TriggerConfigForm`.
-
-`ActionRow` is written against `ActionRowStep`, the little that the two surfaces share (id, handler type, function call, parameters). They store their steps differently — a trigger's is a `ProjectedAction` projected out of a workflow definition, a command's is an `ActionStep` held on the `chatCommands` row — and each keeps its own shape. Three behaviours differ, and the row takes them as optional props:
-
-- **Concurrency.** A trigger can start a step alongside the one above it; a command's steps always run in order, so no "start at the same time" switch is offered there.
-- **Order.** A command's step order is the user's to change, so its rows carry move buttons. A trigger's order comes from the workflow, and its rows have none.
-- **Alert content.** Each surface passes the route of *its own* alert editor. A step with no such route falls back to the shared `field:layout` renderer, which edits the layout in place.
-
-A step is addressed by `commandStepId` (its `id`, or its position for a step written before ids were assigned). The row keys and the alert route both use it, so the route always names the step it opened — which is why that rule lives in one function rather than two.
+A step's alert content opens in the `layout` field's own editor, as it does in the workflow editor.
 
 ## The alert editor
 
 `components/alert-editor/alert-layout-editor.tsx` is the canvas, the widget tiles, the layer list and the selected layer's settings. It edits a copy and knows nothing about where the layout came from: it takes the stored value, a line of context, the variables the owning step can reference, and hands the result back through `onDone` (or `null` when nothing changed).
 
-Two thin pages supply that. `pages/alert-editor.tsx` finds the step in an event's workflow draft; `pages/command-step-alert-editor.tsx` finds it in a command's draft. Each navigates back to its own screen.
+`pages/alert-editor.tsx` supplies that for the Alerts screen: it finds the step in an event's workflow draft and navigates back to that screen.
 
 Underneath, it is a view over the same headless composition editor as the scene editor (`createCompositionEditor` from `@woofx3/scene/editor`, see [Scenes: The editor](./scenes.md#the-editor)), made with `PROFILES.alert` over a `LocalDocumentSource` holding a copy of the step's layout (`hooks/use-alert-layout-editor.ts`). The editor does the geometry and every change: dragging, the corner resize handle, snapping (to the canvas centre and edges and to other layers, with guides), stacking, undo, and the shared keyboard shortcuts. The inspector draws the selected widget's settings from its schema with the same form the scene editor uses (`WidgetSettingsForm` in `components/scenes/widget-settings-panel.tsx`), so a widget shows the same fields in an alert as on a scene, and each change calls `editor.nodes.patch`; size and place are set on the stage. Below the settings it adds the layer's timing within the alert. How a box follows its content is the widget's trait in the engine's type registry, applied by the editor: a Text layer's height grows with its text and font size, and an Image, Video or Lottie layer keeps its aspect. What the dashboard still computes is only read-outs: a layer's length, the alert's length and layer labels (`lib/alert-editor.ts`).
 

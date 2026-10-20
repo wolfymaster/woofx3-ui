@@ -77,6 +77,7 @@ import type {
   TransientEvent,
   UploadGrant,
   UploadRequest,
+  ViewerFact,
   ViewerSupportTotals,
   WebhookEventId,
   WebhookEventSummary,
@@ -284,6 +285,11 @@ export interface ModuleResourcesGateway {
    * loading) for a null id or kind.
    */
   useKindInstances(instanceId: InstanceId | null, kind: string | null): Live<ModuleResourceInstance[]>;
+  /**
+   * The instances of several kinds in one read, each `module:kind` or bare.
+   * Skipped (always loading) for a null id or no kinds.
+   */
+  useKindsInstances(instanceId: InstanceId | null, kinds: readonly string[]): Live<ModuleResourceInstance[]>;
   /** Every mirrored value, keyed by canonical id. Skipped (always loading) for a null id. */
   useValues(instanceId: InstanceId | null): Live<ResourceValues>;
   /**
@@ -436,6 +442,8 @@ export interface WorkflowsGateway {
   useTriggerRequest(): (instanceId: InstanceId, run: WorkflowTrigger) => Promise<WorkflowTriggerResult>;
   /** Probes whether the engine takes test-run options, without starting a run. */
   useTestRunCapabilitiesRequest(): (instanceId: InstanceId) => Promise<TestRunCapabilities>;
+  /** The values `${viewer.*}` resolves on the engine. Needs `workflow.viewerFacts`. */
+  useViewerFactsRequest(): (instanceId: InstanceId) => Promise<ViewerFact[]>;
   /** Runs a recorded run again and resolves at once with its key, like a manual run. */
   useReplayRequest(): (instanceId: InstanceId, replay: WorkflowReplay) => Promise<{ triggerId: string }>;
   /** Stops a recorded run. */

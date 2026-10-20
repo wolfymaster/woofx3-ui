@@ -16,6 +16,13 @@ function useKindInstances(instanceId: InstanceId | null, kind: string | null) {
   return useQuery(api.moduleResourceInstances.listByKind, instanceId && kind !== null ? { instanceId, kind } : "skip");
 }
 
+function useKindsInstances(instanceId: InstanceId | null, kinds: readonly string[]) {
+  return useQuery(
+    api.moduleResourceInstances.listByKinds,
+    instanceId && kinds.length > 0 ? { instanceId, kinds: [...kinds] } : "skip"
+  );
+}
+
 function useValues(instanceId: InstanceId | null) {
   return useQuery(api.resourceValues.listForInstance, instanceId ? { instanceId } : "skip");
 }
@@ -82,6 +89,7 @@ export const convexModuleResourcesGateway: ModuleResourcesGateway = {
   useInstances,
   useModuleInstances,
   useKindInstances,
+  useKindsInstances,
   useValues,
   useKind,
   useKinds,

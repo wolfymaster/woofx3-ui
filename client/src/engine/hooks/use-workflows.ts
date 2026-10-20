@@ -48,6 +48,11 @@ export function useTestRunCapabilitiesRequest() {
   return useEngineGateway().workflows.useTestRunCapabilitiesRequest();
 }
 
+/** The values `${viewer.*}` resolves on the engine; ask only engines with `workflow.viewerFacts`. */
+export function useViewerFactsRequest() {
+  return useEngineGateway().workflows.useViewerFactsRequest();
+}
+
 /** Runs a recorded run again; its progress arrives in transient events under the returned `triggerId`. */
 export function useReplayWorkflowRunRequest() {
   return useEngineGateway().workflows.useReplayRequest();

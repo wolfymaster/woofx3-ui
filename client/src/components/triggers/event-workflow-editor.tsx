@@ -1,13 +1,12 @@
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { ChevronRight, Loader2, Plus, Zap } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import { Loader2, Plus } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
 import { SaveState } from "@/components/triggers/save-state";
 import { TriggerCard } from "@/components/triggers/trigger-card";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   useCreateWorkflowRequest,
   useSetWorkflowEnabledRequest,
@@ -18,47 +17,19 @@ import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
 import { alertEditorPath } from "@/lib/alert-editor-route";
-import { alertSectionAnchor } from "@/lib/alert-groups";
 import { type OptionLabels, sentenceParts } from "@/lib/condition-sentence";
 import { type EventEditorState, isDraftDirty, setDraft, updateDraftValue } from "@/lib/event-drafts";
-import {
-  type ActionScope,
-  conditionFieldsOf,
-  type EventScope,
-  newProjectedAction,
-  usedTaskIds,
-  withNewTrigger,
-} from "@/lib/event-workflow-state";
+import { conditionFieldsOf, newProjectedAction, usedTaskIds, withNewTrigger } from "@/lib/event-workflow-state";
 import { isInternalSource } from "@/lib/parse-config-fields";
-import { aimsAtResource } from "@/lib/resource-actions";
 import { firstIncompleteTrigger, saveEventDraft } from "@/lib/save-event-draft";
 import { nextTaskId, type ProjectedAction, type ProjectedTrigger } from "@/lib/trigger-projection";
-import { cn } from "@/lib/utils";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
 
 interface EventWorkflowEditorProps {
   triggerPreset: TriggerPreset;
   actionPresets: ActionPreset[];
-  /** Every workflow on this instance; the ones for this event are found here. */
+  /** The workflow holding the event's triggers together, as the only entry. */
   workflows: Doc<"workflows">[];
-  /** Where this event sits in the Alerts menu, above its own title. */
-  breadcrumb: string[];
-  /** h1 when the event is the page; h2 when it shares the page with others. */
-  headingLevel: "h1" | "h2";
-  /** Opens the test sheet on this event; no lightning icon when omitted. */
-  onTest?: () => void;
-  /** Shows only the triggers pinned to one value of one condition field; see EventScope. */
-  scope?: EventScope;
-  /** Shows only the triggers running one of a resource's actions against it; see ActionScope. */
-  actionScope?: ActionScope;
-  /**
-   * Renders the triggers alone — no heading, no count line, no Save bar. A screen showing
-   * several events as one list supplies those once, around the whole set, and saves them
-   * together through saveEventDraft.
-   */
-  bare?: boolean;
-  /** What the page shows about the event between its heading and its triggers. */
-  children?: ReactNode;
 }
 
 /** A condition value picker that is open, and on which trigger. */
@@ -68,28 +39,17 @@ interface OpenField {
 }
 
 /**
- * Every configured trigger for one event, edited as a single workflow.
+ * An event's triggers stored together in one workflow, edited as that workflow: a
+ * condition task per trigger, its actions in `onTrue` (lib/trigger-projection.ts).
  *
- * The workflow is the record: this reads one, lets the user add triggers and steps to
- * it, and writes the whole task list back through the same action the workflow builder
- * uses. Two cheer triggers at different thresholds are two condition tasks in one
- * workflow, which is what makes them shareable and keeps the builder's view honest.
+ * Triggers are workflows of their own now (lib/alert-triggers.ts), and the engine splits
+ * workflows of this shape into them when it can reproduce what they did exactly. This
+ * editor is what still opens the ones it could not, from their card on the trigger list.
  *
  * Edits collect in the event's draft (lib/event-drafts.ts) until Save, including the
  * ones the alert editor hands back, so the page's Save and Discard cover all of them.
  */
-export function EventWorkflowEditor({
-  triggerPreset,
-  actionPresets,
-  workflows,
-  breadcrumb,
-  headingLevel,
-  onTest,
-  scope,
-  actionScope,
-  bare = false,
-  children,
-}: EventWorkflowEditorProps) {
+export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }: EventWorkflowEditorProps) {
   const event = triggerPreset.event ?? "";
   const [, navigate] = useLocation();
   const { instance } = useInstance();
@@ -107,7 +67,7 @@ export function EventWorkflowEditor({
   const conditionFields = useMemo(() => conditionFieldsOf(triggerPreset), [triggerPreset]);
   const dynamicFields = useMemo(() => conditionFields.filter(isInternalSource), [conditionFields]);
 
-  const { draft, others, unprojectable } = useEventWorkflowDraft(triggerPreset, conditionFields, workflows);
+  const { draft } = useEventWorkflowDraft(triggerPreset, conditionFields, workflows);
   const { byId: notRunning } = useNotRunningWorkflows();
 
   const state = draft?.value ?? null;
@@ -120,56 +80,21 @@ export function EventWorkflowEditor({
         new Map(entry.options.map((option) => [option.value, option.label])),
       ])
     );
-    if (scope) {
-      labels.set(scope.fieldId, new Map([[scope.value, scope.label]]));
-    }
     return labels;
-  }, [loadedOptions, scope]);
-
-  const editableFields = useMemo(
-    () => (scope ? conditionFields.filter((field) => field.id !== scope.fieldId) : conditionFields),
-    [conditionFields, scope]
-  );
-  const visibleTriggers = (current: EventEditorState): ProjectedTrigger[] => {
-    let shown = current.triggers;
-    if (scope) {
-      shown = shown.filter((trigger) => current.conditionValues[trigger.id]?.[scope.fieldId] === scope.value);
-    }
-    if (actionScope) {
-      shown = shown.filter((trigger) =>
-        trigger.actions.some((action) => aimsAtResource(action, actionScope.actions, actionScope.value))
-      );
-    }
-    return shown;
-  };
+  }, [loadedOptions]);
 
   const handleOptionsLoaded = useCallback((fieldId: string, entry: LoadedFieldOptions) => {
     setLoadedOptions((previous) => new Map(previous).set(fieldId, entry));
   }, []);
 
   const resolveActionPreset = useCallback(
-    (action: ProjectedAction): ActionPreset | undefined => {
-      const preset = actionPresets.find((candidate) =>
+    (action: ProjectedAction): ActionPreset | undefined =>
+      actionPresets.find((candidate) =>
         action.functionCall
           ? candidate.functionCall === action.functionCall
           : candidate.handlerType === action.handlerType
-      );
-      if (!preset?.config || !actionScope) {
-        return preset;
-      }
-      // On the instance's own page the parameter aiming the step could only offer that
-      // instance again, so the step is shown without it — in its settings and in the
-      // summary of them a collapsed trigger reads.
-      const aimed = actionScope.actions.find((candidate) => candidate.preset.id === preset.id);
-      if (!aimed) {
-        return preset;
-      }
-      return {
-        ...preset,
-        config: { ...preset.config, fields: preset.config.fields.filter((field) => field.id !== aimed.fieldId) },
-      };
-    },
-    [actionPresets, actionScope]
+      ),
+    [actionPresets]
   );
 
   const mutate = (updater: (current: EventEditorState) => EventEditorState) => {
@@ -187,7 +112,7 @@ export function EventWorkflowEditor({
     if (!state) {
       return;
     }
-    const { state: next, triggerId } = withNewTrigger(state, conditionFields, { scope, actionScope });
+    const { state: next, triggerId } = withNewTrigger(state, conditionFields);
     mutate(() => next);
     setExpandedTriggerId(triggerId);
     // A new trigger opens on the first value it still needs, so it never sits unfinished.
@@ -202,7 +127,7 @@ export function EventWorkflowEditor({
     const id = nextTaskId("act", usedTaskIds(state));
     mutateTrigger(triggerId, (trigger) => ({
       ...trigger,
-      actions: [...trigger.actions, newProjectedAction(id, preset, actionScope)],
+      actions: [...trigger.actions, newProjectedAction(id, preset)],
     }));
     setExpandedActionId(id);
   };
@@ -278,109 +203,30 @@ export function EventWorkflowEditor({
     }
   }
 
-  const Heading = headingLevel;
-  const ListHeading = headingLevel === "h1" ? "h2" : "h3";
-  // The anchor belongs to the event's own section on Alerts; a screen listing several
-  // events under one heading would repeat an id the rail links to.
-  const anchorId = bare ? undefined : alertSectionAnchor(triggerPreset);
-  const shown = state ? visibleTriggers(state) : [];
+  const shown = state?.triggers ?? [];
   const count = shown.length;
 
   return (
-    <section id={anchorId} className="flex scroll-mt-6 flex-col gap-9" data-testid={`event-editor-${event}`}>
+    <section className="flex flex-col gap-4" data-testid={`event-editor-${event}`}>
       {dynamicFields.map((field) => (
         <FieldOptionsLoader key={field.id} field={field} onLoaded={handleOptionsLoaded} />
       ))}
-
-      {!bare && (
-        <header className="flex items-end justify-between gap-6">
-          <div className="flex min-w-0 flex-col gap-2.5">
-            {breadcrumb.length > 0 && (
-              <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-[13px] text-muted-foreground">
-                {breadcrumb.map((crumb, index) => (
-                  <span key={crumb} className="flex items-center gap-2">
-                    {index > 0 && <ChevronRight className="h-3 w-3" aria-hidden="true" />}
-                    {crumb}
-                  </span>
-                ))}
-              </nav>
-            )}
-            <Heading
-              className={cn(
-                "font-semibold leading-tight tracking-[-0.02em]",
-                headingLevel === "h1" ? "text-[28px] sm:text-4xl" : "text-2xl"
-              )}
-            >
-              {triggerPreset.name}
-            </Heading>
-            {triggerPreset.description && <p className="text-sm text-muted-foreground">{triggerPreset.description}</p>}
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {onTest && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-11 w-11 text-muted-foreground hover:text-foreground sm:h-10 sm:w-10"
-                    onClick={onTest}
-                    aria-label={`Test ${triggerPreset.name}`}
-                    data-testid={`test-event-${event}`}
-                  >
-                    <Zap className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Fire a test event</TooltipContent>
-              </Tooltip>
-            )}
-            <Button
-              onClick={addTrigger}
-              disabled={!state}
-              className="h-11 w-11 px-0 sm:h-10 sm:w-auto sm:pl-3.5 sm:pr-4"
-              aria-label="New trigger"
-              data-testid={`add-trigger-${event}`}
-            >
-              <Plus className="h-4 w-4 sm:mr-2" aria-hidden="true" />
-              <span className="hidden sm:inline">New trigger</span>
-            </Button>
-          </div>
-        </header>
-      )}
-
-      {children}
 
       {!state ? (
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       ) : (
         <div className="flex flex-col gap-3">
-          {!bare && (
-            <div className="flex flex-col gap-1 px-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-              <ListHeading className="text-[13px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
-                {count === 1 ? "1 trigger" : `${count} triggers`}
-              </ListHeading>
-              <code title={`Event: ${event}`} className="min-w-0 truncate font-mono text-xs text-muted-foreground/80">
-                {event}
-              </code>
-            </div>
-          )}
+          <div className="flex items-center justify-between gap-4 px-1">
+            <span className="text-[13px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+              {count === 1 ? "1 trigger" : `${count} triggers`}
+            </span>
+            <Button variant="outline" className="h-11 sm:h-9" onClick={addTrigger} data-testid={`add-trigger-${event}`}>
+              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
+              Add a trigger here
+            </Button>
+          </div>
 
-          {unprojectable && (
-            <p className="px-1 text-xs text-muted-foreground">
-              A workflow on this event uses steps this screen can't show. It is left untouched — edit it in the workflow
-              builder.
-            </p>
-          )}
-          {others.length > 0 && (
-            <p className="px-1 text-xs text-muted-foreground">
-              {others.length} other workflow{others.length === 1 ? "" : "s"} also fire on this event.
-            </p>
-          )}
-
-          {count === 0 && bare ? null : count === 0 && scope ? (
-            <p className="rounded-2xl border border-dashed px-5 py-4 text-sm text-muted-foreground">
-              Nothing happens yet. Add a trigger to decide what does.
-            </p>
-          ) : count === 0 ? (
+          {count === 0 ? (
             <div className="flex flex-col items-center gap-3.5 rounded-2xl border border-dashed px-6 py-14 text-center">
               <p className="text-base font-medium">No triggers yet</p>
               <p className="max-w-[360px] text-sm text-muted-foreground">
@@ -399,7 +245,7 @@ export function EventWorkflowEditor({
                   trigger={trigger}
                   triggerPreset={triggerPreset}
                   actionPresets={actionPresets}
-                  conditionFields={editableFields}
+                  conditionFields={conditionFields}
                   conditionValues={values}
                   sentence={sentenceParts(triggerPreset.sentence, conditionFields, values, optionLabels)}
                   loadedOptions={loadedOptions}
@@ -449,7 +295,7 @@ export function EventWorkflowEditor({
             })
           )}
 
-          {!bare && <SaveState isDirty={isDirty} isSaving={isSaving} onSave={handleSave} onDiscard={handleDiscard} />}
+          <SaveState isDirty={isDirty} isSaving={isSaving} onSave={handleSave} onDiscard={handleDiscard} />
         </div>
       )}
     </section>

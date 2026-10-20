@@ -16,6 +16,11 @@ export function useResourceInstancesOfKind(instanceId: InstanceId | null, kind: 
   return useEngineGateway().moduleResources.useKindInstances(instanceId, kind);
 }
 
+/** The instances of several kinds in one read; skipped for a null id or no kinds. */
+export function useResourceInstancesOfKinds(instanceId: InstanceId | null, kinds: readonly string[]) {
+  return useEngineGateway().moduleResources.useKindsInstances(instanceId, kinds);
+}
+
 /** Every mirrored resource value, keyed by canonical id; a null id skips the read. */
 export function useResourceValues(instanceId: InstanceId | null) {
   return useEngineGateway().moduleResources.useValues(instanceId);

@@ -140,6 +140,7 @@ const actionValidator = v.object({
   projectionKey: v.optional(v.string()),
   canonicalId: v.optional(v.string()),
   taxonomy: v.optional(v.array(v.string())),
+  sentence: v.optional(v.string()),
 });
 
 /*
@@ -182,6 +183,7 @@ type EngineAction = {
   returns?: string;
   projectionKey?: string;
   taxonomy?: string[];
+  sentence?: string;
 };
 
 function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | undefined) {
@@ -198,6 +200,7 @@ function translateAction(a: EngineAction, moduleId: Id<"moduleRepository"> | und
     returns: ui.returns,
     projectionKey: a.projectionKey,
     taxonomy: a.taxonomy,
+    sentence: a.sentence?.trim() || undefined,
     handlerType,
     functionCall: a.call?.trim() || undefined,
     moduleId,

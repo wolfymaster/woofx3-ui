@@ -198,7 +198,6 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
             await updateCommand(instanceId, {
               engineCommandId: cmd.engineCommandId,
               command: cmd.command,
-              actions: cmd.actions ?? [],
               cooldown: cmd.cooldown,
               priority: cmd.priority,
               enabled: !cmd.enabled,

@@ -3,7 +3,6 @@ import type { WorkflowRecord } from "@/engine/types";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import type { EventEditorState } from "@/lib/event-drafts";
 import { eventWorkflowTarget, newProjectedAction, withNewTrigger } from "@/lib/event-workflow-state";
-import { resourceActions } from "@/lib/resource-actions";
 import type { ActionPreset, ConfigField } from "@/lib/workflow-presets";
 
 const icon = (() => null) as unknown as ActionPreset["icon"];
@@ -26,59 +25,31 @@ const increment: ActionPreset = {
   },
 };
 
-const actionScope = { actions: resourceActions([increment], "counter"), value: "woofx3:counter:deaths" };
-
 const empty: EventEditorState = { name: "Chat command triggers", triggers: [], shared: [], conditionValues: {} };
 
 describe("newProjectedAction", () => {
-  test("aims the step at the scoped instance and leaves its other settings unset", () => {
-    const action = newProjectedAction("act_1", increment, actionScope);
-    expect(action.parameters).toEqual({ target: "woofx3:counter:deaths" });
+  test("the step is seeded the way the builder seeds it", () => {
+    const action = newProjectedAction("act_1", increment);
+    expect(action.parameters).toEqual({ target: "", amount: 1 });
     expect(action.functionCall).toBe("woofx3:function:counter.increment");
-  });
-
-  test("without a scope the step is seeded the way the builder seeds it", () => {
-    expect(newProjectedAction("act_1", increment).parameters).toEqual({ target: "", amount: 1 });
-  });
-
-  test("an action the scope does not cover keeps its defaults", () => {
-    const reply: ActionPreset = {
-      ...increment,
-      id: "row-2",
-      name: "Send chat message",
-      handlerType: "chat.reply",
-      functionCall: undefined,
-      config: { fields: [{ id: "message", label: "Message", type: "text" }] as ConfigField[] },
-    };
-    expect(newProjectedAction("act_1", reply, actionScope).parameters).toEqual({ message: "" });
   });
 });
 
 describe("withNewTrigger", () => {
   const command: ConfigField[] = [{ id: "command", label: "Command", type: "text", required: true } as ConfigField];
 
-  test("a seeded trigger arrives already running the step, aimed at the instance", () => {
-    const { state, triggerId } = withNewTrigger(empty, command, { actionScope, seed: increment });
+  test("a new trigger starts with its fields' defaults and no steps", () => {
+    const { state, triggerId } = withNewTrigger(empty, command);
     const trigger = state.triggers.find((candidate) => candidate.id === triggerId);
-    expect(trigger?.actions).toHaveLength(1);
-    expect(trigger?.actions[0].parameters).toEqual({ target: "woofx3:counter:deaths" });
+    expect(trigger?.actions).toEqual([]);
     expect(trigger?.enabled).toBe(true);
+    expect(state.conditionValues[triggerId]).toEqual({ command: "" });
   });
 
   test("ids do not collide with the ones already in the workflow", () => {
-    const first = withNewTrigger(empty, command, { actionScope, seed: increment });
-    const second = withNewTrigger(first.state, command, { actionScope, seed: increment });
-    const ids = second.state.triggers.flatMap((trigger) => [trigger.id, ...trigger.actions.map((a) => a.id)]);
-    expect(new Set(ids).size).toBe(ids.length);
+    const first = withNewTrigger(empty, command);
+    const second = withNewTrigger(first.state, command);
     expect(first.triggerId).not.toBe(second.triggerId);
-  });
-
-  test("a condition scope pins its field on the new trigger", () => {
-    const scope = { fieldId: "counter", value: "woofx3:counter:deaths", label: "Deaths" };
-    const { state, triggerId } = withNewTrigger(empty, [{ id: "counter", label: "Counter" } as ConfigField], {
-      scope,
-    });
-    expect(state.conditionValues[triggerId].counter).toBe("woofx3:counter:deaths");
   });
 });
 

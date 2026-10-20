@@ -74,6 +74,11 @@ function useTestRunCapabilitiesRequest() {
   return useCallback((instanceId: InstanceId) => testRunCapabilities({ instanceId }), [testRunCapabilities]);
 }
 
+function useViewerFactsRequest() {
+  const listViewerFacts = useAction(api.viewerFacts.list);
+  return useCallback((instanceId: InstanceId) => listViewerFacts({ instanceId }), [listViewerFacts]);
+}
+
 function useReplayRequest() {
   const replay = useAction(api.workflowActions.replay);
   return useCallback((instanceId: InstanceId, run: WorkflowReplay) => replay({ instanceId, ...run }), [replay]);
@@ -125,6 +130,7 @@ export const convexWorkflowsGateway: WorkflowsGateway = {
   useSetEnabledRequest,
   useTriggerRequest,
   useTestRunCapabilitiesRequest,
+  useViewerFactsRequest,
   useReplayRequest,
   useCancelRunRequest,
   useRun,

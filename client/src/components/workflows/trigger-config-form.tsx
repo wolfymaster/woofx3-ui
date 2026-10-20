@@ -3,6 +3,7 @@ import { THEME_FIELD_TYPE } from "@convex/lib/widgetThemes";
 import { FileAudio, FileImage, FileVideo, Link2, Plus, Upload, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
+import { ConfigButtonFieldRenderer } from "@/components/common/config-button-field";
 import {
   ConfigurationForm,
   type CustomFieldRenderer,
@@ -266,7 +267,24 @@ const AlertWidgetNameRenderer: CustomFieldRenderer = (props) => <AlertWidgetName
 // does everywhere else.
 // ---------------------------------------------------------------------------
 
-const LayoutFieldRenderer: CustomFieldRenderer = (props) => <AlertLayoutField {...props} />;
+/**
+ * A layout places the widgets of one surface. Only alerts are laid out per step; a
+ * field naming another surface is shown, not edited, and its value is kept as it is.
+ */
+const LayoutFieldRenderer: CustomFieldRenderer = (props) => {
+  const surface = props.field.surface;
+  if (surface === undefined || surface === "alert") {
+    return <AlertLayoutField {...props} />;
+  }
+  return (
+    <div className="space-y-1">
+      <Label>{props.field.label}</Label>
+      <p className="text-xs text-muted-foreground" data-testid={`text-layout-unsupported-${props.field.id}`}>
+        A {String(surface)} layout can't be edited here yet. Whatever it holds is kept as it is.
+      </p>
+    </div>
+  );
+};
 
 // ---------------------------------------------------------------------------
 // TriggerConfigForm — thin wrapper around ConfigurationForm
@@ -300,6 +318,8 @@ export const configFieldRenderers: Record<string, CustomFieldRenderer> = {
   asset: MediaFieldRenderer,
   resource_ref: ResourceRefFieldRenderer,
   "field:layout": LayoutFieldRenderer,
+  // A button stores nothing, so there is no value for a variable to stand in for.
+  "field:button": ConfigButtonFieldRenderer,
   "source:alertWidgets": AlertWidgetNameRenderer,
   "source:scenes": ScenesFieldRenderer,
   "source:scenePlacements": ScenePlacementsFieldRenderer,
