@@ -2,7 +2,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { EventCatalog } from "@/components/flow/event-catalog";
 import { FlowEditor } from "@/components/flow/flow-editor";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { newTriggerTree } from "@/lib/alert-triggers";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { conditionFieldsOf } from "@/lib/event-workflow-state";
-import { type WaitEventChoice, waitEventGroups } from "@/lib/wait-event";
+import { isCommandsSource } from "@/lib/parse-config-fields";
+import { type WaitEventChoice, type WaitEventGroup, waitEventGroups } from "@/lib/wait-event";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 import { countActionSteps, treeToDefinition, type WorkflowTree } from "@/lib/workflow-tree";
 
@@ -27,6 +28,26 @@ const keepUnsaved = async () => true;
  * uses, then its steps in the flow editor every other surface edits with. It is created
  * once it has an action, named after its trigger, and opens in the workflow editor.
  */
+/**
+ * The events a workflow can start on by itself. A chat command's event names the command
+ * (a commands setting, or a wildcard filled in per command), and commands are made on the
+ * Commands page, so those events are left out.
+ */
+function startableGroups(
+  groups: readonly WaitEventGroup[],
+  triggerPresets: readonly TriggerPreset[]
+): WaitEventGroup[] {
+  const namesACommand = new Set(
+    triggerPresets.filter((preset) => (preset.config?.fields ?? []).some(isCommandsSource)).map((preset) => preset.id)
+  );
+  return groups
+    .map((group) => ({
+      ...group,
+      choices: group.choices.filter((choice) => !choice.wildcardField && !namesACommand.has(choice.row.id)),
+    }))
+    .filter((group) => group.choices.length > 0);
+}
+
 export function NewWorkflowEditor({ instanceId }: { instanceId: Id<"instances"> }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -40,7 +61,10 @@ export function NewWorkflowEditor({ instanceId }: { instanceId: Id<"instances"> 
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
     [resourceInstances]
   );
-  const groups = useMemo(() => waitEventGroups(catalogTriggers), [catalogTriggers]);
+  const groups = useMemo(
+    () => startableGroups(waitEventGroups(catalogTriggers), triggerPresets),
+    [catalogTriggers, triggerPresets]
+  );
 
   const [triggerPreset, setTriggerPreset] = useState<TriggerPreset | null>(null);
   const [tree, setTree] = useState<WorkflowTree | null>(null);
@@ -100,6 +124,13 @@ export function NewWorkflowEditor({ instanceId }: { instanceId: Id<"instances"> 
           legend="Events that can start a workflow"
           testId="new-workflow-event"
         />
+        <p className="text-xs text-muted-foreground">
+          To answer a chat command, make it on the{" "}
+          <Link href="/stream/commands" className="underline underline-offset-2 hover:text-foreground">
+            Commands page
+          </Link>
+          : its steps are a workflow too.
+        </p>
       </div>
     );
   }

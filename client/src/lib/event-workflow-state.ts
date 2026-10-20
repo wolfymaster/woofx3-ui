@@ -2,8 +2,8 @@ import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { WorkflowRecord } from "@/engine/types";
 import type { EventEditorState } from "@/lib/event-drafts";
 import { isCommandsSource } from "@/lib/parse-config-fields";
-import { nextTaskId, type ProjectedAction, projectWorkflow } from "@/lib/trigger-projection";
-import { type ActionPreset, getDefaultConfigValues, type TriggerPreset } from "@/lib/workflow-presets";
+import { projectWorkflow } from "@/lib/trigger-projection";
+import type { TriggerPreset } from "@/lib/workflow-presets";
 import { conditionsToFieldValues } from "@/lib/workflow-presets-json";
 
 export interface EventWorkflowTarget {
@@ -68,42 +68,6 @@ export function eventEditorStateFor(
     };
   }
   return { name: `${triggerPreset.name} triggers`, triggers: [], shared: [], conditionValues: {} };
-}
-
-/** Every task id in use, so a new step never collides with one already in the workflow. */
-export function usedTaskIds(state: EventEditorState): string[] {
-  return [
-    ...state.triggers.map((trigger) => trigger.id),
-    ...state.triggers.flatMap((trigger) => trigger.actions.map((action) => action.id)),
-    ...state.shared.map((shared) => shared.id),
-  ];
-}
-
-/** A step running `preset`, seeded the way the workflow builder seeds one. */
-export function newProjectedAction(id: string, preset: ActionPreset): ProjectedAction {
-  return {
-    id,
-    handlerType: preset.handlerType ?? "function",
-    functionCall: preset.functionCall,
-    parameters: getDefaultConfigValues(preset.config?.fields ?? []),
-    concurrentWithPrevious: false,
-  };
-}
-
-/** The state with one more trigger, its condition fields at their defaults. */
-export function withNewTrigger(
-  state: EventEditorState,
-  conditionFields: ConfigField[]
-): { state: EventEditorState; triggerId: string } {
-  const triggerId = nextTaskId("rule", usedTaskIds(state));
-  return {
-    state: {
-      ...state,
-      triggers: [...state.triggers, { id: triggerId, enabled: true, conditions: [], actions: [] }],
-      conditionValues: { ...state.conditionValues, [triggerId]: getDefaultConfigValues(conditionFields) },
-    },
-    triggerId,
-  };
 }
 
 function definitionEvent(row: WorkflowRecord): string | undefined {
