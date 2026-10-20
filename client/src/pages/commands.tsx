@@ -344,6 +344,12 @@ function CommandsTab({
                   </TableCell>
                   <TableCell className="max-w-[280px] text-muted-foreground">
                     {summarizeSteps(cmd, actionPresets)}
+                    {cmd.workflowError && (
+                      <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
+                        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                        Steps need attention
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell>
                     {cmd.visibility === "public" ? (

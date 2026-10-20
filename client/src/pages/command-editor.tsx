@@ -226,6 +226,15 @@ export default function CommandEditor() {
             </div>
           )}
 
+          {existing?.workflowError && (
+            <div
+              className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              data-testid="text-command-workflow-error"
+            >
+              The engine couldn't set up this command's steps: {existing.workflowError}. Save the command to try again.
+            </div>
+          )}
+
           {form.flow.editable ? (
             <FlowEditor
               tree={form.flow.tree}

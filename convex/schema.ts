@@ -481,6 +481,10 @@ export default defineSchema({
     // instead. Optional for rows written before commands had workflows.
     engineWorkflowId: v.optional(v.string()),
     steps: v.optional(v.array(v.any())),
+    // Why the engine could not give the command its workflow (a failed
+    // conversion on upgrade, or a link to a workflow that no longer exists);
+    // absent when it has one or never needed one.
+    workflowError: v.optional(v.string()),
     // "{variable}" placeholders parsed out of user input after the command
     // word, e.g. "{songTitle}" — extracted values are merged into the
     // function's invoke payload (or usable in a "text" response). Empty

@@ -22,8 +22,9 @@ import { alertLayoutSummary } from "@/lib/workflow-node-summary";
  * - the configured value, or the label of the option or thing it names
  * - the short name of a value taken from earlier in the workflow (`next` for `${increment.next}`)
  * - the field's `missingText`, or "a counter", while a required setting is empty
- * - "the default amount" while an optional setting is empty, since the action then
- *   uses its own default: the sentence says what the step will do, never leaves a gap
+ * - the field's `missingText`, or "the default amount", while an optional setting is
+ *   empty, since the action then uses its own default: the author words what that
+ *   default is ("the counter's step"), and the sentence never leaves a gap
  *
  * An action declaring no template reads as its name followed by the settings it has.
  */
@@ -90,7 +91,7 @@ function actionFieldPart(field: ConfigField, value: unknown, optionLabels: Optio
     if (field.required) {
       return part(field.missingText ?? withArticle(lowerLabel(field)), "missing");
     }
-    return part(`the default ${lowerLabel(field)}`, "default");
+    return part(field.missingText ?? `the default ${lowerLabel(field)}`, "default");
   }
   return part(settingText(field, value, optionLabels), "value");
 }
