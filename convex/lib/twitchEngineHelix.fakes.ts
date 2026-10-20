@@ -4,6 +4,8 @@ import { directHelixRoute, type TwitchHelixRoute } from "./twitchEngineHelix";
 
 // Test doubles for code that calls Helix through convex/lib/twitchEngineHelix.ts.
 // Kept out of the *.test.ts files so each module's tests share one fake engine.
+// The second dot in the file name keeps Convex from deploying it, as it does
+// for *.test.ts: Convex skips any file whose name has more than one dot.
 
 export interface EngineCall {
   method: string;

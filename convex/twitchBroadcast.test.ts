@@ -10,7 +10,7 @@ import {
   helixErrorBody,
   rejection,
   stubFetch,
-} from "./lib/twitchEngineHelixFakes";
+} from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
 import { postAnnouncement, postChatMessage, postShoutout } from "./twitchBroadcast";
 

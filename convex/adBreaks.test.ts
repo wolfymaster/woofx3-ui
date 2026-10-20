@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { callHelix } from "./adBreaks";
 import type { AdHelixOperation } from "./lib/adBreaks";
 import type { AuthorizedTwitchCall } from "./lib/twitchAuth";
-import { DIRECT_ROUTE, fakeEngineRoute, helixErrorBody, rejection, stubFetch } from "./lib/twitchEngineHelixFakes";
+import { DIRECT_ROUTE, fakeEngineRoute, helixErrorBody, rejection, stubFetch } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
 
 const CALL: AuthorizedTwitchCall = { accessToken: "token", broadcasterUserId: "B1", clientId: "client" };

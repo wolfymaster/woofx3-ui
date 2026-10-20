@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { TwitchHelixResult } from "@woofx3/api";
 import type { AuthorizedTwitchCall } from "./lib/twitchAuth";
 import type { TwitchHelixRoute } from "./lib/twitchEngineHelix";
-import { DIRECT_ROUTE, fakeEngineRoute, helixErrorBody, rejection, stubFetch } from "./lib/twitchEngineHelixFakes";
+import { DIRECT_ROUTE, fakeEngineRoute, helixErrorBody, rejection, stubFetch } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
 import {
   createMarkerOnTwitch,
