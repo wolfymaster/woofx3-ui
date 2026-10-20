@@ -1,8 +1,6 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import { useAction, useQuery } from "convex/react";
 import { ExternalLink } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -10,6 +8,13 @@ import { TriggerWhenCard } from "@/components/alerts/trigger-when-card";
 import { FlowEditor } from "@/components/flow/flow-editor";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { Button } from "@/components/ui/button";
+import { useResourceInstances } from "@/engine/hooks/use-module-resources";
+import {
+  useCreateWorkflowRequest,
+  useDeleteWorkflowRequest,
+  useSetWorkflowEnabledRequest,
+  useUpdateWorkflowRequest,
+} from "@/engine/hooks/use-workflows";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -79,11 +84,11 @@ export function TriggerEditor({
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const createFromDefinition = useAction(api.workflowActions.createFromDefinition);
-  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
-  const setEnabled = useAction(api.workflowActions.setEnabled);
-  const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
-  const resourceInstances = useQuery(api.moduleResourceInstances.listForInstance, { instanceId });
+  const createFromDefinition = useCreateWorkflowRequest();
+  const updateFromDefinition = useUpdateWorkflowRequest();
+  const setEnabled = useSetWorkflowEnabledRequest();
+  const removeWorkflow = useDeleteWorkflowRequest();
+  const resourceInstances = useResourceInstances(instanceId);
   const conditionSupport = useEngineConditionSupport(instanceId);
   const resourceLabels = useMemo(
     () =>
@@ -137,21 +142,14 @@ export function TriggerEditor({
         if (saved) {
           definition.id = saved.definition.id;
           definition.name = saved.definition.name;
-          await updateFromDefinition({
-            instanceId,
-            engineWorkflowId: saved.engineWorkflowId,
-            definition: escapeDollarKeys(definition) as WorkflowDefinition,
-          });
+          await updateFromDefinition(instanceId, saved.engineWorkflowId, escapeDollarKeys(definition));
         } else {
           const { id: _unsaved, ...unsaved } = definition;
           const name = sentenceText(parts) || triggerPreset.name;
-          const { engineWorkflowId } = await createFromDefinition({
-            instanceId,
-            definition: escapeDollarKeys({ ...unsaved, name }),
-          });
+          const { engineWorkflowId } = await createFromDefinition(instanceId, escapeDollarKeys({ ...unsaved, name }));
           setCreated({ engineWorkflowId, definition: { ...definition, id: engineWorkflowId, name } });
           try {
-            await setEnabled({ instanceId, engineWorkflowId, isEnabled: true });
+            await setEnabled(instanceId, engineWorkflowId, true);
           } catch {
             toast({
               title: "Saved, but not switched on",
@@ -208,7 +206,7 @@ export function TriggerEditor({
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId({ instanceId, engineWorkflowId: saved.engineWorkflowId });
+      await removeWorkflow(instanceId, saved.engineWorkflowId);
       onDeleted();
     } catch (err) {
       toast({

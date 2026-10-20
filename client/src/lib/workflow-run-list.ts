@@ -1,4 +1,4 @@
-import type { WorkflowRun } from "@/lib/transport";
+import type { WorkflowRun } from "@/engine/types";
 
 /** capnweb may deliver a timestamp as a Date or as its serialized string. */
 function timeKey(value: Date | string | undefined): string {

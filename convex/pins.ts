@@ -2,11 +2,20 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
-import { action, internalMutation, internalQuery, mutation, type QueryCtx, query } from "./_generated/server";
-import { planRepin } from "./lib/pinStrategy";
+import {
+  type ActionCtx,
+  action,
+  internalMutation,
+  internalQuery,
+  mutation,
+  type QueryCtx,
+  query,
+} from "./_generated/server";
+import { planRepin, type RepinPlan } from "./lib/pinStrategy";
 import { getInstanceMembership } from "./lib/teamAccess";
-import { authorizeTwitch } from "./lib/twitchAuth";
+import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
+import { helixResponse, isUnconfirmedWrite, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 import { parsePinsResponse, type TwitchPin } from "./lib/twitchPins";
 
 // Twitch chat pinning, and the local history it is driven from.
@@ -22,6 +31,10 @@ import { parsePinsResponse, type TwitchPin } from "./lib/twitchPins";
 // is shown when the id matches an entry we recorded ourselves.
 //
 // These endpoints are in open beta as of 2026-05-15 and may change.
+//
+// The Helix calls go through an engine that advertises twitch.pins when it
+// does (convex/lib/twitchEngineHelix.ts); writes only while the
+// twitch.enginePins flag is on for the instance.
 
 const TWITCH_PINS_URL = "https://api.twitch.tv/helix/chat/pins";
 
@@ -166,14 +179,24 @@ export const recordPinned = internalMutation({
 // Twitch
 // ---------------------------------------------------------------------------
 
-async function fetchCurrentPin(
-  accessToken: string,
-  clientId: string,
-  broadcasterUserId: string
+/** Reads follow the engine's capability; writes also wait for the rollout flag. */
+function pinsRoute(ctx: ActionCtx, instanceId: Id<"instances">, kind: "read" | "write"): Promise<TwitchHelixRoute> {
+  return twitchHelixRoute(ctx, instanceId, "twitch.pins", kind === "write" ? "twitch.enginePins" : undefined);
+}
+
+export async function fetchCurrentPin(
+  { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
+  route: TwitchHelixRoute
 ): Promise<TwitchPin | null> {
   const url = `${TWITCH_PINS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}`;
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
+  const response = await helixResponse(route, {
+    operation: "getChatPins",
+    kind: "read",
+    viaEngine: (engine) => engine.twitchGetChatPins(),
+    direct: () =>
+      fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
+      }),
   });
   if (!response.ok) {
     throw new Error(`Twitch pin lookup failed: ${response.status} ${await response.text()}`);
@@ -199,8 +222,8 @@ export const currentPin = action({
     if (!userId) {
       throw new Error("Not authenticated");
     }
-    const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(ctx, args.instanceId, PIN_READ_SCOPE);
-    const pin = await fetchCurrentPin(accessToken, clientId, broadcasterUserId);
+    const twitch = await authorizeTwitch(ctx, args.instanceId, PIN_READ_SCOPE);
+    const pin = await fetchCurrentPin(twitch, await pinsRoute(ctx, args.instanceId, "read"));
     if (!pin) {
       return null;
     }
@@ -263,20 +286,66 @@ export const recordSeenPin = internalMutation({
   },
 });
 
+/** A pin the engine sent but could not confirm; Twitch may have applied it. */
+class UnconfirmedPinError extends Error {}
+
 async function pinExisting(
-  accessToken: string,
-  clientId: string,
-  broadcasterUserId: string,
+  { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
   messageId: string
 ): Promise<void> {
   const url = `${TWITCH_PINS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}&message_id=${encodeURIComponent(messageId)}`;
-  const response = await fetch(url, {
-    method: "PUT",
-    headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
+  const response = await helixResponse(route, {
+    operation: "pinChatMessage",
+    kind: "write",
+    viaEngine: (engine) => engine.twitchPinChatMessage({ message_id: messageId }),
+    direct: () =>
+      fetch(url, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
+      }),
   });
   if (!response.ok) {
-    throw new Error(`Twitch pin failed: ${response.status} ${await response.text()}`);
+    const message = `Twitch pin failed: ${response.status} ${await response.text()}`;
+    throw isUnconfirmedWrite(response) ? new UnconfirmedPinError(message) : new Error(message);
   }
+}
+
+/**
+ * Pins a history entry by its id when the plan says to, re-posting the text
+ * when Twitch refuses the id or the plan says the id is stale. A pin the
+ * engine could not confirm fails instead: re-posting after a pin Twitch did
+ * apply would put the message in chat twice. `beforeResend` runs before any
+ * re-post, for the send scope check.
+ */
+export async function repinOnTwitch(
+  twitch: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  plan: RepinPlan,
+  content: string,
+  beforeResend: () => Promise<void>
+): Promise<{ messageId: string; resent: boolean }> {
+  let messageId = plan.kind === "repin" ? plan.messageId : "";
+  let resent = plan.kind === "resend";
+
+  if (plan.kind === "repin") {
+    try {
+      await pinExisting(twitch, route, plan.messageId);
+    } catch (error) {
+      if (error instanceof UnconfirmedPinError) {
+        throw error;
+      }
+      // The id outlived the rule's guess — post the text instead. This is the
+      // path planRepin exists to keep rare, not to replace.
+      resent = true;
+    }
+  }
+
+  if (resent) {
+    await beforeResend();
+    messageId = await sendChatMessage(twitch, content, { pin: true }, route);
+  }
+  return { messageId, resent };
 }
 
 /** Post a new message and pin it, recording it in history. */
@@ -299,7 +368,12 @@ export const pinNewMessage = action({
     const twitch = await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
     await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
 
-    const messageId = await sendChatMessage(twitch, text, { pin: true });
+    const messageId = await sendChatMessage(
+      twitch,
+      text,
+      { pin: true },
+      await pinsRoute(ctx, args.instanceId, "write")
+    );
     await ctx.runMutation(internal.pins.recordPinned, {
       instanceId: args.instanceId,
       userId,
@@ -347,23 +421,15 @@ export const repinFromHistory = action({
       startedAt ?? undefined
     );
 
-    let messageId = plan.kind === "repin" ? plan.messageId : "";
-    let resent = plan.kind === "resend";
-
-    if (plan.kind === "repin") {
-      try {
-        await pinExisting(twitch.accessToken, twitch.clientId, twitch.broadcasterUserId, plan.messageId);
-      } catch {
-        // The id outlived the rule's guess — post the text instead. This is the
-        // path planRepin exists to keep rare, not to replace.
-        resent = true;
+    const { messageId, resent } = await repinOnTwitch(
+      twitch,
+      await pinsRoute(ctx, args.instanceId, "write"),
+      plan,
+      entry.content,
+      async () => {
+        await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
       }
-    }
-
-    if (resent) {
-      await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
-      messageId = await sendChatMessage(twitch, entry.content, { pin: true });
-    }
+    );
 
     await ctx.runMutation(internal.pins.recordPinned, {
       instanceId: args.instanceId,
@@ -381,16 +447,29 @@ export const repinFromHistory = action({
 export const unpinCurrent = action({
   args: { instanceId: v.id("instances"), messageId: v.string() },
   handler: async (ctx, args): Promise<{ ok: true }> => {
-    const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
-
-    const url = `${TWITCH_PINS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}&message_id=${encodeURIComponent(args.messageId)}`;
-    const response = await fetch(url, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
-    });
-    if (!response.ok) {
-      throw new Error(`Twitch unpin failed: ${response.status} ${await response.text()}`);
-    }
+    const twitch = await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
+    await unpinOnTwitch(twitch, await pinsRoute(ctx, args.instanceId, "write"), args.messageId);
     return { ok: true };
   },
 });
+
+export async function unpinOnTwitch(
+  { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  messageId: string
+): Promise<void> {
+  const url = `${TWITCH_PINS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}&message_id=${encodeURIComponent(messageId)}`;
+  const response = await helixResponse(route, {
+    operation: "unpinChatMessage",
+    kind: "write",
+    viaEngine: (engine) => engine.twitchUnpinChatMessage({ message_id: messageId }),
+    direct: () =>
+      fetch(url, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId },
+      }),
+  });
+  if (!response.ok) {
+    throw new Error(`Twitch unpin failed: ${response.status} ${await response.text()}`);
+  }
+}

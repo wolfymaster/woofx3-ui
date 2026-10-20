@@ -1,9 +1,8 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ModuleFileContent, ModuleFileList } from "@woofx3/api/api";
-import { useAction } from "convex/react";
 import { useCallback, useRef, useState } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useModuleFileRequest, useModuleFilesRequest } from "@/engine/hooks/use-modules";
 import { actionErrorMessage } from "@/lib/action-error";
 import type { CapabilitySupport } from "@/lib/engine-capabilities";
 
@@ -59,8 +58,8 @@ interface UseModuleFilesArgs {
  * kept for as long as the same module version stays on screen.
  */
 export function useModuleFiles({ instanceId, moduleId, isInstalled, version }: UseModuleFilesArgs): ModuleFiles {
-  const listAction = useAction(api.moduleFiles.listModuleFiles);
-  const readAction = useAction(api.moduleFiles.readModuleFile);
+  const listAction = useModuleFilesRequest();
+  const readAction = useModuleFileRequest();
   const capabilities = useEngineCapabilities(isInstalled ? instanceId : undefined);
 
   const key = instanceId && moduleId ? `${instanceId}|${moduleId}|${isInstalled}|${version}` : null;
@@ -88,7 +87,7 @@ export function useModuleFiles({ instanceId, moduleId, isInstalled, version }: U
     }
     requested.current.add(requestId);
     update(key, (state) => ({ ...state, list: { status: "loading" } }));
-    listAction({ instanceId, moduleId }).then(
+    listAction(instanceId, moduleId).then(
       (result) => {
         update(key, (state) => ({ ...state, list: { status: "ready", list: result } }));
       },
@@ -113,7 +112,7 @@ export function useModuleFiles({ instanceId, moduleId, isInstalled, version }: U
         update(key, (prev) => ({ ...prev, files: new Map(prev.files).set(path, state) }));
       };
       setFile({ status: "loading" });
-      readAction({ instanceId, moduleId, path }).then(
+      readAction(instanceId, moduleId, path).then(
         (result) => {
           setFile({ status: "ready", file: result });
         },

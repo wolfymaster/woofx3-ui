@@ -1,6 +1,6 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { resourceKindMatches } from "@convex/lib/resourceKinds";
 import type { ActionStep, WorkflowDefinition } from "@woofx3/api";
+import type { WorkflowRecord } from "@/engine/types";
 import { stepsAimAt } from "@/lib/alert-triggers";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import type { ActionPreset } from "@/lib/workflow-presets";
@@ -78,7 +78,7 @@ export function resourceActions(actionPresets: ActionPreset[], kind: string): Re
  * not editable from that list either way.
  */
 export function eventsChangingResource(
-  workflows: Doc<"workflows">[],
+  workflows: WorkflowRecord[],
   actions: ResourceAction[],
   canonicalId: string
 ): string[] {

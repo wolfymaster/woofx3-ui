@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
-import { useQuery } from "convex/react";
 import { Bell, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -11,6 +9,7 @@ import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { TestEventSheet } from "@/components/test-events/test-event-sheet";
+import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -41,7 +40,7 @@ export default function Alerts() {
   const [location, navigate] = useLocation();
   const { instance } = useInstance();
   const { triggerPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
+  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
 
   // The trigger stays selected while the sheet closes, so its contents don't blank
   // out mid-animation.

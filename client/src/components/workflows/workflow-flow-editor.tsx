@@ -1,11 +1,12 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
-import { useAction, useQuery } from "convex/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlowEditor } from "@/components/flow/flow-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
+import { useResourceInstances } from "@/engine/hooks/use-module-resources";
+import { useScenes } from "@/engine/hooks/use-scenes";
+import { useUpdateWorkflowRequest, useWorkflow } from "@/engine/hooks/use-workflows";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -41,10 +42,10 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const { toast } = useToast();
   const conditionSupport = useEngineConditionSupport(instanceId);
-  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
-  const workflow = useQuery(api.workflows.getByEngineId, { instanceId, engineWorkflowId });
-  const resourceInstances = useQuery(api.moduleResourceInstances.listForInstance, { instanceId });
-  const scenes = useQuery(api.scenes.list, { instanceId });
+  const updateFromDefinition = useUpdateWorkflowRequest();
+  const workflow = useWorkflow(instanceId, engineWorkflowId);
+  const resourceInstances = useResourceInstances(instanceId);
+  const scenes = useScenes(instanceId);
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -94,11 +95,7 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
         return true;
       }
       try {
-        await updateFromDefinition({
-          instanceId,
-          engineWorkflowId,
-          definition: escapeDollarKeys(definition) as WorkflowDefinition,
-        });
+        await updateFromDefinition(instanceId, engineWorkflowId, escapeDollarKeys(definition) as WorkflowDefinition);
         return true;
       } catch (err) {
         toast({

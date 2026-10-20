@@ -1,8 +1,6 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { ConditionConfig } from "@woofx3/api";
 import type { ConfigField, DataShapeField } from "@woofx3/api/ui-schema";
-import { useQuery } from "convex/react";
 import { ChevronDown, ChevronLeft, Plus, X } from "lucide-react";
 import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { DurationInput } from "@/components/flow/duration-input";
@@ -12,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { type OptionLabels, type SentencePart, sentenceParts } from "@/lib/condition-sentence";
@@ -1016,9 +1015,6 @@ function OutputsNote({ step, catalogTriggers }: { step: WaitNode; catalogTrigger
 /** The streamer's counters, timers and queues by canonical id, so a sentence names them. */
 function useResourceLabels(): ReadonlyMap<string, string> | undefined {
   const { instance } = useInstance();
-  const rows = useQuery(
-    api.moduleResourceInstances.listForInstance,
-    instance ? { instanceId: instance._id as Id<"instances"> } : "skip"
-  );
+  const rows = useResourceInstances(instance ? (instance._id as Id<"instances">) : null);
   return useMemo(() => (rows ? new Map(rows.map((row) => [row.canonicalId, row.displayName])) : undefined), [rows]);
 }

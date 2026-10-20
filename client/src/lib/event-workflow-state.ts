@@ -1,5 +1,5 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { WorkflowRecord } from "@/engine/types";
 import type { EventEditorState } from "@/lib/event-drafts";
 import { isCommandsSource } from "@/lib/parse-config-fields";
 import { nextTaskId, type ProjectedAction, projectWorkflow } from "@/lib/trigger-projection";
@@ -8,11 +8,11 @@ import { conditionsToFieldValues } from "@/lib/workflow-presets-json";
 
 export interface EventWorkflowTarget {
   /** The workflow this screen edits for the event, if one exists yet. */
-  primary: Doc<"workflows"> | undefined;
+  primary: WorkflowRecord | undefined;
   /** The event's other workflows, which this screen leaves alone. */
-  others: Doc<"workflows">[];
+  others: WorkflowRecord[];
   /** A workflow on this event this screen can't project, if there is one. */
-  unprojectable: Doc<"workflows"> | undefined;
+  unprojectable: WorkflowRecord | undefined;
 }
 
 /**
@@ -22,8 +22,8 @@ export interface EventWorkflowTarget {
  *
  * Each workflow is projected once here, because projecting walks the whole definition.
  */
-export function eventWorkflowTarget(workflows: Doc<"workflows">[] | undefined, event: string): EventWorkflowTarget {
-  const matching: { row: Doc<"workflows">; projectable: boolean }[] = [];
+export function eventWorkflowTarget(workflows: WorkflowRecord[] | undefined, event: string): EventWorkflowTarget {
+  const matching: { row: WorkflowRecord; projectable: boolean }[] = [];
   for (const row of workflows ?? []) {
     const projected = projectWorkflow(row);
     const rowsEvent = projected.ok ? projected.projection.event : definitionEvent(row);
@@ -49,7 +49,7 @@ export function conditionFieldsOf(triggerPreset: TriggerPreset | undefined): Con
 
 /** The editor state for an event, read from the workflow that serves it, or empty. */
 export function eventEditorStateFor(
-  workflows: Doc<"workflows">[],
+  workflows: WorkflowRecord[],
   triggerPreset: TriggerPreset,
   conditionFields: ConfigField[]
 ): EventEditorState {
@@ -106,7 +106,7 @@ export function withNewTrigger(
   };
 }
 
-function definitionEvent(row: Doc<"workflows">): string | undefined {
+function definitionEvent(row: WorkflowRecord): string | undefined {
   const definition = row.definition as { trigger?: { event?: string } } | undefined;
   return definition?.trigger?.event;
 }

@@ -74,6 +74,43 @@
           }
         }
       }
+    },
+    {
+      "includes": ["client/src/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@/lib/transport", "@/lib/transport/**"],
+                    "message": "The engine transport is reached through the EngineGateway (client/src/engine). Add what you need to a gateway namespace instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "client/src/engine/**",
+        "client/src/lib/transport/**",
+        "client/src/hooks/use-sync-engine-transport.ts",
+        "client/src/components/dashboard/widgets/ad-breaks.tsx",
+        "client/src/components/dashboard/widgets/stream-stats.tsx",
+        "client/src/hooks/use-engine-upgrading.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": "off"
+          }
+        }
+      }
     }
   ]
 }

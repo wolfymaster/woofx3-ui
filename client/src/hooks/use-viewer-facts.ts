@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { EngineConditionSupport } from "@/lib/condition-builder";
 import type { ViewerFact, ViewerFactsState } from "@/lib/viewer-facts";
 

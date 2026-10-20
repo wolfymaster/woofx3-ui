@@ -1,6 +1,5 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { useMemo } from "react";
+import { useRawWorkflowCatalog } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
@@ -122,7 +121,7 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
 
 export function useWorkflowCatalog() {
   const { instance, isLoading: instanceLoading } = useInstance();
-  const raw = useQuery(api.workflowCatalog.get, instance ? { instanceId: instance._id } : "skip");
+  const raw = useRawWorkflowCatalog(instance ? instance._id : null);
 
   const triggers = (raw?.triggers ?? []) as CatalogTriggerRow[];
   const actions = (raw?.actions ?? []) as CatalogActionRow[];

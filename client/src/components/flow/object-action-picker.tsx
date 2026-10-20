@@ -1,12 +1,11 @@
-import { api } from "@convex/_generated/api";
 import { bareKind, parseKindRef } from "@convex/lib/resourceKinds";
-import { useAction, useQuery } from "convex/react";
 import { ChevronLeft, Plus, X } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { CreateResourceForm } from "@/components/modules/create-resource-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useCreateResourceInstanceRequest, useResourceKind } from "@/engine/hooks/use-module-resources";
 import { useActionObjectInstances } from "@/hooks/use-action-object-instances";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -622,8 +621,8 @@ function InlineCreateForm({
 }) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const createInstance = useAction(api.moduleResourceActions.createResourceInstance);
-  const kindDefinition = useQuery(api.resourceKinds.getForInstance, instanceId ? { instanceId, kind } : "skip");
+  const createInstance = useCreateResourceInstanceRequest();
+  const kindDefinition = useResourceKind(instanceId ?? null, kind);
   const owner = kindDefinition?.moduleName ?? parseKindRef(kind)?.module;
   const createdRef = useRef<ResourceInstanceRow | null>(null);
 
@@ -654,8 +653,7 @@ function InlineCreateForm({
         moduleId={owner}
         kind={{ kind: bareKind(kind), name: kindDefinition?.name ?? noun, schema: kindDefinition?.schema }}
         onCreate={async (resourceInstanceId, displayName, settings) => {
-          const created = await createInstance({
-            instanceId,
+          const created = await createInstance(instanceId, {
             moduleName: owner,
             kind: bareKind(kind),
             resourceInstanceId,

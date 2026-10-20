@@ -1,5 +1,3 @@
-import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
 import { Loader2, MessageSquare } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -19,6 +17,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
+import {
+  useChatCommandGroups,
+  useChatCommands,
+  useCreateChatCommandRequest,
+  useUpdateChatCommandRequest,
+} from "@/engine/hooks/use-chat-commands";
+import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useOpenCommandDraft } from "@/hooks/use-command-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -60,21 +65,18 @@ export default function CommandEditor() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
-  const commandsRaw = useQuery(api.chatCommands.list, instance ? { instanceId: instance._id } : "skip");
-  const groupsRaw = useQuery(api.chatCommandGroups.list, instance ? { instanceId: instance._id } : "skip");
+  const commandsRaw = useChatCommands(instance?._id ?? null);
+  const groupsRaw = useChatCommandGroups(instance?._id ?? null);
   const groups = useMemo(() => groupsRaw ?? [], [groupsRaw]);
-  const resourceInstances = useQuery(
-    api.moduleResourceInstances.listForInstance,
-    instance ? { instanceId: instance._id } : "skip"
-  );
+  const resourceInstances = useResourceInstances(instance?._id ?? null);
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
     [resourceInstances]
   );
 
-  const createCommand = useAction(api.chatCommandActions.createCommand);
-  const updateCommand = useAction(api.chatCommandActions.updateCommand);
+  const createCommand = useCreateChatCommandRequest();
+  const updateCommand = useUpdateChatCommandRequest();
 
   const existing = commandsRaw?.find((doc) => doc.engineCommandId === engineCommandId);
   const draft = useOpenCommandDraft(draftKey, existing);
@@ -134,7 +136,6 @@ export default function CommandEditor() {
     }
 
     const fields = {
-      instanceId: instance._id,
       command,
       // Steps that can't be edited here are left as they are, which an absent `steps` means.
       ...(form.flow.editable ? { steps: escapeDollarKeys(commandSteps(form.flow.tree)) as unknown[] } : {}),
@@ -157,10 +158,10 @@ export default function CommandEditor() {
     setSaving(true);
     try {
       if (existing) {
-        await updateCommand({ ...fields, engineCommandId: existing.engineCommandId });
+        await updateCommand(instance._id, { ...fields, engineCommandId: existing.engineCommandId });
         toast({ title: "Command updated" });
       } else {
-        await createCommand(fields);
+        await createCommand(instance._id, fields);
         toast({ title: "Command created" });
       }
       discardAndLeave();

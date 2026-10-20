@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionStep } from "@woofx3/api";
-import { useAction, useQuery } from "convex/react";
 import {
   AlertTriangle,
   Clock,
@@ -37,6 +35,13 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  useChatCommandGroups,
+  useChatCommands,
+  useDeleteChatCommandGroupRequest,
+  useDeleteChatCommandRequest,
+  useUpdateChatCommandRequest,
+} from "@/engine/hooks/use-chat-commands";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -145,8 +150,8 @@ export default function Commands() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const showingGroups = location.startsWith(COMMAND_GROUPS_PATH);
 
-  const commandsRaw = useQuery(api.chatCommands.list, instance ? { instanceId: instance._id } : "skip");
-  const groupsRaw = useQuery(api.chatCommandGroups.list, instance ? { instanceId: instance._id } : "skip");
+  const commandsRaw = useChatCommands(instance?._id ?? null);
+  const groupsRaw = useChatCommandGroups(instance?._id ?? null);
   const commands = commandsRaw ?? [];
   const groups = groupsRaw ?? [];
 
@@ -224,8 +229,8 @@ function CommandsTab({
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<CommandDoc | null>(null);
 
-  const updateCommand = useAction(api.chatCommandActions.updateCommand);
-  const deleteCommand = useAction(api.chatCommandActions.deleteCommand);
+  const updateCommand = useUpdateChatCommandRequest();
+  const deleteCommand = useDeleteChatCommandRequest();
 
   const filteredCommands = searchQuery.trim()
     ? commands.filter((c) => c.command.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -238,7 +243,7 @@ function CommandsTab({
       return;
     }
     try {
-      await deleteCommand({ instanceId, engineCommandId: deleteTarget.engineCommandId });
+      await deleteCommand(instanceId, deleteTarget.engineCommandId);
       toast({ title: "Command deleted" });
     } catch (err: unknown) {
       toast({
@@ -255,8 +260,7 @@ function CommandsTab({
       return;
     }
     try {
-      await updateCommand({
-        instanceId,
+      await updateCommand(instanceId, {
         engineCommandId: cmd.engineCommandId,
         command: cmd.command,
         cooldown: cmd.cooldown,
@@ -472,7 +476,7 @@ function GroupsTab({
   const [, navigate] = useLocation();
   const [deleteTarget, setDeleteTarget] = useState<GroupDoc | null>(null);
 
-  const deleteGroup = useAction(api.chatCommandActions.deleteGroup);
+  const deleteGroup = useDeleteChatCommandGroupRequest();
 
   // No server-side "used by N commands" lookup exists — computed client-side
   // from the already-loaded commands list, per docs/services/commands-ui.md.
@@ -491,7 +495,7 @@ function GroupsTab({
       return;
     }
     try {
-      await deleteGroup({ instanceId, engineGroupId: deleteTarget.engineGroupId });
+      await deleteGroup(instanceId, deleteTarget.engineGroupId);
       toast({ title: "Group deleted" });
     } catch (err: unknown) {
       toast({

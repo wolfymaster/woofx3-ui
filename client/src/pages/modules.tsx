@@ -16,6 +16,7 @@ import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dia
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
 import { useModuleInstall } from "@/hooks/use-module-install";
@@ -141,7 +142,7 @@ export default function Modules() {
   } | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
 
-  const getModuleDetail = useAction(api.moduleDetail.getModuleDetail);
+  const getModuleDetail = useModuleDetailRequest();
   const [moduleDetail, setModuleDetail] = useState<ModuleDetailResult | null>(null);
   const [moduleDetailLoading, setModuleDetailLoading] = useState(false);
   const [moduleDetailError, setModuleDetailError] = useState<string | null>(null);
@@ -249,7 +250,7 @@ export default function Modules() {
     setModuleDetail(null);
     setModuleDetailError(null);
     let cancelled = false;
-    void getModuleDetail({ instanceId: instance._id, moduleId: detailModuleId })
+    void getModuleDetail(instance._id, detailModuleId)
       .then((detail) => {
         if (!cancelled) {
           setModuleDetail(detail);

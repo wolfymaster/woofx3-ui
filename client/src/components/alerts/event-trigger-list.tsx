@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { ChevronRight, ExternalLink, Plus, Zap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -13,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
+import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -383,7 +382,7 @@ function TriggerCard({
   const { toast } = useToast();
   const { catalogActions } = useWorkflowCatalog();
   const { byId: notRunning } = useNotRunningWorkflows();
-  const setEnabled = useAction(api.workflowActions.setEnabled);
+  const setEnabled = useSetWorkflowEnabledRequest();
   const [isSwitching, setIsSwitching] = useState(false);
   const { row } = trigger;
 
@@ -414,7 +413,7 @@ function TriggerCard({
   async function toggleEnabled() {
     setIsSwitching(true);
     try {
-      await setEnabled({ instanceId, engineWorkflowId: row.engineWorkflowId, isEnabled: !row.isEnabled });
+      await setEnabled(instanceId, row.engineWorkflowId, !row.isEnabled);
     } catch (err) {
       toast({
         title: row.isEnabled ? "Couldn't pause the trigger" : "Couldn't switch the trigger on",

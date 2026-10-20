@@ -1,3 +1,4 @@
+import type { TwitchHelixResult } from "@woofx3/api";
 import { ConvexError, v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, action } from "./_generated/server";
@@ -14,13 +15,15 @@ import {
   parseHelixBody,
   parseHelixSnoozeResult,
 } from "./lib/adBreaks";
+import type { EngineApi } from "./lib/engineInstanceUrl";
 import { type AuthorizedTwitchCall, authorizeTwitch, missingTwitchScopeMessage } from "./lib/twitchAuth";
+import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 
 // The Ad breaks dashboard widget's schedule and snooze, straight to Helix like
-// convex/pins.ts and convex/streamInfo.ts: Convex already holds a refreshable
-// broadcaster token, and Twitch's ad schedule is not something the generic
-// engine surface should describe. The engine's part is the ad-break events,
-// which reach the widget over the stream-event session.
+// convex/pins.ts, or through an engine that advertises twitch.ads and makes
+// the same calls (convex/lib/twitchEngineHelix.ts). Convex holds a refreshable
+// broadcaster token either way. The engine's other part is the ad-break
+// events, which reach the widget over the stream-event session.
 //
 // Any member may snooze, not only owners and admins. A snooze only pushes the
 // next ad back (Twitch refills them over time), it is the kind of call a
@@ -42,17 +45,31 @@ async function authorizeAds(ctx: ActionCtx, instanceId: Id<"instances">, scope: 
   }
 }
 
-async function callHelix(
+const OPERATIONS: Record<
+  AdHelixOperation,
+  { url: string; method: "GET" | "POST"; viaEngine: (engine: EngineApi) => Promise<TwitchHelixResult> }
+> = {
+  read: { url: TWITCH_ADS_URL, method: "GET", viaEngine: (engine) => engine.twitchGetAdSchedule() },
+  snooze: { url: TWITCH_SNOOZE_URL, method: "POST", viaEngine: (engine) => engine.twitchSnoozeNextAd() },
+};
+
+export async function callHelix(
   call: AuthorizedTwitchCall,
-  operation: AdHelixOperation,
-  url: string,
-  method: "GET" | "POST"
+  route: TwitchHelixRoute,
+  operation: AdHelixOperation
 ): Promise<unknown> {
+  const { url, method, viaEngine } = OPERATIONS[operation];
   let response: Response;
   try {
-    response = await fetch(`${url}?broadcaster_id=${encodeURIComponent(call.broadcasterUserId)}`, {
-      method,
-      headers: { Authorization: `Bearer ${call.accessToken}`, "Client-Id": call.clientId },
+    response = await helixResponse(route, {
+      operation: operation === "read" ? "getAdSchedule" : "snoozeNextAd",
+      kind: operation === "read" ? "read" : "write",
+      viaEngine,
+      direct: () =>
+        fetch(`${url}?broadcaster_id=${encodeURIComponent(call.broadcasterUserId)}`, {
+          method,
+          headers: { Authorization: `Bearer ${call.accessToken}`, "Client-Id": call.clientId },
+        }),
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
@@ -72,7 +89,7 @@ export const getSchedule = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<AdSchedule> => {
     const call = await authorizeAds(ctx, args.instanceId, AD_READ_SCOPE);
-    const body = await callHelix(call, "read", TWITCH_ADS_URL, "GET");
+    const body = await callHelix(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.ads"), "read");
     const schedule = parseHelixAdSchedule(body, new Date().toISOString());
     if (!schedule) {
       throw new ConvexError("Twitch answered with an ad schedule this page cannot read.");
@@ -85,7 +102,7 @@ export const snoozeNextAd = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<AdSnoozeResult> => {
     const call = await authorizeAds(ctx, args.instanceId, AD_MANAGE_SCOPE);
-    const body = await callHelix(call, "snooze", TWITCH_SNOOZE_URL, "POST");
+    const body = await callHelix(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.ads"), "snooze");
     const result = parseHelixSnoozeResult(body, new Date().toISOString());
     if (!result) {
       throw new ConvexError("Twitch snoozed the ad but answered with something this page cannot read.");

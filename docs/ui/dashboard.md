@@ -101,7 +101,7 @@ built by `mergeActivity` in `client/src/lib/activity-feed.ts`:
   event types (CloudEvent `type`), which decides what it logs and pushes, and
   every Events widget on that engine shows it. The widget's filter reads it with
   `getEventLogSettings` and writes it with `setEventLogSelection`
-  (`hooks/use-event-log-settings.ts`, shared by every widget on the page and read
+  (`engine/hooks/use-event-log-settings.ts`, shared by every widget on the page and read
   again on reconnect and whenever the filter opens). The checklist lists the
   engine's `offered` types grouped by the module of the trigger that fires each
   (`eventTypeGroups`; a type no installed trigger claims shows as its raw type),
@@ -117,7 +117,7 @@ built by `mergeActivity` in `client/src/lib/activity-feed.ts`:
   (`listEvents({ types: enabled })` on the transport), read on mount, whenever
   `enabled` changes, and again on every reconnect because the push is not
   gapless; pushed events of the enabled types go on top, deduplicated by event
-  id (`hooks/use-event-log.ts`). Alerts come from `engineAlerts.listForInstance`.
+  id (`engine/hooks/use-event-log.ts`). Alerts come from `engineAlerts.listForInstance`.
 - **Older engines.** An engine without the `events.log` capability has no
   selection and no log. The widget shows a "Live only" badge, disables the
   filter with a tooltip to update the engine, and shows alerts plus whatever the
@@ -253,6 +253,11 @@ stream preview, live pill, counter cards, Clip. It is not a widget and is not in
 the layout — it spans the whole dashboard and is hidden per browser through the
 `$commandBarHidden` nanostore.
 
+Clip creates the clip from `convex/twitchClips.ts`, on Helix or through an
+engine with `twitch.clips` while the `twitch.engineClips` flag is on (see
+[Helix calls through the engine](#helix-calls-through-the-engine)). Stream
+recap clips stay in Convex.
+
 The counter cards are a **projection of counter resources**, not a store of their
 own. A card reads its number from the `resourceValues` mirror and its name and
 goals from the counter's `moduleResourceInstances` row, through the same
@@ -274,9 +279,12 @@ Values arrive by webhook while the dashboard is open, and the bar calls
 
 For a streamer with nobody else modding: block a phrase, time out or ban a user,
 or lock chat down, in seconds and without leaving the dashboard. Every call goes
-straight to Helix from `convex/moderation.ts` with the broadcaster's token, the
-same path as the announcement and shoutout controls; the engine exposes no
-moderation methods.
+to Helix from `convex/moderation.ts` with the broadcaster's token, the same
+path as the announcement and shoutout controls, or through an engine with
+`twitch.moderation` (see
+[Helix calls through the engine](#helix-calls-through-the-engine)). Reads take
+the engine path on the capability alone; writes, and the user lookup before a
+timeout or ban, also need the `twitch.engineModeration` flag.
 
 The widget is three stacked sections, ordered by how fast each has to happen:
 
@@ -557,12 +565,32 @@ accepted runs bump `lastUsedAt` / `useCount`, refused or failed ones set
 `lastFailedAt` / `lastFailure`. The decision logic is pure and tested in
 `convex/lib/macroTrigger.test.ts`.
 
+## Helix calls through the engine
+
+The widgets below call Twitch Helix from Convex with the broadcaster's link
+token. An engine that advertises a `twitch.*` capability can make the same
+calls itself, with the same link's token, and answer with Twitch's own status
+and body. `convex/lib/twitchEngineHelix.ts` is the one place that chooses:
+
+- `twitchHelixRoute` picks the engine only when it is registered and lists the
+  capability (asked once per action, with a 3s limit). A riskier switch also
+  names a feature flag, checked first, so while the flag is off for the
+  instance the calls go to Helix and the engine is not asked anything.
+- `helixResponse` hands the engine's answer back as a `Response`, so each
+  module's status checks, parsers and error sentences are the same on both
+  paths.
+- When the engine has no answer from Twitch (`not_linked`, `unavailable`,
+  `invalid_arguments`, or the engine is unreachable) the call goes to Helix
+  directly, and the fallback is logged. A read also falls back after `timeout`
+  or `failed`. A write does not: Twitch may already have applied it, so it
+  fails as a Twitch 504 (timeout) or 502 (failed) instead of being sent twice.
+
 ## Stream info
 
 Edits the channel's title, category and tags, and drops stream markers, without
-leaving for Twitch's own dashboard. Everything goes straight to Helix from
-`convex/streamInfo.ts`, like the other Helix actions here, so it keeps working
-while no engine is running. Every call needs one scope,
+leaving for Twitch's own dashboard. Every call goes to Helix from
+`convex/streamInfo.ts`, or through an engine with `twitch.streamInfo` (see
+above), so it keeps working while no engine is running. Every call needs one scope,
 `channel:manage:broadcast` — reads included, although Get Channel Information
 needs none, so a link missing the scope shows a single "reconnect Twitch" state
 instead of a card that shows data and refuses every button.
@@ -629,11 +657,19 @@ keyed by its message id so it is added once, and can then be pinned again from
 here. There is no EventSub type for pinning, which is why the current pin is
 polled rather than pushed.
 
+Reading, pinning, re-posting and unpinning go to Helix from `convex/pins.ts`,
+or through an engine with `twitch.pins` (see
+[Helix calls through the engine](#helix-calls-through-the-engine)): the
+current pin on the capability alone, the writes only while the
+`twitch.enginePins` flag is on. The history stays in Convex.
+
 Re-pinning has two paths, chosen by `convex/lib/pinStrategy.ts`: reuse the
 stored message id when the entry was created during the current broadcast,
 otherwise re-post the text and pin the new message, since a message id stops
 being pinnable once its stream ends. A refusal falls back to re-posting anyway —
-the rule exists to keep that fallback rare, not to replace it. History rows
+the rule exists to keep that fallback rare, not to replace it. A pin the engine
+sent but could not confirm does not fall back: Twitch may have pinned it, and a
+re-post would put the message in chat twice. History rows
 predating this feature were hand-written Activity-panel notes; they carry no
 message id and so always take the re-post path.
 
@@ -646,6 +682,17 @@ an inline hint. These endpoints have been in open beta since 2026-05-15.
 
 Queues Twitch shoutouts and sends them one at a time within the endpoint's
 cooldown.
+
+The chatter list, the confirmation lookup and each send go to Helix, or through
+an engine with `twitch.chat` (see
+[Helix calls through the engine](#helix-calls-through-the-engine)). Reads take
+the engine path on the capability alone; sends, from this queue and from
+Broadcast Controls, also need the `twitch.engineShoutouts` flag. Chat messages
+and announcements (Broadcast Controls, the macro pad and the Go live
+announcement) need `twitch.engineChat`. The queue itself stays in Convex. A
+queued shoutout the engine could not confirm fails like a Twitch 5xx and is
+retried after its backoff, which cannot shout out twice: Twitch refuses a
+second shoutout to the same channel within the hour.
 
 The autocomplete lists **who is currently in chat**. Nothing in woofx3 tracks
 chat presence — the only signal anywhere is the per-message chat event, and no
@@ -687,11 +734,12 @@ countdown to the next scheduled ad, when the last one ran, the preroll-free
 time left, and a snooze button with the snoozes left and when the next one
 refills. While an ad plays the widget shows "Ad running, back in m:ss".
 
-The schedule and the snooze go straight to Helix from `convex/adBreaks.ts`
-(Get Ad Schedule under `channel:read:ads`, Snooze Next Ad under
-`channel:manage:ads`), the same pattern as pins and stream info: Convex holds
-a refreshable broadcaster token, and the generic engine surface carries
-nothing Twitch-specific. `authorizeTwitch` checks membership and the scope.
+The schedule and the snooze go to Helix from `convex/adBreaks.ts` (Get Ad
+Schedule under `channel:read:ads`, Snooze Next Ad under `channel:manage:ads`),
+or through an engine with `twitch.ads` (see
+[Helix calls through the engine](#helix-calls-through-the-engine)). A snooze
+the engine could not confirm is not resent, since a second one would spend
+another snooze. `authorizeTwitch` checks membership and the scope.
 Any member may snooze: a snooze only pushes the next ad back, and it is a call
 a moderator running the stream makes on the spot. Helix documents its ad
 times as RFC3339 but also answers with epoch seconds (a number or a numeric

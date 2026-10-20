@@ -189,9 +189,19 @@ export default defineSchema({
     // owner could otherwise opt their own instance in. See
     // lib/marketplaceAccess.ts.
     marketplaceDevAccess: v.optional(v.boolean()),
+    // What the engine last reported about itself, recorded for operators
+    // deciding when a capability check can be retired; gating never reads
+    // them. See lib/engineReport.ts. engineSeenAt is the last time it
+    // answered either call, and is the ops API's measure of a recently
+    // active instance.
+    engineVersion: v.optional(v.string()),
+    engineCapabilityIds: v.optional(v.array(v.string())),
+    engineCapabilitiesSeenAt: v.optional(v.number()),
+    engineSeenAt: v.optional(v.number()),
   })
     .index("by_account", ["accountId"])
-    .index("by_webhook_secret", ["webhookSecret"]),
+    .index("by_webhook_secret", ["webhookSecret"])
+    .index("by_engine_seen", ["engineSeenAt"]),
 
   // instanceLiveState: live stream presence per instance, driven by STREAM_ONLINE/OFFLINE
   // engine events (and best-effort poll fallback). One row per instance.

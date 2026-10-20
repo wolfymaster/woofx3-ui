@@ -1,6 +1,6 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { useMemo } from "react";
+import { useResourceInstancesOfKinds } from "@/engine/hooks/use-module-resources";
+import { useAlertWidgetNames, useScenes } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import {
   type ActionObject,
@@ -20,8 +20,8 @@ const NONE_CREATED: readonly ResourceInstanceRow[] = [];
  * (`scenes.list`), an alert widget's name (`sceneWidgets.alertWidgetNames`).
  * `undefined` while a list loads.
  *
- * Resource instances come from one `moduleResourceInstances.listByKinds` query
- * for every kind any object's actions name, since which kinds those are depends
+ * Resource instances come from one read (`useResourceInstancesOfKinds`) for
+ * every kind any object's actions name, since which kinds those are depends
  * on the installed modules. `created` are instances made in the picker that the
  * mirror may not hold yet. A query runs only when some object needs it.
  */
@@ -46,15 +46,9 @@ export function useActionObjectInstances(
   const needsSource = (source: "scenes" | "alertWidgets") =>
     objects.some((object) => object.target?.type === "source" && object.target.source === source);
 
-  const resourceRows = useQuery(
-    api.moduleResourceInstances.listByKinds,
-    instanceId && kinds.length > 0 ? { instanceId, kinds } : "skip"
-  );
-  const scenes = useQuery(api.scenes.list, instanceId && needsSource("scenes") ? { instanceId } : "skip");
-  const alertWidgetNames = useQuery(
-    api.sceneWidgets.alertWidgetNames,
-    instanceId && needsSource("alertWidgets") ? { instanceId } : "skip"
-  );
+  const resourceRows = useResourceInstancesOfKinds(instanceId ?? null, kinds);
+  const scenes = useScenes(instanceId && needsSource("scenes") ? instanceId : null);
+  const alertWidgetNames = useAlertWidgetNames(instanceId && needsSource("alertWidgets") ? instanceId : null);
 
   return useMemo(() => {
     const result = new Map<string, readonly ObjectInstance[] | undefined>();

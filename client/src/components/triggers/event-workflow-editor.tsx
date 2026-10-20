@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { Loader2, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -9,6 +7,11 @@ import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
 import { SaveState } from "@/components/triggers/save-state";
 import { TriggerCard } from "@/components/triggers/trigger-card";
 import { Button } from "@/components/ui/button";
+import {
+  useCreateWorkflowRequest,
+  useSetWorkflowEnabledRequest,
+  useUpdateWorkflowRequest,
+} from "@/engine/hooks/use-workflows";
 import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -51,9 +54,9 @@ export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }:
   const [, navigate] = useLocation();
   const { instance } = useInstance();
   const { toast } = useToast();
-  const createFromDefinition = useAction(api.workflowActions.createFromDefinition);
-  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
-  const setEnabled = useAction(api.workflowActions.setEnabled);
+  const createFromDefinition = useCreateWorkflowRequest();
+  const updateFromDefinition = useUpdateWorkflowRequest();
+  const setEnabled = useSetWorkflowEnabledRequest();
 
   const [expandedTriggerId, setExpandedTriggerId] = useState<string | null>(null);
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);

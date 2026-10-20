@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { bareKind } from "@convex/lib/resourceKinds";
-import { useQuery } from "convex/react";
 import { Loader2, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -15,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import type { AlertMenuSection } from "@/lib/alert-groups";
@@ -34,7 +33,7 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
 export function ResourceActionEditors({ kind, instance }: { kind: string; instance: ResourceInstanceDoc }) {
   const { instance: engineInstance } = useInstance();
   const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
-  const workflows = useQuery(api.workflows.list, engineInstance ? { instanceId: engineInstance._id } : "skip");
+  const workflows = useWorkflows(engineInstance ? engineInstance._id : null);
 
   // The trigger being added, on its event's list, until it is saved or dropped.
   const [adding, setAdding] = useState<{ event: string; request: NewTriggerRequest } | null>(null);

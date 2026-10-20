@@ -1,8 +1,8 @@
 import { Clock, Gamepad2, Gift, HandHeart, Heart, Radio, UserPlus, Users, Zap } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Uptime } from "@/components/common/uptime";
+import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useInstance } from "@/hooks/use-instance";
-import { useLiveState } from "@/hooks/use-live-state";
 import { EMPTY_TALLIES, STREAM_TALLY_EVENTS, type StreamTallies, tallyStreamEvent } from "@/lib/stream-tallies";
 import { transport } from "@/lib/transport";
 
