@@ -487,11 +487,7 @@ export const sweepStalledQueues = internalMutation({
 
 async function sendShoutoutNow(ctx: ActionCtx, instanceId: Id<"instances">, toBroadcasterId: string): Promise<void> {
   const call = await authorizeTwitchUnattended(ctx, instanceId, SHOUTOUT_SCOPE);
-  await sendQueuedShoutout(
-    call,
-    await twitchHelixRoute(ctx, instanceId, "twitch.chat", "twitch.engineShoutouts"),
-    toBroadcasterId
-  );
+  await sendQueuedShoutout(call, await twitchHelixRoute(ctx, instanceId, "twitch.chat"), toBroadcasterId);
 }
 
 /**

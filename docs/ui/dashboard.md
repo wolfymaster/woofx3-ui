@@ -254,7 +254,7 @@ the layout — it spans the whole dashboard and is hidden per browser through th
 `$commandBarHidden` nanostore.
 
 Clip creates the clip from `convex/twitchClips.ts`, on Helix or through an
-engine with `twitch.clips` while the `twitch.engineClips` flag is on (see
+engine with `twitch.clips` (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). Stream
 recap clips stay in Convex.
 
@@ -282,9 +282,7 @@ or lock chat down, in seconds and without leaving the dashboard. Every call goes
 to Helix from `convex/moderation.ts` with the broadcaster's token, the same
 path as the announcement and shoutout controls, or through an engine with
 `twitch.moderation` (see
-[Helix calls through the engine](#helix-calls-through-the-engine)). Reads take
-the engine path on the capability alone; writes, and the user lookup before a
-timeout or ban, also need the `twitch.engineModeration` flag.
+[Helix calls through the engine](#helix-calls-through-the-engine)).
 
 The widget is three stacked sections, ordered by how fast each has to happen:
 
@@ -549,9 +547,7 @@ calls itself, with the same link's token, and answer with Twitch's own status
 and body. `convex/lib/twitchEngineHelix.ts` is the one place that chooses:
 
 - `twitchHelixRoute` picks the engine only when it is registered and lists the
-  capability (asked once per action, with a 3s limit). A riskier switch also
-  names a feature flag, checked first, so while the flag is off for the
-  instance the calls go to Helix and the engine is not asked anything.
+  capability (asked once per action, with a 3s limit).
 - `helixResponse` hands the engine's answer back as a `Response`, so each
   module's status checks, parsers and error sentences are the same on both
   paths.
@@ -635,9 +631,8 @@ polled rather than pushed.
 
 Reading, pinning, re-posting and unpinning go to Helix from `convex/pins.ts`,
 or through an engine with `twitch.pins` (see
-[Helix calls through the engine](#helix-calls-through-the-engine)): the
-current pin on the capability alone, the writes only while the
-`twitch.enginePins` flag is on. The history stays in Convex.
+[Helix calls through the engine](#helix-calls-through-the-engine)). The history
+stays in Convex.
 
 Re-pinning has two paths, chosen by `convex/lib/pinStrategy.ts`: reuse the
 stored message id when the entry was created during the current broadcast,
@@ -661,11 +656,8 @@ cooldown.
 
 The chatter list, the confirmation lookup and each send go to Helix, or through
 an engine with `twitch.chat` (see
-[Helix calls through the engine](#helix-calls-through-the-engine)). Reads take
-the engine path on the capability alone; sends, from this queue and from
-Broadcast Controls, also need the `twitch.engineShoutouts` flag. Chat messages
-and announcements (Broadcast Controls, the macro pad and the Go live
-announcement) need `twitch.engineChat`. The queue itself stays in Convex. A
+[Helix calls through the engine](#helix-calls-through-the-engine)). The queue
+itself stays in Convex. A
 queued shoutout the engine could not confirm fails like a Twitch 5xx and is
 retried after its backoff, which cannot shout out twice: Twitch refuses a
 second shoutout to the same channel within the hour.

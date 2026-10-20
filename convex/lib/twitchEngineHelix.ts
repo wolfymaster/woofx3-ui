@@ -10,7 +10,6 @@ import {
   hasEngineCapability,
 } from "./engineCapabilities";
 import { createEngineRpcSession, type EngineApi } from "./engineInstanceUrl";
-import type { FeatureFlagKey } from "./featureFlags";
 import { EngineTimeoutError, withEngineTimeout } from "./inboundWebhookRelay";
 
 // The one place a dashboard Helix call chooses between the engine and Twitch.
@@ -70,20 +69,12 @@ export async function chooseTwitchHelixRoute(gate: TwitchHelixRouteGate): Promis
  * Where an action's Helix calls go. Resolved once per action, so an action
  * making several calls asks the engine for its capabilities once. An
  * instance not registered with its engine calls Helix, as it always has.
- *
- * `flag` holds a riskier switch back until it is rolled out: while it is off
- * for the instance the calls go to Helix, and the engine is not asked
- * anything.
  */
 export async function twitchHelixRoute(
   ctx: ActionCtx,
   instanceId: Id<"instances">,
-  capability: EngineCapability,
-  flag?: FeatureFlagKey
+  capability: EngineCapability
 ): Promise<TwitchHelixRoute> {
-  if (flag !== undefined && !(await ctx.runQuery(internal.featureFlags.isOnForInstance, { key: flag, instanceId }))) {
-    return directHelixRoute(instanceId);
-  }
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
   if (!instance?.clientId || !instance.clientSecret) {
     return directHelixRoute(instanceId);

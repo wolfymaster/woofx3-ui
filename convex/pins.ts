@@ -33,8 +33,7 @@ import { parsePinsResponse, type TwitchPin } from "./lib/twitchPins";
 // These endpoints are in open beta as of 2026-05-15 and may change.
 //
 // The Helix calls go through an engine that advertises twitch.pins when it
-// does (convex/lib/twitchEngineHelix.ts); writes only while the
-// twitch.enginePins flag is on for the instance.
+// does (convex/lib/twitchEngineHelix.ts).
 
 const TWITCH_PINS_URL = "https://api.twitch.tv/helix/chat/pins";
 
@@ -179,11 +178,6 @@ export const recordPinned = internalMutation({
 // Twitch
 // ---------------------------------------------------------------------------
 
-/** Reads follow the engine's capability; writes also wait for the rollout flag. */
-function pinsRoute(ctx: ActionCtx, instanceId: Id<"instances">, kind: "read" | "write"): Promise<TwitchHelixRoute> {
-  return twitchHelixRoute(ctx, instanceId, "twitch.pins", kind === "write" ? "twitch.enginePins" : undefined);
-}
-
 export async function fetchCurrentPin(
   { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
   route: TwitchHelixRoute
@@ -223,7 +217,7 @@ export const currentPin = action({
       throw new Error("Not authenticated");
     }
     const twitch = await authorizeTwitch(ctx, args.instanceId, PIN_READ_SCOPE);
-    const pin = await fetchCurrentPin(twitch, await pinsRoute(ctx, args.instanceId, "read"));
+    const pin = await fetchCurrentPin(twitch, await twitchHelixRoute(ctx, args.instanceId, "twitch.pins"));
     if (!pin) {
       return null;
     }
@@ -372,7 +366,7 @@ export const pinNewMessage = action({
       twitch,
       text,
       { pin: true },
-      await pinsRoute(ctx, args.instanceId, "write")
+      await twitchHelixRoute(ctx, args.instanceId, "twitch.pins")
     );
     await ctx.runMutation(internal.pins.recordPinned, {
       instanceId: args.instanceId,
@@ -423,7 +417,7 @@ export const repinFromHistory = action({
 
     const { messageId, resent } = await repinOnTwitch(
       twitch,
-      await pinsRoute(ctx, args.instanceId, "write"),
+      await twitchHelixRoute(ctx, args.instanceId, "twitch.pins"),
       plan,
       entry.content,
       async () => {
@@ -448,7 +442,7 @@ export const unpinCurrent = action({
   args: { instanceId: v.id("instances"), messageId: v.string() },
   handler: async (ctx, args): Promise<{ ok: true }> => {
     const twitch = await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
-    await unpinOnTwitch(twitch, await pinsRoute(ctx, args.instanceId, "write"), args.messageId);
+    await unpinOnTwitch(twitch, await twitchHelixRoute(ctx, args.instanceId, "twitch.pins"), args.messageId);
     return { ok: true };
   },
 });
