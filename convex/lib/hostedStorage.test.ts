@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
 import { ENTITLEMENT_CATALOG, resolveEntitlements } from "./entitlements";
-import { formatStorageBytes, hostedStorageLimits, hostedUploadRefusal, isOnHostedStorage } from "./hostedStorage";
+import {
+  formatStorageBytes,
+  hostedStorageLimits,
+  hostedUploadRefusal,
+  isByteLimit,
+  isOnHostedStorage,
+} from "./hostedStorage";
 
 const GiB = 1024 * 1024 * 1024;
 const MiB = 1024 * 1024;
@@ -50,6 +56,34 @@ describe("hostedStorageLimits", () => {
       totalBytes: 50 * GiB,
       fileBytes: null,
     });
+  });
+});
+
+describe("hostedStorageLimits with an engine override", () => {
+  const plan = {
+    key: "pro",
+    name: "Pro",
+    features: [],
+    limits: [{ key: "storage.hostedAssetBytes", value: GiB }],
+  };
+
+  it("takes the engine's value where it sets one and the account's elsewhere", () => {
+    expect(
+      hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), { totalBytes: 200 * MiB })
+    ).toEqual({ totalBytes: 200 * MiB, fileBytes: 10 * MiB });
+  });
+
+  it("can make a limit unlimited, or lower it to nothing", () => {
+    expect(
+      hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), { totalBytes: null, fileBytes: 0 })
+    ).toEqual({ totalBytes: null, fileBytes: 0 });
+  });
+});
+
+describe("isByteLimit", () => {
+  it("accepts whole bytes and null, nothing else", () => {
+    expect([0, 1024, null].every(isByteLimit)).toBe(true);
+    expect([-1, 1.5, "1", undefined, Number.NaN].some(isByteLimit)).toBe(false);
   });
 });
 

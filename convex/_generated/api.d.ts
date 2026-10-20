@@ -151,6 +151,7 @@ import type * as lib_ops_engineCapabilityCounts from "../lib/ops/engineCapabilit
 import type * as lib_ops_notificationRequest from "../lib/ops/notificationRequest.js";
 import type * as lib_ops_planCounts from "../lib/ops/planCounts.js";
 import type * as lib_ops_routes from "../lib/ops/routes.js";
+import type * as lib_ops_storageLimitsRequest from "../lib/ops/storageLimitsRequest.js";
 import type * as lib_pinStrategy from "../lib/pinStrategy.js";
 import type * as lib_pkce from "../lib/pkce.js";
 import type * as lib_placementOpacity from "../lib/placementOpacity.js";
@@ -244,6 +245,7 @@ import type * as ops_engines from "../ops/engines.js";
 import type * as ops_http from "../ops/http.js";
 import type * as ops_notifications from "../ops/notifications.js";
 import type * as ops_reads from "../ops/reads.js";
+import type * as ops_storageLimits from "../ops/storageLimits.js";
 import type * as pageIntros from "../pageIntros.js";
 import type * as pins from "../pins.js";
 import type * as plans from "../plans.js";
@@ -440,6 +442,7 @@ declare const fullApi: ApiFromModules<{
   "lib/ops/notificationRequest": typeof lib_ops_notificationRequest;
   "lib/ops/planCounts": typeof lib_ops_planCounts;
   "lib/ops/routes": typeof lib_ops_routes;
+  "lib/ops/storageLimitsRequest": typeof lib_ops_storageLimitsRequest;
   "lib/pinStrategy": typeof lib_pinStrategy;
   "lib/pkce": typeof lib_pkce;
   "lib/placementOpacity": typeof lib_placementOpacity;
@@ -533,6 +536,7 @@ declare const fullApi: ApiFromModules<{
   "ops/http": typeof ops_http;
   "ops/notifications": typeof ops_notifications;
   "ops/reads": typeof ops_reads;
+  "ops/storageLimits": typeof ops_storageLimits;
   pageIntros: typeof pageIntros;
   pins: typeof pins;
   plans: typeof plans;

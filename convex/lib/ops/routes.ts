@@ -15,6 +15,7 @@ export type OpsRoute =
   | { method: "GET"; name: "plans.list" }
   | { method: "GET"; name: "notifications.list" }
   | { method: "POST"; name: "engines.act"; instanceId: string; action: EngineAction }
+  | { method: "POST"; name: "instances.setStorageLimits"; instanceId: string }
   | { method: "POST"; name: "notifications.create" }
   | { method: "POST"; name: "notifications.delete"; notificationId: string };
 
@@ -38,6 +39,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
   if (method === "POST") {
     if (segments.length === 3 && first === "engines" && second && third && ENGINE_ACTIONS.has(third)) {
       return { method, name: "engines.act", instanceId: second, action: third as EngineAction };
+    }
+    if (segments.length === 3 && first === "instances" && second && third === "storage-limits") {
+      return { method, name: "instances.setStorageLimits", instanceId: second };
     }
     if (segments.length === 1 && first === "notifications") {
       return { method, name: "notifications.create" };

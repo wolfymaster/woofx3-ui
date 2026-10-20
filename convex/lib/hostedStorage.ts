@@ -1,4 +1,5 @@
 import type { StorageConfig } from "@woofx3/api";
+import { v } from "convex/values";
 import type { Entitlements } from "./entitlements";
 
 /**
@@ -35,13 +36,41 @@ export interface HostedStorageLimits {
   fileBytes: number | null;
 }
 
-export function hostedStorageLimits(entitlements: Entitlements): HostedStorageLimits {
+/**
+ * An engine's own limits, which an operator sets on one instance and which
+ * win over its account's entitlements. A field left out inherits the
+ * account's value; null is unlimited. Usage is counted per engine, so the
+ * limit can be too, while every other entitlement stays the account's.
+ */
+export interface HostedStorageOverride {
+  totalBytes?: number | null;
+  fileBytes?: number | null;
+}
+
+export const hostedStorageOverrideValidator = v.object({
+  totalBytes: v.optional(v.union(v.number(), v.null())),
+  fileBytes: v.optional(v.union(v.number(), v.null())),
+});
+
+/** The limits that apply to one engine: its override where it sets one, otherwise the account's entitlements. */
+export function hostedStorageLimits(
+  entitlements: Entitlements,
+  override: HostedStorageOverride = {}
+): HostedStorageLimits {
   const totalBytes = entitlements.limits["storage.hostedAssetBytes"];
   const fileBytes = entitlements.limits["storage.hostedFileBytes"];
   if (totalBytes === undefined || fileBytes === undefined) {
     throw new Error("Hosted storage limits were not resolved");
   }
-  return { totalBytes, fileBytes };
+  return {
+    totalBytes: override.totalBytes === undefined ? totalBytes : override.totalBytes,
+    fileBytes: override.fileBytes === undefined ? fileBytes : override.fileBytes,
+  };
+}
+
+/** Whether a value is a limit an operator could mean: a whole number of bytes of at least 0, or null for unlimited. */
+export function isByteLimit(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0);
 }
 
 /**
@@ -51,11 +80,11 @@ export function hostedStorageLimits(entitlements: Entitlements): HostedStorageLi
  */
 export function hostedUploadRefusal(limits: HostedStorageLimits, usedBytes: number, size: number): string | null {
   if (limits.fileBytes !== null && size > limits.fileBytes) {
-    return `This file is ${formatStorageBytes(size)}; your plan allows uploads of up to ${formatStorageBytes(limits.fileBytes)} each.`;
+    return `This file is ${formatStorageBytes(size)}; this engine allows uploads of up to ${formatStorageBytes(limits.fileBytes)} each.`;
   }
   if (limits.totalBytes !== null && usedBytes + size > limits.totalBytes) {
     const left = Math.max(0, limits.totalBytes - usedBytes);
-    return `Uploading this would exceed your plan's ${formatStorageBytes(limits.totalBytes)} of asset storage (${formatStorageBytes(left)} left). Delete assets you no longer need to make room.`;
+    return `Uploading this would exceed this engine's ${formatStorageBytes(limits.totalBytes)} of asset storage (${formatStorageBytes(left)} left). Delete assets you no longer need to make room.`;
   }
   return null;
 }
