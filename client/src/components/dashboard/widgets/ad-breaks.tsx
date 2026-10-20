@@ -6,9 +6,9 @@ import { AlarmClockOff, Loader2, Megaphone } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useInstance } from "@/hooks/use-instance";
-import { useLiveState } from "@/hooks/use-live-state";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
 import { actionErrorMessage } from "@/lib/action-error";
 import {

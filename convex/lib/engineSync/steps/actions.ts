@@ -19,8 +19,9 @@ export const actionsStep: SyncStep = {
     const raw = await api.getActions();
     const snapshots = (raw ?? []).map((a) => {
       // `returns` is the contract's name; an engine predating that rename still
-      // sends the same JSON as `outputSchema`.
-      const row = a as typeof a & { type?: string; outputSchema?: string };
+      // sends the same JSON as `outputSchema`. `sentence` is absent from engines
+      // older than action sentences, and from the type package they ship.
+      const row = a as typeof a & { type?: string; outputSchema?: string; sentence?: string };
       return {
         id: row.id,
         name: row.name,
@@ -29,6 +30,7 @@ export const actionsStep: SyncStep = {
         returns: row.returns ?? row.outputSchema,
         projectionKey: row.projectionKey,
         taxonomy: row.taxonomy,
+        sentence: row.sentence,
         handlerType: row.type,
         functionCall: row.call,
         createdByType: row.createdByType,

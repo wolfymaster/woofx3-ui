@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
-import type { ActionNode, TriggerNode } from "@/lib/workflow-tree";
-import { actionNodeSummary, triggerNodeSummary } from "./workflow-node-summary";
+import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import type { TriggerNode } from "@/lib/workflow-tree";
+import { alertLayoutSummary, triggerNodeSummary } from "./workflow-node-summary";
 
 function catalogTrigger(overrides: Partial<CatalogTriggerRow>): CatalogTriggerRow {
   return {
@@ -12,20 +12,6 @@ function catalogTrigger(overrides: Partial<CatalogTriggerRow>): CatalogTriggerRo
     color: "",
     icon: "Zap",
     event: "redeem.channelpoints.twitch",
-    ...overrides,
-  };
-}
-
-function catalogAction(overrides: Partial<CatalogActionRow>): CatalogActionRow {
-  return {
-    id: "a1",
-    name: "Send Chat Message",
-    description: "",
-    category: "twitch",
-    color: "",
-    icon: "MessageSquare",
-    handlerType: "function",
-    functionCall: "twitch.chat.send",
     ...overrides,
   };
 }
@@ -75,90 +61,7 @@ describe("triggerNodeSummary", () => {
   });
 });
 
-describe("actionNodeSummary", () => {
-  test("shows configured parameter values directly", () => {
-    const node: ActionNode = {
-      type: "action",
-      id: "a1",
-      action: "function",
-      parameters: { message: "Thanks for the follow!" },
-      function: "twitch.chat.send",
-    };
-    const catalog = [
-      catalogAction({
-        configFields: [{ id: "message", label: "Message", type: "text" }],
-      }),
-    ];
-    expect(actionNodeSummary(node, catalog)).toEqual(["Message: Thanks for the follow!"]);
-  });
-
-  test("formats select fields using the option label, not the raw value", () => {
-    const node: ActionNode = { type: "action", id: "a1", action: "function", parameters: { voice: "en-US-1" } };
-    const catalog = [
-      catalogAction({
-        configFields: [
-          {
-            id: "voice",
-            label: "Voice",
-            type: "select",
-            options: [{ value: "en-US-1", label: "Aria (US)" }],
-          },
-        ],
-      }),
-    ];
-    expect(actionNodeSummary(node, catalog)).toEqual(["Voice: Aria (US)"]);
-  });
-
-  test("omits empty parameter values", () => {
-    const node: ActionNode = { type: "action", id: "a1", action: "function", parameters: { message: "" } };
-    const catalog = [catalogAction({ configFields: [{ id: "message", label: "Message", type: "text" }] })];
-    expect(actionNodeSummary(node, catalog)).toEqual([]);
-  });
-
-  test("resolves resource_ref values to their friendly display name via the label map", () => {
-    const node: ActionNode = {
-      type: "action",
-      id: "a1",
-      action: "function",
-      parameters: { counter: "counters:counter:death_count" },
-    };
-    const catalog = [
-      catalogAction({
-        configFields: [{ id: "counter", label: "Counter", type: "resource_ref", kind: "counter" }],
-      }),
-    ];
-    const resourceLabels = new Map([["counters:counter:death_count", "Death Count"]]);
-    expect(actionNodeSummary(node, catalog, resourceLabels)).toEqual(["Counter: Death Count"]);
-  });
-
-  test("falls back to the raw canonical id when no label is resolved", () => {
-    const node: ActionNode = {
-      type: "action",
-      id: "a1",
-      action: "function",
-      parameters: { counter: "counters:counter:death_count" },
-    };
-    const catalog = [
-      catalogAction({
-        configFields: [{ id: "counter", label: "Counter", type: "resource_ref", kind: "counter" }],
-      }),
-    ];
-    expect(actionNodeSummary(node, catalog)).toEqual(["Counter: counters:counter:death_count"]);
-  });
-});
-
-describe("alert step summary", () => {
-  const alertAction = catalogAction({
-    name: "Alert",
-    functionCall: "alert",
-    configFields: [{ id: "layout", label: "Alert", type: "layout", surface: "alert" }],
-  });
-  const alertNode = (parameters: Record<string, unknown>): ActionNode => ({
-    type: "action",
-    id: "act_1",
-    function: "alert",
-    parameters,
-  });
+describe("alertLayoutSummary", () => {
   const entry = (id: string, zIndex: number, settings: Record<string, unknown>) => ({
     id,
     widgetCanonicalId: "woofx3:widget:text",
@@ -182,14 +85,10 @@ describe("alert step summary", () => {
         entry("text", 1, { text: "${trigger.data.userName} just followed!" }),
       ],
     };
-    expect(actionNodeSummary(alertNode({ layout }), [alertAction])).toEqual([
-      "Alert: “{userName} just followed!” · 2 layers",
-    ]);
+    expect(alertLayoutSummary(layout)).toBe("“{userName} just followed!” · 2 layers");
   });
 
   test("an empty layout reads as empty", () => {
-    expect(actionNodeSummary(alertNode({ layout: { width: 1920, height: 1080, widgets: [] } }), [alertAction])).toEqual(
-      ["Alert: Empty"]
-    );
+    expect(alertLayoutSummary({ width: 1920, height: 1080, widgets: [] })).toBe("Empty");
   });
 });

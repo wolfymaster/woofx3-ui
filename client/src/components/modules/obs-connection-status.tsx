@@ -1,6 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { AlertCircle, CheckCircle2, CircleHelp, Loader2 } from "lucide-react";
-import { useObsStatus } from "@/hooks/use-obs-status";
+import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { describeObsStatus, type ObsStatusTone } from "@/lib/obs-status";
 import { cn } from "@/lib/utils";
 

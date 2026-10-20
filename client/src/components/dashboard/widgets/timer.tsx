@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import { TIMER_KIND } from "@convex/lib/resourceKinds";
-import { useAction, useQuery } from "convex/react";
 import { Pause, Play, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link } from "wouter";
@@ -8,6 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  useRefreshResourceValuesRequest,
+  useResourceInstancesOfKind,
+  useResourceKind,
+  useResourceValues,
+} from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
 import { useResourceAction } from "@/hooks/use-resource-action";
 import { useTimerState } from "@/hooks/use-timer-state";
@@ -42,16 +46,10 @@ export function TimerWidget({ config, onConfigChange }: DashboardWidgetProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
 
-  const kindDefinition = useQuery(
-    api.resourceKinds.getForInstance,
-    instanceId ? { instanceId, kind: TIMER_KIND } : "skip"
-  );
-  const timers = useQuery(
-    api.moduleResourceInstances.listByKind,
-    instanceId ? { instanceId, kind: TIMER_KIND } : "skip"
-  );
-  const values = useQuery(api.resourceValues.listForInstance, instanceId ? { instanceId } : "skip");
-  const refreshValues = useAction(api.moduleResourceActions.refreshResourceValues);
+  const kindDefinition = useResourceKind(instanceId ?? null, TIMER_KIND);
+  const timers = useResourceInstancesOfKind(instanceId ?? null, TIMER_KIND);
+  const values = useResourceValues(instanceId ?? null);
+  const refreshValues = useRefreshResourceValuesRequest();
 
   // Values arrive by webhook while the dashboard is open; this fills in any
   // written before it was, or while a webhook went missing.
@@ -59,7 +57,7 @@ export function TimerWidget({ config, onConfigChange }: DashboardWidgetProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues({ instanceId, kind: TIMER_KIND }).catch(() => {
+    refreshValues(instanceId, TIMER_KIND).catch(() => {
       // The mirror still shows the last known value; the next change updates it.
     });
   }, [instanceId, refreshValues]);

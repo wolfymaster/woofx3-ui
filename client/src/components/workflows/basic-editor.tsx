@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { WorkflowDefinition } from "@woofx3/api";
-import { useAction } from "convex/react";
 import { ArrowLeft, ArrowRight, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -11,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useCreateWorkflowRequest } from "@/engine/hooks/use-workflows";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { actionGroupHeading, actionMenuGroups } from "@/lib/action-menu";
@@ -256,7 +255,7 @@ function ActionCardGroups({ actions, selectedId, onSelect, headingClassName }: A
     <div className="space-y-4">
       {groups.map((group, index) => (
         <div key={group.groupKey}>
-          <h4 className={headingClassName}>{actionGroupHeading(group, groups[index - 1], true)}</h4>
+          <h4 className={headingClassName}>{actionGroupHeading(group, groups[index - 1])}</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {group.actions.map((action) => (
               <PresetCard
@@ -311,7 +310,7 @@ export function BasicWorkflowEditor() {
   const { toast } = useToast();
   const { instance, instanceLoading, triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const instanceId = instance?._id;
-  const createFromDefinition = useAction(api.workflowActions.createFromDefinition);
+  const createFromDefinition = useCreateWorkflowRequest();
 
   const triggerCategoryOrder = useMemo(
     () => Array.from(new Set(triggerPresets.map((t) => t.category))).sort(),
@@ -503,10 +502,10 @@ export function BasicWorkflowEditor() {
       }
       const ids: string[] = [];
       for (const definition of previewDefinitions) {
-        const result = await createFromDefinition({
+        const result = await createFromDefinition(
           instanceId,
-          definition: escapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">,
-        });
+          escapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">
+        );
         ids.push(result.engineWorkflowId);
       }
       toast({

@@ -849,6 +849,9 @@ http.route({
           // Already `$`-escaped: the whole webhook payload is escaped on the
           // way in (see the escapeDollarKeys call on the envelope above).
           actions: event.command.actions ?? [],
+          engineWorkflowId: event.command.workflowId ?? "",
+          workflowError: event.command.workflowError ?? "",
+          steps: (event.command.steps ?? []) as unknown[],
           cooldown: event.command.cooldown,
           priority: event.command.priority,
           enabled: event.command.enabled,

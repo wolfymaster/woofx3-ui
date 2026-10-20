@@ -1,4 +1,4 @@
-import type { AggregationConfig, WaitConfig as EngineWaitConfig } from "@woofx3/api";
+import type { AggregationConfig, ConditionConfig, WaitConfig as EngineWaitConfig } from "@woofx3/api";
 
 /** A wait that pauses for an event (or an aggregation over events), optionally with a timeout. */
 export type EventWaitConfig = Extract<EngineWaitConfig, { type: "event" | "aggregation" }>;
@@ -221,4 +221,78 @@ export function waitNodeLabel(wait: WaitConfig): string {
       return `Until ${event} reaches ${threshold}`;
     }
   }
+}
+
+/**
+ * The engine evaluates a wait's match conditions against the waited event alone: its
+ * resolver has an `event` source and nothing else, so `${trigger...}` or a step's
+ * exports fail to resolve and the condition never matches. `env` is resolved by every
+ * resolver regardless of its sources.
+ */
+const WAIT_CONDITION_SOURCES = new Set(["event", "env"]);
+const REFERENCE = /\$\{([^{}]*)\}/g;
+const REFERENCE_SOURCE = /^([A-Za-z0-9_-]+)(\.|$)/;
+
+function referencesIn(value: unknown): string[] {
+  if (typeof value === "string") {
+    return Array.from(value.matchAll(REFERENCE), (match) => match[0]);
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(referencesIn);
+  }
+  return [];
+}
+
+/** The first reference whose source a wait's resolver does not have. A compound expression is not checked. */
+function unavailableReference(value: unknown): string | undefined {
+  return referencesIn(value).find((reference) => {
+    const source = REFERENCE_SOURCE.exec(reference.slice(2, -1).trim())?.[1];
+    return source !== undefined && !WAIT_CONDITION_SOURCES.has(source);
+  });
+}
+
+/** Why a wait's match condition can never match as written, or null when it can. */
+export function waitConditionProblem(condition: ConditionConfig): string | null {
+  const reference = unavailableReference(condition.field) ?? unavailableReference(condition.value);
+  if (reference) {
+    return `A wait checks only the event it waits for, so ${reference} is never available here and this condition can't match. Use the event's fields instead.`;
+  }
+  const field = condition.field.trim();
+  if (field !== "" && !field.includes("${")) {
+    return "Pick one of the event's fields with {. Plain text is compared as written, not read from the event.";
+  }
+  return null;
+}
+
+export type AggregationFieldResult = { ok: true; field: string | undefined } | { ok: false; message: string };
+
+/** A path into the event's payload, which is all the engine's lookup is rooted at. */
+const AGGREGATION_FIELD_PATH = /^data[.[]\S+$/;
+
+/**
+ * Reads the field an aggregation takes its number from. The engine wants a plain dot path
+ * rooted at the event, such as `data.amount`, and resolves it against `{ data }` only, so
+ * a reference to the waited event (`${event.data.amount}`, which the variable menu
+ * inserts) is converted to that path. Any other reference names something the engine
+ * never looks at. Empty means no field, and the engine then uses the payload's `amount`,
+ * or failing that its `value`.
+ */
+export function parseAggregationField(text: string): AggregationFieldResult {
+  const trimmed = text.trim();
+  if (trimmed === "") {
+    return { ok: true, field: undefined };
+  }
+  const whole = /^\$\{\s*([^{}]*?)\s*\}$/.exec(trimmed);
+  const path = whole ? whole[1] : trimmed;
+  if (path.includes("${") || (whole && !path.startsWith("event."))) {
+    return {
+      ok: false,
+      message: `The number is read from the event this step waits for, so ${trimmed} can't be used. Enter a path into it, like data.amount.`,
+    };
+  }
+  const field = path.startsWith("event.") ? path.slice("event.".length) : path;
+  if (!AGGREGATION_FIELD_PATH.test(field)) {
+    return { ok: false, message: "Start the path with data., like data.amount." };
+  }
+  return { ok: true, field };
 }

@@ -7,9 +7,6 @@ import type { ActionPreset } from "@/lib/workflow-presets";
  */
 export const BUILTIN_MODULE_LABEL = "Built-in";
 
-/** The rail entry that narrows to nothing, shown as "All actions". */
-export const ALL_SECTIONS = "__all__";
-
 /**
  * The family of the primitives every workflow is built from (Function, Print). Its
  * section leads the menu instead of sorting under "w".
@@ -27,7 +24,7 @@ const SYSTEM_SECTION_KEY = `taxonomy:${SYSTEM_FAMILY}`;
 const LEADING_SECTIONS = new Set([WORKFLOW_SECTION_KEY, SYSTEM_SECTION_KEY]);
 
 /**
- * Rail labels for taxonomy families, where the family name alone reads wrong as a
+ * Section labels for taxonomy families, where the family name alone reads wrong as a
  * heading over many entries. A phrase the UI owns; any other family is humanised.
  */
 const FAMILY_LABELS: Record<string, string> = {
@@ -37,7 +34,7 @@ const FAMILY_LABELS: Record<string, string> = {
   tools: "Stream tools",
 };
 
-/** Where an action is listed: a rail section and a heading inside it. */
+/** Where an action is listed: a section and a heading inside it. */
 export interface ActionPlacement {
   sectionKey: string;
   sectionLabel: string;
@@ -50,14 +47,8 @@ export interface ActionMenuGroup extends ActionPlacement {
   actions: ActionPreset[];
 }
 
-export interface ActionSectionCount {
-  key: string;
-  label: string;
-  count: number;
-}
-
 /**
- * Where the picker lists an action, read from its first `taxonomy` entry: the first
+ * Where an action is listed, read from its first `taxonomy` entry: the first
  * segment is the section, the second the heading inside it (`platform.obs` lists
  * under Platforms › OBS). An entry of one segment is a section with no headings.
  *
@@ -93,20 +84,13 @@ export function actionPlacement(preset: Pick<ActionPreset, "source" | "taxonomy"
  *
  * Workflow primitives lead either way; see WORKFLOW_SECTION_KEY.
  */
-export function actionMenuGroups(
-  presets: readonly ActionPreset[],
-  query: string,
-  section: string = ALL_SECTIONS
-): ActionMenuGroup[] {
+export function actionMenuGroups(presets: readonly ActionPreset[], query: string): ActionMenuGroup[] {
   const q = query.trim().toLowerCase();
   const groups = new Map<string, { placement: ActionPlacement; best: number; entries: ScoredAction[] }>();
   const sectionBest = new Map<string, number>();
 
   for (const preset of presets) {
     const placement = actionPlacement(preset);
-    if (section !== ALL_SECTIONS && placement.sectionKey !== section) {
-      continue;
-    }
     const score = matchScore(q, preset, placement);
     if (score === null) {
       continue;
@@ -153,49 +137,16 @@ export function actionMenuGroups(
 }
 
 /**
- * How many actions each section offers for `query`, in the order the sections appear,
- * for the picker's rail. Counts ignore which section is selected, so the rail keeps
- * showing where else a search has hits.
+ * The heading over a group. A section's first group names the section and its own
+ * heading (Stream tools › Counters), or the section alone when the group has no
+ * heading of its own (a module's section, or a one-segment taxonomy); later groups
+ * name their own heading.
  */
-export function actionSectionCounts(presets: readonly ActionPreset[], query: string): ActionSectionCount[] {
-  const counts: ActionSectionCount[] = [];
-  for (const group of actionMenuGroups(presets, query)) {
-    const last = counts[counts.length - 1];
-    if (last && last.key === group.sectionKey) {
-      last.count += group.actions.length;
-    } else {
-      counts.push({ key: group.sectionKey, label: group.sectionLabel, count: group.actions.length });
-    }
-  }
-  return counts;
-}
-
-/**
- * The heading over a group, or nothing. With every section listed, a section's first
- * group names the section and its own heading (Stream tools › Counters) and later
- * groups their own heading. A group with no heading of its own (a module's section,
- * or a one-segment taxonomy) opening its section shows the section label alone, or
- * nothing once the list is narrowed to that section and something else names it.
- */
-export function actionGroupHeading(
-  group: ActionMenuGroup,
-  previous: ActionMenuGroup | undefined,
-  showSection: boolean
-): string | null {
-  const hasOwnHeading = group.groupLabel !== group.sectionLabel;
-  const startsSection = previous?.sectionKey !== group.sectionKey;
-  if (!startsSection) {
+export function actionGroupHeading(group: ActionMenuGroup, previous: ActionMenuGroup | undefined): string {
+  if (previous?.sectionKey === group.sectionKey) {
     return group.groupLabel;
   }
-  if (showSection) {
-    return hasOwnHeading ? `${group.sectionLabel} › ${group.groupLabel}` : group.sectionLabel;
-  }
-  return hasOwnHeading ? group.groupLabel : null;
-}
-
-/** The menu's actions in the order shown, which is the order the arrow keys walk. */
-export function flattenActionMenu(groups: readonly ActionMenuGroup[]): ActionPreset[] {
-  return groups.flatMap((group) => group.actions);
+  return group.groupLabel !== group.sectionLabel ? `${group.sectionLabel} › ${group.groupLabel}` : group.sectionLabel;
 }
 
 interface ScoredAction {

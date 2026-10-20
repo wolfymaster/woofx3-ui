@@ -6,7 +6,7 @@ A new UI feature often needs to reach a few accounts before everyone: an operato
 
 | Question | Answered by |
 |---|---|
-| Can this engine build do X? | Engine capabilities (`useEngineCapabilities`) |
+| Can this engine build do X? | [Engine capabilities](./engine-capabilities.md) (`useEngineCapabilities`) |
 | Does this account's plan include X? | An [entitlement](./entitlements.md) |
 | Should this viewer see new UI Y yet? | A feature flag (this page) |
 

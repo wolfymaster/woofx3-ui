@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import { isFailureStatus } from "@convex/lib/engineAlertLifecycle";
-import { useQuery } from "convex/react";
 import { Info, ListFilter, Loader2, Radio, RotateCcw, ScrollText, Star } from "lucide-react";
 import { useMemo } from "react";
 import { Link } from "wouter";
@@ -12,10 +10,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { type EventLogStatus, useEventLog } from "@/hooks/use-event-log";
-import { type EventLogSettingsHandle, useEventLogSettings } from "@/hooks/use-event-log-settings";
+import { useEngineAlerts } from "@/engine/hooks/use-alert-queue";
+import { type EventLogStatus, useEventLog } from "@/engine/hooks/use-event-log";
+import { type EventLogSettingsHandle, useEventLogSettings } from "@/engine/hooks/use-event-log-settings";
+import { useReplayAlert } from "@/engine/hooks/use-replay-alert";
 import { useInstance } from "@/hooks/use-instance";
-import { useReplayAlert } from "@/hooks/use-replay-alert";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { type ActivityRow, eventTypeGroups, mergeActivity, triggersByEventType } from "@/lib/activity-feed";
@@ -70,7 +69,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
     settings.status === "ready" ? settings.settings.enabled : settings.status === "unsupported" ? null : undefined;
   const enabledTypes = useMemo(() => (enabled === null ? null : new Set(enabled ?? [])), [enabled]);
 
-  const alerts = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit: ALERT_LIMIT } : "skip");
+  const alerts = useEngineAlerts(instanceId ?? null, ALERT_LIMIT);
   const { events, status } = useEventLog(instanceId, enabled);
   const rows = useMemo(() => mergeActivity(events, alerts ?? [], enabledTypes), [events, alerts, enabledTypes]);
 

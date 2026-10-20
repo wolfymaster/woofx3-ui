@@ -56,10 +56,20 @@ export function settingFieldOptionsReference(
 }
 
 /**
- * Tell every `internal` source among `fields` where it was declared, so the
- * picker rendering it can ask the engine for that field's options. Fields are
- * rendered far from where they are loaded, and a ConfigField carries no link
- * to its declaration, so the reference rides on the source the same way
+ * What a `button` field fires, told where it was declared: the engine runs an
+ * `internal` request by that reference, and an `integration` connects the
+ * account of the reference's module.
+ */
+export type ReferencedButtonAction =
+  | (InternalConfigFieldSource & { reference?: FieldOptionsReference })
+  | { kind: "integration"; integration: string; reference?: FieldOptionsReference };
+
+/**
+ * Tell every `internal` source and every button among `fields` where it was
+ * declared, so the control rendering it can ask the engine for that field's
+ * options or fire its request. Fields are rendered far from where they are
+ * loaded, and a ConfigField carries no link to its declaration, so the
+ * reference rides on the source (or the button's action) the same way
  * `withModuleName` attaches a module name.
  */
 export function withFieldOptionsOwner(fields: ConfigField[], owner: FieldOptionsOwner | undefined): ConfigField[] {
@@ -67,12 +77,25 @@ export function withFieldOptionsOwner(fields: ConfigField[], owner: FieldOptions
     return fields;
   }
   return fields.map((field) => {
+    const reference: FieldOptionsReference = { ...owner, fieldId: field.id };
+    if (field.type === "button" && field.action && typeof field.action === "object") {
+      return { ...field, action: { ...field.action, reference } };
+    }
     if (field.source?.kind !== "internal") {
       return field;
     }
-    const source: ReferencedInternalSource = { ...field.source, reference: { ...owner, fieldId: field.id } };
+    const source: ReferencedInternalSource = { ...field.source, reference };
     return { ...field, source };
   });
+}
+
+/** A button field's `action` with its reference, when it parsed as one of the two kinds a button fires. */
+export function buttonActionOf(action: unknown): ReferencedButtonAction | undefined {
+  const kind = (action as { kind?: unknown } | undefined)?.kind;
+  if (kind === "internal" || kind === "integration") {
+    return action as ReferencedButtonAction;
+  }
+  return undefined;
 }
 
 /** The reference a source was given by `withFieldOptionsOwner`, if any. */

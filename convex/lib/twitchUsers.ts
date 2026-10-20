@@ -3,6 +3,8 @@
 // Helix call lives here; which token it runs with, and who may ask, is the
 // caller's decision.
 
+import { helixResponse, type TwitchHelixRoute } from "./twitchEngineHelix";
+
 const TWITCH_USERS_URL = "https://api.twitch.tv/helix/users";
 const TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 
@@ -56,15 +58,29 @@ export function twitchUserFromHelix(body: unknown): TwitchUser | null {
 /**
  * One Twitch user by login or by id. Null when no such user exists, which is
  * also what Helix answers for a suspended or banned account.
+ *
+ * `route` may send the lookup through the engine, which looks users up with
+ * the broadcaster's link token; pass it only when `credentials` are that
+ * token, so both paths ask Twitch as the same user.
  */
 export async function fetchTwitchUser(
   credentials: HelixCredentials,
-  by: { login: string } | { id: string }
+  by: { login: string } | { id: string },
+  route?: TwitchHelixRoute
 ): Promise<TwitchUser | null> {
   const query = "login" in by ? `login=${encodeURIComponent(by.login)}` : `id=${encodeURIComponent(by.id)}`;
-  const response = await fetch(`${TWITCH_USERS_URL}?${query}`, {
-    headers: { Authorization: `Bearer ${credentials.accessToken}`, "Client-Id": credentials.clientId },
-  });
+  const direct = () =>
+    fetch(`${TWITCH_USERS_URL}?${query}`, {
+      headers: { Authorization: `Bearer ${credentials.accessToken}`, "Client-Id": credentials.clientId },
+    });
+  const response = route
+    ? await helixResponse(route, {
+        operation: "getUsers",
+        kind: "read",
+        viaEngine: (engine) => engine.twitchGetUsers("login" in by ? { login: by.login } : { id: by.id }),
+        direct,
+      })
+    : await direct();
   if (!response.ok) {
     throw new Error(`Twitch user lookup failed: ${response.status} ${await response.text()}`);
   }

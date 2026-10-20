@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { SceneSyncClient, type SceneSyncState } from "@woofx3/api/scene-editor/client";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useSceneEditorSessionRequest } from "@/engine/hooks/use-scenes";
 import { toast } from "@/hooks/use-toast";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
 import {
@@ -76,7 +77,7 @@ export function useSceneEditorSession({
   editorName,
   unsavedOutsideSession,
 }: UseSceneEditorSessionArgs): SceneEditorSession {
-  const getSession = useAction(api.sceneActions.getSceneEditorSession);
+  const getSession = useSceneEditorSessionRequest();
   const getPreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
   const [sceneKey] = useState(() => sceneKeyOf(instanceId, engineSceneId));
   const [client, setClient] = useState<SceneSyncClient | null>(null);
@@ -89,10 +90,10 @@ export function useSceneEditorSession({
   // editor lost the scene's row still reconnects with the row it had.
   const socketSourceRef = useRef<SceneSocketSource | null>(null);
   if (publicUrl) {
-    socketSourceRef.current = { getGrant: () => getSession({ instanceId, engineSceneId }), getPreviewUrl: publicUrl };
+    socketSourceRef.current = { getGrant: () => getSession(instanceId, engineSceneId), getPreviewUrl: publicUrl };
   } else if (sceneId) {
     socketSourceRef.current = {
-      getGrant: () => getSession({ instanceId, engineSceneId }),
+      getGrant: () => getSession(instanceId, engineSceneId),
       getPreviewUrl: () => getPreviewUrl({ sceneId }),
     };
   }

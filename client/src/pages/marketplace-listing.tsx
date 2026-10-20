@@ -7,7 +7,7 @@ import {
   moduleInstalled,
 } from "@convex/lib/marketplaceInstallIdentity";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
@@ -22,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
@@ -159,7 +160,7 @@ function ListingBody({
   // A module or theme install needs the permissions its archive declares,
   // which the catalog does not carry — this is the same action the module
   // page uses, so the two surfaces ask the streamer the same question.
-  const getModuleDetail = useAction(api.moduleDetail.getModuleDetail);
+  const getModuleDetail = useModuleDetailRequest();
   const [moduleDetail, setModuleDetail] = useState<ModuleDetailResult | null>(null);
   useEffect(() => {
     if (!instance || !isModuleListing(listing.type)) {
@@ -167,7 +168,7 @@ function ListingBody({
       return;
     }
     let cancelled = false;
-    void getModuleDetail({ instanceId: instance._id, moduleId: listing.id })
+    void getModuleDetail(instance._id, listing.id)
       .then((detail) => {
         if (!cancelled) {
           setModuleDetail(detail);

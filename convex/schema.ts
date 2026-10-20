@@ -189,9 +189,19 @@ export default defineSchema({
     // owner could otherwise opt their own instance in. See
     // lib/marketplaceAccess.ts.
     marketplaceDevAccess: v.optional(v.boolean()),
+    // What the engine last reported about itself, recorded for operators
+    // deciding when a capability check can be retired; gating never reads
+    // them. See lib/engineReport.ts. engineSeenAt is the last time it
+    // answered either call, and is the ops API's measure of a recently
+    // active instance.
+    engineVersion: v.optional(v.string()),
+    engineCapabilityIds: v.optional(v.array(v.string())),
+    engineCapabilitiesSeenAt: v.optional(v.number()),
+    engineSeenAt: v.optional(v.number()),
   })
     .index("by_account", ["accountId"])
-    .index("by_webhook_secret", ["webhookSecret"]),
+    .index("by_webhook_secret", ["webhookSecret"])
+    .index("by_engine_seen", ["engineSeenAt"]),
 
   // instanceLiveState: live stream presence per instance, driven by STREAM_ONLINE/OFFLINE
   // engine events (and best-effort poll fallback). One row per instance.
@@ -475,6 +485,16 @@ export default defineSchema({
     // other engine JSON Convex holds (see lib/dollarKeys.ts), and validated by
     // the engine, which is the authority on what it can run.
     actions: v.array(v.any()),
+    // The stored workflow the command runs, by engine id, and that workflow's
+    // tasks (escaped like `actions`). A command with steps has a workflow and
+    // an empty `actions`; one the engine has not linked yet runs `actions`
+    // instead. Optional for rows written before commands had workflows.
+    engineWorkflowId: v.optional(v.string()),
+    steps: v.optional(v.array(v.any())),
+    // Why the engine could not give the command its workflow (a failed
+    // conversion on upgrade, or a link to a workflow that no longer exists);
+    // absent when it has one or never needed one.
+    workflowError: v.optional(v.string()),
     // "{variable}" placeholders parsed out of user input after the command
     // word, e.g. "{songTitle}" — extracted values are merged into the
     // function's invoke payload (or usable in a "text" response). Empty
@@ -982,6 +1002,9 @@ export default defineSchema({
     projectionKey: v.optional(v.string()),
     /** See triggerDefinitions.taxonomy. */
     taxonomy: v.optional(v.array(v.string())),
+    // The manifest's one-line template for a configured step, e.g. "Add {amount}
+    // to {target}"; absent when the action declares none. See lib/action-sentence.ts.
+    sentence: v.optional(v.string()),
     handlerType: v.optional(v.string()),
     functionCall: v.optional(v.string()),
     moduleId: v.optional(v.id("moduleRepository")),

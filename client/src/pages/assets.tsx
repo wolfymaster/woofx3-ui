@@ -1,7 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import type { HostedStorageUsage } from "@convex/resources";
-import { useAction } from "convex/react";
 import {
   ChevronRight,
   Copy,
@@ -59,11 +56,18 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toggle } from "@/components/ui/toggle";
+import { useHostedStorageUsage } from "@/engine/hooks/use-hosted-storage-usage";
+import { useResourceUpload } from "@/engine/hooks/use-resource-upload";
+import {
+  type Resource,
+  useCreateResourceFolderRequest,
+  useRemoveResourceRequest,
+  useResources,
+  useUpdateResourceRequest,
+} from "@/engine/hooks/use-resources";
+import type { HostedStorageUsage } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useHostedStorageUsage } from "@/hooks/use-hosted-storage-usage";
 import { useInstance } from "@/hooks/use-instance";
-import { useResourceUpload } from "@/hooks/use-resource-upload";
-import { type Resource, useResources } from "@/hooks/use-resources";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -388,9 +392,9 @@ export default function Assets() {
 
   const currentFolderId = trail[trail.length - 1].id;
 
-  const createFolder = useAction(api.resources.createFolder);
-  const updateResource = useAction(api.resources.update);
-  const removeResource = useAction(api.resources.remove);
+  const createFolder = useCreateResourceFolderRequest();
+  const updateResource = useUpdateResourceRequest();
+  const removeResource = useRemoveResourceRequest();
 
   // The engine filters, searches and pages; nothing here narrows a local array,
   // so search reaches past the current page.
@@ -482,9 +486,7 @@ export default function Assets() {
     if (!instance || !folderName.trim()) {
       return;
     }
-    const ok = await run("Couldn't create that folder", () =>
-      createFolder({ instanceId: instance._id, name: folderName, parentId: currentFolderId })
-    );
+    const ok = await run("Couldn't create that folder", () => createFolder(instance._id, folderName, currentFolderId));
     if (ok) {
       setFolderName("");
       setNewFolderOpen(false);
@@ -496,7 +498,7 @@ export default function Assets() {
       return;
     }
     const ok = await run("Couldn't rename that", () =>
-      updateResource({ instanceId: instance._id, resourceId: renaming.id, name: renameValue })
+      updateResource(instance._id, renaming.id, { name: renameValue })
     );
     if (ok) {
       setRenaming(null);
@@ -508,9 +510,7 @@ export default function Assets() {
       return;
     }
     const target = deleting;
-    const ok = await run("Couldn't delete that", () =>
-      removeResource({ instanceId: instance._id, resourceId: target.id })
-    );
+    const ok = await run("Couldn't delete that", () => removeResource(instance._id, target.id));
     if (ok) {
       setSelected((prev) => {
         const next = new Set(prev);
@@ -531,7 +531,7 @@ export default function Assets() {
     // bottleneck for no gain.
     const ok = await run("Some items couldn't be deleted", async () => {
       for (const id of ids) {
-        await removeResource({ instanceId: instance._id, resourceId: id });
+        await removeResource(instance._id, id);
       }
     });
     if (ok) {
@@ -547,7 +547,7 @@ export default function Assets() {
     const ids = Array.from(selected);
     const ok = await run("Some items couldn't be moved", async () => {
       for (const id of ids) {
-        await updateResource({ instanceId: instance._id, resourceId: id, parentId: destinationId });
+        await updateResource(instance._id, id, { parentId: destinationId });
       }
     });
     if (ok) {
