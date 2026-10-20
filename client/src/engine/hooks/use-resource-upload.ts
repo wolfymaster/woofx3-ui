@@ -21,7 +21,7 @@ const UNREACHABLE_STORAGE =
  * exactly the headers it was handed and never branches on which backend is
  * configured. Bytes never pass through Convex.
  *
- * Shared by the Assets page and the asset picker so the sequence exists once.
+ * Shared by the Media page and the asset picker so the sequence exists once.
  */
 export function useResourceUpload(instanceId: InstanceId | undefined) {
   const { resources } = useEngineGateway();
