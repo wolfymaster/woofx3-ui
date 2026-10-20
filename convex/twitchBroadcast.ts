@@ -9,9 +9,7 @@ import { fetchTwitchUser, normalizeTwitchLogin } from "./lib/twitchUsers";
 //
 // These go straight to Helix with the broadcaster token Convex holds, or
 // through an engine that advertises twitch.chat and sends the same requests
-// (convex/lib/twitchEngineHelix.ts). The engine path is taken only while the
-// twitch.engineChat flag (messages, announcements) or twitch.engineShoutouts
-// flag is on for the instance.
+// (convex/lib/twitchEngineHelix.ts).
 // Same shape as convex/twitchClips.ts.
 
 const TWITCH_MESSAGES_URL = "https://api.twitch.tv/helix/chat/messages";
@@ -52,11 +50,7 @@ export const sendChatMessage = action({
     }
 
     const call = await authorizeTwitch(ctx, args.instanceId, SEND_MESSAGE_SCOPE);
-    await postChatMessage(
-      call,
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.chat", "twitch.engineChat"),
-      message
-    );
+    await postChatMessage(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"), message);
     return { ok: true };
   },
 });
@@ -112,12 +106,7 @@ export const sendAnnouncement = action({
     }
 
     const call = await authorizeTwitch(ctx, args.instanceId, ANNOUNCEMENT_SCOPE);
-    await postAnnouncement(
-      call,
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.chat", "twitch.engineChat"),
-      message,
-      args.color
-    );
+    await postAnnouncement(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"), message, args.color);
     return { ok: true };
   },
 });
@@ -163,11 +152,7 @@ export const sendShoutout = action({
     }
 
     const call = await authorizeTwitch(ctx, args.instanceId, SHOUTOUT_SCOPE);
-    await postShoutout(
-      call,
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.chat", "twitch.engineShoutouts"),
-      login
-    );
+    await postShoutout(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"), login);
     return { ok: true };
   },
 });

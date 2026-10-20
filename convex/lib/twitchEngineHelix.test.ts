@@ -99,32 +99,18 @@ describe("chooseTwitchHelixRoute", () => {
 });
 
 describe("twitchHelixRoute", () => {
-  function ctxAnswering(answers: Record<string, unknown>) {
-    const asked: string[] = [];
-    const ctx = {
-      runQuery: async (query: FunctionReference<"query", "internal">) => {
-        const name = getFunctionName(query);
-        asked.push(name);
-        return answers[name];
-      },
+  function ctxAnswering(answers: Record<string, unknown>): ActionCtx {
+    return {
+      runQuery: async (query: FunctionReference<"query", "internal">) => answers[getFunctionName(query)],
     } as unknown as ActionCtx;
-    return { ctx, asked };
   }
   const instanceId = "instance-1" as Parameters<typeof twitchHelixRoute>[1];
 
-  test("a switch whose flag is off calls Helix without asking the engine anything", async () => {
-    const { ctx, asked } = ctxAnswering({ "featureFlags:isOnForInstance": false });
-    const route = await twitchHelixRoute(ctx, instanceId, "twitch.moderation", "twitch.engineModeration");
-    expect(route.engine).toBeNull();
-    expect(asked).toEqual(["featureFlags:isOnForInstance"]);
-  });
-
   test("an instance not registered with its engine calls Helix", async () => {
-    const { ctx } = ctxAnswering({
-      "featureFlags:isOnForInstance": true,
+    const ctx = ctxAnswering({
       "instances:getInternal": { url: "https://engine.example", clientId: undefined, clientSecret: undefined },
     });
-    const route = await twitchHelixRoute(ctx, instanceId, "twitch.moderation", "twitch.engineModeration");
+    const route = await twitchHelixRoute(ctx, instanceId, "twitch.moderation");
     expect(route.engine).toBeNull();
   });
 });

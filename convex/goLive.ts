@@ -398,7 +398,7 @@ export const complete = action({
           twitch,
           announcementText,
           { pin: false },
-          await twitchHelixRoute(ctx, args.instanceId, "twitch.chat", "twitch.engineChat")
+          await twitchHelixRoute(ctx, args.instanceId, "twitch.chat")
         );
         announcement = { status: "done" };
       } catch (error) {

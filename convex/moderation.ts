@@ -30,8 +30,7 @@ import { fetchTwitchUser, normalizeTwitchLogin, type TwitchUser } from "./lib/tw
 // Moderation for the dashboard widget: blocked terms, timeouts and bans, and
 // chat lockdown modes. Straight to Helix with the broadcaster's token, the same
 // shape as convex/twitchBroadcast.ts, or through an engine that advertises
-// twitch.moderation (convex/lib/twitchEngineHelix.ts). Writes take the engine
-// path only while the twitch.engineModeration flag is on for the instance.
+// twitch.moderation (convex/lib/twitchEngineHelix.ts).
 //
 // Who may do what is decided by CAPABILITY_RULES in convex/lib/moderation.ts;
 // every action enforces it here, and the widget reads the same rules through
@@ -175,16 +174,6 @@ export const moderationRequests = {
 
 const READ_OPERATIONS: ReadonlySet<ModerationOperation> = new Set(["list-terms", "read-settings"]);
 
-/** Reads follow the engine's capability; writes also wait for the rollout flag. */
-function moderationRoute(ctx: ActionCtx, instanceId: Id<"instances">, kind: "read" | "write") {
-  return twitchHelixRoute(
-    ctx,
-    instanceId,
-    "twitch.moderation",
-    kind === "write" ? "twitch.engineModeration" : undefined
-  );
-}
-
 export async function helix(
   auth: AuthorizedTwitchCall,
   route: TwitchHelixRoute,
@@ -286,7 +275,7 @@ export const listBlockedTerms = action({
   handler: async (ctx, args): Promise<{ terms: BlockedTerm[]; truncated: boolean }> => {
     // Anyone who may add a term may see the list they are adding to.
     const auth = await authorizeModeration(ctx, args.instanceId, "addBlockedTerm");
-    const route = await moderationRoute(ctx, args.instanceId, "read");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
 
     const terms: BlockedTerm[] = [];
     let cursor: string | undefined;
@@ -317,7 +306,7 @@ export const addBlockedTerm = action({
       throw new ConvexError(validated.error);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "addBlockedTerm");
-    const route = await moderationRoute(ctx, args.instanceId, "write");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
     const body = (await helix(auth, route, moderationRequests.addTerm(auth, validated.value))) as HelixBlockedTermsPage;
     const term = body.data?.[0];
     if (!term) {
@@ -334,7 +323,7 @@ export const removeBlockedTerm = action({
       throw new ConvexError("No blocked term to remove");
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "removeBlockedTerm");
-    const route = await moderationRoute(ctx, args.instanceId, "write");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
     await helix(auth, route, moderationRequests.removeTerm(auth, args.termId));
     return { ok: true };
   },
@@ -361,7 +350,7 @@ export const timeoutUser = action({
       throw new ConvexError(duration.error);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "timeout");
-    const route = await moderationRoute(ctx, args.instanceId, "write");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
     const target = await resolveTarget(auth, route, args.login);
     await helix(auth, route, moderationRequests.timeout(auth, target.twitchUserId, duration.value));
     return { login: target.login, displayName: target.displayName };
@@ -376,7 +365,7 @@ export const banUser = action({
       throw new ConvexError(reason.error);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "ban");
-    const route = await moderationRoute(ctx, args.instanceId, "write");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
     const target = await resolveTarget(auth, route, args.login);
     await helix(auth, route, moderationRequests.ban(auth, target.twitchUserId, reason.value));
     return { login: target.login, displayName: target.displayName };
@@ -388,7 +377,7 @@ export const unbanUser = action({
   args: { instanceId: v.id("instances"), login: v.string() },
   handler: async (ctx, args): Promise<ModeratedUser> => {
     const auth = await authorizeModeration(ctx, args.instanceId, "ban");
-    const route = await moderationRoute(ctx, args.instanceId, "write");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
     const target = await resolveTarget(auth, route, args.login);
     await helix(auth, route, moderationRequests.unban(auth, target.twitchUserId));
     return { login: target.login, displayName: target.displayName };
@@ -408,7 +397,7 @@ export const getChatSettings = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<ChatSettings> => {
     const auth = await readable(authorizeTwitch(ctx, args.instanceId, MODERATION_SCOPES.readChatSettings));
-    const route = await moderationRoute(ctx, args.instanceId, "read");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
     const body = await helix(auth, route, moderationRequests.readSettings(auth));
     const settings = chatSettingsFromHelix(body);
     if (!settings) {
@@ -436,7 +425,7 @@ export const updateChatSettings = action({
       throw new ConvexError(body.error);
     }
     const auth = await authorizeModeration(ctx, args.instanceId, "chatSettings");
-    const route = await moderationRoute(ctx, args.instanceId, "write");
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.moderation");
     const response = await helix(auth, route, moderationRequests.updateSettings(auth, body.value));
     const settings = chatSettingsFromHelix(response);
     if (!settings) {

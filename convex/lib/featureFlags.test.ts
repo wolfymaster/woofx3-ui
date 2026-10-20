@@ -74,35 +74,6 @@ describe("isFlagOn", () => {
   });
 });
 
-describe("isFlagOn for an instance with no user", () => {
-  const instanceSubject: FeatureFlagSubject = {
-    accountId: account,
-    instanceId: instance,
-    hosting: "managed",
-    entitlements: [],
-  };
-
-  it("rolls out to managed engines first, by account", () => {
-    const managedAll: FeatureFlagRow = {
-      key: "twitch.engineModeration",
-      state: "rules",
-      rules: { hosting: "managed", percent: 100 },
-    };
-    const managedNone: FeatureFlagRow = {
-      key: "twitch.engineModeration",
-      state: "rules",
-      rules: { hosting: "managed", percent: 0 },
-    };
-    expect(isFlagOn(managedAll, instanceSubject)).toBe(true);
-    expect(isFlagOn(managedAll, { ...instanceSubject, hosting: "external" })).toBe(false);
-    expect(isFlagOn(managedNone, instanceSubject)).toBe(false);
-  });
-
-  it("is off with no row", () => {
-    expect(isFlagOn(null, instanceSubject)).toBe(false);
-  });
-});
-
 describe("rolloutBucket", () => {
   it("is stable, in range, and differs by flag", () => {
     expect(rolloutBucket("a", "account1")).toBe(rolloutBucket("a", "account1"));
