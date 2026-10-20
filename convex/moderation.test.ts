@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { AuthorizedTwitchCall } from "./lib/twitchAuth";
-import { DIRECT_ROUTE, fakeEngineRoute, helixErrorBody, rejection, stubFetch } from "./lib/twitchEngineHelixFakes";
+import { DIRECT_ROUTE, fakeEngineRoute, helixErrorBody, rejection, stubFetch } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
 import { helix, type ModerationRequest, moderationRequests, resolveTarget } from "./moderation";
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { logger } from "../logger";
 import type { AuthorizedTwitchCall } from "./twitchAuth";
 import { sendChatMessage } from "./twitchChat";
-import { DIRECT_ROUTE, fakeEngineRoute, helixErrorBody, rejection, stubFetch } from "./twitchEngineHelixFakes";
+import { DIRECT_ROUTE, fakeEngineRoute, helixErrorBody, rejection, stubFetch } from "./twitchEngineHelix.fakes";
 
 const CALL: AuthorizedTwitchCall = { accessToken: "token", broadcasterUserId: "B1", clientId: "client" };
 const SENT = { data: [{ message_id: "m1", is_sent: true }] };
