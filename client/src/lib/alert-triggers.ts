@@ -134,7 +134,8 @@ export function triggerAimsAt(trigger: EventTrigger, actions: readonly ResourceA
 export interface NewTriggerOptions {
   triggerPreset: TriggerPreset;
   conditionFields: ConfigField[];
-  order: number;
+  /** Its place among the event's other workflows; a workflow made on its own has none. */
+  order?: number;
   pin?: TriggerPin;
   /** A step the trigger starts with, aimed by `aim` when given. */
   seed?: ActionPreset;
@@ -146,7 +147,7 @@ export const SEED_STEP_ID = "step_1";
 
 /**
  * The tree of a trigger not yet saved: the event, its fields' default values (with
- * `pin` held), the next order and, when given, its first step. Unfinished fields save
+ * `pin` held), its order when given and, when given, its first step. Unfinished fields save
  * no condition, so they read as missing in the sentence until they are chosen.
  */
 export function newTriggerTree(options: NewTriggerOptions): WorkflowTree {
@@ -173,7 +174,7 @@ export function newTriggerTree(options: NewTriggerOptions): WorkflowTree {
       event: triggerPreset.event ?? "",
       ...(triggerPreset.canonicalRef ? { $ref: triggerPreset.canonicalRef } : {}),
       conditions: fieldValuesToConditions(conditionFields, values),
-      order,
+      ...(order === undefined ? {} : { order }),
     },
     tasks,
   } as unknown as WorkflowDefinition;

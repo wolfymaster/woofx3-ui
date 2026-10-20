@@ -188,6 +188,11 @@ describe("newTriggerTree", () => {
     expect(definition.tasks).toEqual([]);
   });
 
+  test("a workflow made on its own has no order", () => {
+    const tree = newTriggerTree({ triggerPreset: preset, conditionFields: [] });
+    expect(treeToDefinition(tree).trigger).not.toHaveProperty("order");
+  });
+
   test("a seeded step aimed at an instance carries no other settings", () => {
     const tree = newTriggerTree({
       triggerPreset: preset,
