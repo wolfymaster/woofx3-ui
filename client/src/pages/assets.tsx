@@ -364,7 +364,7 @@ export default function Assets() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const { toast } = useToast();
 
-  const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: "Assets" }]);
+  const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: "Media" }]);
   const [searchInput, setSearchInput] = useState("");
   const searchQuery = useDebouncedValue(searchInput.trim(), SEARCH_DEBOUNCE_MS);
   const [kindFilter, setKindFilter] = useState<string[]>([]);
@@ -564,7 +564,7 @@ export default function Assets() {
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
       <PageHeader
-        title="Assets"
+        title="Media"
         description="Manage your stream media files and resources."
         actions={
           <div className="flex items-center gap-2">
