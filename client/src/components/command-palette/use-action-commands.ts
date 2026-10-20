@@ -29,6 +29,7 @@ import {
   Type,
   UserCheck,
 } from "lucide-react";
+import { useClearAlertQueueRequest, useSkipCurrentAlertRequest } from "@/engine/hooks/use-alert-queue";
 import { useAuthActions } from "@/hooks/use-convex-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { $commandBarHidden, $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
@@ -106,8 +107,8 @@ export function useActionCommands(
   const createMarker = useAction(api.streamInfo.createMarker);
   const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
   const snoozeNextAd = useAction(api.adBreaks.snoozeNextAd);
-  const skipCurrentAlert = useAction(api.alertActions.skipCurrent);
-  const clearAlertQueue = useAction(api.alertActions.clearQueue);
+  const skipCurrentAlert = useSkipCurrentAlertRequest();
+  const clearAlertQueue = useClearAlertQueueRequest();
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
   const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
   const sendShoutout = useAction(api.twitchBroadcast.sendShoutout);
@@ -215,7 +216,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await skipCurrentAlert({ instanceId: id });
+            const result = await skipCurrentAlert(id);
             if (!result.ok) {
               throw new Error(result.reason ?? "The engine refused to skip");
             }
@@ -234,7 +235,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await clearAlertQueue({ instanceId: id });
+            const result = await clearAlertQueue(id);
             if (!result.ok) {
               throw new Error(result.reason ?? "The engine refused to clear the queue");
             }

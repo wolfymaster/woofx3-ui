@@ -1,6 +1,6 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { useEffect, useMemo } from "react";
+import type { WorkflowRecord } from "@/engine/types";
 import { useEventDraft } from "@/hooks/use-event-draft";
 import { type EventDraft, type EventEditorState, getDraft, isDraftDirty, setDraft } from "@/lib/event-drafts";
 import { eventEditorStateFor, eventWorkflowTarget } from "@/lib/event-workflow-state";
@@ -9,9 +9,9 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
 export interface EventWorkflowDraft {
   draft: EventDraft | undefined;
   /** The workflow's other copies on this event, which this page leaves alone. */
-  others: Doc<"workflows">[];
+  others: WorkflowRecord[];
   /** A workflow on this event this page can't project, if there is one. */
-  unprojectable: Doc<"workflows"> | undefined;
+  unprojectable: WorkflowRecord | undefined;
 }
 
 /**
@@ -25,7 +25,7 @@ export interface EventWorkflowDraft {
 export function useEventWorkflowDraft(
   triggerPreset: TriggerPreset | undefined,
   conditionFields: ConfigField[],
-  workflows: Doc<"workflows">[] | undefined
+  workflows: WorkflowRecord[] | undefined
 ): EventWorkflowDraft {
   const event = triggerPreset?.event ?? "";
   const draft = useEventDraft(event);

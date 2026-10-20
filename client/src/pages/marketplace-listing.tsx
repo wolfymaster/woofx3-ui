@@ -7,7 +7,7 @@ import {
   laterEditionInstalled,
   moduleInstalled,
 } from "@convex/lib/marketplaceInstallIdentity";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { AlertCircle, ArrowLeft, Check, CheckCircle2, Loader2, Package, Tag, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
 import { useModuleInstall } from "@/hooks/use-module-install";
@@ -174,7 +175,7 @@ function ListingBody({
   // module and ask the streamer the same permission question. It is read
   // again whenever the installed version changes, since an install or update
   // turns on the settings and resources tabs.
-  const getModuleDetail = useAction(api.moduleDetail.getModuleDetail);
+  const getModuleDetail = useModuleDetailRequest();
   // Stamped with its listing, so opening another listing never shows this one's README.
   const [loadedDetail, setLoadedDetail] = useState<{ listingId: string; load: ModuleDetailLoad } | null>(null);
   const [detailAttempt, setDetailAttempt] = useState(0);
@@ -188,7 +189,7 @@ function ListingBody({
     void installedVersion;
     let cancelled = false;
     const listingId = listing.id;
-    getModuleDetail({ instanceId: instance._id, moduleId: listingId })
+    getModuleDetail(instance._id, listingId)
       .then((detail) => {
         if (!cancelled) {
           setLoadedDetail({ listingId, load: { status: "ready", detail } });

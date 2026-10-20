@@ -10,7 +10,7 @@ export interface SceneOption {
   label: string;
 }
 
-interface SceneRow {
+export interface SceneRow {
   engineSceneId?: string;
   name: string;
   widgets?: unknown[];

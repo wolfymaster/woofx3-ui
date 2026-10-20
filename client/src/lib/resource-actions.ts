@@ -1,9 +1,11 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { resourceKindMatches } from "@convex/lib/resourceKinds";
-import type { ActionStep } from "@woofx3/api";
-import { type ProjectedAction, projectWorkflow } from "@/lib/trigger-projection";
+import type { ActionStep, WorkflowDefinition } from "@woofx3/api";
+import type { WorkflowRecord } from "@/engine/types";
+import { stepsAimAt } from "@/lib/alert-triggers";
+import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import { presetToActionStep } from "@/lib/workflow-presets-json";
+import { definitionToTree } from "@/lib/workflow-tree";
 
 /**
  * The step that runs one of a module's actions against a resource instance —
@@ -68,38 +70,27 @@ export function resourceActions(actionPresets: ActionPreset[], kind: string): Re
   return found.sort((a, b) => a.preset.name.localeCompare(b.preset.name));
 }
 
-/** Whether this step runs one of `actions` aimed at `canonicalId`. */
-export function aimsAtResource(action: ProjectedAction, actions: ResourceAction[], canonicalId: string): boolean {
-  return actions.some(({ preset, fieldId }) => {
-    const matches = action.functionCall
-      ? preset.functionCall === action.functionCall
-      : preset.handlerType === action.handlerType;
-    return matches && action.parameters[fieldId] === canonicalId;
-  });
-}
-
 /**
- * The events whose workflows already change this instance — which events a resource page
- * opens an editor for.
+ * The events whose triggers already change this instance — which events a resource page
+ * lists triggers for. A step inside a condition counts.
  *
- * A workflow this screen can't project is skipped rather than reported: its steps are not
- * editable here either way, and the workflow builder is where it is dealt with.
+ * A workflow the step editor can't read is skipped rather than guessed at: its steps are
+ * not editable from that list either way.
  */
 export function eventsChangingResource(
-  workflows: Doc<"workflows">[],
+  workflows: WorkflowRecord[],
   actions: ResourceAction[],
   canonicalId: string
 ): string[] {
   const events = new Set<string>();
   for (const row of workflows) {
-    const projected = projectWorkflow(row);
-    if (!projected.ok) {
+    const definition = unescapeDollarKeys(row.definition) as WorkflowDefinition | undefined;
+    if (!definition || definition.trigger?.type !== "event") {
       continue;
     }
-    const { projection } = projected;
-    const steps = [...projection.triggers.flatMap((trigger) => trigger.actions), ...projection.shared];
-    if (steps.some((action) => aimsAtResource(action, actions, canonicalId))) {
-      events.add(projection.event);
+    const read = definitionToTree(definition);
+    if (read.editable && stepsAimAt(read.tree.steps, actions, canonicalId)) {
+      events.add(definition.trigger.event);
     }
   }
   return Array.from(events).sort();

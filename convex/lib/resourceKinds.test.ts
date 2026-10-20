@@ -7,6 +7,7 @@ import {
   parseManifestResourceKinds,
   resolveResourceKind,
   resourceKindMatches,
+  rowsOfKind,
 } from "./resourceKinds";
 
 function declares(moduleName: string, ...kinds: string[]): KindDeclarer {
@@ -84,5 +85,28 @@ describe("parseManifestResourceKinds", () => {
     });
     expect(wheel.summaryPath).toBe("items");
     expect(counter).not.toHaveProperty("summaryPath");
+  });
+});
+
+describe("rowsOfKind", () => {
+  const rows = [
+    { kind: "counter", canonicalId: "woofx3:counter:hype" },
+    { kind: "counter", canonicalId: "rival:counter:hype" },
+    { kind: "timer", canonicalId: "woofx3:timer:break" },
+  ];
+
+  it("keeps the owner's rows of the kind", () => {
+    expect(rowsOfKind(rows, "counter", "rival").map((row) => row.canonicalId)).toEqual(["rival:counter:hype"]);
+  });
+
+  it("keeps every module's rows of the kind when there is no owner", () => {
+    expect(rowsOfKind(rows, "counter", undefined).map((row) => row.canonicalId)).toEqual([
+      "woofx3:counter:hype",
+      "rival:counter:hype",
+    ]);
+  });
+
+  it("does not take a module whose name only starts with the owner's", () => {
+    expect(rowsOfKind([{ kind: "counter", canonicalId: "woofx3extra:counter:a" }], "counter", "woofx3")).toEqual([]);
   });
 });

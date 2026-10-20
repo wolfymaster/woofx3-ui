@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Doc } from "@convex/_generated/dataModel";
+import type { WorkflowRecord } from "@/engine/types";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import {
   eventsChangingResource,
@@ -102,12 +102,12 @@ describe("resourceActions", () => {
   });
 });
 
-function workflow(event: string, tasks: unknown[], engineWorkflowId = "wf-1"): Doc<"workflows"> {
+function workflow(event: string, tasks: unknown[], engineWorkflowId = "wf-1"): WorkflowRecord {
   return {
     engineWorkflowId,
     isEnabled: true,
     definition: escapeDollarKeys({ name: event, trigger: { type: "event", event }, tasks }),
-  } as Doc<"workflows">;
+  };
 }
 
 function step(id: string, parameters: Record<string, unknown>, extra: Record<string, unknown> = {}) {
@@ -134,7 +134,7 @@ describe("eventsChangingResource", () => {
     expect(eventsChangingResource(workflows, actions, deaths)).toEqual(["channel.raid", "chat.command.death"]);
   });
 
-  test("a step under a condition counts, and a shared step counts", () => {
+  test("a step under a condition counts", () => {
     const conditional = workflow("channel.cheer", [
       { id: "rule_1", type: "condition", conditions: [{ field: "a", operator: "eq", value: 1 }], onTrue: ["act_1"] },
       step("act_1", { target: deaths }, { dependsOn: ["rule_1"] }),
@@ -142,12 +142,22 @@ describe("eventsChangingResource", () => {
     expect(eventsChangingResource([conditional], actions, deaths)).toEqual(["channel.cheer"]);
   });
 
-  test("a workflow this screen can't project is skipped rather than guessed at", () => {
-    const withDelay = workflow("channel.subscribe", [
-      { id: "wait_1", type: "delay", parameters: { seconds: 5 } },
-      step("act_1", { target: deaths }),
+  test("a step after a pause counts", () => {
+    const withPause = workflow("channel.subscribe", [
+      { id: "wait_1", type: "wait", wait: { type: "delay", durationMs: 5000 } },
+      step("act_1", { target: deaths }, { dependsOn: ["wait_1"] }),
     ]);
-    expect(eventsChangingResource([withDelay], actions, deaths)).toEqual([]);
+    expect(eventsChangingResource([withPause], actions, deaths)).toEqual(["channel.subscribe"]);
+  });
+
+  test("a workflow the step editor can't read is skipped rather than guessed at", () => {
+    const together = workflow("channel.cheer", [
+      { id: "rule_1", type: "condition", conditions: [{ field: "a", operator: "eq", value: 1 }], onTrue: ["act_1"] },
+      step("act_1", { target: deaths }, { dependsOn: ["rule_1"] }),
+      { id: "rule_2", type: "condition", conditions: [{ field: "a", operator: "eq", value: 2 }], onTrue: ["act_2"] },
+      step("act_2", { target: deaths }, { dependsOn: ["rule_2"] }),
+    ]);
+    expect(eventsChangingResource([together], actions, deaths)).toEqual([]);
   });
 
   test("a target chosen at runtime is not claimed as this instance", () => {

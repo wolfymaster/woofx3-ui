@@ -23,13 +23,16 @@ import {
 } from "./lib/streamInfo";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
+import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 
 // Title, category and tags for the dashboard's Stream info widget, plus stream
 // markers and the named presets that apply a whole set in one click.
 //
-// Straight to Helix, like convex/twitchBroadcast.ts and convex/pins.ts, rather
-// than through the engine: Convex already holds a refreshable broadcaster
-// token, so editing the channel keeps working while no engine is running.
+// Straight to Helix, like convex/twitchBroadcast.ts and convex/pins.ts, unless
+// the engine advertises twitch.streamInfo and makes the same calls itself
+// (convex/lib/twitchEngineHelix.ts). Convex holds a refreshable broadcaster
+// token either way, so editing the channel keeps working while no engine is
+// running.
 // Every call runs under channel:manage:broadcast, reads included. Reading
 // channel information needs no scope on Helix, but the widget exists to edit,
 // and one scope gate keeps "reconnect Twitch" a single, predictable state
@@ -79,9 +82,15 @@ async function helixFailure(what: string, response: Response): Promise<Error> {
   return new Error(`${what}: ${reason || `Twitch answered ${response.status}`}`);
 }
 
-async function fetchChannelInfo(call: AuthorizedTwitchCall): Promise<StreamInfo> {
-  const response = await fetch(`${TWITCH_CHANNELS_URL}?broadcaster_id=${call.broadcasterUserId}`, {
-    headers: helixHeaders(call),
+export async function fetchChannelInfo(call: AuthorizedTwitchCall, route: TwitchHelixRoute): Promise<StreamInfo> {
+  const response = await helixResponse(route, {
+    operation: "getChannelInformation",
+    kind: "read",
+    viaEngine: (engine) => engine.twitchGetChannelInformation(),
+    direct: () =>
+      fetch(`${TWITCH_CHANNELS_URL}?broadcaster_id=${call.broadcasterUserId}`, {
+        headers: helixHeaders(call),
+      }),
   });
   if (!response.ok) {
     throw await helixFailure("Couldn't read your stream info", response);
@@ -94,9 +103,19 @@ async function fetchChannelInfo(call: AuthorizedTwitchCall): Promise<StreamInfo>
 }
 
 /** Box art for a category, which Get Channel Information does not return. */
-async function fetchCategory(call: AuthorizedTwitchCall, categoryId: string): Promise<StreamCategory | null> {
-  const response = await fetch(`${TWITCH_GAMES_URL}?id=${encodeURIComponent(categoryId)}`, {
-    headers: helixHeaders(call),
+export async function fetchCategory(
+  call: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  categoryId: string
+): Promise<StreamCategory | null> {
+  const response = await helixResponse(route, {
+    operation: "getGames",
+    kind: "read",
+    viaEngine: (engine) => engine.twitchGetGames({ id: categoryId }),
+    direct: () =>
+      fetch(`${TWITCH_GAMES_URL}?id=${encodeURIComponent(categoryId)}`, {
+        headers: helixHeaders(call),
+      }),
   });
   if (!response.ok) {
     // The art is decoration; the channel's info is still worth showing without it.
@@ -112,16 +131,17 @@ async function fetchCategory(call: AuthorizedTwitchCall, categoryId: string): Pr
  */
 async function readChannel(
   call: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
   known?: { categoryId: string; boxArtUrl: string }
 ): Promise<StreamInfo> {
-  const info = await fetchChannelInfo(call);
+  const info = await fetchChannelInfo(call, route);
   if (!info.category) {
     return info;
   }
   if (known && known.categoryId === info.category.id && known.boxArtUrl.startsWith(BOX_ART_URL_PREFIX)) {
     return { ...info, category: { ...info.category, boxArtUrl: known.boxArtUrl } };
   }
-  const category = await fetchCategory(call, info.category.id);
+  const category = await fetchCategory(call, route, info.category.id);
   return { ...info, category: category ?? info.category };
 }
 
@@ -132,7 +152,7 @@ export const getChannelInfo = action({
   },
   handler: async (ctx, args): Promise<StreamInfo> => {
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    return readChannel(call, args.knownBoxArt);
+    return readChannel(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo"), args.knownBoxArt);
   },
 });
 
@@ -147,14 +167,27 @@ export const searchCategories = action({
       throw new Error(`Category searches are limited to ${MAX_SEARCH_QUERY_LENGTH} characters`);
     }
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    const url = `${TWITCH_SEARCH_CATEGORIES_URL}?query=${encodeURIComponent(text)}&first=${SEARCH_RESULT_LIMIT}`;
-    const response = await fetch(url, { headers: helixHeaders(call) });
-    if (!response.ok) {
-      throw await helixFailure("Category search failed", response);
-    }
-    return categoriesFromHelix(await response.json());
+    return searchCategoriesOnTwitch(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo"), text);
   },
 });
+
+export async function searchCategoriesOnTwitch(
+  call: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  text: string
+): Promise<StreamCategory[]> {
+  const url = `${TWITCH_SEARCH_CATEGORIES_URL}?query=${encodeURIComponent(text)}&first=${SEARCH_RESULT_LIMIT}`;
+  const response = await helixResponse(route, {
+    operation: "searchCategories",
+    kind: "read",
+    viaEngine: (engine) => engine.twitchSearchCategories({ query: text, first: SEARCH_RESULT_LIMIT }),
+    direct: () => fetch(url, { headers: helixHeaders(call) }),
+  });
+  if (!response.ok) {
+    throw await helixFailure("Category search failed", response);
+  }
+  return categoriesFromHelix(await response.json());
+}
 
 function assertValidChanges(changes: StreamInfoChanges): void {
   const problem =
@@ -200,19 +233,35 @@ export const updateChannelInfo = action({
     assertValidChanges(changes);
 
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    const response = await fetch(`${TWITCH_CHANNELS_URL}?broadcaster_id=${call.broadcasterUserId}`, {
-      method: "PATCH",
-      headers: { ...helixHeaders(call), "Content-Type": "application/json" },
-      body: JSON.stringify(toHelixPatch(changes)),
-    });
-    if (!response.ok) {
-      throw await helixFailure("Couldn't update your stream info", response);
-    }
+    const route = await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo");
+    await modifyChannelInformation(call, route, changes);
 
-    const info = await readChannel(call);
+    const info = await readChannel(call, route);
     return { info, unapplied: unappliedFields(changes, info) };
   },
 });
+
+export async function modifyChannelInformation(
+  call: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  changes: StreamInfoChanges
+): Promise<void> {
+  const patch = toHelixPatch(changes);
+  const response = await helixResponse(route, {
+    operation: "modifyChannelInformation",
+    kind: "write",
+    viaEngine: (engine) => engine.twitchModifyChannelInformation(patch),
+    direct: () =>
+      fetch(`${TWITCH_CHANNELS_URL}?broadcaster_id=${call.broadcasterUserId}`, {
+        method: "PATCH",
+        headers: { ...helixHeaders(call), "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      }),
+  });
+  if (!response.ok) {
+    throw await helixFailure("Couldn't update your stream info", response);
+  }
+}
 
 export const createMarker = action({
   args: { instanceId: v.id("instances"), description: v.optional(v.string()) },
@@ -224,36 +273,50 @@ export const createMarker = action({
     }
 
     const call = await authorizeTwitch(ctx, args.instanceId, STREAM_INFO_SCOPE);
-    const response = await fetch(TWITCH_MARKERS_URL, {
-      method: "POST",
-      headers: { ...helixHeaders(call), "Content-Type": "application/json" },
-      body: JSON.stringify(
-        description ? { user_id: call.broadcasterUserId, description } : { user_id: call.broadcasterUserId }
-      ),
-    });
-
-    // Helix answers 404 both when the channel is not live and when it has no
-    // VOD to mark (past broadcasts are off), and does not say which. The user
-    // id is the token's own, so the third documented 404, an unknown user, is
-    // not a case here. A 403 (token user is not the owner or an editor) is
-    // left to helixFailure, which carries Twitch's message.
-    if (response.status === 404) {
-      throw new Error(
-        "Not live, or past broadcasts are off (Twitch VOD settings); reruns and premieres can't be marked."
-      );
-    }
-    if (!response.ok) {
-      throw await helixFailure("Couldn't add a marker", response);
-    }
-
-    const body = (await response.json()) as { data?: Array<{ position_seconds?: unknown; created_at?: unknown }> };
-    const marker = body.data?.[0];
-    return {
-      positionSeconds: typeof marker?.position_seconds === "number" ? marker.position_seconds : null,
-      createdAt: typeof marker?.created_at === "string" ? marker.created_at : null,
-    };
+    return createMarkerOnTwitch(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.streamInfo"), description);
   },
 });
+
+export async function createMarkerOnTwitch(
+  call: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  description: string
+): Promise<{ positionSeconds: number | null; createdAt: string | null }> {
+  const response = await helixResponse(route, {
+    operation: "createStreamMarker",
+    kind: "write",
+    viaEngine: (engine) => engine.twitchCreateStreamMarker(description ? { description } : {}),
+    direct: () =>
+      fetch(TWITCH_MARKERS_URL, {
+        method: "POST",
+        headers: { ...helixHeaders(call), "Content-Type": "application/json" },
+        body: JSON.stringify(
+          description ? { user_id: call.broadcasterUserId, description } : { user_id: call.broadcasterUserId }
+        ),
+      }),
+  });
+
+  // Helix answers 404 both when the channel is not live and when it has no
+  // VOD to mark (past broadcasts are off), and does not say which. The user
+  // id is the token's own, so the third documented 404, an unknown user, is
+  // not a case here. A 403 (token user is not the owner or an editor) is
+  // left to helixFailure, which carries Twitch's message.
+  if (response.status === 404) {
+    throw new Error(
+      "Not live, or past broadcasts are off (Twitch VOD settings); reruns and premieres can't be marked."
+    );
+  }
+  if (!response.ok) {
+    throw await helixFailure("Couldn't add a marker", response);
+  }
+
+  const body = (await response.json()) as { data?: Array<{ position_seconds?: unknown; created_at?: unknown }> };
+  const marker = body.data?.[0];
+  return {
+    positionSeconds: typeof marker?.position_seconds === "number" ? marker.position_seconds : null,
+    createdAt: typeof marker?.created_at === "string" ? marker.created_at : null,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Presets

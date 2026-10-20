@@ -10,8 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useLiveState } from "@/engine/hooks/use-live-state";
+import {
+  useRefreshResourceValuesRequest,
+  useResourceInstancesOfKind,
+  useResourceValues,
+} from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
-import { useLiveState } from "@/hooks/use-live-state";
 import { useToast } from "@/hooks/use-toast";
 import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
 import { counterGoals, counterValue, goalProgress } from "@/lib/resource-values";
@@ -255,15 +260,12 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
 
   const liveState = useLiveState();
   const platformLinks = useQuery(api.instances.getPlatformLinks, instanceId ? { instanceId } : "skip");
-  const counters = useQuery(
-    api.moduleResourceInstances.listByKind,
-    instanceId ? { instanceId, kind: COUNTER_KIND } : "skip"
-  );
-  const values = useQuery(api.resourceValues.listForInstance, instanceId ? { instanceId } : "skip");
+  const counters = useResourceInstancesOfKind(instanceId ?? null, COUNTER_KIND);
+  const values = useResourceValues(instanceId ?? null);
   const pinnedRows = useQuery(api.dashboardCounters.list, instanceId ? { instanceId } : "skip");
   const pinCounter = useMutation(api.dashboardCounters.add);
   const unpinCounter = useMutation(api.dashboardCounters.remove);
-  const refreshValues = useAction(api.moduleResourceActions.refreshResourceValues);
+  const refreshValues = useRefreshResourceValuesRequest();
   const createClip = useAction(api.twitchClips.createClip);
 
   const [showRemaining, setShowRemaining] = useState(false);
@@ -279,7 +281,7 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues({ instanceId, kind: COUNTER_KIND }).catch(() => {
+    refreshValues(instanceId, COUNTER_KIND).catch(() => {
       // The mirror still shows the last known numbers; the next change updates it.
     });
   }, [instanceId, refreshValues]);

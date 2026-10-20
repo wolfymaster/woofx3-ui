@@ -130,3 +130,21 @@ export function resolveResourceKind(
   );
   return matches.length === 1 ? matches[0] : null;
 }
+
+/**
+ * The rows of kind `kind` that belong to `owner`, matched on the canonical id
+ * (`{module}:{kind}:{id}`) so it holds before the owner's manifest is mirrored.
+ * With no owner, every module's rows of that name.
+ */
+export function rowsOfKind<Row extends { kind: string; canonicalId: string }>(
+  rows: readonly Row[],
+  kind: string,
+  owner: string | undefined
+): Row[] {
+  const ofKind = rows.filter((row) => row.kind === kind);
+  if (owner === undefined) {
+    return ofKind;
+  }
+  const prefix = `${owner}:${kind}:`;
+  return ofKind.filter((row) => row.canonicalId.startsWith(prefix));
+}

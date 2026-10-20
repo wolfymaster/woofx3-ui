@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { useQuery } from "convex/react";
 import { Bell, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -8,6 +6,7 @@ import { AlertLayoutEditor } from "@/components/alert-editor/alert-layout-editor
 import { EmptyState } from "@/components/common/empty-state";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
+import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -34,7 +33,7 @@ export default function AlertEditorPage() {
   const [, navigate] = useLocation();
   const { instance } = useInstance();
   const { triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
+  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
 
   const triggerPreset = triggerPresets.find((preset) => preset.event === event);
   const conditionFields = useMemo(
