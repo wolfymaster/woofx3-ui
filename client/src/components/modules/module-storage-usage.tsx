@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
-import type { InstanceId, ModuleStorageUsage } from "@/engine/types";
+import type { ModuleStorageUsage } from "@/engine/types";
 
 /**
  * Said wherever module storage is over its limit. The limit is never enforced,
@@ -28,8 +28,8 @@ export function ModuleStorageOverLimitAlert({ usage, className }: { usage: Modul
 }
 
 /** Module storage on a managed engine against its plan's limit, for the engine page. */
-export function ModuleStorageCard({ instanceId }: { instanceId: InstanceId }) {
-  const { usage } = useModuleStorageUsage(instanceId);
+export function ModuleStorageCard() {
+  const { usage } = useModuleStorageUsage();
   return (
     <Card data-testid="module-storage-card">
       <CardHeader>
