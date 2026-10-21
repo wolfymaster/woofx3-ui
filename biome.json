@@ -83,6 +83,9 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
+                "paths": {
+                  "capnweb": "Import capnweb through @woofx3/api/client: capnweb recognises an RpcTarget only by its own copy, so a second copy breaks passing targets to the engine."
+                },
                 "patterns": [
                   {
                     "group": ["@/lib/transport", "@/lib/transport/**"],
@@ -107,7 +110,14 @@
       "linter": {
         "rules": {
           "style": {
-            "noRestrictedImports": "off"
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "capnweb": "Import capnweb through @woofx3/api/client: capnweb recognises an RpcTarget only by its own copy, so a second copy breaks passing targets to the engine."
+                }
+              }
+            }
           }
         }
       }

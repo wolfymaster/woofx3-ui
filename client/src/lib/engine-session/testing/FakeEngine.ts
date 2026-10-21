@@ -16,12 +16,13 @@ import { type EngineBrowserSession, RpcTarget } from "@woofx3/api/client";
 import type { EngineTarget } from "../target";
 
 // capnweb recognises an RpcTarget only by its own copy's class, and
-// `@woofx3/api/client` builds sessions with the copy installed beside the
-// package, which is also the `RpcTarget` it re-exports. Both halves of the
+// `@woofx3/api/client` builds sessions with whichever copy the package
+// resolves, which is also the `RpcTarget` it re-exports. Both halves of the
 // fake run on that copy, or a target passed across would not serialize. The
-// package exports no MessagePort session, so the copy is loaded from there.
+// package exports no MessagePort session, so `capnweb` is resolved the way
+// the package resolves it, wherever its dependencies are installed.
 const { newMessagePortRpcSession }: typeof import("capnweb") = await import(
-  new URL("node_modules/capnweb/dist/index.js", import.meta.resolve("@woofx3/api/client")).href
+  import.meta.resolve("capnweb", import.meta.resolve("@woofx3/api/client"))
 );
 
 /** The engine methods the fake serves. Typed against the real contract, so drift is a compile error. */
@@ -145,6 +146,19 @@ export class FakeEngine {
   dropFrames(count: number): void {
     for (const subscription of this.subscriptions()) {
       subscription.seq += count;
+    }
+  }
+
+  /**
+   * Ends every subscription and releases its held stub while the sessions
+   * stay open, as the engine does with a subscriber whose push rejects or
+   * times out.
+   */
+  dropSubscriptions(): void {
+    for (const api of this.sessions) {
+      const held = api.subscription?.subscriber as Partial<Disposable> | undefined;
+      api.subscription = null;
+      held?.[Symbol.dispose]?.();
     }
   }
 
