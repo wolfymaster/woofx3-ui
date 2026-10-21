@@ -163,11 +163,12 @@ describe("engine gateway types", () => {
 });
 
 describe("engine adapter boundary", () => {
+  // Read while the tests are collected, like the engine boundary's offenders,
+  // so a slow disk does not run into a test's timeout.
+  const reachingAdapter = appFilesReachingAdapter();
+
   test("outside client/src/engine only lib/cloud-ids.ts reaches the Convex adapter", () => {
-    expect(
-      appFilesReachingAdapter(),
-      "take the instance from useEngineScope(), or convert in lib/cloud-ids.ts"
-    ).toEqual([]);
+    expect(reachingAdapter, "take the instance from useEngineScope(), or convert in lib/cloud-ids.ts").toEqual([]);
   });
 
   test("the adapter check matches aliased and relative imports", () => {
