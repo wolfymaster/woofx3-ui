@@ -13,6 +13,8 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
+#[cfg(test)]
+mod command_names;
 mod credentials;
 mod engine_host;
 mod installation;
@@ -353,6 +355,7 @@ async fn test_endpoint(
 }
 
 /// What the window needs to open a capnweb session with the local engine.
+/// Only this host's own window can call it (capabilities/main.json).
 #[tauri::command]
 async fn local_engine_session(
     companion: State<'_, Arc<Companion>>,
@@ -482,4 +485,28 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
         companion.engine.stop().await;
         app.exit(code.unwrap_or(0));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::command_names::COMMAND_NAMES;
+
+    #[test]
+    fn test_capabilities_grant_exactly_the_declared_commands() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/main.json")).expect("valid JSON");
+        let granted: Vec<&str> = capability["permissions"]
+            .as_array()
+            .expect("a permission list")
+            .iter()
+            .map(|permission| permission.as_str().expect("a permission id"))
+            .filter(|permission| permission.starts_with("allow-"))
+            .collect();
+        let declared: Vec<String> = COMMAND_NAMES
+            .iter()
+            .map(|name| format!("allow-{}", name.replace('_', "-")))
+            .collect();
+        assert_eq!(granted, declared);
+        assert_eq!(capability["windows"], serde_json::json!(["main"]));
+    }
 }
