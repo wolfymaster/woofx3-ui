@@ -10,6 +10,7 @@ import { convexModulesGateway } from "./modules";
 import { convexRequestsGateway } from "./requests";
 import { convexResourcesGateway } from "./resources";
 import { convexScenesGateway } from "./scenes";
+import { convexSessionGateway } from "./session";
 import { convexStatusGateway } from "./status";
 import { convexStreamOpsGateway } from "./stream-ops";
 import { convexWorkflowsGateway } from "./workflows";
@@ -35,4 +36,5 @@ export const convexEngineGateway: EngineGateway = {
   macros: convexMacrosGateway,
   streamOps: convexStreamOpsGateway,
   config: convexConfigGateway,
+  session: convexSessionGateway,
 };

@@ -124,6 +124,7 @@ export interface EngineGateway {
   readonly macros: MacrosGateway;
   readonly streamOps: StreamOpsGateway;
   readonly config: ConfigGateway;
+  readonly session: SessionGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -523,4 +524,16 @@ export interface ConfigGateway {
   useStorageConfigRequest(): () => Promise<StorageConfig | null>;
   /** Replaces the storage backend, and its credentials, for everyone on the instance. */
   useSetStorageConfigRequest(): (config: Record<string, unknown>) => Promise<{ success: boolean }>;
+}
+
+/**
+ * The live connection the engine pushes events and runs over, which the
+ * subscriptions in other namespaces share. A gateway opens it to the scope's
+ * engine.
+ */
+export interface SessionGateway {
+  /** Keeps the live connection pointed at the scope's engine while mounted. Mount it once, in the app shell. */
+  useLiveConnection(): void;
+  /** Retries a dropped connection now instead of waiting out its backoff; does nothing while connected. */
+  useReconnectRequest(): () => void;
 }

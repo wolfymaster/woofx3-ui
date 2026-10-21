@@ -1,15 +1,16 @@
 import { useStore } from "@nanostores/react";
 import { useEffect } from "react";
+import type { SessionGateway } from "@/engine/gateway";
 import { useInstance } from "@/hooks/use-instance";
 import { $engineUrl } from "@/lib/stores";
 import { transport } from "@/lib/transport";
 
-/**
- * Keeps the browser engine transport aligned with the selected Convex instance.
- * Each instance has its own engine URL and client credentials from registration.
- * The global `$engineUrl` store is a fallback for legacy UX and local overrides.
- */
-export function useSyncEngineTransport(): void {
+// The live connection is the browser transport's WebSocket session, opened
+// with the URL and client credentials Convex recorded for the instance at
+// registration. `$engineUrl` stands in for an instance with no URL, for local
+// overrides.
+
+function useLiveConnection(): void {
   const { instance, isLoading } = useInstance();
   const fallbackUrl = useStore($engineUrl);
 
@@ -26,3 +27,13 @@ export function useSyncEngineTransport(): void {
     transport.connect(url, clientId, clientSecret);
   }, [isLoading, instance, fallbackUrl]);
 }
+
+// The transport is a module singleton, so this keeps its identity without memoising.
+const reconnectNow = (): void => {
+  transport.reconnectNow();
+};
+
+export const convexSessionGateway: SessionGateway = {
+  useLiveConnection,
+  useReconnectRequest: () => reconnectNow,
+};
