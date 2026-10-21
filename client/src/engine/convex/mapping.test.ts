@@ -32,7 +32,7 @@ const { convexModuleResourcesGateway } = await import("./module-resources");
 const { convexRequestsGateway } = await import("./requests");
 const { convexScenesGateway } = await import("./scenes");
 const { convexStatusGateway } = await import("./status");
-const { convexWorkflowsGateway } = await import("./workflows");
+const { convexWorkflowsGateway, toWorkflowRun } = await import("./workflows");
 
 const convexFields = { _creationTime: 1_700_000_000_000, instanceId: "instance-1" };
 
@@ -384,4 +384,54 @@ describe("each mapper builds its domain record from named fields", () => {
     const [group] = renderInScope(() => convexCommandsGateway.useGroups()) ?? [];
     expect(group).not.toHaveProperty("internalNote");
   });
+});
+
+describe("a pushed workflow run crosses field by field", () => {
+  const startedAt = new Date(1_700_000_000_000);
+  const cases = [
+    {
+      name: "a run in progress",
+      run: { id: "r1", workflowId: "wf-1", workflowName: "Raid", status: "running" as const, startedAt, progress: 40 },
+      expected: {
+        id: "r1",
+        workflowId: "wf-1",
+        workflowName: "Raid",
+        status: "running",
+        startedAt,
+        completedAt: undefined,
+        triggeredBy: undefined,
+        error: undefined,
+        progress: 40,
+      },
+    },
+    {
+      name: "a failed run keeps its error and end",
+      run: {
+        id: "r2",
+        workflowId: "wf-1",
+        workflowName: "Raid",
+        status: "failed" as const,
+        startedAt,
+        completedAt: startedAt,
+        triggeredBy: "chat",
+        error: "timed out",
+      },
+      expected: {
+        id: "r2",
+        workflowId: "wf-1",
+        workflowName: "Raid",
+        status: "failed",
+        startedAt,
+        completedAt: startedAt,
+        triggeredBy: "chat",
+        error: "timed out",
+        progress: undefined,
+      },
+    },
+  ];
+  for (const { name, run, expected } of cases) {
+    test(name, () => {
+      expect(toWorkflowRun(run)).toEqual(expected);
+    });
+  }
 });

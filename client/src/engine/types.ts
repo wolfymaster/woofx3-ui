@@ -23,7 +23,6 @@ export type {
   ViewerFact,
   WidgetThemes,
 } from "@woofx3/api";
-export type { WorkflowRun } from "@/lib/transport";
 
 /** A grant to open sceneManager's editor socket for one scene. */
 export type SceneEditorGrant = SceneEditorSession;
@@ -821,6 +820,20 @@ export interface WorkflowCatalog {
 }
 
 /** Who started a run, which the run history and the replay controls tell apart. */
+/** A workflow run as the engine pushes it while it happens. */
+export interface WorkflowRun {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  startedAt: Date;
+  completedAt?: Date;
+  triggeredBy?: string;
+  error?: string;
+  /** How far through its steps the run is, 0 to 100, when the engine reports it. */
+  progress?: number;
+}
+
 export type WorkflowRunOrigin = "dashboard" | "test" | "replay";
 
 /** A manual run: the workflow by name or id, its parameters, and test-run options. */

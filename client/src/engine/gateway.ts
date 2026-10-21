@@ -557,6 +557,8 @@ export interface SessionGateway {
   useLiveConnection(): void;
   /** Retries a dropped connection now instead of waiting out its backoff; does nothing while connected. */
   useReconnectRequest(): () => void;
+  /** True while the connection holds an engine session that has completed an authenticated round trip. */
+  useConnected(): boolean;
 }
 
 /**

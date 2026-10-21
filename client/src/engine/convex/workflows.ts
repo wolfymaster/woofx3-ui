@@ -20,6 +20,7 @@ import type {
   WorkflowTrigger,
 } from "@/engine/types";
 import { transport } from "@/lib/transport";
+import type { WorkflowRun as TransportWorkflowRun } from "@/lib/transport/interface";
 import { toModuleId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
 import { requireInstance, useInstanceAction, useScopeInstanceId } from "./scope";
@@ -244,12 +245,27 @@ function useRuns(engineWorkflowId: string, limit: number) {
   return useMappedList(rows, toRecordedWorkflowRun);
 }
 
+export function toWorkflowRun(run: TransportWorkflowRun): WorkflowRun {
+  return {
+    id: run.id,
+    workflowId: run.workflowId,
+    workflowName: run.workflowName,
+    status: run.status,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+    triggeredBy: run.triggeredBy,
+    error: run.error,
+    progress: run.progress,
+  };
+}
+
 // The live transport holds one session, to the current instance's engine;
 // this still refuses while the scope has no instance, like every other call.
 function useRunsSubscription() {
   const instanceId = useScopeInstanceId();
   return useCallback(
-    (onRun: (run: WorkflowRun) => void) => transport.subscribeWorkflowRuns(requireInstance(instanceId), onRun),
+    (onRun: (run: WorkflowRun) => void) =>
+      transport.subscribeWorkflowRuns(requireInstance(instanceId), (run) => onRun(toWorkflowRun(run))),
     [instanceId]
   );
 }

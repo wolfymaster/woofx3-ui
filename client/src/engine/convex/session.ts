@@ -4,6 +4,7 @@ import type { SessionGateway } from "@/engine/gateway";
 import { useInstance } from "@/hooks/use-instance";
 import { $engineUrl } from "@/lib/stores";
 import { transport } from "@/lib/transport";
+import { $engineConnected } from "@/lib/transport/engine-connection";
 
 // The live connection is the browser transport's WebSocket session, opened
 // with the URL and client credentials Convex recorded for the instance at
@@ -33,7 +34,12 @@ const reconnectNow = (): void => {
   transport.reconnectNow();
 };
 
+function useConnected(): boolean {
+  return useStore($engineConnected);
+}
+
 export const convexSessionGateway: SessionGateway = {
   useLiveConnection,
   useReconnectRequest: () => reconnectNow,
+  useConnected,
 };
