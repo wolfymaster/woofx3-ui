@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -47,14 +46,14 @@ function startableGroups(
  * uses, then its steps in the flow editor every other surface edits with. It is created
  * once it has an action, named after its trigger, and opens in the workflow editor.
  */
-export function WorkflowEditor({ instanceId }: { instanceId: Id<"instances"> }) {
+export function WorkflowEditor() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { catalogTriggers, catalogActions, triggerPresets, actionPresets, loading } = useWorkflowCatalog();
-  const conditionSupport = useEngineConditionSupport(instanceId);
+  const conditionSupport = useEngineConditionSupport();
   const createFromDefinition = useCreateWorkflowRequest();
-  const resourceInstances = useResourceInstances(instanceId);
-  const scenes = useScenes(instanceId);
+  const resourceInstances = useResourceInstances();
+  const scenes = useScenes();
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -89,7 +88,6 @@ export function WorkflowEditor({ instanceId }: { instanceId: Id<"instances"> }) 
     try {
       const { id: _unsaved, ...definition } = treeToDefinition(tree);
       const { engineWorkflowId } = await createFromDefinition(
-        instanceId,
         escapeDollarKeys({ ...definition, name: triggerPreset.name }) as Omit<WorkflowDefinition, "id">
       );
       toast({ title: "Workflow created" });

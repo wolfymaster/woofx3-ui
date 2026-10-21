@@ -415,7 +415,7 @@ function WorkflowListScreen() {
 
 function CreateWorkflowScreen() {
   const [, navigate] = useLocation();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
@@ -426,7 +426,7 @@ function CreateWorkflowScreen() {
 
       <PageHeader title="Create a new workflow" description="Pick what starts it, then add its steps" />
 
-      {instance && <WorkflowEditor instanceId={instance._id as Id<"instances">} />}
+      {instanceId && <WorkflowEditor />}
     </div>
   );
 }
