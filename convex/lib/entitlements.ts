@@ -45,6 +45,15 @@ export const ENTITLEMENT_LIMITS = {
     unit: "bytes",
     default: 10 * 1024 * 1024,
   },
+  // Soft: nothing refuses a write over it. Module storage lives on a managed
+  // engine's ephemeral disk and its replica in our bucket, so the dashboard
+  // warns its owner, and operators see it in the backoffice; see
+  // lib/hostedStorage.ts.
+  "storage.moduleStorageBytes": {
+    description: "Module storage on a managed engine (warned, never enforced)",
+    unit: "bytes",
+    default: 500 * 1024 * 1024,
+  },
 } as const satisfies Record<string, EntitlementLimitDefinition>;
 
 export type EntitlementFeatureKey = keyof typeof ENTITLEMENT_FEATURES;

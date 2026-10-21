@@ -9,6 +9,7 @@ export type OpsRoute =
   | { method: "GET"; name: "accounts.get"; accountId: string }
   | { method: "GET"; name: "engines.list" }
   | { method: "GET"; name: "engines.capabilities" }
+  | { method: "GET"; name: "engines.moduleStorageLimits" }
   | { method: "GET"; name: "engines.byMaintenanceId"; engineId: string }
   | { method: "GET"; name: "instances.health"; instanceId: string }
   | { method: "GET"; name: "audit.list" }
@@ -78,6 +79,9 @@ export function matchOpsRoute(method: string, pathname: string): OpsRoute | null
     case 2:
       if (first === "engines" && second === "capabilities") {
         return { method, name: "engines.capabilities" };
+      }
+      if (first === "engines" && second === "module-storage-limits") {
+        return { method, name: "engines.moduleStorageLimits" };
       }
       if (first === "users" && second) {
         return { method, name: "users.get", userId: second };

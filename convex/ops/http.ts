@@ -100,6 +100,9 @@ export const opsHandler = httpAction(async (ctx, request) => {
         })
       );
     }
+    case "engines.moduleStorageLimits": {
+      return ok(await ctx.runQuery(internal.ops.reads.moduleStorageLimits, { cursor }));
+    }
     case "engines.byMaintenanceId": {
       const engine = await ctx.runQuery(internal.ops.reads.engineByMaintenanceId, { engineId: route.engineId });
       return engine === null ? error(404, "not_found", "No such engine") : ok(engine);
