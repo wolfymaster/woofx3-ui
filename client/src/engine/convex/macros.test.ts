@@ -1,8 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Id } from "@convex/_generated/dataModel";
 import { getFunctionName } from "convex/server";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // The Convex hooks are replaced so the call can be checked: running a macro
 // through the gateway must send what the macro pad and the command palette
@@ -24,26 +23,13 @@ mock.module("convex/react", () => ({
 
 const { convexMacrosGateway } = await import("./macros");
 
-function renderRequest<T>(hook: () => T): T {
-  let value: T | undefined;
-  function Probe() {
-    value = hook();
-    return null;
-  }
-  renderToStaticMarkup(createElement(Probe));
-  if (value === undefined) {
-    throw new Error("the probe did not render");
-  }
-  return value;
-}
-
-const instanceId = "instance-1" as Id<"instances">;
+const instanceId = TEST_INSTANCE_ID;
 const macroId = "macro-1" as Id<"macros">;
 
 describe("macros.useRunRequest", () => {
   test("runs the macro with its variable values", async () => {
-    const run = renderRequest(() => convexMacrosGateway.useRunRequest());
-    await run(instanceId, macroId, [{ name: "user", value: "wolfy" }]);
+    const run = renderInScope(() => convexMacrosGateway.useRunRequest());
+    await run(macroId, [{ name: "user", value: "wolfy" }]);
     expect(calls).toEqual([
       { name: "macros:run", args: { instanceId, macroId, values: [{ name: "user", value: "wolfy" }] } },
     ]);

@@ -22,7 +22,7 @@ export default function WorkflowRun() {
   const [, navigate] = useLocation();
   const { instanceId } = useEngineScope();
   // The same subscription RunTrace makes, so Convex serves both from one.
-  const recorded = useWorkflowRun(instanceId, engineRunId);
+  const recorded = useWorkflowRun(engineRunId);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -47,15 +47,9 @@ export default function WorkflowRun() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : (
             <RunTrace
-              instanceId={instanceId}
               engineRunId={engineRunId}
               actions={({ failedStepTaskId }) => (
-                <ReplayControls
-                  instanceId={instanceId}
-                  engineRunId={engineRunId}
-                  failedStepTaskId={failedStepTaskId}
-                  origin={REPLAY_ORIGIN}
-                />
+                <ReplayControls engineRunId={engineRunId} failedStepTaskId={failedStepTaskId} origin={REPLAY_ORIGIN} />
               )}
             />
           )}

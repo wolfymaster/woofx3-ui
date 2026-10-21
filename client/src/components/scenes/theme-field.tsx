@@ -40,7 +40,7 @@ function ThemeField({ field, value, onChange }: Parameters<CustomFieldRenderer>[
       return;
     }
     let cancelled = false;
-    listWidgetThemes(engineInstanceId, widgetCanonicalId)
+    listWidgetThemes(widgetCanonicalId)
       .then((result) => {
         if (!cancelled) {
           setList({ status: "loaded", themes: result.themes });

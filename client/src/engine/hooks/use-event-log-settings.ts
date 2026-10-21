@@ -1,9 +1,9 @@
 import { useStore } from "@nanostores/react";
 import { atom } from "nanostores";
 import { useCallback, useEffect, useState } from "react";
-import { useEngineGateway } from "@/engine/context";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import type { EventLogSettings, InstanceId } from "@/engine/types";
+import type { EventLogSettings } from "@/engine/types";
 import { withEventTypeEnabled } from "@/lib/activity-feed";
 import { type CapabilitySupport, EVENT_LOG_CAPABILITIES } from "@/lib/engine-capabilities";
 import { $engineConnected } from "@/lib/transport/engine-connection";
@@ -49,8 +49,9 @@ export interface EventLogSettingsHandle {
  * logs and pushes, its defaults and what it offers. Read on mount, on every
  * reconnect and on `refresh`.
  */
-export function useEventLogSettings(instanceId: InstanceId | null): EventLogSettingsHandle {
-  const support = useEngineCapabilities(instanceId).support(...EVENT_LOG_CAPABILITIES);
+export function useEventLogSettings(): EventLogSettingsHandle {
+  const { instanceId } = useEngineScope();
+  const support = useEngineCapabilities().support(...EVENT_LOG_CAPABILITIES);
   const { eventLog } = useEngineGateway();
   const getEventLogSettings = eventLog.useSettingsRequest();
   const setEventLogSelection = eventLog.useSetSelectionRequest();
@@ -67,7 +68,7 @@ export function useEventLogSettings(instanceId: InstanceId | null): EventLogSett
       return;
     }
     let cancelled = false;
-    getEventLogSettings(instanceId)
+    getEventLogSettings()
       .then((next) => {
         if (!cancelled) {
           storeSettings(instanceId, next);
@@ -97,7 +98,7 @@ export function useEventLogSettings(instanceId: InstanceId | null): EventLogSett
       setSaving(true);
       try {
         const selection = withEventTypeEnabled(settings.selection, settings.defaults, type, enabled);
-        storeSettings(instanceId, await setEventLogSelection(instanceId, selection));
+        storeSettings(instanceId, await setEventLogSelection(selection));
       } finally {
         setSaving(false);
       }

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useEngineGateway, useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import type { AlertComposition, InstanceId } from "@/engine/types";
+import type { AlertComposition } from "@/engine/types";
 import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
 
 export interface AlertLibrary {
@@ -22,9 +22,9 @@ const refreshed = new Set<string>();
  */
 export function useAlertLibrary(): AlertLibrary {
   const { instanceId } = useEngineScope();
-  const enabled = useEngineCapabilities(instanceId).support(...ALERT_LIBRARY_CAPABILITIES) === "supported";
+  const enabled = useEngineCapabilities().support(...ALERT_LIBRARY_CAPABILITIES) === "supported";
   const { alertLibrary } = useEngineGateway();
-  const alerts = alertLibrary.useAlerts(enabled && instanceId ? instanceId : null);
+  const alerts = alertLibrary.useAlerts({ enabled });
   const refresh = alertLibrary.useRefreshRequest();
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function useAlertLibrary(): AlertLibrary {
       return;
     }
     refreshed.add(instanceId);
-    refresh(instanceId).catch((error: unknown) => {
+    refresh().catch((error: unknown) => {
       // The cache still has whatever the webhooks brought; the next editor to mount tries again.
       refreshed.delete(instanceId);
       console.warn("[alert library] refresh failed", error);
@@ -43,8 +43,8 @@ export function useAlertLibrary(): AlertLibrary {
 }
 
 /** One library alert by the engine's id; null until its webhook arrives or once it is deleted. */
-export function useLibraryAlert(instanceId: InstanceId, engineCompositionId: string) {
-  return useEngineGateway().alertLibrary.useAlert(instanceId, engineCompositionId);
+export function useLibraryAlert(engineCompositionId: string) {
+  return useEngineGateway().alertLibrary.useAlert(engineCompositionId);
 }
 
 export function useCreateLibraryAlertRequest() {

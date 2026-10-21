@@ -191,7 +191,7 @@ function ListingBody({
     void installedVersion;
     let cancelled = false;
     const listingId = listing.id;
-    getModuleDetail(engineInstanceId, listingId)
+    getModuleDetail(listingId)
       .then((detail) => {
         if (!cancelled) {
           setLoadedDetail({ listingId, load: { status: "ready", detail } });
@@ -213,7 +213,7 @@ function ListingBody({
     loadedDetail?.listingId === listing.id ? loadedDetail.load : { status: "loading" };
   const moduleDetail = detailLoad.status === "ready" ? detailLoad.detail : null;
 
-  const install = useModuleInstall(engineInstanceId, onRefetch);
+  const install = useModuleInstall(onRefetch);
   const [removing, setRemoving] = useState(false);
   const [bundleInstalled, setBundleInstalled] = useState<{ kind: "scene" | "alert" } | null>(null);
 
@@ -418,7 +418,6 @@ function ListingBody({
         <UninstallModuleDialog
           open={removing && installedRow !== undefined}
           onOpenChange={setRemoving}
-          instanceId={engineInstanceId}
           module={
             installedRow
               ? {

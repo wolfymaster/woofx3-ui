@@ -303,7 +303,7 @@ function SelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
 // string) so downstream code can assemble `chat.command.${value}` verbatim.
 function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
   const { instanceId } = useEngineScope();
-  const commands = useChatCommands(instanceId);
+  const commands = useChatCommands();
 
   const options = useMemo(() => {
     if (!commands) {

@@ -190,7 +190,7 @@ export function MacroPadModule() {
   const listArgs = instanceId ? { instanceId } : "skip";
 
   const macros = useQuery(api.macros.list, listArgs);
-  const commands = useChatCommands(engineInstanceId);
+  const commands = useChatCommands();
   const remoteTriggers = useQuery(api.macroTriggers.listForInstance, listArgs);
   const addMacro = useMutation(api.macros.addMacro);
   const updateMacro = useMutation(api.macros.updateMacro);
@@ -217,7 +217,7 @@ export function MacroPadModule() {
     if (!engineInstanceId) {
       return;
     }
-    listEngineWorkflows(engineInstanceId).then(setWorkflows).catch(console.error);
+    listEngineWorkflows().then(setWorkflows).catch(console.error);
   }, [engineInstanceId, listEngineWorkflows]);
 
   const variableCounts = useMemo(() => {
@@ -321,7 +321,6 @@ export function MacroPadModule() {
             return;
           }
           await runMacroOnServer(
-            engineInstanceId,
             toMacroId(macro.id),
             Object.entries(values).map(([name, value]) => ({ name, value }))
           );

@@ -1,5 +1,4 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
-import type { InstanceId } from "@/engine/types";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { type EventEditorState, getDraft, setDraft } from "@/lib/event-drafts";
 import { buildWorkflowDefinition, UNCONDITIONAL_TRIGGER_ID } from "@/lib/trigger-projection";
@@ -33,10 +32,9 @@ export function firstIncompleteTrigger(
 
 /** The engine writes saving needs, as a screen's workflow request hooks supply them. */
 export interface EngineWorkflowWriters {
-  instanceId: InstanceId;
-  createFromDefinition: (instanceId: InstanceId, definition: unknown) => Promise<{ engineWorkflowId: string }>;
-  updateFromDefinition: (instanceId: InstanceId, engineWorkflowId: string, definition: unknown) => Promise<unknown>;
-  setEnabled: (instanceId: InstanceId, engineWorkflowId: string, isEnabled: boolean) => Promise<unknown>;
+  createFromDefinition: (definition: unknown) => Promise<{ engineWorkflowId: string }>;
+  updateFromDefinition: (engineWorkflowId: string, definition: unknown) => Promise<unknown>;
+  setEnabled: (engineWorkflowId: string, isEnabled: boolean) => Promise<unknown>;
 }
 
 /**
@@ -72,11 +70,11 @@ export async function saveEventDraft(
 
   let enabled = true;
   if (state.engineWorkflowId) {
-    await writers.updateFromDefinition(writers.instanceId, state.engineWorkflowId, escapeDollarKeys(definition));
+    await writers.updateFromDefinition(state.engineWorkflowId, escapeDollarKeys(definition));
   } else {
-    const created = await writers.createFromDefinition(writers.instanceId, escapeDollarKeys(definition));
+    const created = await writers.createFromDefinition(escapeDollarKeys(definition));
     try {
-      await writers.setEnabled(writers.instanceId, created.engineWorkflowId, true);
+      await writers.setEnabled(created.engineWorkflowId, true);
     } catch {
       enabled = false;
     }

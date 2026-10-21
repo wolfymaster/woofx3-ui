@@ -424,7 +424,7 @@ export default function Dashboard() {
         <NotRunningNotice />
 
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
-        {engineInstanceId && <StarterPacksNudge instanceId={engineInstanceId} />}
+        {engineInstanceId && <StarterPacksNudge />}
 
         {/* Swiping between panels is off while editing, so dragging a widget
             does not also drag the carousel. */}

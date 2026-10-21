@@ -3,7 +3,6 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { AlertTriangle, Download, Laptop, Unplug } from "lucide-react";
-import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import { companionDownloadUrl, type LocalEndpointSituation, localEndpointSituation } from "@/lib/local-endpoints";
@@ -21,9 +20,8 @@ type EndpointView = ModuleLocalEndpoints["endpoints"][number];
  * the companion's bridge.
  */
 export function LocalEndpointPanel({ instanceId, moduleId }: { instanceId: Id<"instances">; moduleId: string }) {
-  const { instanceId: engineInstanceId } = useEngineScope();
   const view = useQuery(api.companionIntegrations.forModule, moduleId ? { instanceId, moduleId } : "skip");
-  const capability = useEngineCapabilities(engineInstanceId).support("modules.localEndpoints");
+  const capability = useEngineCapabilities().support("modules.localEndpoints");
   const now = useMinuteClock();
   if (!view || view.endpoints.length === 0) {
     return null;

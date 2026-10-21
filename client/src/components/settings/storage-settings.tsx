@@ -76,7 +76,7 @@ export function StorageSettings() {
     }
     setIsLoading(true);
     try {
-      const [result, engineInfo] = await Promise.all([getConfig(instanceId), getEngineInfo(instanceId)]);
+      const [result, engineInfo] = await Promise.all([getConfig(), getEngineInfo()]);
       if (result) {
         setConfigState(result as unknown as StorageConfig);
       }
@@ -104,8 +104,8 @@ export function StorageSettings() {
     setIsSaving(true);
     try {
       await Promise.all([
-        setConfig(instanceId, config as unknown as Record<string, unknown>),
-        setOverlayPublicUrl(instanceId, trimmedOverlayUrl),
+        setConfig(config as unknown as Record<string, unknown>),
+        setOverlayPublicUrl(trimmedOverlayUrl),
       ]);
       setOverlayPublicUrlState(trimmedOverlayUrl);
       toast({ title: "Settings saved" });

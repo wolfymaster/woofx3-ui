@@ -29,7 +29,7 @@ import {
   useRemoveChatCommandGroupMemberRequest,
   useUpdateChatCommandGroupRequest,
 } from "@/engine/hooks/use-chat-commands";
-import type { ChatCommandGroup, InstanceId } from "@/engine/types";
+import type { ChatCommandGroup } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { COMMAND_GROUPS_PATH } from "@/lib/command-editor-route";
 import { groupLabel } from "@/lib/group-display";
@@ -59,8 +59,8 @@ export default function CommandGroupEditor() {
   const { toast } = useToast();
   const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
 
-  const groupsRaw = useChatCommandGroups(instanceId);
-  const commandsRaw = useChatCommands(instanceId);
+  const groupsRaw = useChatCommandGroups();
+  const commandsRaw = useChatCommands();
 
   const createGroup = useCreateChatCommandGroupRequest();
   const updateGroup = useUpdateChatCommandGroupRequest();
@@ -125,14 +125,14 @@ export default function CommandGroupEditor() {
     setSaving(true);
     try {
       if (existing) {
-        await updateGroup(instanceId, {
+        await updateGroup({
           engineGroupId: existing.engineGroupId,
           name,
           description: form.description.trim() || undefined,
         });
         toast({ title: "Group updated" });
       } else {
-        await createGroup(instanceId, {
+        await createGroup({
           name,
           description: form.description.trim() || undefined,
         });
@@ -261,7 +261,7 @@ export default function CommandGroupEditor() {
                       ? "Membership of this group is kept up to date from chat automatically. It is shown here for reference and can't be edited — a manual change would be reverted on that user's next message."
                       : "Membership is by chat username. Each change here is saved straight away, separately from the name and description above."}
                   </p>
-                  <GroupMembers instanceId={instanceId} group={existing} />
+                  <GroupMembers group={existing} />
                 </>
               )
             )}
@@ -290,13 +290,13 @@ export default function CommandGroupEditor() {
 }
 
 /** Who belongs to one group, added and removed a username at a time. */
-function GroupMembers({ instanceId, group }: { instanceId: InstanceId; group: GroupDoc }) {
+function GroupMembers({ group }: { group: GroupDoc }) {
   const readOnly = !!group.isBuiltIn;
   const { toast } = useToast();
   const [usernameInput, setUsernameInput] = useState("");
   const [pending, setPending] = useState(false);
 
-  const members = useChatCommandGroupMembers(instanceId, group.engineGroupId);
+  const members = useChatCommandGroupMembers(group.engineGroupId);
 
   const addUserToGroup = useAddChatCommandGroupMemberRequest();
   const removeUserFromGroup = useRemoveChatCommandGroupMemberRequest();
@@ -308,7 +308,7 @@ function GroupMembers({ instanceId, group }: { instanceId: InstanceId; group: Gr
     }
     setPending(true);
     try {
-      await addUserToGroup(instanceId, group.engineGroupId, username);
+      await addUserToGroup(group.engineGroupId, username);
       setUsernameInput("");
     } catch (err: unknown) {
       toast({
@@ -324,7 +324,7 @@ function GroupMembers({ instanceId, group }: { instanceId: InstanceId; group: Gr
   async function handleRemove(username: string) {
     setPending(true);
     try {
-      await removeUserFromGroup(instanceId, group.engineGroupId, username);
+      await removeUserFromGroup(group.engineGroupId, username);
     } catch (err: unknown) {
       toast({
         title: "Failed to remove member",

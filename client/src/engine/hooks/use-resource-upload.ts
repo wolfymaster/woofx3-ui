@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
-import { useEngineGateway } from "@/engine/context";
-import type { InstanceId, Resource } from "@/engine/types";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
+import type { Resource } from "@/engine/types";
 import { actionErrorMessage } from "@/lib/action-error";
 
 /**
@@ -23,7 +23,8 @@ const UNREACHABLE_STORAGE =
  *
  * Shared by the Media page and the asset picker so the sequence exists once.
  */
-export function useResourceUpload(instanceId: InstanceId | null) {
+export function useResourceUpload() {
+  const { instanceId } = useEngineScope();
   const { resources } = useEngineGateway();
   const requestUpload = resources.useUploadGrantRequest();
   const completeUpload = resources.useCompleteUploadRequest();
@@ -50,7 +51,7 @@ export function useResourceUpload(instanceId: InstanceId | null) {
       // it is untidy rather than harmful, so this must not mask that failure.
       const discardReservation = async (resourceId: string) => {
         try {
-          await removeResource(instanceId, resourceId);
+          await removeResource(resourceId);
         } catch {}
       };
       try {
@@ -60,7 +61,7 @@ export function useResourceUpload(instanceId: InstanceId | null) {
 
           let grant: Awaited<ReturnType<typeof requestUpload>>;
           try {
-            grant = await requestUpload(instanceId, {
+            grant = await requestUpload({
               name: file.name,
               contentType: file.type || "application/octet-stream",
               parentId,
@@ -99,14 +100,14 @@ export function useResourceUpload(instanceId: InstanceId | null) {
             throw Object.assign(new Error(`${file.name}: upload failed (${response.status})`), { uploaded: done });
           }
 
-          const resource = await completeUpload(instanceId, grant.resource.id);
+          const resource = await completeUpload(grant.resource.id);
           done.push(resource);
 
           // Fire-and-forget: thumbnailing is asynchronous, and a resource the
           // utility cannot render (audio) keeps a null thumbnail rather than
           // failing — so a rejection here must never fail the upload.
           if (resource.kind === "image" || resource.kind === "video") {
-            void requestProcessing(instanceId, resource.id, "thumbnail").catch(() => {});
+            void requestProcessing(resource.id, "thumbnail").catch(() => {});
           }
         }
         return done;

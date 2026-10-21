@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { useEngineGateway } from "@/engine/context";
-import type { EngineCapability, EngineCapabilityReport, InstanceId } from "@/engine/types";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
+import type { EngineCapability, EngineCapabilityReport, ReadOptions } from "@/engine/types";
 import {
   type CapabilitySupport,
   capabilitySupport,
@@ -78,27 +78,23 @@ export interface EngineCapabilities {
 
 /**
  * The features the instance's engine supports, cached for the page session and
- * asked again when the engine reconnects. See lib/engine-capabilities.ts for
+ * asked again when the engine reconnects. `enabled: false` asks nothing and
+ * reads as loading. See lib/engine-capabilities.ts for
  * turning the answer into a gate.
  */
-export function useEngineCapabilities(instanceId: InstanceId | null): EngineCapabilities {
+export function useEngineCapabilities({ enabled = true }: ReadOptions = {}): EngineCapabilities {
+  const scope = useEngineScope();
+  const instanceId = enabled ? scope.instanceId : null;
   const getCapabilities = useEngineGateway().status.useCapabilitiesRequest();
   const key = instanceId ?? "";
   const state = useSyncExternalStore(subscribe, () => (key ? (entries.get(key) ?? LOADING) : LOADING));
   const cached = key !== "" && entries.has(key);
 
-  const fetchReport = useCallback(() => {
-    if (!instanceId) {
-      throw new Error("useEngineCapabilities: fetch without an instance");
-    }
-    return getCapabilities(instanceId);
-  }, [instanceId, getCapabilities]);
-
   useEffect(() => {
     if (instanceId && !cached) {
-      load(instanceId, fetchReport);
+      load(instanceId, getCapabilities);
     }
-  }, [instanceId, cached, fetchReport]);
+  }, [instanceId, cached, getCapabilities]);
 
   const refresh = useCallback(() => {
     if (instanceId) {

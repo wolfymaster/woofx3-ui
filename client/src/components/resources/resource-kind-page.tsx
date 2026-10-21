@@ -79,9 +79,9 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   const { instanceId } = useEngineScope();
   const { toast } = useToast();
 
-  const kindDefinition = useResourceKind(instanceId, kind);
-  const instances = useResourceInstancesOfKind(instanceId, kind);
-  const values = useResourceValues(instanceId);
+  const kindDefinition = useResourceKind(kind);
+  const instances = useResourceInstancesOfKind(kind);
+  const values = useResourceValues();
   const createInstance = useCreateResourceInstanceRequest();
   const updateInstance = useUpdateResourceInstanceRequest();
   const deleteInstance = useDeleteResourceInstanceRequest();
@@ -96,7 +96,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues(instanceId, kind).catch(() => {
+    refreshValues(kind).catch(() => {
       // The mirror still shows the last known values; the next change updates it.
     });
   }, [instanceId, kind, refreshValues]);
@@ -239,7 +239,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                 settings={resourceSettings(selected)}
                 onSave={async (displayName, settings) => {
                   try {
-                    await updateInstance(instanceId, {
+                    await updateInstance({
                       canonicalId: selected.canonicalId,
                       displayName,
                       settings,
@@ -264,7 +264,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
           kind={{ kind: kindDefinition.kind, name: kindDefinition.name, schema: kindDefinition.schema }}
           onClose={() => setCreating(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            await createInstance(instanceId, {
+            await createInstance({
               moduleName: kindDefinition.moduleName,
               kind: kindDefinition.kind,
               resourceInstanceId,
@@ -293,7 +293,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                   return;
                 }
                 try {
-                  await deleteInstance(instanceId, deleteTarget.canonicalId);
+                  await deleteInstance(deleteTarget.canonicalId);
                   navigate(basePath);
                 } catch (err) {
                   toast({

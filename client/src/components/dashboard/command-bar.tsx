@@ -263,8 +263,8 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
 
   const liveState = useLiveState();
   const platformLinks = useQuery(api.instances.getPlatformLinks, instanceId ? { instanceId } : "skip");
-  const counters = useResourceInstancesOfKind(engineInstanceId, COUNTER_KIND);
-  const values = useResourceValues(engineInstanceId);
+  const counters = useResourceInstancesOfKind(COUNTER_KIND);
+  const values = useResourceValues();
   const pinnedRows = useQuery(api.dashboardCounters.list, instanceId ? { instanceId } : "skip");
   const pinCounter = useMutation(api.dashboardCounters.add);
   const unpinCounter = useMutation(api.dashboardCounters.remove);
@@ -284,7 +284,7 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
     if (!engineInstanceId) {
       return;
     }
-    refreshValues(engineInstanceId, COUNTER_KIND).catch(() => {
+    refreshValues(COUNTER_KIND).catch(() => {
       // The mirror still shows the last known numbers; the next change updates it.
     });
   }, [engineInstanceId, refreshValues]);

@@ -13,8 +13,7 @@ export function useNotRunningWorkflows(): {
   byId: ReadonlyMap<string, NotRunningWorkflow>;
   list: readonly NotRunningWorkflow[] | undefined;
 } {
-  const { instanceId } = useEngineScope();
-  const list = useNotRunningWorkflowList(instanceId);
+  const list = useNotRunningWorkflowList();
   const byId = useMemo(() => notRunningById(list), [list]);
   return { byId, list };
 }
@@ -31,7 +30,7 @@ export function useWorkflowHealthResyncOnMount(): void {
     if (!instanceId) {
       return;
     }
-    resync(instanceId, "mount").catch(() => undefined);
+    resync("mount").catch(() => undefined);
   }, [instanceId, resync]);
 }
 
@@ -49,6 +48,6 @@ export function useWorkflowHealthResyncOnReconnect(): void {
     if (!instanceId || !connected) {
       return;
     }
-    resync(instanceId, "reconnect").catch(() => undefined);
+    resync("reconnect").catch(() => undefined);
   }, [instanceId, connected, resync]);
 }

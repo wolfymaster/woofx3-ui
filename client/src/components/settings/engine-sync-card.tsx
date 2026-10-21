@@ -5,11 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
-import type { InstanceId } from "@/engine/types";
-
-interface EngineSyncCardProps {
-  instanceId: InstanceId;
-}
 
 type StepStatus = "pending" | "running" | "success" | "error";
 
@@ -26,8 +21,8 @@ function StepIcon({ status }: { status: StepStatus }) {
   return <Circle className="h-3.5 w-3.5 text-muted-foreground" />;
 }
 
-export function EngineSyncCard({ instanceId }: EngineSyncCardProps) {
-  const state = useEngineSyncState(instanceId);
+export function EngineSyncCard() {
+  const state = useEngineSyncState();
   const syncNow = useEngineSyncRequest();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -36,7 +31,7 @@ export function EngineSyncCard({ instanceId }: EngineSyncCardProps) {
     setError(null);
     setPending(true);
     try {
-      const res = await syncNow(instanceId);
+      const res = await syncNow();
       if (!res.scheduled) {
         setError("A sync is already in progress.");
       }

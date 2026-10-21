@@ -92,12 +92,12 @@ export function useSceneEditorSession({
   const socketSourceRef = useRef<SceneSocketSource | null>(null);
   if (publicUrl) {
     socketSourceRef.current = {
-      getGrant: () => getSession(instanceId, engineSceneId),
+      getGrant: () => getSession(engineSceneId),
       getPreviewUrl: publicUrl,
     };
   } else if (sceneId) {
     socketSourceRef.current = {
-      getGrant: () => getSession(instanceId, engineSceneId),
+      getGrant: () => getSession(engineSceneId),
       getPreviewUrl: () => getPreviewUrl({ sceneId }),
     };
   }

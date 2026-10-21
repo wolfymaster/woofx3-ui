@@ -14,7 +14,6 @@ import {
   useSetWorkflowEnabledRequest,
   useUpdateWorkflowRequest,
 } from "@/engine/hooks/use-workflows";
-import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -38,7 +37,6 @@ export interface SavedTrigger {
 }
 
 interface TriggerEditorProps {
-  instanceId: InstanceId;
   triggerPreset: TriggerPreset;
   conditionFields: ConfigField[];
   /** The trigger's workflow, or undefined for a trigger not saved yet. */
@@ -70,7 +68,6 @@ function lastStepReason(steps: StepNode[], id: string): string | null {
  * is switched on as it is created, since a trigger just written is meant to fire.
  */
 export function TriggerEditor({
-  instanceId,
   triggerPreset,
   conditionFields,
   saved: savedProp,
@@ -88,8 +85,8 @@ export function TriggerEditor({
   const updateFromDefinition = useUpdateWorkflowRequest();
   const setEnabled = useSetWorkflowEnabledRequest();
   const removeWorkflow = useDeleteWorkflowRequest();
-  const resourceInstances = useResourceInstances(instanceId);
-  const conditionSupport = useEngineConditionSupport(instanceId);
+  const resourceInstances = useResourceInstances();
+  const conditionSupport = useEngineConditionSupport();
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -142,14 +139,14 @@ export function TriggerEditor({
         if (saved) {
           definition.id = saved.definition.id;
           definition.name = saved.definition.name;
-          await updateFromDefinition(instanceId, saved.engineWorkflowId, escapeDollarKeys(definition));
+          await updateFromDefinition(saved.engineWorkflowId, escapeDollarKeys(definition));
         } else {
           const { id: _unsaved, ...unsaved } = definition;
           const name = sentenceText(parts) || triggerPreset.name;
-          const { engineWorkflowId } = await createFromDefinition(instanceId, escapeDollarKeys({ ...unsaved, name }));
+          const { engineWorkflowId } = await createFromDefinition(escapeDollarKeys({ ...unsaved, name }));
           setCreated({ engineWorkflowId, definition: { ...definition, id: engineWorkflowId, name } });
           try {
-            await setEnabled(instanceId, engineWorkflowId, true);
+            await setEnabled(engineWorkflowId, true);
           } catch {
             toast({
               title: "Saved, but not switched on",
@@ -173,7 +170,6 @@ export function TriggerEditor({
     [
       conditionFields,
       saved,
-      instanceId,
       parts,
       triggerPreset.name,
       toast,
@@ -206,7 +202,7 @@ export function TriggerEditor({
     }
     setIsDeleting(true);
     try {
-      await removeWorkflow(instanceId, saved.engineWorkflowId);
+      await removeWorkflow(saved.engineWorkflowId);
       onDeleted();
     } catch (err) {
       toast({

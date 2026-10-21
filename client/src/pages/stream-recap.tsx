@@ -11,7 +11,6 @@ import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { RecapTimeline } from "@/components/stream-recap/recap-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
@@ -366,26 +365,15 @@ function SupportersCard({
 
 function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: string }) {
   const platformLinks = useQuery(api.instances.getPlatformLinks, { instanceId: row.instanceId });
-  const { instanceId: engineInstanceId } = useEngineScope();
-  const capabilities = useEngineCapabilities(engineInstanceId);
+  const capabilities = useEngineCapabilities();
   const engineSupport = capabilities.support(...RECAP_ENGINE_CAPABILITIES);
   // Keyed on any open session, not only a live one: the snapshot taken after
   // the stream goes offline carries its last minutes, which the chart and
   // leaderboards should then pick up too.
   const engineDetailRefreshKey = row.session?.status === "open" ? row.generatedAtMs : 0;
-  const { state, retry } = useStreamRecapEngineDetail(
-    engineInstanceId,
-    sessionId,
-    engineSupport === "supported",
-    engineDetailRefreshKey
-  );
+  const { state, retry } = useStreamRecapEngineDetail(sessionId, engineSupport === "supported", engineDetailRefreshKey);
   const eventSupport = capabilities.support(...RECAP_EVENT_CAPABILITIES);
-  const events = useRecapTimelineEvents(
-    engineInstanceId,
-    sessionId,
-    eventSupport === "supported",
-    engineDetailRefreshKey
-  );
+  const events = useRecapTimelineEvents(sessionId, eventSupport === "supported", engineDetailRefreshKey);
   const clips = useRecapClips(row.instanceId, sessionId);
   const markers = useRecapMarkers(row.instanceId, sessionId);
   const body: SessionBody | null = row.session && row.totals ? { session: row.session, totals: row.totals } : null;
@@ -520,8 +508,7 @@ export default function StreamRecap() {
   const params = useParams<{ sessionId: string }>();
   const sessionId = sessionIdFromParam(params.sessionId);
   const { instance, isLoading } = useInstance();
-  const { instanceId: engineInstanceId } = useEngineScope();
-  useOpenSessionRefresh(engineInstanceId);
+  useOpenSessionRefresh();
   const row = useQuery(
     api.streamSessionSummaries.get,
     instance && sessionId ? { instanceId: instance._id, sessionId } : "skip"

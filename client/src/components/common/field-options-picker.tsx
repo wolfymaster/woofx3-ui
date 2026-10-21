@@ -87,8 +87,7 @@ function RefreshButton({ field, state }: { field: PickerField; state: FieldOptio
  * Options carrying a `group` are listed under its heading.
  */
 export function InternalSelectField({ field, value, onChange, source }: PickerProps) {
-  const { instanceId } = useEngineScope();
-  const state = useFieldOptions(instanceId, source);
+  const state = useFieldOptions(source);
   const reason = emptyReason(state);
   const groups = groupFieldOptions(state.options);
 
@@ -172,7 +171,7 @@ export function InternalSuggestField({
   availableVariables,
 }: PickerProps & { availableVariables: VariableOption[] }) {
   const { instanceId } = useEngineScope();
-  const state = useFieldOptions(instanceId, source);
+  const state = useFieldOptions(source);
   const [open, setOpen] = useState(false);
   const listId = useId();
   const noticeId = useId();

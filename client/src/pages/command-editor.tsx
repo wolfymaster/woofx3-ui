@@ -65,10 +65,10 @@ export default function CommandEditor() {
   const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
-  const commandsRaw = useChatCommands(instanceId);
-  const groupsRaw = useChatCommandGroups(instanceId);
+  const commandsRaw = useChatCommands();
+  const groupsRaw = useChatCommandGroups();
   const groups = useMemo(() => groupsRaw ?? [], [groupsRaw]);
-  const resourceInstances = useResourceInstances(instanceId);
+  const resourceInstances = useResourceInstances();
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -158,10 +158,10 @@ export default function CommandEditor() {
     setSaving(true);
     try {
       if (existing) {
-        await updateCommand(instanceId, { ...fields, engineCommandId: existing.engineCommandId });
+        await updateCommand({ ...fields, engineCommandId: existing.engineCommandId });
         toast({ title: "Command updated" });
       } else {
-        await createCommand(instanceId, fields);
+        await createCommand(fields);
         toast({ title: "Command created" });
       }
       discardAndLeave();

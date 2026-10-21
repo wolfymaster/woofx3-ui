@@ -44,7 +44,6 @@ import {
   useConfigImportPreviewRequest,
   useConfigImportRequest,
 } from "@/engine/hooks/use-engine-config";
-import type { InstanceId } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -155,15 +154,7 @@ function SectionPicker({
   );
 }
 
-function ExportCard({
-  instanceId,
-  instanceName,
-  canExportMembers,
-}: {
-  instanceId: InstanceId;
-  instanceName: string;
-  canExportMembers: boolean;
-}) {
+function ExportCard({ instanceName, canExportMembers }: { instanceName: string; canExportMembers: boolean }) {
   const exportConfig = useConfigExportRequest();
   const { toast } = useToast();
   const [sections, setSections] = useState<ConfigSection[]>([...CONFIG_SECTIONS]);
@@ -173,7 +164,7 @@ function ExportCard({
   async function handleExport() {
     setIsExporting(true);
     try {
-      const chunks = await exportConfig(instanceId, { include: sections, includeMembers });
+      const chunks = await exportConfig({ include: sections, includeMembers });
       const fileName = backupFileName(instanceName, new Date());
       saveTextFile(fileName, chunks.join(""));
       toast({ title: "Backup downloaded", description: fileName });
@@ -404,7 +395,7 @@ interface PickedFile {
   chunks: string[];
 }
 
-function ImportCard({ instanceId, canImport }: { instanceId: InstanceId; canImport: boolean }) {
+function ImportCard({ canImport }: { canImport: boolean }) {
   const previewImport = useConfigImportPreviewRequest();
   const importConfig = useConfigImportRequest();
   const { toast } = useToast();
@@ -449,7 +440,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: InstanceId; canImpo
     setResult(null);
     try {
       setPlan(
-        await previewImport(instanceId, {
+        await previewImport({
           bundleChunks: file.chunks,
           onConflict,
           include: sections,
@@ -471,7 +462,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: InstanceId; canImpo
     setConfirming(false);
     setBusy("import");
     try {
-      const outcome = await importConfig(instanceId, {
+      const outcome = await importConfig({
         bundleChunks: file.chunks,
         onConflict,
         include: sections,
@@ -638,7 +629,7 @@ export default function AdminBackup() {
   const { instance, isLoading } = useInstance();
   const access = useQuery(api.configBackup.access, instance ? { instanceId: instance._id } : "skip");
   const { instanceId: engineInstanceId } = useEngineScope();
-  const capabilities = useEngineCapabilities(engineInstanceId);
+  const capabilities = useEngineCapabilities();
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -659,12 +650,8 @@ export default function AdminBackup() {
             feature="Backups"
             onRetry={capabilities.refresh}
           >
-            <ExportCard
-              instanceId={engineInstanceId}
-              instanceName={instance.name}
-              canExportMembers={access.canExportMembers}
-            />
-            <ImportCard instanceId={engineInstanceId} canImport={access.canImport} />
+            <ExportCard instanceName={instance.name} canExportMembers={access.canExportMembers} />
+            <ImportCard canImport={access.canImport} />
           </EngineFeatureGate>
           <Card>
             <CardHeader>

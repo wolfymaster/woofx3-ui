@@ -503,10 +503,7 @@ export function BasicWorkflowEditor() {
       }
       const ids: string[] = [];
       for (const definition of previewDefinitions) {
-        const result = await createFromDefinition(
-          instanceId,
-          escapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">
-        );
+        const result = await createFromDefinition(escapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">);
         ids.push(result.engineWorkflowId);
       }
       toast({

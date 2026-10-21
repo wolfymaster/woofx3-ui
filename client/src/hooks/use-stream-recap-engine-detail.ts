@@ -1,7 +1,7 @@
 import type { StreamRecapEngineDetail } from "@convex/lib/streamRecap";
 import { useCallback, useEffect, useState } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useRecapEngineDetailRequest } from "@/engine/hooks/use-stream-recap";
-import type { InstanceId } from "@/engine/types";
 
 export type StreamRecapEngineState =
   | { kind: "loading" }
@@ -17,12 +17,8 @@ export type StreamRecapEngineState =
  * summary's `generatedAtMs`) loads it again. That reload keeps the detail
  * already on screen while it runs, and keeps it if the reload fails.
  */
-export function useStreamRecapEngineDetail(
-  instanceId: InstanceId | null,
-  sessionId: string,
-  enabled: boolean,
-  refreshKey = 0
-) {
+export function useStreamRecapEngineDetail(sessionId: string, enabled: boolean, refreshKey = 0) {
+  const { instanceId } = useEngineScope();
   const loadEngineDetail = useRecapEngineDetailRequest();
   const [state, setState] = useState<StreamRecapEngineState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -34,7 +30,7 @@ export function useStreamRecapEngineDetail(
     }
     let cancelled = false;
     setState((prev) => (prev.kind === "loaded" ? prev : { kind: "loading" }));
-    loadEngineDetail(instanceId, sessionId)
+    loadEngineDetail(sessionId)
       .then((detail) => {
         if (!cancelled) {
           setState({ kind: "loaded", detail });

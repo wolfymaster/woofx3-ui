@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Id } from "@convex/_generated/dataModel";
 import { getFunctionName } from "convex/server";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // The Convex hooks are replaced so each call can be checked: a gateway
 // request must send what the Backup page and the storage settings sent
@@ -24,20 +23,7 @@ mock.module("convex/react", () => ({
 
 const { convexConfigGateway } = await import("./config");
 
-function renderRequest<T>(hook: () => T): T {
-  let value: T | undefined;
-  function Probe() {
-    value = hook();
-    return null;
-  }
-  renderToStaticMarkup(createElement(Probe));
-  if (value === undefined) {
-    throw new Error("the probe did not render");
-  }
-  return value;
-}
-
-const instanceId = "instance-1" as Id<"instances">;
+const instanceId = TEST_INSTANCE_ID;
 
 beforeEach(() => {
   calls.length = 0;
@@ -45,8 +31,8 @@ beforeEach(() => {
 
 describe("config backup requests", () => {
   test("export the chosen sections", async () => {
-    const exportConfig = renderRequest(() => convexConfigGateway.useExportRequest());
-    await exportConfig(instanceId, { include: ["workflows", "commands"], includeMembers: false });
+    const exportConfig = renderInScope(() => convexConfigGateway.useExportRequest());
+    await exportConfig({ include: ["workflows", "commands"], includeMembers: false });
     expect(calls).toEqual([
       {
         name: "configBackup:exportConfig",
@@ -56,16 +42,16 @@ describe("config backup requests", () => {
   });
 
   test("preview and import send the same backup and options", async () => {
-    const preview = renderRequest(() => convexConfigGateway.usePreviewImportRequest());
-    const importConfig = renderRequest(() => convexConfigGateway.useImportRequest());
+    const preview = renderInScope(() => convexConfigGateway.usePreviewImportRequest());
+    const importConfig = renderInScope(() => convexConfigGateway.useImportRequest());
     const request = {
       bundleChunks: ["{", "}"],
       onConflict: "rename" as const,
       include: ["resources" as const],
       applyMembers: true,
     };
-    await preview(instanceId, request);
-    await importConfig(instanceId, request);
+    await preview(request);
+    await importConfig(request);
     expect(calls).toEqual([
       { name: "configBackup:previewImport", args: { instanceId, ...request } },
       { name: "configBackup:importConfig", args: { instanceId, ...request } },
@@ -75,10 +61,10 @@ describe("config backup requests", () => {
 
 describe("config storage requests", () => {
   test("read and replace the storage backend", async () => {
-    const getConfig = renderRequest(() => convexConfigGateway.useStorageConfigRequest());
-    const setConfig = renderRequest(() => convexConfigGateway.useSetStorageConfigRequest());
-    await getConfig(instanceId);
-    await setConfig(instanceId, { provider: "file" });
+    const getConfig = renderInScope(() => convexConfigGateway.useStorageConfigRequest());
+    const setConfig = renderInScope(() => convexConfigGateway.useSetStorageConfigRequest());
+    await getConfig();
+    await setConfig({ provider: "file" });
     expect(calls).toEqual([
       { name: "storage:getConfig", args: { instanceId } },
       { name: "storage:setConfig", args: { instanceId, config: { provider: "file" } } },

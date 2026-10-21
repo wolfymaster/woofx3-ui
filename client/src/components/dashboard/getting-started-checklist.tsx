@@ -7,7 +7,6 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { useEngineScope } from "@/engine/context";
 import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useToast } from "@/hooks/use-toast";
@@ -90,7 +89,6 @@ export interface GettingStarted {
  * flyout, so the OBS status poll behind it runs once.
  */
 export function useGettingStarted(instanceId: Id<"instances">): GettingStarted | null {
-  const { instanceId: engineInstanceId } = useEngineScope();
   const setup = useQuery(api.setup.status, { instanceId });
   const overlays = useQuery(api.goLive.overlays, { instanceId });
   const state = useQuery(api.gettingStarted.state, { instanceId });
@@ -103,7 +101,7 @@ export function useGettingStarted(instanceId: Id<"instances">): GettingStarted |
   const [busyAction, setBusyAction] = useState<GettingStartedAction["kind"] | null>(null);
 
   const watchesObs = Boolean(state && !state.dismissed && setup?.platformsNeedingSettings.includes(OBS_MODULE_ID));
-  const { status: obsStatus } = useObsStatus(engineInstanceId, watchesObs);
+  const { status: obsStatus } = useObsStatus(watchesObs);
 
   const followPreset = useMemo(() => triggerPresets.find((preset) => preset.event === FOLLOW_EVENT), [triggerPresets]);
 

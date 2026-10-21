@@ -31,12 +31,10 @@ export function resetLiveStatePollThrottle(): void {
 }
 
 export function useLiveState() {
-  const scope = useEngineScope();
+  const { instanceId } = useEngineScope();
   const { status } = useEngineGateway();
-  const liveState = status.useLiveState(scope);
+  const liveState = status.useLiveState();
   const pollLiveState = status.useLiveStatePollRequest();
-
-  const { instanceId } = scope;
 
   useEffect(() => {
     if (!instanceId) {
@@ -48,7 +46,7 @@ export function useLiveState() {
     if (!pollThrottle.claim(instanceId)) {
       return;
     }
-    void pollLiveState(instanceId);
+    void pollLiveState();
   }, [instanceId, pollLiveState]);
 
   return liveState;

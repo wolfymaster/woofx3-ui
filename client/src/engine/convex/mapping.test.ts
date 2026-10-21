@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import type { InstanceId } from "@/engine/types";
+import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // Each read answers with a Convex row, so these check what the gateway hands
 // callers instead: the engine-neutral record, with Convex's own fields gone
@@ -36,20 +35,7 @@ const { convexScenesGateway } = await import("./scenes");
 const { convexStatusGateway } = await import("./status");
 const { convexWorkflowsGateway } = await import("./workflows");
 
-function read<T>(hook: () => T): T {
-  let value: { current: T } | undefined;
-  function Probe() {
-    value = { current: hook() };
-    return null;
-  }
-  renderToStaticMarkup(createElement(Probe));
-  if (!value) {
-    throw new Error("the probe did not render");
-  }
-  return value.current;
-}
-
-const instanceId = "instance-1" as InstanceId;
+const instanceId = TEST_INSTANCE_ID;
 const convexFields = { _creationTime: 1_700_000_000_000, instanceId: "instance-1" };
 
 beforeEach(() => {
@@ -76,7 +62,7 @@ describe("Convex rows become engine-neutral records", () => {
     rows["scenes:list"] = [
       { _id: "scene-1", id: "scene-1", ...convexFields, name: "Main", widgets: [], createdAt: 5, updatedAt: 6 },
     ];
-    expect(read(() => convexScenesGateway.useScenes(instanceId))).toEqual([
+    expect(renderInScope(() => convexScenesGateway.useScenes())).toEqual([
       { id: "scene-1", name: "Main", widgets: [], createdAt: 5, updatedAt: 6 },
     ]);
   });
@@ -85,7 +71,7 @@ describe("Convex rows become engine-neutral records", () => {
     rows["engineAlerts:listForInstance"] = [
       { _id: "row-1", ...convexFields, engineAlertId: "alert-1", status: "completed", createdAt: 7 },
     ];
-    expect(read(() => convexAlertQueueGateway.useAlerts(instanceId, 10))).toEqual([
+    expect(renderInScope(() => convexAlertQueueGateway.useAlerts(10))).toEqual([
       { id: "row-1", engineAlertId: "alert-1", status: "completed", createdAt: 7 },
     ]);
   });
@@ -104,7 +90,7 @@ describe("Convex rows become engine-neutral records", () => {
         displayName: "Deaths",
       },
     ];
-    expect(read(() => convexModuleResourcesGateway.useInstances(instanceId))).toEqual([
+    expect(renderInScope(() => convexModuleResourcesGateway.useInstances())).toEqual([
       {
         moduleId: "module-row-1",
         canonicalId: "obs:counter:deaths",
@@ -124,7 +110,7 @@ describe("Convex rows become engine-neutral records", () => {
       currentRun: null,
       recentRuns: [run],
     };
-    expect(read(() => convexStatusGateway.useSyncState(instanceId))).toEqual({
+    expect(renderInScope(() => convexStatusGateway.useSyncState())).toEqual({
       syncState: { status: "idle", nextEligibleAt: 2 },
       currentRun: null,
       recentRuns: [{ id: "run-1", trigger: "manual", status: "success", startedAt: 1, steps: [] }],
@@ -137,7 +123,7 @@ describe("Convex rows become engine-neutral records", () => {
       steps: [{ _id: "step-row", ...convexFields, engineStepId: "step-1", stepIndex: 0 }],
       alerts: [],
     };
-    expect(read(() => convexWorkflowsGateway.useRun(instanceId, "run-1"))).toEqual({
+    expect(renderInScope(() => convexWorkflowsGateway.useRun("run-1"))).toEqual({
       run: { engineRunId: "run-1", workflowName: "Raid", status: "completed" },
       steps: [{ engineStepId: "step-1", stepIndex: 0 }],
       alerts: [],
@@ -145,9 +131,9 @@ describe("Convex rows become engine-neutral records", () => {
   });
 
   test("loading and missing reads pass through", () => {
-    expect(read(() => convexWorkflowsGateway.useWorkflows(instanceId))).toBeUndefined();
+    expect(renderInScope(() => convexWorkflowsGateway.useWorkflows())).toBeUndefined();
     rows["workflows:getByEngineId"] = null;
-    expect(read(() => convexWorkflowsGateway.useWorkflow(instanceId, "wf-1"))).toBeNull();
+    expect(renderInScope(() => convexWorkflowsGateway.useWorkflow("wf-1"))).toBeNull();
   });
 });
 
@@ -207,7 +193,7 @@ const MAPPING_CASES: MappingCase[] = [
         updatedAt: 2,
       },
     ],
-    read: () => convexCommandsGateway.useCommands(instanceId),
+    read: () => convexCommandsGateway.useCommands(),
     expected: [
       {
         engineCommandId: "cmd-1",
@@ -240,7 +226,7 @@ const MAPPING_CASES: MappingCase[] = [
         updatedAt: 2,
       },
     ],
-    read: () => convexCommandsGateway.useGroups(instanceId),
+    read: () => convexCommandsGateway.useGroups(),
     expected: [
       {
         engineGroupId: "group-1",
@@ -257,7 +243,7 @@ const MAPPING_CASES: MappingCase[] = [
     name: "a catalog entry carries its module as a gateway id, or none",
     query: "workflowCatalog:get",
     answer: { triggers: [catalogTrigger], actions: [catalogAction] },
-    read: () => convexWorkflowsGateway.useCatalog(instanceId),
+    read: () => convexWorkflowsGateway.useCatalog(),
     expected: { triggers: [catalogTrigger], actions: [catalogAction] },
   },
   {
@@ -277,7 +263,7 @@ const MAPPING_CASES: MappingCase[] = [
         createdAt: 3,
       },
     ],
-    read: () => convexScenesGateway.useWidgetCatalog(instanceId),
+    read: () => convexScenesGateway.useWidgetCatalog(),
     expected: [
       {
         widgetId: "alert-box",
@@ -305,7 +291,7 @@ const MAPPING_CASES: MappingCase[] = [
         payloadLength: 120,
       },
     ],
-    read: () => convexEventLogGateway.useWebhookEvents(instanceId, null, 10).results,
+    read: () => convexEventLogGateway.useWebhookEvents(null, 10).results,
     expected: [{ id: "log-row-1", eventType: "follow", source: "webhook", receivedAt: 4, payloadLength: 120 }],
   },
   {
@@ -325,7 +311,7 @@ const MAPPING_CASES: MappingCase[] = [
         updatedAt: 2,
       },
     ],
-    read: () => convexAlertLibraryGateway.useAlerts(instanceId),
+    read: () => convexAlertLibraryGateway.useAlerts(),
     expected: [
       {
         engineCompositionId: "composition-1",
@@ -351,7 +337,7 @@ const MAPPING_CASES: MappingCase[] = [
       data: { moduleKey: "obs" },
       expiresAt: 9,
     },
-    read: () => convexRequestsGateway.useEvent(instanceId, "key-1"),
+    read: () => convexRequestsGateway.useEvent("key-1"),
     expected: {
       correlationKey: "key-1",
       type: "module.install",
@@ -364,7 +350,7 @@ const MAPPING_CASES: MappingCase[] = [
     name: "a missing transient event passes through as null",
     query: "transientEvents:get",
     answer: null,
-    read: () => convexRequestsGateway.useEvent(instanceId, "key-1"),
+    read: () => convexRequestsGateway.useEvent("key-1"),
     expected: null,
   },
 ];
@@ -377,7 +363,7 @@ describe("each mapper builds its domain record from named fields", () => {
       } else {
         rows[mappingCase.query] = mappingCase.answer;
       }
-      const mapped = read(mappingCase.read);
+      const mapped = renderInScope(mappingCase.read);
       expect(mapped).toEqual(mappingCase.expected);
       expect(convexKeysIn(mapped)).toEqual([]);
     });
@@ -397,7 +383,7 @@ describe("each mapper builds its domain record from named fields", () => {
         internalNote: "cloud only",
       },
     ];
-    const [group] = read(() => convexCommandsGateway.useGroups(instanceId)) ?? [];
+    const [group] = renderInScope(() => convexCommandsGateway.useGroups()) ?? [];
     expect(group).not.toHaveProperty("internalNote");
   });
 });

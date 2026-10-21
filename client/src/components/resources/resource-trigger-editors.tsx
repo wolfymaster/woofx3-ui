@@ -2,7 +2,6 @@ import { bareKind } from "@convex/lib/resourceKinds";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { EventTriggerList } from "@/components/alerts/event-trigger-list";
-import { useEngineScope } from "@/engine/context";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
 import type { ModuleResourceInstance } from "@/engine/types";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -28,9 +27,8 @@ export function ResourceTriggerEditors({
   /** What a trigger's section shows about this instance above its triggers; see ResourceKindPage. */
   triggerDetail?: (preset: TriggerPreset) => ReactNode;
 }) {
-  const { instanceId } = useEngineScope();
   const { triggerPresets, loading } = useWorkflowCatalog();
-  const workflows = useWorkflows(instanceId);
+  const workflows = useWorkflows();
   const triggers = useMemo(() => resourceTriggers(triggerPresets, kind), [triggerPresets, kind]);
 
   if (loading || workflows === undefined) {

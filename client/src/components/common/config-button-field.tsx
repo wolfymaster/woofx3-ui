@@ -49,10 +49,10 @@ function RequestButton({
   reference,
 }: {
   label: string;
-  reference: Parameters<typeof useInternalSettingAction>[1];
+  reference: Parameters<typeof useInternalSettingAction>[0];
 }) {
   const { instanceId } = useEngineScope();
-  const { trigger, status, message } = useInternalSettingAction(instanceId, reference);
+  const { trigger, status, message } = useInternalSettingAction(reference);
   return (
     <div className="space-y-2">
       <Button

@@ -88,7 +88,7 @@ export default function Modules() {
   // marketplace storefront: the approval gate, the engine's progress events
   // and the timeout have to stay together to be correct, and two copies of
   // that would drift.
-  const install = useModuleInstall(engineInstanceId, () => setDetailRefreshKey((key) => key + 1));
+  const install = useModuleInstall(() => setDetailRefreshKey((key) => key + 1));
 
   const prevSelectedRef = useRef(selectedModule);
   useEffect(() => {
@@ -183,7 +183,7 @@ export default function Modules() {
     setModuleDetail(null);
     setModuleDetailError(null);
     let cancelled = false;
-    void getModuleDetail(engineInstanceId, detailModuleId)
+    void getModuleDetail(detailModuleId)
       .then((detail) => {
         if (!cancelled) {
           setModuleDetail(detail);
@@ -433,7 +433,6 @@ export default function Modules() {
               setUninstallTarget(null);
             }
           }}
-          instanceId={engineInstanceId}
           module={uninstallTarget}
           onSuccess={handleUninstallSuccess}
         />

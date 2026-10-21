@@ -145,7 +145,7 @@ function WorkflowListScreen() {
   const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const { catalogTriggers } = useWorkflowCatalog();
 
-  const workflows = useWorkflows(instanceId);
+  const workflows = useWorkflows();
   const { byId: notRunning } = useNotRunningWorkflows();
   useWorkflowHealthResyncOnMount();
   const setEnabled = useSetWorkflowEnabledRequest();
@@ -189,7 +189,7 @@ function WorkflowListScreen() {
     }
     setTogglingId(workflow.engineWorkflowId);
     try {
-      await setEnabled(instanceId, workflow.engineWorkflowId, !workflow.isEnabled);
+      await setEnabled(workflow.engineWorkflowId, !workflow.isEnabled);
     } catch (err) {
       toast({
         title: "Failed to toggle workflow",
@@ -207,7 +207,7 @@ function WorkflowListScreen() {
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId(instanceId, deleteTarget.engineWorkflowId);
+      await deleteByEngineId(deleteTarget.engineWorkflowId);
       toast({ title: "Workflow deleted" });
       setDeleteTarget(null);
     } catch (err) {
@@ -439,7 +439,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const { toast } = useToast();
   const { instanceId } = useEngineScope();
 
-  const workflows = useWorkflows(instanceId);
+  const workflows = useWorkflows();
   const updateFromDefinition = useUpdateWorkflowRequest();
   const deleteByEngineId = useDeleteWorkflowRequest();
   const notRunningHealth = useNotRunningWorkflows().byId.get(engineWorkflowId);
@@ -516,11 +516,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     try {
       const def = unescapeDollarKeys(workflow.definition) as WorkflowDefinition;
-      await updateFromDefinition(
-        instanceId,
-        engineWorkflowId,
-        escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition
-      );
+      await updateFromDefinition(engineWorkflowId, escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition);
       toast({ title: "Workflow name updated" });
     } catch (err) {
       toast({
@@ -548,11 +544,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     setIsSaving(true);
     try {
-      await updateFromDefinition(
-        instanceId,
-        engineWorkflowId,
-        escapeDollarKeys(currentDefinition) as WorkflowDefinition
-      );
+      await updateFromDefinition(engineWorkflowId, escapeDollarKeys(currentDefinition) as WorkflowDefinition);
       toast({ title: "Workflow saved" });
     } catch (err) {
       toast({
@@ -571,7 +563,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId(instanceId, engineWorkflowId);
+      await deleteByEngineId(engineWorkflowId);
       setDeleteDialogOpen(false);
       navigate(LIST_PATH);
     } catch (err) {
@@ -682,11 +674,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
         {instanceId ? (
-          <WorkflowFlowEditor
-            instanceId={instanceId}
-            engineWorkflowId={engineWorkflowId}
-            onDefinitionChange={setCurrentDefinition}
-          />
+          <WorkflowFlowEditor engineWorkflowId={engineWorkflowId} onDefinitionChange={setCurrentDefinition} />
         ) : (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -695,7 +683,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
       </div>
       {tab === "runs" && instanceId && (
         <div className="flex-1 overflow-hidden">
-          <WorkflowRunsPanel instanceId={instanceId} engineWorkflowId={engineWorkflowId} />
+          <WorkflowRunsPanel engineWorkflowId={engineWorkflowId} />
         </div>
       )}
 

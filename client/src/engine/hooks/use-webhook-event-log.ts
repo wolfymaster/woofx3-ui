@@ -1,5 +1,5 @@
 import { useEngineGateway, useEngineScope } from "@/engine/context";
-import type { InstanceId, WebhookEventId } from "@/engine/types";
+import type { WebhookEventId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -22,7 +22,7 @@ export function useRetriggerEvent() {
       return;
     }
     try {
-      const result = await retrigger(instanceId, logId);
+      const result = await retrigger(logId);
       toast({
         title: "Event retriggered",
         description: `${eventType} → ${result.message}`,
@@ -37,9 +37,9 @@ export function useRetriggerEvent() {
   };
 }
 
-/** The webhook log, newest first, optionally of one type; a null id skips the read. */
-export function useWebhookEventLog(instanceId: InstanceId | null, eventType: string | null, initialNumItems: number) {
-  return useEngineGateway().eventLog.useWebhookEvents(instanceId, eventType, initialNumItems);
+/** The webhook log, newest first, optionally of one type. */
+export function useWebhookEventLog(eventType: string | null, initialNumItems: number) {
+  return useEngineGateway().eventLog.useWebhookEvents(eventType, initialNumItems);
 }
 
 /** One logged event's raw payload JSON; null when it is gone. */

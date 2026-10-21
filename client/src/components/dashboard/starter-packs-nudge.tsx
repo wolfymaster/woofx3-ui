@@ -3,15 +3,14 @@ import { Link } from "wouter";
 import { STARTER_PACKS_PATH } from "@/components/layout/nav-config";
 import { Button } from "@/components/ui/button";
 import { useHasWorkflows } from "@/engine/hooks/use-workflows";
-import type { InstanceId } from "@/engine/types";
 
 /**
  * Points an instance with no workflows at the starter packs. Renders nothing
  * until the query confirms the instance is empty, so it never flashes for an
  * instance that has workflows.
  */
-export function StarterPacksNudge({ instanceId }: { instanceId: InstanceId }) {
-  const hasWorkflows = useHasWorkflows(instanceId);
+export function StarterPacksNudge() {
+  const hasWorkflows = useHasWorkflows();
   if (hasWorkflows !== false) {
     return null;
   }

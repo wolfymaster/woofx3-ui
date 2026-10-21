@@ -59,12 +59,12 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const { toast } = useToast();
   useCollapsedSidebar();
 
-  const fetchedScene = useScene(instanceId, engineSceneId);
+  const fetchedScene = useScene(engineSceneId);
   // undefined = loading; null = synced id not in the cache yet (webhook pending).
   const isLoading = fetchedScene === undefined;
   const isAwaitingSync = fetchedScene === null;
 
-  const catalogRows = useSceneWidgetCatalog(instanceId);
+  const catalogRows = useSceneWidgetCatalog();
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
   // The scene's name and description, which are not part of the scene
@@ -95,7 +95,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // cache in for the draft on the canvas. The editor is keyed by instance
   // (see pages/scenes.tsx), so another instance starts over and has to show
   // the capability itself.
-  const capabilities = useEngineCapabilities(instanceId);
+  const capabilities = useEngineCapabilities();
   const syncSupport = capabilities.support("scenes.editorSync");
   const syncSupported = syncSupport === "supported";
   const needsEngineUpgrade = !syncSupported && capabilities.support("scenes.editorSessions") === "supported";
@@ -275,7 +275,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const sceneDescription = scene?.description;
   const saveNameAndDescription = useCallback(
     (name: string, description: string | undefined) => {
-      updateSceneAction(instanceId, engineSceneId, { name, description }).catch((err) =>
+      updateSceneAction(engineSceneId, { name, description }).catch((err) =>
         toast({
           title: "Couldn't save the scene's name",
           description: err instanceof Error ? err.message : String(err),
@@ -283,7 +283,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         })
       );
     },
-    [updateSceneAction, instanceId, engineSceneId, toast]
+    [updateSceneAction, engineSceneId, toast]
   );
   const unsavedNameRef = useRef<{ name: string; description: string | undefined } | null>(null);
   // While the scene is being deleted its name is not saved: that would only
@@ -383,7 +383,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     // it was before this save.
     echoWatermark.current = fetchedScene?.updatedAt ?? echoWatermark.current;
     try {
-      await updateSceneAction(instanceId, engineSceneId, {
+      await updateSceneAction(engineSceneId, {
         name: scene.name,
         description: scene.description,
         ...storedSceneJson(shownDoc),
@@ -400,24 +400,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     } finally {
       setIsSaving(false);
     }
-  }, [
-    scene,
-    shownDoc,
-    sessionMode,
-    editorModeKnown,
-    instanceId,
-    engineSceneId,
-    updateSceneAction,
-    toast,
-    fetchedScene?.updatedAt,
-  ]);
+  }, [scene, shownDoc, sessionMode, editorModeKnown, engineSceneId, updateSceneAction, toast, fetchedScene?.updatedAt]);
 
   const abandonSession = session.abandon;
   const handleDeleteScene = useCallback(async () => {
     deletingRef.current = true;
     setDeleting(true);
     try {
-      await deleteSceneAction(instanceId, engineSceneId);
+      await deleteSceneAction(engineSceneId);
       unsavedNameRef.current = null;
       // Edits still on their way would only be resent to a scene that is gone,
       // including by a session left draining if the editor closed meanwhile.
@@ -438,14 +428,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession, saveUnsavedName]);
+  }, [deleteSceneAction, engineSceneId, navigate, toast, abandonSession, saveUnsavedName]);
 
   const handleDuplicateScene = useCallback(async () => {
     if (!scene || !shownDoc) {
       return;
     }
     try {
-      const { engineSceneId: newId } = await createSceneAction(instanceId, {
+      const { engineSceneId: newId } = await createSceneAction({
         name: `${scene.name} (Copy)`,
         description: scene.description || undefined,
         ...storedSceneJson(shownDoc),
@@ -459,7 +449,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [scene, shownDoc, createSceneAction, instanceId, navigate, toast]);
+  }, [scene, shownDoc, createSceneAction, navigate, toast]);
 
   const runDraftCommand = useCallback(
     (command: DraftCommand) => {

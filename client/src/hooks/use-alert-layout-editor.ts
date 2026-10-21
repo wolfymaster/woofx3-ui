@@ -1,7 +1,6 @@
 import { LocalDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import type { SceneWidgetCatalogRow } from "@/engine/types";
@@ -42,9 +41,8 @@ export interface AlertLayoutSession extends AlertEditorHandle {
  * overwrite edits made here. Null until then.
  */
 export function useAlertLayoutEditor(value: unknown): AlertLayoutSession | null {
-  const { instanceId } = useEngineScope();
-  const catalogRows = useSceneWidgetCatalog(instanceId);
-  const compositionSupport = useEngineCapabilities(instanceId).support(ALERT_COMPOSITION_CAPABILITY);
+  const catalogRows = useSceneWidgetCatalog();
+  const compositionSupport = useEngineCapabilities().support(ALERT_COMPOSITION_CAPABILITY);
 
   const [seed, setSeed] = useState<CompositionDocument | null>(null);
   useEffect(() => {

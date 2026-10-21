@@ -150,8 +150,8 @@ export default function Commands() {
   const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const showingGroups = location.startsWith(COMMAND_GROUPS_PATH);
 
-  const commandsRaw = useChatCommands(instanceId);
-  const groupsRaw = useChatCommandGroups(instanceId);
+  const commandsRaw = useChatCommands();
+  const groupsRaw = useChatCommandGroups();
   const commands = commandsRaw ?? [];
   const groups = groupsRaw ?? [];
 
@@ -243,7 +243,7 @@ function CommandsTab({
       return;
     }
     try {
-      await deleteCommand(instanceId, deleteTarget.engineCommandId);
+      await deleteCommand(deleteTarget.engineCommandId);
       toast({ title: "Command deleted" });
     } catch (err: unknown) {
       toast({
@@ -260,7 +260,7 @@ function CommandsTab({
       return;
     }
     try {
-      await updateCommand(instanceId, {
+      await updateCommand({
         engineCommandId: cmd.engineCommandId,
         command: cmd.command,
         cooldown: cmd.cooldown,
@@ -495,7 +495,7 @@ function GroupsTab({
       return;
     }
     try {
-      await deleteGroup(instanceId, deleteTarget.engineGroupId);
+      await deleteGroup(deleteTarget.engineGroupId);
       toast({ title: "Group deleted" });
     } catch (err: unknown) {
       toast({

@@ -42,8 +42,8 @@ interface LibraryAlertEditorProps {
 export function LibraryAlertEditor({ instanceId, compositionId, onBack }: LibraryAlertEditorProps) {
   const { toast } = useToast();
   useCollapsedSidebar();
-  const row = useLibraryAlert(instanceId, compositionId);
-  const catalogRows = useSceneWidgetCatalog(instanceId);
+  const row = useLibraryAlert(compositionId);
+  const catalogRows = useSceneWidgetCatalog();
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
   const me = useQuery(api.users.getMe);
@@ -51,10 +51,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   const getEngineInfo = useEngineInfoRequest();
   // An alert has no preview page to take sceneManager's origin from, so the socket is
   // opened at the engine's overlay URL, which is sceneManager's public URL.
-  const publicUrl = useCallback(
-    async () => (await getEngineInfo(instanceId))?.overlayPublicUrl ?? null,
-    [instanceId, getEngineInfo]
-  );
+  const publicUrl = useCallback(async () => (await getEngineInfo())?.overlayPublicUrl ?? null, [getEngineInfo]);
 
   // Each open editor chooses for itself whether it edits the published alert, and every one starts on the draft.
   const [live, setLive] = useState(false);

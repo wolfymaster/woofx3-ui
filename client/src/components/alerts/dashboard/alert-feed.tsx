@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useReplayAlert } from "@/engine/hooks/use-replay-alert";
-import type { EngineAlert, InstanceId } from "@/engine/types";
+import type { EngineAlert } from "@/engine/types";
 import { useDescribeAlert } from "@/hooks/use-describe-alert";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
@@ -15,12 +15,11 @@ import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
 interface AlertFeedProps {
-  instanceId: InstanceId;
   alerts: EngineAlert[];
 }
 
 /** Recent dispatches, newest first, each replayable. */
-export function AlertFeed({ instanceId, alerts }: AlertFeedProps) {
+export function AlertFeed({ alerts }: AlertFeedProps) {
   const describe = useDescribeAlert();
   if (alerts.length === 0) {
     return (
@@ -37,21 +36,20 @@ export function AlertFeed({ instanceId, alerts }: AlertFeedProps) {
   return (
     <ul className="divide-y divide-border" data-testid="alert-feed">
       {alerts.map((alert) => (
-        <AlertFeedRow key={alert.id} instanceId={instanceId} alert={alert} summary={describe(alert.payload)} />
+        <AlertFeedRow key={alert.id} alert={alert} summary={describe(alert.payload)} />
       ))}
     </ul>
   );
 }
 
 interface AlertFeedRowProps {
-  instanceId: InstanceId;
   alert: EngineAlert;
   /** Who did what, e.g. "wolfy_fan redeemed Hydrate", and the facts worth a glance. */
   summary: AlertSummary;
 }
 
-function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
-  const { replay, busy } = useReplayAlert(instanceId);
+function AlertFeedRow({ alert, summary }: AlertFeedRowProps) {
+  const { replay, busy } = useReplayAlert();
 
   const style = engineAlertStyle(alert);
   const StatusIcon = style.icon;

@@ -46,9 +46,9 @@ function configuredCanonicalId(config: Record<string, unknown> | undefined): str
 export function TimerWidget({ config, onConfigChange }: DashboardWidgetProps) {
   const { instanceId } = useEngineScope();
 
-  const kindDefinition = useResourceKind(instanceId, TIMER_KIND);
-  const timers = useResourceInstancesOfKind(instanceId, TIMER_KIND);
-  const values = useResourceValues(instanceId);
+  const kindDefinition = useResourceKind(TIMER_KIND);
+  const timers = useResourceInstancesOfKind(TIMER_KIND);
+  const values = useResourceValues();
   const refreshValues = useRefreshResourceValuesRequest();
 
   // Values arrive by webhook while the dashboard is open; this fills in any
@@ -57,7 +57,7 @@ export function TimerWidget({ config, onConfigChange }: DashboardWidgetProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues(instanceId, TIMER_KIND).catch(() => {
+    refreshValues(TIMER_KIND).catch(() => {
       // The mirror still shows the last known value; the next change updates it.
     });
   }, [instanceId, refreshValues]);

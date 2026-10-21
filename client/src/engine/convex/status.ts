@@ -4,15 +4,19 @@ import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { ConvexError } from "convex/values";
 import { useCallback } from "react";
-import type { OptimisticInstance, StatusGateway } from "@/engine/gateway";
-import type { EngineSyncRun, EngineSyncSchedule, EngineSyncState, InstanceId, InstanceLiveState } from "@/engine/types";
+import type { StatusGateway } from "@/engine/gateway";
+import { useEngineScope } from "@/engine/scope";
+import type {
+  EngineSyncRun,
+  EngineSyncSchedule,
+  EngineSyncState,
+  InstanceLiveState,
+  ReadOptions,
+} from "@/engine/types";
 import { useOptimisticInstanceQueryFor } from "@/hooks/use-optimistic-instance-query";
 import { fromInstanceId } from "./ids";
 import { useMappedValue } from "./mapped";
-
-// Each request hook wraps a `useAction`, which Convex memoises on the
-// function's name, so the returned function keeps its identity across renders
-// and is safe in effect dependencies.
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 /**
  * A refusal Convex raised for the caller carries its text in `data`; it is
@@ -27,37 +31,30 @@ function withPlainError(error: unknown): never {
 }
 
 function useCapabilitiesRequest() {
-  const get = useAction(api.engineCapabilities.get);
-  return useCallback(
-    (instanceId: InstanceId) => get({ instanceId: fromInstanceId(instanceId) }).catch(withPlainError),
-    [get]
-  );
+  const get = useInstanceAction(api.engineCapabilities.get);
+  return useCallback(() => get({}).catch(withPlainError), [get]);
 }
 
 function useEngineInfoRequest() {
-  const getEngineInfo = useAction(api.engineInfo.getEngineInfo);
-  return useCallback(
-    (instanceId: InstanceId) => getEngineInfo({ instanceId: fromInstanceId(instanceId) }),
-    [getEngineInfo]
-  );
+  const getEngineInfo = useInstanceAction(api.engineInfo.getEngineInfo);
+  return useCallback(() => getEngineInfo({}), [getEngineInfo]);
 }
 
 function useSetOverlayPublicUrlRequest() {
-  const setOverlayPublicUrl = useAction(api.engineInfo.setOverlayPublicUrl);
-  return useCallback(
-    (instanceId: InstanceId, value: string) => setOverlayPublicUrl({ instanceId: fromInstanceId(instanceId), value }),
-    [setOverlayPublicUrl]
-  );
+  const setOverlayPublicUrl = useInstanceAction(api.engineInfo.setOverlayPublicUrl);
+  return useCallback((value: string) => setOverlayPublicUrl({ value }), [setOverlayPublicUrl]);
 }
 
+// The URL names the engine, so this one call needs no scope and works
+// outside EngineGatewayProvider, before any instance exists.
 function useConnectionTestRequest() {
   const testConnection = useAction(api.engineHealth.testConnection);
   return useCallback((url: string) => testConnection({ url }), [testConnection]);
 }
 
 function useObsStatusRequest() {
-  const get = useAction(api.obsStatus.get);
-  return useCallback((instanceId: InstanceId) => get({ instanceId: fromInstanceId(instanceId) }), [get]);
+  const get = useInstanceAction(api.obsStatus.get);
+  return useCallback(() => get({}), [get]);
 }
 
 function toInstanceLiveState(row: Doc<"instanceLiveState">): InstanceLiveState {
@@ -75,7 +72,8 @@ function toInstanceLiveState(row: Doc<"instanceLiveState">): InstanceLiveState {
   };
 }
 
-function useLiveState({ optimisticInstanceId, isInstanceLoading }: OptimisticInstance) {
+function useLiveState() {
+  const { optimisticInstanceId, isInstanceLoading } = useEngineScope();
   const row = useOptimisticInstanceQueryFor(
     api.instanceLiveState.getForInstance,
     optimisticInstanceId ? fromInstanceId(optimisticInstanceId) : null,
@@ -85,11 +83,8 @@ function useLiveState({ optimisticInstanceId, isInstanceLoading }: OptimisticIns
 }
 
 function useLiveStatePollRequest() {
-  const pollLiveState = useAction(api.streamStatus.pollLiveState);
-  return useCallback(
-    (instanceId: InstanceId) => pollLiveState({ instanceId: fromInstanceId(instanceId) }),
-    [pollLiveState]
-  );
+  const pollLiveState = useInstanceAction(api.streamStatus.pollLiveState);
+  return useCallback(() => pollLiveState({}), [pollLiveState]);
 }
 
 function toEngineSyncSchedule(row: Doc<"instanceSync">): EngineSyncSchedule {
@@ -137,14 +132,15 @@ function toEngineSyncState(
   };
 }
 
-function useSyncState(instanceId: InstanceId | null) {
-  const state = useQuery(api.engineSync.getSyncState, instanceId ? { instanceId: fromInstanceId(instanceId) } : "skip");
+function useSyncState({ enabled = true }: ReadOptions = {}) {
+  const instanceId = useScopeInstanceId();
+  const state = useQuery(api.engineSync.getSyncState, enabled && instanceId ? { instanceId } : "skip");
   return useMappedValue(state, toEngineSyncState);
 }
 
 function useSyncRequest() {
-  const syncNow = useAction(api.engineSync.syncNow);
-  return useCallback((instanceId: InstanceId) => syncNow({ instanceId: fromInstanceId(instanceId) }), [syncNow]);
+  const syncNow = useInstanceAction(api.engineSync.syncNow);
+  return useCallback(() => syncNow({}), [syncNow]);
 }
 
 export const convexStatusGateway: StatusGateway = {

@@ -152,9 +152,9 @@ export function useGoLiveChecklist(): GoLiveChecklist {
         pending = checkTwitch({ instanceId }).then((facts) => ({ kind: "twitch", facts }));
       } else if (id === "obs") {
         const correlationKey = crypto.randomUUID();
-        pending = dispatchFieldOptions(engineInstanceId, OBS_SCENES_FIELD, correlationKey)
+        pending = dispatchFieldOptions(OBS_SCENES_FIELD, correlationKey)
           .then(
-            () => awaitObsReply(watchEvent(engineInstanceId, correlationKey)),
+            () => awaitObsReply(watchEvent(correlationKey)),
             (error: unknown) => obsFactsFromDispatchError(dispatchErrorMessage(error))
           )
           .then((facts) => ({ kind: "obs", facts }));

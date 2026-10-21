@@ -621,7 +621,7 @@ function InlineCreateForm({
 }) {
   const { instanceId } = useEngineScope();
   const createInstance = useCreateResourceInstanceRequest();
-  const kindDefinition = useResourceKind(instanceId, kind);
+  const kindDefinition = useResourceKind(kind);
   const owner = kindDefinition?.moduleName ?? parseKindRef(kind)?.module;
   const createdRef = useRef<ResourceInstanceRow | null>(null);
 
@@ -652,7 +652,7 @@ function InlineCreateForm({
         moduleId={owner}
         kind={{ kind: bareKind(kind), name: kindDefinition?.name ?? noun, schema: kindDefinition?.schema }}
         onCreate={async (resourceInstanceId, displayName, settings) => {
-          const created = await createInstance(instanceId, {
+          const created = await createInstance({
             moduleName: owner,
             kind: bareKind(kind),
             resourceInstanceId,

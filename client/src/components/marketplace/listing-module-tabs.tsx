@@ -13,7 +13,6 @@ import { ModuleFilesTab } from "@/components/modules/module-files";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useEngineScope } from "@/engine/context";
 import type { ModuleDetail } from "@/engine/types";
 import { useModuleFiles } from "@/hooks/use-module-files";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
@@ -48,9 +47,7 @@ export function ListingModuleTabs({ instanceId, load, onRetry, children }: Listi
   const [tab, setTab] = useListingTab(tabs);
   // One loader for both the file browser and the function rows, so moving
   // between the tabs does not list the files again.
-  const { instanceId: engineInstanceId } = useEngineScope();
   const files = useModuleFiles({
-    instanceId: engineInstanceId,
     moduleId: detail?.id,
     isInstalled: detail?.isInstalled ?? false,
     version: detail?.version ?? "",

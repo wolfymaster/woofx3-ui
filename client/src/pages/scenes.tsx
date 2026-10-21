@@ -101,7 +101,7 @@ function SceneListScreen() {
   const { toast } = useToast();
   const { instanceId, isInstanceLoading } = useEngineScope();
 
-  const scenesRaw = useScenes(instanceId);
+  const scenesRaw = useScenes();
   const deleteScene = useDeleteSceneRequest();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -132,7 +132,7 @@ function SceneListScreen() {
     }
     setIsDeleting(true);
     try {
-      await deleteScene(instanceId, deleteTarget.engineSceneId);
+      await deleteScene(deleteTarget.engineSceneId);
       toast({ title: "Scene deleted" });
       setDeleteTarget(null);
     } catch (err) {

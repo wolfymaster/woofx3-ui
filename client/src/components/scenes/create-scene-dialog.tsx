@@ -37,7 +37,7 @@ export function CreateSceneDialog({ open, onOpenChange, onCreated }: CreateScene
     }
     setIsCreating(true);
     try {
-      const { engineSceneId } = await createScene(instanceId, {
+      const { engineSceneId } = await createScene({
         name: name.trim(),
         layoutJson: JSON.stringify({ width: 1920, height: 1080, backgroundColor: "transparent" }),
       });

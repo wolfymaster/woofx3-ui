@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { Id } from "@convex/_generated/dataModel";
 import { getFunctionName } from "convex/server";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // The Convex hooks are replaced so each call can be checked: a gateway
 // request must send what the recap hooks, the supporters page and the
@@ -24,20 +23,7 @@ mock.module("convex/react", () => ({
 
 const { convexStreamOpsGateway } = await import("./stream-ops");
 
-function renderRequest<T>(hook: () => T): T {
-  let value: T | undefined;
-  function Probe() {
-    value = hook();
-    return null;
-  }
-  renderToStaticMarkup(createElement(Probe));
-  if (value === undefined) {
-    throw new Error("the probe did not render");
-  }
-  return value;
-}
-
-const instanceId = "instance-1" as Id<"instances">;
+const instanceId = TEST_INSTANCE_ID;
 
 beforeEach(() => {
   calls.length = 0;
@@ -45,10 +31,10 @@ beforeEach(() => {
 
 describe("streamOps recap requests", () => {
   test("load a session's engine detail and timeline events", async () => {
-    const loadDetail = renderRequest(() => convexStreamOpsGateway.useRecapEngineDetailRequest());
-    const loadEvents = renderRequest(() => convexStreamOpsGateway.useRecapTimelineEventsRequest());
-    await loadDetail(instanceId, "session-1");
-    await loadEvents(instanceId, "session-1");
+    const loadDetail = renderInScope(() => convexStreamOpsGateway.useRecapEngineDetailRequest());
+    const loadEvents = renderInScope(() => convexStreamOpsGateway.useRecapTimelineEventsRequest());
+    await loadDetail("session-1");
+    await loadEvents("session-1");
     expect(calls).toEqual([
       { name: "streamRecap:loadEngineDetail", args: { instanceId, sessionId: "session-1" } },
       { name: "streamRecap:loadTimelineEvents", args: { instanceId, sessionId: "session-1" } },
@@ -56,18 +42,18 @@ describe("streamOps recap requests", () => {
   });
 
   test("refresh the open session", async () => {
-    const refresh = renderRequest(() => convexStreamOpsGateway.useOpenSessionRefreshRequest());
-    await refresh(instanceId);
+    const refresh = renderInScope(() => convexStreamOpsGateway.useOpenSessionRefreshRequest());
+    await refresh();
     expect(calls).toEqual([{ name: "streamRecap:refreshOpenSession", args: { instanceId } }]);
   });
 });
 
 describe("streamOps supporter requests", () => {
   test("list streams and read a stream's leaderboard", async () => {
-    const listStreams = renderRequest(() => convexStreamOpsGateway.useSupporterStreamsRequest());
-    const leaderboard = renderRequest(() => convexStreamOpsGateway.useSupporterLeaderboardRequest());
-    await listStreams(instanceId);
-    await leaderboard(instanceId, { metric: "bits", minTotal: 1, sessionId: "session-1" });
+    const listStreams = renderInScope(() => convexStreamOpsGateway.useSupporterStreamsRequest());
+    const leaderboard = renderInScope(() => convexStreamOpsGateway.useSupporterLeaderboardRequest());
+    await listStreams();
+    await leaderboard({ metric: "bits", minTotal: 1, sessionId: "session-1" });
     expect(calls).toEqual([
       { name: "supporters:listStreams", args: { instanceId } },
       { name: "supporters:leaderboard", args: { instanceId, metric: "bits", minTotal: 1, sessionId: "session-1" } },
@@ -75,26 +61,26 @@ describe("streamOps supporter requests", () => {
   });
 
   test("sends no session for the all-time leaderboard", async () => {
-    const leaderboard = renderRequest(() => convexStreamOpsGateway.useSupporterLeaderboardRequest());
-    await leaderboard(instanceId, { metric: "giftedSubs", minTotal: 5 });
+    const leaderboard = renderInScope(() => convexStreamOpsGateway.useSupporterLeaderboardRequest());
+    await leaderboard({ metric: "giftedSubs", minTotal: 5 });
     expect(calls[0]?.args).toEqual({ instanceId, metric: "giftedSubs", minTotal: 5 });
     expect(calls[0]?.args).not.toHaveProperty("sessionId");
   });
 
   test("read a viewer's totals", async () => {
-    const viewerTotals = renderRequest(() => convexStreamOpsGateway.useViewerSupportTotalsRequest());
-    await viewerTotals(instanceId, "1234");
+    const viewerTotals = renderInScope(() => convexStreamOpsGateway.useViewerSupportTotalsRequest());
+    await viewerTotals("1234");
     expect(calls).toEqual([{ name: "supporters:viewerTotals", args: { instanceId, platformUserId: "1234" } }]);
   });
 });
 
 describe("streamOps test events", () => {
   test("publish as given or simulate a Twitch event, with the same arguments", async () => {
-    const publish = renderRequest(() => convexStreamOpsGateway.usePublishEventRequest());
-    const simulate = renderRequest(() => convexStreamOpsGateway.useSimulateTwitchEventRequest());
+    const publish = renderInScope(() => convexStreamOpsGateway.usePublishEventRequest());
+    const simulate = renderInScope(() => convexStreamOpsGateway.useSimulateTwitchEventRequest());
     const event = { eventType: "user.follow", eventData: { user: "wolfy" }, triggerId: "key-1", triggeredBy: "test" };
-    await publish(instanceId, event);
-    await simulate(instanceId, event);
+    await publish(event);
+    await simulate(event);
     expect(calls).toEqual([
       { name: "debug:fireTrigger", args: { instanceId, ...event } },
       { name: "debug:simulateTwitchEvent", args: { instanceId, ...event } },

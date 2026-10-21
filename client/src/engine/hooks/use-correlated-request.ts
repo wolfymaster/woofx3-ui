@@ -1,14 +1,14 @@
 import { useEngineGateway } from "@/engine/context";
-import type { CorrelatedRequestKind, InstanceId } from "@/engine/types";
+import type { CorrelatedRequestKind } from "@/engine/types";
 
-/** The latest transient event under a key; a null id or key skips the read. */
-export function useTransientEvent(instanceId: InstanceId | null, correlationKey: string | null) {
-  return useEngineGateway().requests.useEvent(instanceId, correlationKey);
+/** The latest transient event under a key; a null key skips the read. */
+export function useTransientEvent(correlationKey: string | null) {
+  return useEngineGateway().requests.useEvent(correlationKey);
 }
 
-/** Every transient event under a key, oldest first; a null id or key skips the read. */
-export function useTransientEvents(instanceId: InstanceId | null, correlationKey: string | null) {
-  return useEngineGateway().requests.useEvents(instanceId, correlationKey);
+/** Every transient event under a key, oldest first; a null key skips the read. */
+export function useTransientEvents(correlationKey: string | null) {
+  return useEngineGateway().requests.useEvents(correlationKey);
 }
 
 /** Sends one request of a kind under the caller's key; the caller follows the answer. */
@@ -22,6 +22,6 @@ export function useTransientEventWatchRequest() {
 }
 
 /** Sends requests of one kind under fresh correlation keys and follows the answer to the latest. */
-export function useCorrelatedRequest<Kind extends CorrelatedRequestKind>(kind: Kind, instanceId: InstanceId | null) {
-  return useEngineGateway().requests.useCorrelated(kind, instanceId);
+export function useCorrelatedRequest<Kind extends CorrelatedRequestKind>(kind: Kind) {
+  return useEngineGateway().requests.useCorrelated(kind);
 }

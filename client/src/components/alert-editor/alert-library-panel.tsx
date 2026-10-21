@@ -188,7 +188,7 @@ function DeleteLibraryAlertDialog({ alert, onClose }: { alert: LibraryAlert | nu
     }
     setPending(true);
     try {
-      const result = await remove(instanceId, alert.engineCompositionId);
+      const result = await remove(alert.engineCompositionId);
       if (!result.success) {
         toast({ title: "The alert wasn't deleted", description: "The engine refused.", variant: "destructive" });
         return;

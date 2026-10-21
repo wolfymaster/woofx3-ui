@@ -180,7 +180,6 @@ export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }:
     setIsSaving(true);
     try {
       const { enabled } = await saveEventDraft(event, state, conditionFields, {
-        instanceId: instanceId,
         createFromDefinition,
         updateFromDefinition,
         setEnabled,

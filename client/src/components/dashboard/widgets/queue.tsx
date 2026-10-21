@@ -44,9 +44,9 @@ function configuredCanonicalId(config: Record<string, unknown> | undefined): str
 export function QueueWidget({ config, onConfigChange }: DashboardWidgetProps) {
   const { instanceId } = useEngineScope();
 
-  const kindDefinition = useResourceKind(instanceId, QUEUE_KIND);
-  const queues = useResourceInstancesOfKind(instanceId, QUEUE_KIND);
-  const values = useResourceValues(instanceId);
+  const kindDefinition = useResourceKind(QUEUE_KIND);
+  const queues = useResourceInstancesOfKind(QUEUE_KIND);
+  const values = useResourceValues();
   const refreshValues = useRefreshResourceValuesRequest();
 
   // Entries arrive by webhook while the dashboard is open; this fills in any
@@ -55,7 +55,7 @@ export function QueueWidget({ config, onConfigChange }: DashboardWidgetProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues(instanceId, QUEUE_KIND).catch(() => {
+    refreshValues(QUEUE_KIND).catch(() => {
       // The mirror still shows the last known line; the next change updates it.
     });
   }, [instanceId, refreshValues]);

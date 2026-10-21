@@ -1,24 +1,24 @@
 import { useEngineGateway } from "@/engine/context";
-import type { InstanceId } from "@/engine/types";
+import type { ReadOptions } from "@/engine/types";
 
-/** Every scene on the instance; a null id skips the read. */
-export function useScenes(instanceId: InstanceId | null) {
-  return useEngineGateway().scenes.useScenes(instanceId);
+/** Every scene on the instance. */
+export function useScenes(options?: ReadOptions) {
+  return useEngineGateway().scenes.useScenes(options);
 }
 
 /** One scene by the engine's id; null until its webhook arrives. */
-export function useScene(instanceId: InstanceId, engineSceneId: string) {
-  return useEngineGateway().scenes.useScene(instanceId, engineSceneId);
+export function useScene(engineSceneId: string) {
+  return useEngineGateway().scenes.useScene(engineSceneId);
 }
 
-/** The widgets the instance can place, with their module's name; a null id skips the read. */
-export function useSceneWidgetCatalog(instanceId: InstanceId | null) {
-  return useEngineGateway().scenes.useWidgetCatalog(instanceId);
+/** The widgets the instance can place, with their module's name. */
+export function useSceneWidgetCatalog(options?: ReadOptions) {
+  return useEngineGateway().scenes.useWidgetCatalog(options);
 }
 
-/** Every name the alert widgets on the instance's scenes answer to, the default first; a null id skips the read. */
-export function useAlertWidgetNames(instanceId: InstanceId | null) {
-  return useEngineGateway().scenes.useAlertWidgetNames(instanceId);
+/** Every name the alert widgets on the instance's scenes answer to, the default first. */
+export function useAlertWidgetNames(options?: ReadOptions) {
+  return useEngineGateway().scenes.useAlertWidgetNames(options);
 }
 
 export function useCreateSceneRequest() {

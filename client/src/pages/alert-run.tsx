@@ -37,15 +37,9 @@ export default function AlertRun() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : (
             <RunTrace
-              instanceId={instanceId}
               engineRunId={engineRunId}
               actions={({ failedStepTaskId }) => (
-                <ReplayControls
-                  instanceId={instanceId}
-                  engineRunId={engineRunId}
-                  failedStepTaskId={failedStepTaskId}
-                  origin={REPLAY_ORIGIN}
-                />
+                <ReplayControls engineRunId={engineRunId} failedStepTaskId={failedStepTaskId} origin={REPLAY_ORIGIN} />
               )}
             />
           )}
