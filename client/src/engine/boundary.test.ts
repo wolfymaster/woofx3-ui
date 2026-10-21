@@ -31,6 +31,11 @@ const INSTANCE_SELECTION = join(CLIENT_SRC, "hooks", "use-instance");
 // module, which names each conversion they need.
 const CLOUD_ID_CONVERSIONS = join(CLIENT_SRC, "lib", "cloud-ids.ts");
 
+// The live transport is the Convex gateway's realtime half: it opens the
+// engine socket with the credentials Convex recorded, so a screen that
+// imported it would bypass whichever gateway the app booted with.
+const TRANSPORT_DIR = join(CLIENT_SRC, "lib", "transport");
+
 // `from "x"`, `import "x"` and `import("x")`, static or type-only.
 const IMPORT_SPECIFIER = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)["']([^"']+)["']/g;
 
@@ -177,6 +182,44 @@ describe("engine adapter boundary", () => {
     expect(adapterImports(file, 'import { toInstanceId } from "../engine/convex/ids";')).not.toEqual([]);
     expect(adapterImports(file, 'import { useEngineScope } from "@/engine/context";')).toEqual([]);
     expect(adapterImports(file, 'import { api } from "@convex/_generated/api";')).toEqual([]);
+  });
+});
+
+/** What a file imports from the live transport. */
+function transportImports(file: string, source: string): string[] {
+  return importSpecifiers(source).filter((specifier) => {
+    const target = resolveSpecifier(file, specifier);
+    return target !== null && isWithin(target, TRANSPORT_DIR);
+  });
+}
+
+function appFilesReachingTransport(): string[] {
+  return sourceFiles(CLIENT_SRC)
+    .filter((path) => !isWithin(path, ENGINE_DIR) && !isWithin(path, TRANSPORT_DIR))
+    .filter((path) => transportImports(path, readFileSync(path, "utf8")).length > 0)
+    .map((path) => relative(CLIENT_SRC, path))
+    .sort();
+}
+
+describe("live transport boundary", () => {
+  const reachingTransport = appFilesReachingTransport();
+
+  test("outside client/src/engine nothing imports the live transport", () => {
+    expect(reachingTransport, "subscribe through useEngineGateway() instead of @/lib/transport").toEqual([]);
+  });
+
+  test("the transport check matches aliased, relative and deep imports", () => {
+    const file = join(CLIENT_SRC, "components", "dashboard", "widgets", "example.tsx");
+    expect(transportImports(file, 'import { transport } from "@/lib/transport";')).not.toEqual([]);
+    expect(transportImports(file, 'import { $engineConnected } from "@/lib/transport/engine-connection";')).not.toEqual(
+      []
+    );
+    expect(transportImports(file, 'import { transport } from "../../../lib/transport";')).not.toEqual([]);
+    expect(transportImports(file, 'import type { WorkflowRun } from "@/lib/transport/interface";')).not.toEqual([]);
+    expect(
+      transportImports(file, 'import { useStreamEventsSubscription } from "@/engine/hooks/use-event-log";')
+    ).toEqual([]);
+    expect(transportImports(file, 'import { transportLabel } from "@/lib/transport-labels";')).toEqual([]);
   });
 });
 
