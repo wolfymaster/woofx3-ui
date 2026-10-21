@@ -56,6 +56,12 @@ export const ENGINE_NAMESPACE_MODULES = {
     "configBackup.importConfig",
     "storage",
   ],
+  twitchLink: [
+    // finishConnect completes Convex's own OAuth redirect on the callback page,
+    // which a gateway that links another way never reaches.
+    "twitchIntegration.startConnect",
+    "twitchIntegration.disconnect",
+  ],
 } as const satisfies Record<string, readonly string[]>;
 
 export type EngineNamespace = keyof typeof ENGINE_NAMESPACE_MODULES;

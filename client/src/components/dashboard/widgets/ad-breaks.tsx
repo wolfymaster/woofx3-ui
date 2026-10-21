@@ -40,7 +40,7 @@ export function AdBreaksWidget() {
   const { instance } = useInstance();
   const instanceId = instance?._id;
   const liveState = useLiveState();
-  const { twitchLink, isLoading: linksLoading } = useTwitchIntegration(instanceId);
+  const { twitchLink, isLoading: linksLoading } = useTwitchIntegration();
   const subscribeStreamEvents = useStreamEventsSubscription();
   const getSchedule = useAction(api.adBreaks.getSchedule);
   const snoozeNextAd = useAction(api.adBreaks.snoozeNextAd);

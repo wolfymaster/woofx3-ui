@@ -74,6 +74,8 @@ import type {
   SupporterStream,
   TestRunCapabilities,
   TransientEvent,
+  TwitchLink,
+  TwitchLinkFlow,
   UploadGrant,
   UploadRequest,
   ViewerFact,
@@ -125,6 +127,7 @@ export interface EngineGateway {
   readonly streamOps: StreamOpsGateway;
   readonly config: ConfigGateway;
   readonly session: SessionGateway;
+  readonly twitchLink: TwitchLinkGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -536,4 +539,19 @@ export interface SessionGateway {
   useLiveConnection(): void;
   /** Retries a dropped connection now instead of waiting out its backoff; does nothing while connected. */
   useReconnectRequest(): () => void;
+}
+
+/**
+ * The Twitch account the instance acts as. Owners and admins link and unlink
+ * it; anyone who can see the instance reads it. Linking is a flow the UI
+ * follows rather than a URL to visit, so a gateway can link with a browser
+ * redirect or with a code the streamer approves elsewhere.
+ */
+export interface TwitchLinkGateway {
+  /** The linked account; null when there is none or the caller cannot see the instance. */
+  useLink(): Live<TwitchLink | null>;
+  /** Starts and follows linking for the calling component. */
+  useLinkFlow(): TwitchLinkFlow;
+  /** Removes the link. Rejects for a caller who is not an owner or admin. */
+  useUnlinkRequest(): () => Promise<void>;
 }

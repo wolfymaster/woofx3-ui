@@ -1163,3 +1163,46 @@ export interface ConfigImportResult {
   items: ConfigImportResultItem[];
   summary: Record<ConfigImportOutcome, number>;
 }
+
+// ==================== Twitch link ====================
+
+/** The Twitch account the instance acts as on Twitch. */
+export interface TwitchLink {
+  platformUserId: string;
+  platformUsername: string;
+  profileImageUrl: string | undefined;
+  /** The scopes Twitch granted when the account was linked. */
+  scopes: string[];
+  /** When Twitch last refused the link's token (epoch ms); undefined while Twitch accepts it. */
+  authFailedAt: number | undefined;
+  /** Whether the viewer may replace or remove the link (an owner or admin). */
+  viewerCanRelink: boolean;
+}
+
+/**
+ * How an attempt to link Twitch stands. A gateway either sends the browser to
+ * Twitch to approve (`redirecting`: the page is about to leave, and the link
+ * shows up when it comes back), or has the streamer approve on any device
+ * with a code (`awaitingApproval`: the link shows up through `useLink` once
+ * they have).
+ */
+export type TwitchLinking =
+  | { status: "idle" }
+  | { status: "starting" }
+  | { status: "redirecting" }
+  | { status: "awaitingApproval"; userCode: string; verificationUri: string; expiresAt: number }
+  | { status: "failed"; error: string };
+
+export interface TwitchLinkStart {
+  /** The app path to come back to, for a gateway that leaves the page for Twitch. */
+  returnTo: string;
+}
+
+/** Linking Twitch, for one component: what the attempt is doing and how to start or abandon one. */
+export interface TwitchLinkFlow {
+  linking: TwitchLinking;
+  /** Starts linking, replacing the account already linked. */
+  start: (request: TwitchLinkStart) => void;
+  /** Abandons the attempt under way and returns to `idle`. */
+  cancel: () => void;
+}

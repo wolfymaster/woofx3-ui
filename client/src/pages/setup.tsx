@@ -165,9 +165,7 @@ export default function Setup() {
           {step === "platforms" && (
             <PlatformsStep instanceId={instanceId} status={status} onContinue={() => goTo("twitch")} />
           )}
-          {step === "twitch" && (
-            <TwitchStep instanceId={instanceId} status={status} onContinue={() => goTo("import")} />
-          )}
+          {step === "twitch" && <TwitchStep status={status} onContinue={() => goTo("import")} />}
           {step === "import" && (
             <ImportStep instanceId={instanceId} status={status} onContinue={() => goTo("interests")} />
           )}

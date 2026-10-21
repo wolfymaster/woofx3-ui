@@ -9,7 +9,7 @@ import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
 
 export default function AdminIntegrations() {
   const { instance } = useInstance();
-  const { isConnected, twitchLink, isLoading: twitchLoading, health } = useTwitchIntegration(instance?._id);
+  const { isConnected, twitchLink, isLoading: twitchLoading, health } = useTwitchIntegration();
 
   return (
     <div className="container mx-auto p-6">
@@ -28,7 +28,6 @@ export default function AdminIntegrations() {
           />
           {instance && twitchLink && (
             <TwitchScopeStatus
-              instanceId={instance._id}
               health={health}
               platformUsername={twitchLink.platformUsername}
               canRelink={twitchLink.viewerCanRelink}

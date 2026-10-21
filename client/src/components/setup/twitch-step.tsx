@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { SetupStatus } from "@convex/setup";
 import { CheckCircle2, Loader2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,6 @@ import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 import { setupStepPath } from "@/lib/setup-steps";
 
 interface TwitchStepProps {
-  instanceId: Id<"instances">;
   status: SetupStatus;
   onContinue: () => void;
 }
@@ -22,7 +20,7 @@ interface TwitchStepProps {
  * optional (`SetupStatus.twitchRequired`) and the page can be skipped, so automated
  * tests can finish setup with a password account.
  */
-export function TwitchStep({ instanceId, status, onContinue }: TwitchStepProps) {
+export function TwitchStep({ status, onContinue }: TwitchStepProps) {
   const { connect, starting, error } = useTwitchConnect();
 
   if (status.twitchUsername !== null) {
@@ -52,7 +50,7 @@ export function TwitchStep({ instanceId, status, onContinue }: TwitchStepProps) 
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button
         className="w-full"
-        onClick={() => void connect(instanceId, setupStepPath("twitch"))}
+        onClick={() => void connect(setupStepPath("twitch"))}
         disabled={starting}
         data-testid="button-connect-twitch"
       >
