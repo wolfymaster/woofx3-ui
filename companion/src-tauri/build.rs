@@ -6,6 +6,14 @@
 const DEBUG_CONVEX_URL: &str = "http://127.0.0.1:3210";
 
 include!("src/command_names.rs");
+
+macro_rules! command_name_list {
+    ($($name:ident),* $(,)?) => {
+        &[$(stringify!($name)),*]
+    };
+}
+
+const COMMAND_NAMES: &[&str] = with_command_names!(command_name_list);
 include!("src/convex_url.rs");
 
 fn main() {

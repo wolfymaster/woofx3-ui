@@ -13,7 +13,7 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
-#[cfg(test)]
+#[macro_use]
 mod command_names;
 #[cfg(test)]
 mod convex_url;
@@ -376,6 +376,12 @@ async fn reconnect_relay(companion: State<'_, Arc<Companion>>) -> Result<(), Str
     Ok(())
 }
 
+macro_rules! command_handler {
+    ($($name:ident),* $(,)?) => {
+        tauri::generate_handler![$($name),*]
+    };
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -446,24 +452,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![
-            get_state,
-            start_pairing,
-            cancel_pairing,
-            open_verification_url,
-            confirm_pairing,
-            reject_pairing,
-            unpair,
-            install_update,
-            get_integrations,
-            set_endpoint_enabled,
-            confirm_address,
-            use_discovered,
-            set_share_password,
-            test_endpoint,
-            reconnect_relay,
-            local_engine_session
-        ])
+        .invoke_handler(with_command_names!(command_handler))
         .build(tauri::generate_context!())
         .expect("error while building the woofx3 companion")
         .run(|app, event| {
@@ -510,7 +499,13 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
 
 #[cfg(test)]
 mod tests {
-    use super::command_names::COMMAND_NAMES;
+    macro_rules! command_name_list {
+        ($($name:ident),* $(,)?) => {
+            &[$(stringify!($name)),*]
+        };
+    }
+
+    const COMMAND_NAMES: &[&str] = with_command_names!(command_name_list);
     use super::convex_url::check_convex_url;
 
     #[test]
