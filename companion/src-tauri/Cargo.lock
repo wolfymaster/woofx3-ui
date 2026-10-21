@@ -6347,6 +6347,7 @@ dependencies = [
  "futures",
  "libc",
  "rand 0.9.5",
+ "reqwest",
  "rustls",
  "serde",
  "serde_json",

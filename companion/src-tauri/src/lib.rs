@@ -33,7 +33,10 @@ use woofx3_companion_core::host::{HostMode, HOST_CONFIG_FILE};
 use cloud::CloudLink;
 use engine_host::LocalEngine;
 use integrations::Integrations;
-use state::{CompanionState, IntegrationsView, ReadyUpdate, TestResult, WindowState, STATE_EVENT};
+use state::{
+    CompanionState, IntegrationsView, LocalEngineSession, ReadyUpdate, TestResult, WindowState,
+    STATE_EVENT,
+};
 use tray::Tray;
 use update::Downloaded;
 
@@ -349,6 +352,14 @@ async fn test_endpoint(
     companion.integrations.test(&module_id, &endpoint_id).await
 }
 
+/// What the window needs to open a capnweb session with the local engine.
+#[tauri::command]
+async fn local_engine_session(
+    companion: State<'_, Arc<Companion>>,
+) -> Result<LocalEngineSession, String> {
+    Ok(companion.engine.session())
+}
+
 /// Connects to the relay again after another connection displaced this one
 /// or woofx3 refused a credential.
 #[tauri::command]
@@ -373,9 +384,11 @@ pub fn run() {
             let host_mode = HostMode::load(&app.path().app_config_dir()?.join(HOST_CONFIG_FILE))?;
             let engine = match host_mode {
                 HostMode::Companion => LocalEngine::Off,
-                HostMode::Local(settings) => {
-                    LocalEngine::start(&settings, &app.path().resource_dir()?)?
-                }
+                HostMode::Local(settings) => LocalEngine::start(
+                    &settings,
+                    &app.path().resource_dir()?,
+                    &app.path().app_local_data_dir()?,
+                )?,
             };
             let installation_id = installation::load_or_create(&app_data_dir)?;
             let integrations = Arc::new(Integrations::new(
@@ -439,7 +452,8 @@ pub fn run() {
             use_discovered,
             set_share_password,
             test_endpoint,
-            reconnect_relay
+            reconnect_relay,
+            local_engine_session
         ])
         .build(tauri::generate_context!())
         .expect("error while building the woofx3 companion")

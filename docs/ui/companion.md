@@ -103,11 +103,12 @@ How the relay ends a connection decides what the companion does next:
 In local mode the companion is the desktop host for a woofx3 engine that runs on the streamer's own PC, with no account. The window has no switch for it; it is selected only by a file in the app's config directory (`%APPDATA%\tv.woofx3.companion\desktop-host.json` on Windows, `~/.config/tv.woofx3.companion/desktop-host.json` on Linux):
 
 ```json
-{ "mode": "local", "engineDir": "C:\\woofx3\\engine" }
+{ "mode": "local", "engineDir": "C:\\woofx3\\engine", "apiPort": 5050 }
 ```
 
 - Without the file, or with `{ "mode": "companion" }`, the companion is the tray app described above and runs no engine.
 - `engineDir` is an unpacked engine release (the `woofx3-<version>-<os>-amd64.zip` an engine release attaches): the orchestrator, `services.json` and every service binary. It must be absolute. Without it, local mode runs the release bundled with the app in `engine/` under its resource directory. Installers do not bundle one, so local mode needs `engineDir`.
+- `apiPort` is the port the engine's api listens on, 5050 (an engine release's own default) unless set.
 - A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup with the reason, so a typo never quietly turns local mode off.
 
 ### The engine sidecar
@@ -119,6 +120,35 @@ In local mode the companion runs the engine's orchestrator as its one sidecar pr
 - Quitting from the tray waits for the engine to stop. A stop that takes longer than 35 seconds (the orchestrator itself allows its services 25) kills the process tree. Restarting into an update cannot wait (Tauri does not let an app hold a restart), so the engine then stops on its own as its stdin closes.
 - On Windows the orchestrator is started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs to stop its services gracefully, and its job object ends every service when it exits. Elsewhere it is started in a process group of its own, and the group is killed whenever the orchestrator exits, so no service it left behind holds a port the next run needs.
 - When the orchestrator exits on its own it is started again after a capped exponential backoff with jitter (1 second doubling to at most 60). A run that stayed ready for 60 seconds starts the backoff over.
+
+The engine is configured as a local engine (`core/src/host/engine.rs`), following the desktop recipe in the engine's `docs/services/deployment.md`:
+
+| Variable | Value |
+|---|---|
+| `WOOFX3_HOSTING` | `local`, so the engine advertises `engine.localMode` |
+| `WOOFX3_DATA_DIR` | `engine/` under the app's local data directory (`%LOCALAPPDATA%\tv.woofx3.companion` on Windows) |
+| `WOOFX3_REGISTRATION_TOKEN_FILE` | `engine-secrets/registration-token` under the same directory. The engine writes a token there on its first start, readable only by the user |
+| `WOOFX3_API_PORT` | `apiPort` |
+| `WOOFX3_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` |
+| `WOOFX3_ALLOWED_ORIGINS` | `http://localhost:*,http://127.0.0.1:*,tauri://localhost,http://tauri.localhost` |
+
+The engine's recipe also allows `null` on sceneManager alone, for sandboxed widget frames. The orchestrator gives every service the same environment and `null` must not reach the api, so it is left out, and widget frames' CORS loads from sceneManager are refused in local mode.
+
+### Local registration
+
+Once the engine is ready, the companion becomes its client (`core/src/host/registration.rs`):
+
+1. If the credential store holds client credentials (account `local-engine-client`, next to the companion token), it checks them with one capnweb batch, `authenticate(clientId, clientSecret).getEngineInfo()`. If the engine accepts them, they are used.
+2. Otherwise, or if the engine refuses them (its data was wiped), it reads the token file and calls `registerClient("woofx3-desktop", { registrationToken })`, then stores the new credentials.
+3. A failure (engine unreachable, token missing, registration refused, store unavailable) is retried with backoff for as long as the engine stays ready. Every time the engine becomes ready again after a restart, the credentials are checked again.
+
+The capnweb calls are plain HTTP batch requests to `http://127.0.0.1:<apiPort>/api` (`core/src/host/capnweb.rs`, `gateway.rs`), with a 10-second timeout. Each call is a single request with no origin, which the engine allows.
+
+The client secret stays in the Rust process and the credential store. The window asks for it with the `local_engine_session` command, wrapped in `companion/ui/src/host.ts`, which answers `notLocal` in companion mode, `starting` until registration succeeds, `failed` with the reason, or `ready` with the api URL, client id and client secret the window needs to open its own capnweb session.
+
+### Window permissions
+
+`build.rs` declares every command in `src/command_names.rs` to Tauri, which then checks each call against the window's capability (`capabilities/main.json`). The capability grants the window only those commands plus listening for events, and nothing from Tauri's core or its plugins. A test keeps the capability and the list in step.
 
 ## Updates
 
