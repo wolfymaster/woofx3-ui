@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
+import { ConvexError } from "convex/values";
+import { EngineUnreachableError } from "@/engine/errors";
 import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // Linking under the Convex gateway is Twitch's OAuth redirect: Convex mints
@@ -106,10 +108,53 @@ describe("twitchLink.useLinkFlow", () => {
 });
 
 describe("twitchLink.useUnlinkRequest", () => {
+  const unreachable = new ConvexError({ code: "engine_unreachable", message: "Engine is offline" });
+
   test("removes the instance's Twitch link", async () => {
+    actionResult = () => Promise.resolve({ ok: true });
     const unlink = renderInScope(() => convexTwitchLinkGateway.useUnlinkRequest());
-    await unlink();
-    expect(actions).toEqual([{ name: "twitchIntegration:disconnect", args: { instanceId, platform: "twitch" } }]);
+    expect(await unlink()).toEqual({ warning: undefined });
+    expect(actions).toEqual([
+      { name: "twitchIntegration:disconnect", args: { instanceId, platform: "twitch", force: undefined } },
+    ]);
+  });
+
+  test("force is passed on and the engine warning comes back", async () => {
+    actionResult = () => Promise.resolve({ ok: true, warning: "may still be using it" });
+    const unlink = renderInScope(() => convexTwitchLinkGateway.useUnlinkRequest());
+    expect(await unlink({ force: true })).toEqual({ warning: "may still be using it" });
+    expect(actions[0].args).toEqual({ instanceId, platform: "twitch", force: true });
+  });
+
+  test("an unreachable engine rejects with the typed error", async () => {
+    actionResult = () => Promise.reject(unreachable);
+    const unlink = renderInScope(() => convexTwitchLinkGateway.useUnlinkRequest());
+    const error = await unlink().catch((err: unknown) => err);
+    expect(error).toBeInstanceOf(EngineUnreachableError);
+    expect((error as Error).message).toBe("Engine is offline");
+  });
+
+  test("any other refusal is a plain Error with its text", async () => {
+    actionResult = () => Promise.reject(new ConvexError("Only an owner or admin can disconnect Twitch"));
+    const unlink = renderInScope(() => convexTwitchLinkGateway.useUnlinkRequest());
+    const error = await unlink().catch((err: unknown) => err);
+    expect(error).not.toBeInstanceOf(EngineUnreachableError);
+    expect((error as Error).message).toBe("Only an owner or admin can disconnect Twitch");
+  });
+});
+
+describe("twitchLink.useRetryEngineSyncRequest", () => {
+  test("asks Convex to offer the link to the engine again", async () => {
+    actionResult = () => Promise.resolve({ ok: true });
+    const retry = renderInScope(() => convexTwitchLinkGateway.useRetryEngineSyncRequest());
+    await retry();
+    expect(actions).toEqual([{ name: "twitchIntegration:retryEngineSync", args: { instanceId } }]);
+  });
+
+  test("an engine that still does not answer rejects with the typed error", async () => {
+    actionResult = () => Promise.reject(new ConvexError({ code: "engine_unreachable", message: "Engine is offline" }));
+    const retry = renderInScope(() => convexTwitchLinkGateway.useRetryEngineSyncRequest());
+    expect(await retry().catch((err: unknown) => err)).toBeInstanceOf(EngineUnreachableError);
   });
 });
 

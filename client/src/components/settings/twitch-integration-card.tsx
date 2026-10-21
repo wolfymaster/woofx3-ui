@@ -16,8 +16,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useUnlinkTwitchRequest } from "@/engine/hooks/use-twitch-link";
+import { EngineUnreachableError } from "@/engine/errors";
+import { useRetryEngineSyncRequest, useUnlinkTwitchRequest } from "@/engine/hooks/use-twitch-link";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
+import { actionErrorMessage } from "@/lib/action-error";
+import { hasEnginePending, withoutEnginePending } from "@/lib/twitch-connect-return";
+
+/** Why the last disconnect did not remove the link; only an unreachable engine can be forced. */
+interface UnlinkFailure {
+  message: string;
+  engineUnreachable: boolean;
+}
 
 interface TwitchIntegrationCardProps {
   instanceId: Id<"instances"> | undefined;
@@ -33,7 +42,13 @@ interface TwitchIntegrationCardProps {
 export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isLoading }: TwitchIntegrationCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [unlinkFailure, setUnlinkFailure] = useState<UnlinkFailure | null>(null);
+  const [unlinkWarning, setUnlinkWarning] = useState<string | null>(null);
+  const [enginePending, setEnginePending] = useState(() => hasEnginePending(window.location.search));
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
   const unlink = useUnlinkTwitchRequest();
+  const retryEngineSync = useRetryEngineSyncRequest();
   const { connect, starting, error: connectError } = useTwitchConnect();
   // The server refuses a member's connect or disconnect; this only keeps the
   // buttons from offering what will be refused. Undefined while loading, which
@@ -45,15 +60,44 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
     connect("/admin/integrations");
   };
 
-  const handleDisconnect = async () => {
+  const handleDisconnect = async (force: boolean) => {
     setIsDisconnecting(true);
     try {
-      await unlink();
+      const result = await unlink({ force });
+      setUnlinkFailure(null);
+      setUnlinkWarning(result.warning ?? null);
+      setConfirmOpen(false);
     } catch (err) {
       console.error("Failed to disconnect Twitch:", err);
+      setUnlinkFailure({ message: actionErrorMessage(err), engineUnreachable: err instanceof EngineUnreachableError });
     } finally {
       setIsDisconnecting(false);
-      setConfirmOpen(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    setRetryError(null);
+    try {
+      await retryEngineSync();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${withoutEnginePending(window.location.search)}`
+      );
+      setEnginePending(false);
+    } catch (err) {
+      console.error("Failed to hand Twitch to the engine:", err);
+      setRetryError(actionErrorMessage(err));
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
+  const handleConfirmOpenChange = (open: boolean) => {
+    setConfirmOpen(open);
+    if (!open) {
+      setUnlinkFailure(null);
     }
   };
 
@@ -93,7 +137,7 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
           {canManage ? (
             <Button
               variant="outline"
-              onClick={() => setConfirmOpen(true)}
+              onClick={() => handleConfirmOpenChange(true)}
               disabled={isDisconnecting}
               data-testid="button-disconnect-twitch"
             >
@@ -109,19 +153,47 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
           )}
         </div>
 
-        <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        {enginePending && canManage && (
+          <div className="flex items-center justify-between gap-3 p-3 rounded-lg border border-amber-500/50 text-sm">
+            <div>
+              <p>Connected, but your engine has not picked it up yet.</p>
+              {retryError && <p className="text-destructive">{retryError}</p>}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRetry}
+              disabled={isRetrying}
+              data-testid="button-retry-twitch-sync"
+            >
+              {isRetrying && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Retry
+            </Button>
+          </div>
+        )}
+        {unlinkWarning && <p className="text-sm text-muted-foreground">{unlinkWarning}</p>}
+
+        <AlertDialog open={confirmOpen} onOpenChange={handleConfirmOpenChange}>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Disconnect Twitch</AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to disconnect your Twitch account? This will stop all Twitch-related actions and
-                triggers for this instance.
+                This turns off Twitch in your engine and stops all Twitch actions and triggers.
               </AlertDialogDescription>
+              {unlinkFailure && (
+                <p className="text-sm text-destructive" data-testid="text-disconnect-twitch-error">
+                  {unlinkFailure.message}
+                </p>
+              )}
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction
-                onClick={handleDisconnect}
+                onClick={(event) => {
+                  // Keep the dialog open so a refusal can be read and, for an unreachable engine, forced.
+                  event.preventDefault();
+                  handleDisconnect(unlinkFailure?.engineUnreachable === true);
+                }}
                 disabled={isDisconnecting}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
@@ -130,7 +202,7 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
                 ) : (
                   <Unlink className="h-4 w-4 mr-2" />
                 )}
-                Disconnect
+                {unlinkFailure?.engineUnreachable ? "Remove anyway" : "Disconnect"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
