@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
-import type { InstanceId } from "@/engine/types";
-import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
+import { renderInScope } from "./render-in-scope";
 
 // Each read answers with a Convex row, so these check what the gateway hands
 // callers instead: the engine-neutral record, with Convex's own fields gone
@@ -35,7 +34,6 @@ const { convexScenesGateway } = await import("./scenes");
 const { convexStatusGateway } = await import("./status");
 const { convexWorkflowsGateway } = await import("./workflows");
 
-const instanceId = TEST_INSTANCE_ID;
 const convexFields = { _creationTime: 1_700_000_000_000, instanceId: "instance-1" };
 
 beforeEach(() => {

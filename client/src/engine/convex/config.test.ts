@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { Id } from "@convex/_generated/dataModel";
 import { getFunctionName } from "convex/server";
 import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 

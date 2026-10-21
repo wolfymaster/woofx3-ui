@@ -1,4 +1,3 @@
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { EngineScopeProvider } from "@/engine/scope";
 import type { EngineScope, InstanceId } from "@/engine/types";
@@ -17,7 +16,11 @@ export function renderInScope<T>(hook: () => T, instanceId: InstanceId | null = 
     value = { current: hook() };
     return null;
   }
-  renderToStaticMarkup(createElement(EngineScopeProvider, { scope, children: createElement(Probe) }));
+  renderToStaticMarkup(
+    <EngineScopeProvider scope={scope}>
+      <Probe />
+    </EngineScopeProvider>
+  );
   if (!value) {
     throw new Error("the probe did not render");
   }
