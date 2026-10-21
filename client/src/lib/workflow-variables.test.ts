@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
-import type { ProjectedAction } from "@/lib/trigger-projection";
-import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
 import type { StepNode, TriggerNode, WorkflowTree } from "@/lib/workflow-tree";
 import {
   collectStepIds,
@@ -9,8 +7,6 @@ import {
   generateStepId,
   isStepIdReferenced,
   isValidStepId,
-  projectedActionVariables,
-  waitEventVariables,
 } from "./workflow-variables";
 
 function catalogTrigger(overrides: Partial<CatalogTriggerRow>): CatalogTriggerRow {
@@ -332,50 +328,6 @@ describe("computeAvailableVariables — type and description", () => {
   });
 });
 
-describe("projectedActionVariables", () => {
-  const cheer = {
-    id: "t1",
-    name: "Cheer",
-    description: "",
-    category: "twitch",
-    color: "",
-    event: "cheer.user.twitch",
-    emits: [{ path: "amount", type: "number" }],
-  } as unknown as TriggerPreset;
-  const counter = {
-    id: "a1",
-    name: "Increment Counter",
-    config: { fields: [], outputs: [{ path: "next", type: "number" }] },
-  } as unknown as ActionPreset;
-  const action = (id: string, concurrentWithPrevious = false): ProjectedAction => ({
-    id,
-    handlerType: "function",
-    functionCall: "counter.increment",
-    parameters: {},
-    concurrentWithPrevious,
-  });
-  const values = (actions: ProjectedAction[], index: number) =>
-    projectedActionVariables(cheer, actions, index, () => counter).map((option) => option.value);
-
-  test("offers the trigger's data and the outputs of every earlier stage", () => {
-    expect(values([action("first"), action("second"), action("third")], 2)).toEqual([
-      "${trigger.data.amount}",
-      "${first.next}",
-      "${second.next}",
-    ]);
-  });
-
-  test("leaves out an action running alongside this one", () => {
-    const actions = [action("first"), action("second"), action("third", true)];
-    expect(values(actions, 2)).toEqual(["${trigger.data.amount}", "${first.next}"]);
-    expect(values(actions, 1)).toEqual(["${trigger.data.amount}", "${first.next}"]);
-  });
-
-  test("a first action marked concurrent still sees the trigger", () => {
-    expect(values([action("first", true)], 0)).toEqual(["${trigger.data.amount}"]);
-  });
-});
-
 const subCatalog = [
   catalogTrigger({
     id: "sub",
@@ -387,25 +339,6 @@ const subCatalog = [
     ],
   }),
 ];
-
-describe("waitEventVariables", () => {
-  test("offers the waited event's declared payload, typed, as ${event.data.*}", () => {
-    const options = waitEventVariables("channel.subscribe", subCatalog);
-    expect(options).toContainEqual(
-      expect.objectContaining({ value: "${event.data.user_name}", type: "string", description: "Who subscribed" })
-    );
-    expect(options).toContainEqual(expect.objectContaining({ value: "${event.data.months}", type: "number" }));
-  });
-
-  test("always offers the event's type and id, and never the trigger or a step", () => {
-    const options = waitEventVariables("custom.unknown", subCatalog);
-    expect(options.map((o) => o.value)).toEqual(["${event.type}", "${event.id}"]);
-  });
-
-  test("offers no payload for an empty event", () => {
-    expect(waitEventVariables("", subCatalog).map((o) => o.value)).toEqual(["${event.type}", "${event.id}"]);
-  });
-});
 
 describe("computeAvailableVariables — wait exports", () => {
   const notify: StepNode = { type: "action", id: "notify", action: "function", parameters: {} };

@@ -1,7 +1,7 @@
+import { ArrowRight, Bell, type LucideIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ObjectActionPicker } from "@/components/flow/object-action-picker";
 import { StepInlineEditor } from "@/components/flow/step-inline-editor";
-import { stepIcon } from "@/components/triggers/action-row";
 import { Button } from "@/components/ui/button";
 import { useActionObjectInstances } from "@/hooks/use-action-object-instances";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
@@ -13,6 +13,18 @@ import type { ActionPreset } from "@/lib/workflow-presets";
 import { presetToActionStep, resolveActionStepPreset } from "@/lib/workflow-presets-json";
 
 const NO_STEP_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * The engine's own Alert handler gets its bell. Every other action shows the icon its
+ * catalog entry carries, which is the same default arrow for all of them until modules
+ * can declare one.
+ */
+function stepIcon(handlerType: string, preset: ActionPreset | undefined): LucideIcon {
+  if (handlerType === "alert") {
+    return Bell;
+  }
+  return preset?.icon ?? ArrowRight;
+}
 
 interface MacroActionStepEditorProps {
   value: MacroActionStep | null;
@@ -138,7 +150,7 @@ export function MacroActionStepEditor({
   }
 
   const preset = findPreset(value, actionPresets);
-  const Icon = stepIcon({ handlerType: value.action }, preset);
+  const Icon = stepIcon(value.action, preset);
 
   return (
     <div className="space-y-4">

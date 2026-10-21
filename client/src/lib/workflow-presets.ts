@@ -110,20 +110,6 @@ export interface ActionPreset {
   };
 }
 
-export interface TriggerVariant {
-  id: string;
-  /** User-visible label for this binding (defaults from trigger name + config values). */
-  displayName: string;
-  /** When true, changing trigger field values does not overwrite displayName. */
-  displayNameCustomized?: boolean;
-  values: TriggerConfigValues;
-  action: ActionPreset | null;
-  actionConfig: TriggerConfigValues;
-}
-
-/** @deprecated Use TriggerVariant */
-export type TierConfig = TriggerVariant;
-
 export function getDefaultConfigValues(fields: ConfigField[]): TriggerConfigValues {
   const values: TriggerConfigValues = {};
   fields.forEach((field) => {

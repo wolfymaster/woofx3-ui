@@ -10,7 +10,6 @@ import {
   starterPackDefaults,
 } from "@convex/lib/starterPacks";
 import type { TaskDefinition, WorkflowDefinition } from "@woofx3/api";
-import { buildWorkflowDefinition, type ProjectedAction } from "./trigger-projection";
 import {
   definitionToTree,
   type TreeLayout,
@@ -19,6 +18,7 @@ import {
   updateStepInTree,
   type WorkflowTree,
 } from "./workflow-tree";
+import legacyAlertWorkflows from "./workflow-tree.legacy-alerts.json";
 
 /**
  * The tree round trip is lossless: every definition the editor can open saves back as itself.
@@ -556,64 +556,18 @@ describe("definitions the app writes round-trip", () => {
     });
   }
 
-  const projected = (id: string, message: string, concurrentWithPrevious = false): ProjectedAction => ({
-    id,
-    handlerType: "function",
-    functionCall: "twitch.chat.send",
-    parameters: { message },
-    concurrentWithPrevious,
-  });
+  // Workflows the Alerts screen wrote when it kept all of an event's triggers in one
+  // workflow: a condition task per trigger, its actions in `onTrue`. The engine's upgrade
+  // splits most of them; these are the shapes the step editor still has to read.
+  const legacy = legacyAlertWorkflows as unknown as Record<"one" | "two" | "shared" | "concurrent", WorkflowDefinition>;
 
   test("an Alerts workflow with one trigger is a tree", () => {
-    const def = buildWorkflowDefinition({
-      event: "channel.cheer",
-      name: "Cheers",
-      engineWorkflowId: "wf-cheers",
-      triggers: [
-        {
-          id: "rule_1",
-          enabled: true,
-          conditions: [{ field: "${trigger.data.amount}", operator: "gte", value: 100 }],
-          actions: [projected("a1", "thanks"), projected("a2", "again")],
-        },
-      ],
-      shared: [],
-    });
-    expectRoundTrip(def as WorkflowDefinition, "nested");
+    expectRoundTrip(legacy.one, "nested");
   });
 
   test("an Alerts workflow with two triggers, a shared action or concurrent actions is not", () => {
-    const rule = (id: string, actions: ProjectedAction[]) => ({
-      id,
-      enabled: true,
-      conditions: [{ field: "${trigger.data.amount}", operator: "gte" as const, value: 100 }],
-      actions,
-    });
-    const twoTriggers = buildWorkflowDefinition({
-      event: "channel.cheer",
-      name: "Cheers",
-      engineWorkflowId: "wf-cheers",
-      triggers: [rule("rule_1", [projected("a1", "one")]), rule("rule_2", [projected("a2", "two")])],
-      shared: [],
-    });
-    expect(definitionToTree(twoTriggers as WorkflowDefinition).editable).toBe(false);
-
-    const shared = buildWorkflowDefinition({
-      event: "channel.cheer",
-      name: "Cheers",
-      engineWorkflowId: "wf-cheers",
-      triggers: [rule("rule_1", []), rule("rule_2", [])],
-      shared: [{ ...projected("s1", "either"), triggerIds: ["rule_1", "rule_2"] }],
-    });
-    expectNotATree(shared as WorkflowDefinition, { kind: "joined-step", taskId: "s1" });
-
-    const concurrent = buildWorkflowDefinition({
-      event: "channel.cheer",
-      name: "Cheers",
-      engineWorkflowId: "wf-cheers",
-      triggers: [rule("rule_1", [projected("a1", "one"), projected("a2", "two", true)])],
-      shared: [],
-    });
-    expectNotATree(concurrent as WorkflowDefinition, { kind: "unsequenced-step", taskId: "a2" });
+    expect(definitionToTree(legacy.two).editable).toBe(false);
+    expectNotATree(legacy.shared, { kind: "joined-step", taskId: "s1" });
+    expectNotATree(legacy.concurrent, { kind: "unsequenced-step", taskId: "a2" });
   });
 });

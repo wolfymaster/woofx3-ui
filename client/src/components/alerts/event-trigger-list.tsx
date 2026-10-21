@@ -17,6 +17,7 @@ import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
 import { alertSectionAnchor } from "@/lib/alert-groups";
 import {
+  conditionFieldsOf,
   type EventTrigger,
   eventTriggers,
   isPinnedTo,
@@ -27,7 +28,6 @@ import {
   triggerFieldValues,
 } from "@/lib/alert-triggers";
 import { type OptionLabels, type SentencePart, sentenceParts, sentenceText } from "@/lib/condition-sentence";
-import { conditionFieldsOf } from "@/lib/event-workflow-state";
 import { isInternalSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
 import { stepSummary } from "@/lib/step-summary";
@@ -82,8 +82,8 @@ const NEW_TRIGGER = "new";
  * the "When" card. Every trigger whose sentence holds runs, top to bottom.
  *
  * A workflow the step editor can't read is still listed and still opens, saying why it
- * can't be edited here. One holding several triggers, the way this page once stored them,
- * is split into one workflow per trigger by the engine's upgrade.
+ * can't be edited here. One still holding several triggers, the way this page once stored
+ * them, is one the engine's upgrade could not split into a workflow per trigger.
  */
 export function EventTriggerList({
   triggerPreset,
@@ -472,8 +472,8 @@ function TriggerCard({ instanceId, trigger, triggerPreset, sentence, isExpanded,
             <div className="flex flex-col gap-3">
               {storedTogether > 1 ? (
                 <p className="text-sm text-muted-foreground" data-testid="text-triggers-saved-together">
-                  These triggers were saved together in one workflow, which can't be edited here. Updating your engine
-                  gives each of them a workflow of its own.
+                  These triggers were saved together in one workflow in a way that can't be edited here. To change them,
+                  delete this workflow and add each trigger again.
                 </p>
               ) : (
                 <WorkflowNotEditable reason={read.message} />

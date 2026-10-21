@@ -8,7 +8,7 @@ import {
   STREAM_ITEMS,
   withAlertsChildren,
 } from "@/components/layout/nav-config";
-import { alertEditorPath } from "@/lib/alert-editor-route";
+import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
 import { alertRunPath } from "@/lib/alert-run-route";
 
 const alerts = STREAM_ITEMS.find((item) => item.id === "alerts");
@@ -30,9 +30,7 @@ describe("isNavItemActive", () => {
   });
 
   test("an editor it owns marks it", () => {
-    expect(isNavItemActive(alerts, alertEditorPath({ event: "channel.follow", triggerId: "t1", actionId: "a1" }))).toBe(
-      true
-    );
+    expect(isNavItemActive(alerts, libraryAlertEditorPath("comp-1"))).toBe(true);
   });
 
   test("another page does not mark it", () => {

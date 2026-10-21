@@ -8,7 +8,7 @@ import { StepIdField } from "@/components/flow/step-id-field";
 import { Label } from "@/components/ui/label";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
-import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
+import { BUILTIN_MODULE_LABEL } from "@/lib/action-objects";
 import {
   appendToken,
   isWholeReference,

@@ -2,6 +2,7 @@ import type { Doc } from "@convex/_generated/dataModel";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
+import { isCommandsSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
 import {
   type ActionPreset,
@@ -129,6 +130,14 @@ export function stepsAimAt(
 export function triggerAimsAt(trigger: EventTrigger, actions: readonly ResourceAction[], canonicalId: string): boolean {
   const read = definitionToTree(trigger.definition);
   return read.editable && stepsAimAt(read.tree.steps, actions, canonicalId);
+}
+
+/**
+ * The fields a trigger's conditions are set from. A commands field is folded into the
+ * event name rather than held as a condition, so it has no place in the sentence.
+ */
+export function conditionFieldsOf(triggerPreset: TriggerPreset | undefined): ConfigField[] {
+  return (triggerPreset?.config?.fields ?? []).filter((field) => !isCommandsSource(field));
 }
 
 export interface NewTriggerOptions {

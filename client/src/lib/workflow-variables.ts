@@ -1,11 +1,9 @@
 import type { ConfigField, DataShapeField } from "@woofx3/api/ui-schema";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { parseConfigFields, parseDataShapeFields } from "@/lib/parse-config-fields";
-import type { ProjectedAction } from "@/lib/trigger-projection";
 import type { WaitConfig } from "@/lib/wait-config";
 import { payloadFieldLabel, resolveWaitEvent } from "@/lib/wait-event";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
-import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
 import type { StepNode, WaitNode, WorkflowTree } from "@/lib/workflow-tree";
 
 const STEP_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
@@ -174,64 +172,11 @@ function catalogTriggerVariables(tree: WorkflowTree, catalogTriggers: CatalogTri
 }
 
 /**
- * Every variable an action on the Alerts screen could reference: the trigger's payload,
- * plus the outputs of the actions in stages before its own. An action marked concurrent
- * runs in the same stage as the one above it (see buildWorkflowDefinition), so neither
- * can read the other's output.
- */
-export function projectedActionVariables(
-  trigger: TriggerPreset,
-  actions: readonly ProjectedAction[],
-  actionIndex: number,
-  presetOf: (action: ProjectedAction) => ActionPreset | undefined
-): VariableOption[] {
-  if (actionIndex < 0 || actionIndex >= actions.length) {
-    throw new Error(`action index ${actionIndex} is outside a trigger with ${actions.length} actions`);
-  }
-  let stageStart = actionIndex;
-  while (stageStart > 0 && actions[stageStart].concurrentWithPrevious) {
-    stageStart -= 1;
-  }
-
-  const options = triggerPresetVariables(trigger);
-  for (const action of actions.slice(0, stageStart)) {
-    const preset = presetOf(action);
-    options.push(...stepOutputVariables(action.id, preset?.name ?? action.id, preset?.config?.outputs ?? []));
-  }
-  return options;
-}
-
-/** The trigger's payload, which every action a trigger preset runs may reference. */
-export function triggerPresetVariables(trigger: TriggerPreset): VariableOption[] {
-  return triggerDataVariables(trigger.emits ?? [], trigger.config?.fields ?? []);
-}
-
-/**
  * The catalog's description of the payload an event carries, when a trigger declares
  * that event; a chat command's `chat.command.hug` is described by `chat.command.*`.
  */
 function eventPayloadFields(event: string, catalogTriggers: CatalogTriggerRow[]): DataShapeField[] {
   return resolveWaitEvent(event, catalogTriggers)?.choice.emits ?? [];
-}
-
-/**
- * What a wait's match conditions can read: the event being waited for, and nothing else.
- * The engine evaluates them against that event alone (matchesConditions in the engine's
- * workflow/internal/tasks/wait.go), so the trigger and earlier steps are not offered.
- */
-export function waitEventVariables(event: string, catalogTriggers: CatalogTriggerRow[]): VariableOption[] {
-  const group = "Waited event";
-  return [
-    ...eventPayloadFields(event, catalogTriggers).map((field) => ({
-      value: `\${event.data.${field.path}}`,
-      label: field.path,
-      group,
-      type: field.type,
-      description: field.description,
-    })),
-    { value: `\${event.type}`, label: "Event type", group, type: "string", description: "The event's subject." },
-    { value: `\${event.id}`, label: "Event ID", group, type: "string", description: "The event's unique id." },
-  ];
 }
 
 /**
