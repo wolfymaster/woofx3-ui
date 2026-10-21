@@ -35,6 +35,7 @@ A narrow HTTP API under `/api/ops/`, served by `convex/ops/http.ts`, that only t
 | `GET /api/ops/accounts/:id` | An account, its members, pending invitations, resolved entitlements, instances, and each instance's provisioning. |
 | `GET /api/ops/engines?status=&cursor=` | Every `engineProvisioning` row, or those in one status, for drift checks against the maintenance API. |
 | `GET /api/ops/engines/capabilities?days=` | For each capability id, how many recently active instances have and lack it, by hosting, and the engine versions they run. See below. |
+| `GET /api/ops/engines/module-storage-limits?cursor=` | Each managed engine's module storage limit (`storage.moduleStorageBytes` after its override), by maintenance engine id, a page at a time; `null` is unlimited. A page may hold fewer rows than its size: rows without a maintenance engine are skipped. The backoffice compares these with maintenance's replica sizes to flag engines over their limit. |
 | `GET /api/ops/engines/by-maintenance-id/:engineId` | One managed engine's provisioning row, instance, account, and hosted storage limits (inherited from the account, its override, and the limits that apply). |
 | `GET /api/ops/instances/:id/health` | Live state, sync state, recent alerts and failing workflows. |
 | `GET /api/ops/audit?actor=&target=&cursor=` | The audit log, newest first, for one operator or one target. |
@@ -79,7 +80,7 @@ Operators also set what only an operator may:
 
 | Route | Does |
 |---|---|
-| `POST /api/ops/instances/:instanceId/storage-limits` | Replaces a managed engine's hosted storage override, `{ totalBytes?, fileBytes? }` in bytes. A field left out inherits the account's entitlement, `null` is unlimited, and `{}` clears the override. An engine someone else hosts answers `409 not_managed`. |
+| `POST /api/ops/instances/:instanceId/storage-limits` | Replaces a managed engine's hosted storage override, `{ totalBytes?, fileBytes?, moduleStorageBytes? }` in bytes. A field left out inherits the account's entitlement, `null` is unlimited, and `{}` clears the override. An engine someone else hosts answers `409 not_managed`. |
 
 - **One implementation:** both paths run `convex/lib/managedEngineActions.ts`. The provisioning row, the runs, the callbacks and a rollback are identical; only `upgrade.requestedBy` names the operator, as `{ operator: email }`.
 - **Not shown to the customer:** `provisioning.forInstance` strips `requestedBy`, and the customer sees the run like any other.

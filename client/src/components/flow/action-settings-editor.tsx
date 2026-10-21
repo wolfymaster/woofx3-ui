@@ -4,11 +4,11 @@ import { useId, useMemo, useState } from "react";
 import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { ModuleAssetFieldRenderer, withAssetModule } from "@/components/flow/module-asset-field";
+import { StepIdField } from "@/components/flow/step-id-field";
 import { Label } from "@/components/ui/label";
-import { StepIdField } from "@/components/workflows/step-config-panel";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import type { CatalogActionRow } from "@/hooks/use-workflow-catalog";
-import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
+import { BUILTIN_MODULE_LABEL } from "@/lib/action-objects";
 import {
   appendToken,
   isWholeReference,

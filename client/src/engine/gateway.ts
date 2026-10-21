@@ -4,6 +4,7 @@ import type {
   AlertOverview,
   AlertReplayResult,
   AlertSkipResult,
+  AlertTargetUsage,
   ChatCommand,
   ChatCommandChanges,
   ChatCommandGroup,
@@ -47,6 +48,7 @@ import type {
   ModuleResourceInstance,
   ModuleResourceInstanceChanges,
   ModuleSettingValue,
+  ModuleStorageUsage,
   NewChatCommand,
   NewChatCommandGroup,
   NewLibraryAlert,
@@ -69,6 +71,7 @@ import type {
   SceneEditorGrant,
   SceneId,
   SceneRecord,
+  SceneRepairResult,
   SceneWidgetCatalogRow,
   SetupImportAnalysis,
   SetupImportId,
@@ -356,6 +359,8 @@ export interface ModulesGateway {
    * resolves with what it made. Rejects for a listing the instance may not install.
    */
   useBundleInstallRequest(): (listingId: string) => Promise<MarketplaceBundleInstall>;
+  /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */
+  useStorageUsageRequest(): () => Promise<ModuleStorageUsage | null>;
 }
 
 /**
@@ -378,6 +383,13 @@ export interface ScenesGateway {
    * default first. Empty when the caller cannot see the instance.
    */
   useAlertWidgetNames(options?: ReadOptions): Live<string[]>;
+  /**
+   * What one scene's editor needs to warn that an edit leaves Alert steps
+   * with no alert widget to play on: every Alert step's target, and the names
+   * the alert widgets of the instance's other scenes answer to. Null when the
+   * caller cannot see the instance.
+   */
+  useAlertTargetUsage(engineSceneId: string): Live<AlertTargetUsage | null>;
   useCreateRequest(): (scene: NewScene) => Promise<{ engineSceneId: string }>;
   useUpdateRequest(): (engineSceneId: string, changes: SceneChanges) => Promise<{ success: boolean }>;
   useRemoveRequest(): (engineSceneId: string) => Promise<{ success: boolean }>;
@@ -389,6 +401,12 @@ export interface ScenesGateway {
    * reach sceneManager. Needs `scenes.editorSync`.
    */
   useEditorSessionRequest(): (engineSceneId: string) => Promise<SceneEditorGrant | null>;
+  /**
+   * Repair a scene or alert whose stored data the engine cannot read: the
+   * engine keeps a copy of what it cannot read, then writes back the readable
+   * rest. Needs `scenes.repair`.
+   */
+  useRepairRequest(): (engineSceneId: string) => Promise<SceneRepairResult>;
 }
 
 /**

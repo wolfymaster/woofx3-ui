@@ -1,7 +1,5 @@
-import { type HostedStorageOverride, isByteLimit } from "../hostedStorage";
+import { HOSTED_STORAGE_LIMIT_FIELDS, type HostedStorageOverride, isByteLimit } from "../hostedStorage";
 import type { ParseResult } from "../notifications";
-
-const FIELDS = ["totalBytes", "fileBytes"] as const;
 
 /**
  * An engine's hosted storage override as the backoffice sends it. The body
@@ -14,12 +12,12 @@ export function parseStorageLimitsRequest(body: unknown): ParseResult<HostedStor
   }
   const raw = body as Record<string, unknown>;
   for (const key of Object.keys(raw)) {
-    if (!(FIELDS as readonly string[]).includes(key)) {
-      return { ok: false, message: `Unknown field "${key}"; expected ${FIELDS.join(" or ")}` };
+    if (!(HOSTED_STORAGE_LIMIT_FIELDS as readonly string[]).includes(key)) {
+      return { ok: false, message: `Unknown field "${key}"; expected ${HOSTED_STORAGE_LIMIT_FIELDS.join(", ")}` };
     }
   }
   const override: HostedStorageOverride = {};
-  for (const field of FIELDS) {
+  for (const field of HOSTED_STORAGE_LIMIT_FIELDS) {
     const value = raw[field];
     if (value === undefined) {
       continue;

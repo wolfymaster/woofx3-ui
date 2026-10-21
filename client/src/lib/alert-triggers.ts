@@ -2,6 +2,7 @@ import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import type { Workflow } from "@/engine/types";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
+import { isCommandsSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
 import {
   type ActionPreset,
@@ -131,10 +132,34 @@ export function triggerAimsAt(trigger: EventTrigger, actions: readonly ResourceA
   return read.editable && stepsAimAt(read.tree.steps, actions, canonicalId);
 }
 
+/**
+ * The fields a trigger's conditions are set from. A commands field is folded into the
+ * event name rather than held as a condition, so it has no place in the sentence.
+ */
+export function conditionFieldsOf(triggerPreset: TriggerPreset | undefined): ConfigField[] {
+  return (triggerPreset?.config?.fields ?? []).filter((field) => !isCommandsSource(field));
+}
+
+/**
+ * How many triggers a workflow holds as condition tasks: one per `condition` task, plus
+ * one for the actions no condition branches to or guards, which run on every event.
+ */
+export function storedTriggerCount(definition: WorkflowDefinition): number {
+  const tasks = definition.tasks ?? [];
+  const conditions = tasks.filter((task) => task.type === "condition");
+  const branched = new Set(conditions.flatMap((task) => [...(task.onTrue ?? []), ...(task.onFalse ?? [])]));
+  const unguarded = tasks.some(
+    (task) =>
+      task.type === "action" && !branched.has(task.id) && (task.conditions ?? []).length === 0 && !task.condition
+  );
+  return conditions.length + (unguarded ? 1 : 0);
+}
+
 export interface NewTriggerOptions {
   triggerPreset: TriggerPreset;
   conditionFields: ConfigField[];
-  order: number;
+  /** Its place among the event's other workflows; a workflow made on its own has none. */
+  order?: number;
   pin?: TriggerPin;
   /** A step the trigger starts with, aimed by `aim` when given. */
   seed?: ActionPreset;
@@ -146,7 +171,7 @@ export const SEED_STEP_ID = "step_1";
 
 /**
  * The tree of a trigger not yet saved: the event, its fields' default values (with
- * `pin` held), the next order and, when given, its first step. Unfinished fields save
+ * `pin` held), its order when given and, when given, its first step. Unfinished fields save
  * no condition, so they read as missing in the sentence until they are chosen.
  */
 export function newTriggerTree(options: NewTriggerOptions): WorkflowTree {
@@ -173,7 +198,7 @@ export function newTriggerTree(options: NewTriggerOptions): WorkflowTree {
       event: triggerPreset.event ?? "",
       ...(triggerPreset.canonicalRef ? { $ref: triggerPreset.canonicalRef } : {}),
       conditions: fieldValuesToConditions(conditionFields, values),
-      order,
+      ...(order === undefined ? {} : { order }),
     },
     tasks,
   } as unknown as WorkflowDefinition;

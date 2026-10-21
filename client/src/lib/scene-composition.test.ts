@@ -77,6 +77,12 @@ describe("compositionOfStoredScene + storedWidgetsOf", () => {
     expect(placement?.extra).toEqual({});
   });
 
+  it("leaves out cached entries the scene manager cannot read", () => {
+    const widgets = [42, null, "clock", { id: "x" }, { widgetCanonicalId: "example:widget:clock" }, widget("a", 0)];
+    const doc = compositionOfStoredScene({ ...scene, widgets: widgets as unknown as Widget[] });
+    expect(Object.keys(doc.widgets)).toEqual(["a"]);
+  });
+
   it("stores a composition as updateScene takes it", () => {
     const json = storedSceneJson(compositionOfStoredScene(scene));
     expect(JSON.parse(json.widgetsJson)).toEqual(scene.widgets);

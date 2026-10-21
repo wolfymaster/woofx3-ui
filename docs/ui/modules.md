@@ -116,6 +116,18 @@ A conflict entry with `resourceType: "module"` means other installed modules dec
 
 If the engine returns a delete webhook without a `moduleKey` (older engine build), `emitDeleteErrorForMissingKey` locates the record by name and emits the error under its stored `moduleKey` so the dialog unsticks.
 
+## Module storage limit
+
+Module storage is what modules keep with `ctx.storage`. A managed engine keeps it on the container's own disk and restores it from its replica in the engine's bucket, so the plan bounds it with `storage.moduleStorageBytes` (default 500 MiB; see [Entitlements](../patterns/entitlements.md)). Operators can set it for one engine from the backoffice, beside the hosted asset limits (`instances.hostedStorageLimits.moduleStorageBytes`, through the [ops API](../patterns/ops-api.md)).
+
+The limit is soft. The engine never refuses a write, and nothing in the dashboard does either: an owner over the limit is told that what their modules store beyond it could be lost.
+
+- `api.moduleStorage.usage` asks the engine for `getModuleStorageUsage` (capability `modules.storageUsage`) and compares it with the limit. It answers null for an engine someone else hosts and for an engine too old to report it.
+- The engine page shows a **Module storage** card for a managed engine: a meter against the limit, or a note to update the engine when it cannot report usage.
+- The Modules page shows a warning above the catalog while the engine is over its limit.
+
+Operators see the same figure from the other side: the maintenance API's daily usage collection reads the size of the engine's module storage replica, and the backoffice flags engines over their limit.
+
 ## Mental model
 
 - **Engine truth** (what is actually installed on the engine) is the source of truth. The `moduleRepository` table in Convex is a projection that only writes after the engine confirms.

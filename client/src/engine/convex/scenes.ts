@@ -72,6 +72,10 @@ function useAlertWidgetNames({ enabled = true }: ReadOptions = {}) {
   return useQuery(api.sceneWidgets.alertWidgetNames, enabled && instanceId ? { instanceId } : "skip");
 }
 
+function useAlertTargetUsage(instanceId: InstanceId, engineSceneId: string) {
+  return useQuery(api.sceneWidgets.alertTargetUsage, { instanceId, engineSceneId });
+}
+
 function useCreateRequest() {
   const createScene = useInstanceAction(api.sceneActions.createScene);
   return useCallback((scene: NewScene) => createScene(scene), [createScene]);
@@ -100,14 +104,24 @@ function useEditorSessionRequest() {
   return useCallback((engineSceneId: string) => getSceneEditorSession({ engineSceneId }), [getSceneEditorSession]);
 }
 
+function useRepairRequest() {
+  const repairScene = useAction(api.sceneActions.repairScene);
+  return useCallback(
+    (instanceId: InstanceId, engineSceneId: string) => repairScene({ instanceId, engineSceneId }),
+    [repairScene]
+  );
+}
+
 export const convexScenesGateway: ScenesGateway = {
   useScenes,
   useScene,
   useWidgetCatalog,
   useAlertWidgetNames,
+  useAlertTargetUsage,
   useCreateRequest,
   useUpdateRequest,
   useRemoveRequest,
   useWidgetThemesRequest,
   useEditorSessionRequest,
+  useRepairRequest,
 };

@@ -15,8 +15,8 @@ import {
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ObjectActionPicker } from "@/components/flow/object-action-picker";
 import { StepInlineEditor } from "@/components/flow/step-inline-editor";
+import { TriggerConfigPanel } from "@/components/flow/trigger-config-panel";
 import { Button } from "@/components/ui/button";
-import { TriggerConfigPanel } from "@/components/workflows/step-config-panel";
 import { useToast } from "@/hooks/use-toast";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { conditionSourcesFor, type EngineConditionSupport, NO_ENGINE_CONDITION_SUPPORT } from "@/lib/condition-builder";
