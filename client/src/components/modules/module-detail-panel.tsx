@@ -183,9 +183,7 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
   } = props;
 
   const [topTab, setTopTab] = useState<TopTab>("details");
-  const { instanceId: engineInstanceId } = useEngineScope();
   const moduleFiles = useModuleFiles({
-    instanceId: engineInstanceId,
     moduleId: module.identifier,
     isInstalled: module.isInstalled,
     version: module.version,
@@ -917,7 +915,7 @@ export function ModuleSettingsSections({
     <div className={cn("flex flex-col gap-6", className)}>
       {instanceId && moduleId && <ModuleWebhookEndpoints instanceId={instanceId} modulePrefix={moduleId} />}
       {instanceId && moduleId && <LocalEndpointPanel instanceId={instanceId} moduleId={moduleId} />}
-      {engineInstanceId && moduleId === OBS_MODULE_ID && <ObsConnectionStatus instanceId={engineInstanceId} />}
+      {engineInstanceId && moduleId === OBS_MODULE_ID && <ObsConnectionStatus />}
       <SettingsTab instanceId={instanceId} moduleId={moduleId} manifestSettings={manifestSettings} />
     </div>
   );
@@ -975,7 +973,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     }
     setLoadState("loading");
     setLoadError(null);
-    void getSettingsAction(engineInstanceId, moduleId)
+    void getSettingsAction(moduleId)
       .then((settings) => {
         const map: Record<string, string> = {};
         const secrets: Record<string, boolean> = {};
@@ -1030,7 +1028,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     setSaveError(null);
     setSaveSuccess(null);
     try {
-      await updateSettingAction(engineInstanceId, moduleId, key, value);
+      await updateSettingAction(moduleId, key, value);
       if (isSecret) {
         setSecretIsSet((prev) => ({ ...prev, [key]: value !== "" }));
         // The typed secret is not kept once the engine has it.
@@ -1202,8 +1200,7 @@ interface ResourceRefSettingRowProps {
  * that declares the kind (`woofx3` for a timer), never under this module.
  */
 function ResourceRefSettingRow({ field, resourceKind, value, busy, saved, onChange }: ResourceRefSettingRowProps) {
-  const { instanceId } = useEngineScope();
-  const kind = useResourceKind(instanceId, resourceKind);
+  const kind = useResourceKind(resourceKind);
   const ResourcePicker = configFieldRenderers.resource_ref;
   return (
     <div className="space-y-2">
@@ -1375,9 +1372,8 @@ function SettingButtonRow({ instanceId, moduleId, field }: SettingButtonRowProps
 }
 
 function InternalSettingButton({ moduleId, field }: { moduleId: string; field: ManifestSettingField }) {
-  const { instanceId } = useEngineScope();
   const reference = useMemo(() => settingFieldOptionsReference(moduleId, field.id), [moduleId, field.id]);
-  const { trigger, status, message } = useInternalSettingAction(instanceId, reference);
+  const { trigger, status, message } = useInternalSettingAction(reference);
   return (
     <div className="space-y-2">
       <Button size="sm" variant="outline" disabled={!reference || status === "pending"} onClick={trigger}>
@@ -1511,7 +1507,7 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const instances = useModuleResourceInstances(instanceId, moduleDbId ?? null);
+  const instances = useModuleResourceInstances(moduleDbId ?? null);
 
   const createAction = useCreateResourceInstanceRequest();
   const deleteAction = useDeleteResourceInstanceRequest();
@@ -1525,7 +1521,7 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
     let cancelled = false;
     setSyncing(true);
     setSyncError(null);
-    void syncAction(instanceId, moduleDbId)
+    void syncAction(moduleDbId)
       .catch((err: unknown) => {
         if (!cancelled) {
           setSyncError(err instanceof Error ? err.message : "Failed to sync resource instances from the engine.");
@@ -1553,10 +1549,10 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
     setDeleting(deleteTarget.canonicalId);
     setOpError(null);
     try {
-      await deleteAction(instanceId, deleteTarget.canonicalId);
+      await deleteAction(deleteTarget.canonicalId);
       setDeleteTarget(null);
       if (moduleDbId) {
-        await syncAction(instanceId, moduleDbId);
+        await syncAction(moduleDbId);
       }
     } catch (err) {
       setOpError(err instanceof Error ? err.message : "Failed to delete resource.");
@@ -1674,14 +1670,14 @@ export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKin
           kind={createDialogKind}
           onClose={() => setCreateDialogKind(null)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            await createAction(instanceId, {
+            await createAction({
               moduleName,
               kind: createDialogKind.kind,
               resourceInstanceId,
               displayName,
               settings,
             });
-            await syncAction(instanceId, moduleDbId);
+            await syncAction(moduleDbId);
           }}
         />
       )}

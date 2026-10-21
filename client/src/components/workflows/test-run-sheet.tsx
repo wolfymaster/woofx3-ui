@@ -92,8 +92,7 @@ export function TestRunSheet({
   preset,
   otherWorkflows,
 }: TestRunSheetProps) {
-  const { instanceId } = useEngineScope();
-  const testRunSupport = useTestRunSupport(instanceId);
+  const testRunSupport = useTestRunSupport();
   const optionsState = testRunSupport.options;
   const takesOptions = optionsState === "supported";
   // Null until someone picks a tab, so the default follows what loads in:
@@ -337,7 +336,7 @@ function DirectTest({
     setAttempt(null);
     try {
       const result = await withinTimeout(
-        trigger(instanceId, {
+        trigger({
           workflowNameOrId: engineWorkflowId,
           origin: TEST_RUN_ORIGIN,
           options: takesOptions
@@ -554,12 +553,11 @@ function TestRunOutcome({
   knownExecutionId?: string | null;
   dryRun?: boolean;
 }) {
-  const { instanceId } = useEngineScope();
   const { waitElapsed, gaveUp } = useTestEventWaits();
   const [executionId, setExecutionId] = useState<string | null>(knownExecutionId);
   const [sticky, setSticky] = useState<TestEventOutcome | null>(null);
-  const rows = useTransientEvents(instanceId, triggerId);
-  const recorded = useWorkflowRun(instanceId, executionId || null);
+  const rows = useTransientEvents(triggerId);
+  const recorded = useWorkflowRun(executionId || null);
 
   const progress = testRunProgress(rows, engineWorkflowId, waitElapsed);
   const liveOutcome = progress.outcome;

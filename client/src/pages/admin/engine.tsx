@@ -162,7 +162,7 @@ function EngineSettings() {
     return (
       <div className="space-y-4">
         <ManagedEngineCard instanceId={instance._id} />
-        {instance.clientId && engineInstanceId && <EngineSyncCard instanceId={engineInstanceId} />}
+        {instance.clientId && engineInstanceId && <EngineSyncCard />}
         <CompanionCard instanceId={instance._id} />
         <DangerZone instanceId={instance._id} managed />
       </div>
@@ -267,7 +267,7 @@ function EngineSettings() {
           </div>
         </CardContent>
       </Card>
-      {engineInstanceId && <EngineSyncCard instanceId={engineInstanceId} />}
+      {engineInstanceId && <EngineSyncCard />}
       <CompanionCard instanceId={instance._id} />
       <DangerZone instanceId={instance._id} />
     </div>

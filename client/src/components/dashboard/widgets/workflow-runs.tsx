@@ -99,7 +99,7 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
     if (!instanceId) {
       return;
     }
-    const unsubscribe = subscribeWorkflowRuns(instanceId, (run) => {
+    const unsubscribe = subscribeWorkflowRuns((run) => {
       setRuns((prev) => mergeWorkflowRun(prev, run, MAX_RUNS));
     });
 

@@ -49,10 +49,10 @@ function Actions({ onContinue, continueLabel }: { onContinue: () => void; contin
  */
 export function OverlayStep({ status, onContinue }: OverlayStepProps) {
   const { instanceId } = useEngineScope();
-  const engineInstanceId = status.engineRegistered ? instanceId : null;
-  const scenes = useScenes(engineInstanceId);
-  const catalog = useSceneWidgetCatalog(engineInstanceId);
-  const syncState = useEngineSyncState(engineInstanceId);
+  const engineReady = status.engineRegistered && instanceId !== null;
+  const scenes = useScenes({ enabled: status.engineRegistered });
+  const catalog = useSceneWidgetCatalog({ enabled: status.engineRegistered });
+  const syncState = useEngineSyncState({ enabled: status.engineRegistered });
   const syncNow = useEngineSyncRequest();
   const createScene = useCreateSceneRequest();
   const getOrCreateKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
@@ -75,15 +75,15 @@ export function OverlayStep({ status, onContinue }: OverlayStepProps) {
   const needsScene = scenes !== undefined && !scene;
 
   const requestSync = useCallback(() => {
-    if (!engineInstanceId) {
+    if (!engineReady) {
       return;
     }
     setError(null);
     setSyncRequestedAfter(latestRunId);
-    syncNow(engineInstanceId).catch((err: unknown) => {
+    syncNow().catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err));
     });
-  }, [engineInstanceId, latestRunId, syncNow]);
+  }, [engineReady, latestRunId, syncNow]);
 
   useEffect(() => {
     if (needsScene && syncState !== undefined && catalogState === "unsynced" && syncRequestedAfter === undefined) {
@@ -125,13 +125,13 @@ export function OverlayStep({ status, onContinue }: OverlayStepProps) {
   }
 
   async function handleCreate() {
-    if (!engineInstanceId) {
+    if (!engineReady) {
       return;
     }
     setError(null);
     setCreating(true);
     try {
-      await createScene(engineInstanceId, {
+      await createScene({
         name: SETUP_OVERLAY_NAME,
         widgetsJson: JSON.stringify(setupOverlayWidgets(alertWidget)),
         layoutJson: JSON.stringify({ ...SETUP_OVERLAY_SIZE, backgroundColor: "transparent" }),

@@ -6,7 +6,6 @@ import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editabl
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useUpdateWorkflowRequest, useWorkflow } from "@/engine/hooks/use-workflows";
-import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -21,7 +20,6 @@ import {
 } from "@/lib/workflow-tree";
 
 interface WorkflowFlowEditorProps {
-  instanceId: InstanceId;
   engineWorkflowId: string;
   /** Every edit as a full definition, for the header's Save. */
   onDefinitionChange?: (definition: WorkflowDefinition) => void;
@@ -38,14 +36,14 @@ function lastActionReason(steps: StepNode[], id: string): string | null {
  * The workflow editor's steps as a flow (FlowEditor), read from and saved to the stored
  * definition. Saves go through the same action and key escaping as the header's Save.
  */
-export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionChange }: WorkflowFlowEditorProps) {
+export function WorkflowFlowEditor({ engineWorkflowId, onDefinitionChange }: WorkflowFlowEditorProps) {
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
   const { toast } = useToast();
-  const conditionSupport = useEngineConditionSupport(instanceId);
+  const conditionSupport = useEngineConditionSupport();
   const updateFromDefinition = useUpdateWorkflowRequest();
-  const workflow = useWorkflow(instanceId, engineWorkflowId);
-  const resourceInstances = useResourceInstances(instanceId);
-  const scenes = useScenes(instanceId);
+  const workflow = useWorkflow(engineWorkflowId);
+  const resourceInstances = useResourceInstances();
+  const scenes = useScenes();
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -95,7 +93,7 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
         return true;
       }
       try {
-        await updateFromDefinition(instanceId, engineWorkflowId, escapeDollarKeys(definition) as WorkflowDefinition);
+        await updateFromDefinition(engineWorkflowId, escapeDollarKeys(definition) as WorkflowDefinition);
         return true;
       } catch (err) {
         toast({
@@ -106,7 +104,7 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
         return false;
       }
     },
-    [toDefinition, updateFromDefinition, instanceId, engineWorkflowId, toast]
+    [toDefinition, updateFromDefinition, engineWorkflowId, toast]
   );
 
   return (

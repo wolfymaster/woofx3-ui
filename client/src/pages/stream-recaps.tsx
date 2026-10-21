@@ -5,7 +5,6 @@ import { Link } from "wouter";
 import { PageHeader } from "@/components/layout/page-header";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Card } from "@/components/ui/card";
-import { useEngineScope } from "@/engine/context";
 import { useInstance } from "@/hooks/use-instance";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import {
@@ -62,8 +61,7 @@ function RecapRow({ row }: { row: SessionSummaryRow }) {
 
 export default function StreamRecaps() {
   const { instance, isLoading } = useInstance();
-  const { instanceId: engineInstanceId } = useEngineScope();
-  useOpenSessionRefresh(engineInstanceId);
+  useOpenSessionRefresh();
   const rows = useQuery(
     api.streamSessionSummaries.listRecent,
     instance ? { instanceId: instance._id, limit: RECAP_LIST_LIMIT } : "skip"

@@ -96,9 +96,9 @@ export function AssetLibraryModal({
   }, [open, currentExternalUrl]);
 
   const currentFolderId = trail[trail.length - 1].id;
-  const { upload, isUploading, progress } = useResourceUpload(instanceId);
+  const { upload, isUploading, progress } = useResourceUpload();
 
-  const { resources, isLoading, error, refetch } = useResources(instanceId, {
+  const { resources, isLoading, error, refetch } = useResources({
     folderId: currentFolderId,
     kind: filterTypes?.length === 1 ? filterTypes[0] : undefined,
     search: search || undefined,

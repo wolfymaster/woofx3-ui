@@ -108,7 +108,7 @@ function useResourceActionSender() {
     if (!instanceId) {
       return false;
     }
-    await runActions(instanceId, `dashboard:${instance.canonicalId}`, escapeDollarKeys([step]) as unknown[]);
+    await runActions(`dashboard:${instance.canonicalId}`, escapeDollarKeys([step]) as unknown[]);
     return true;
   };
 }

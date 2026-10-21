@@ -1,11 +1,11 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { useCallback } from "react";
 import type { AlertQueueGateway } from "@/engine/gateway";
-import type { EngineAlert, InstanceId } from "@/engine/types";
-import { fromInstanceId } from "./ids";
+import type { EngineAlert } from "@/engine/types";
 import { useMappedList } from "./mapped";
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 function toEngineAlert(row: Doc<"engineAlerts">): EngineAlert {
   return {
@@ -30,41 +30,30 @@ function toEngineAlert(row: Doc<"engineAlerts">): EngineAlert {
   };
 }
 
-function useAlerts(instanceId: InstanceId | null, limit: number) {
-  const rows = useQuery(
-    api.engineAlerts.listForInstance,
-    instanceId ? { instanceId: fromInstanceId(instanceId), limit } : "skip"
-  );
+function useAlerts(limit: number) {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(api.engineAlerts.listForInstance, instanceId ? { instanceId, limit } : "skip");
   return useMappedList(rows, toEngineAlert);
 }
 
-function useOverview(instanceId: InstanceId | null, hourStart: number) {
-  return useQuery(
-    api.engineAlerts.overview,
-    instanceId ? { instanceId: fromInstanceId(instanceId), hourStart } : "skip"
-  );
+function useOverview(hourStart: number) {
+  const instanceId = useScopeInstanceId();
+  return useQuery(api.engineAlerts.overview, instanceId ? { instanceId, hourStart } : "skip");
 }
 
 function useReplayRequest() {
-  const replay = useAction(api.alertActions.replay);
-  return useCallback(
-    (instanceId: InstanceId, engineAlertId: string) =>
-      replay({ instanceId: fromInstanceId(instanceId), engineAlertId }),
-    [replay]
-  );
+  const replay = useInstanceAction(api.alertActions.replay);
+  return useCallback((engineAlertId: string) => replay({ engineAlertId }), [replay]);
 }
 
 function useSkipCurrentRequest() {
-  const skipCurrent = useAction(api.alertActions.skipCurrent);
-  return useCallback(
-    (instanceId: InstanceId) => skipCurrent({ instanceId: fromInstanceId(instanceId) }),
-    [skipCurrent]
-  );
+  const skipCurrent = useInstanceAction(api.alertActions.skipCurrent);
+  return useCallback(() => skipCurrent({}), [skipCurrent]);
 }
 
 function useClearQueueRequest() {
-  const clearQueue = useAction(api.alertActions.clearQueue);
-  return useCallback((instanceId: InstanceId) => clearQueue({ instanceId: fromInstanceId(instanceId) }), [clearQueue]);
+  const clearQueue = useInstanceAction(api.alertActions.clearQueue);
+  return useCallback(() => clearQueue({}), [clearQueue]);
 }
 
 export const convexAlertQueueGateway: AlertQueueGateway = {

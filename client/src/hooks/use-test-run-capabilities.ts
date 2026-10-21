@@ -1,5 +1,6 @@
 import type { OptionsSupport } from "@convex/lib/engineTestRun";
 import { useEffect, useState } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useTestRunCapabilitiesRequest } from "@/engine/hooks/use-workflows";
 import type { InstanceId } from "@/engine/types";
@@ -29,7 +30,8 @@ export function rememberOptionsUnsupported(instanceId: InstanceId): void {
 }
 
 /** Probes only when `enabled`; see `workflowActions.testRunCapabilities`. */
-function useLegacyOptionsProbe(instanceId: InstanceId | null, enabled: boolean): TestRunOptionsState {
+function useLegacyOptionsProbe(enabled: boolean): TestRunOptionsState {
+  const { instanceId } = useEngineScope();
   const probe = useTestRunCapabilitiesRequest();
   const [state, setState] = useState<TestRunOptionsState>(() =>
     instanceId ? (probed.get(instanceId) ?? "checking") : "checking"
@@ -46,7 +48,7 @@ function useLegacyOptionsProbe(instanceId: InstanceId | null, enabled: boolean):
     }
     let cancelled = false;
     setState("checking");
-    probe(instanceId)
+    probe()
       .then(({ options }) => {
         if (options !== "unknown") {
           probed.set(instanceId, options);
@@ -72,10 +74,11 @@ function useLegacyOptionsProbe(instanceId: InstanceId | null, enabled: boolean):
  * What the instance's engine supports for test runs: sample trigger data and
  * skipping conditions for one workflow, dry runs, and a Stop that halts a run.
  */
-export function useTestRunSupport(instanceId: InstanceId | null): TestRunSupport {
-  const { state } = useEngineCapabilities(instanceId);
+export function useTestRunSupport(): TestRunSupport {
+  const { instanceId } = useEngineScope();
+  const { state } = useEngineCapabilities();
   const legacy = state.status === "ready" && state.report.legacy;
-  const legacyProbe = useLegacyOptionsProbe(instanceId, legacy);
+  const legacyProbe = useLegacyOptionsProbe(legacy);
   const support = testRunSupport(state, legacyProbe);
   if (instanceId && ignoredOptions.has(instanceId)) {
     return { ...support, options: "unsupported", dryRun: "unsupported" };

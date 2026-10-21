@@ -109,7 +109,7 @@ async function copyToClipboard(text: string): Promise<void> {
 export default function Supporters() {
   const { instance } = useInstance();
   const { instanceId: engineInstanceId } = useEngineScope();
-  const capabilities = useEngineCapabilities(engineInstanceId);
+  const capabilities = useEngineCapabilities();
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
@@ -151,7 +151,7 @@ function SupportersView({
   const settledMinTotal = useDebouncedValue(minTotal, MIN_TOTAL_DEBOUNCE_MS);
   const [selected, setSelected] = useState<SelectedViewer | null>(null);
 
-  const streams = useActionResult(engineInstanceId, () => listStreams(engineInstanceId));
+  const streams = useActionResult(engineInstanceId, () => listStreams());
   useEffect(() => {
     if (streams.data) {
       setRange((current) => reconcileRange(current, streams.data ?? []));
@@ -160,7 +160,7 @@ function SupportersView({
 
   const sessionId = rangeSessionId(range);
   const board = useActionResult(`${engineInstanceId}|${metric}|${rangeValue(range)}|${settledMinTotal}`, () =>
-    readLeaderboard(engineInstanceId, {
+    readLeaderboard({
       metric,
       minTotal: settledMinTotal,
       ...(sessionId !== undefined ? { sessionId } : {}),
@@ -487,7 +487,7 @@ function ViewerDetail({
   const [queueing, setQueueing] = useState(false);
 
   const totals = useActionResult(`${engineInstanceId}|${viewer.platformUserId}`, () =>
-    readViewerTotals(engineInstanceId, viewer.platformUserId)
+    readViewerTotals(viewer.platformUserId)
   );
   const twitch = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
     findTwitchViewer({ instanceId, by: { twitchUserId: viewer.platformUserId } })

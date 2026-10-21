@@ -1,7 +1,7 @@
 import { useStore } from "@nanostores/react";
 import { useEffect, useMemo, useState } from "react";
-import { useEngineGateway } from "@/engine/context";
-import type { InstanceId, StreamEventFrame } from "@/engine/types";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
+import type { StreamEventFrame } from "@/engine/types";
 import type { ActivityEvent } from "@/lib/activity-feed";
 import { $engineConnected } from "@/lib/transport/engine-connection";
 
@@ -36,10 +36,11 @@ function withId(frame: StreamEventFrame): ActivityEvent {
  *   the engine pushes.
  * - `types` undefined: not known yet; nothing is read or subscribed.
  */
-export function useEventLog(
-  instanceId: InstanceId | null,
-  types: readonly string[] | null | undefined
-): { events: ActivityEvent[]; status: EventLogStatus } {
+export function useEventLog(types: readonly string[] | null | undefined): {
+  events: ActivityEvent[];
+  status: EventLogStatus;
+} {
+  const { instanceId } = useEngineScope();
   const { eventLog } = useEngineGateway();
   const subscribeStreamEvents = eventLog.useStreamEventsSubscription();
   const listEvents = eventLog.useEventsRequest();
@@ -62,7 +63,7 @@ export function useEventLog(
       return;
     }
     const wanted = typesKey === null ? null : typesKey.split(",").filter(Boolean);
-    return subscribeStreamEvents(instanceId, wanted, (frame) => {
+    return subscribeStreamEvents(wanted, (frame) => {
       setLive((previous) => [withId(frame), ...previous].slice(0, LIVE_LIMIT));
     });
   }, [instanceId, typesKey, subscribeStreamEvents]);
@@ -78,7 +79,7 @@ export function useEventLog(
       return;
     }
     let cancelled = false;
-    listEvents(instanceId, { types: wanted, limit: HISTORY_LIMIT })
+    listEvents({ types: wanted, limit: HISTORY_LIMIT })
       .then((page) => {
         if (!cancelled) {
           setHistory(page.events.map(withId));

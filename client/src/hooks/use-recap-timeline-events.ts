@@ -1,7 +1,7 @@
 import type { RecapTimelineEvents } from "@convex/lib/streamRecap";
 import { useEffect, useState } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useRecapTimelineEventsRequest } from "@/engine/hooks/use-stream-recap";
-import type { InstanceId } from "@/engine/types";
 
 export type RecapTimelineEventsState =
   | { kind: "loading" }
@@ -14,12 +14,8 @@ export type RecapTimelineEventsState =
  * detail, a session still in progress loads again on a new `refreshKey`, and
  * the events on screen stay while that runs or if it fails.
  */
-export function useRecapTimelineEvents(
-  instanceId: InstanceId | null,
-  sessionId: string,
-  enabled: boolean,
-  refreshKey = 0
-) {
+export function useRecapTimelineEvents(sessionId: string, enabled: boolean, refreshKey = 0) {
+  const { instanceId } = useEngineScope();
   const loadTimelineEvents = useRecapTimelineEventsRequest();
   const [state, setState] = useState<RecapTimelineEventsState>({ kind: "loading" });
 
@@ -30,7 +26,7 @@ export function useRecapTimelineEvents(
     }
     let cancelled = false;
     setState((prev) => (prev.kind === "loaded" ? prev : { kind: "loading" }));
-    loadTimelineEvents(instanceId, sessionId)
+    loadTimelineEvents(sessionId)
       .then((result) => {
         if (!cancelled) {
           setState({ kind: "loaded", result });

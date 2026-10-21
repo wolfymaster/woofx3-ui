@@ -28,7 +28,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useEngineScope } from "@/engine/context";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
@@ -290,7 +289,6 @@ export default function ModuleInstall() {
   const [, navigate] = useLocation();
   const { mode } = useTheme();
   const { instance } = useInstance();
-  const { instanceId: engineInstanceId } = useEngineScope();
   const [files, setFiles] = useState<Record<string, string>>({});
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [checkResults, setCheckResults] = useState<CheckResult[]>([]);
@@ -305,7 +303,7 @@ export default function ModuleInstall() {
   const uploadAndDeliver = useMutation(api.moduleRepository.uploadAndDeliver);
 
   // Subscribe to transient events — Convex realtime pushes the moment the webhook emits one
-  const installEvent = useTransientEvent(engineInstanceId, pendingModuleKey || null);
+  const installEvent = useTransientEvent(pendingModuleKey || null);
 
   const fileTree = useMemo(() => buildFileTree(files), [files]);
 

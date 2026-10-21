@@ -90,10 +90,10 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const { instanceId: engineInstanceId } = useEngineScope();
   const args = instanceId ? { instanceId } : "skip";
 
-  const workflows = useWorkflows(engineInstanceId);
-  const commands = useChatCommands(engineInstanceId);
-  const commandGroups = useChatCommandGroups(engineInstanceId);
-  const scenes = useScenes(engineInstanceId);
+  const workflows = useWorkflows();
+  const commands = useChatCommands();
+  const commandGroups = useChatCommandGroups();
+  const scenes = useScenes();
   const modules = useQuery(api.moduleRepository.list, args);
   const recaps = useQuery(
     api.streamSessionSummaries.listRecent,
@@ -101,15 +101,15 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   );
   const macros = useQuery(api.macros.list, args);
   const presets = useQuery(api.streamInfo.listPresets, args);
-  const counters = useResourceInstancesOfKind(engineInstanceId, COUNTER_KIND);
-  const timers = useResourceInstancesOfKind(engineInstanceId, TIMER_KIND);
-  const queues = useResourceInstancesOfKind(engineInstanceId, QUEUE_KIND);
-  const counterKind = useResourceKind(engineInstanceId, COUNTER_KIND);
-  const timerKind = useResourceKind(engineInstanceId, TIMER_KIND);
-  const queueKind = useResourceKind(engineInstanceId, QUEUE_KIND);
-  const values = useResourceValues(engineInstanceId);
-  const resourceInstances = useResourceInstances(engineInstanceId);
-  const declaredKinds = useResourceKinds(engineInstanceId);
+  const counters = useResourceInstancesOfKind(COUNTER_KIND);
+  const timers = useResourceInstancesOfKind(TIMER_KIND);
+  const queues = useResourceInstancesOfKind(QUEUE_KIND);
+  const counterKind = useResourceKind(COUNTER_KIND);
+  const timerKind = useResourceKind(TIMER_KIND);
+  const queueKind = useResourceKind(QUEUE_KIND);
+  const values = useResourceValues();
+  const resourceInstances = useResourceInstances();
+  const declaredKinds = useResourceKinds();
   const { triggerPresets, actionPresets } = useWorkflowCatalog();
 
   const setWorkflowEnabled = useSetWorkflowEnabledRequest();
@@ -167,7 +167,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         action: {
           type: "run",
           run: async () => {
-            await setWorkflowEnabled(engineInstanceId, row.engineWorkflowId, !enabled);
+            await setWorkflowEnabled(row.engineWorkflowId, !enabled);
             return `${item.title} ${enabled ? "disabled" : "enabled"}`;
           },
         },
@@ -199,7 +199,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         action: {
           type: "run",
           run: async () => {
-            await updateCommand(engineInstanceId, {
+            await updateCommand({
               engineCommandId: cmd.engineCommandId,
               command: cmd.command,
               cooldown: cmd.cooldown,
@@ -560,7 +560,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
           if (macro.type === "send-message") {
             await sendChatMessage({ instanceId, message: applyMacroVariables(macro.config, {}).message ?? "" });
           } else {
-            await runMacro(engineInstanceId, toMacroId(macro.id), []);
+            await runMacro(toMacroId(macro.id), []);
           }
           return `Ran ${macro.label}`;
         },

@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { Id } from "@convex/_generated/dataModel";
 import { getFunctionName } from "convex/server";
-import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import type { Correlated, FieldOptionsReference } from "@/engine/types";
+import { NoInstanceSelectedError } from "@/engine/scope";
+import type { Correlated, FieldOptionsReference, InstanceId } from "@/engine/types";
+import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // The Convex hooks are replaced so each read's function and arguments can be
 // checked: a gateway read must send what the call sites it replaced sent,
@@ -50,15 +49,11 @@ mock.module("convex/react", () => ({
 
 const { convexRequestsGateway } = await import("./requests");
 
-function render(hook: () => unknown) {
-  function Probe() {
-    hook();
-    return null;
-  }
-  renderToStaticMarkup(createElement(Probe));
+function render(hook: () => unknown, instanceId: InstanceId | null = TEST_INSTANCE_ID) {
+  renderInScope(hook, instanceId);
 }
 
-const instanceId = "instance-1" as Id<"instances">;
+const instanceId = TEST_INSTANCE_ID;
 const reference: FieldOptionsReference = {
   moduleId: "obs",
   declaration: "action",
@@ -77,26 +72,26 @@ beforeEach(() => {
 
 describe("requests.useEvent", () => {
   test("reads the latest event under the key", () => {
-    render(() => convexRequestsGateway.useEvent(instanceId, "key-1"));
+    render(() => convexRequestsGateway.useEvent("key-1"));
     expect(queries).toEqual([{ name: "transientEvents:get", args: { instanceId, correlationKey: "key-1" } }]);
   });
 
   test("skips without an instance or a key", () => {
-    render(() => convexRequestsGateway.useEvent(null, "key-1"));
-    render(() => convexRequestsGateway.useEvent(instanceId, null));
+    render(() => convexRequestsGateway.useEvent("key-1"), null);
+    render(() => convexRequestsGateway.useEvent(null));
     expect(queries.map((q) => q.args)).toEqual(["skip", "skip"]);
   });
 
   test("still reads an empty key, which only null skips", () => {
-    render(() => convexRequestsGateway.useEvent(instanceId, ""));
+    render(() => convexRequestsGateway.useEvent(""));
     expect(queries[0]?.args).toEqual({ instanceId, correlationKey: "" });
   });
 });
 
 describe("requests.useEvents", () => {
   test("reads every event under the key", () => {
-    render(() => convexRequestsGateway.useEvents(instanceId, "key-1"));
-    render(() => convexRequestsGateway.useEvents(null, "key-1"));
+    render(() => convexRequestsGateway.useEvents("key-1"));
+    render(() => convexRequestsGateway.useEvents("key-1"), null);
     expect(queries).toEqual([
       { name: "transientEvents:listByCorrelation", args: { instanceId, correlationKey: "key-1" } },
       { name: "transientEvents:listByCorrelation", args: "skip" },
@@ -105,11 +100,11 @@ describe("requests.useEvents", () => {
 });
 
 describe("requests.useCorrelated", () => {
-  function renderCorrelated(id: Id<"instances"> | null): Correlated<FieldOptionsReference> {
+  function renderCorrelated(id: InstanceId | null = TEST_INSTANCE_ID): Correlated<FieldOptionsReference> {
     let correlated: Correlated<FieldOptionsReference> | undefined;
     render(() => {
-      correlated = convexRequestsGateway.useCorrelated("fieldOptions", id);
-    });
+      correlated = convexRequestsGateway.useCorrelated("fieldOptions");
+    }, id);
     if (!correlated) {
       throw new Error("the probe did not render");
     }
@@ -117,7 +112,7 @@ describe("requests.useCorrelated", () => {
   }
 
   test("reads nothing before a request starts", () => {
-    const correlated = renderCorrelated(instanceId);
+    const correlated = renderCorrelated();
     expect(correlated.correlationKey).toBeNull();
     expect(correlated.event).toBeUndefined();
     expect(correlated.failure).toBeNull();
@@ -125,7 +120,7 @@ describe("requests.useCorrelated", () => {
   });
 
   test("dispatches the request under a new key each time", () => {
-    const correlated = renderCorrelated(instanceId);
+    const correlated = renderCorrelated();
     correlated.start(reference);
     correlated.start(reference);
     expect(dispatched).toHaveLength(2);
@@ -136,7 +131,7 @@ describe("requests.useCorrelated", () => {
 
   test("swallows a failed dispatch rather than rejecting unhandled", async () => {
     dispatchResult = Promise.reject(new Error("engine unreachable"));
-    const correlated = renderCorrelated(instanceId);
+    const correlated = renderCorrelated();
     correlated.start(reference);
     await Promise.resolve();
     expect(dispatched).toHaveLength(1);
@@ -144,7 +139,7 @@ describe("requests.useCorrelated", () => {
 
   test("refuses to start without an instance", () => {
     const correlated = renderCorrelated(null);
-    expect(() => correlated.start(reference)).toThrow();
+    expect(() => correlated.start(reference)).toThrow(NoInstanceSelectedError);
     expect(dispatched).toEqual([]);
   });
 });
@@ -156,7 +151,7 @@ describe("requests.useSendRequest", () => {
     render(() => {
       send = convexRequestsGateway.useSendRequest("fieldOptions");
     });
-    await expect(send?.(instanceId, reference, "key-1")).resolves.toEqual({ correlationKey: "key-1" });
+    await expect(send?.(reference, "key-1")).resolves.toEqual({ correlationKey: "key-1" });
     expect(dispatched).toEqual([{ instanceId, reference, correlationKey: "key-1" }]);
   });
 
@@ -166,7 +161,7 @@ describe("requests.useSendRequest", () => {
     render(() => {
       send = convexRequestsGateway.useSendRequest("fieldOptions");
     });
-    await expect(send?.(instanceId, reference, "key-1")).rejects.toThrow("engine unreachable");
+    await expect(send?.(reference, "key-1")).rejects.toThrow("engine unreachable");
   });
 });
 
@@ -183,12 +178,12 @@ describe("requests.useEventWatchRequest", () => {
   }
 
   test("watches the latest event under the key", () => {
-    renderWatch()(instanceId, "key-1");
+    renderWatch()("key-1");
     expect(watched).toEqual([{ name: "transientEvents:get", args: { instanceId, correlationKey: "key-1" } }]);
   });
 
   test("reads the current result and throws the read's error", () => {
-    const watch = renderWatch()(instanceId, "key-1");
+    const watch = renderWatch()("key-1");
     expect(watch.current()).toBeUndefined();
     watchResult = () => {
       throw new Error("read failed");
@@ -197,7 +192,7 @@ describe("requests.useEventWatchRequest", () => {
   });
 
   test("calls back on updates until unsubscribed", () => {
-    const watch = renderWatch()(instanceId, "key-1");
+    const watch = renderWatch()("key-1");
     let updates = 0;
     const unsubscribe = watch.onUpdate(() => {
       updates += 1;

@@ -16,7 +16,7 @@ export function useEngineVersion(connected: boolean): string | null {
     }
 
     let cancelled = false;
-    void getEngineInfo(instanceId)
+    void getEngineInfo()
       .then((info) => {
         // An engine older than the version field returns an EngineInfo
         // without one, so the type alone does not guarantee a string.

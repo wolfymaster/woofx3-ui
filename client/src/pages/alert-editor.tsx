@@ -5,7 +5,6 @@ import { AlertLayoutEditor } from "@/components/alert-editor/alert-layout-editor
 import { EmptyState } from "@/components/common/empty-state";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
-import { useEngineScope } from "@/engine/context";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -30,9 +29,8 @@ export default function AlertEditorPage() {
   const triggerId = decodeParam(params.triggerId);
   const actionId = decodeParam(params.actionId);
   const [, navigate] = useLocation();
-  const { instanceId } = useEngineScope();
   const { triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const workflows = useWorkflows(instanceId);
+  const workflows = useWorkflows();
 
   const triggerPreset = triggerPresets.find((preset) => preset.event === event);
   const conditionFields = useMemo(

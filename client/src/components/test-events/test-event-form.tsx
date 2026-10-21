@@ -2,7 +2,6 @@ import { AlertCircle, CheckCircle2, Loader2, Zap } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useEngineScope } from "@/engine/context";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import {
@@ -69,9 +68,8 @@ export function useTestEventWaits(): { waitElapsed: boolean; gaveUp: boolean } {
 
 /** The latest run under `triggerId`. Keyed by it, so a new fire starts a new wait. */
 function DefaultTestEventOutcome({ triggerId }: { triggerId: string }) {
-  const { instanceId } = useEngineScope();
   const { waitElapsed, gaveUp } = useTestEventWaits();
-  const record = useTransientEvent(instanceId, triggerId);
+  const record = useTransientEvent(triggerId);
 
   return <TestEventOutcome record={record} waitElapsed={waitElapsed} gaveUp={gaveUp} />;
 }

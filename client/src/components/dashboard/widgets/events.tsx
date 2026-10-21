@@ -14,7 +14,7 @@ import { useEngineAlerts } from "@/engine/hooks/use-alert-queue";
 import { type EventLogStatus, useEventLog } from "@/engine/hooks/use-event-log";
 import { type EventLogSettingsHandle, useEventLogSettings } from "@/engine/hooks/use-event-log-settings";
 import { useReplayAlert } from "@/engine/hooks/use-replay-alert";
-import type { EngineAlert, InstanceId } from "@/engine/types";
+import type { EngineAlert } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { type ActivityRow, eventTypeGroups, mergeActivity, triggersByEventType } from "@/lib/activity-feed";
@@ -58,7 +58,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
   const { instanceId } = useEngineScope();
   const { triggerPresets } = useWorkflowCatalog();
   const byEvent = useMemo(() => triggersByEventType(triggerPresets), [triggerPresets]);
-  const selection = useEventLogSettings(instanceId);
+  const selection = useEventLogSettings();
   const settings = selection.state;
 
   // Undefined until the selection is known; null for an engine without one,
@@ -67,8 +67,8 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
     settings.status === "ready" ? settings.settings.enabled : settings.status === "unsupported" ? null : undefined;
   const enabledTypes = useMemo(() => (enabled === null ? null : new Set(enabled ?? [])), [enabled]);
 
-  const alerts = useEngineAlerts(instanceId, ALERT_LIMIT);
-  const { events, status } = useEventLog(instanceId, enabled);
+  const alerts = useEngineAlerts(ALERT_LIMIT);
+  const { events, status } = useEventLog(enabled);
   const rows = useMemo(() => mergeActivity(events, alerts ?? [], enabledTypes), [events, alerts, enabledTypes]);
 
   const failures = rows.filter((row) => row.alerts[0] && isFailureStatus(row.alerts[0].status)).length;
@@ -90,7 +90,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
           <HistoryNote status={historyStatus} />
         </div>
         <div className="flex items-center gap-1">
-          {instanceId && <AlertQueueControls instanceId={instanceId} />}
+          {instanceId && <AlertQueueControls />}
           {instanceId && <EventsFilterButton selection={selection} byEvent={byEvent} />}
         </div>
       </div>
@@ -114,7 +114,6 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
                   row={row}
                   trigger={trigger}
                   summary={describeRow(row, trigger)}
-                  instanceId={instanceId}
                   onSaveHighlight={onSaveHighlight}
                 />
               );
@@ -272,11 +271,10 @@ interface EventsRowItemProps {
   row: EventsRow;
   trigger: TriggerPreset | undefined;
   summary: AlertSummary;
-  instanceId: InstanceId;
   onSaveHighlight?: (row: EventsRow, summary: AlertSummary) => void;
 }
 
-function EventsRowItem({ row, trigger, summary, instanceId, onSaveHighlight }: EventsRowItemProps) {
+function EventsRowItem({ row, trigger, summary, onSaveHighlight }: EventsRowItemProps) {
   const alert = row.alerts[0];
   const style = alert ? engineAlertStyle(alert) : null;
   const Icon = style?.icon ?? trigger?.icon ?? Radio;
@@ -333,7 +331,7 @@ function EventsRowItem({ row, trigger, summary, instanceId, onSaveHighlight }: E
                 {row.alerts.length} alerts
               </Badge>
             )}
-            <AlertRowActions instanceId={instanceId} alert={alert} />
+            <AlertRowActions alert={alert} />
           </>
         ) : (
           <EventDetailsButton row={row} trigger={trigger} title={summary.title} />
@@ -356,8 +354,8 @@ function EventsRowItem({ row, trigger, summary, instanceId, onSaveHighlight }: E
 }
 
 /** Replay and "open run" for the newest alert of a row. */
-function AlertRowActions({ instanceId, alert }: { instanceId: InstanceId; alert: EngineAlert }) {
-  const { replay, busy } = useReplayAlert(instanceId);
+function AlertRowActions({ alert }: { alert: EngineAlert }) {
+  const { replay, busy } = useReplayAlert();
   return (
     <>
       {/* `workflowId` on an alert row is the execution that fired it, which is

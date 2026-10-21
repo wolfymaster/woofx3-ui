@@ -1,11 +1,11 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { useCallback } from "react";
 import type { AlertLibraryGateway } from "@/engine/gateway";
-import type { AlertComposition, InstanceId, NewLibraryAlert } from "@/engine/types";
-import { fromInstanceId } from "./ids";
+import type { AlertComposition, NewLibraryAlert, ReadOptions } from "@/engine/types";
 import { useMappedList, useMappedValue } from "./mapped";
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 function toAlertComposition(row: Doc<"alertCompositions">): AlertComposition {
   return {
@@ -23,44 +23,36 @@ function toAlertComposition(row: Doc<"alertCompositions">): AlertComposition {
   };
 }
 
-function useAlerts(instanceId: InstanceId | null) {
-  const rows = useQuery(api.alertCompositions.list, instanceId ? { instanceId: fromInstanceId(instanceId) } : "skip");
+function useAlerts({ enabled = true }: ReadOptions = {}) {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(api.alertCompositions.list, enabled && instanceId ? { instanceId } : "skip");
   return useMappedList(rows, toAlertComposition);
 }
 
-function useAlert(instanceId: InstanceId, engineCompositionId: string) {
-  const row = useQuery(api.alertCompositions.getByEngineId, {
-    instanceId: fromInstanceId(instanceId),
-    engineCompositionId,
-  });
+function useAlert(engineCompositionId: string) {
+  const instanceId = useScopeInstanceId();
+  const row = useQuery(api.alertCompositions.getByEngineId, instanceId ? { instanceId, engineCompositionId } : "skip");
   return useMappedValue(row, toAlertComposition);
 }
 
 function useRefreshRequest() {
-  const refresh = useAction(api.alertCompositionActions.refresh);
-  return useCallback((instanceId: InstanceId) => refresh({ instanceId: fromInstanceId(instanceId) }), [refresh]);
+  const refresh = useInstanceAction(api.alertCompositionActions.refresh);
+  return useCallback(() => refresh({}), [refresh]);
 }
 
 function useCreateRequest() {
-  const create = useAction(api.alertCompositionActions.create);
-  return useCallback(
-    (instanceId: InstanceId, alert: NewLibraryAlert) => create({ instanceId: fromInstanceId(instanceId), ...alert }),
-    [create]
-  );
+  const create = useInstanceAction(api.alertCompositionActions.create);
+  return useCallback((alert: NewLibraryAlert) => create(alert), [create]);
 }
 
 function useRemoveRequest() {
-  const remove = useAction(api.alertCompositionActions.remove);
-  return useCallback(
-    (instanceId: InstanceId, engineCompositionId: string) =>
-      remove({ instanceId: fromInstanceId(instanceId), engineCompositionId }),
-    [remove]
-  );
+  const remove = useInstanceAction(api.alertCompositionActions.remove);
+  return useCallback((engineCompositionId: string) => remove({ engineCompositionId }), [remove]);
 }
 
 function usePreviewUrlRequest() {
-  const getUrl = useAction(api.compositionPreview.getUrl);
-  return useCallback((instanceId: InstanceId) => getUrl({ instanceId: fromInstanceId(instanceId) }), [getUrl]);
+  const getUrl = useInstanceAction(api.compositionPreview.getUrl);
+  return useCallback(() => getUrl({}), [getUrl]);
 }
 
 export const convexAlertLibraryGateway: AlertLibraryGateway = {

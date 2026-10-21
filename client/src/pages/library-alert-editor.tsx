@@ -12,7 +12,7 @@ export default function LibraryAlertEditorPage() {
   const compositionId = decodeParam(params.compositionId);
   const [, navigate] = useLocation();
   const { instanceId } = useEngineScope();
-  const support = useEngineCapabilities(instanceId).support(...ALERT_LIBRARY_CAPABILITIES);
+  const support = useEngineCapabilities().support(...ALERT_LIBRARY_CAPABILITIES);
 
   // Back returns to the editor the library was opened from, when there is one.
   const back = () => {

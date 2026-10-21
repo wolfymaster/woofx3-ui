@@ -1,39 +1,39 @@
 import { useEngineGateway } from "@/engine/context";
-import type { InstanceId, ModuleId } from "@/engine/types";
+import type { ModuleId } from "@/engine/types";
 
-/** Every module resource instance on the instance; a null id skips the read. */
-export function useResourceInstances(instanceId: InstanceId | null) {
-  return useEngineGateway().moduleResources.useInstances(instanceId);
+/** Every module resource instance on the instance. */
+export function useResourceInstances() {
+  return useEngineGateway().moduleResources.useInstances();
 }
 
-/** One installed module's resource instances; skipped unless both ids are set. */
-export function useModuleResourceInstances(instanceId: InstanceId | null, moduleId: ModuleId | null) {
-  return useEngineGateway().moduleResources.useModuleInstances(instanceId, moduleId);
+/** One installed module's resource instances; a null module id skips the read. */
+export function useModuleResourceInstances(moduleId: ModuleId | null) {
+  return useEngineGateway().moduleResources.useModuleInstances(moduleId);
 }
 
-/** The resource instances of one kind (`module:kind` or bare); a null id or kind skips the read. */
-export function useResourceInstancesOfKind(instanceId: InstanceId | null, kind: string | null) {
-  return useEngineGateway().moduleResources.useKindInstances(instanceId, kind);
+/** The resource instances of one kind (`module:kind` or bare); a null kind skips the read. */
+export function useResourceInstancesOfKind(kind: string | null) {
+  return useEngineGateway().moduleResources.useKindInstances(kind);
 }
 
-/** The instances of several kinds in one read; skipped for a null id or no kinds. */
-export function useResourceInstancesOfKinds(instanceId: InstanceId | null, kinds: readonly string[]) {
-  return useEngineGateway().moduleResources.useKindsInstances(instanceId, kinds);
+/** The instances of several kinds in one read; skipped for no kinds. */
+export function useResourceInstancesOfKinds(kinds: readonly string[]) {
+  return useEngineGateway().moduleResources.useKindsInstances(kinds);
 }
 
-/** Every mirrored resource value, keyed by canonical id; a null id skips the read. */
-export function useResourceValues(instanceId: InstanceId | null) {
-  return useEngineGateway().moduleResources.useValues(instanceId);
+/** Every mirrored resource value, keyed by canonical id. */
+export function useResourceValues() {
+  return useEngineGateway().moduleResources.useValues();
 }
 
-/** The module providing a resource kind and its declaration, or null; a null id or kind skips the read. */
-export function useResourceKind(instanceId: InstanceId | null, kind: string | null) {
-  return useEngineGateway().moduleResources.useKind(instanceId, kind);
+/** The module providing a resource kind and its declaration, or null; a null kind skips the read. */
+export function useResourceKind(kind: string | null) {
+  return useEngineGateway().moduleResources.useKind(kind);
 }
 
-/** Every resource kind the installed modules declare; a null id skips the read. */
-export function useResourceKinds(instanceId: InstanceId | null) {
-  return useEngineGateway().moduleResources.useKinds(instanceId);
+/** Every resource kind the installed modules declare. */
+export function useResourceKinds() {
+  return useEngineGateway().moduleResources.useKinds();
 }
 
 export function useCreateResourceInstanceRequest() {

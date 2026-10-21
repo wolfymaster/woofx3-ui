@@ -1,78 +1,47 @@
 import { api } from "@convex/_generated/api";
-import { useAction } from "convex/react";
 import { useCallback } from "react";
 import type { StreamOpsGateway } from "@/engine/gateway";
-import type { EngineTestEvent, InstanceId, SupporterLeaderboardQuery } from "@/engine/types";
-import { fromInstanceId } from "./ids";
+import type { EngineTestEvent, SupporterLeaderboardQuery } from "@/engine/types";
+import { useInstanceAction } from "./scope";
 
 function useRecapEngineDetailRequest() {
-  const loadEngineDetail = useAction(api.streamRecap.loadEngineDetail);
-  return useCallback(
-    (instanceId: InstanceId, sessionId: string) =>
-      loadEngineDetail({ instanceId: fromInstanceId(instanceId), sessionId }),
-    [loadEngineDetail]
-  );
+  const loadEngineDetail = useInstanceAction(api.streamRecap.loadEngineDetail);
+  return useCallback((sessionId: string) => loadEngineDetail({ sessionId }), [loadEngineDetail]);
 }
 
 function useRecapTimelineEventsRequest() {
-  const loadTimelineEvents = useAction(api.streamRecap.loadTimelineEvents);
-  return useCallback(
-    (instanceId: InstanceId, sessionId: string) =>
-      loadTimelineEvents({ instanceId: fromInstanceId(instanceId), sessionId }),
-    [loadTimelineEvents]
-  );
+  const loadTimelineEvents = useInstanceAction(api.streamRecap.loadTimelineEvents);
+  return useCallback((sessionId: string) => loadTimelineEvents({ sessionId }), [loadTimelineEvents]);
 }
 
 function useOpenSessionRefreshRequest() {
-  const refreshOpenSession = useAction(api.streamRecap.refreshOpenSession);
-  return useCallback(
-    (instanceId: InstanceId) => refreshOpenSession({ instanceId: fromInstanceId(instanceId) }),
-    [refreshOpenSession]
-  );
+  const refreshOpenSession = useInstanceAction(api.streamRecap.refreshOpenSession);
+  return useCallback(() => refreshOpenSession({}), [refreshOpenSession]);
 }
 
 function useSupporterStreamsRequest() {
-  const listStreams = useAction(api.supporters.listStreams);
-  return useCallback(
-    (instanceId: InstanceId) => listStreams({ instanceId: fromInstanceId(instanceId) }),
-    [listStreams]
-  );
+  const listStreams = useInstanceAction(api.supporters.listStreams);
+  return useCallback(() => listStreams({}), [listStreams]);
 }
 
 function useSupporterLeaderboardRequest() {
-  const leaderboard = useAction(api.supporters.leaderboard);
-  return useCallback(
-    (instanceId: InstanceId, query: SupporterLeaderboardQuery) =>
-      leaderboard({ instanceId: fromInstanceId(instanceId), ...query }),
-    [leaderboard]
-  );
+  const leaderboard = useInstanceAction(api.supporters.leaderboard);
+  return useCallback((query: SupporterLeaderboardQuery) => leaderboard(query), [leaderboard]);
 }
 
 function useViewerSupportTotalsRequest() {
-  const viewerTotals = useAction(api.supporters.viewerTotals);
-  return useCallback(
-    (instanceId: InstanceId, platformUserId: string) =>
-      viewerTotals({ instanceId: fromInstanceId(instanceId), platformUserId }),
-    [viewerTotals]
-  );
+  const viewerTotals = useInstanceAction(api.supporters.viewerTotals);
+  return useCallback((platformUserId: string) => viewerTotals({ platformUserId }), [viewerTotals]);
 }
 
 function usePublishEventRequest() {
-  const fireTrigger = useAction(api.debug.fireTrigger);
-  return useCallback(
-    (instanceId: InstanceId, event: EngineTestEvent) =>
-      fireTrigger({ instanceId: fromInstanceId(instanceId), ...event }),
-    [fireTrigger]
-  );
+  const fireTrigger = useInstanceAction(api.debug.fireTrigger);
+  return useCallback((event: EngineTestEvent) => fireTrigger(event), [fireTrigger]);
 }
 
 function useSimulateTwitchEventRequest() {
-  const simulateTwitchEvent = useAction(api.debug.simulateTwitchEvent);
-  return useCallback(
-    (instanceId: InstanceId, event: EngineTestEvent) =>
-      simulateTwitchEvent({ instanceId: fromInstanceId(instanceId), ...event }),
-    [simulateTwitchEvent]
-  );
+  const simulateTwitchEvent = useInstanceAction(api.debug.simulateTwitchEvent);
+  return useCallback((event: EngineTestEvent) => simulateTwitchEvent(event), [simulateTwitchEvent]);
 }
 
 export const convexStreamOpsGateway: StreamOpsGateway = {

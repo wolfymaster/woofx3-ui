@@ -12,7 +12,7 @@ import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
 import { useEngineScope } from "@/engine/context";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
-import type { InstanceId, Workflow } from "@/engine/types";
+import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
@@ -287,7 +287,6 @@ export function EventTriggerList({
           shown.map((trigger) => (
             <TriggerCard
               key={trigger.row.engineWorkflowId}
-              instanceId={instanceId}
               trigger={trigger}
               triggerPreset={triggerPreset}
               sentence={sentenceFor(trigger.conditions)}
@@ -297,7 +296,6 @@ export function EventTriggerList({
               }
               editor={(read) => (
                 <TriggerEditor
-                  instanceId={instanceId}
                   triggerPreset={triggerPreset}
                   conditionFields={conditionFields}
                   saved={
@@ -327,7 +325,6 @@ export function EventTriggerList({
             data-testid="trigger-card-new"
           >
             <TriggerEditor
-              instanceId={instanceId}
               triggerPreset={triggerPreset}
               conditionFields={conditionFields}
               saved={undefined}
@@ -355,7 +352,6 @@ function aimFor(seed: ActionPreset, scope: TriggerActionScope): TriggerPin | und
 }
 
 interface TriggerCardProps {
-  instanceId: InstanceId;
   trigger: EventTrigger;
   triggerPreset: TriggerPreset;
   sentence: SentencePart[];
@@ -369,7 +365,6 @@ interface TriggerCardProps {
 
 /** One trigger: its sentence and steps on one card, opening onto its editor. */
 function TriggerCard({
-  instanceId,
   trigger,
   triggerPreset,
   sentence,
@@ -413,7 +408,7 @@ function TriggerCard({
   async function toggleEnabled() {
     setIsSwitching(true);
     try {
-      await setEnabled(instanceId, row.engineWorkflowId, !row.isEnabled);
+      await setEnabled(row.engineWorkflowId, !row.isEnabled);
     } catch (err) {
       toast({
         title: row.isEnabled ? "Couldn't pause the trigger" : "Couldn't switch the trigger on",

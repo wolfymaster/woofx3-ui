@@ -10,11 +10,10 @@ import type {
   CorrelatedRequestKind,
   CorrelatedRequests,
   EventWatch,
-  InstanceId,
   TransientEvent,
 } from "@/engine/types";
-import { fromInstanceId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
+import { requireInstance, useInstanceAction, useScopeInstanceId } from "./scope";
 
 function toTransientEvent(row: Doc<"transientEvents">): TransientEvent {
   return {
@@ -37,69 +36,66 @@ const DISPATCH = {
   fieldOptions: api.fieldOptions.dispatch,
 } as const satisfies Record<CorrelatedRequestKind, unknown>;
 
-function useEvent(instanceId: InstanceId | null, correlationKey: string | null) {
+function useEvent(correlationKey: string | null) {
+  const instanceId = useScopeInstanceId();
   const row = useQuery(
     api.transientEvents.get,
-    instanceId && correlationKey !== null ? { instanceId: fromInstanceId(instanceId), correlationKey } : "skip"
+    instanceId && correlationKey !== null ? { instanceId, correlationKey } : "skip"
   );
   return useMappedValue(row, toTransientEvent);
 }
 
-function useEvents(instanceId: InstanceId | null, correlationKey: string | null) {
+function useEvents(correlationKey: string | null) {
+  const instanceId = useScopeInstanceId();
   const rows = useQuery(
     api.transientEvents.listByCorrelation,
-    instanceId && correlationKey !== null ? { instanceId: fromInstanceId(instanceId), correlationKey } : "skip"
+    instanceId && correlationKey !== null ? { instanceId, correlationKey } : "skip"
   );
   return useMappedList(rows, toTransientEvent);
 }
 
-function useCorrelated(
-  kind: CorrelatedRequestKind,
-  instanceId: InstanceId | null
-): Correlated<CorrelatedRequests[CorrelatedRequestKind]> {
+function useCorrelated(kind: CorrelatedRequestKind): Correlated<CorrelatedRequests[CorrelatedRequestKind]> {
   const dispatch = useAction(DISPATCH[kind]);
+  const instanceId = useScopeInstanceId();
   const [correlationKey, setCorrelationKey] = useState<string | null>(null);
   const [failure, setFailure] = useState<CorrelatedFailure | null>(null);
 
   const start = useCallback(
     (request: CorrelatedRequests[CorrelatedRequestKind]) => {
-      if (!instanceId) {
-        throw new Error("useCorrelated: start needs an instance");
-      }
+      const scoped = requireInstance(instanceId);
       const key = crypto.randomUUID();
       setCorrelationKey(key);
-      dispatch({ instanceId: fromInstanceId(instanceId), reference: request, correlationKey: key }).catch(
-        (error: unknown) => {
-          setFailure({ correlationKey: key, error });
-        }
-      );
+      dispatch({ instanceId: scoped, reference: request, correlationKey: key }).catch((error: unknown) => {
+        setFailure({ correlationKey: key, error });
+      });
     },
     [instanceId, dispatch]
   );
 
   const clear = useCallback(() => setCorrelationKey(null), []);
 
-  const event = useEvent(instanceId, correlationKey);
+  const event = useEvent(correlationKey);
   const currentFailure = useMemo(() => failureForCurrentRequest(failure, correlationKey), [failure, correlationKey]);
 
   return { correlationKey, start, clear, event, failure: currentFailure };
 }
 
 function useSendRequest(kind: CorrelatedRequestKind) {
-  const dispatch = useAction(DISPATCH[kind]);
+  const dispatch = useInstanceAction(DISPATCH[kind]);
   return useCallback(
-    (instanceId: InstanceId, request: CorrelatedRequests[CorrelatedRequestKind], correlationKey: string) =>
-      dispatch({ instanceId: fromInstanceId(instanceId), reference: request, correlationKey }),
+    (request: CorrelatedRequests[CorrelatedRequestKind], correlationKey: string) =>
+      dispatch({ reference: request, correlationKey }),
     [dispatch]
   );
 }
 
 function useEventWatchRequest() {
   const convex = useConvex();
+  const instanceId = useScopeInstanceId();
   return useCallback(
-    (instanceId: InstanceId, correlationKey: string): EventWatch => {
+    (correlationKey: string): EventWatch => {
       const watch = convex.watchQuery(api.transientEvents.get, {
-        instanceId: fromInstanceId(instanceId),
+        instanceId: requireInstance(instanceId),
         correlationKey,
       });
       return {
@@ -107,7 +103,7 @@ function useEventWatchRequest() {
         onUpdate: (onChange) => watch.onUpdate(onChange),
       };
     },
-    [convex]
+    [convex, instanceId]
   );
 }
 

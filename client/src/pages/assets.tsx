@@ -65,7 +65,7 @@ import {
   useResources,
   useUpdateResourceRequest,
 } from "@/engine/hooks/use-resources";
-import type { HostedStorageUsage, InstanceId } from "@/engine/types";
+import type { HostedStorageUsage } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -264,7 +264,6 @@ function ResourceCardSkeleton() {
 interface UploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  instanceId: InstanceId;
   parentId: string | null;
   onUploaded: () => void;
 }
@@ -274,9 +273,9 @@ interface UploadModalProps {
  * sequence lives in useResourceUpload so this page and the asset picker
  * cannot drift apart.
  */
-function UploadResourcesModal({ open, onOpenChange, instanceId, parentId, onUploaded }: UploadModalProps) {
+function UploadResourcesModal({ open, onOpenChange, parentId, onUploaded }: UploadModalProps) {
   const { toast } = useToast();
-  const { upload, isUploading, progress } = useResourceUpload(instanceId);
+  const { upload, isUploading, progress } = useResourceUpload();
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -403,14 +402,14 @@ export default function Assets() {
     isLoading,
     error,
     refetch: refetchResources,
-  } = useResources(instanceId, {
+  } = useResources({
     folderId: currentFolderId,
     kind: kindFilter.length === 1 ? kindFilter[0] : undefined,
     search: searchQuery || undefined,
     page,
     pageSize: PAGE_SIZE,
   });
-  const { usage: storageUsage, refresh: refreshStorageUsage } = useHostedStorageUsage(instanceId);
+  const { usage: storageUsage, refresh: refreshStorageUsage } = useHostedStorageUsage();
   // Anything that changes the listing can change how much storage is used.
   const refetch = useCallback(() => {
     refetchResources();
@@ -485,7 +484,7 @@ export default function Assets() {
     if (!instanceId || !folderName.trim()) {
       return;
     }
-    const ok = await run("Couldn't create that folder", () => createFolder(instanceId, folderName, currentFolderId));
+    const ok = await run("Couldn't create that folder", () => createFolder(folderName, currentFolderId));
     if (ok) {
       setFolderName("");
       setNewFolderOpen(false);
@@ -496,7 +495,7 @@ export default function Assets() {
     if (!instanceId || !renaming || !renameValue.trim()) {
       return;
     }
-    const ok = await run("Couldn't rename that", () => updateResource(instanceId, renaming.id, { name: renameValue }));
+    const ok = await run("Couldn't rename that", () => updateResource(renaming.id, { name: renameValue }));
     if (ok) {
       setRenaming(null);
     }
@@ -507,7 +506,7 @@ export default function Assets() {
       return;
     }
     const target = deleting;
-    const ok = await run("Couldn't delete that", () => removeResource(instanceId, target.id));
+    const ok = await run("Couldn't delete that", () => removeResource(target.id));
     if (ok) {
       setSelected((prev) => {
         const next = new Set(prev);
@@ -528,7 +527,7 @@ export default function Assets() {
     // bottleneck for no gain.
     const ok = await run("Some items couldn't be deleted", async () => {
       for (const id of ids) {
-        await removeResource(instanceId, id);
+        await removeResource(id);
       }
     });
     if (ok) {
@@ -544,7 +543,7 @@ export default function Assets() {
     const ids = Array.from(selected);
     const ok = await run("Some items couldn't be moved", async () => {
       for (const id of ids) {
-        await updateResource(instanceId, id, { parentId: destinationId });
+        await updateResource(id, { parentId: destinationId });
       }
     });
     if (ok) {
@@ -854,7 +853,6 @@ export default function Assets() {
         <UploadResourcesModal
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          instanceId={instanceId}
           parentId={currentFolderId}
           onUploaded={refetch}
         />

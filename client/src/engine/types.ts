@@ -87,7 +87,13 @@ export interface Paginated<T> {
   loadMore: (numItems: number) => void;
 }
 
-/** Which instance engine hooks read, owned by `EngineGatewayProvider`. */
+/** For a read whose caller may not want it yet. */
+export interface ReadOptions {
+  /** False asks nothing and the read stays loading. Defaults to true. */
+  enabled?: boolean;
+}
+
+/** Which instance the gateway and the engine hooks act on, owned by `EngineGatewayProvider`. */
 export interface EngineScope {
   /** The confirmed current instance, or null while the membership list loads or when there is none. */
   instanceId: InstanceId | null;

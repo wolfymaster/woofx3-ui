@@ -2,8 +2,11 @@ import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { convexEngineGateway } from "@/engine/convex/gateway";
 import { toInstanceId } from "@/engine/convex/ids";
 import type { EngineGateway } from "@/engine/gateway";
+import { EngineScopeProvider } from "@/engine/scope";
 import type { EngineScope } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
+
+export { useEngineScope } from "@/engine/scope";
 
 /**
  * The gateway this app runs with, fixed at boot. Swapping it while mounted
@@ -14,11 +17,11 @@ const bootGateway: EngineGateway = convexEngineGateway;
 // The gateway is the context's default as well as the provider's value, so
 // an engine call that needs no current instance works outside the provider.
 const EngineGatewayContext = createContext<EngineGateway>(bootGateway);
-const EngineScopeContext = createContext<EngineScope | null>(null);
 
 /**
- * Holds the current instance for the engine hooks below it, so they need no
- * instance id of their own. Mounted around the app shell and the setup wizard.
+ * Holds the current instance for the engine hooks and the gateway below it,
+ * so no call carries an instance id. Mounted around the app shell and the
+ * setup wizard.
  */
 export function EngineGatewayProvider({ children }: { children: ReactNode }) {
   const { instance, optimisticInstanceId, isLoading } = useInstance();
@@ -33,20 +36,11 @@ export function EngineGatewayProvider({ children }: { children: ReactNode }) {
   );
   return (
     <EngineGatewayContext.Provider value={bootGateway}>
-      <EngineScopeContext.Provider value={scope}>{children}</EngineScopeContext.Provider>
+      <EngineScopeProvider scope={scope}>{children}</EngineScopeProvider>
     </EngineGatewayContext.Provider>
   );
 }
 
 export function useEngineGateway(): EngineGateway {
   return useContext(EngineGatewayContext);
-}
-
-/** The current instance as the provider sees it. Throws outside `EngineGatewayProvider`. */
-export function useEngineScope(): EngineScope {
-  const scope = useContext(EngineScopeContext);
-  if (!scope) {
-    throw new Error("useEngineScope: no EngineGatewayProvider above this component");
-  }
-  return scope;
 }

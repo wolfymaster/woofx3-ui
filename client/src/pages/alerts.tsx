@@ -8,7 +8,6 @@ import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { TestEventSheet } from "@/components/test-events/test-event-sheet";
-import { useEngineScope } from "@/engine/context";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -37,9 +36,8 @@ const BASE_PATH = "/stream/alerts";
  */
 export default function Alerts() {
   const [location, navigate] = useLocation();
-  const { instanceId } = useEngineScope();
   const { triggerPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const workflows = useWorkflows(instanceId);
+  const workflows = useWorkflows();
 
   // The trigger stays selected while the sheet closes, so its contents don't blank
   // out mid-animation.

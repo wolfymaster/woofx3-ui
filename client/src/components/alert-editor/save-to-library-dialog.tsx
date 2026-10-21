@@ -57,7 +57,7 @@ export function SaveToLibraryDialog({
     setPending(true);
     try {
       const savedName = name.trim();
-      await create(instanceId, {
+      await create({
         name: savedName,
         ...libraryJsonOf(libraryAlertOfStep(doc, availableVariables)),
       });

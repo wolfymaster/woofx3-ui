@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useViewerFactsRequest } from "@/engine/hooks/use-workflows";
 import type { InstanceId } from "@/engine/types";
@@ -9,8 +10,9 @@ import type { ViewerFact, ViewerFactsState } from "@/lib/viewer-facts";
  * The values `${viewer.*}` resolves on the instance's engine, read once per instance
  * while `enabled`. Only engines with `workflow.viewerFacts` are asked.
  */
-export function useViewerFacts(instanceId: InstanceId | null, enabled: boolean): ViewerFactsState {
-  const support = useEngineCapabilities(instanceId).support("workflow.viewerFacts");
+export function useViewerFacts(enabled: boolean): ViewerFactsState {
+  const { instanceId } = useEngineScope();
+  const support = useEngineCapabilities().support("workflow.viewerFacts");
   const listFacts = useViewerFactsRequest();
   const [loaded, setLoaded] = useState<{ instanceId: InstanceId; result: ViewerFact[] | "failed" } | null>(null);
   const ask = Boolean(instanceId) && enabled && support === "supported";
@@ -21,7 +23,7 @@ export function useViewerFacts(instanceId: InstanceId | null, enabled: boolean):
       return;
     }
     let cancelled = false;
-    listFacts(instanceId)
+    listFacts()
       .then((facts) => {
         if (!cancelled) {
           setLoaded({ instanceId, result: facts });
@@ -52,9 +54,9 @@ export function useViewerFacts(instanceId: InstanceId | null, enabled: boolean):
 }
 
 /** What the instance's engine lets the condition builder offer; see EngineConditionSupport. */
-export function useEngineConditionSupport(instanceId: InstanceId | null): EngineConditionSupport {
-  const capabilities = useEngineCapabilities(instanceId);
-  const viewerFacts = useViewerFacts(instanceId, true);
+export function useEngineConditionSupport(): EngineConditionSupport {
+  const capabilities = useEngineCapabilities();
+  const viewerFacts = useViewerFacts(true);
   const listReferences = capabilities.support("workflow.conditionListReferences") === "supported";
   return useMemo(() => ({ viewerFacts, listReferences }), [viewerFacts, listReferences]);
 }

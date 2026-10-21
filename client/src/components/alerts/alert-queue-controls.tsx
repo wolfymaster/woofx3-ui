@@ -3,14 +3,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useClearAlertQueueRequest, useSkipCurrentAlertRequest } from "@/engine/hooks/use-alert-queue";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { clearResultToast, skipResultToast } from "@/lib/alert-queue";
 import { ALERT_QUEUE_CONTROL_CAPABILITIES, capabilitySupport } from "@/lib/engine-capabilities";
 import { cn } from "@/lib/utils";
 
 interface AlertQueueControlsProps {
-  instanceId: InstanceId;
   className?: string;
 }
 
@@ -23,14 +21,14 @@ type Pending = "skip" | "clear" | null;
  * from a playing one (see lib/alert-queue.ts). Clearing asks first, inline,
  * because it throws away alerts a viewer paid for.
  */
-export function AlertQueueControls({ instanceId, className }: AlertQueueControlsProps) {
+export function AlertQueueControls({ className }: AlertQueueControlsProps) {
   const skipCurrent = useSkipCurrentAlertRequest();
   const clearQueue = useClearAlertQueueRequest();
   const { toast } = useToast();
   const [pending, setPending] = useState<Pending>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
 
-  const { state: capabilities } = useEngineCapabilities(instanceId);
+  const { state: capabilities } = useEngineCapabilities();
   const support = capabilitySupport(capabilities, ALERT_QUEUE_CONTROL_CAPABILITIES);
   const busy = pending !== null;
   const unavailable = support !== "supported";
@@ -41,9 +39,9 @@ export function AlertQueueControls({ instanceId, className }: AlertQueueControls
     setPending(kind);
     try {
       if (kind === "skip") {
-        toast(skipResultToast(await skipCurrent(instanceId)));
+        toast(skipResultToast(await skipCurrent()));
       } else {
-        toast(clearResultToast(await clearQueue(instanceId)));
+        toast(clearResultToast(await clearQueue()));
       }
     } catch (err) {
       toast({

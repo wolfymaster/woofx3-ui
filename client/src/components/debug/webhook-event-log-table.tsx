@@ -158,7 +158,7 @@ const EventRow = memo(function EventRow({ event, index, isPending, measureRef, o
 });
 
 export function WebhookEventLogTable() {
-  const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
+  const { isInstanceLoading: instanceLoading } = useEngineScope();
   const [typeFilter, setTypeFilter] = useState("all");
   const [pendingIds, setPendingIds] = useState<Set<WebhookEventId>>(new Set());
   const retriggerEvent = useRetriggerEvent();
@@ -166,11 +166,7 @@ export function WebhookEventLogTable() {
   retriggerEventRef.current = retriggerEvent;
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const {
-    results: events,
-    status,
-    loadMore,
-  } = useWebhookEventLog(instanceId, typeFilter !== "all" ? typeFilter : null, PAGE_SIZE);
+  const { results: events, status, loadMore } = useWebhookEventLog(typeFilter !== "all" ? typeFilter : null, PAGE_SIZE);
 
   const isLoading = instanceLoading || status === "LoadingFirstPage";
 

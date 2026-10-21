@@ -64,7 +64,7 @@ export function useFireTestEvent() {
     const triggerId = crypto.randomUUID();
     try {
       const published = await withinTimeout(
-        fire(instanceId, { eventType, eventData, triggerId, triggeredBy: origin }),
+        fire({ eventType, eventData, triggerId, triggeredBy: origin }),
         TEST_EVENT_PUBLISH_TIMEOUT_MS,
         "The engine didn't answer. Check that it is running, then try again."
       );
