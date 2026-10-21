@@ -1,23 +1,14 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { type CanvasSize, type CommandResult, canvasOf, type NodeView } from "@woofx3/scene/editor";
-import { BookmarkPlus, ChevronDown, Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
-import {
-  AddLibraryAlertDialog,
-  type LibraryAlert,
-  LibraryAlertList,
-} from "@/components/alert-editor/alert-library-panel";
 import { AlertStage } from "@/components/alert-editor/alert-stage";
 import { PreviewScrub, PreviewTransport } from "@/components/alert-editor/composition-preview-frame";
 import { LayerInspector } from "@/components/alert-editor/layer-inspector";
-import { SaveToLibraryDialog } from "@/components/alert-editor/save-to-library-dialog";
 import type { StageZoom } from "@/components/common/stage-area";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
-import { StatusIndicator } from "@/components/scenes/draft-live-controls";
 import { WidgetBehaviorsSection } from "@/components/scenes/widget-behaviors-section";
 import {
   AlertDialog,
@@ -29,23 +20,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAlertLibrary } from "@/engine/hooks/use-alert-library";
-import { type AlertEditorHandle, useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
-import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
+import type { AlertEditorHandle } from "@/hooks/use-alert-layout-editor";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
-import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
-import { inlineCopyOfLibraryAlert, unfilledInputsText, withLayersOf } from "@/lib/alert-library";
 import {
   activityEditFor,
   activityOf,
@@ -62,198 +42,6 @@ import type { VariableOption } from "@/lib/workflow-variables";
 /** Width the phone layout switches at; below it the stage is a fixed-width strip. */
 const DESKTOP_QUERY = "(min-width: 1024px)";
 
-interface AlertLayoutEditorProps {
-  /** The step's stored layout, read once when the editor opens. */
-  value: unknown;
-  /** What is being edited, shown under the title — the trigger and step, or the command and step. */
-  context: ReactNode;
-  /** Named in the back arrow's label: "Back to {backLabel}". */
-  backLabel: string;
-  /** Offered in the layers' text settings; whatever the step that owns this layout can reference. */
-  availableVariables: VariableOption[];
-  /**
-   * Hands the edited layout back in stored form, or `null` when nothing changed. Either
-   * way the caller then leaves — the editor does no navigating of its own.
-   */
-  onDone: (layout: unknown | null) => void;
-  /** Leaving without keeping the edits; already confirmed when there were any. */
-  onCancel: () => void;
-  /**
-   * On an engine with an alert library, offer the Library tab (copy a library alert's
-   * layers onto the canvas) and Save to library (store a copy of this alert there).
-   */
-  offerLibrary?: boolean;
-}
-
-/**
- * The editor for one alert's content: a canvas of layers, the widgets that can be added
- * to it, and the settings of whichever layer is selected.
- *
- * It is a view over a composition editor (`@woofx3/scene/editor`, alert profile) holding
- * a copy of the layout, so nothing the caller holds changes until Done. Both surfaces
- * that own an alert step — a trigger on the Alerts screen and a chat command — give it
- * its own route and hand the result back to their own draft, where it waits for that
- * screen's Save with every other unsaved edit.
- */
-export function AlertLayoutEditor({
-  value,
-  context,
-  backLabel,
-  availableVariables,
-  onDone,
-  onCancel,
-  offerLibrary = false,
-}: AlertLayoutEditorProps) {
-  const session = useAlertLayoutEditor(value);
-  // Where to go once the edits are confirmed discarded: back out, or to a library alert.
-  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
-  const [, navigate] = useLocation();
-  const [addingFromLibrary, setAddingFromLibrary] = useState<LibraryAlert | null>(null);
-  const [savingToLibrary, setSavingToLibrary] = useState(false);
-  useCollapsedSidebar();
-  const view = useAlertEditorView(session, availableVariables);
-  const libraryAlerts = useAlertLibrary();
-  const { toast } = useToast();
-
-  if (session === null || view === null) {
-    return <EditorLoading />;
-  }
-
-  const libraryOffered = offerLibrary && libraryAlerts.enabled;
-  const leaveTo = (go: () => void) => {
-    if (session.isDirty) {
-      setPendingLeave(() => go);
-      return;
-    }
-    go();
-  };
-  const leave = () => leaveTo(onCancel);
-  const editLibraryAlert = (alert: LibraryAlert) => {
-    leaveTo(() => navigate(libraryAlertEditorPath(alert.engineCompositionId)));
-  };
-  const done = () => onDone(session.changedLayout());
-  const addFromLibrary = (alert: LibraryAlert) => {
-    setAddingFromLibrary(null);
-    const current = session.state.doc;
-    if (current === null) {
-      return;
-    }
-    const { doc: copy, unfilled } = inlineCopyOfLibraryAlert(alert, availableVariables);
-    session.replace(withLayersOf(current, copy));
-    session.editor.dispatch("selection.clear");
-    if (unfilled.length > 0) {
-      toast({ title: "Some of its inputs had no value", description: unfilledInputsText(unfilled) });
-    }
-  };
-  const library = libraryOffered
-    ? (layout: "grid" | "row") => (
-        <LibraryAlertList
-          alerts={libraryAlerts.alerts}
-          layout={layout}
-          onPick={setAddingFromLibrary}
-          onEdit={editLibraryAlert}
-        />
-      )
-    : undefined;
-
-  return (
-    <>
-      <AlertEditorFrame
-        session={session}
-        view={view}
-        title="Edit alert"
-        context={context}
-        backLabel={backLabel}
-        onBack={leave}
-        library={library}
-        actions={
-          <>
-            <StatusIndicator ok={!session.isDirty} testId="status-saved">
-              {session.isDirty ? "Unsaved changes" : "All changes saved"}
-            </StatusIndicator>
-            <Button variant="ghost" onClick={leave}>
-              Cancel
-            </Button>
-            <div className="flex items-center">
-              <Button
-                onClick={done}
-                className={libraryOffered ? "rounded-r-none" : undefined}
-                data-testid="button-alert-done"
-              >
-                Done
-              </Button>
-              {libraryOffered && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      size="icon"
-                      className="rounded-l-none border-l border-primary-foreground/25"
-                      aria-label="More options"
-                      data-testid="button-alert-done-menu"
-                    >
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setSavingToLibrary(true)} data-testid="button-save-to-library">
-                      <BookmarkPlus className="h-4 w-4 mr-2" />
-                      Save to Library
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </div>
-          </>
-        }
-        phoneAction={
-          <Button className="h-11" onClick={done} data-testid="button-alert-done">
-            Done
-          </Button>
-        }
-        phoneExtras={
-          libraryOffered ? (
-            <Button variant="outline" className="h-11" onClick={() => setSavingToLibrary(true)}>
-              Save to Library
-            </Button>
-          ) : null
-        }
-      />
-
-      {libraryOffered && (
-        <>
-          <AddLibraryAlertDialog
-            alert={addingFromLibrary}
-            onClose={() => setAddingFromLibrary(null)}
-            onConfirm={addFromLibrary}
-          />
-          <SaveToLibraryDialog
-            open={savingToLibrary}
-            onOpenChange={setSavingToLibrary}
-            doc={session.state.doc}
-            availableVariables={availableVariables}
-            takenNames={libraryAlerts.alerts?.map((alert) => alert.name)}
-            onSaved={() => setSavingToLibrary(false)}
-          />
-        </>
-      )}
-
-      <DiscardAlertChangesDialog
-        open={pendingLeave !== null}
-        onOpenChange={(open) => (open ? undefined : setPendingLeave(null))}
-        onDiscard={() => pendingLeave?.()}
-      />
-    </>
-  );
-}
-
-function EditorLoading() {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-    </div>
-  );
-}
-
 interface AlertEditorFrameProps {
   session: AlertEditorHandle;
   view: AlertEditorView;
@@ -267,18 +55,13 @@ interface AlertEditorFrameProps {
   status?: ReactNode;
   /** The phone header's one button. */
   phoneAction: ReactNode;
-  /** Anything the phone layout shows above the palette. */
-  phoneExtras?: ReactNode;
   /** Shown under the desktop header's controls on a phone, beside the canvas readout. */
   phoneStatus?: ReactNode;
-  /** The alert library, listed in the palette's Library tab; omitted, the palette has only widgets. */
-  library?: (layout: "grid" | "row") => ReactNode;
 }
 
 /**
  * The alert editor's page: a header over the stage, palette, layers and inspector on a
- * desktop, and a stacked column on a phone. Shared by an alert written into a step and
- * one edited in the library, which differ only in the header's controls.
+ * desktop, and a stacked column on a phone. The header's controls are the caller's.
  */
 export function AlertEditorFrame({
   session,
@@ -290,9 +73,7 @@ export function AlertEditorFrame({
   actions,
   status,
   phoneAction,
-  phoneExtras,
   phoneStatus,
-  library,
 }: AlertEditorFrameProps) {
   const isDesktop = useMediaQuery(DESKTOP_QUERY);
 
@@ -321,7 +102,7 @@ export function AlertEditorFrame({
             </div>
             <div className="flex shrink-0 items-center gap-2">{actions}</div>
           </header>
-          <AlertEditorShell view={view} library={library} />
+          <AlertEditorShell view={view} />
         </>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -344,16 +125,7 @@ export function AlertEditorFrame({
             </div>
           </div>
           <div className="flex flex-col gap-6 px-4 py-5">
-            {phoneExtras}
             {view.palette("row")}
-            {library && (
-              <section className="flex min-w-0 flex-col gap-3">
-                <h2 className="text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                  From library
-                </h2>
-                {library("row")}
-              </section>
-            )}
             {view.layerList(true)}
             {view.inspector ? (
               <div className="rounded-2xl border bg-card p-4">{view.inspector}</div>
@@ -639,7 +411,7 @@ export function AlertEditorShell({
   className,
 }: {
   view: AlertEditorView;
-  library?: (layout: "grid" | "row") => ReactNode;
+  library?: ReactNode;
   className?: string;
 }) {
   const readout = `${view.canvas.width} × ${view.canvas.height}`;
@@ -674,7 +446,7 @@ export function AlertEditorShell({
               {palette}
             </TabsContent>
             <TabsContent value="library" className="mt-0">
-              {library("grid")}
+              {library}
             </TabsContent>
           </Tabs>
         )

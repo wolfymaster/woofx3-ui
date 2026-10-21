@@ -23,15 +23,12 @@ import { useRemoveLibraryAlertRequest } from "@/engine/hooks/use-alert-library";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert } from "@/lib/alert-library";
-import { cn } from "@/lib/utils";
 
 export type LibraryAlert = Doc<"alertCompositions">;
 
 interface LibraryAlertListProps {
   /** The library, undefined while it loads. */
   alerts: LibraryAlert[] | undefined;
-  /** `grid` for the editor's left rail, `row` for the phone strip that scrolls sideways. */
-  layout: "grid" | "row";
   /** Add the alert's layers to the canvas; the caller confirms first. */
   onPick: (alert: LibraryAlert) => void;
   /** Open the library alert's own editor. */
@@ -44,7 +41,7 @@ interface LibraryAlertListProps {
  * starting point, and editing it later changes nothing already copied. Each alert can
  * also be edited on its own page or deleted from here.
  */
-export function LibraryAlertList({ alerts, layout, onPick, onEdit }: LibraryAlertListProps) {
+export function LibraryAlertList({ alerts, onPick, onEdit }: LibraryAlertListProps) {
   const [deleting, setDeleting] = useState<LibraryAlert | null>(null);
 
   if (alerts === undefined) {
@@ -53,24 +50,18 @@ export function LibraryAlertList({ alerts, layout, onPick, onEdit }: LibraryAler
   if (alerts.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        The library is empty. Save to library, under Done in any alert's editor, puts an alert here.
+        The library is empty. Save to library, beside Done in an alert's editor, puts an alert here.
       </p>
     );
   }
 
   return (
     <>
-      <ul
-        className={cn(layout === "grid" ? "flex flex-col gap-3" : "-mx-4 flex gap-2 overflow-x-auto px-4 pb-1")}
-        data-testid="library-alert-list"
-      >
+      <ul className="flex flex-col gap-3" data-testid="library-alert-list">
         {alerts.map((alert) => (
           <li
             key={alert._id}
-            className={cn(
-              "flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-1.5 hover:border-foreground/20 hover:bg-accent",
-              layout === "row" && "w-40 shrink-0"
-            )}
+            className="flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-1.5 hover:border-foreground/20 hover:bg-accent"
           >
             <button
               type="button"
