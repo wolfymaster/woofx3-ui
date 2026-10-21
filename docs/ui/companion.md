@@ -20,7 +20,8 @@ companion/
   src-tauri/          the Rust process: Convex client, credential store, tray,
                       integrations (integrations.rs, integration_store.rs)
   core/               woofx3-companion-core: relay frames, the relay client,
-                      the bridge, address rules and OBS discovery. No Tauri.
+                      the bridge, address rules, OBS discovery, and the
+                      supervision of a local engine (core/src/host). No Tauri.
 ```
 
 The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Once open, it stays open until the companion quits. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
@@ -96,6 +97,28 @@ How the relay ends a connection decides what the companion does next:
 | Retrying | "Retrying in N s" and the last error |
 | Displaced | Another companion connection for the instance took over. The companion does not take it back on its own; **Reconnect** does |
 | Refused | woofx3 would not issue a credential. The companion asks again when `forCompanion` changes, after 5 minutes, or on **Reconnect**. A revoked companion hears it from `companions.self` and unpairs |
+
+## Local mode
+
+In local mode the companion is the desktop host for a woofx3 engine that runs on the streamer's own PC, with no account. The window has no switch for it; it is selected only by a file in the app's config directory (`%APPDATA%\tv.woofx3.companion\desktop-host.json` on Windows, `~/.config/tv.woofx3.companion/desktop-host.json` on Linux):
+
+```json
+{ "mode": "local", "engineDir": "C:\\woofx3\\engine" }
+```
+
+- Without the file, or with `{ "mode": "companion" }`, the companion is the tray app described above and runs no engine.
+- `engineDir` is an unpacked engine release (the `woofx3-<version>-<os>-amd64.zip` an engine release attaches): the orchestrator, `services.json` and every service binary. It must be absolute. Without it, local mode runs the release bundled with the app in `engine/` under its resource directory. Installers do not bundle one, so local mode needs `engineDir`.
+- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup with the reason, so a typo never quietly turns local mode off.
+
+### The engine sidecar
+
+In local mode the companion runs the engine's orchestrator as its one sidecar process (`engine_host.rs`, supervised by `core/src/host/sidecar.rs`). The orchestrator runs inside the engine release, from that directory, because it finds `services.json` and every service binary next to itself; that is why the companion does not use a Tauri `externalBin`, which would place a lone orchestrator beside the companion's own executable.
+
+- It is started with `WOOFX3_SUPERVISOR_STATUS=stdout-jsonl` and `--exit-on-stdin-eof`. Its stdout carries only status lines, parsed into typed states (`core/src/host/status.rs`); unknown event types and statuses are ignored, as the engine's format asks.
+- The companion holds the orchestrator's stdin. Closing it is the stop request: the orchestrator stops its services in dependency order and exits. If the companion dies, the pipe closes with it and the engine stops just the same.
+- Quitting from the tray waits for the engine to stop. A stop that takes longer than 35 seconds (the orchestrator itself allows its services 25) kills the process tree. Restarting into an update cannot wait (Tauri does not let an app hold a restart), so the engine then stops on its own as its stdin closes.
+- On Windows the orchestrator is started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs to stop its services gracefully, and its job object ends every service when it exits. Elsewhere it is started in a process group of its own, and the group is killed whenever the orchestrator exits, so no service it left behind holds a port the next run needs.
+- When the orchestrator exits on its own it is started again after a capped exponential backoff with jitter (1 second doubling to at most 60). A run that stayed ready for 60 seconds starts the backoff over.
 
 ## Updates
 
