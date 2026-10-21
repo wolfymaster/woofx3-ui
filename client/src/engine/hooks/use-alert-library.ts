@@ -22,7 +22,7 @@ const refreshed = new Set<string>();
  */
 export function useAlertLibrary(): AlertLibrary {
   const { instanceId } = useEngineScope();
-  const enabled = useEngineCapabilities(instanceId ?? undefined).support(...ALERT_LIBRARY_CAPABILITIES) === "supported";
+  const enabled = useEngineCapabilities(instanceId).support(...ALERT_LIBRARY_CAPABILITIES) === "supported";
   const { alertLibrary } = useEngineGateway();
   const alerts = alertLibrary.useAlerts(enabled && instanceId ? instanceId : null);
   const refresh = alertLibrary.useRefreshRequest();

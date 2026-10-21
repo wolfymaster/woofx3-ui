@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { ActionStep } from "@woofx3/api";
 import {
   AlertTriangle,
@@ -35,7 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import {
   useChatCommandGroups,
   useChatCommands,
@@ -43,8 +42,7 @@ import {
   useDeleteChatCommandRequest,
   useUpdateChatCommandRequest,
 } from "@/engine/hooks/use-chat-commands";
-import type { ChatCommand, ChatCommandGroup } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
+import type { ChatCommand, ChatCommandGroup, InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -149,11 +147,11 @@ function CommandTableSkeleton() {
  */
 export default function Commands() {
   const [location] = useLocation();
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const showingGroups = location.startsWith(COMMAND_GROUPS_PATH);
 
-  const commandsRaw = useChatCommands(toInstanceId(instance?._id ?? null));
-  const groupsRaw = useChatCommandGroups(toInstanceId(instance?._id ?? null));
+  const commandsRaw = useChatCommands(instanceId);
+  const groupsRaw = useChatCommandGroups(instanceId);
   const commands = commandsRaw ?? [];
   const groups = groupsRaw ?? [];
 
@@ -177,9 +175,9 @@ export default function Commands() {
       </nav>
 
       {showingGroups ? (
-        <GroupsTab instanceId={instance?._id} groups={groups} commands={commands} isLoading={groupsLoading} />
+        <GroupsTab instanceId={instanceId} groups={groups} commands={commands} isLoading={groupsLoading} />
       ) : (
-        <CommandsTab instanceId={instance?._id} commands={commands} isLoading={commandsLoading} />
+        <CommandsTab instanceId={instanceId} commands={commands} isLoading={commandsLoading} />
       )}
     </div>
   );
@@ -221,7 +219,7 @@ function CommandsTab({
   commands,
   isLoading,
 }: {
-  instanceId: Id<"instances"> | undefined;
+  instanceId: InstanceId | null;
   commands: CommandDoc[];
   isLoading: boolean;
 }) {
@@ -245,7 +243,7 @@ function CommandsTab({
       return;
     }
     try {
-      await deleteCommand(toInstanceId(instanceId), deleteTarget.engineCommandId);
+      await deleteCommand(instanceId, deleteTarget.engineCommandId);
       toast({ title: "Command deleted" });
     } catch (err: unknown) {
       toast({
@@ -262,7 +260,7 @@ function CommandsTab({
       return;
     }
     try {
-      await updateCommand(toInstanceId(instanceId), {
+      await updateCommand(instanceId, {
         engineCommandId: cmd.engineCommandId,
         command: cmd.command,
         cooldown: cmd.cooldown,
@@ -469,7 +467,7 @@ function GroupsTab({
   commands,
   isLoading,
 }: {
-  instanceId: Id<"instances"> | undefined;
+  instanceId: InstanceId | null;
   groups: GroupDoc[];
   commands: CommandDoc[];
   isLoading: boolean;
@@ -497,7 +495,7 @@ function GroupsTab({
       return;
     }
     try {
-      await deleteGroup(toInstanceId(instanceId), deleteTarget.engineGroupId);
+      await deleteGroup(instanceId, deleteTarget.engineGroupId);
       toast({ title: "Group deleted" });
     } catch (err: unknown) {
       toast({

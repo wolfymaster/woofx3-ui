@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import type { CustomFieldRenderer, FieldDescriptor } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
+import { useEngineScope } from "@/engine/context";
 import { useInstance } from "@/hooks/use-instance";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -40,18 +41,17 @@ function ConfigButtonField({ field }: { field: FieldDescriptor }) {
       />
     );
   }
-  return <RequestButton instanceId={instance?._id} label={field.label} reference={action.reference} />;
+  return <RequestButton label={field.label} reference={action.reference} />;
 }
 
 function RequestButton({
-  instanceId,
   label,
   reference,
 }: {
-  instanceId: Id<"instances"> | undefined;
   label: string;
   reference: Parameters<typeof useInternalSettingAction>[1];
 }) {
+  const { instanceId } = useEngineScope();
   const { trigger, status, message } = useInternalSettingAction(instanceId, reference);
   return (
     <div className="space-y-2">

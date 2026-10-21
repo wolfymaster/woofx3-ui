@@ -23,6 +23,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { useEngineScope } from "@/engine/context";
 import { useEngineConnectionTest } from "@/engine/hooks/use-engine-status";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -32,6 +33,7 @@ type ConnectionStatus = "idle" | "testing" | "success" | "error";
 
 function EngineSettings() {
   const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId: engineInstanceId } = useEngineScope();
   const testConnectionAction = useEngineConnectionTest();
   const registerInstance = useAction(api.registration.registerInstance);
   const updateInstance = useConvexMutation(api.instances.update);
@@ -160,7 +162,7 @@ function EngineSettings() {
     return (
       <div className="space-y-4">
         <ManagedEngineCard instanceId={instance._id} />
-        {instance.clientId && <EngineSyncCard instanceId={instance._id} />}
+        {instance.clientId && engineInstanceId && <EngineSyncCard instanceId={engineInstanceId} />}
         <CompanionCard instanceId={instance._id} />
         <DangerZone instanceId={instance._id} managed />
       </div>
@@ -265,7 +267,7 @@ function EngineSettings() {
           </div>
         </CardContent>
       </Card>
-      <EngineSyncCard instanceId={instance._id} />
+      {engineInstanceId && <EngineSyncCard instanceId={engineInstanceId} />}
       <CompanionCard instanceId={instance._id} />
       <DangerZone instanceId={instance._id} />
     </div>

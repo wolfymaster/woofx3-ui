@@ -23,7 +23,7 @@ const UNREACHABLE_STORAGE =
  *
  * Shared by the Media page and the asset picker so the sequence exists once.
  */
-export function useResourceUpload(instanceId: InstanceId | undefined) {
+export function useResourceUpload(instanceId: InstanceId | null) {
   const { resources } = useEngineGateway();
   const requestUpload = resources.useUploadGrantRequest();
   const completeUpload = resources.useCompleteUploadRequest();

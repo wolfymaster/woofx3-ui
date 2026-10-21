@@ -1,8 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
-import type { ModuleDetailResult } from "@convex/moduleDetail";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { Loader2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -16,8 +15,9 @@ import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dia
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
+import type { ModuleDetail } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
 import { useModuleInstall } from "@/hooks/use-module-install";
@@ -46,6 +46,7 @@ const PLATFORM_CATEGORY = "platform";
 
 export default function Modules() {
   const { instance } = useInstance();
+  const { instanceId: engineInstanceId } = useEngineScope();
   const [location, navigate] = useLocation();
   const segments = location.split("/").filter(Boolean);
   const routeModuleId =
@@ -75,7 +76,7 @@ export default function Modules() {
   const [showErrorDetails, setShowErrorDetails] = useState(false);
 
   const getModuleDetail = useModuleDetailRequest();
-  const [moduleDetail, setModuleDetail] = useState<ModuleDetailResult | null>(null);
+  const [moduleDetail, setModuleDetail] = useState<ModuleDetail | null>(null);
   const [moduleDetailLoading, setModuleDetailLoading] = useState(false);
   const [moduleDetailError, setModuleDetailError] = useState<string | null>(null);
   // getModuleDetail is an action — a one-shot fetch, not a reactive query — so an install or update
@@ -87,7 +88,7 @@ export default function Modules() {
   // marketplace storefront: the approval gate, the engine's progress events
   // and the timeout have to stay together to be correct, and two copies of
   // that would drift.
-  const install = useModuleInstall(instance?._id, () => setDetailRefreshKey((key) => key + 1));
+  const install = useModuleInstall(engineInstanceId, () => setDetailRefreshKey((key) => key + 1));
 
   const prevSelectedRef = useRef(selectedModule);
   useEffect(() => {
@@ -174,7 +175,7 @@ export default function Modules() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: detailRefreshKey re-triggers the fetch, it is not a value read in the body
   useEffect(() => {
-    if (!detailModuleId || !instance) {
+    if (!detailModuleId || !engineInstanceId) {
       setModuleDetail(null);
       return;
     }
@@ -182,7 +183,7 @@ export default function Modules() {
     setModuleDetail(null);
     setModuleDetailError(null);
     let cancelled = false;
-    void getModuleDetail(toInstanceId(instance._id), detailModuleId)
+    void getModuleDetail(engineInstanceId, detailModuleId)
       .then((detail) => {
         if (!cancelled) {
           setModuleDetail(detail);
@@ -201,7 +202,7 @@ export default function Modules() {
     return () => {
       cancelled = true;
     };
-  }, [detailModuleId, detailRefreshKey, instance, getModuleDetail]);
+  }, [detailModuleId, detailRefreshKey, engineInstanceId, getModuleDetail]);
 
   // Installing and updating are the same marketplace operation, and both need only the listing id.
   // For an installed module that is the listing it was installed from, derived here from its row —
@@ -292,7 +293,7 @@ export default function Modules() {
       functions: moduleDetail.functions,
       widgets: moduleDetail.widgets,
       workflows: moduleDetail.workflows,
-      moduleDbId: moduleDetail.moduleDbId as Id<"moduleRepository"> | undefined,
+      moduleDbId: moduleDetail.moduleDbId,
       manifestSettings: moduleDetail.manifestSettings,
       manifestResourceKinds: moduleDetail.manifestResourceKinds,
       permissions: moduleDetail.permissions,
@@ -424,7 +425,7 @@ export default function Modules() {
 
       <ApproveModulePermissionsDialog {...install.approvalDialogProps} />
 
-      {instance && (
+      {engineInstanceId && (
         <UninstallModuleDialog
           open={uninstallTarget !== null}
           onOpenChange={(open) => {
@@ -432,7 +433,7 @@ export default function Modules() {
               setUninstallTarget(null);
             }
           }}
-          instanceId={instance._id}
+          instanceId={engineInstanceId}
           module={uninstallTarget}
           onSuccess={handleUninstallSuccess}
         />

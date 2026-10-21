@@ -10,12 +10,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { toInstanceId, toMacroId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useChatCommands } from "@/engine/hooks/use-chat-commands";
 import { useRunMacroRequest } from "@/engine/hooks/use-macros";
 import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { toMacroId } from "@/lib/cloud-ids";
 import {
   applyMacroVariables,
   extractMacroVariables,
@@ -173,6 +174,7 @@ function MacroTile({
 // the per-user widget config.
 export function MacroPadModule() {
   const { instance } = useInstance();
+  const { instanceId: engineInstanceId } = useEngineScope();
   const [isEditMode, setIsEditMode] = useState(false);
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [editingMacro, setEditingMacro] = useState<MacroButton | null>(null);
@@ -188,7 +190,7 @@ export function MacroPadModule() {
   const listArgs = instanceId ? { instanceId } : "skip";
 
   const macros = useQuery(api.macros.list, listArgs);
-  const commands = useChatCommands(toInstanceId(instanceId ?? null));
+  const commands = useChatCommands(engineInstanceId);
   const remoteTriggers = useQuery(api.macroTriggers.listForInstance, listArgs);
   const addMacro = useMutation(api.macros.addMacro);
   const updateMacro = useMutation(api.macros.updateMacro);
@@ -211,11 +213,12 @@ export function MacroPadModule() {
     localStore.setQuery(api.macros.list, { instanceId }, reordered);
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: depends on instance?._id (not the instance object) so it doesn't re-fetch on every reference change
   useEffect(() => {
-    if (!instance) return;
-    listEngineWorkflows(toInstanceId(instance._id)).then(setWorkflows).catch(console.error);
-  }, [instance?._id, listEngineWorkflows]);
+    if (!engineInstanceId) {
+      return;
+    }
+    listEngineWorkflows(engineInstanceId).then(setWorkflows).catch(console.error);
+  }, [engineInstanceId, listEngineWorkflows]);
 
   const variableCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -243,11 +246,11 @@ export function MacroPadModule() {
   }, []);
 
   const handleDeleteMacro = useCallback(
-    (id: string) => {
+    (id: Id<"macros">) => {
       if (!instanceId) {
         return;
       }
-      void deleteMacro({ instanceId, macroId: id as Id<"macros"> });
+      void deleteMacro({ instanceId, macroId: id });
     },
     [instanceId, deleteMacro]
   );
@@ -258,7 +261,7 @@ export function MacroPadModule() {
         return;
       }
       if (editingMacro) {
-        void updateMacro({ instanceId, macroId: editingMacro.id as Id<"macros">, ...input });
+        void updateMacro({ instanceId, macroId: editingMacro.id, ...input });
       } else {
         void addMacro({ instanceId, ...input });
       }
@@ -314,9 +317,12 @@ export function MacroPadModule() {
           const resolved = applyMacroVariables(macro.config, values);
           await sendChatMessage({ instanceId, message: resolved.message ?? "" });
         } else {
+          if (!engineInstanceId) {
+            return;
+          }
           await runMacroOnServer(
-            toInstanceId(instanceId),
-            toMacroId(macro.id as Id<"macros">),
+            engineInstanceId,
+            toMacroId(macro.id),
             Object.entries(values).map(([name, value]) => ({ name, value }))
           );
         }
@@ -330,7 +336,7 @@ export function MacroPadModule() {
         setIsExecuting(null);
       }
     },
-    [instanceId, runMacroOnServer, sendChatMessage, toast]
+    [instanceId, engineInstanceId, runMacroOnServer, sendChatMessage, toast]
   );
 
   const handlePress = useCallback(

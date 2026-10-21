@@ -1,17 +1,16 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { ListX, Loader2, SkipForward } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useClearAlertQueueRequest, useSkipCurrentAlertRequest } from "@/engine/hooks/use-alert-queue";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { clearResultToast, skipResultToast } from "@/lib/alert-queue";
 import { ALERT_QUEUE_CONTROL_CAPABILITIES, capabilitySupport } from "@/lib/engine-capabilities";
 import { cn } from "@/lib/utils";
 
 interface AlertQueueControlsProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   className?: string;
 }
 
@@ -31,7 +30,7 @@ export function AlertQueueControls({ instanceId, className }: AlertQueueControls
   const [pending, setPending] = useState<Pending>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
 
-  const { state: capabilities } = useEngineCapabilities(toInstanceId(instanceId));
+  const { state: capabilities } = useEngineCapabilities(instanceId);
   const support = capabilitySupport(capabilities, ALERT_QUEUE_CONTROL_CAPABILITIES);
   const busy = pending !== null;
   const unavailable = support !== "supported";
@@ -42,9 +41,9 @@ export function AlertQueueControls({ instanceId, className }: AlertQueueControls
     setPending(kind);
     try {
       if (kind === "skip") {
-        toast(skipResultToast(await skipCurrent(toInstanceId(instanceId))));
+        toast(skipResultToast(await skipCurrent(instanceId)));
       } else {
-        toast(clearResultToast(await clearQueue(toInstanceId(instanceId))));
+        toast(clearResultToast(await clearQueue(instanceId)));
       }
     } catch (err) {
       toast({

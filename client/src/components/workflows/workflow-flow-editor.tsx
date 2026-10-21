@@ -1,13 +1,12 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlowEditor } from "@/components/flow/flow-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useUpdateWorkflowRequest, useWorkflow } from "@/engine/hooks/use-workflows";
+import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useEngineConditionSupport } from "@/hooks/use-viewer-facts";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -22,7 +21,7 @@ import {
 } from "@/lib/workflow-tree";
 
 interface WorkflowFlowEditorProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   engineWorkflowId: string;
   /** Every edit as a full definition, for the header's Save. */
   onDefinitionChange?: (definition: WorkflowDefinition) => void;
@@ -44,9 +43,9 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
   const { toast } = useToast();
   const conditionSupport = useEngineConditionSupport(instanceId);
   const updateFromDefinition = useUpdateWorkflowRequest();
-  const workflow = useWorkflow(toInstanceId(instanceId), engineWorkflowId);
-  const resourceInstances = useResourceInstances(toInstanceId(instanceId));
-  const scenes = useScenes(toInstanceId(instanceId));
+  const workflow = useWorkflow(instanceId, engineWorkflowId);
+  const resourceInstances = useResourceInstances(instanceId);
+  const scenes = useScenes(instanceId);
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -96,11 +95,7 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
         return true;
       }
       try {
-        await updateFromDefinition(
-          toInstanceId(instanceId),
-          engineWorkflowId,
-          escapeDollarKeys(definition) as WorkflowDefinition
-        );
+        await updateFromDefinition(instanceId, engineWorkflowId, escapeDollarKeys(definition) as WorkflowDefinition);
         return true;
       } catch (err) {
         toast({

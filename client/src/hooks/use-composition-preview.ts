@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { CompositionEditor, EditorState } from "@woofx3/scene/editor";
 import {
   PREVIEW_LOAD,
@@ -14,9 +13,9 @@ import {
   parsePreviewReport,
 } from "@woofx3/scene/runtime";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useCompositionPreviewUrlRequest } from "@/engine/hooks/use-alert-library";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import type { InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import {
   createPreviewUrlCache,
@@ -57,7 +56,7 @@ export interface CompositionPreviewController {
 }
 
 interface UseCompositionPreviewArgs {
-  instanceId: Id<"instances"> | undefined;
+  instanceId: InstanceId | null;
   editor: CompositionEditor | null;
   state: EditorState | null;
   /** The document as the page should play it (`previewDocumentOf`); null before it loads. */
@@ -84,8 +83,8 @@ interface PostedLoad {
 
 // One cache for the page session: a URL names nothing, so any editor on the
 // instance may frame one another editor fetched.
-let fetchPreviewUrl: ((instanceId: string) => Promise<PreviewUrl | null>) | null = null;
-const urlCache = createPreviewUrlCache((instanceId) => {
+let fetchPreviewUrl: ((instanceId: InstanceId) => Promise<PreviewUrl | null>) | null = null;
+const urlCache = createPreviewUrlCache((instanceId: InstanceId) => {
   if (fetchPreviewUrl === null) {
     throw new Error("composition preview: a URL was asked for before the editor could fetch one");
   }
@@ -123,9 +122,9 @@ export function useCompositionPreview({
   inputs,
   labelOf,
 }: UseCompositionPreviewArgs): CompositionPreviewController {
-  const supported = useEngineCapabilities(toInstanceId(instanceId)).support(CAPABILITY) === "supported";
+  const supported = useEngineCapabilities(instanceId).support(CAPABILITY) === "supported";
   const getUrl = useCompositionPreviewUrlRequest();
-  fetchPreviewUrl = (id) => getUrl(toInstanceId(id as Id<"instances">));
+  fetchPreviewUrl = getUrl;
   const { toast } = useToast();
 
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -146,7 +145,7 @@ export function useCompositionPreview({
   const seenProblems = useRef(new Set<string>());
 
   useEffect(() => {
-    if (!supported || instanceId === undefined || attempt >= PREVIEW_MAX_ATTEMPTS) {
+    if (!supported || instanceId === null || attempt >= PREVIEW_MAX_ATTEMPTS) {
       setSrc(null);
       return;
     }

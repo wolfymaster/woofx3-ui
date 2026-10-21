@@ -1,8 +1,9 @@
-// Features only the cloud dashboard has (the setup wizard, browser-source
-// keys) are Convex functions keyed by Convex document ids, while the engine
-// gateway speaks its own ids. Under the Convex gateway the two are the same
-// documents, so these features convert between them here, and only here: a
-// gateway without Convex has none of these features, and nothing else
-// outside client/src/engine may reach the Convex adapter's ids.
+// Features only the cloud dashboard has are Convex functions keyed by Convex
+// document ids: macros, which the dashboard keeps; the installed-module list,
+// which Convex records; and browser-source keys, minted per scene row. Engine
+// calls about those records take the gateway's own ids. Under the Convex
+// gateway the two name the same documents, so these features convert between
+// them here, and only here: nothing else outside client/src/engine may reach
+// the Convex adapter's ids.
 
-export { fromSceneId } from "@/engine/convex/ids";
+export { fromSceneId, toMacroId, toModuleId } from "@/engine/convex/ids";

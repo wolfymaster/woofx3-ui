@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import {
   useRefreshResourceValuesRequest,
   useResourceInstancesOfKind,
@@ -14,7 +14,6 @@ import {
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
 import type { ModuleResourceInstance } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useResourceAction } from "@/hooks/use-resource-action";
 import type { DashboardWidgetProps } from "@/lib/dashboard-widgets/types";
 import { resourceName, resourceSettings } from "@/lib/resource-instance";
@@ -43,12 +42,11 @@ function configuredCanonicalId(config: Record<string, unknown> | undefined): str
  * change event rather than being guessed at locally.
  */
 export function QueueWidget({ config, onConfigChange }: DashboardWidgetProps) {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
 
-  const kindDefinition = useResourceKind(toInstanceId(instanceId ?? null), QUEUE_KIND);
-  const queues = useResourceInstancesOfKind(toInstanceId(instanceId ?? null), QUEUE_KIND);
-  const values = useResourceValues(toInstanceId(instanceId ?? null));
+  const kindDefinition = useResourceKind(instanceId, QUEUE_KIND);
+  const queues = useResourceInstancesOfKind(instanceId, QUEUE_KIND);
+  const values = useResourceValues(instanceId);
   const refreshValues = useRefreshResourceValuesRequest();
 
   // Entries arrive by webhook while the dashboard is open; this fills in any
@@ -57,7 +55,7 @@ export function QueueWidget({ config, onConfigChange }: DashboardWidgetProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues(toInstanceId(instanceId), QUEUE_KIND).catch(() => {
+    refreshValues(instanceId, QUEUE_KIND).catch(() => {
       // The mirror still shows the last known line; the next change updates it.
     });
   }, [instanceId, refreshValues]);

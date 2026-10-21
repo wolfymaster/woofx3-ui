@@ -3,9 +3,9 @@ import type { InstanceId, MacroId, ModuleId, SceneId, WebhookEventId } from "@/e
 
 // The Convex gateway's ids are Convex document ids: an instance is its
 // `instances` row, an installed module its `moduleRepository` row, a scene
-// its `scenes` row. These convert between the two at the edge. They only change the type, so code
-// that already holds a Convex id (from a cloud-owned query) uses them to call
-// the gateway with it.
+// its `scenes` row. These convert between the two at the edge, and only
+// change the type. Outside the adapter, only the boot wiring and
+// lib/cloud-ids.ts may use them.
 
 // A missing id converts to the same missing value, so a caller's null or
 // undefined passes through untouched.

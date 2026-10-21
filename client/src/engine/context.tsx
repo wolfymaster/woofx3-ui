@@ -11,15 +11,14 @@ import { useInstance } from "@/hooks/use-instance";
  */
 const bootGateway: EngineGateway = convexEngineGateway;
 
-// The gateway is the context's default rather than a provider value, so
-// engine calls that need no current instance (the setup wizard, which runs
-// outside the shell) can reach it too.
+// The gateway is the context's default as well as the provider's value, so
+// an engine call that needs no current instance works outside the provider.
 const EngineGatewayContext = createContext<EngineGateway>(bootGateway);
 const EngineScopeContext = createContext<EngineScope | null>(null);
 
 /**
  * Holds the current instance for the engine hooks below it, so they need no
- * instance id of their own. Mounted by the broadcast shell.
+ * instance id of their own. Mounted around the app shell and the setup wizard.
  */
 export function EngineGatewayProvider({ children }: { children: ReactNode }) {
   const { instance, optimisticInstanceId, isLoading } = useInstance();

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useRawWorkflowCatalog } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
@@ -122,7 +122,8 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
 
 export function useWorkflowCatalog() {
   const { instance, isLoading: instanceLoading } = useInstance();
-  const raw = useRawWorkflowCatalog(toInstanceId(instance ? instance._id : null));
+  const { instanceId } = useEngineScope();
+  const raw = useRawWorkflowCatalog(instanceId);
 
   const triggers = (raw?.triggers ?? []) as CatalogTriggerRow[];
   const actions = (raw?.actions ?? []) as CatalogActionRow[];

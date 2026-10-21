@@ -24,7 +24,7 @@ export interface ObsStatusResult {
  * and the tab is visible. The state lives on the engine and nothing pushes
  * it, so this polls rather than subscribes.
  */
-export function useObsStatus(instanceId: InstanceId | undefined, enabled: boolean): ObsStatusResult {
+export function useObsStatus(instanceId: InstanceId | null, enabled: boolean): ObsStatusResult {
   const support = useEngineCapabilities(instanceId).support("obs.status");
   const getStatus = useEngineGateway().status.useObsStatusRequest();
   const visible = useStore($documentVisible);

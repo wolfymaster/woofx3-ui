@@ -29,8 +29,9 @@ import {
   Type,
   UserCheck,
 } from "lucide-react";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useClearAlertQueueRequest, useSkipCurrentAlertRequest } from "@/engine/hooks/use-alert-queue";
+import type { InstanceId } from "@/engine/types";
 import { useAuthActions } from "@/hooks/use-convex-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { $commandBarHidden, $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
@@ -104,6 +105,7 @@ export function useActionCommands(
   setInstance: (id: string) => void
 ): PaletteCommand[] {
   const instanceId = instance?._id;
+  const { instanceId: engineInstanceId } = useEngineScope();
   const createClip = useAction(api.twitchClips.createClip);
   const createMarker = useAction(api.streamInfo.createMarker);
   const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
@@ -126,13 +128,17 @@ export function useActionCommands(
 
   const commands: PaletteCommand[] = [];
 
-  if (instanceId) {
-    commands.push(...streamCommands(instanceId), ...chatCommands(instanceId), ...moderationCommands(instanceId));
+  if (instanceId && engineInstanceId) {
+    commands.push(
+      ...streamCommands(instanceId, engineInstanceId),
+      ...chatCommands(instanceId),
+      ...moderationCommands(instanceId)
+    );
   }
   commands.push(...appCommands());
   return commands;
 
-  function streamCommands(id: Id<"instances">): PaletteCommand[] {
+  function streamCommands(id: Id<"instances">, engineId: InstanceId): PaletteCommand[] {
     return [
       {
         id: "stream:clip",
@@ -217,7 +223,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await skipCurrentAlert(toInstanceId(id));
+            const result = await skipCurrentAlert(engineId);
             if (!result.ok) {
               throw new Error(result.reason ?? "The engine refused to skip");
             }
@@ -236,7 +242,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await clearAlertQueue(toInstanceId(id));
+            const result = await clearAlertQueue(engineId);
             if (!result.ok) {
               throw new Error(result.reason ?? "The engine refused to clear the queue");
             }

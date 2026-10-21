@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEngineScope } from "@/engine/context";
 import { useInstance } from "@/hooks/use-instance";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import {
@@ -77,7 +78,8 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
 export function RecentStreamsWidget() {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  useOpenSessionRefresh(instanceId);
+  const { instanceId: engineInstanceId } = useEngineScope();
+  useOpenSessionRefresh(engineInstanceId);
   const rows = useQuery(
     api.streamSessionSummaries.listRecent,
     instanceId ? { instanceId, limit: RECENT_STREAM_LIMIT } : "skip"

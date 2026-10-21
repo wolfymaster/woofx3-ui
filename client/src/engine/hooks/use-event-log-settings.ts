@@ -49,7 +49,7 @@ export interface EventLogSettingsHandle {
  * logs and pushes, its defaults and what it offers. Read on mount, on every
  * reconnect and on `refresh`.
  */
-export function useEventLogSettings(instanceId: InstanceId | undefined): EventLogSettingsHandle {
+export function useEventLogSettings(instanceId: InstanceId | null): EventLogSettingsHandle {
   const support = useEngineCapabilities(instanceId).support(...EVENT_LOG_CAPABILITIES);
   const { eventLog } = useEngineGateway();
   const getEventLogSettings = eventLog.useSettingsRequest();

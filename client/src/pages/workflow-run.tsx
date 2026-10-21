@@ -5,9 +5,8 @@ import { ReplayControls } from "@/components/alert-run/replay-controls";
 import { RunTrace } from "@/components/alert-run/run-trace";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { Badge } from "@/components/ui/badge";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useWorkflowRun } from "@/engine/hooks/use-workflows";
-import { useInstance } from "@/hooks/use-instance";
 import { decodeRouteParam } from "@/lib/route-param";
 import { workflowRunsPath } from "@/lib/workflow-run-route";
 
@@ -21,9 +20,9 @@ export default function WorkflowRun() {
   const engineWorkflowId = decodeRouteParam(params.id);
   const engineRunId = decodeRouteParam(params.engineRunId);
   const [, navigate] = useLocation();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   // The same subscription RunTrace makes, so Convex serves both from one.
-  const recorded = useWorkflowRun(toInstanceId(instance ? instance._id : null), engineRunId);
+  const recorded = useWorkflowRun(instanceId, engineRunId);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -44,15 +43,15 @@ export default function WorkflowRun() {
 
       <div className="flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-[1200px] p-4 sm:p-6">
-          {!instance ? (
+          {!instanceId ? (
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : (
             <RunTrace
-              instanceId={instance._id}
+              instanceId={instanceId}
               engineRunId={engineRunId}
               actions={({ failedStepTaskId }) => (
                 <ReplayControls
-                  instanceId={instance._id}
+                  instanceId={instanceId}
                   engineRunId={engineRunId}
                   failedStepTaskId={failedStepTaskId}
                   origin={REPLAY_ORIGIN}

@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { type CommandResult, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
@@ -22,7 +21,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
   useCreateSceneRequest,
@@ -31,7 +29,7 @@ import {
   useSceneWidgetCatalog,
   useUpdateSceneRequest,
 } from "@/engine/hooks/use-scenes";
-import type { SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
+import type { InstanceId, SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
@@ -52,7 +50,7 @@ import { LiveScenePreview } from "./live-scene-preview";
 import { WidgetLayoutCanvas } from "./widget-layout-canvas";
 
 interface SceneCanvasEditorProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   engineSceneId: string;
 }
 
@@ -61,12 +59,12 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const { toast } = useToast();
   useCollapsedSidebar();
 
-  const fetchedScene = useScene(toInstanceId(instanceId), engineSceneId);
+  const fetchedScene = useScene(instanceId, engineSceneId);
   // undefined = loading; null = synced id not in the cache yet (webhook pending).
   const isLoading = fetchedScene === undefined;
   const isAwaitingSync = fetchedScene === null;
 
-  const catalogRows = useSceneWidgetCatalog(toInstanceId(instanceId));
+  const catalogRows = useSceneWidgetCatalog(instanceId);
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
   // The scene's name and description, which are not part of the scene
@@ -97,7 +95,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // cache in for the draft on the canvas. The editor is keyed by instance
   // (see pages/scenes.tsx), so another instance starts over and has to show
   // the capability itself.
-  const capabilities = useEngineCapabilities(toInstanceId(instanceId));
+  const capabilities = useEngineCapabilities(instanceId);
   const syncSupport = capabilities.support("scenes.editorSync");
   const syncSupported = syncSupport === "supported";
   const needsEngineUpgrade = !syncSupported && capabilities.support("scenes.editorSessions") === "supported";
@@ -277,7 +275,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const sceneDescription = scene?.description;
   const saveNameAndDescription = useCallback(
     (name: string, description: string | undefined) => {
-      updateSceneAction(toInstanceId(instanceId), engineSceneId, { name, description }).catch((err) =>
+      updateSceneAction(instanceId, engineSceneId, { name, description }).catch((err) =>
         toast({
           title: "Couldn't save the scene's name",
           description: err instanceof Error ? err.message : String(err),
@@ -385,7 +383,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     // it was before this save.
     echoWatermark.current = fetchedScene?.updatedAt ?? echoWatermark.current;
     try {
-      await updateSceneAction(toInstanceId(instanceId), engineSceneId, {
+      await updateSceneAction(instanceId, engineSceneId, {
         name: scene.name,
         description: scene.description,
         ...storedSceneJson(shownDoc),
@@ -419,7 +417,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     deletingRef.current = true;
     setDeleting(true);
     try {
-      await deleteSceneAction(toInstanceId(instanceId), engineSceneId);
+      await deleteSceneAction(instanceId, engineSceneId);
       unsavedNameRef.current = null;
       // Edits still on their way would only be resent to a scene that is gone,
       // including by a session left draining if the editor closed meanwhile.
@@ -447,7 +445,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       return;
     }
     try {
-      const { engineSceneId: newId } = await createSceneAction(toInstanceId(instanceId), {
+      const { engineSceneId: newId } = await createSceneAction(instanceId, {
         name: `${scene.name} (Copy)`,
         description: scene.description || undefined,
         ...storedSceneJson(shownDoc),

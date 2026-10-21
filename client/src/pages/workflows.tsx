@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
 import {
   ArrowLeft,
@@ -53,7 +52,7 @@ import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { TestRunSheet } from "@/components/workflows/test-run-sheet";
 import { WorkflowFlowEditor } from "@/components/workflows/workflow-flow-editor";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import {
   useDeleteWorkflowRequest,
   useSetWorkflowEnabledRequest,
@@ -61,7 +60,6 @@ import {
   useWorkflows,
 } from "@/engine/hooks/use-workflows";
 import type { Workflow } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows, useWorkflowHealthResyncOnMount } from "@/hooks/use-workflow-health";
@@ -144,10 +142,10 @@ function WorkflowTableSkeleton() {
 function WorkflowListScreen() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const { catalogTriggers } = useWorkflowCatalog();
 
-  const workflows = useWorkflows(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
+  const workflows = useWorkflows(instanceId);
   const { byId: notRunning } = useNotRunningWorkflows();
   useWorkflowHealthResyncOnMount();
   const setEnabled = useSetWorkflowEnabledRequest();
@@ -186,12 +184,12 @@ function WorkflowListScreen() {
   const enabledCount = allWorkflows.filter((w) => w.isEnabled).length;
 
   async function handleToggleEnabled(workflow: WorkflowRow) {
-    if (!instance) {
+    if (!instanceId) {
       return;
     }
     setTogglingId(workflow.engineWorkflowId);
     try {
-      await setEnabled(toInstanceId(instance._id as Id<"instances">), workflow.engineWorkflowId, !workflow.isEnabled);
+      await setEnabled(instanceId, workflow.engineWorkflowId, !workflow.isEnabled);
     } catch (err) {
       toast({
         title: "Failed to toggle workflow",
@@ -204,12 +202,12 @@ function WorkflowListScreen() {
   }
 
   async function handleDelete() {
-    if (!instance || !deleteTarget) {
+    if (!instanceId || !deleteTarget) {
       return;
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId(toInstanceId(instance._id as Id<"instances">), deleteTarget.engineWorkflowId);
+      await deleteByEngineId(instanceId, deleteTarget.engineWorkflowId);
       toast({ title: "Workflow deleted" });
       setDeleteTarget(null);
     } catch (err) {
@@ -254,7 +252,7 @@ function WorkflowListScreen() {
               data-testid="input-search-workflows"
             />
           </div>
-          <Button onClick={() => navigate(CREATE_PATH)} disabled={!instance} data-testid="button-create-workflow">
+          <Button onClick={() => navigate(CREATE_PATH)} disabled={!instanceId} data-testid="button-create-workflow">
             <Plus className="h-4 w-4 mr-2" />
             Create Workflow
           </Button>
@@ -439,9 +437,9 @@ function CreateWorkflowScreen() {
 function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
 
-  const workflows = useWorkflows(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
+  const workflows = useWorkflows(instanceId);
   const updateFromDefinition = useUpdateWorkflowRequest();
   const deleteByEngineId = useDeleteWorkflowRequest();
   const notRunningHealth = useNotRunningWorkflows().byId.get(engineWorkflowId);
@@ -508,7 +506,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   };
 
   const saveTitle = async () => {
-    if (!instance) {
+    if (!instanceId) {
       return;
     }
     const trimmed = editedTitle.trim();
@@ -519,7 +517,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     try {
       const def = unescapeDollarKeys(workflow.definition) as WorkflowDefinition;
       await updateFromDefinition(
-        toInstanceId(instance._id as Id<"instances">),
+        instanceId,
         engineWorkflowId,
         escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition
       );
@@ -545,13 +543,13 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   };
 
   const handleSave = async () => {
-    if (!instance || !currentDefinition) {
+    if (!instanceId || !currentDefinition) {
       return;
     }
     setIsSaving(true);
     try {
       await updateFromDefinition(
-        toInstanceId(instance._id as Id<"instances">),
+        instanceId,
         engineWorkflowId,
         escapeDollarKeys(currentDefinition) as WorkflowDefinition
       );
@@ -568,12 +566,12 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   };
 
   const confirmDelete = async () => {
-    if (!instance) {
+    if (!instanceId) {
       return;
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId(toInstanceId(instance._id as Id<"instances">), engineWorkflowId);
+      await deleteByEngineId(instanceId, engineWorkflowId);
       setDeleteDialogOpen(false);
       navigate(LIST_PATH);
     } catch (err) {
@@ -647,7 +645,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
             size="sm"
             variant="outline"
             onClick={() => setTestRunOpen(true)}
-            disabled={!instance}
+            disabled={!instanceId}
             data-testid="button-workflow-test-run"
           >
             <Play className="h-4 w-4 mr-2" />
@@ -683,9 +681,9 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
 
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
-        {instance ? (
+        {instanceId ? (
           <WorkflowFlowEditor
-            instanceId={instance._id as Id<"instances">}
+            instanceId={instanceId}
             engineWorkflowId={engineWorkflowId}
             onDefinitionChange={setCurrentDefinition}
           />
@@ -695,9 +693,9 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
           </div>
         )}
       </div>
-      {tab === "runs" && instance && (
+      {tab === "runs" && instanceId && (
         <div className="flex-1 overflow-hidden">
-          <WorkflowRunsPanel instanceId={instance._id as Id<"instances">} engineWorkflowId={engineWorkflowId} />
+          <WorkflowRunsPanel instanceId={instanceId} engineWorkflowId={engineWorkflowId} />
         </div>
       )}
 

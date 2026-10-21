@@ -177,9 +177,7 @@ export default function Setup() {
           {step === "dashboard" && (
             <DashboardStep instanceId={instanceId} status={status} onContinue={() => goTo("overlay")} />
           )}
-          {step === "overlay" && (
-            <OverlayStep instanceId={instanceId} status={status} onContinue={() => goTo("finish")} />
-          )}
+          {step === "overlay" && <OverlayStep status={status} onContinue={() => goTo("finish")} />}
           {step === "finish" && <FinishStep instanceId={instanceId} status={status} />}
         </CardContent>
       </Card>

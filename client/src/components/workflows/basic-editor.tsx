@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useCreateWorkflowRequest } from "@/engine/hooks/use-workflows";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -310,7 +310,7 @@ export function BasicWorkflowEditor() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { instance, instanceLoading, triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
   const createFromDefinition = useCreateWorkflowRequest();
 
   const triggerCategoryOrder = useMemo(
@@ -504,7 +504,7 @@ export function BasicWorkflowEditor() {
       const ids: string[] = [];
       for (const definition of previewDefinitions) {
         const result = await createFromDefinition(
-          toInstanceId(instanceId),
+          instanceId,
           escapeDollarKeys(definition) as Omit<WorkflowDefinition, "id">
         );
         ids.push(result.engineWorkflowId);

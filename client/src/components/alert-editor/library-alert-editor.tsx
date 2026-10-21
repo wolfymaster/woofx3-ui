@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { PROFILES } from "@woofx3/scene/model";
@@ -15,10 +14,10 @@ import {
 } from "@/components/scenes/draft-live-controls";
 import { hasUnsavedEdits, sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
 import { Button } from "@/components/ui/button";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useLibraryAlert } from "@/engine/hooks/use-alert-library";
 import { useEngineInfoRequest } from "@/engine/hooks/use-engine-status";
 import { useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
+import type { InstanceId } from "@/engine/types";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
@@ -27,7 +26,7 @@ import { compositionOfLibraryAlert, inputVariableOptions, libraryPreviewInputs }
 import { catalogOfRows } from "@/lib/scene-composition";
 
 interface LibraryAlertEditorProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   /** The library alert's engine id. */
   compositionId: string;
   onBack: () => void;
@@ -43,8 +42,8 @@ interface LibraryAlertEditorProps {
 export function LibraryAlertEditor({ instanceId, compositionId, onBack }: LibraryAlertEditorProps) {
   const { toast } = useToast();
   useCollapsedSidebar();
-  const row = useLibraryAlert(toInstanceId(instanceId), compositionId);
-  const catalogRows = useSceneWidgetCatalog(toInstanceId(instanceId));
+  const row = useLibraryAlert(instanceId, compositionId);
+  const catalogRows = useSceneWidgetCatalog(instanceId);
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
   const me = useQuery(api.users.getMe);
@@ -53,7 +52,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   // An alert has no preview page to take sceneManager's origin from, so the socket is
   // opened at the engine's overlay URL, which is sceneManager's public URL.
   const publicUrl = useCallback(
-    async () => (await getEngineInfo(toInstanceId(instanceId)))?.overlayPublicUrl ?? null,
+    async () => (await getEngineInfo(instanceId))?.overlayPublicUrl ?? null,
     [instanceId, getEngineInfo]
   );
 

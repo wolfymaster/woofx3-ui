@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
@@ -144,6 +144,7 @@ function ListingBody({
   onRefetch: () => void;
 }) {
   const { instance } = useInstance();
+  const { instanceId: engineInstanceId } = useEngineScope();
   const [, navigate] = useLocation();
   const meta = listingTypeMeta(listing.type);
 
@@ -181,7 +182,7 @@ function ListingBody({
   const [loadedDetail, setLoadedDetail] = useState<{ listingId: string; load: ModuleDetailLoad } | null>(null);
   const [detailAttempt, setDetailAttempt] = useState(0);
   useEffect(() => {
-    if (!instance || !isModuleListing(listing.type)) {
+    if (!engineInstanceId || !isModuleListing(listing.type)) {
       return;
     }
     // Read again on a retry and whenever the installed version changes. The
@@ -190,7 +191,7 @@ function ListingBody({
     void installedVersion;
     let cancelled = false;
     const listingId = listing.id;
-    getModuleDetail(toInstanceId(instance._id), listingId)
+    getModuleDetail(engineInstanceId, listingId)
       .then((detail) => {
         if (!cancelled) {
           setLoadedDetail({ listingId, load: { status: "ready", detail } });
@@ -207,12 +208,12 @@ function ListingBody({
     return () => {
       cancelled = true;
     };
-  }, [getModuleDetail, instance, listing.id, listing.type, installedVersion, detailAttempt]);
+  }, [getModuleDetail, engineInstanceId, listing.id, listing.type, installedVersion, detailAttempt]);
   const detailLoad: ModuleDetailLoad =
     loadedDetail?.listingId === listing.id ? loadedDetail.load : { status: "loading" };
   const moduleDetail = detailLoad.status === "ready" ? detailLoad.detail : null;
 
-  const install = useModuleInstall(instance?._id, onRefetch);
+  const install = useModuleInstall(engineInstanceId, onRefetch);
   const [removing, setRemoving] = useState(false);
   const [bundleInstalled, setBundleInstalled] = useState<{ kind: "scene" | "alert" } | null>(null);
 
@@ -413,11 +414,11 @@ function ListingBody({
 
       <ApproveModulePermissionsDialog {...install.approvalDialogProps} />
 
-      {instance && (
+      {engineInstanceId && (
         <UninstallModuleDialog
           open={removing && installedRow !== undefined}
           onOpenChange={setRemoving}
-          instanceId={instance._id}
+          instanceId={engineInstanceId}
           module={
             installedRow
               ? {

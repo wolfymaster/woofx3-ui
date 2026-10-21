@@ -26,6 +26,11 @@ const CONVEX_GENERATED_TYPE = /\b(?:Id|Doc|FunctionReturnType|FunctionArgs)</;
 const BOOT_WIRING = join(ENGINE_DIR, "context.tsx");
 const INSTANCE_SELECTION = join(CLIENT_SRC, "hooks", "use-instance");
 
+// Outside client/src/engine, screens reach the engine through the gateway's
+// own ids. Cloud-only features keyed by Convex rows convert through this one
+// module, which names each conversion they need.
+const CLOUD_ID_CONVERSIONS = join(CLIENT_SRC, "lib", "cloud-ids.ts");
+
 // `from "x"`, `import "x"` and `import("x")`, static or type-only.
 const IMPORT_SPECIFIER = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)["']([^"']+)["']/g;
 
@@ -108,6 +113,22 @@ function engineFilesReachingBootDependencies(): string[] {
     .sort();
 }
 
+/** What a file imports from the Convex adapter. */
+function adapterImports(file: string, source: string): string[] {
+  return importSpecifiers(source).filter((specifier) => {
+    const target = resolveSpecifier(file, specifier);
+    return target !== null && isWithin(target, CONVEX_ADAPTER_DIR);
+  });
+}
+
+function appFilesReachingAdapter(): string[] {
+  return sourceFiles(CLIENT_SRC)
+    .filter((path) => !isWithin(path, ENGINE_DIR) && path !== CLOUD_ID_CONVERSIONS)
+    .filter((path) => adapterImports(path, readFileSync(path, "utf8")).length > 0)
+    .map((path) => relative(CLIENT_SRC, path))
+    .sort();
+}
+
 describe("engine gateway types", () => {
   test("only the Convex adapter in client/src/engine imports Convex or names its generated types", () => {
     expect(engineFilesNamingConvex(), "map Convex shapes into @/engine/types inside client/src/engine/convex").toEqual(
@@ -138,6 +159,23 @@ describe("engine gateway types", () => {
     expect(bootOnlyImports(file, 'import { useInstance } from "@/hooks/use-instance";')).not.toEqual([]);
     expect(bootOnlyImports(file, 'import { useEngineScope } from "@/engine/context";')).toEqual([]);
     expect(bootOnlyImports(file, 'import { useInstanceSwitcher } from "@/hooks/use-instance-switcher";')).toEqual([]);
+  });
+});
+
+describe("engine adapter boundary", () => {
+  test("outside client/src/engine only lib/cloud-ids.ts reaches the Convex adapter", () => {
+    expect(
+      appFilesReachingAdapter(),
+      "take the instance from useEngineScope(), or convert in lib/cloud-ids.ts"
+    ).toEqual([]);
+  });
+
+  test("the adapter check matches aliased and relative imports", () => {
+    const file = join(CLIENT_SRC, "components", "example.tsx");
+    expect(adapterImports(file, 'import { toInstanceId } from "@/engine/convex/ids";')).not.toEqual([]);
+    expect(adapterImports(file, 'import { toInstanceId } from "../engine/convex/ids";')).not.toEqual([]);
+    expect(adapterImports(file, 'import { useEngineScope } from "@/engine/context";')).toEqual([]);
+    expect(adapterImports(file, 'import { api } from "@convex/_generated/api";')).toEqual([]);
   });
 });
 

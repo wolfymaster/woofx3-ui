@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import {
   CONFIG_CONFLICT_POLICIES,
   CONFIG_SECTIONS,
@@ -38,13 +37,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
   useConfigExportRequest,
   useConfigImportPreviewRequest,
   useConfigImportRequest,
 } from "@/engine/hooks/use-engine-config";
+import type { InstanceId } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -160,7 +160,7 @@ function ExportCard({
   instanceName,
   canExportMembers,
 }: {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   instanceName: string;
   canExportMembers: boolean;
 }) {
@@ -173,7 +173,7 @@ function ExportCard({
   async function handleExport() {
     setIsExporting(true);
     try {
-      const chunks = await exportConfig(toInstanceId(instanceId), { include: sections, includeMembers });
+      const chunks = await exportConfig(instanceId, { include: sections, includeMembers });
       const fileName = backupFileName(instanceName, new Date());
       saveTextFile(fileName, chunks.join(""));
       toast({ title: "Backup downloaded", description: fileName });
@@ -404,7 +404,7 @@ interface PickedFile {
   chunks: string[];
 }
 
-function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; canImport: boolean }) {
+function ImportCard({ instanceId, canImport }: { instanceId: InstanceId; canImport: boolean }) {
   const previewImport = useConfigImportPreviewRequest();
   const importConfig = useConfigImportRequest();
   const { toast } = useToast();
@@ -449,7 +449,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setResult(null);
     try {
       setPlan(
-        await previewImport(toInstanceId(instanceId), {
+        await previewImport(instanceId, {
           bundleChunks: file.chunks,
           onConflict,
           include: sections,
@@ -471,7 +471,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setConfirming(false);
     setBusy("import");
     try {
-      const outcome = await importConfig(toInstanceId(instanceId), {
+      const outcome = await importConfig(instanceId, {
         bundleChunks: file.chunks,
         onConflict,
         include: sections,
@@ -637,7 +637,8 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
 export default function AdminBackup() {
   const { instance, isLoading } = useInstance();
   const access = useQuery(api.configBackup.access, instance ? { instanceId: instance._id } : "skip");
-  const capabilities = useEngineCapabilities(toInstanceId(instance?._id));
+  const { instanceId: engineInstanceId } = useEngineScope();
+  const capabilities = useEngineCapabilities(engineInstanceId);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -648,7 +649,7 @@ export default function AdminBackup() {
 
       {isLoading || (instance && access === undefined) ? (
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      ) : !instance || !access?.canExport ? (
+      ) : !instance || !engineInstanceId || !access?.canExport ? (
         <p className="text-sm text-muted-foreground">Select an instance you are a member of to back it up.</p>
       ) : (
         <>
@@ -659,11 +660,11 @@ export default function AdminBackup() {
             onRetry={capabilities.refresh}
           >
             <ExportCard
-              instanceId={instance._id}
+              instanceId={engineInstanceId}
               instanceName={instance.name}
               canExportMembers={access.canExportMembers}
             />
-            <ImportCard instanceId={instance._id} canImport={access.canImport} />
+            <ImportCard instanceId={engineInstanceId} canImport={access.canImport} />
           </EngineFeatureGate>
           <Card>
             <CardHeader>
