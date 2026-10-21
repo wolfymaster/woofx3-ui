@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
   useSupporterLeaderboardRequest,
@@ -44,8 +45,6 @@ import {
   supporterName,
   thankYouLine,
 } from "@/lib/supporters";
-
-type InstanceId = Id<"instances">;
 
 const MIN_TOTAL_DEBOUNCE_MS = 300;
 
@@ -108,7 +107,7 @@ async function copyToClipboard(text: string): Promise<void> {
 
 export default function Supporters() {
   const { instance } = useInstance();
-  const capabilities = useEngineCapabilities(instance?._id);
+  const capabilities = useEngineCapabilities(toInstanceId(instance?._id));
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
@@ -132,7 +131,7 @@ export default function Supporters() {
   );
 }
 
-function SupportersView({ instanceId }: { instanceId: InstanceId }) {
+function SupportersView({ instanceId }: { instanceId: Id<"instances"> }) {
   const listStreams = useSupporterStreamsRequest();
   const readLeaderboard = useSupporterLeaderboardRequest();
 
@@ -144,7 +143,7 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
   const settledMinTotal = useDebouncedValue(minTotal, MIN_TOTAL_DEBOUNCE_MS);
   const [selected, setSelected] = useState<SelectedViewer | null>(null);
 
-  const streams = useActionResult(instanceId, () => listStreams(instanceId));
+  const streams = useActionResult(instanceId, () => listStreams(toInstanceId(instanceId)));
   useEffect(() => {
     if (streams.data) {
       setRange((current) => reconcileRange(current, streams.data ?? []));
@@ -153,7 +152,7 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
 
   const sessionId = rangeSessionId(range);
   const board = useActionResult(`${instanceId}|${metric}|${rangeValue(range)}|${settledMinTotal}`, () =>
-    readLeaderboard(instanceId, {
+    readLeaderboard(toInstanceId(instanceId), {
       metric,
       minTotal: settledMinTotal,
       ...(sessionId !== undefined ? { sessionId } : {}),
@@ -358,7 +357,7 @@ function ViewerCard({
   selected,
   onSelect,
 }: {
-  instanceId: InstanceId;
+  instanceId: Id<"instances">;
   ranked: RankedSupporter[];
   selected: SelectedViewer | null;
   onSelect: (viewer: SelectedViewer) => void;
@@ -451,7 +450,7 @@ function ViewerCard({
   );
 }
 
-function ViewerDetail({ instanceId, viewer }: { instanceId: InstanceId; viewer: SelectedViewer }) {
+function ViewerDetail({ instanceId, viewer }: { instanceId: Id<"instances">; viewer: SelectedViewer }) {
   const readViewerTotals = useViewerSupportTotalsRequest();
   const findTwitchViewer = useAction(api.supporters.findTwitchViewer);
   const enqueueShoutout = useMutation(api.shoutouts.enqueue);
@@ -459,7 +458,7 @@ function ViewerDetail({ instanceId, viewer }: { instanceId: InstanceId; viewer: 
   const [queueing, setQueueing] = useState(false);
 
   const totals = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
-    readViewerTotals(instanceId, viewer.platformUserId)
+    readViewerTotals(toInstanceId(instanceId), viewer.platformUserId)
   );
   const twitch = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
     findTwitchViewer({ instanceId, by: { twitchUserId: viewer.platformUserId } })

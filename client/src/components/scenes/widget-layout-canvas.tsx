@@ -1,4 +1,3 @@
-import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import {
   alertWidgetName,
@@ -15,6 +14,7 @@ import { CANVAS_STAGE_CLASS, type StageZoom } from "@/components/common/stage-ar
 import { LayersList } from "@/components/overlay-editor/layers-list";
 import { OverlayEditorShell } from "@/components/overlay-editor/overlay-editor-shell";
 import { WidgetPalette } from "@/components/overlay-editor/widget-palette";
+import type { SceneWidgetCatalogRow } from "@/engine/types";
 import { canvasSettingsOf, catalogWidgetOf, type RemoteSelection } from "@/lib/scene-composition";
 import type { VariableOption } from "@/lib/workflow-variables";
 import { CanvasSummary } from "./canvas-summary";

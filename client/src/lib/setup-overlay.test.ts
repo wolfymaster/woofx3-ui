@@ -38,7 +38,7 @@ describe("setupOverlayWidgets", () => {
 
 describe("overlayCatalogState", () => {
   const run = (id: string, status: OverlaySyncRun["status"], widgets: string): OverlaySyncRun => ({
-    _id: id,
+    id,
     status,
     steps: [
       { name: "modules", status: "success" },

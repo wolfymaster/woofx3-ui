@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import { CreateResourceForm } from "@/components/modules/create-resource-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useCreateResourceInstanceRequest, useResourceKind } from "@/engine/hooks/use-module-resources";
 import { useActionObjectInstances } from "@/hooks/use-action-object-instances";
 import { useInstance } from "@/hooks/use-instance";
@@ -622,7 +623,7 @@ function InlineCreateForm({
   const { instance } = useInstance();
   const instanceId = instance?._id;
   const createInstance = useCreateResourceInstanceRequest();
-  const kindDefinition = useResourceKind(instanceId ?? null, kind);
+  const kindDefinition = useResourceKind(toInstanceId(instanceId ?? null), kind);
   const owner = kindDefinition?.moduleName ?? parseKindRef(kind)?.module;
   const createdRef = useRef<ResourceInstanceRow | null>(null);
 
@@ -653,7 +654,7 @@ function InlineCreateForm({
         moduleId={owner}
         kind={{ kind: bareKind(kind), name: kindDefinition?.name ?? noun, schema: kindDefinition?.schema }}
         onCreate={async (resourceInstanceId, displayName, settings) => {
-          const created = await createInstance(instanceId, {
+          const created = await createInstance(toInstanceId(instanceId), {
             moduleName: owner,
             kind: bareKind(kind),
             resourceInstanceId,

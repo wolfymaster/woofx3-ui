@@ -1,8 +1,6 @@
-import type { Id } from "@convex/_generated/dataModel";
-import type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
-import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useEngineGateway } from "@/engine/context";
+import type { EngineCapability, EngineCapabilityReport, InstanceId } from "@/engine/types";
 import {
   type CapabilitySupport,
   capabilitySupport,
@@ -47,9 +45,6 @@ $engineConnected.subscribe((connected) => {
 });
 
 function requestErrorMessage(err: unknown): string {
-  if (err instanceof ConvexError && typeof err.data === "string") {
-    return err.data;
-  }
   return err instanceof Error ? err.message : String(err);
 }
 
@@ -86,7 +81,7 @@ export interface EngineCapabilities {
  * asked again when the engine reconnects. See lib/engine-capabilities.ts for
  * turning the answer into a gate.
  */
-export function useEngineCapabilities(instanceId: Id<"instances"> | undefined): EngineCapabilities {
+export function useEngineCapabilities(instanceId: InstanceId | undefined): EngineCapabilities {
   const getCapabilities = useEngineGateway().status.useCapabilitiesRequest();
   const key = instanceId ?? "";
   const state = useSyncExternalStore(subscribe, () => (key ? (entries.get(key) ?? LOADING) : LOADING));

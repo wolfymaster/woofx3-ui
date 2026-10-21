@@ -3,6 +3,7 @@ import { isRecordedOrigin, type ManualRunOrigin, UNRECORDED_ORIGIN } from "@conv
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, StepForward } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useReplayWorkflowRunRequest } from "@/engine/hooks/use-workflows";
 import { useToast } from "@/hooks/use-toast";
@@ -47,7 +48,7 @@ export function ReplayControls({
   const [triggerId, setTriggerId] = useState<string | null>(null);
   const [waitElapsed, setWaitElapsed] = useState(false);
 
-  const record = useTransientEvent(instanceId, triggerId || null);
+  const record = useTransientEvent(toInstanceId(instanceId), triggerId || null);
 
   // A different run was selected: the previous replay's outcome is not this run's.
   // biome-ignore lint/correctness/useExhaustiveDependencies: engineRunId is the trigger, not a value read inside
@@ -69,7 +70,7 @@ export function ReplayControls({
     // Cleared first so the previous replay's outcome cannot be read as this one's.
     setTriggerId(null);
     try {
-      const result = await replay(instanceId, { engineRunId, fromTaskId, origin });
+      const result = await replay(toInstanceId(instanceId), { engineRunId, fromTaskId, origin });
       setTriggerId(result.triggerId);
     } catch (err) {
       toast({

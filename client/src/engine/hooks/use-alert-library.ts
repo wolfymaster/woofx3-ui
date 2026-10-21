@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useEngineGateway } from "@/engine/context";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { AlertComposition, InstanceId } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
@@ -23,7 +24,7 @@ const refreshed = new Set<string>();
  */
 export function useAlertLibrary(): AlertLibrary {
   const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const instanceId = toInstanceId(instance?._id);
   const enabled = useEngineCapabilities(instanceId).support(...ALERT_LIBRARY_CAPABILITIES) === "supported";
   const { alertLibrary } = useEngineGateway();
   const alerts = alertLibrary.useAlerts(enabled && instanceId ? instanceId : null);

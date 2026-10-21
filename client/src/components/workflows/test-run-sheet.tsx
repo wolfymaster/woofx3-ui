@@ -24,6 +24,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useTransientEvents } from "@/engine/hooks/use-correlated-request";
 import { useTriggerWorkflowRequest, useWorkflowRun } from "@/engine/hooks/use-workflows";
 import type { WorkflowRunDetail, WorkflowTriggerResult } from "@/engine/types";
@@ -337,7 +338,7 @@ function DirectTest({
     setAttempt(null);
     try {
       const result = await withinTimeout(
-        trigger(instance._id, {
+        trigger(toInstanceId(instance._id), {
           workflowNameOrId: engineWorkflowId,
           origin: TEST_RUN_ORIGIN,
           options: takesOptions
@@ -558,8 +559,8 @@ function TestRunOutcome({
   const { waitElapsed, gaveUp } = useTestEventWaits();
   const [executionId, setExecutionId] = useState<string | null>(knownExecutionId);
   const [sticky, setSticky] = useState<TestEventOutcome | null>(null);
-  const rows = useTransientEvents(instance?._id ?? null, triggerId);
-  const recorded = useWorkflowRun(instance ? instance._id : null, executionId || null);
+  const rows = useTransientEvents(toInstanceId(instance?._id ?? null), triggerId);
+  const recorded = useWorkflowRun(toInstanceId(instance ? instance._id : null), executionId || null);
 
   const progress = testRunProgress(rows, engineWorkflowId, waitElapsed);
   const liveOutcome = progress.outcome;

@@ -3,6 +3,7 @@ import { PackagePlus } from "lucide-react";
 import { Link } from "wouter";
 import { STARTER_PACKS_PATH } from "@/components/layout/nav-config";
 import { Button } from "@/components/ui/button";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useHasWorkflows } from "@/engine/hooks/use-workflows";
 
 /**
@@ -11,7 +12,7 @@ import { useHasWorkflows } from "@/engine/hooks/use-workflows";
  * instance that has workflows.
  */
 export function StarterPacksNudge({ instanceId }: { instanceId: Id<"instances"> }) {
-  const hasWorkflows = useHasWorkflows(instanceId);
+  const hasWorkflows = useHasWorkflows(toInstanceId(instanceId));
   if (hasWorkflows !== false) {
     return null;
   }

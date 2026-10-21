@@ -47,6 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -336,7 +337,7 @@ function InstallDialog({
   const { toast } = useToast();
   const install = useAction(api.starterPacks.install);
   const [draft, setDraft] = useState<DraftValues>(() => starterPackDefaults(pack));
-  const { state: capabilities } = useEngineCapabilities(instanceId);
+  const { state: capabilities } = useEngineCapabilities(toInstanceId(instanceId));
   // Until the engine answers, a feature it may lack stays off; the install
   // action checks again against the engine's own answer.
   const features = useMemo(

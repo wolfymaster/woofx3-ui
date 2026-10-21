@@ -1,8 +1,9 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { Play } from "lucide-react";
 import type { ComponentType } from "react";
+import type { ModuleResourceInstance } from "@/engine/types";
 import type { ResourceAction } from "@/lib/resource-actions";
-import { type ResourceInstanceDoc, resourceName } from "@/lib/resource-instance";
+import { resourceName } from "@/lib/resource-instance";
 import { isBuiltInKind, pluralKindName, resourceKindPath } from "@/lib/resource-kind-route";
 import { summarizeResourceValue } from "@/lib/resource-values";
 import type { PaletteCommand } from "./types";
@@ -20,7 +21,7 @@ export interface PaletteResourceKind {
 }
 
 export type RunKindAction = (
-  row: ResourceInstanceDoc,
+  row: ModuleResourceInstance,
   action: ResourceAction,
   parameters: Record<string, unknown>
 ) => Promise<boolean>;
@@ -34,7 +35,7 @@ export type RunKindAction = (
  */
 export function resourceKindItemCommands(
   kinds: readonly PaletteResourceKind[],
-  instances: readonly ResourceInstanceDoc[],
+  instances: readonly ModuleResourceInstance[],
   values: Readonly<Record<string, unknown>>,
   runAction: RunKindAction
 ): PaletteCommand[] {
@@ -77,7 +78,7 @@ export function resourceKindItemCommands(
 function actionCommand(
   item: PaletteCommand,
   href: string,
-  row: ResourceInstanceDoc,
+  row: ModuleResourceInstance,
   action: ResourceAction,
   runAction: RunKindAction
 ): PaletteCommand {

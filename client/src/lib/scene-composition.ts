@@ -1,6 +1,6 @@
-import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { CatalogWidget, Peer } from "@woofx3/scene/editor";
 import { type CompositionDocument, evenKeys, type PlacementDocument, stackOrder } from "@woofx3/scene/model";
+import type { SceneWidgetCatalogRow } from "@/engine/types";
 import type { Scene, Widget } from "@/types";
 
 /**

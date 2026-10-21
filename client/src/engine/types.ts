@@ -1,29 +1,14 @@
-import type { api } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
-import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
-import type { FunctionArgs, FunctionReturnType } from "convex/server";
+// The types every EngineGateway speaks. They describe the engine's data as the
+// UI uses it, whoever serves it: a gateway maps its own storage or wire shapes
+// into these at its edge, so nothing here may name a gateway's backend.
 
-export type { CompositionPreviewUrl } from "@convex/compositionPreview";
-export type { AlertClearResult, AlertReplayResult, AlertSkipResult } from "@convex/lib/alertQueueResults";
-export type { ConfigImportPlan, ConfigImportResult } from "@convex/lib/configBundle";
-export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
-export type { ObsStatus } from "@convex/lib/engineObsStatus";
-export type { FieldOptionsReference } from "@convex/lib/fieldOptions";
-export type { SceneEditorSession as SceneEditorGrant } from "@convex/lib/sceneEditorSession";
-export type { RecapTimelineEvents, StreamRecapEngineDetail } from "@convex/lib/streamRecap";
-export type { Supporter, SupporterStream } from "@convex/lib/supporters";
-export type { WidgetThemes } from "@convex/lib/widgetThemes";
-export type { ModuleDetailResult as ModuleDetail } from "@convex/moduleDetail";
-export type { ModuleSettingValue } from "@convex/moduleSettingsActions";
+import type { SceneEditorSession } from "@woofx3/api";
+import type { ConfigField } from "@woofx3/api/ui-schema";
+
 export type {
-  HostedStorageUsage,
-  PaginatedResourcesDto as ResourcePage,
-  ResourceDto as Resource,
-} from "@convex/resources";
-export type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
-export type { OpenSessionRefresh } from "@convex/streamRecap";
-export type { NotRunningWorkflow } from "@convex/workflowHealth";
-export type {
+  AlertClearResult,
+  AlertReplayResult,
+  AlertSkipResult,
   EngineInfo,
   EventLogPage,
   EventLogQuery,
@@ -31,18 +16,44 @@ export type {
   EventLogSettings,
   ModuleFileContent,
   ModuleFileList,
+  ObsStatus,
   StorageConfig,
   StreamEventFrame,
   UploadGrant,
+  ViewerFact,
+  WidgetThemes,
 } from "@woofx3/api";
 export type { WorkflowRun } from "@/lib/transport";
 
-/** The Convex `_id` of the instance record, which is the instance's only identity. */
-export type InstanceId = Id<"instances">;
+/** A grant to open sceneManager's editor socket for one scene. */
+export type SceneEditorGrant = SceneEditorSession;
+
+// ==================== Identities ====================
 
 /**
- * A subscribed read, shaped like Convex's `useQuery`: `undefined` while
- * loading, the value once known, and a thrown error on failure.
+ * An opaque id a gateway issued. Branded so ids of different things cannot be
+ * swapped for each other, or for a backend's own id type, without a gateway
+ * converting them.
+ */
+type GatewayId<Name extends string> = string & { readonly __gatewayId: Name };
+
+/** The instance a call is for: one engine deployment. */
+export type InstanceId = GatewayId<"instance">;
+
+/** An installed module, as the gateway that lists installed modules knows it. */
+export type ModuleId = GatewayId<"module">;
+
+/** A dashboard macro. Macros are kept by the dashboard; only running one reaches the engine. */
+export type MacroId = GatewayId<"macro">;
+
+/** A callback recorded from the engine, kept for debugging. */
+export type WebhookEventId = GatewayId<"webhookEvent">;
+
+// ==================== Read shapes ====================
+
+/**
+ * A subscribed read: `undefined` while loading, the value once known, and a
+ * thrown error on failure.
  */
 export type Live<T> = T | undefined;
 
@@ -60,8 +71,8 @@ export interface Fetched<T> {
 }
 
 /**
- * A paged subscribed read, shaped like Convex's `usePaginatedQuery`: `results`
- * grows as `loadMore` brings in pages, and every loaded page stays live.
+ * A paged subscribed read: `results` grows as `loadMore` brings in pages, and
+ * every loaded page stays live.
  */
 export interface Paginated<T> {
   results: T[];
@@ -84,18 +95,269 @@ export interface EngineScope {
   isInstanceLoading: boolean;
 }
 
-// Records the engine mirrors into Convex keep their Convex fields (`_id`,
-// `_creationTime`): callers use them for keys and ordering, and a gateway
-// that reads the engine directly has to supply them too.
+// ==================== Status ====================
+
+/** The engine features this UI knows how to detect. */
+export type EngineCapability =
+  | "alerts.compositionLayout"
+  | "alerts.queueControls"
+  | "analytics.aggregates"
+  | "analytics.gauges"
+  | "analytics.sessionEvents"
+  | "analytics.sessions"
+  | "assets.sizedUploads"
+  | "compositions.alerts"
+  | "compositions.preview"
+  | "config.bundles"
+  | "events.log"
+  | "modules.files"
+  | "modules.localEndpoints"
+  | "modules.marketplaceInstall"
+  | "modules.oauth"
+  | "obs.control"
+  | "obs.status"
+  | "scenes.behaviors"
+  | "scenes.editorSessions"
+  | "scenes.editorSync"
+  | "twitch.ads"
+  | "twitch.chat"
+  | "twitch.clips"
+  | "twitch.dashboardTokens"
+  | "twitch.moderation"
+  | "twitch.pins"
+  | "twitch.streamInfo"
+  | "widgets.themes"
+  | "workflow.conditionListReferences"
+  | "workflow.delayWait"
+  | "workflow.dryRun"
+  | "workflow.health"
+  | "workflow.realCancel"
+  | "workflow.reservedSubjects"
+  | "workflow.testRunOptions"
+  | "workflow.viewerFacts";
+
+/**
+ * What an engine supports, as far as this UI cares. `legacy` is an engine
+ * that predates capability reports and so supports none of them.
+ */
+export interface EngineCapabilityReport {
+  legacy: boolean;
+  /** Known ids only, sorted and unique. */
+  capabilities: EngineCapability[];
+}
+
+/** The instance's stream state, kept current by engine callbacks and polls. */
+export interface InstanceLiveState {
+  isLive: boolean;
+  twitchUserId?: string;
+  /** ISO time the stream went online; cleared when it goes offline. */
+  startedAt?: string;
+  /** The logical session, which spans brief dropouts and so outlives `startedAt`. */
+  sessionId?: string;
+  sessionStartedAt?: string;
+  streamTitle?: string;
+  gameName?: string;
+  viewerCount?: number;
+  lastUpdateSource: "webhook" | "poll";
+  /** Epoch ms. */
+  lastUpdatedAt: number;
+}
+
+/** The step of a mirror sync that copies one kind of engine data. */
+export type EngineSyncStepName =
+  | "actions"
+  | "widgets"
+  | "modules"
+  | "workflows"
+  | "scenes"
+  | "commands"
+  | "groups"
+  | "functions"
+  | "triggers"
+  | "resources";
+
+/** When the instance's mirror last synced and when it may sync next. Times are epoch ms. */
+export interface EngineSyncSchedule {
+  status: "running" | "error" | "success" | "idle";
+  nextEligibleAt: number;
+  lastError: string;
+  lastSyncedAt: number;
+  lastDurationMs: number;
+  consecutiveErrorCount: number;
+  syncIntervalMs: number;
+}
+
+/** One sync of the mirror and its steps. Times are epoch ms. */
+export interface EngineSyncRun {
+  id: string;
+  trigger: "manual" | "scheduled" | "registration";
+  status: "running" | "error" | "success";
+  startedAt: number;
+  completedAt?: number;
+  error?: string;
+  steps: {
+    name: EngineSyncStepName;
+    status: "pending" | "running" | "error" | "success";
+    itemsProcessed: number;
+    startedAt?: number;
+    completedAt?: number;
+    error?: string;
+  }[];
+}
+
+/** The mirror's sync bookkeeping: the schedule plus the five most recent runs. */
+export interface EngineSyncState {
+  syncState: EngineSyncSchedule | null;
+  currentRun: EngineSyncRun | null;
+  recentRuns: EngineSyncRun[];
+}
+
+export type EngineSyncRequest = { scheduled: true } | { scheduled: false; reason: "already-running" };
+
+export type EngineConnectionTest = { ok: true } | { ok: false; error: string };
+
+// ==================== Resources ====================
+
+/** An uploaded file or a folder. Times are ISO strings. */
+export interface Resource {
+  id: string;
+  name: string;
+  parentId: string | null;
+  isFolder: boolean;
+  kind: string;
+  contentType: string;
+  size: number;
+  status: string;
+  url: string | null;
+  thumbnailUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResourcePage {
+  resources: Resource[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** What the instance's hosted storage holds against its plan; a null limit is unlimited. */
+export interface HostedStorageUsage {
+  usedBytes: number;
+  limitBytes: number | null;
+  fileLimitBytes: number | null;
+}
+
+export interface ResourceQuery {
+  folderId?: string | null;
+  kind?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+/** The file an upload grant is asked for; the grant is bound to `size`. */
+export interface UploadRequest {
+  name: string;
+  contentType: string;
+  parentId: string | null;
+  size: number;
+}
+
+/** A rename (`name`), a move (`parentId`), or both. */
+export interface ResourceChanges {
+  name?: string;
+  parentId?: string | null;
+}
+
+// ==================== Event log ====================
+
+/** One webhook log entry without its payload, which is read on its own. */
+export interface WebhookEventSummary {
+  id: WebhookEventId;
+  eventType: string;
+  /** Whether the engine sent it, or the dashboard fired it again. */
+  source: "webhook" | "retrigger";
+  /** Epoch ms. */
+  receivedAt: number;
+  payloadLength: number;
+}
+
+// ==================== Alerts ====================
+
+export type EngineAlertStatus =
+  | "sent"
+  | "playing"
+  | "completed"
+  | "failed"
+  | "replayed"
+  | "timed_out"
+  | "skipped"
+  | "pending"
+  | "dispatched"
+  | "unknown";
 
 /** One alert the engine dispatched, kept current by its `alert.*` callbacks. */
-export type EngineAlert = Doc<"engineAlerts">;
+export interface EngineAlert {
+  /** The gateway's id of the record, for keys. */
+  id: string;
+  engineAlertId: string;
+  status: EngineAlertStatus;
+  /** The alert's JSON as the engine sent it. */
+  payload?: string;
+  workflowId?: string;
+  sourceEventId?: string;
+  engineStatus?: string;
+  envelopeId?: string;
+  dispatchedAt?: string;
+  playedAt?: string;
+  completedAt?: string;
+  error?: string;
+  engineCreatedAt?: string;
+  engineUpdatedAt?: string;
+  engineVersion?: number;
+  /** Epoch ms the dashboard first heard of the alert. */
+  createdAt: number;
+  /** Epoch ms of the last callback that moved the alert on. */
+  progressedAt?: number;
+  /** Epoch ms the alert was marked unconfirmed for going quiet mid-flight. */
+  unconfirmedAt?: number;
+}
 
-/** How alerts have gone over a window: totals by outcome and one bucket per hour. */
-export type AlertOverview = NonNullable<FunctionReturnType<typeof api.engineAlerts.overview>>;
+/** How alerts have gone over a window: totals by outcome and one bucket per hour. Times are epoch ms. */
+export interface AlertOverview {
+  hours: number;
+  since: number;
+  bucketMs: number;
+  /** True when the window held more alerts than were counted, so the counts cover the newest only. */
+  truncated: boolean;
+  totals: {
+    total: number;
+    completed: number;
+    failed: number;
+    inFlight: number;
+    unconfirmed: number;
+    skipped: number;
+    replayed: number;
+  };
+  buckets: { start: number; total: number; failed: number }[];
+}
 
-/** One alert in the engine's library, cached from its webhooks. */
-export type AlertComposition = Doc<"alertCompositions">;
+/** One alert in the engine's library. The composition parts are the engine's stored JSON, parsed. */
+export interface AlertComposition {
+  engineCompositionId: string;
+  name: string;
+  description?: string;
+  widgets: unknown[];
+  layout: unknown;
+  behaviors: unknown;
+  inputs: unknown[];
+  createdByType?: string;
+  createdByRef?: string;
+  /** Epoch ms. */
+  createdAt: number;
+  updatedAt: number;
+}
 
 /** A new library alert: the composition in the engine's stored JSON shapes. */
 export interface NewLibraryAlert {
@@ -107,80 +369,240 @@ export interface NewLibraryAlert {
   inputsJson?: string;
 }
 
-/** A chat command, mirrored from the engine's webhooks. */
-export type ChatCommand = Doc<"chatCommands">;
+/** What the alert editor frames to preview a composition, and until when it may load it. */
+export interface CompositionPreviewUrl {
+  url: string;
+  /** Epoch ms after which the page refuses the URL's token. */
+  expiresAt: number;
+}
 
-/** A group of users a chat command can be limited to, mirrored from the engine's webhooks. */
-export type ChatCommandGroup = Doc<"chatCommandGroups">;
+// ==================== Chat commands ====================
 
-export type NewChatCommand = Omit<FunctionArgs<typeof api.chatCommandActions.createCommand>, "instanceId">;
+/** A chat command. `actions` and `steps` carry their `$` keys escaped (lib/dollar-keys). */
+export interface ChatCommand {
+  engineCommandId: string;
+  /** Without the `!` prefix. */
+  command: string;
+  /** The actions the command runs when the engine has not linked it to a workflow yet. */
+  actions: unknown[];
+  /** The workflow the command runs, by engine id, and its tasks. */
+  engineWorkflowId?: string;
+  steps?: unknown[];
+  /** Why the engine could not give the command its workflow. */
+  workflowError?: string;
+  /** `{variable}` placeholders read from the text after the command word; absent reads as "". */
+  argumentPattern?: string;
+  /** Seconds; 0 never throttles. */
+  cooldown: number;
+  priority: number;
+  enabled: boolean;
+  visibility: "public" | "restricted";
+  /** `engineGroupId`s of the groups that may run a restricted command. */
+  groupIds: string[];
+  /** Lowercased usernames granted direct access. */
+  usernames: string[];
+  /** Epoch ms. */
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** A group of users a chat command can be limited to. */
+export interface ChatCommandGroup {
+  engineGroupId: string;
+  name: string;
+  description: string;
+  /** Seeded by the engine; cannot be renamed or deleted. Absent reads as false. */
+  isBuiltIn?: boolean;
+  /** ISO time, as the engine reports it. */
+  engineCreatedAt: string;
+  /** Epoch ms. */
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface ChatCommandDefinition {
+  command: string;
+  enabled: boolean;
+  cooldown: number;
+  visibility: "public" | "restricted";
+  /** `$` keys escaped (lib/dollar-keys). */
+  actions?: unknown[];
+  /** `$` keys escaped (lib/dollar-keys). */
+  steps?: unknown[];
+  argumentPattern?: string;
+  groupIds?: string[];
+  usernames?: string[];
+}
+
+export interface NewChatCommand extends ChatCommandDefinition {
+  priority?: number;
+}
 
 /** A command's full new definition, keyed by `engineCommandId`. */
-export type ChatCommandChanges = Omit<FunctionArgs<typeof api.chatCommandActions.updateCommand>, "instanceId">;
+export interface ChatCommandChanges extends ChatCommandDefinition {
+  engineCommandId: string;
+  priority: number;
+}
 
-export type NewChatCommandGroup = Omit<FunctionArgs<typeof api.chatCommandActions.createGroup>, "instanceId">;
+export interface NewChatCommandGroup {
+  name: string;
+  description?: string;
+}
 
-export type ChatCommandGroupChanges = Omit<FunctionArgs<typeof api.chatCommandActions.updateGroup>, "instanceId">;
+export interface ChatCommandGroupChanges {
+  engineGroupId: string;
+  name: string;
+  description?: string;
+}
 
-/** One runtime instance of a module-declared resource kind (a counter, a timer, a queue), mirrored from the engine's webhooks. */
-export type ModuleResourceInstance = Doc<"moduleResourceInstances">;
+// ==================== Module resources ====================
 
-/** The installed module that provides a resource kind, merged with the kind's declaration. */
-export type ResourceKindDefinition = NonNullable<FunctionReturnType<typeof api.resourceKinds.getForInstance>>;
+/** One runtime instance of a module-declared resource kind (a counter, a timer, a queue). */
+export interface ModuleResourceInstance {
+  /** `{module}:{kind}:{resourceInstanceId}`, the id everything else refers to it by. */
+  canonicalId: string;
+  /** The engine's own id of the instance. */
+  engineInstanceId: string;
+  resourceInstanceId: string;
+  kind: string;
+  moduleId: ModuleId;
+  moduleName: string;
+  displayName: string;
+  /** Values for the kind's `schema` fields. */
+  settings?: unknown;
+}
 
 /** A resource kind an installed module declares, with the module declaring it. */
-export type DeclaredResourceKind = FunctionReturnType<typeof api.resourceKinds.listForInstance>[number];
+export interface DeclaredResourceKind {
+  kind: string;
+  name: string;
+  description: string;
+  /** A lucide icon name, when the module chose one. */
+  icon?: string;
+  schema: unknown[];
+  /** Where in an instance's value the reading shown beside its name is; absent means the whole value. */
+  summaryPath?: string;
+  moduleName: string;
+}
 
-/** Every mirrored resource value on the instance, keyed by canonical id. */
-export type ResourceValues = FunctionReturnType<typeof api.resourceValues.listForInstance>;
+/** The installed module that provides a resource kind, merged with the kind's declaration. */
+export type ResourceKindDefinition = DeclaredResourceKind;
+
+/** Every resource value on the instance, keyed by canonical id. */
+export type ResourceValues = Record<string, unknown>;
 
 /** A new resource instance; `settings` are values for the kind's `schema` fields. */
-export type NewModuleResourceInstance = Omit<
-  FunctionArgs<typeof api.moduleResourceActions.createResourceInstance>,
-  "instanceId"
->;
+export interface NewModuleResourceInstance {
+  displayName: string;
+  kind: string;
+  moduleName: string;
+  resourceInstanceId: string;
+  settings?: Record<string, unknown>;
+}
 
-export type CreatedModuleResourceInstance = FunctionReturnType<typeof api.moduleResourceActions.createResourceInstance>;
+export interface CreatedModuleResourceInstance {
+  canonicalId: string;
+  displayName: string;
+  /** The engine's id of the new resource instance. */
+  instanceId: string;
+}
 
 /** A rename and the settings the instance runs with; its identity is fixed. */
-export type ModuleResourceInstanceChanges = Omit<
-  FunctionArgs<typeof api.moduleResourceActions.updateResourceInstance>,
-  "instanceId"
->;
+export interface ModuleResourceInstanceChanges {
+  canonicalId: string;
+  displayName: string;
+  settings: Record<string, unknown>;
+}
 
-/** The Convex id of an installed module's repository row. */
-export type ModuleId = Id<"moduleRepository">;
+// ==================== Modules ====================
 
-/** The Convex id of a dashboard macro. Macros are kept in Convex; only running one reaches the engine. */
-export type MacroId = Id<"macros">;
+export type ManifestSettingAction =
+  | { kind: "internal"; request: { event: string; payload?: Record<string, unknown> }; timeoutMs?: number }
+  | {
+      kind: "integration";
+      integration: string;
+      /** Whether the manifest declares the integration under `oauth[]`, the only integrations a button can connect. */
+      declared: boolean;
+    };
 
-/** The value given for one of a macro's variables. */
-export type MacroVariableValue = FunctionArgs<typeof api.macros.run>["values"][number];
+/** A module-level setting its manifest declares. */
+export interface ManifestSettingField {
+  id: string;
+  label: string;
+  description: string;
+  type: string;
+  required: boolean;
+  defaultValue?: string;
+  /** Present only when `type === "button"`. */
+  action?: ManifestSettingAction;
+  /** Present only when `type === "resource_ref"`: the kind of instance it links. */
+  resourceKind?: string;
+  /** Present only when `type === "list"`: the fields of one row. */
+  itemFields?: ConfigField[];
+}
 
-/** The key of the workflow run a macro started, or null when it started none. */
-export type MacroRunResult = FunctionReturnType<typeof api.macros.run>;
+/** A function a module ships. */
+export interface ModuleFunctionSummary {
+  /** `{moduleId}:function:{manifestId}`; unique within a module. */
+  qualifiedName: string;
+  name: string;
+  file?: string;
+  entryPoint?: string;
+  runtime?: string;
+}
 
-/** Which supporters to rank: by bits or gifted subs, for one stream (`sessionId`) or all time, at or above `minTotal`. */
-export type SupporterLeaderboardQuery = Omit<FunctionArgs<typeof api.supporters.leaderboard>, "instanceId">;
+/** A runtime instance type a module's manifest declares. */
+export type ManifestResourceKind = Omit<DeclaredResourceKind, "moduleName">;
 
-/** One viewer's lifetime support and their support in each of the last few live streams. */
-export type ViewerSupportTotals = FunctionReturnType<typeof api.supporters.viewerTotals>;
+/** Something on the streamer's network a module reaches (`local[]` in its manifest). */
+export interface LocalEndpointSummary {
+  id: string;
+  name: string;
+  protocol: "websocket" | "http";
+}
 
-/**
- * An event to publish on the engine's bus. `triggerId` is the key the runs it
- * starts report under; `triggeredBy` tags those runs (see
- * convex/lib/manualRunOrigin.ts).
- */
-export type EngineTestEvent = Omit<FunctionArgs<typeof api.debug.fireTrigger>, "instanceId">;
+/** A module's manifest-derived detail, merged with its marketplace listing when it has one. */
+export interface ModuleDetail {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  /** Latest version available in the marketplace, when the module is published there. */
+  latestVersion?: string;
+  author: string;
+  category: string;
+  tags: string[];
+  iconUrl?: string;
+  readme?: string;
+  isInstalled: boolean;
+  triggers: { key: string; name: string; description: string; color: string }[];
+  actions: { key: string; name: string; description: string; color: string }[];
+  functions: ModuleFunctionSummary[];
+  widgets: { slug: string; name: string }[];
+  workflows: { slug: string; name: string }[];
+  /** The installed module, only present for installed modules. */
+  moduleDbId?: ModuleId;
+  manifestSettings: ManifestSettingField[];
+  manifestResourceKinds: ManifestResourceKind[];
+  /** Permission ids the manifest of `version` declares; null when they could not be read. */
+  permissions: string[] | null;
+  /** Permission ids `latestVersion` declares, for an installed module with a newer marketplace version. */
+  latestPermissions?: string[] | null;
+  /** What the manifest of `version` reaches on the streamer's network; null when unreadable. */
+  localEndpoints: LocalEndpointSummary[] | null;
+  /** `local[]` of `latestVersion`, alongside `latestPermissions`. */
+  latestLocalEndpoints?: LocalEndpointSummary[] | null;
+}
 
-/** Whether the engine published the event; `message` says why not. */
-export type PublishedTestEvent = FunctionReturnType<typeof api.debug.fireTrigger>;
-
-/** Which sections to back up, and whether to include each group's members. */
-export type ConfigExportRequest = Omit<FunctionArgs<typeof api.configBackup.exportConfig>, "instanceId">;
-
-/** A backup, as the chunks it was read into, and how to apply it. */
-export type ConfigImportRequest = Omit<FunctionArgs<typeof api.configBackup.importConfig>, "instanceId">;
+/** A declared setting's current value. A secret's value never comes back, only whether one is set. */
+export interface ModuleSettingValue {
+  id: string;
+  moduleId: string;
+  key: string;
+  value: string;
+  valueType: string;
+  isSet?: boolean;
+}
 
 /** A workflow on the engine, as the pickers that list them need it. */
 export interface EngineWorkflowOption {
@@ -188,12 +610,31 @@ export interface EngineWorkflowOption {
   name: string;
 }
 
+// ==================== Requests ====================
+
 /**
- * A short-lived event Convex records from an engine callback under a
- * correlation key, so a caller can follow work the engine does after the
- * request that started it has returned. Rows expire after about a minute.
+ * A short-lived event recorded from an engine callback under a correlation
+ * key, so a caller can follow work the engine does after the request that
+ * started it has returned. Events expire after about a minute.
  */
-export type TransientEvent = Doc<"transientEvents">;
+export interface TransientEvent {
+  correlationKey: string;
+  type: string;
+  status: "progress" | "success" | "error";
+  message?: string;
+  data?: unknown;
+  /** Epoch ms. */
+  expiresAt: number;
+}
+
+/** Which field of which module declaration to ask a module's worker about. */
+export interface FieldOptionsReference {
+  moduleId: string;
+  declaration: "trigger" | "action" | "widget" | "resource" | "setting";
+  /** The trigger, action, widget or resource kind; absent for a module setting. */
+  declarationId?: string;
+  fieldId: string;
+}
 
 /** The requests the engine answers with a transient event, and what each one sends. */
 export interface CorrelatedRequests {
@@ -237,95 +678,485 @@ export interface EventWatch {
   onUpdate(onChange: () => void): () => void;
 }
 
-/** One scene on the engine, cached from its webhooks; `id` repeats `_id` and `widgets` is never missing. */
-export type SceneRecord = FunctionReturnType<typeof api.scenes.list>[number];
+// ==================== Scenes ====================
+
+/** One overlay scene. `widgets` and `layout` are the engine's stored JSON, parsed. */
+export interface SceneRecord {
+  /** The gateway's id of the scene, for keys and selection. */
+  id: string;
+  engineSceneId?: string;
+  name: string;
+  description?: string;
+  widgets: unknown[];
+  layout?: unknown;
+  sceneWidgets?: unknown[];
+  width?: number;
+  height?: number;
+  backgroundColor?: string;
+  /** Epoch ms. */
+  createdAt: number;
+  updatedAt: number;
+}
 
 /** A new scene: its name and, in the engine's stored JSON shapes, its widgets and layout. */
-export type NewScene = Omit<FunctionArgs<typeof api.sceneActions.createScene>, "instanceId">;
+export interface NewScene {
+  name: string;
+  description?: string;
+  widgetsJson?: string;
+  layoutJson?: string;
+}
 
 /** The parts of a scene to replace; a field left out keeps its value. */
-export type SceneChanges = Omit<FunctionArgs<typeof api.sceneActions.updateScene>, "instanceId" | "engineSceneId">;
+export type SceneChanges = Partial<NewScene>;
+
+/** A widget the instance can place, with the name of the module providing it. */
+export interface SceneWidgetCatalogRow {
+  widgetId: string;
+  name: string;
+  description?: string;
+  moduleId?: ModuleId;
+  moduleName: string;
+  directory: string;
+  alertTypes: string[];
+  settings: unknown[];
+  surfaces?: string[];
+  hostsSurface?: string;
+  taxonomy?: string[];
+  projectionKey?: string;
+  createdByType?: string;
+  createdByRef?: string;
+  behaviorKinds?: {
+    transitions: { id: string; label: string }[];
+    effects: { id: string; label: string }[];
+  };
+  /** Epoch ms. */
+  createdAt: number;
+}
+
+// ==================== Workflows ====================
+
+/** A workflow on the engine. `definition` and `nodes` carry their `$` keys escaped (lib/dollar-keys). */
+export interface Workflow {
+  engineWorkflowId: string;
+  definition: unknown;
+  isEnabled: boolean;
+  /** The builder's nodes and edges. */
+  nodes?: unknown[];
+  edges?: unknown[];
+  projectionKey?: string;
+  projectionUpdatedAt?: number;
+  /** Epoch ms. */
+  createdAt: number;
+  updatedAt: number;
+}
 
 /**
- * What the UI's workflow logic reads of a workflow: the engine's definition
- * and enabled flag, and the builder's nodes. Structural, so the pure libraries
- * work on any gateway's rows; a read returns the whole record, which has these.
+ * What the UI's workflow logic reads of a workflow. Structural, so the pure
+ * libraries work on any gateway's rows; a read returns the whole record,
+ * which has these.
  */
-export type WorkflowRecord = Pick<Doc<"workflows">, "engineWorkflowId" | "definition" | "isEnabled" | "nodes">;
+export type WorkflowRecord = Pick<Workflow, "engineWorkflowId" | "definition" | "isEnabled" | "nodes">;
 
-/** A value `${viewer.*}` resolves on the engine, for the condition builder. */
-export type ViewerFact = FunctionReturnType<typeof api.viewerFacts.list>[number];
+/** A trigger an installed module registers, as the builder offers it. */
+export interface WorkflowCatalogTrigger {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  color: string;
+  icon: string;
+  event: string | undefined;
+  allowVariants: boolean | undefined;
+  configFields: unknown[] | undefined;
+  emits: unknown[] | undefined;
+  sentence: string | undefined;
+  summary: string | undefined;
+  summaryDetails: string[] | undefined;
+  projectionKey: string | undefined;
+  taxonomy: string[] | undefined;
+  transport: string | undefined;
+  canonicalRef: string | undefined;
+  moduleId: ModuleId | undefined;
+  moduleName: string | undefined;
+  moduleLabel: string;
+}
 
-/** A workflow on the engine, mirrored from its webhooks. */
-export type Workflow = Doc<"workflows">;
+/** An action an installed module registers, as the builder offers it. */
+export interface WorkflowCatalogAction {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  color: string;
+  icon: string;
+  configFields: unknown[] | undefined;
+  returns: unknown[] | undefined;
+  sentence: string | undefined;
+  projectionKey: string | undefined;
+  taxonomy: string[] | undefined;
+  canonicalRef: string | undefined;
+  handlerType: string | undefined;
+  functionCall: string | undefined;
+  moduleId: ModuleId | undefined;
+  moduleName: string | undefined;
+  moduleLabel: string;
+}
 
 /** The workflow builder's catalog: the triggers and actions the installed modules register. */
-export type WorkflowCatalog = NonNullable<FunctionReturnType<typeof api.workflowCatalog.get>>;
+export interface WorkflowCatalog {
+  triggers: WorkflowCatalogTrigger[];
+  actions: WorkflowCatalogAction[];
+}
+
+/** Who started a run, which the run history and the replay controls tell apart. */
+export type WorkflowRunOrigin = "dashboard" | "test" | "replay";
 
 /** A manual run: the workflow by name or id, its parameters, and test-run options. */
-export type WorkflowTrigger = Omit<FunctionArgs<typeof api.workflowActions.trigger>, "instanceId">;
+export interface WorkflowTrigger {
+  workflowNameOrId: string;
+  parameters?: Record<string, string>;
+  origin?: WorkflowRunOrigin;
+  options?: {
+    platform?: string;
+    dryRun?: boolean;
+    triggerData?: Record<string, unknown>;
+    skipConditions?: boolean;
+  };
+}
+
+/** A trigger condition a test run's event did not meet. */
+export interface UnmetTriggerCondition {
+  field: string;
+  operator: string;
+  value: unknown;
+  /** Set when the condition could not be evaluated. */
+  error?: string;
+}
 
 /** How the engine answered a manual run; its progress arrives in transient events under `triggerId`. */
-export type WorkflowTriggerResult = FunctionReturnType<typeof api.workflowActions.trigger>;
+export interface WorkflowTriggerResult {
+  triggerId: string;
+  /** `requested`, `started`, or `conditions_not_met`. */
+  status: string;
+  executionId: string | null;
+  unmetConditions: UnmetTriggerCondition[];
+  dryRun: boolean;
+  /** True when the engine ran the workflow without the test-run options it was given. */
+  optionsIgnored: boolean;
+}
 
-/** Whether the engine takes test-run options. */
-export type TestRunCapabilities = FunctionReturnType<typeof api.workflowActions.testRunCapabilities>;
+/** Whether the engine takes test-run options; `unknown` when it could not be asked. */
+export interface TestRunCapabilities {
+  options: "supported" | "unsupported" | "unknown";
+}
 
 /** A recorded run to run again, whole or from one step. */
-export type WorkflowReplay = Omit<FunctionArgs<typeof api.workflowActions.replay>, "instanceId">;
+export interface WorkflowReplay {
+  engineRunId: string;
+  fromTaskId?: string;
+  origin?: WorkflowRunOrigin;
+}
 
-/** How stopping a run went: the engine's outcome, or `marked` when an older engine only marked the row. */
-export type WorkflowCancelResult = FunctionReturnType<typeof api.workflowActions.cancelRun>;
+/** How stopping a run went: the engine's outcome, or `marked` when an older engine only marked it stopped. */
+export interface WorkflowCancelResult {
+  outcome: "cancelled" | "already_finished" | "marked";
+  status: string;
+}
+
+/** A recorded run. Engine times are ISO strings; `createdAt` is epoch ms. */
+export interface WorkflowRunRecord {
+  engineRunId: string;
+  workflowId: string;
+  workflowName: string | undefined;
+  status: string;
+  triggeredBy?: string;
+  /** The triggering event's JSON. */
+  triggerEvent?: string;
+  dryRun?: boolean;
+  error?: string;
+  startedAt?: string;
+  completedAt?: string;
+  engineCreatedAt: string;
+  engineUpdatedAt: string;
+  createdAt: number;
+}
+
+/** One recorded attempt at a step of a run. Engine times are ISO strings; `createdAt` is epoch ms. */
+export interface WorkflowRunStep {
+  engineStepId: string;
+  runId: string;
+  taskId: string;
+  stepIndex: number;
+  attempt: number;
+  name?: string;
+  status: string;
+  /** The step's inputs and outputs as JSON. */
+  inputs?: string;
+  outputs?: string;
+  error?: string;
+  durationMs?: number;
+  startedAt?: string;
+  completedAt?: string;
+  engineCreatedAt: string;
+  engineUpdatedAt: string;
+  createdAt: number;
+}
+
+/** An alert a recorded run played. */
+export interface WorkflowRunAlert {
+  engineAlertId: string;
+  status: EngineAlertStatus;
+  payload: string | undefined;
+  error: string | undefined;
+  dispatchedAt: string | undefined;
+  playedAt: string | undefined;
+  completedAt: string | undefined;
+  engineCreatedAt: string | undefined;
+  unconfirmedAt: number | undefined;
+}
 
 /** A recorded run with its steps and the alerts it played; null when it is not recorded or not the caller's. */
-export type WorkflowRunDetail = FunctionReturnType<typeof api.workflowRuns.runWithSteps>;
+export type WorkflowRunDetail = {
+  run: WorkflowRunRecord;
+  steps: WorkflowRunStep[];
+  alerts: WorkflowRunAlert[];
+} | null;
 
 /** One recorded run of a workflow, as its run history lists it. */
-export type RecordedWorkflowRun = FunctionReturnType<typeof api.workflowRuns.listForWorkflow>[number];
-
-/** What prompted a workflow health resync; the server throttles repeats per instance. */
-export type WorkflowHealthResyncTrigger = FunctionArgs<typeof api.workflowHealth.resync>["trigger"];
-
-export type WorkflowHealthResyncResult = FunctionReturnType<typeof api.workflowHealth.resync>;
-
-/** The instance's stream state, kept current by engine callbacks and polls. */
-export type InstanceLiveState = Doc<"instanceLiveState">;
-
-/** The mirror's sync bookkeeping: the schedule row plus the five most recent runs. */
-export interface EngineSyncState {
-  syncState: Doc<"instanceSync"> | null;
-  currentRun: Doc<"syncRuns"> | null;
-  recentRuns: Doc<"syncRuns">[];
+export interface RecordedWorkflowRun {
+  engineRunId: string;
+  status: string;
+  triggeredBy: string | undefined;
+  error: string | undefined;
+  startedAt: string | undefined;
+  completedAt: string | undefined;
+  hasTriggerEvent: boolean;
+  dryRun: boolean;
 }
 
-export type EngineSyncRequest = { scheduled: true } | { scheduled: false; reason: "already-running" };
-
-export type EngineConnectionTest = { ok: true } | { ok: false; error: string };
-
-export interface ResourceQuery {
-  folderId?: string | null;
-  kind?: string;
-  search?: string;
-  page?: number;
-  pageSize?: number;
+/** An enabled workflow the engine reported it could not set up. */
+export interface NotRunningWorkflow {
+  engineWorkflowId: string;
+  reason: string | null;
+  /** ISO time. */
+  since: string;
 }
 
-/** The file an upload grant is asked for; the grant is bound to `size`. */
-export interface UploadRequest {
+/** What prompted a workflow health resync; repeats are throttled per instance. */
+export type WorkflowHealthResyncTrigger = "mount" | "reconnect";
+
+export type WorkflowHealthResyncResult = "ok" | "skipped" | "failed" | "unsupported" | "loading";
+
+// ==================== Macros ====================
+
+/** The value given for one of a macro's variables. */
+export interface MacroVariableValue {
   name: string;
-  contentType: string;
-  parentId: string | null;
-  size: number;
+  value: string;
 }
 
-/** A rename (`name`), a move (`parentId`), or both. */
-export interface ResourceChanges {
+/** The key of the workflow run a macro started, or null when it started none. */
+export interface MacroRunResult {
+  triggerId: string | null;
+}
+
+// ==================== Stream operations ====================
+
+/** Why an engine call a recap or refresh needs did not answer. */
+export type EngineCallFailure =
+  | { status: "rejected" }
+  | { status: "unreachable"; message: string }
+  | { status: "failed"; message: string };
+
+export interface RecapSupporter {
+  platformUserId: string;
+  userName: string | null;
+  total: number;
+  events: number;
+}
+
+export interface RecapViewerSample {
+  /** ISO time. */
+  sampledAt: string;
+  viewerCount: number | null;
+}
+
+/** A recapped session's per-minute viewer samples and top supporters, or why they could not be read. */
+export type StreamRecapEngineDetail =
+  | {
+      status: "ok";
+      viewerSamples: RecapViewerSample[];
+      topCheerers: RecapSupporter[];
+      topGifters: RecapSupporter[];
+    }
+  | { status: "unregistered" }
+  | { status: "unknown_session" }
+  | EngineCallFailure;
+
+export type RecapEventKind = "follow" | "sub" | "giftedSubs" | "cheer" | "raid";
+
+export interface RecapEvent {
+  /** ISO time. */
+  occurredAt: string;
+  kind: RecapEventKind;
+  userName: string | null;
+  amount: number | null;
+}
+
+/** A session's counted events; `total` counts every event the engine has, so the page can say how many it left out. */
+export type RecapTimelineEvents =
+  | { status: "ok"; events: RecapEvent[]; total: number }
+  | { status: "unregistered" }
+  | { status: "unknown_session" }
+  | EngineCallFailure;
+
+/** Whether the open session's summary was stored, was fresh already, or could not be. */
+export type OpenSessionRefresh =
+  | { status: "stored" }
+  | { status: "fresh" }
+  | { status: "no_open_session" }
+  | { status: "unregistered" }
+  | EngineCallFailure;
+
+/** A stream the engine recorded. Times are ISO strings. */
+export interface SupporterStream {
+  id: string;
+  status: "open" | "closed";
+  startedAt: string;
+  endedAt: string | null;
+  segments: { startedAt: string; endedAt: string | null }[];
+}
+
+export interface Supporter {
+  platformUserId: string;
+  userName: string | null;
+  total: number;
+  events: number;
+}
+
+/** Which supporters to rank: by bits or gifted subs, for one stream (`sessionId`) or all time, at or above `minTotal`. */
+export interface SupporterLeaderboardQuery {
+  metric: "bits" | "giftedSubs";
+  sessionId?: string;
+  minTotal: number;
+}
+
+/** What one viewer gave: `bits` and `giftedSubs` are the amounts, `cheers` and `gifts` the events behind them. */
+export interface SupporterTotals {
+  bits: number;
+  cheers: number;
+  giftedSubs: number;
+  gifts: number;
+}
+
+/** One viewer's lifetime support and their support in each of the last few live streams. */
+export interface ViewerSupportTotals {
+  userName: string | null;
+  lifetime: SupporterTotals;
+  recent: { stream: SupporterStream; totals: SupporterTotals }[];
+}
+
+/**
+ * An event to publish on the engine's bus. `triggerId` is the key the runs it
+ * starts report under; `triggeredBy` tags those runs.
+ */
+export interface EngineTestEvent {
+  eventType: string;
+  eventData: unknown;
+  triggerId?: string;
+  triggeredBy?: string;
+}
+
+/** Whether the engine published the event; `message` says why not. */
+export interface PublishedTestEvent {
+  success: boolean;
+  message: string;
+}
+
+// ==================== Configuration ====================
+
+/** The parts of a configuration a backup can carry. */
+export type ConfigSection = "workflows" | "commands" | "groups" | "resources";
+
+export type ConfigConflictPolicy = "skip" | "rename" | "overwrite";
+
+/** Which sections to back up, and whether to include each group's members. */
+export interface ConfigExportRequest {
+  include: ConfigSection[];
+  includeMembers: boolean;
+}
+
+/** A backup, as the chunks it was read into, and how to apply it. */
+export interface ConfigImportRequest {
+  bundleChunks: string[];
+  include: ConfigSection[];
+  onConflict: ConfigConflictPolicy;
+  applyMembers: boolean;
+}
+
+export type ConfigItemKind = "workflow" | "command" | "group" | "resource";
+
+export type ConfigImportAction = "create" | "update" | "skip" | "conflict";
+
+export type ConfigImportReasonCode =
+  | "identical"
+  | "name_collision"
+  | "renamed"
+  | "overwrite"
+  | "not_owned"
+  | "missing_module"
+  | "module_version_mismatch"
+  | "unknown_resource_kind"
+  | "unknown_action"
+  | "unknown_group"
+  | "unknown_workflow"
+  | "invalid"
+  | "rename_exhausted"
+  | "grants_access"
+  | "privileged_action";
+
+export interface ConfigImportReason {
+  code: ConfigImportReasonCode;
+  message: string;
+  /** True when this reason alone keeps the item from being applied. */
+  blocking: boolean;
+}
+
+export interface ConfigImportPlanItem {
+  kind: ConfigItemKind;
+  /** The item's identity in the backup: name, command word, or canonical id. */
+  key: string;
+  action: ConfigImportAction;
+  /** The name it will have on this engine; differs from `key` when renamed. */
+  targetName: string;
+  /** The existing item it matches, for `update` and `skip`. */
+  targetId?: string;
+  reasons: ConfigImportReason[];
+}
+
+/** What importing a backup would do, without doing it. */
+export interface ConfigImportPlan {
+  onConflict: ConfigConflictPolicy;
+  items: ConfigImportPlanItem[];
+  summary: Record<ConfigImportAction, number>;
+  /** Modules the backup requires that the engine does not have installed. */
+  missingModules: { moduleId: string; version: string }[];
+}
+
+export type ConfigImportOutcome = "created" | "updated" | "skipped" | "conflict" | "failed";
+
+export interface ConfigImportResultItem {
+  kind: ConfigItemKind;
+  key: string;
+  action: ConfigImportAction;
+  outcome: ConfigImportOutcome;
   name?: string;
-  parentId?: string | null;
+  id?: string;
+  /** Why it failed or conflicted. */
+  error?: string;
 }
 
-/** A callback Convex recorded from the engine, kept for debugging. */
-export type WebhookEventId = Id<"engineEventLog">;
-
-/** One webhook log entry without its payload, which is read on its own. */
-export type WebhookEventSummary = FunctionReturnType<typeof api.engineEventLog.list>["page"][number];
+export interface ConfigImportResult {
+  items: ConfigImportResultItem[];
+  summary: Record<ConfigImportOutcome, number>;
+}

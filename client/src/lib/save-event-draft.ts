@@ -1,5 +1,5 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { InstanceId } from "@/engine/types";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { type EventEditorState, getDraft, setDraft } from "@/lib/event-drafts";
 import { buildWorkflowDefinition, UNCONDITIONAL_TRIGGER_ID } from "@/lib/trigger-projection";
@@ -33,14 +33,10 @@ export function firstIncompleteTrigger(
 
 /** The engine writes saving needs, as a screen's workflow request hooks supply them. */
 export interface EngineWorkflowWriters {
-  instanceId: Id<"instances">;
-  createFromDefinition: (instanceId: Id<"instances">, definition: unknown) => Promise<{ engineWorkflowId: string }>;
-  updateFromDefinition: (
-    instanceId: Id<"instances">,
-    engineWorkflowId: string,
-    definition: unknown
-  ) => Promise<unknown>;
-  setEnabled: (instanceId: Id<"instances">, engineWorkflowId: string, isEnabled: boolean) => Promise<unknown>;
+  instanceId: InstanceId;
+  createFromDefinition: (instanceId: InstanceId, definition: unknown) => Promise<{ engineWorkflowId: string }>;
+  updateFromDefinition: (instanceId: InstanceId, engineWorkflowId: string, definition: unknown) => Promise<unknown>;
+  setEnabled: (instanceId: InstanceId, engineWorkflowId: string, isEnabled: boolean) => Promise<unknown>;
 }
 
 /**

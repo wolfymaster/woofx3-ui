@@ -38,6 +38,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
   useConfigExportRequest,
@@ -172,7 +173,7 @@ function ExportCard({
   async function handleExport() {
     setIsExporting(true);
     try {
-      const chunks = await exportConfig(instanceId, { include: sections, includeMembers });
+      const chunks = await exportConfig(toInstanceId(instanceId), { include: sections, includeMembers });
       const fileName = backupFileName(instanceName, new Date());
       saveTextFile(fileName, chunks.join(""));
       toast({ title: "Backup downloaded", description: fileName });
@@ -448,7 +449,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setResult(null);
     try {
       setPlan(
-        await previewImport(instanceId, {
+        await previewImport(toInstanceId(instanceId), {
           bundleChunks: file.chunks,
           onConflict,
           include: sections,
@@ -470,7 +471,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setConfirming(false);
     setBusy("import");
     try {
-      const outcome = await importConfig(instanceId, {
+      const outcome = await importConfig(toInstanceId(instanceId), {
         bundleChunks: file.chunks,
         onConflict,
         include: sections,
@@ -636,7 +637,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
 export default function AdminBackup() {
   const { instance, isLoading } = useInstance();
   const access = useQuery(api.configBackup.access, instance ? { instanceId: instance._id } : "skip");
-  const capabilities = useEngineCapabilities(instance?._id);
+  const capabilities = useEngineCapabilities(toInstanceId(instance?._id));
 
   return (
     <div className="container mx-auto p-6 space-y-6">

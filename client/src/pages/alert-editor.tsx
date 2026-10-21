@@ -1,4 +1,4 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Id } from "@convex/_generated/dataModel";
 import { Bell, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -6,6 +6,7 @@ import { AlertLayoutEditor } from "@/components/alert-editor/alert-layout-editor
 import { EmptyState } from "@/components/common/empty-state";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
 import { useInstance } from "@/hooks/use-instance";
@@ -33,14 +34,14 @@ export default function AlertEditorPage() {
   const [, navigate] = useLocation();
   const { instance } = useInstance();
   const { triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
+  const workflows = useWorkflows(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
 
   const triggerPreset = triggerPresets.find((preset) => preset.event === event);
   const conditionFields = useMemo(
     () => (triggerPreset?.config?.fields ?? []).filter((field) => !isCommandsSource(field)),
     [triggerPreset]
   );
-  const { draft } = useEventWorkflowDraft(triggerPreset, conditionFields, workflows as Doc<"workflows">[] | undefined);
+  const { draft } = useEventWorkflowDraft(triggerPreset, conditionFields, workflows);
 
   const [loadedOptions, setLoadedOptions] = useState<ReadonlyMap<string, LoadedFieldOptions>>(new Map());
   const handleOptionsLoaded = useCallback((fieldId: string, entry: LoadedFieldOptions) => {

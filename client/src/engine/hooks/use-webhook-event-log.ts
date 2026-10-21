@@ -1,4 +1,5 @@
 import { useEngineGateway } from "@/engine/context";
+import { toInstanceId } from "@/engine/convex/ids";
 import type { InstanceId, WebhookEventId } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -23,7 +24,7 @@ export function useRetriggerEvent() {
       return;
     }
     try {
-      const result = await retrigger(instance._id, logId);
+      const result = await retrigger(toInstanceId(instance._id), logId);
       toast({
         title: "Event retriggered",
         description: `${eventType} → ${result.message}`,

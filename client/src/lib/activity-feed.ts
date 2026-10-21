@@ -26,10 +26,11 @@ export const TEST_EVENT_SOURCE = "api";
 /** A logged or pushed event. History always has an id; a pushed frame without one is given one on arrival. */
 export type ActivityEvent = StreamEventFrame & { id: string };
 
-/** The fields of an `engineAlerts` row the feed reads. */
+/** The fields of an engine alert the feed reads. */
 export interface ActivityAlert {
-  _id: string;
-  _creationTime: number;
+  id: string;
+  /** Epoch ms the dashboard first heard of the alert; its time when the engine sent none. */
+  createdAt: number;
   sourceEventId?: string;
   payload?: string;
   engineCreatedAt?: string;
@@ -55,7 +56,7 @@ function parseTime(time: string | null | undefined): number | null {
 }
 
 function alertTime(alert: ActivityAlert): number {
-  return parseTime(alert.engineCreatedAt) ?? alert._creationTime;
+  return parseTime(alert.engineCreatedAt) ?? alert.createdAt;
 }
 
 function dataOf(value: unknown): Record<string, unknown> | null {
@@ -94,7 +95,7 @@ export function mergeActivity<A extends ActivityAlert>(
     }
     const eventId = alert.sourceEventId || carried?.id || null;
     if (!eventId) {
-      rows.push({ key: `alert:${alert._id}`, time: alertTime(alert), event: null, alerts: [alert] });
+      rows.push({ key: `alert:${alert.id}`, time: alertTime(alert), event: null, alerts: [alert] });
       continue;
     }
     const existing = rowsByEventId.get(eventId);

@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { type MarketplaceQuote, useMarketplaceListing, useMarketplaceQuote } from "@/hooks/use-marketplace";
@@ -189,7 +190,7 @@ function ListingBody({
     void installedVersion;
     let cancelled = false;
     const listingId = listing.id;
-    getModuleDetail(instance._id, listingId)
+    getModuleDetail(toInstanceId(instance._id), listingId)
       .then((detail) => {
         if (!cancelled) {
           setLoadedDetail({ listingId, load: { status: "ready", detail } });

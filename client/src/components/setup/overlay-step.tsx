@@ -6,6 +6,7 @@ import { Copy, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
 import { useCreateSceneRequest, useScenes, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useToast } from "@/hooks/use-toast";
@@ -48,9 +49,9 @@ function Actions({ onContinue, continueLabel }: { onContinue: () => void; contin
  * if none has run, rather than making an overlay with nothing on it.
  */
 export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps) {
-  const scenes = useScenes(status.engineRegistered ? instanceId : null);
-  const catalog = useSceneWidgetCatalog(status.engineRegistered ? instanceId : null);
-  const syncState = useEngineSyncState(status.engineRegistered ? instanceId : null);
+  const scenes = useScenes(toInstanceId(status.engineRegistered ? instanceId : null));
+  const catalog = useSceneWidgetCatalog(toInstanceId(status.engineRegistered ? instanceId : null));
+  const syncState = useEngineSyncState(toInstanceId(status.engineRegistered ? instanceId : null));
   const syncNow = useEngineSyncRequest();
   const createScene = useCreateSceneRequest();
   const getOrCreateKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
@@ -63,19 +64,19 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
 
   // The engine announces a new scene by webhook, so a created scene shows up
   // in `scenes` a moment after createScene returns.
-  const scene = scenes ? [...scenes].sort((a, b) => a._creationTime - b._creationTime)[0] : undefined;
-  const sceneId = scene?.engineSceneId ? scene._id : null;
+  const scene = scenes ? [...scenes].sort((a, b) => a.createdAt - b.createdAt)[0] : undefined;
+  const sceneId = scene?.engineSceneId ? (scene.id as Id<"scenes">) : null;
 
   const alertWidget = catalog ? findAlertWidget(catalog) : undefined;
   const syncRuns = syncState?.recentRuns ?? [];
-  const latestRunId = syncRuns[0]?._id ?? null;
+  const latestRunId = syncRuns[0]?.id ?? null;
   const catalogState = overlayCatalogState(alertWidget !== undefined, syncRuns, syncRequestedAfter);
   const needsScene = scenes !== undefined && !scene;
 
   const requestSync = useCallback(() => {
     setError(null);
     setSyncRequestedAfter(latestRunId);
-    syncNow(instanceId).catch((err: unknown) => {
+    syncNow(toInstanceId(instanceId)).catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err));
     });
   }, [instanceId, latestRunId, syncNow]);
@@ -123,7 +124,7 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
     setError(null);
     setCreating(true);
     try {
-      await createScene(instanceId, {
+      await createScene(toInstanceId(instanceId), {
         name: SETUP_OVERLAY_NAME,
         widgetsJson: JSON.stringify(setupOverlayWidgets(alertWidget)),
         layoutJson: JSON.stringify({ ...SETUP_OVERLAY_SIZE, backgroundColor: "transparent" }),

@@ -1,6 +1,7 @@
 import type { Id } from "@convex/_generated/dataModel";
 import type { OptionsSupport } from "@convex/lib/engineTestRun";
 import { useEffect, useState } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useTestRunCapabilitiesRequest } from "@/engine/hooks/use-workflows";
 import { type TestRunSupport, testRunSupport } from "@/lib/engine-capabilities";
@@ -46,7 +47,7 @@ function useLegacyOptionsProbe(instanceId: Id<"instances"> | undefined, enabled:
     }
     let cancelled = false;
     setState("checking");
-    probe(instanceId)
+    probe(toInstanceId(instanceId))
       .then(({ options }) => {
         if (options !== "unknown") {
           probed.set(instanceId, options);
@@ -73,7 +74,7 @@ function useLegacyOptionsProbe(instanceId: Id<"instances"> | undefined, enabled:
  * skipping conditions for one workflow, dry runs, and a Stop that halts a run.
  */
 export function useTestRunSupport(instanceId: Id<"instances"> | undefined): TestRunSupport {
-  const { state } = useEngineCapabilities(instanceId);
+  const { state } = useEngineCapabilities(toInstanceId(instanceId));
   const legacy = state.status === "ready" && state.report.legacy;
   const legacyProbe = useLegacyOptionsProbe(instanceId, legacy);
   const support = testRunSupport(state, legacyProbe);

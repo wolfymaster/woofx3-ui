@@ -1,4 +1,5 @@
 import { type ManualRunOrigin, TEST_RUN_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { toInstanceId } from "@/engine/convex/ids";
 import { usePublishTestEventRequest, useSimulateTwitchEventRequest } from "@/engine/hooks/use-test-events";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -64,7 +65,7 @@ export function useFireTestEvent() {
     const triggerId = crypto.randomUUID();
     try {
       const published = await withinTimeout(
-        fire(instance._id, { eventType, eventData, triggerId, triggeredBy: origin }),
+        fire(toInstanceId(instance._id), { eventType, eventData, triggerId, triggeredBy: origin }),
         TEST_EVENT_PUBLISH_TIMEOUT_MS,
         "The engine didn't answer. Check that it is running, then try again."
       );

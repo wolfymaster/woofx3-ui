@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { ModuleResourceInstance } from "@/engine/types";
 import type { ResourceAction } from "@/lib/resource-actions";
-import type { ResourceInstanceDoc } from "@/lib/resource-instance";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import {
   type PaletteResourceKind,
@@ -42,9 +42,9 @@ function wheelKind(actions: ResourceAction[] = [spin, add, pick]): PaletteResour
   return { moduleName: "wheel_spin", kind: "wheel", name: "Wheel", icon, actions };
 }
 
-function row(canonicalId: string, displayName = ""): ResourceInstanceDoc {
+function row(canonicalId: string, displayName = ""): ModuleResourceInstance {
   const [, kind, resourceInstanceId] = canonicalId.split(":");
-  return { canonicalId, kind, resourceInstanceId, displayName } as unknown as ResourceInstanceDoc;
+  return { canonicalId, kind, resourceInstanceId, displayName } as unknown as ModuleResourceInstance;
 }
 
 interface Ran {
@@ -53,7 +53,7 @@ interface Ran {
   parameters: Record<string, unknown>;
 }
 
-function build(kinds: PaletteResourceKind[], rows: ResourceInstanceDoc[], values: Record<string, unknown> = {}) {
+function build(kinds: PaletteResourceKind[], rows: ModuleResourceInstance[], values: Record<string, unknown> = {}) {
   const ran: Ran[] = [];
   const run: RunKindAction = async (instance, chosen, parameters) => {
     ran.push({ canonicalId: instance.canonicalId, presetId: chosen.preset.id, parameters });

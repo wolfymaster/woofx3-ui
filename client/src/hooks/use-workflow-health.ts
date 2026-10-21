@@ -1,5 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { useEffect, useMemo } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useNotRunningWorkflowList, useWorkflowHealthResyncRequest } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
@@ -15,7 +16,7 @@ export function useNotRunningWorkflows(): {
   list: readonly NotRunningWorkflow[] | undefined;
 } {
   const { instance } = useInstance();
-  const list = useNotRunningWorkflowList(instance ? (instance._id as Id<"instances">) : null);
+  const list = useNotRunningWorkflowList(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
   const byId = useMemo(() => notRunningById(list), [list]);
   return { byId, list };
 }
@@ -33,7 +34,7 @@ export function useWorkflowHealthResyncOnMount(): void {
     if (!instanceId) {
       return;
     }
-    resync(instanceId, "mount").catch(() => undefined);
+    resync(toInstanceId(instanceId), "mount").catch(() => undefined);
   }, [instanceId, resync]);
 }
 
@@ -52,6 +53,6 @@ export function useWorkflowHealthResyncOnReconnect(): void {
     if (!instanceId || !connected) {
       return;
     }
-    resync(instanceId, "reconnect").catch(() => undefined);
+    resync(toInstanceId(instanceId), "reconnect").catch(() => undefined);
   }, [instanceId, connected, resync]);
 }

@@ -1,4 +1,4 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
 import { Bell, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -9,7 +9,9 @@ import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import { EmptyState } from "@/components/common/empty-state";
 import { PageHeader } from "@/components/layout/page-header";
 import { TestEventSheet } from "@/components/test-events/test-event-sheet";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
+import type { Workflow } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -40,7 +42,7 @@ export default function Alerts() {
   const [location, navigate] = useLocation();
   const { instance } = useInstance();
   const { triggerPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
+  const workflows = useWorkflows(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
 
   // The trigger stays selected while the sheet closes, so its contents don't blank
   // out mid-animation.
@@ -62,7 +64,7 @@ export default function Alerts() {
 
   const tree = useMemo(() => buildAlertTree(triggerPresets), [triggerPresets]);
   const sections = useMemo(() => flattenAlertTree(tree), [tree]);
-  const rows = useMemo(() => (workflows ?? []) as Doc<"workflows">[], [workflows]);
+  const rows = useMemo(() => (workflows ?? []) as Workflow[], [workflows]);
   const loading = catalogLoading || workflows === undefined;
 
   // Configured-trigger count per menu entry, so the rail says where the work already

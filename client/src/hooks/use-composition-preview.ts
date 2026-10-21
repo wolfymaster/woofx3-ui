@@ -14,6 +14,7 @@ import {
   parsePreviewReport,
 } from "@woofx3/scene/runtime";
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useCompositionPreviewUrlRequest } from "@/engine/hooks/use-alert-library";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useToast } from "@/hooks/use-toast";
@@ -122,9 +123,9 @@ export function useCompositionPreview({
   inputs,
   labelOf,
 }: UseCompositionPreviewArgs): CompositionPreviewController {
-  const supported = useEngineCapabilities(instanceId).support(CAPABILITY) === "supported";
+  const supported = useEngineCapabilities(toInstanceId(instanceId)).support(CAPABILITY) === "supported";
   const getUrl = useCompositionPreviewUrlRequest();
-  fetchPreviewUrl = (id) => getUrl(id as Id<"instances">);
+  fetchPreviewUrl = (id) => getUrl(toInstanceId(id as Id<"instances">));
   const { toast } = useToast();
 
   const frameRef = useRef<HTMLIFrameElement>(null);

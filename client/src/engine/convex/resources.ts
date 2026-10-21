@@ -3,6 +3,7 @@ import { useAction } from "convex/react";
 import { useCallback } from "react";
 import type { ResourcesGateway } from "@/engine/gateway";
 import type { InstanceId, ResourceChanges, ResourceQuery, UploadRequest } from "@/engine/types";
+import { fromInstanceId } from "./ids";
 
 // Each request hook wraps a `useAction`, which Convex memoises on the
 // function's name, so the returned function keeps its identity across renders
@@ -13,7 +14,7 @@ function useListRequest() {
   return useCallback(
     (instanceId: InstanceId, query: ResourceQuery) =>
       list({
-        instanceId,
+        instanceId: fromInstanceId(instanceId),
         folderId: query.folderId,
         kind: query.kind,
         search: query.search,
@@ -26,13 +27,16 @@ function useListRequest() {
 
 function useHostedStorageUsageRequest() {
   const hostedStorageUsage = useAction(api.resources.hostedStorageUsage);
-  return useCallback((instanceId: InstanceId) => hostedStorageUsage({ instanceId }), [hostedStorageUsage]);
+  return useCallback(
+    (instanceId: InstanceId) => hostedStorageUsage({ instanceId: fromInstanceId(instanceId) }),
+    [hostedStorageUsage]
+  );
 }
 
 function useUploadGrantRequest() {
   const requestUpload = useAction(api.resources.requestUpload);
   return useCallback(
-    (instanceId: InstanceId, file: UploadRequest) => requestUpload({ instanceId, ...file }),
+    (instanceId: InstanceId, file: UploadRequest) => requestUpload({ instanceId: fromInstanceId(instanceId), ...file }),
     [requestUpload]
   );
 }
@@ -40,7 +44,8 @@ function useUploadGrantRequest() {
 function useCompleteUploadRequest() {
   const completeUpload = useAction(api.resources.completeUpload);
   return useCallback(
-    (instanceId: InstanceId, resourceId: string) => completeUpload({ instanceId, resourceId }),
+    (instanceId: InstanceId, resourceId: string) =>
+      completeUpload({ instanceId: fromInstanceId(instanceId), resourceId }),
     [completeUpload]
   );
 }
@@ -49,7 +54,7 @@ function useProcessingRequest() {
   const requestProcessing = useAction(api.resources.requestProcessing);
   return useCallback(
     (instanceId: InstanceId, resourceId: string, utility: string) =>
-      requestProcessing({ instanceId, resourceId, utility }),
+      requestProcessing({ instanceId: fromInstanceId(instanceId), resourceId, utility }),
     [requestProcessing]
   );
 }
@@ -57,7 +62,8 @@ function useProcessingRequest() {
 function useCreateFolderRequest() {
   const createFolder = useAction(api.resources.createFolder);
   return useCallback(
-    (instanceId: InstanceId, name: string, parentId: string | null) => createFolder({ instanceId, name, parentId }),
+    (instanceId: InstanceId, name: string, parentId: string | null) =>
+      createFolder({ instanceId: fromInstanceId(instanceId), name, parentId }),
     [createFolder]
   );
 }
@@ -66,14 +72,17 @@ function useUpdateRequest() {
   const update = useAction(api.resources.update);
   return useCallback(
     (instanceId: InstanceId, resourceId: string, changes: ResourceChanges) =>
-      update({ instanceId, resourceId, ...changes }),
+      update({ instanceId: fromInstanceId(instanceId), resourceId, ...changes }),
     [update]
   );
 }
 
 function useRemoveRequest() {
   const remove = useAction(api.resources.remove);
-  return useCallback((instanceId: InstanceId, resourceId: string) => remove({ instanceId, resourceId }), [remove]);
+  return useCallback(
+    (instanceId: InstanceId, resourceId: string) => remove({ instanceId: fromInstanceId(instanceId), resourceId }),
+    [remove]
+  );
 }
 
 export const convexResourcesGateway: ResourcesGateway = {

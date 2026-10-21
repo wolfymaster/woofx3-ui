@@ -15,6 +15,7 @@ import {
 } from "@/components/scenes/draft-live-controls";
 import { hasUnsavedEdits, sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
 import { Button } from "@/components/ui/button";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useLibraryAlert } from "@/engine/hooks/use-alert-library";
 import { useEngineInfoRequest } from "@/engine/hooks/use-engine-status";
 import { useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
@@ -42,8 +43,8 @@ interface LibraryAlertEditorProps {
 export function LibraryAlertEditor({ instanceId, compositionId, onBack }: LibraryAlertEditorProps) {
   const { toast } = useToast();
   useCollapsedSidebar();
-  const row = useLibraryAlert(instanceId, compositionId);
-  const catalogRows = useSceneWidgetCatalog(instanceId);
+  const row = useLibraryAlert(toInstanceId(instanceId), compositionId);
+  const catalogRows = useSceneWidgetCatalog(toInstanceId(instanceId));
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
   const me = useQuery(api.users.getMe);
@@ -52,7 +53,7 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   // An alert has no preview page to take sceneManager's origin from, so the socket is
   // opened at the engine's overlay URL, which is sceneManager's public URL.
   const publicUrl = useCallback(
-    async () => (await getEngineInfo(instanceId))?.overlayPublicUrl ?? null,
+    async () => (await getEngineInfo(toInstanceId(instanceId)))?.overlayPublicUrl ?? null,
     [instanceId, getEngineInfo]
   );
 

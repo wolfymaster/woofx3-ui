@@ -3,6 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import { SceneSyncClient, type SceneSyncState } from "@woofx3/api/scene-editor/client";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useSceneEditorSessionRequest } from "@/engine/hooks/use-scenes";
 import { toast } from "@/hooks/use-toast";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
@@ -90,10 +91,13 @@ export function useSceneEditorSession({
   // editor lost the scene's row still reconnects with the row it had.
   const socketSourceRef = useRef<SceneSocketSource | null>(null);
   if (publicUrl) {
-    socketSourceRef.current = { getGrant: () => getSession(instanceId, engineSceneId), getPreviewUrl: publicUrl };
+    socketSourceRef.current = {
+      getGrant: () => getSession(toInstanceId(instanceId), engineSceneId),
+      getPreviewUrl: publicUrl,
+    };
   } else if (sceneId) {
     socketSourceRef.current = {
-      getGrant: () => getSession(instanceId, engineSceneId),
+      getGrant: () => getSession(toInstanceId(instanceId), engineSceneId),
       getPreviewUrl: () => getPreviewUrl({ sceneId }),
     };
   }

@@ -56,6 +56,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toggle } from "@/components/ui/toggle";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useHostedStorageUsage } from "@/engine/hooks/use-hosted-storage-usage";
 import { useResourceUpload } from "@/engine/hooks/use-resource-upload";
 import {
@@ -277,7 +278,7 @@ interface UploadModalProps {
  */
 function UploadResourcesModal({ open, onOpenChange, instanceId, parentId, onUploaded }: UploadModalProps) {
   const { toast } = useToast();
-  const { upload, isUploading, progress } = useResourceUpload(instanceId);
+  const { upload, isUploading, progress } = useResourceUpload(toInstanceId(instanceId));
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -404,14 +405,14 @@ export default function Assets() {
     isLoading,
     error,
     refetch: refetchResources,
-  } = useResources(instance?._id, {
+  } = useResources(toInstanceId(instance?._id), {
     folderId: currentFolderId,
     kind: kindFilter.length === 1 ? kindFilter[0] : undefined,
     search: searchQuery || undefined,
     page,
     pageSize: PAGE_SIZE,
   });
-  const { usage: storageUsage, refresh: refreshStorageUsage } = useHostedStorageUsage(instance?._id);
+  const { usage: storageUsage, refresh: refreshStorageUsage } = useHostedStorageUsage(toInstanceId(instance?._id));
   // Anything that changes the listing can change how much storage is used.
   const refetch = useCallback(() => {
     refetchResources();
@@ -486,7 +487,9 @@ export default function Assets() {
     if (!instance || !folderName.trim()) {
       return;
     }
-    const ok = await run("Couldn't create that folder", () => createFolder(instance._id, folderName, currentFolderId));
+    const ok = await run("Couldn't create that folder", () =>
+      createFolder(toInstanceId(instance._id), folderName, currentFolderId)
+    );
     if (ok) {
       setFolderName("");
       setNewFolderOpen(false);
@@ -498,7 +501,7 @@ export default function Assets() {
       return;
     }
     const ok = await run("Couldn't rename that", () =>
-      updateResource(instance._id, renaming.id, { name: renameValue })
+      updateResource(toInstanceId(instance._id), renaming.id, { name: renameValue })
     );
     if (ok) {
       setRenaming(null);
@@ -510,7 +513,7 @@ export default function Assets() {
       return;
     }
     const target = deleting;
-    const ok = await run("Couldn't delete that", () => removeResource(instance._id, target.id));
+    const ok = await run("Couldn't delete that", () => removeResource(toInstanceId(instance._id), target.id));
     if (ok) {
       setSelected((prev) => {
         const next = new Set(prev);
@@ -531,7 +534,7 @@ export default function Assets() {
     // bottleneck for no gain.
     const ok = await run("Some items couldn't be deleted", async () => {
       for (const id of ids) {
-        await removeResource(instance._id, id);
+        await removeResource(toInstanceId(instance._id), id);
       }
     });
     if (ok) {
@@ -547,7 +550,7 @@ export default function Assets() {
     const ids = Array.from(selected);
     const ok = await run("Some items couldn't be moved", async () => {
       for (const id of ids) {
-        await updateResource(instance._id, id, { parentId: destinationId });
+        await updateResource(toInstanceId(instance._id), id, { parentId: destinationId });
       }
     });
     if (ok) {

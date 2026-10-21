@@ -1,6 +1,6 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import type { ActionStep, TaskDefinition } from "@woofx3/api";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
+import type { ChatCommand } from "@/engine/types";
 import {
   type CommandDraft,
   type CommandEditorState,
@@ -27,7 +27,7 @@ export function useCommandDraft(key: string): CommandDraft | undefined {
  * A draft already open is left alone: it holds edits in progress, which a list refreshed
  * by a webhook must not overwrite.
  */
-export function useOpenCommandDraft(key: string, doc: Doc<"chatCommands"> | undefined): CommandDraft | undefined {
+export function useOpenCommandDraft(key: string, doc: ChatCommand | undefined): CommandDraft | undefined {
   const draft = useCommandDraft(key);
 
   useEffect(() => {
@@ -48,7 +48,7 @@ export function useOpenCommandDraft(key: string, doc: Doc<"chatCommands"> | unde
 }
 
 /** The engine's copy of a command, in the shape the editor works in. */
-export function commandEditorState(doc: Doc<"chatCommands">): CommandEditorState {
+export function commandEditorState(doc: ChatCommand): CommandEditorState {
   return {
     command: joinCommandInput(doc.command, doc.argumentPattern ?? ""),
     flow: commandFlow(

@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toInstanceId } from "@/engine/convex/ids";
 import {
   useCreateResourceInstanceRequest,
   useResourceInstancesOfKind,
@@ -118,12 +119,12 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
   const moduleName = typeof field.moduleName === "string" ? field.moduleName : undefined;
   const [createOpen, setCreateOpen] = useState(false);
 
-  const instances = useResourceInstancesOfKind(instanceId ?? null, resourceKind || null);
+  const instances = useResourceInstancesOfKind(toInstanceId(instanceId ?? null), resourceKind || null);
   const createAction = useCreateResourceInstanceRequest();
   // The kind's declaration: the module an instance made from here belongs to,
   // and its create form, so it is configured the same way as one made on the
   // kind's own page.
-  const kindDefinition = useResourceKind(instanceId ?? null, resourceKind || null);
+  const kindDefinition = useResourceKind(toInstanceId(instanceId ?? null), resourceKind || null);
   // Until the kind's declaration is known, a qualified kind still names its
   // module, and a bare one is taken to be the field's own module's.
   const owner =
@@ -189,7 +190,7 @@ function ResourceRefField({ field, value, onChange }: Parameters<CustomFieldRend
           kind={{ kind: bareKind(resourceKind), name: field.label, schema: kindDefinition?.schema }}
           onClose={() => setCreateOpen(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            const created = await createAction(instanceId, {
+            const created = await createAction(toInstanceId(instanceId), {
               moduleName: owner,
               kind: bareKind(resourceKind),
               resourceInstanceId,
@@ -215,7 +216,7 @@ const ResourceRefFieldRenderer: CustomFieldRenderer = (props) => <ResourceRefFie
 
 function AlertWidgetNameField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
   const { instance } = useInstance();
-  const names = useAlertWidgetNames(instance ? instance._id : null);
+  const names = useAlertWidgetNames(toInstanceId(instance ? instance._id : null));
   const { selected, options, stale } = alertTargetChoices(names, value);
   const noWidgets = names !== undefined && options.length === 0;
 

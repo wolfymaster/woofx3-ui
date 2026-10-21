@@ -1,4 +1,4 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Id } from "@convex/_generated/dataModel";
 import { Loader2, Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
+import { toInstanceId } from "@/engine/convex/ids";
 import {
   useAddChatCommandGroupMemberRequest,
   useChatCommandGroupMembers,
@@ -29,12 +30,13 @@ import {
   useRemoveChatCommandGroupMemberRequest,
   useUpdateChatCommandGroupRequest,
 } from "@/engine/hooks/use-chat-commands";
+import type { ChatCommandGroup } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { COMMAND_GROUPS_PATH } from "@/lib/command-editor-route";
 import { groupLabel } from "@/lib/group-display";
 
-type GroupDoc = Doc<"chatCommandGroups">;
+type GroupDoc = ChatCommandGroup;
 
 interface GroupFormState {
   name: string;
@@ -59,8 +61,8 @@ export default function CommandGroupEditor() {
   const { toast } = useToast();
   const { instance, isLoading: instanceLoading } = useInstance();
 
-  const groupsRaw = useChatCommandGroups(instance?._id ?? null);
-  const commandsRaw = useChatCommands(instance?._id ?? null);
+  const groupsRaw = useChatCommandGroups(toInstanceId(instance?._id ?? null));
+  const commandsRaw = useChatCommands(toInstanceId(instance?._id ?? null));
 
   const createGroup = useCreateChatCommandGroupRequest();
   const updateGroup = useUpdateChatCommandGroupRequest();
@@ -125,14 +127,14 @@ export default function CommandGroupEditor() {
     setSaving(true);
     try {
       if (existing) {
-        await updateGroup(instance._id, {
+        await updateGroup(toInstanceId(instance._id), {
           engineGroupId: existing.engineGroupId,
           name,
           description: form.description.trim() || undefined,
         });
         toast({ title: "Group updated" });
       } else {
-        await createGroup(instance._id, {
+        await createGroup(toInstanceId(instance._id), {
           name,
           description: form.description.trim() || undefined,
         });
@@ -296,7 +298,7 @@ function GroupMembers({ instanceId, group }: { instanceId: Id<"instances">; grou
   const [usernameInput, setUsernameInput] = useState("");
   const [pending, setPending] = useState(false);
 
-  const members = useChatCommandGroupMembers(instanceId, group.engineGroupId);
+  const members = useChatCommandGroupMembers(toInstanceId(instanceId), group.engineGroupId);
 
   const addUserToGroup = useAddChatCommandGroupMemberRequest();
   const removeUserFromGroup = useRemoveChatCommandGroupMemberRequest();
@@ -308,7 +310,7 @@ function GroupMembers({ instanceId, group }: { instanceId: Id<"instances">; grou
     }
     setPending(true);
     try {
-      await addUserToGroup(instanceId, group.engineGroupId, username);
+      await addUserToGroup(toInstanceId(instanceId), group.engineGroupId, username);
       setUsernameInput("");
     } catch (err: unknown) {
       toast({
@@ -324,7 +326,7 @@ function GroupMembers({ instanceId, group }: { instanceId: Id<"instances">; grou
   async function handleRemove(username: string) {
     setPending(true);
     try {
-      await removeUserFromGroup(instanceId, group.engineGroupId, username);
+      await removeUserFromGroup(toInstanceId(instanceId), group.engineGroupId, username);
     } catch (err: unknown) {
       toast({
         title: "Failed to remove member",

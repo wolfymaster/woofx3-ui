@@ -1,4 +1,4 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Id } from "@convex/_generated/dataModel";
 import { ChevronRight, ExternalLink, Plus, Zap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -11,7 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
+import type { Workflow } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -54,7 +56,7 @@ export interface NewTriggerRequest {
 interface EventTriggerListProps {
   triggerPreset: TriggerPreset;
   /** Every workflow on this instance; the ones for this event are found here. */
-  workflows: Doc<"workflows">[];
+  workflows: Workflow[];
   /** Where this event sits in the Alerts menu, above its own title. */
   breadcrumb: string[];
   /** h1 when the event is the page; h2 when it shares the page with others. */
@@ -413,7 +415,7 @@ function TriggerCard({
   async function toggleEnabled() {
     setIsSwitching(true);
     try {
-      await setEnabled(instanceId, row.engineWorkflowId, !row.isEnabled);
+      await setEnabled(toInstanceId(instanceId), row.engineWorkflowId, !row.isEnabled);
     } catch (err) {
       toast({
         title: row.isEnabled ? "Couldn't pause the trigger" : "Couldn't switch the trigger on",
