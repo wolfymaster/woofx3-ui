@@ -9,6 +9,7 @@ import {
   isEngineUnreachableData,
   retryEngineSyncWith,
   syncAfterConnect,
+  withEngineDeadline,
 } from "./twitchLinkEngine";
 
 function effects(deleteTokenOnEngine: DisconnectEffects["deleteTokenOnEngine"]) {
@@ -68,64 +69,36 @@ describe("disconnectLink", () => {
 });
 
 describe("syncAfterConnect", () => {
-  const cases: Array<{
-    name: string;
-    sync: () => Promise<EngineSyncOutcome>;
-    expected: string;
-    failures: number;
-  }> = [
-    { name: "a synced engine is connected", sync: async () => "synced", expected: "connected", failures: 0 },
-    { name: "a failed sync is pending", sync: down, expected: "connectedPendingEngine", failures: 1 },
-    { name: "no engine is connected", sync: async () => "no_engine", expected: "connected", failures: 0 },
+  const cases: Array<{ name: string; outcome: EngineSyncOutcome; expected: string }> = [
+    { name: "a synced engine is connected", outcome: "synced", expected: "connected" },
+    { name: "a failed engine call is pending", outcome: "engine_failed", expected: "connectedPendingEngine" },
+    { name: "no engine is connected", outcome: "no_engine", expected: "connected" },
   ];
-  for (const { name, sync, expected, failures } of cases) {
+  for (const { name, outcome, expected } of cases) {
     test(name, async () => {
-      let failed = 0;
-      expect(await syncAfterConnect(sync, () => failed++)).toBe(expected as never);
-      expect(failed).toBe(failures);
+      expect(await syncAfterConnect(async () => outcome)).toBe(expected as never);
     });
   }
+
+  test("a sync fault propagates instead of offering a retry that cannot succeed", async () => {
+    await expect(
+      syncAfterConnect(() => Promise.reject(new Error("AUTH_TWITCH_ID env var is not set")))
+    ).rejects.toThrow("AUTH_TWITCH_ID");
+  });
 });
 
 describe("retryEngineSyncWith", () => {
-  const cases: Array<{
-    name: string;
-    hasLink: boolean;
-    sync: () => Promise<EngineSyncOutcome>;
-    refusal: "unreachable" | "other" | null;
-    failures: number;
-  }> = [
-    { name: "a synced engine succeeds", hasLink: true, sync: async () => "synced", refusal: null, failures: 0 },
-    {
-      name: "a failed engine call is engine_unreachable",
-      hasLink: true,
-      sync: down,
-      refusal: "unreachable",
-      failures: 1,
-    },
-    {
-      name: "a missing link is not reported as unreachable",
-      hasLink: false,
-      sync: down,
-      refusal: "other",
-      failures: 0,
-    },
-    {
-      name: "no registered engine is not reported as unreachable",
-      hasLink: true,
-      sync: async () => "no_engine",
-      refusal: "other",
-      failures: 0,
-    },
+  const cases: Array<{ name: string; outcome: EngineSyncOutcome; refusal: "unreachable" | "other" | null }> = [
+    { name: "a synced engine succeeds", outcome: "synced", refusal: null },
+    { name: "a failed engine call is engine_unreachable", outcome: "engine_failed", refusal: "unreachable" },
+    { name: "no registered engine is not reported as unreachable", outcome: "no_engine", refusal: "other" },
   ];
-  for (const { name, hasLink, sync, refusal, failures } of cases) {
+  for (const { name, outcome, refusal } of cases) {
     test(name, async () => {
-      let failed = 0;
-      const thrown = await retryEngineSyncWith(hasLink, sync, () => failed++).then(
+      const thrown = await retryEngineSyncWith(async () => outcome).then(
         () => null,
         (err: unknown) => err
       );
-      expect(failed).toBe(failures);
       if (refusal === null) {
         expect(thrown).toBeNull();
       } else if (refusal === "unreachable") {
@@ -137,6 +110,26 @@ describe("retryEngineSyncWith", () => {
       }
     });
   }
+
+  test("a sync fault is not reported as unreachable", async () => {
+    const thrown = await retryEngineSyncWith(() => Promise.reject(new Error("No Twitch platform link found"))).catch(
+      (err: unknown) => err
+    );
+    expect(thrown).not.toBeInstanceOf(ConvexError);
+  });
+});
+
+describe("withEngineDeadline", () => {
+  test("a call that never settles rejects, so disconnect reports engine_unreachable", async () => {
+    const { built, calls } = effects(() => withEngineDeadline(() => new Promise<void>(() => {}), 10));
+    const refusal = await disconnectLink(built, false).catch((err: unknown) => err);
+    expect(isEngineUnreachableData((refusal as ConvexError<unknown>).data)).toBe(true);
+    expect(calls).toEqual(["engine", "logged"]);
+  });
+
+  test("a call inside the deadline resolves with its value", async () => {
+    expect(await withEngineDeadline(async () => 7, 1000)).toBe(7);
+  });
 });
 
 describe("isEngineUnreachableData", () => {

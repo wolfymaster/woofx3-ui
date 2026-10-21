@@ -15,10 +15,12 @@ import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import {
   type DisconnectResult,
   disconnectLink,
+  ENGINE_CALL_DEADLINE_MS,
   type EngineSyncOutcome,
   type EngineSyncStatus,
   retryEngineSyncWith,
   syncAfterConnect,
+  withEngineDeadline,
 } from "./lib/twitchLinkEngine";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
 import { type TwitchTokenRequestedResponse, twitchTokenForEngine, twitchTokenGrant } from "./lib/twitchTokenGrant";
@@ -165,9 +167,8 @@ export const finishConnect = action({
     if (!result.ok) {
       return result;
     }
-    const status = await syncAfterConnect(
-      () => ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId: result.instanceId }),
-      (err) => console.error("[twitch-connect] engine sync failed after saving the link", String(err))
+    const status = await syncAfterConnect(() =>
+      ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId: result.instanceId })
     );
     return { ok: true, status, redirectTo: result.redirectTo, instanceId: result.instanceId };
   },
@@ -182,20 +183,7 @@ export const retryEngineSync = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ ok: true }> => {
     await requireTwitchLinkManager(ctx, instanceId);
-    // A server configuration fault is not an engine problem: fail it here,
-    // before the sync, so it is never reported as an unreachable engine.
-    if (!process.env.AUTH_TWITCH_ID) {
-      throw new Error("AUTH_TWITCH_ID env var is not set");
-    }
-    const { link } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
-      instanceId,
-      platform: "twitch",
-    });
-    await retryEngineSyncWith(
-      link !== null,
-      () => ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId }),
-      (err) => console.error("[twitch-connect] engine sync retry failed", String(err))
-    );
+    await retryEngineSyncWith(() => ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId }));
     return { ok: true };
   },
 });
@@ -246,21 +234,25 @@ export const syncToEngine = internalAction({
       throw new Error("AUTH_TWITCH_ID env var is not set");
     }
 
-    const capabilities = await fetchEngineCapabilities({
-      url: instance.url,
-      clientId: instance.clientId,
-      clientSecret: instance.clientSecret,
-    });
-    const token = twitchTokenForEngine({
-      link,
-      asksForTokens: hasEngineCapability(capabilities, "twitch.dashboardTokens"),
-      clientId: twitchClientId,
-      now: Date.now(),
-    });
-
-    const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
-
-    await engine.setTwitchToken(token, link.connectedByUserId ?? undefined);
+    const { url, clientId, clientSecret } = instance;
+    try {
+      await withEngineDeadline(async () => {
+        const capabilities = await fetchEngineCapabilities({ url, clientId, clientSecret });
+        const token = twitchTokenForEngine({
+          link,
+          asksForTokens: hasEngineCapability(capabilities, "twitch.dashboardTokens"),
+          clientId: twitchClientId,
+          now: Date.now(),
+        });
+        await createEngineRpcSession<EngineApi>(url, clientId, clientSecret).setTwitchToken(
+          token,
+          link.connectedByUserId ?? undefined
+        );
+      }, ENGINE_CALL_DEADLINE_MS);
+    } catch (err) {
+      console.error("[twitch-connect] engine sync failed", String(err));
+      return "engine_failed";
+    }
     return "synced";
   },
 });
@@ -332,11 +324,15 @@ export const disconnect = action({
       {
         deleteTokenOnEngine: engine
           ? async () => {
-              await createEngineRpcSession<EngineApi>(
-                engine.url,
-                engine.clientId,
-                engine.clientSecret
-              ).deleteTwitchToken();
+              await withEngineDeadline(
+                () =>
+                  createEngineRpcSession<EngineApi>(
+                    engine.url,
+                    engine.clientId,
+                    engine.clientSecret
+                  ).deleteTwitchToken(),
+                ENGINE_CALL_DEADLINE_MS
+              );
             }
           : null,
         deleteLink: async () => {
