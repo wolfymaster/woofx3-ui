@@ -1,11 +1,12 @@
 import { api } from "@convex/_generated/api";
 import type { WidgetThemeOption } from "@convex/lib/widgetThemes";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useWidgetThemesRequest } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import {
   themeMismatchNotice,
@@ -28,7 +29,7 @@ function ThemeField({ field, value, onChange }: Parameters<CustomFieldRenderer>[
   const { instance } = useInstance();
   const instanceId = instance?._id;
   const widgetCanonicalId = typeof field.widgetCanonicalId === "string" ? field.widgetCanonicalId : undefined;
-  const listWidgetThemes = useAction(api.sceneActions.listWidgetThemes);
+  const listWidgetThemes = useWidgetThemesRequest();
   const revision = useQuery(api.moduleRepository.installedRevision, instanceId ? { instanceId } : "skip");
   const [list, setList] = useState<ThemeList>({ status: "loading" });
 
@@ -37,7 +38,7 @@ function ThemeField({ field, value, onChange }: Parameters<CustomFieldRenderer>[
       return;
     }
     let cancelled = false;
-    listWidgetThemes({ instanceId, widgetCanonicalId })
+    listWidgetThemes(instanceId, widgetCanonicalId)
       .then((result) => {
         if (!cancelled) {
           setList({ status: "loaded", themes: result.themes });

@@ -6,7 +6,12 @@ import {
   hasMacroVariables,
   isHexColor,
   MACRO_COLOR_PRESETS,
+  type MacroActionStep,
   type MacroConfig,
+  macroButtonLabel,
+  macroStepFromNode,
+  macroStepNode,
+  typedMacroLabel,
 } from "./macro-pad";
 
 // The workflow engine's own dollar-brace syntax, written out literally because
@@ -203,5 +208,47 @@ describe("send-message and command text variables", () => {
     const resolved = applyMacroVariables({ message: "hi {{who}}", commandText: "{{who}}" }, { who: "chat" });
     expect(resolved.message).toBe("hi chat");
     expect(resolved.commandText).toBe("chat");
+  });
+});
+
+describe("macroStepNode", () => {
+  test("round trips a button's action through the step editors' shape", () => {
+    const step: MacroActionStep = {
+      action: "function",
+      function: "woofx3:function:counter.increment",
+      ref: "woofx3:action:counter.increment",
+      parameters: { target: "woofx3:counter:hype", amount: 2 },
+    };
+    expect(macroStepFromNode(macroStepNode(step))).toEqual(step);
+  });
+
+  test("keeps an action without a function or ref as it is stored", () => {
+    const step: MacroActionStep = { action: "alert", parameters: {} };
+    expect(macroStepFromNode(macroStepNode(step))).toEqual(step);
+    expect(macroStepNode({ action: "alert" }).parameters).toEqual({});
+  });
+});
+
+describe("macroButtonLabel", () => {
+  test("is the step's sentence until a label is typed", () => {
+    expect(macroButtonLabel(null, "Add to Hype counter")).toBe("Add to Hype counter");
+    expect(macroButtonLabel("", "Add to Hype counter")).toBe("Add to Hype counter");
+    expect(macroButtonLabel("  Hype!  ", "Add to Hype counter")).toBe("Hype!");
+  });
+
+  test("is the typed label for a button with no sentence", () => {
+    expect(macroButtonLabel("Say hi", "")).toBe("Say hi");
+    expect(macroButtonLabel(null, "")).toBe("");
+  });
+});
+
+describe("typedMacroLabel", () => {
+  test("follows the sentence when the stored label is the sentence", () => {
+    expect(typedMacroLabel("Add to Hype counter", "Add to Hype counter")).toBeNull();
+  });
+
+  test("keeps a label of the streamer's own", () => {
+    expect(typedMacroLabel("Hype!", "Add to Hype counter")).toBe("Hype!");
+    expect(typedMacroLabel("Hype!", "")).toBe("Hype!");
   });
 });

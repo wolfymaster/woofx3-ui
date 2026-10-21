@@ -20,7 +20,9 @@ import {
   userDto,
   userRefDto,
 } from "../lib/ops/dto";
+import type { EngineReportRow } from "../lib/ops/engineCapabilityCounts";
 import type { AssignmentRow, PlanRow } from "../lib/ops/planCounts";
+import { type HostedStorageLimitsDto, hostedStorageLimitsDto } from "./storageLimits";
 
 /**
  * The ops API's reads. Only ops/http.ts calls these, after it has
@@ -215,6 +217,8 @@ export interface EngineDetailDto {
   provisioning: ProvisioningDto;
   instance: InstanceDto | null;
   account: AccountSummaryDto | null;
+  /** Null when the instance is gone or someone else hosts the engine, so it has no hosted storage. */
+  hostedStorage: HostedStorageLimitsDto | null;
 }
 
 export const engineByMaintenanceId = internalQuery({
@@ -233,6 +237,7 @@ export const engineByMaintenanceId = internalQuery({
       provisioning: provisioningDto(row),
       instance: instance ? instanceDto(instance) : null,
       account: account ? await toAccountSummary(ctx, account) : null,
+      hostedStorage: instance?.hosting === "managed" ? await hostedStorageLimitsDto(ctx, instance) : null,
     };
   },
 });
@@ -442,6 +447,31 @@ export const assignmentPage = internalQuery({
       assignments: result.page.map((row) => ({
         ...(row.planId === undefined ? {} : { planId: row.planId }),
         ...(row.expiresAt === undefined ? {} : { expiresAt: row.expiresAt }),
+      })),
+      cursor: result.isDone ? null : result.continueCursor,
+    };
+  },
+});
+
+/**
+ * Instances whose engine answered Convex at or after `since`, a page at a
+ * time for ops/http.ts to tally. The index skips every instance not seen
+ * since then, so the cost follows active instances rather than all of them.
+ */
+const ENGINE_REPORT_PAGE_SIZE = 1000;
+
+export const engineReportPage = internalQuery({
+  args: { since: v.number(), cursor: cursorArg },
+  handler: async (ctx, { since, cursor }): Promise<{ rows: EngineReportRow[]; cursor: string | null }> => {
+    const result = await ctx.db
+      .query("instances")
+      .withIndex("by_engine_seen", (index) => index.gte("engineSeenAt", since))
+      .paginate({ numItems: ENGINE_REPORT_PAGE_SIZE, cursor });
+    return {
+      rows: result.page.map((instance) => ({
+        hosting: instance.hosting ?? "external",
+        version: instance.engineVersion ?? null,
+        capabilityIds: instance.engineCapabilityIds ?? null,
       })),
       cursor: result.isDone ? null : result.continueCursor,
     };

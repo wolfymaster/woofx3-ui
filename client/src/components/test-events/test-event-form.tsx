@@ -1,9 +1,8 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { AlertCircle, CheckCircle2, Loader2, Zap } from "lucide-react";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -72,10 +71,7 @@ export function useTestEventWaits(): { waitElapsed: boolean; gaveUp: boolean } {
 function DefaultTestEventOutcome({ triggerId }: { triggerId: string }) {
   const { instance } = useInstance();
   const { waitElapsed, gaveUp } = useTestEventWaits();
-  const record = useQuery(
-    api.transientEvents.get,
-    instance ? { instanceId: instance._id, correlationKey: triggerId } : "skip"
-  );
+  const record = useTransientEvent(instance?._id ?? null, triggerId);
 
   return <TestEventOutcome record={record} waitElapsed={waitElapsed} gaveUp={gaveUp} />;
 }

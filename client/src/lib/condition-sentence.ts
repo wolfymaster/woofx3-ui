@@ -15,16 +15,23 @@ import { ANY_CONDITION } from "@/lib/workflow-presets-json";
  */
 export type SentencePart =
   | { kind: "text"; text: string }
-  | { kind: "field"; fieldId: string; text: string; state: "value" | "any" | "missing" };
+  | { kind: "field"; fieldId: string; text: string; state: SentenceFieldState };
+
+/**
+ * What a placeholder shows. Triggers use the first three; an action sentence (see
+ * lib/action-sentence.ts) also shows a value taken from earlier in the workflow
+ * ("variable") and an optional setting left to the action's own default ("default").
+ */
+export type SentenceFieldState = "value" | "any" | "missing" | "variable" | "default";
 
 /**
  * The config field properties a sentence reads. `anyText` and `missingText` are the
  * module author's wording; without them the field's label supplies generic words.
  */
-export type SentenceField = Pick<ConfigField, "id" | "label" | "type" | "unit" | "operator" | "options"> & {
-  anyText?: string;
-  missingText?: string;
-};
+export type SentenceField = Pick<
+  ConfigField,
+  "id" | "label" | "type" | "unit" | "operator" | "options" | "anyText" | "missingText"
+>;
 
 /** Labels for options that load at runtime (a reward list), by field id then value. */
 export type OptionLabels = ReadonlyMap<string, ReadonlyMap<string, string>>;
@@ -45,30 +52,48 @@ export function sentenceParts(
   values: TriggerConfigValues,
   optionLabels: OptionLabels = new Map()
 ): SentencePart[] {
-  const byId = new Map(fields.map((field) => [field.id, field]));
-  const parts: SentencePart[] = [];
-
+  const partOf = (field: SentenceField) => fieldPart(field, values[field.id], optionLabels);
   if (template === undefined || template.trim() === "") {
+    const parts: SentencePart[] = [];
     fields.forEach((field, index) => {
       parts.push({ kind: "text", text: `${index === 0 ? "" : " · "}${field.label}: ` });
-      parts.push(fieldPart(field, values[field.id], optionLabels));
+      parts.push(partOf(field));
     });
-  } else {
-    let cursor = 0;
-    for (const match of Array.from(template.matchAll(PLACEHOLDER))) {
-      const index = match.index ?? 0;
-      if (index > cursor) {
-        parts.push({ kind: "text", text: template.slice(cursor, index) });
-      }
-      const field = byId.get(match[1]);
-      parts.push(field ? fieldPart(field, values[field.id], optionLabels) : { kind: "text", text: match[0] });
-      cursor = index + match[0].length;
-    }
-    if (cursor < template.length) {
-      parts.push({ kind: "text", text: template.slice(cursor) });
-    }
+    return finishSentence(parts);
   }
+  return fillSentence(template, fields, partOf);
+}
 
+/**
+ * A template's `{fieldId}` placeholders replaced by `partOf` the field each names, for
+ * any sentence using the trigger sentence grammar. A placeholder naming no field is
+ * kept as written, which shows the mistake instead of hiding it.
+ */
+export function fillSentence<F extends { id: string }>(
+  template: string,
+  fields: readonly F[],
+  partOf: (field: F) => SentencePart
+): SentencePart[] {
+  const byId = new Map(fields.map((field) => [field.id, field]));
+  const parts: SentencePart[] = [];
+  let cursor = 0;
+  for (const match of Array.from(template.matchAll(PLACEHOLDER))) {
+    const index = match.index ?? 0;
+    if (index > cursor) {
+      parts.push({ kind: "text", text: template.slice(cursor, index) });
+    }
+    const field = byId.get(match[1]);
+    parts.push(field ? partOf(field) : { kind: "text", text: match[0] });
+    cursor = index + match[0].length;
+  }
+  if (cursor < template.length) {
+    parts.push({ kind: "text", text: template.slice(cursor) });
+  }
+  return finishSentence(parts);
+}
+
+/** Drops empty parts and starts the sentence with a capital. */
+export function finishSentence(parts: readonly SentencePart[]): SentencePart[] {
   return capitalizeFirst(parts.filter((part) => part.text !== ""));
 }
 
@@ -134,11 +159,11 @@ function withOperator(amount: string, operator: SentenceField["operator"]): stri
   }
 }
 
-function lowerLabel(field: SentenceField): string {
+export function lowerLabel(field: Pick<SentenceField, "label">): string {
   return field.label.toLowerCase();
 }
 
-function withArticle(noun: string): string {
+export function withArticle(noun: string): string {
   return /^[aeiou]/.test(noun) ? `an ${noun}` : `a ${noun}`;
 }
 

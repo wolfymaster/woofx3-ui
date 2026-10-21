@@ -61,7 +61,17 @@ export function incompleteConditionFields(fields: ConfigField[], values: Trigger
   });
 }
 
-export function fieldValuesToConditions(fields: ConfigField[], values: TriggerConfigValues): ConditionConfig[] {
+/**
+ * Whose payload a condition built from field values reads: the trigger's, or (inside a
+ * wait) the event the wait is waiting for, which the engine names `event`.
+ */
+export type ConditionSource = "trigger" | "event";
+
+export function fieldValuesToConditions(
+  fields: ConfigField[],
+  values: TriggerConfigValues,
+  source: ConditionSource = "trigger"
+): ConditionConfig[] {
   const out: ConditionConfig[] = [];
   for (const field of fields) {
     if (isCommandsSource(field)) {
@@ -76,13 +86,13 @@ export function fieldValuesToConditions(fields: ConfigField[], values: TriggerCo
       const path = field.eventPath ?? field.id;
       if (cv.type === "range" && cv.min !== undefined && cv.max !== undefined) {
         out.push({
-          field: `\${trigger.data.${path}}`,
+          field: `\${${source}.data.${path}}`,
           operator: "between",
           value: [cv.min, cv.max],
         });
       } else if (cv.type === "single" && cv.value !== undefined) {
         out.push({
-          field: `\${trigger.data.${path}}`,
+          field: `\${${source}.data.${path}}`,
           operator: field.operator ?? "eq",
           value: cv.value,
         });
@@ -92,12 +102,12 @@ export function fieldValuesToConditions(fields: ConfigField[], values: TriggerCo
     const path = field.eventPath ?? field.id;
     if (isComparisonValue(raw)) {
       if (raw.value !== "") {
-        out.push({ field: `\${trigger.data.${path}}`, operator: raw.operator, value: raw.value });
+        out.push({ field: `\${${source}.data.${path}}`, operator: raw.operator, value: raw.value });
       }
       continue;
     }
     out.push({
-      field: `\${trigger.data.${path}}`,
+      field: `\${${source}.data.${path}}`,
       operator: field.operator ?? "eq",
       value: raw as unknown,
     });
@@ -105,8 +115,13 @@ export function fieldValuesToConditions(fields: ConfigField[], values: TriggerCo
   return out;
 }
 
-function conditionEventPath(condition: ConditionConfig): string | undefined {
-  return /^\$\{trigger\.data\.(.+)\}$/.exec(condition.field)?.[1];
+function conditionEventPath(condition: ConditionConfig, source: ConditionSource): string | undefined {
+  const prefix = `\${${source}.data.`;
+  if (!condition.field.startsWith(prefix) || !condition.field.endsWith("}")) {
+    return undefined;
+  }
+  const path = condition.field.slice(prefix.length, -1);
+  return path === "" || path.includes("}") ? undefined : path;
 }
 
 /**
@@ -116,13 +131,14 @@ function conditionEventPath(condition: ConditionConfig): string | undefined {
  */
 export function decodeConditionValue(
   field: ConfigField,
-  conditions: ConditionConfig[]
+  conditions: ConditionConfig[],
+  source: ConditionSource = "trigger"
 ): TriggerConfigValues[string] | undefined {
   if (isCommandsSource(field)) {
     return undefined;
   }
   const path = field.eventPath ?? field.id;
-  const condition = conditions.find((c) => conditionEventPath(c) === path);
+  const condition = conditions.find((c) => conditionEventPath(c, source) === path);
   if (!condition) {
     return ANY_CONDITION;
   }
@@ -142,10 +158,14 @@ export function decodeConditionValue(
 }
 
 /** Inverse of fieldValuesToConditions — recovers editable field values from a trigger's stored conditions. */
-export function conditionsToFieldValues(fields: ConfigField[], conditions: ConditionConfig[]): TriggerConfigValues {
+export function conditionsToFieldValues(
+  fields: ConfigField[],
+  conditions: ConditionConfig[],
+  source: ConditionSource = "trigger"
+): TriggerConfigValues {
   const values = getDefaultConfigValues(fields);
   for (const field of fields) {
-    const decoded = decodeConditionValue(field, conditions);
+    const decoded = decodeConditionValue(field, conditions, source);
     if (decoded !== undefined) {
       values[field.id] = decoded;
     }

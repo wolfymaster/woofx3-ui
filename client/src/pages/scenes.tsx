@@ -1,6 +1,4 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
-import { useAction, useQuery } from "convex/react";
 import { Layers, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
@@ -27,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useDeleteSceneRequest, useScenes } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
@@ -106,8 +105,8 @@ function SceneListScreen() {
   const { toast } = useToast();
   const { instance, isLoading: instanceLoading } = useInstance();
 
-  const scenesRaw = useQuery(api.scenes.list, instance ? { instanceId: instance._id } : "skip");
-  const deleteScene = useAction(api.sceneActions.deleteScene);
+  const scenesRaw = useScenes(instance ? instance._id : null);
+  const deleteScene = useDeleteSceneRequest();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -137,10 +136,7 @@ function SceneListScreen() {
     }
     setIsDeleting(true);
     try {
-      await deleteScene({
-        instanceId: instance._id as Id<"instances">,
-        engineSceneId: deleteTarget.engineSceneId,
-      });
+      await deleteScene(instance._id as Id<"instances">, deleteTarget.engineSceneId);
       toast({ title: "Scene deleted" });
       setDeleteTarget(null);
     } catch (err) {

@@ -1,17 +1,15 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { authorizeTwitch } from "./lib/twitchAuth";
+import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
+import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 import { fetchTwitchUser, normalizeTwitchLogin } from "./lib/twitchUsers";
 
 // Chat message / announce / shoutout for the dashboard's Broadcast Controls
 // panel and macro pad.
 //
-// These go straight to Helix rather than through the engine. The engine's Api
-// surface has no chat message, announcement or shoutout method (its only
-// generic escape hatch is `triggerEvent`, which just publishes a CloudEvent and
-// depends on some module happening to subscribe — not a dependable path), while
-// Convex already holds a refreshable broadcaster token for exactly this kind of
-// call.
+// These go straight to Helix with the broadcaster token Convex holds, or
+// through an engine that advertises twitch.chat and sends the same requests
+// (convex/lib/twitchEngineHelix.ts).
 // Same shape as convex/twitchClips.ts.
 
 const TWITCH_MESSAGES_URL = "https://api.twitch.tv/helix/chat/messages";
@@ -51,37 +49,46 @@ export const sendChatMessage = action({
       throw new Error(`Twitch chat messages are limited to ${MAX_CHAT_MESSAGE_LENGTH} characters`);
     }
 
-    const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(
-      ctx,
-      args.instanceId,
-      SEND_MESSAGE_SCOPE
-    );
-
-    const response = await fetch(TWITCH_MESSAGES_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Client-Id": clientId,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ broadcaster_id: broadcasterUserId, sender_id: broadcasterUserId, message }),
-    });
-    if (!response.ok) {
-      throw new Error(`Twitch chat message failed: ${response.status} ${await response.text()}`);
-    }
-
-    // Twitch answers 200 and still drops the message — automod, a duplicate, a
-    // banned term — so success is read from the body, not the status.
-    const body = (await response.json()) as {
-      data?: Array<{ is_sent?: boolean; drop_reason?: { message?: string } }>;
-    };
-    const result = body.data?.[0];
-    if (!result?.is_sent) {
-      throw new Error(result?.drop_reason?.message ?? "Twitch accepted the message but did not send it");
-    }
+    const call = await authorizeTwitch(ctx, args.instanceId, SEND_MESSAGE_SCOPE);
+    await postChatMessage(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"), message);
     return { ok: true };
   },
 });
+
+export async function postChatMessage(
+  { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  message: string
+): Promise<void> {
+  const response = await helixResponse(route, {
+    operation: "sendChatMessage",
+    kind: "write",
+    viaEngine: (engine) => engine.twitchSendChatMessage({ message }),
+    direct: () =>
+      fetch(TWITCH_MESSAGES_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Client-Id": clientId,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ broadcaster_id: broadcasterUserId, sender_id: broadcasterUserId, message }),
+      }),
+  });
+  if (!response.ok) {
+    throw new Error(`Twitch chat message failed: ${response.status} ${await response.text()}`);
+  }
+
+  // Twitch answers 200 and still drops the message — automod, a duplicate, a
+  // banned term — so success is read from the body, not the status.
+  const body = (await response.json()) as {
+    data?: Array<{ is_sent?: boolean; drop_reason?: { message?: string } }>;
+  };
+  const result = body.data?.[0];
+  if (!result?.is_sent) {
+    throw new Error(result?.drop_reason?.message ?? "Twitch accepted the message but did not send it");
+  }
+}
 
 export const sendAnnouncement = action({
   args: {
@@ -98,29 +105,39 @@ export const sendAnnouncement = action({
       throw new Error(`Twitch announcements are limited to ${MAX_ANNOUNCEMENT_LENGTH} characters`);
     }
 
-    const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(
-      ctx,
-      args.instanceId,
-      ANNOUNCEMENT_SCOPE
-    );
-
-    const url = `${TWITCH_ANNOUNCEMENTS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}`;
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Client-Id": clientId,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ message, color: args.color }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Twitch announcement failed: ${response.status} ${await response.text()}`);
-    }
+    const call = await authorizeTwitch(ctx, args.instanceId, ANNOUNCEMENT_SCOPE);
+    await postAnnouncement(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"), message, args.color);
     return { ok: true };
   },
 });
+
+export async function postAnnouncement(
+  { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  message: string,
+  color: (typeof ANNOUNCEMENT_COLORS)[number]
+): Promise<void> {
+  const url = `${TWITCH_ANNOUNCEMENTS_URL}?broadcaster_id=${broadcasterUserId}&moderator_id=${broadcasterUserId}`;
+  const response = await helixResponse(route, {
+    operation: "sendChatAnnouncement",
+    kind: "write",
+    viaEngine: (engine) => engine.twitchSendChatAnnouncement({ message, color }),
+    direct: () =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Client-Id": clientId,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ message, color }),
+      }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Twitch announcement failed: ${response.status} ${await response.text()}`);
+  }
+}
 
 export const sendShoutout = action({
   args: {
@@ -134,26 +151,39 @@ export const sendShoutout = action({
       throw new Error("A shoutout needs a channel name");
     }
 
-    const { accessToken, broadcasterUserId, clientId } = await authorizeTwitch(ctx, args.instanceId, SHOUTOUT_SCOPE);
-    const headers = { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId };
-
-    // Helix takes the target by id, not login.
-    const target = await fetchTwitchUser({ accessToken, clientId }, { login });
-    if (!target) {
-      throw new Error(`No Twitch channel called "${login}"`);
-    }
-
-    const url = `${TWITCH_SHOUTOUTS_URL}?from_broadcaster_id=${broadcasterUserId}&to_broadcaster_id=${target.twitchUserId}&moderator_id=${broadcasterUserId}`;
-    const response = await fetch(url, { method: "POST", headers });
-
-    // Twitch rate-limits shoutouts hard (one per 2 minutes, and not to the same
-    // channel within 60 minutes) and refuses when the channel isn't live.
-    if (response.status === 429) {
-      throw new Error("Twitch is rate-limiting shoutouts — try again in a couple of minutes.");
-    }
-    if (!response.ok) {
-      throw new Error(`Twitch shoutout failed: ${response.status} ${await response.text()}`);
-    }
+    const call = await authorizeTwitch(ctx, args.instanceId, SHOUTOUT_SCOPE);
+    await postShoutout(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"), login);
     return { ok: true };
   },
 });
+
+export async function postShoutout(
+  { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
+  route: TwitchHelixRoute,
+  login: string
+): Promise<void> {
+  const headers = { Authorization: `Bearer ${accessToken}`, "Client-Id": clientId };
+
+  // Helix takes the target by id, not login.
+  const target = await fetchTwitchUser({ accessToken, clientId }, { login }, route);
+  if (!target) {
+    throw new Error(`No Twitch channel called "${login}"`);
+  }
+
+  const url = `${TWITCH_SHOUTOUTS_URL}?from_broadcaster_id=${broadcasterUserId}&to_broadcaster_id=${target.twitchUserId}&moderator_id=${broadcasterUserId}`;
+  const response = await helixResponse(route, {
+    operation: "sendShoutout",
+    kind: "write",
+    viaEngine: (engine) => engine.twitchSendShoutout({ to_broadcaster_id: target.twitchUserId }),
+    direct: () => fetch(url, { method: "POST", headers }),
+  });
+
+  // Twitch rate-limits shoutouts hard (one per 2 minutes, and not to the same
+  // channel within 60 minutes) and refuses when the channel isn't live.
+  if (response.status === 429) {
+    throw new Error("Twitch is rate-limiting shoutouts — try again in a couple of minutes.");
+  }
+  if (!response.ok) {
+    throw new Error(`Twitch shoutout failed: ${response.status} ${await response.text()}`);
+  }
+}

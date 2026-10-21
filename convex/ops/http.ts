@@ -1,10 +1,13 @@
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import { httpAction } from "../_generated/server";
+import { MIN_SUPPORTED_ENGINE_VERSION } from "../lib/engineVersion";
 import { authenticateOps, OPS_SECRET_ENV, OPS_SECRET_NEXT_ENV } from "../lib/ops/auth";
+import { type EngineReportRow, parseActiveDays, tallyEngineCapabilities } from "../lib/ops/engineCapabilityCounts";
 import { parseNotificationRequest } from "../lib/ops/notificationRequest";
 import { type AssignmentRow, tallyPlanAccounts } from "../lib/ops/planCounts";
 import { matchOpsRoute } from "../lib/ops/routes";
+import { parseStorageLimitsRequest } from "../lib/ops/storageLimitsRequest";
 import { logger } from "../logger";
 
 /**
@@ -70,6 +73,33 @@ export const opsHandler = httpAction(async (ctx, request) => {
       }
       return ok(await ctx.runQuery(internal.ops.reads.listEngines, { status, cursor }));
     }
+    case "engines.capabilities": {
+      const days = parseActiveDays(url.searchParams.get("days"));
+      if (days === null) {
+        return error(400, "invalid_days", "days must be a whole number from 1 to 365");
+      }
+      // Active instances are read a page per query; see ops/reads.ts.
+      const nowMs = Date.now();
+      const activeSince = nowMs - days * 24 * 60 * 60 * 1000;
+      const rows: EngineReportRow[] = [];
+      let reportCursor: string | null = null;
+      do {
+        const page: { rows: EngineReportRow[]; cursor: string | null } = await ctx.runQuery(
+          internal.ops.reads.engineReportPage,
+          { since: activeSince, cursor: reportCursor }
+        );
+        rows.push(...page.rows);
+        reportCursor = page.cursor;
+      } while (reportCursor !== null);
+      return ok(
+        tallyEngineCapabilities(rows, {
+          days,
+          activeSince,
+          nowMs,
+          minimumSupportedVersion: MIN_SUPPORTED_ENGINE_VERSION,
+        })
+      );
+    }
     case "engines.byMaintenanceId": {
       const engine = await ctx.runQuery(internal.ops.reads.engineByMaintenanceId, { engineId: route.engineId });
       return engine === null ? error(404, "not_found", "No such engine") : ok(engine);
@@ -83,6 +113,21 @@ export const opsHandler = httpAction(async (ctx, request) => {
       const outcome = await ctx.runAction(internal.ops.engines.act, {
         instanceId: route.instanceId,
         action: route.action,
+        actor: auth.actor,
+        reason: auth.reason ?? "",
+      });
+      return outcome.ok ? ok(outcome.result) : error(outcome.status, outcome.code, outcome.message);
+    }
+    case "instances.setStorageLimits": {
+      const body = await request.json().catch(() => null);
+      const parsed = parseStorageLimitsRequest(body);
+      if (!parsed.ok) {
+        return error(400, "invalid_storage_limits", parsed.message);
+      }
+      // authenticateOps required a reason for this write.
+      const outcome = await ctx.runMutation(internal.ops.storageLimits.set, {
+        instanceId: route.instanceId,
+        limits: parsed.value,
         actor: auth.actor,
         reason: auth.reason ?? "",
       });

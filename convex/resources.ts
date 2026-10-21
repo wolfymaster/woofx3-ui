@@ -230,7 +230,7 @@ export type HostedStorageUsage = {
   fileLimitBytes: number | null;
 };
 
-/** What the Assets page's storage meter shows; null when the instance is not on hosted storage. */
+/** What the Media page's storage meter shows; null when the instance is not on hosted storage. */
 export const hostedStorageUsage = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, args): Promise<HostedStorageUsage | null> => {

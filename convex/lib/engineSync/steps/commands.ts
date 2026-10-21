@@ -21,6 +21,9 @@ export const commandsStep: SyncStep = {
       // Escaped like every other engine JSON Convex stores: an action's `$ref`
       // is a reserved field name there (see lib/dollarKeys.ts).
       actions: escapeDollarKeys(s.actions ?? []) as unknown[],
+      engineWorkflowId: s.workflowId ?? "",
+      workflowError: s.workflowError ?? "",
+      steps: escapeDollarKeys(s.steps ?? []) as unknown[],
       cooldown: s.cooldown,
       priority: s.priority,
       enabled: s.enabled,

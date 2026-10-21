@@ -1,8 +1,7 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
-import { useAction, useQuery } from "convex/react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useCorrelatedRequest } from "@/engine/hooks/use-correlated-request";
 import { dispatchErrorMessage } from "@/lib/field-options-request";
 
 /**
@@ -18,32 +17,21 @@ export function useInternalSettingAction(
   message: string | null;
   data: unknown;
 } {
-  const dispatch = useAction(api.fieldOptions.dispatch);
-  const [correlationKey, setCorrelationKey] = useState<string | null>(null);
-  const [failure, setFailure] = useState<{ correlationKey: string; message: string } | null>(null);
+  const { correlationKey, start, event, failure } = useCorrelatedRequest("fieldOptions", instanceId ?? null);
 
   const trigger = useCallback(() => {
     if (!instanceId || !reference) {
       return;
     }
-    const key = crypto.randomUUID();
-    setCorrelationKey(key);
-    dispatch({ instanceId, reference, correlationKey: key }).catch((error: unknown) => {
-      setFailure({ correlationKey: key, message: dispatchErrorMessage(error) });
-    });
-  }, [instanceId, reference, dispatch]);
-
-  const event = useQuery(
-    api.transientEvents.get,
-    instanceId && correlationKey ? { instanceId, correlationKey } : "skip"
-  );
+    start(reference);
+  }, [instanceId, reference, start]);
 
   return useMemo(() => {
     if (!correlationKey) {
       return { trigger, status: "idle" as const, message: null, data: undefined };
     }
-    if (failure !== null && failure.correlationKey === correlationKey) {
-      return { trigger, status: "error" as const, message: failure.message, data: undefined };
+    if (failure !== null) {
+      return { trigger, status: "error" as const, message: dispatchErrorMessage(failure.error), data: undefined };
     }
     if (event === undefined || event === null) {
       return { trigger, status: "pending" as const, message: null, data: undefined };

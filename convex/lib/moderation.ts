@@ -229,8 +229,18 @@ export function chatSettingsFromHelix(body: unknown): ChatSettings | null {
  * fields named in the patch are sent: Helix leaves the rest alone, so a toggle
  * never clobbers a mode someone else changed from Twitch in the meantime.
  */
-export function chatSettingsToHelix(patch: ChatSettingsPatch): Validated<Record<string, boolean | number>> {
-  const body: Record<string, boolean | number> = {};
+/** Update Chat Settings' body, by Helix's names. */
+export interface HelixChatSettingsPatch {
+  emote_mode?: boolean;
+  subscriber_mode?: boolean;
+  follower_mode?: boolean;
+  follower_mode_duration?: number;
+  slow_mode?: boolean;
+  slow_mode_wait_time?: number;
+}
+
+export function chatSettingsToHelix(patch: ChatSettingsPatch): Validated<HelixChatSettingsPatch> {
+  const body: HelixChatSettingsPatch = {};
   if (patch.emoteMode !== undefined) {
     body.emote_mode = patch.emoteMode;
   }

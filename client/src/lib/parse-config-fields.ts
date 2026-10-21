@@ -5,7 +5,9 @@ import {
   type ConfigFieldSource,
   type ConfigFieldType,
   type DataShapeField,
+  type InternalConfigFieldSource,
   isComparisonOperator,
+  isWidgetSurface,
   LIST_ITEM_FIELD_TYPES,
 } from "@woofx3/api/ui-schema";
 import { isThemeField } from "@/lib/widget-theme-picker";
@@ -37,21 +39,57 @@ export function parseConfigFieldSource(raw: unknown): ConfigFieldSource | undefi
   if (o.kind === "scenePlacements" && typeof o.sceneField === "string") {
     return { kind: "scenePlacements", sceneField: o.sceneField };
   }
-  if (o.kind === "internal" && o.request && typeof o.request === "object") {
-    const req = o.request as Record<string, unknown>;
-    if (typeof req.event === "string") {
-      return {
-        kind: "internal",
-        request: {
-          event: req.event,
-          payload:
-            req.payload && typeof req.payload === "object" ? (req.payload as Record<string, unknown>) : undefined,
-        },
-        timeoutMs: typeof o.timeoutMs === "number" ? o.timeoutMs : undefined,
-      };
-    }
+  return parseInternalRequest(o);
+}
+
+function parseInternalRequest(o: Record<string, unknown>): InternalConfigFieldSource | undefined {
+  if (o.kind !== "internal" || !o.request || typeof o.request !== "object") {
+    return undefined;
   }
-  return undefined;
+  const req = o.request as Record<string, unknown>;
+  if (typeof req.event !== "string") {
+    return undefined;
+  }
+  return {
+    kind: "internal",
+    request: {
+      event: req.event,
+      payload: req.payload && typeof req.payload === "object" ? (req.payload as Record<string, unknown>) : undefined,
+    },
+    timeoutMs: typeof o.timeoutMs === "number" ? o.timeoutMs : undefined,
+  };
+}
+
+/**
+ * What a `button` fires. `ConfigField.action` is opaque in the SDK; these are
+ * the two shapes barkloader accepts, so anything else is dropped rather than
+ * forwarded for a consumer to trip over.
+ */
+type ConfigFieldAction = InternalConfigFieldSource | { kind: "integration"; integration: string };
+
+function parseConfigFieldAction(raw: unknown): ConfigFieldAction | undefined {
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const o = raw as Record<string, unknown>;
+  if (o.kind === "integration") {
+    return typeof o.integration === "string" && o.integration !== ""
+      ? { kind: "integration", integration: o.integration }
+      : undefined;
+  }
+  return parseInternalRequest(o);
+}
+
+/** `""` is meaningful (it drops that part of the sentence); whitespace alone is not. */
+function parseAnyText(raw: unknown): string | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  return raw === "" || raw.trim() !== "" ? raw : undefined;
+}
+
+function parseMissingText(raw: unknown): string | undefined {
+  return typeof raw === "string" && raw.trim() !== "" ? raw : undefined;
 }
 
 const OPERATORS = new Set<ConditionOperator>([
@@ -106,6 +144,10 @@ export function parseConfigField(item: unknown): ConfigField | null {
     mediaType: o.mediaType === "image" || o.mediaType === "audio" || o.mediaType === "video" ? o.mediaType : undefined,
     kinds: Array.isArray(o.kinds) ? o.kinds.filter((k): k is string => typeof k === "string") : undefined,
     resourceKind: type === "resource_ref" && typeof o.resourceKind === "string" ? o.resourceKind : undefined,
+    surface: type === "layout" && isWidgetSurface(o.surface) ? o.surface : undefined,
+    action: type === "button" ? parseConfigFieldAction(o.action) : undefined,
+    anyText: parseAnyText(o.anyText),
+    missingText: parseMissingText(o.missingText),
   };
   if (Array.isArray(o.options)) {
     field.options = o.options
