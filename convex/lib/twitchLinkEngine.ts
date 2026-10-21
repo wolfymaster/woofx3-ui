@@ -68,18 +68,17 @@ export async function disconnectLink(effects: DisconnectEffects, force: boolean)
 
 export type EngineSyncStatus = "connected" | "connectedPendingEngine";
 
+/** What an engine sync did when it did not fail: `no_engine` means the instance has no registered engine to tell. */
+export type EngineSyncOutcome = "synced" | "no_engine";
+
 /**
  * Whether the engine has picked up a freshly saved link. An instance without a
  * registered engine has nothing to pick it up, so it is connected.
  */
 export async function syncAfterConnect(
-  hasEngine: boolean,
-  sync: () => Promise<void>,
+  sync: () => Promise<EngineSyncOutcome>,
   onFailure: (err: unknown) => void
 ): Promise<EngineSyncStatus> {
-  if (!hasEngine) {
-    return "connected";
-  }
   try {
     await sync();
   } catch (err) {
@@ -87,4 +86,30 @@ export async function syncAfterConnect(
     return "connectedPendingEngine";
   }
   return "connected";
+}
+
+/**
+ * Offers a saved link to the engine again. Only a failed engine call is
+ * `engine_unreachable`; a missing link or engine is the caller's mistake and
+ * says so, and anything the sync throws before reaching the engine must be
+ * ruled out by the caller (see `retryEngineSync`).
+ */
+export async function retryEngineSyncWith(
+  hasLink: boolean,
+  sync: () => Promise<EngineSyncOutcome>,
+  onFailure: (err: unknown) => void
+): Promise<void> {
+  if (!hasLink) {
+    throw new Error("There is no Twitch connection to hand to the engine");
+  }
+  let outcome: EngineSyncOutcome;
+  try {
+    outcome = await sync();
+  } catch (err) {
+    onFailure(err);
+    throw engineUnreachable();
+  }
+  if (outcome === "no_engine") {
+    throw new Error("This instance has no engine registered to hand Twitch to");
+  }
 }

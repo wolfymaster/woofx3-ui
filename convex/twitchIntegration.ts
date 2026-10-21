@@ -15,8 +15,9 @@ import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
 import {
   type DisconnectResult,
   disconnectLink,
+  type EngineSyncOutcome,
   type EngineSyncStatus,
-  engineUnreachable,
+  retryEngineSyncWith,
   syncAfterConnect,
 } from "./lib/twitchLinkEngine";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
@@ -164,15 +165,8 @@ export const finishConnect = action({
     if (!result.ok) {
       return result;
     }
-    const { instance } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
-      instanceId: result.instanceId,
-      platform: "twitch",
-    });
     const status = await syncAfterConnect(
-      Boolean(instance?.clientId && instance?.clientSecret),
-      async () => {
-        await ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId: result.instanceId });
-      },
+      () => ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId: result.instanceId }),
       (err) => console.error("[twitch-connect] engine sync failed after saving the link", String(err))
     );
     return { ok: true, status, redirectTo: result.redirectTo, instanceId: result.instanceId };
@@ -188,12 +182,20 @@ export const retryEngineSync = action({
   args: { instanceId: v.id("instances") },
   handler: async (ctx, { instanceId }): Promise<{ ok: true }> => {
     await requireTwitchLinkManager(ctx, instanceId);
-    try {
-      await ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId });
-    } catch (err) {
-      console.error("[twitch-connect] engine sync retry failed", String(err));
-      throw engineUnreachable();
+    // A server configuration fault is not an engine problem: fail it here,
+    // before the sync, so it is never reported as an unreachable engine.
+    if (!process.env.AUTH_TWITCH_ID) {
+      throw new Error("AUTH_TWITCH_ID env var is not set");
     }
+    const { link } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
+      instanceId,
+      platform: "twitch",
+    });
+    await retryEngineSyncWith(
+      link !== null,
+      () => ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId }),
+      (err) => console.error("[twitch-connect] engine sync retry failed", String(err))
+    );
     return { ok: true };
   },
 });
@@ -223,7 +225,7 @@ export const deletePlatformLink = internalMutation({
 
 export const syncToEngine = internalAction({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
+  handler: async (ctx, { instanceId }): Promise<EngineSyncOutcome> => {
     const { link, instance } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
       instanceId,
       platform: "twitch",
@@ -236,7 +238,7 @@ export const syncToEngine = internalAction({
       throw new Error("Instance not found");
     }
     if (!instance.clientId || !instance.clientSecret) {
-      throw new Error("Instance not registered with engine");
+      return "no_engine";
     }
 
     const twitchClientId = process.env.AUTH_TWITCH_ID;
@@ -259,6 +261,7 @@ export const syncToEngine = internalAction({
     const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
 
     await engine.setTwitchToken(token, link.connectedByUserId ?? undefined);
+    return "synced";
   },
 });
 

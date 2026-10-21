@@ -5,7 +5,9 @@ import {
   type DisconnectEffects,
   disconnectLink,
   ENGINE_UNREACHABLE,
+  type EngineSyncOutcome,
   isEngineUnreachableData,
+  retryEngineSyncWith,
   syncAfterConnect,
 } from "./twitchLinkEngine";
 
@@ -68,26 +70,71 @@ describe("disconnectLink", () => {
 describe("syncAfterConnect", () => {
   const cases: Array<{
     name: string;
-    hasEngine: boolean;
-    sync: () => Promise<void>;
+    sync: () => Promise<EngineSyncOutcome>;
     expected: string;
     failures: number;
   }> = [
-    { name: "a synced engine is connected", hasEngine: true, sync: up, expected: "connected", failures: 0 },
-    { name: "a failed sync is pending", hasEngine: true, sync: down, expected: "connectedPendingEngine", failures: 1 },
+    { name: "a synced engine is connected", sync: async () => "synced", expected: "connected", failures: 0 },
+    { name: "a failed sync is pending", sync: down, expected: "connectedPendingEngine", failures: 1 },
+    { name: "no engine is connected", sync: async () => "no_engine", expected: "connected", failures: 0 },
+  ];
+  for (const { name, sync, expected, failures } of cases) {
+    test(name, async () => {
+      let failed = 0;
+      expect(await syncAfterConnect(sync, () => failed++)).toBe(expected as never);
+      expect(failed).toBe(failures);
+    });
+  }
+});
+
+describe("retryEngineSyncWith", () => {
+  const cases: Array<{
+    name: string;
+    hasLink: boolean;
+    sync: () => Promise<EngineSyncOutcome>;
+    refusal: "unreachable" | "other" | null;
+    failures: number;
+  }> = [
+    { name: "a synced engine succeeds", hasLink: true, sync: async () => "synced", refusal: null, failures: 0 },
     {
-      name: "no engine is connected without syncing",
-      hasEngine: false,
+      name: "a failed engine call is engine_unreachable",
+      hasLink: true,
       sync: down,
-      expected: "connected",
+      refusal: "unreachable",
+      failures: 1,
+    },
+    {
+      name: "a missing link is not reported as unreachable",
+      hasLink: false,
+      sync: down,
+      refusal: "other",
+      failures: 0,
+    },
+    {
+      name: "no registered engine is not reported as unreachable",
+      hasLink: true,
+      sync: async () => "no_engine",
+      refusal: "other",
       failures: 0,
     },
   ];
-  for (const { name, hasEngine, sync, expected, failures } of cases) {
+  for (const { name, hasLink, sync, refusal, failures } of cases) {
     test(name, async () => {
       let failed = 0;
-      expect(await syncAfterConnect(hasEngine, sync, () => failed++)).toBe(expected as never);
+      const thrown = await retryEngineSyncWith(hasLink, sync, () => failed++).then(
+        () => null,
+        (err: unknown) => err
+      );
       expect(failed).toBe(failures);
+      if (refusal === null) {
+        expect(thrown).toBeNull();
+      } else if (refusal === "unreachable") {
+        expect(thrown).toBeInstanceOf(ConvexError);
+        expect(isEngineUnreachableData((thrown as ConvexError<unknown>).data)).toBe(true);
+      } else {
+        expect(thrown).toBeInstanceOf(Error);
+        expect(thrown).not.toBeInstanceOf(ConvexError);
+      }
     });
   }
 });
