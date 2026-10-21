@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { ImportReport, ImportReportItem } from "@convex/setupImports";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useCallback } from "react";
 import type { SetupImportsGateway } from "@/engine/gateway";
 import type {
@@ -14,7 +14,7 @@ import type {
 import { withPlainError } from "./errors";
 import { fromSetupImportId, toSetupImportId } from "./ids";
 import { useMappedValue } from "./mapped";
-import { requireInstance, useScopeInstanceId } from "./scope";
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 // Convex reads the export into a report of the items it would create, and
 // creates them on the engine once the streamer starts it, in scheduled
@@ -63,16 +63,13 @@ function useLatest() {
 }
 
 function useAnalyzeRequest() {
-  const analyze = useAction(api.setupImports.analyze);
-  const instanceId = useScopeInstanceId();
+  const analyze = useInstanceAction(api.setupImports.analyze);
   return useCallback(
     async ({ source, documentChunks }: SetupImportAnalysis) => {
-      const { importId } = await analyze({ instanceId: requireInstance(instanceId), source, documentChunks }).catch(
-        withPlainError
-      );
+      const { importId } = await analyze({ source, documentChunks }).catch(withPlainError);
       return { importId: toSetupImportId(importId) };
     },
-    [analyze, instanceId]
+    [analyze]
   );
 }
 
