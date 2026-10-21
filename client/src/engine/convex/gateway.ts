@@ -14,6 +14,7 @@ import { convexResourcesGateway } from "./resources";
 import { convexScenesGateway } from "./scenes";
 import { convexSessionGateway } from "./session";
 import { convexSetupImportsGateway } from "./setup-imports";
+import { convexStarterPacksGateway } from "./starter-packs";
 import { convexStatusGateway } from "./status";
 import { convexStreamOpsGateway } from "./stream-ops";
 import { convexTwitchLinkGateway } from "./twitch-link";
@@ -45,4 +46,5 @@ export const convexEngineGateway: EngineGateway = {
   overlays: convexOverlaysGateway,
   moduleOAuth: convexModuleOAuthGateway,
   setupImports: convexSetupImportsGateway,
+  starterPacks: convexStarterPacksGateway,
 };

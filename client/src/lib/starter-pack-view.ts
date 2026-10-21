@@ -8,7 +8,7 @@ import {
   type StarterStep,
   starterItemKey,
 } from "@convex/lib/starterPacks";
-import type { StarterItemState } from "@convex/starterPacks";
+import type { StarterPackItemState } from "@/engine/types";
 
 export type StarterItemView =
   | { state: "installed" | "installing" | "ready" }
@@ -23,7 +23,7 @@ export function starterItemView(
   pack: StarterPack,
   item: StarterItem,
   catalog: StarterCatalog,
-  states: Record<string, StarterItemState>
+  states: Record<string, StarterPackItemState>
 ): StarterItemView {
   const state = states[starterItemKey(pack.id, item.id)] ?? "available";
   if (state === "installed" || state === "installing") {

@@ -37,6 +37,7 @@ import type {
   MacroId,
   MacroRunResult,
   MacroVariableValue,
+  MarketplaceBundleInstall,
   ModuleDetail,
   ModuleFileContent,
   ModuleFileList,
@@ -72,6 +73,9 @@ import type {
   SetupImportAnalysis,
   SetupImportId,
   SetupImportReport,
+  StarterPackInstall,
+  StarterPackInstallOutcome,
+  StarterPackItemState,
   StorageConfig,
   StreamEventFrame,
   StreamRecapEngineDetail,
@@ -137,6 +141,7 @@ export interface EngineGateway {
   readonly overlays: OverlaysGateway;
   readonly moduleOAuth: ModuleOAuthGateway;
   readonly setupImports: SetupImportsGateway;
+  readonly starterPacks: StarterPacksGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -347,6 +352,11 @@ export interface ModulesGateway {
     approvedPermissions: string[],
     approvedLocalEndpoints: string[]
   ) => Promise<{ moduleKey: string }>;
+  /**
+   * Installs a marketplace bundle (a scene or an alert) onto the engine and
+   * resolves with what it made. Rejects for a listing the instance may not install.
+   */
+  useBundleInstallRequest(): (listingId: string) => Promise<MarketplaceBundleInstall>;
 }
 
 /**
@@ -614,4 +624,16 @@ export interface SetupImportsGateway {
   useRetryRequest(): (importId: SetupImportId) => Promise<void>;
   /** Throws away an import still in review. */
   useDiscardRequest(): (importId: SetupImportId) => Promise<void>;
+}
+
+/**
+ * The app's starter packs of ready-made commands and workflows, installed
+ * onto the engine. The packs are the app's own; what each item made on the
+ * engine is tracked so a pack shows what is already in place.
+ */
+export interface StarterPacksGateway {
+  /** Each item's state, keyed by `starterItemKey`; null when the caller cannot see the instance. */
+  useStatus(): Live<Record<string, StarterPackItemState> | null>;
+  /** Installs a pack's items and resolves with how each went; an item can still be pending on the engine. */
+  useInstallRequest(): (install: StarterPackInstall) => Promise<StarterPackInstallOutcome[]>;
 }

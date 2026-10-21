@@ -1295,3 +1295,28 @@ export interface SetupImportAnalysis {
   source: SetupImportSource;
   documentChunks: string[];
 }
+
+// ==================== Marketplace installs and starter packs ====================
+
+/** What installing a marketplace bundle (a scene or an alert) made on the engine. */
+export interface MarketplaceBundleInstall {
+  kind: "scene" | "alert";
+  /** The engine's id for the scene or alert composition it made. */
+  engineId: string;
+}
+
+/** Whether a starter-pack item is in place on the engine. */
+export type StarterPackItemState = "installed" | "installing" | "conflict" | "available";
+
+/** How installing one starter-pack item went. */
+export interface StarterPackInstallOutcome {
+  itemId: string;
+  outcome: "installed" | "already-installed" | "pending" | "conflict" | "busy" | "unavailable" | "failed";
+  message?: string;
+}
+
+/** A starter pack to install, with the values the streamer filled in for its fields. */
+export interface StarterPackInstall {
+  packId: string;
+  values: Record<string, string | number>;
+}
