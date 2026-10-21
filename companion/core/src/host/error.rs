@@ -24,4 +24,8 @@ pub enum HostError {
     EngineDirNotAbsolute(PathBuf),
     #[error("there is no engine orchestrator at {0}")]
     OrchestratorMissing(PathBuf),
+    #[error("the engine's data directory must be an absolute path, not {0}")]
+    DataDirNotAbsolute(PathBuf),
+    #[error("the engine's data directory {0} is inside the engine release")]
+    DataDirInsideEngine(PathBuf),
 }
