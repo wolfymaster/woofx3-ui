@@ -75,6 +75,9 @@ pub struct HttpEngineGateway {
 impl HttpEngineGateway {
     /// `timeout` bounds each call, connection included.
     pub fn new(api_url: String, timeout: Duration) -> Result<Self, HostError> {
+        // In an app where reqwest is built with rustls (the updater's
+        // feature), building a client panics until a provider is installed.
+        crate::install_tls_provider();
         let http = reqwest::Client::builder()
             .timeout(timeout)
             // The engine is on loopback, and the calls carry the registration
