@@ -1,10 +1,8 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { SceneSyncClient, type SceneSyncState } from "@woofx3/api/scene-editor/client";
-import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useOverlayPreviewUrlRequest } from "@/engine/hooks/use-overlays";
 import { useSceneEditorSessionRequest } from "@/engine/hooks/use-scenes";
-import type { InstanceId } from "@/engine/types";
+import type { InstanceId, SceneId } from "@/engine/types";
 import { toast } from "@/hooks/use-toast";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
 import {
@@ -19,7 +17,7 @@ interface UseSceneEditorSessionArgs {
   instanceId: InstanceId;
   engineSceneId: string;
   /** The Convex scene, whose preview URL names sceneManager's public origin. */
-  sceneId: Id<"scenes"> | undefined;
+  sceneId: SceneId | undefined;
   /**
    * sceneManager's public URL for a composition with no preview page (an
    * alert, which is never an overlay page). Used in place of `sceneId`'s
@@ -79,7 +77,7 @@ export function useSceneEditorSession({
   unsavedOutsideSession,
 }: UseSceneEditorSessionArgs): SceneEditorSession {
   const getSession = useSceneEditorSessionRequest();
-  const getPreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
+  const getPreviewUrl = useOverlayPreviewUrlRequest();
   const [sceneKey] = useState(() => sceneKeyOf(instanceId, engineSceneId));
   const [client, setClient] = useState<SceneSyncClient | null>(null);
   const unsavedOutsideSessionRef = useRef(unsavedOutsideSession);
@@ -98,7 +96,7 @@ export function useSceneEditorSession({
   } else if (sceneId) {
     socketSourceRef.current = {
       getGrant: () => getSession(engineSceneId),
-      getPreviewUrl: () => getPreviewUrl({ sceneId }),
+      getPreviewUrl: () => getPreviewUrl(sceneId),
     };
   }
   const hasScene = sceneId !== undefined || publicUrl !== undefined;

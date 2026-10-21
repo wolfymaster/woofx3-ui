@@ -3,7 +3,7 @@ import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { type CommandResult, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { ArrowLeft, ChevronDown, Link, MoreVertical, RefreshCw, Save, Settings, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -22,6 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useBrowserSourceUrlRequest, useRotateBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import {
   useCreateSceneRequest,
   useDeleteSceneRequest,
@@ -34,8 +35,6 @@ import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
-import { browserSourceUrlForKey } from "@/lib/browser-source-url";
-import { fromSceneId } from "@/lib/cloud-ids";
 import {
   type CanvasSettings,
   canvasSettingsOf,
@@ -115,14 +114,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // editor chooses for itself, and every one starts on the draft.
   const [live, setLive] = useState(false);
   const uiVersion: Version = live ? "published" : "draft";
-  const convexSceneId = fetchedScene ? fromSceneId(fetchedScene.id) : undefined;
+  const sceneId = fetchedScene?.id;
 
   const me = useQuery(api.users.getMe);
   const myName = me === undefined ? undefined : (me?.name ?? me?.email ?? "");
   const session = useSceneEditorSession({
     instanceId,
     engineSceneId,
-    sceneId: convexSceneId,
+    sceneId,
     enabled: sessionMode,
     editorName: myName,
     unsavedOutsideSession: sessionMode && isDirty,
@@ -223,8 +222,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const updateSceneAction = useUpdateSceneRequest();
   const deleteSceneAction = useDeleteSceneRequest();
   const createSceneAction = useCreateSceneRequest();
-  const getOrCreateBrowserSourceKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
-  const rotateBrowserSourceKey = useAction(api.browserSource.rotateBrowserSourceKey);
+  const getBrowserSourceUrl = useBrowserSourceUrlRequest();
+  const rotateBrowserSourceUrl = useRotateBrowserSourceUrlRequest();
 
   const reportRefused = useCallback(
     (result: CommandResult) => {
@@ -334,19 +333,13 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     };
   }, [saveUnsavedName]);
 
-  const copyKeyToClipboard = useCallback(async (key: string) => {
-    const browserSourceUrl = browserSourceUrlForKey(key);
-    await navigator.clipboard.writeText(browserSourceUrl);
-    return browserSourceUrl;
-  }, []);
-
   const handleCopyBrowserSource = useCallback(async () => {
-    if (!convexSceneId) {
+    if (!sceneId) {
       return;
     }
     try {
-      const key = await getOrCreateBrowserSourceKey({ sceneId: convexSceneId });
-      const browserSourceUrl = await copyKeyToClipboard(key);
+      const browserSourceUrl = await getBrowserSourceUrl(sceneId);
+      await navigator.clipboard.writeText(browserSourceUrl);
       toast({ title: "Browser source URL copied", description: browserSourceUrl });
     } catch (err) {
       toast({
@@ -355,15 +348,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [convexSceneId, getOrCreateBrowserSourceKey, copyKeyToClipboard, toast]);
+  }, [sceneId, getBrowserSourceUrl, toast]);
 
   const handleRotateBrowserSource = useCallback(async () => {
-    if (!convexSceneId) {
+    if (!sceneId) {
       return;
     }
     try {
-      const key = await rotateBrowserSourceKey({ sceneId: convexSceneId });
-      await copyKeyToClipboard(key);
+      await navigator.clipboard.writeText(await rotateBrowserSourceUrl(sceneId));
       toast({ title: "Browser source URL rotated", description: "Old URLs revoked. New URL copied." });
     } catch (err) {
       toast({
@@ -372,7 +364,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [convexSceneId, rotateBrowserSourceKey, copyKeyToClipboard, toast]);
+  }, [sceneId, rotateBrowserSourceUrl, toast]);
 
   const handleSave = useCallback(async () => {
     if (!scene || !shownDoc || sessionMode || !editorModeKnown) {
@@ -527,7 +519,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             variant="outline"
             className="rounded-r-none"
             onClick={handleCopyBrowserSource}
-            disabled={!convexSceneId}
+            disabled={!sceneId}
             data-testid="button-copy-browser-source"
           >
             <Link className="h-4 w-4 mr-2" />
@@ -539,7 +531,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 variant="outline"
                 size="icon"
                 className="rounded-l-none border-l-0"
-                disabled={!convexSceneId}
+                disabled={!sceneId}
                 aria-label="More browser source options"
                 data-testid="button-browser-source-menu"
               >
@@ -720,7 +712,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       onRefused={reportRefused}
       preview={
         <LiveScenePreview
-          sceneId={convexSceneId}
+          sceneId={sceneId}
           width={canvasSettings.width}
           height={canvasSettings.height}
           layoutMessage={previewMessage}

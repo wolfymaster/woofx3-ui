@@ -64,6 +64,7 @@ import type {
   ResourceValues,
   SceneChanges,
   SceneEditorGrant,
+  SceneId,
   SceneRecord,
   SceneWidgetCatalogRow,
   StorageConfig,
@@ -128,6 +129,7 @@ export interface EngineGateway {
   readonly config: ConfigGateway;
   readonly session: SessionGateway;
   readonly twitchLink: TwitchLinkGateway;
+  readonly overlays: OverlaysGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -554,4 +556,20 @@ export interface TwitchLinkGateway {
   useLinkFlow(): TwitchLinkFlow;
   /** Removes the link. Rejects for a caller who is not an owner or admin. */
   useUnlinkRequest(): () => Promise<void>;
+}
+
+/** The addresses a scene's overlay is served at: the one OBS loads, and previews of it. */
+export interface OverlaysGateway {
+  /**
+   * The URL OBS loads the scene from, made on first ask and the same after
+   * that until rotated. Rejects for a scene that has not reached the engine.
+   */
+  useBrowserSourceUrlRequest(): (sceneId: SceneId) => Promise<string>;
+  /** Replaces the scene's browser-source URL; the one before stops working. */
+  useRotateBrowserSourceUrlRequest(): (sceneId: SceneId) => Promise<string>;
+  /**
+   * A short-lived URL of the scene's live overlay, for an editor's preview.
+   * Null when the scene has not reached the engine or the caller cannot see it.
+   */
+  usePreviewUrlRequest(): (sceneId: SceneId) => Promise<string | null>;
 }
