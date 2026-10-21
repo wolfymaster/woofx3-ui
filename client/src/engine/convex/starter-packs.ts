@@ -3,7 +3,8 @@ import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { StarterPacksGateway } from "@/engine/gateway";
-import type { StarterPackInstall, StarterPackInstallOutcome } from "@/engine/types";
+import type { StarterPackInstall, StarterPackInstallOutcome, StarterPackItemState } from "@/engine/types";
+import { useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 // The packs themselves are the app's own (lib/starterPacks); Convex creates
@@ -16,9 +17,17 @@ export function toStarterPackInstallOutcome(row: InstallOutcomeRow): StarterPack
   return { itemId: row.itemId, outcome: row.outcome, message: row.message };
 }
 
+type StatusRow = NonNullable<FunctionReturnType<typeof api.starterPacks.status>>;
+
+/** Each item's state, keyed as Convex keys it (`starterItemKey`), copied into a record of the gateway's own. */
+export function toStarterPackStatus(row: StatusRow): Record<string, StarterPackItemState> {
+  return Object.fromEntries(Object.entries(row).map(([key, state]) => [key, state]));
+}
+
 function useStatus() {
   const instanceId = useScopeInstanceId();
-  return useQuery(api.starterPacks.status, instanceId ? { instanceId } : "skip");
+  const status = useQuery(api.starterPacks.status, instanceId ? { instanceId } : "skip");
+  return useMappedValue(status, toStarterPackStatus);
 }
 
 function useInstallRequest() {

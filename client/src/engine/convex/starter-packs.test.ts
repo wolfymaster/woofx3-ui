@@ -22,7 +22,7 @@ mock.module("convex/react", () => ({
   },
 }));
 
-const { convexStarterPacksGateway, toStarterPackInstallOutcome } = await import("./starter-packs");
+const { convexStarterPacksGateway, toStarterPackInstallOutcome, toStarterPackStatus } = await import("./starter-packs");
 const { convexModulesGateway } = await import("./modules");
 
 const instanceId = TEST_INSTANCE_ID;
@@ -71,4 +71,20 @@ describe("marketplace bundle installs", () => {
     expect(await install("listing-1")).toEqual({ kind: "scene", engineId: "scene-9" });
     expect(calls).toEqual([{ name: "marketplaceCatalog:installBundle", args: { instanceId, listingId: "listing-1" } }]);
   });
+});
+
+describe("toStarterPackStatus", () => {
+  const cases: Array<{ name: string; row: Parameters<typeof toStarterPackStatus>[0]; expected: unknown }> = [
+    { name: "no items tracked yet", row: {}, expected: {} },
+    {
+      name: "each item keeps its key and state",
+      row: { "handy:lurk": "installed", "handy:raid": "installing", "raid:shoutout": "conflict" },
+      expected: { "handy:lurk": "installed", "handy:raid": "installing", "raid:shoutout": "conflict" },
+    },
+  ];
+  for (const { name, row, expected } of cases) {
+    test(name, () => {
+      expect(toStarterPackStatus(row)).toEqual(expected);
+    });
+  }
 });
