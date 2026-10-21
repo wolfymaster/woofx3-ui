@@ -71,7 +71,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
   const enabledTypes = useMemo(() => (enabled === null ? null : new Set(enabled ?? [])), [enabled]);
 
   const alerts = useEngineAlerts(toInstanceId(instanceId ?? null), ALERT_LIMIT);
-  const { events, status } = useEventLog(instanceId, enabled);
+  const { events, status } = useEventLog(toInstanceId(instanceId ?? null), enabled);
   const rows = useMemo(() => mergeActivity(events, alerts ?? [], enabledTypes), [events, alerts, enabledTypes]);
 
   const failures = rows.filter((row) => row.alerts[0] && isFailureStatus(row.alerts[0].status)).length;

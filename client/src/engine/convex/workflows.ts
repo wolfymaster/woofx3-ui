@@ -169,7 +169,7 @@ function useRuns(instanceId: InstanceId, engineWorkflowId: string, limit: number
 }
 
 // The transport is a module singleton, so this keeps its identity without memoising.
-const subscribeRuns = (instanceId: string, onRun: (run: WorkflowRun) => void) =>
+const subscribeRuns = (instanceId: InstanceId, onRun: (run: WorkflowRun) => void) =>
   transport.subscribeWorkflowRuns(instanceId, onRun);
 
 function useNotRunning(instanceId: InstanceId | null) {

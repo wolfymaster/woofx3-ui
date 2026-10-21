@@ -186,16 +186,16 @@ export interface EventLogGateway {
   ) => Promise<{ success: boolean; message: string }>;
   /** Subscribes to pushed events of `types` (null: every type the engine pushes); returns the unsubscribe. */
   useStreamEventsSubscription(): (
-    instanceId: string,
+    instanceId: InstanceId,
     types: readonly string[] | null,
     onFrame: (frame: StreamEventFrame) => void
   ) => () => void;
   /** A page of the engine's event log. Needs `events.log`. */
-  useEventsRequest(): (instanceId: string, query?: EventLogQuery) => Promise<EventLogPage>;
+  useEventsRequest(): (instanceId: InstanceId, query?: EventLogQuery) => Promise<EventLogPage>;
   /** Which event types the engine logs and pushes, and which it offers. Needs `events.log`. */
-  useSettingsRequest(): (instanceId: string) => Promise<EventLogSettings>;
+  useSettingsRequest(): (instanceId: InstanceId) => Promise<EventLogSettings>;
   /** Replaces the engine's selection and resolves with the settings it results in. */
-  useSetSelectionRequest(): (instanceId: string, selection: EventLogSelection) => Promise<EventLogSettings>;
+  useSetSelectionRequest(): (instanceId: InstanceId, selection: EventLogSelection) => Promise<EventLogSettings>;
 }
 
 /** The alerts the engine dispatched, as its callbacks report them, and its overlay queue. */
@@ -456,7 +456,7 @@ export interface WorkflowsGateway {
   /** A workflow's recorded runs, newest first, at most `limit`. */
   useRuns(instanceId: InstanceId, engineWorkflowId: string, limit: number): Live<RecordedWorkflowRun[]>;
   /** Subscribes to runs as the engine pushes them; returns the unsubscribe. */
-  useRunsSubscription(): (instanceId: string, onRun: (run: WorkflowRun) => void) => () => void;
+  useRunsSubscription(): (instanceId: InstanceId, onRun: (run: WorkflowRun) => void) => () => void;
   /**
    * Enabled workflows the engine reported it could not set up. Empty when the
    * caller cannot see the instance; skipped (always loading) for a null id.

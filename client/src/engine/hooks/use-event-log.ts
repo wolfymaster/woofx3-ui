@@ -1,7 +1,7 @@
 import { useStore } from "@nanostores/react";
 import { useEffect, useMemo, useState } from "react";
 import { useEngineGateway } from "@/engine/context";
-import type { StreamEventFrame } from "@/engine/types";
+import type { InstanceId, StreamEventFrame } from "@/engine/types";
 import type { ActivityEvent } from "@/lib/activity-feed";
 import { $engineConnected } from "@/lib/transport/engine-connection";
 
@@ -37,7 +37,7 @@ function withId(frame: StreamEventFrame): ActivityEvent {
  * - `types` undefined: not known yet; nothing is read or subscribed.
  */
 export function useEventLog(
-  instanceId: string | undefined,
+  instanceId: InstanceId | null,
   types: readonly string[] | null | undefined
 ): { events: ActivityEvent[]; status: EventLogStatus } {
   const { eventLog } = useEngineGateway();

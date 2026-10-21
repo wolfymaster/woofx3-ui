@@ -3,9 +3,9 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEngineScope } from "@/engine/context";
 import { useWorkflowRunsSubscription } from "@/engine/hooks/use-workflows";
 import type { WorkflowRun } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { cn } from "@/lib/utils";
 import { mergeWorkflowRun } from "@/lib/workflow-run-list";
@@ -89,25 +89,22 @@ interface WorkflowRunsModuleProps {
 }
 
 export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps) {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const subscribeWorkflowRuns = useWorkflowRunsSubscription();
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Subscribe to workflow runs via transport. Depends on instance?._id (not
-  // the instance object) to avoid re-subscribing on every reference change;
-  // refreshKey is a deliberate re-run trigger for the manual refresh button.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey resubscribes for the refresh button
   useEffect(() => {
-    if (!instance) return;
-    const instanceId = instance._id;
-
+    if (!instanceId) {
+      return;
+    }
     const unsubscribe = subscribeWorkflowRuns(instanceId, (run) => {
       setRuns((prev) => mergeWorkflowRun(prev, run, MAX_RUNS));
     });
 
     return unsubscribe;
-  }, [instance?._id, refreshKey]);
+  }, [instanceId, subscribeWorkflowRuns, refreshKey]);
 
   return (
     <div className="flex flex-col h-full">
@@ -133,7 +130,7 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
           {runs.length === 0 ? (
             <div className="py-8 text-center">
               <Play className="h-8 w-8 mx-auto text-muted-foreground/50 mb-3" />
-              <p className="text-sm text-muted-foreground">{instance ? "No recent runs" : "No instance connected"}</p>
+              <p className="text-sm text-muted-foreground">{instanceId ? "No recent runs" : "No instance connected"}</p>
             </div>
           ) : (
             runs.map((run) => <WorkflowRunItem key={run.id} run={run} />)
