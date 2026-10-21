@@ -49,6 +49,12 @@ export type MacroId = GatewayId<"macro">;
 /** A callback recorded from the engine, kept for debugging. */
 export type WebhookEventId = GatewayId<"webhookEvent">;
 
+/**
+ * A scene as the gateway that lists scenes knows it. The engine's own id for
+ * the scene is `engineSceneId`; this one keys the gateway's copy of it.
+ */
+export type SceneId = GatewayId<"scene">;
+
 // ==================== Read shapes ====================
 
 /**
@@ -683,7 +689,7 @@ export interface EventWatch {
 /** One overlay scene. `widgets` and `layout` are the engine's stored JSON, parsed. */
 export interface SceneRecord {
   /** The gateway's id of the scene, for keys and selection. */
-  id: string;
+  id: SceneId;
   engineSceneId?: string;
   name: string;
   description?: string;

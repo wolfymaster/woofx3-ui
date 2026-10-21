@@ -37,6 +37,7 @@ import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-edi
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
+import { fromSceneId } from "@/lib/cloud-ids";
 import {
   type CanvasSettings,
   canvasSettingsOf,
@@ -116,7 +117,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // editor chooses for itself, and every one starts on the draft.
   const [live, setLive] = useState(false);
   const uiVersion: Version = live ? "published" : "draft";
-  const convexSceneId = fetchedScene?.id as Id<"scenes"> | undefined;
+  const convexSceneId = fetchedScene ? fromSceneId(fetchedScene.id) : undefined;
 
   const me = useQuery(api.users.getMe);
   const myName = me === undefined ? undefined : (me?.name ?? me?.email ?? "");

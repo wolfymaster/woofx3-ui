@@ -1,9 +1,9 @@
 import type { Id } from "@convex/_generated/dataModel";
-import type { InstanceId, MacroId, ModuleId, WebhookEventId } from "@/engine/types";
+import type { InstanceId, MacroId, ModuleId, SceneId, WebhookEventId } from "@/engine/types";
 
 // The Convex gateway's ids are Convex document ids: an instance is its
-// `instances` row, an installed module its `moduleRepository` row. These
-// convert between the two at the edge. They only change the type, so code
+// `instances` row, an installed module its `moduleRepository` row, a scene
+// its `scenes` row. These convert between the two at the edge. They only change the type, so code
 // that already holds a Convex id (from a cloud-owned query) uses them to call
 // the gateway with it.
 
@@ -48,4 +48,12 @@ export function toWebhookEventId(id: Id<"engineEventLog">): WebhookEventId {
 
 export function fromWebhookEventId(id: WebhookEventId): Id<"engineEventLog"> {
   return id as string as Id<"engineEventLog">;
+}
+
+export function toSceneId(id: Id<"scenes">): SceneId {
+  return id as string as SceneId;
+}
+
+export function fromSceneId(id: SceneId): Id<"scenes"> {
+  return id as string as Id<"scenes">;
 }

@@ -4,14 +4,14 @@ import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ScenesGateway } from "@/engine/gateway";
 import type { InstanceId, NewScene, SceneChanges, SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
-import { fromInstanceId, toModuleId } from "./ids";
+import { fromInstanceId, toModuleId, toSceneId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
 
 type SceneRow = FunctionReturnType<typeof api.scenes.list>[number];
 type WidgetCatalogRow = FunctionReturnType<typeof api.sceneWidgets.listForInstance>[number];
 
 function toSceneRecord({ _id, _creationTime, instanceId, id, ...scene }: SceneRow): SceneRecord {
-  return { id, ...scene };
+  return { id: toSceneId(id), ...scene };
 }
 
 function toSceneWidgetCatalogRow({ _id, _creationTime, moduleId, ...widget }: WidgetCatalogRow): SceneWidgetCatalogRow {

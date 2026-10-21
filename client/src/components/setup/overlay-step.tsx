@@ -11,6 +11,7 @@ import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-eng
 import { useCreateSceneRequest, useScenes, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
+import { fromSceneId } from "@/lib/cloud-ids";
 import {
   findAlertWidget,
   overlayCatalogState,
@@ -65,7 +66,7 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
   // The engine announces a new scene by webhook, so a created scene shows up
   // in `scenes` a moment after createScene returns.
   const scene = scenes ? [...scenes].sort((a, b) => a.createdAt - b.createdAt)[0] : undefined;
-  const sceneId = scene?.engineSceneId ? (scene.id as Id<"scenes">) : null;
+  const sceneId = scene?.engineSceneId ? fromSceneId(scene.id) : null;
 
   const alertWidget = catalog ? findAlertWidget(catalog) : undefined;
   const syncRuns = syncState?.recentRuns ?? [];
