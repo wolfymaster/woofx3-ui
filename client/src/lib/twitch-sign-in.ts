@@ -1,5 +1,5 @@
 import { generateOpaqueToken } from "@convex/lib/oauthHandoff";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { convexSiteUrl } from "@/lib/convexSiteUrl";
 
 /**
  * Twitch sign-in binds the round trip to the tab that started it: a random
@@ -23,7 +23,7 @@ export function startTwitchSignIn(redirectTo: string): void {
   const nonce = generateOpaqueToken();
   window.sessionStorage.setItem(NONCE_KEY, nonce);
   const params = new URLSearchParams({ redirect_to: redirectTo, nonce });
-  window.location.href = `${CONVEX_SITE_URL}/api/auth/twitch/start?${params}`;
+  window.location.href = `${convexSiteUrl()}/api/auth/twitch/start?${params}`;
 }
 
 /** The nonce this tab started a sign-in with, or null. Removed as it is read: it is good for one sign-in. */

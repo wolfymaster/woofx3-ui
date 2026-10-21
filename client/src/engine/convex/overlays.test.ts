@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
 import type { SceneId } from "@/engine/types";
 import { renderInScope } from "./render-in-scope";
@@ -22,15 +22,26 @@ mock.module("convex/react", () => ({
   },
 }));
 
-// The browser-source URL is served from the Convex site, which Vite supplies
-// from the environment at build time.
-process.env.VITE_CONVEX_SITE_URL = "https://site.example";
 const { convexOverlaysGateway } = await import("./overlays");
 
 const sceneId = "scene-1" as SceneId;
 
+// The browser-source URL is served from the Convex site, which Vite supplies
+// from the environment at build time.
+let siteUrlBefore: string | undefined;
+
 beforeEach(() => {
   calls.length = 0;
+  siteUrlBefore = process.env.VITE_CONVEX_SITE_URL;
+  process.env.VITE_CONVEX_SITE_URL = "https://site.example";
+});
+
+afterEach(() => {
+  if (siteUrlBefore === undefined) {
+    delete process.env.VITE_CONVEX_SITE_URL;
+  } else {
+    process.env.VITE_CONVEX_SITE_URL = siteUrlBefore;
+  }
 });
 
 describe("overlays", () => {
