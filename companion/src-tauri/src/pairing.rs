@@ -22,7 +22,8 @@ use tauri::async_runtime::JoinHandle;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::cloud::{
-    decode, CompanionInfo, PairingStatus, PairingStatusReply, SelfUpdate, StartRequest,
+    decode, Cloud, CloudSession, CompanionInfo, PairingStatus, PairingStatusReply, SelfUpdate,
+    StartRequest,
 };
 use crate::credentials::{self, StoredToken};
 use crate::integration_store::StoreIdentity;
@@ -62,13 +63,26 @@ fn device_name() -> String {
 }
 
 /// Tells Convex, in the background, that this companion gave up a pairing
-/// and a token. Both calls are idempotent and either may be absent.
-fn release_on_server(companion: &Companion, token: Option<String>, device_code: Option<String>) {
+/// and a token. Both calls are idempotent and either may be absent. Having
+/// either means a pairing was underway, so this opens the Convex connection
+/// if it is not open yet.
+fn release_on_server(
+    companion: &Arc<Companion>,
+    token: Option<String>,
+    device_code: Option<String>,
+) {
     if token.is_none() && device_code.is_none() {
         return;
     }
-    let cloud = companion.cloud.clone();
+    let companion = Arc::clone(companion);
     tauri::async_runtime::spawn(async move {
+        let cloud = match companion.cloud.connect().await {
+            Ok(cloud) => cloud,
+            Err(err) => {
+                eprintln!("[companion] could not reach woofx3 to release a pairing: {err:#}");
+                return;
+            }
+        };
         if let Some(device_code) = device_code {
             if let Err(err) = cloud.cancel_pairing(&device_code).await {
                 eprintln!("[companion] pairing cancel did not reach woofx3: {err:#}");
@@ -121,6 +135,20 @@ async fn fail(
 pub async fn pair(companion: Arc<Companion>) {
     let start_claim = StartClaim(Arc::clone(&companion));
 
+    let cloud = match companion.cloud.connect().await {
+        Ok(cloud) => cloud,
+        Err(err) => {
+            fail(
+                &companion,
+                None,
+                None,
+                format!("Could not reach woofx3: {err:#}"),
+            )
+            .await;
+            return;
+        }
+    };
+
     // A token left over from an earlier pairing is given up before a new one
     // replaces it, so its row (if any) does not linger.
     match credentials::load().await {
@@ -154,7 +182,7 @@ pub async fn pair(companion: Arc<Companion>) {
         installation_id: &companion.installation_id,
         token_hash: &token_hash,
     };
-    let start = match companion.cloud.start_pairing(&request).await {
+    let start = match cloud.start_pairing(&request).await {
         Ok(start) => start,
         Err(err) => {
             fail(
@@ -181,7 +209,7 @@ pub async fn pair(companion: Arc<Companion>) {
     drop(start_claim);
     open_verification_url(&companion);
 
-    let approved = wait_for_approval(&companion, &start.device_code, &token, wait).await;
+    let approved = wait_for_approval(&companion, &cloud, &start.device_code, &token, wait).await;
     companion.set_device_code(None);
     companion.set_verification_url(None);
     if approved {
@@ -203,6 +231,7 @@ impl Drop for StartClaim {
 /// it ends the attempt itself and returns false.
 async fn wait_for_approval(
     companion: &Arc<Companion>,
+    cloud: &Cloud,
     device_code: &str,
     token: &str,
     wait: Duration,
@@ -215,14 +244,14 @@ async fn wait_for_approval(
             message,
         )
     };
-    let mut status = match companion.cloud.watch_pairing_status(device_code).await {
+    let mut status = match cloud.watch_pairing_status(device_code).await {
         Ok(subscription) => subscription,
         Err(err) => {
             give_up(format!("Lost the connection to woofx3: {err:#}")).await;
             return false;
         }
     };
-    let mut approval = match companion.cloud.watch_self(token).await {
+    let mut approval = match cloud.watch_self(token).await {
         Ok(subscription) => subscription,
         Err(err) => {
             give_up(format!("Lost the connection to woofx3: {err:#}")).await;
@@ -275,7 +304,7 @@ impl Drop for AbortOnDrop {
 
 fn start_integrations(
     companion: &Arc<Companion>,
-    token: &str,
+    session: CloudSession,
     info: &CompanionInfo,
 ) -> AbortOnDrop {
     let identity = StoreIdentity {
@@ -284,7 +313,7 @@ fn start_integrations(
     };
     AbortOnDrop(tauri::async_runtime::spawn(integrations::run(
         Arc::clone(companion),
-        token.to_string(),
+        session,
         identity,
     )))
 }
@@ -300,13 +329,24 @@ fn start_integrations(
 /// confirmed until the session ends. They wait for that answer, not the local
 /// flag, because their store is stamped with the companion and instance ids
 /// it carries.
+///
+/// A session needs Convex, so it opens the connection if it is not open yet.
 pub async fn run_session(
     companion: Arc<Companion>,
     token: String,
     local_confirmed: bool,
     known_name: Option<String>,
 ) {
-    let mut connection = companion.cloud.connection();
+    let cloud = match companion.cloud.connect().await {
+        Ok(cloud) => cloud,
+        Err(err) => {
+            companion.set_state(CompanionState::Error {
+                message: format!("Could not reach woofx3: {err:#}"),
+            });
+            return;
+        }
+    };
+    let mut connection = cloud.connection();
     let mut confirmed = local_confirmed;
     let mut instance_name = known_name;
     let mut decided = false;
@@ -319,7 +359,7 @@ pub async fn run_session(
         });
     }
 
-    let mut updates = match companion.cloud.watch_self(&token).await {
+    let mut updates = match cloud.watch_self(&token).await {
         Ok(subscription) => subscription,
         Err(err) => {
             companion.set_state(CompanionState::Error {
@@ -354,8 +394,12 @@ pub async fn run_session(
                             if newly_confirmed || renamed {
                                 remember(&token, &info.instance_name).await;
                             }
-                                                        if integrations.is_none() {
-                                integrations = Some(start_integrations(&companion, &token, &info));
+                            if integrations.is_none() {
+                                let session = CloudSession {
+                                    cloud: cloud.clone(),
+                                    token: token.clone(),
+                                };
+                                integrations = Some(start_integrations(&companion, session, &info));
                             }
                             companion.set_state(CompanionState::Paired {
                                 instance_name: info.instance_name,
@@ -389,7 +433,7 @@ pub async fn run_session(
                 }
             }
             _ = heartbeat.tick(), if confirmed => {
-                match companion.cloud.heartbeat(&token, COMPANION_VERSION).await {
+                match cloud.heartbeat(&token, COMPANION_VERSION).await {
                     Ok(beat) if !beat.paired => {
                         drop(integrations.take());
                         forget_and_unpair(&companion, Some(token), None).await;
@@ -424,8 +468,12 @@ pub async fn confirm(companion: Arc<Companion>, instance_name: String) -> Result
         .await
         .map_err(|err| format!("{err:#}"))?
         .ok_or_else(|| "The pairing token is missing. Pair again.".to_string())?;
-    let reply = companion
+    let cloud = companion
         .cloud
+        .connect()
+        .await
+        .map_err(|err| format!("Could not reach woofx3: {err:#}"))?;
+    let reply = cloud
         .confirm(&stored.token)
         .await
         .map_err(|err| format!("Could not confirm the pairing: {err:#}"))?;

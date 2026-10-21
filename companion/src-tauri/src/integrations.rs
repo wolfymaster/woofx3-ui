@@ -32,8 +32,8 @@ use woofx3_companion_core::{
 };
 
 use crate::cloud::{
-    is_integrations_unavailable, Cloud, DiscoveredValues, EndpointRecord, InstanceIntegrations,
-    IntegrationsUpdate, LocalEndpoint, RecordedState,
+    is_integrations_unavailable, CloudSession, DiscoveredValues, EndpointRecord,
+    InstanceIntegrations, IntegrationsUpdate, LocalEndpoint, RecordedState,
 };
 use crate::integration_store::{endpoint_key, IntegrationStore, StoreIdentity, StoredEndpoint};
 use crate::lock;
@@ -128,7 +128,6 @@ const MIN_PLAUSIBLE_LIFETIME: Duration = Duration::from_secs(30);
 /// What the window and the runner share.
 pub struct Integrations {
     app: AppHandle,
-    cloud: Cloud,
     store: Arc<IntegrationStore>,
     /// Where OBS keeps its config (`%APPDATA%` on Windows). None when the OS
     /// would not say, and then nothing is discovered.
@@ -143,7 +142,7 @@ pub struct Integrations {
 
 #[derive(Default)]
 struct Inner {
-    token: Option<String>,
+    session: Option<CloudSession>,
     integrations: Option<Arc<InstanceIntegrations>>,
     availability: Option<Availability>,
     discoveries: HashMap<String, Discovery>,
@@ -164,13 +163,11 @@ enum Discovery {
 impl Integrations {
     pub fn new(
         app: AppHandle,
-        cloud: Cloud,
         app_data_dir: &std::path::Path,
         config_dir: Option<PathBuf>,
     ) -> Self {
         Integrations {
             app,
-            cloud,
             store: Arc::new(IntegrationStore::new(app_data_dir)),
             config_dir,
             inner: Mutex::new(Inner::default()),
@@ -259,16 +256,16 @@ impl Integrations {
         self.publish();
     }
 
-    /// The session's token and the endpoint as an installed module declares
+    /// The running session and the endpoint as an installed module declares
     /// it, or why the window cannot act on it.
     fn target(
         &self,
         module_id: &str,
         endpoint_id: &str,
-    ) -> Result<(String, LocalEndpoint), String> {
+    ) -> Result<(CloudSession, LocalEndpoint), String> {
         let inner = lock(&self.inner);
-        let token = inner
-            .token
+        let session = inner
+            .session
             .clone()
             .ok_or_else(|| "Integrations are not running.".to_string())?;
         let endpoint = inner
@@ -283,14 +280,14 @@ impl Integrations {
             .and_then(|module| module.endpoints.iter().find(|e| e.id == endpoint_id))
             .cloned()
             .ok_or_else(|| "No module on this instance declares that endpoint.".to_string())?;
-        Ok((token, endpoint))
+        Ok((session, endpoint))
     }
 
     /// Tells Convex what the store holds for an endpoint, for display in the
     /// browser and so it mints relay credentials while something is enabled.
     async fn record(
         &self,
-        token: &str,
+        session: &CloudSession,
         module_id: &str,
         endpoint_id: &str,
         entry: &StoredEndpoint,
@@ -299,9 +296,10 @@ impl Integrations {
             .address
             .as_ref()
             .map(|address| (address.host(), address.port()));
-        self.cloud
+        session
+            .cloud
             .set_endpoint(
-                token,
+                &session.token,
                 &EndpointRecord {
                     module_id,
                     endpoint_id,
@@ -326,7 +324,7 @@ impl Integrations {
         endpoint_id: &str,
         enabled: bool,
     ) -> Result<(), String> {
-        let (token, endpoint) = self.target(module_id, endpoint_id)?;
+        let (session, endpoint) = self.target(module_id, endpoint_id)?;
         let key = endpoint_key(module_id, endpoint_id);
         if enabled {
             if !endpoint.bridgeable() {
@@ -349,7 +347,7 @@ impl Integrations {
             .update(&key, |entry| entry.enabled = enabled)
             .await
             .map_err(|err| format!("{err:#}"))?;
-        let recorded = self.record(&token, module_id, endpoint_id, &entry).await;
+        let recorded = self.record(&session, module_id, endpoint_id, &entry).await;
         if let Err(err) = recorded {
             if enabled {
                 if let Err(revert) = self
@@ -404,7 +402,7 @@ impl Integrations {
         endpoint_id: &str,
         address: ConfirmedAddress,
     ) -> Result<(), String> {
-        let (token, _endpoint) = self.target(module_id, endpoint_id)?;
+        let (session, _endpoint) = self.target(module_id, endpoint_id)?;
         let key = endpoint_key(module_id, endpoint_id);
         let entry = self
             .store
@@ -413,7 +411,7 @@ impl Integrations {
             .map_err(|err| format!("{err:#}"))?;
         // The store is the authority, so a failure here only delays the
         // browser's copy until the next reconcile.
-        if let Err(err) = self.record(&token, module_id, endpoint_id, &entry).await {
+        if let Err(err) = self.record(&session, module_id, endpoint_id, &entry).await {
             eprintln!("[companion] woofx3 did not hear about a new address: {err:#}");
         }
         self.publish();
@@ -429,7 +427,7 @@ impl Integrations {
         endpoint_id: &str,
         share: bool,
     ) -> Result<(), String> {
-        let (token, endpoint) = self.target(module_id, endpoint_id)?;
+        let (session, endpoint) = self.target(module_id, endpoint_id)?;
         if share && !can_share_password(module_id, &endpoint) {
             return Err("This endpoint has no password the companion can send.".to_string());
         }
@@ -444,7 +442,7 @@ impl Integrations {
             })
             .await
             .map_err(|err| format!("{err:#}"))?;
-        if let Err(err) = self.record(&token, module_id, endpoint_id, &entry).await {
+        if let Err(err) = self.record(&session, module_id, endpoint_id, &entry).await {
             eprintln!("[companion] woofx3 did not hear about the password choice: {err:#}");
         }
         self.publish();
@@ -454,7 +452,7 @@ impl Integrations {
 
     /// One WebSocket handshake with the stored address, enabled or not.
     pub async fn test(&self, module_id: &str, endpoint_id: &str) -> Result<TestResult, String> {
-        let (_token, endpoint) = self.target(module_id, endpoint_id)?;
+        let (_session, endpoint) = self.target(module_id, endpoint_id)?;
         let address = self
             .store
             .get(&endpoint_key(module_id, endpoint_id))
@@ -543,14 +541,14 @@ fn endpoint_view(
 
 /// Mints relay credentials through Convex with the companion's token.
 struct CloudCredentials {
-    cloud: Cloud,
-    token: String,
+    session: CloudSession,
 }
 
 impl CredentialSource for CloudCredentials {
     fn mint(&self) -> BoxFuture<'_, anyhow::Result<Option<RelayGrant>>> {
         Box::pin(async move {
-            let Some(reply) = self.cloud.relay_credential(&self.token).await? else {
+            let session = &self.session;
+            let Some(reply) = session.cloud.relay_credential(&session.token).await? else {
                 return Ok(None);
             };
             // A debug build may point at a relay under `wrangler dev`.
@@ -622,12 +620,12 @@ impl Drop for EndOnDrop {
 
 /// Runs integrations for one paired and confirmed session. The caller aborts
 /// it when the session ends.
-pub async fn run(companion: Arc<Companion>, token: String, identity: StoreIdentity) {
+pub async fn run(companion: Arc<Companion>, session: CloudSession, identity: StoreIdentity) {
     let integrations = Arc::clone(&companion.integrations);
     {
         let mut inner = lock(&integrations.inner);
         *inner = Inner::default();
-        inner.token = Some(token.clone());
+        inner.session = Some(session.clone());
         inner.availability = Some(Availability::Loading);
     }
     let _end = EndOnDrop(Arc::clone(&integrations));
@@ -639,7 +637,7 @@ pub async fn run(companion: Arc<Companion>, token: String, identity: StoreIdenti
 
     let mut runner = Runner {
         integrations: Arc::clone(&integrations),
-        token,
+        session,
         relay: None,
         hold: None,
         reported: HashMap::new(),
@@ -656,7 +654,12 @@ pub async fn run(companion: Arc<Companion>, token: String, identity: StoreIdenti
         };
         let subscription = match updates.as_mut() {
             Some(subscription) => subscription,
-            None => match companion.cloud.watch_integrations(&runner.token).await {
+            None => match runner
+                .session
+                .cloud
+                .watch_integrations(&runner.session.token)
+                .await
+            {
                 Ok(subscription) => updates.insert(subscription),
                 Err(err) => {
                     eprintln!("[companion] could not follow integrations: {err:#}");
@@ -716,7 +719,7 @@ async fn next_status(relay: &mut Option<RelayRun>) -> (RelayStatus, bool) {
 
 struct Runner {
     integrations: Arc<Integrations>,
-    token: String,
+    session: CloudSession,
     relay: Option<RelayRun>,
     hold: Option<Hold>,
     /// The last report per endpoint, so an unchanged one is not sent again.
@@ -867,7 +870,7 @@ impl Runner {
                 }
                 if let Err(err) = self
                     .integrations
-                    .record(&self.token, &module.module_id, &endpoint.id, entry)
+                    .record(&self.session, &module.module_id, &endpoint.id, entry)
                     .await
                 {
                     eprintln!("[companion] could not update woofx3's copy of an endpoint: {err:#}");
@@ -913,8 +916,7 @@ impl Runner {
         let cancel = CancellationToken::new();
         let (status_tx, status) = watch::channel(RelayStatus::Connecting);
         let credentials: Arc<dyn CredentialSource> = Arc::new(CloudCredentials {
-            cloud: self.integrations.cloud.clone(),
-            token: self.token.clone(),
+            session: self.session.clone(),
         });
         let endpoints: Arc<dyn EndpointResolver> = self.integrations.store.clone();
         tauri::async_runtime::spawn(run_relay(credentials, endpoints, status_tx, cancel.clone()));
@@ -1036,7 +1038,7 @@ impl Runner {
             Ok(entry) => {
                 if let Err(err) = self
                     .integrations
-                    .record(&self.token, module_id, &endpoint.id, &entry)
+                    .record(&self.session, module_id, &endpoint.id, &entry)
                     .await
                 {
                     eprintln!("[companion] woofx3 did not hear about OBS's new port: {err:#}");
@@ -1086,9 +1088,9 @@ impl Runner {
             return;
         }
         let reported = self
-            .integrations
+            .session
             .cloud
-            .report_discovered(&self.token, module_id, &endpoint.id, &values)
+            .report_discovered(&self.session.token, module_id, &endpoint.id, &values)
             .await;
         match reported {
             Ok(()) => {

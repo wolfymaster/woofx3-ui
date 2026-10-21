@@ -1,5 +1,9 @@
 //! The companion's connection to Convex. The Rust process owns it, so it lives
 //! as long as the tray icon, not the window.
+//!
+//! The connection is optional: a host that is not paired runs without Convex
+//! at all. [`CloudLink`] opens it only when a pairing starts or a stored one
+//! resumes.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -210,6 +214,56 @@ impl Cloud {
         .await?;
         decode::<serde_json::Value>(result).map(|_| ())
     }
+}
+
+/// Whether this host talks to Convex. It starts [`LinkState::Dormant`] and
+/// moves to [`LinkState::Connected`] the first time something needs Convex;
+/// from then on every caller shares the one connection, for the life of the
+/// process.
+pub struct CloudLink {
+    state: tokio::sync::Mutex<LinkState>,
+}
+
+enum LinkState {
+    /// No connection was asked for, so none is open.
+    Dormant,
+    Connected(Cloud),
+}
+
+impl CloudLink {
+    pub fn dormant() -> Self {
+        CloudLink {
+            state: tokio::sync::Mutex::new(LinkState::Dormant),
+        }
+    }
+
+    /// The connection, opened on first use. Opening does not wait for the
+    /// network, so it succeeds offline.
+    pub async fn connect(&self) -> Result<Cloud> {
+        let mut state = self.state.lock().await;
+        if let LinkState::Connected(cloud) = &*state {
+            return Ok(cloud.clone());
+        }
+        let cloud = Cloud::connect().await?;
+        *state = LinkState::Connected(cloud.clone());
+        Ok(cloud)
+    }
+
+    /// The connection if one is open, without opening one.
+    pub async fn current(&self) -> Option<Cloud> {
+        match &*self.state.lock().await {
+            LinkState::Dormant => None,
+            LinkState::Connected(cloud) => Some(cloud.clone()),
+        }
+    }
+}
+
+/// A paired session's way into Convex: the connection, and the companion
+/// token its calls authenticate with.
+#[derive(Clone)]
+pub struct CloudSession {
+    pub cloud: Cloud,
+    pub token: String,
 }
 
 pub struct StartRequest<'a> {
@@ -495,6 +549,12 @@ mod tests {
                 .map(|(key, value)| ((*key).to_string(), value.clone()))
                 .collect(),
         ))
+    }
+
+    #[tokio::test]
+    async fn test_cloud_link_starts_dormant() {
+        let link = CloudLink::dormant();
+        assert!(link.current().await.is_none());
     }
 
     #[test]

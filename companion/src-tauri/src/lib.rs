@@ -1,5 +1,6 @@
 //! The woofx3 companion: a tray app that pairs this computer with a woofx3
-//! instance through the browser and stays connected to Convex. Its window
+//! instance through the browser and stays connected to Convex while paired.
+//! Without a pairing it runs with no Convex connection at all. Its window
 //! renders `WindowState`; all work happens here, in Rust commands.
 //!
 //! Commands are async so none of them runs on the main thread: tray updates
@@ -23,7 +24,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
-use cloud::Cloud;
+use cloud::CloudLink;
 use integrations::Integrations;
 use state::{CompanionState, IntegrationsView, ReadyUpdate, TestResult, WindowState, STATE_EVENT};
 use tray::Tray;
@@ -32,7 +33,7 @@ use update::Downloaded;
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
-    cloud: Cloud,
+    cloud: CloudLink,
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
     integrations: Arc<Integrations>,
@@ -161,7 +162,9 @@ impl Companion {
         show_main_window(&self.app);
     }
 
-    /// Picks up where the last run left off, from the stored token.
+    /// Picks up where the last run left off, from the stored token. Only a
+    /// stored token opens the Convex connection; without one the companion
+    /// stays off the cloud until a pairing starts.
     async fn resume(self: Arc<Self>) {
         match credentials::load().await {
             Ok(None) => {
@@ -358,18 +361,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
-            let cloud = tauri::async_runtime::block_on(Cloud::connect())?;
             let app_data_dir = app.path().app_data_dir()?;
             let installation_id = installation::load_or_create(&app_data_dir)?;
             let integrations = Arc::new(Integrations::new(
                 handle.clone(),
-                cloud.clone(),
                 &app_data_dir,
                 app.path().config_dir().ok(),
             ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
-                cloud,
+                cloud: CloudLink::dormant(),
                 installation_id,
                 integrations,
                 view: Mutex::new(WindowState {

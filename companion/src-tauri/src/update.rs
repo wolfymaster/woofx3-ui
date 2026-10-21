@@ -38,21 +38,29 @@ impl Downloaded {
     }
 }
 
-/// Checks now and then for as long as the companion runs. Checks wait for the
-/// Convex connection, the companion's only sign of network access, so an
-/// offline PC does not burn its attempts.
+/// Checks now and then for as long as the companion runs. While the Convex
+/// connection is open, checks wait for it to be connected, the companion's
+/// only sign of network access, so an offline PC does not burn its attempts.
+/// Without a Convex connection there is no such sign, and a check that fails
+/// offline is simply tried again at the next interval.
 pub async fn run(companion: Arc<Companion>) {
     // A debug build is someone's working copy; offering to replace it with a
     // release would only get in the way.
     if cfg!(debug_assertions) {
         return;
     }
-    let mut connection = companion.cloud.connection();
     tokio::time::sleep(FIRST_CHECK_DELAY).await;
     loop {
-        if connection.wait_for(|connected| *connected).await.is_err() {
-            eprintln!("[companion] the Convex connection is gone; no more update checks");
-            return;
+        if let Some(cloud) = companion.cloud.current().await {
+            if cloud
+                .connection()
+                .wait_for(|connected| *connected)
+                .await
+                .is_err()
+            {
+                eprintln!("[companion] the Convex connection is gone; no more update checks");
+                return;
+            }
         }
         if let Err(err) = check_and_download(&companion).await {
             eprintln!("[companion] update check failed, trying again later: {err}");
