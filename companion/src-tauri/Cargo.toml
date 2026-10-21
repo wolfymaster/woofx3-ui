@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+url = "2"
 
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
@@ -36,11 +37,17 @@ hostname = "0.4"
 sha2 = "0.10"
 base64 = "0.22"
 getrandom = "0.3"
+# The jitter for update check retries; the version core uses.
+rand = "0.9"
 uuid = { version = "1", features = ["v4"] }
 tokio-util = "0.7"
 # The relay client, the bridge and OBS discovery, kept free of Tauri so their
 # tests run on any OS.
 woofx3-companion-core = { path = "../core" }
+
+[dev-dependencies]
+# For the tests of src/convex_url.rs, which build.rs runs.
+url = "2"
 
 [profile.release]
 codegen-units = 1

@@ -1,6 +1,6 @@
 //! The woofx3 companion: a tray app that pairs this computer with a woofx3
 //! instance through the browser and stays connected to Convex while paired.
-//! Without a pairing it runs with no Convex connection at all. Its window
+//! An unpaired companion holds no Convex connection. Its window
 //! renders `WindowState`; all work happens here, in Rust commands.
 //!
 //! In local mode, chosen by the host configuration file, it also runs the
@@ -13,6 +13,8 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
+#[cfg(test)]
+mod convex_url;
 mod credentials;
 mod engine_host;
 mod installation;
@@ -40,7 +42,7 @@ use update::Downloaded;
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
-    cloud: CloudLink,
+    cloud_link: CloudLink,
     engine: LocalEngine,
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
@@ -385,7 +387,7 @@ pub fn run() {
             ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
-                cloud: CloudLink::dormant(),
+                cloud_link: CloudLink::dormant(),
                 engine,
                 installation_id,
                 integrations,
@@ -468,4 +470,35 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
         companion.engine.stop().await;
         app.exit(code.unwrap_or(0));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::convex_url::check_convex_url;
+
+    #[test]
+    fn test_check_convex_url_accepts_deployment_urls() {
+        for url in [
+            "https://happy-animal-123.convex.cloud",
+            "http://127.0.0.1:3210",
+            "https://convex.example.test/",
+        ] {
+            assert_eq!(check_convex_url(url), Ok(()), "{url}");
+        }
+    }
+
+    #[test]
+    fn test_check_convex_url_refuses_what_convex_cannot_connect_to() {
+        for url in [
+            "happy-animal-123.convex.cloud",
+            "wss://happy-animal-123.convex.cloud",
+            "ftp://example.test",
+            "https://",
+            " https://happy-animal-123.convex.cloud",
+            "https://happy-animal-123.convex.cloud\n",
+            "not a url",
+        ] {
+            assert!(check_convex_url(url).is_err(), "{url}");
+        }
+    }
 }
