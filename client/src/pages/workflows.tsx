@@ -47,9 +47,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { TestRunSheet } from "@/components/workflows/test-run-sheet";
+import { WorkflowEditor } from "@/components/workflows/workflow-editor";
 import { WorkflowFlowEditor } from "@/components/workflows/workflow-flow-editor";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
 import { useEngineScope } from "@/engine/context";
@@ -415,6 +415,7 @@ function WorkflowListScreen() {
 
 function CreateWorkflowScreen() {
   const [, navigate] = useLocation();
+  const { instanceId } = useEngineScope();
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
@@ -423,9 +424,9 @@ function CreateWorkflowScreen() {
         Back to workflows
       </Button>
 
-      <PageHeader title="Create a new workflow" description="Choose what triggers your workflow" />
+      <PageHeader title="Create a new workflow" description="Pick what starts it, then add its steps" />
 
-      <BasicWorkflowEditor />
+      {instanceId && <WorkflowEditor />}
     </div>
   );
 }

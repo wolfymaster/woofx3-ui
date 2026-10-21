@@ -276,6 +276,28 @@ const MAPPING_CASES: MappingCase[] = [
     ],
   },
   {
+    name: "a scene's alert target usage crosses field by field",
+    query: "sceneWidgets:alertTargetUsage",
+    answer: {
+      alertWidgetIds: ["alerts.alert-box"],
+      elsewhere: ["default"],
+      uses: [{ target: "hype", kind: "command", name: "!hype" }],
+    },
+    read: () => convexScenesGateway.useAlertTargetUsage("scene-1"),
+    expected: {
+      alertWidgetIds: ["alerts.alert-box"],
+      elsewhere: ["default"],
+      uses: [{ target: "hype", kind: "command", name: "!hype" }],
+    },
+  },
+  {
+    name: "alert target usage the caller cannot see passes through as null",
+    query: "sceneWidgets:alertTargetUsage",
+    answer: null,
+    read: () => convexScenesGateway.useAlertTargetUsage("scene-1"),
+    expected: null,
+  },
+  {
     name: "a logged webhook event keeps its record id as a gateway id",
     query: "engineEventLog:list",
     paginated: true,

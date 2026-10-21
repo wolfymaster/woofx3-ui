@@ -17,6 +17,7 @@ export type {
   ModuleFileContent,
   ModuleFileList,
   ObsStatus,
+  SceneRepairResult,
   StorageConfig,
   StreamEventFrame,
   UploadGrant,
@@ -128,11 +129,13 @@ export type EngineCapability =
   | "modules.localEndpoints"
   | "modules.marketplaceInstall"
   | "modules.oauth"
+  | "modules.storageUsage"
   | "obs.control"
   | "obs.status"
   | "scenes.behaviors"
   | "scenes.editorSessions"
   | "scenes.editorSync"
+  | "scenes.repair"
   | "twitch.ads"
   | "twitch.chat"
   | "twitch.clips"
@@ -260,6 +263,17 @@ export interface HostedStorageUsage {
   usedBytes: number;
   limitBytes: number | null;
   fileLimitBytes: number | null;
+}
+
+/**
+ * What the instance's modules keep in module storage against the plan's
+ * limit. The limit is soft: nothing refuses a write past it, so `over` only
+ * decides whether the owner is warned. A null limit is unlimited.
+ */
+export interface ModuleStorageUsage {
+  usedBytes: number;
+  limitBytes: number | null;
+  over: boolean;
 }
 
 export interface ResourceQuery {
@@ -742,6 +756,27 @@ export interface SceneWidgetCatalogRow {
   };
   /** Epoch ms. */
   createdAt: number;
+}
+
+/** One Alert step, in a workflow or a chat command, and the alert widget name it plays on. */
+export interface AlertTargetUse {
+  target: string;
+  kind: "workflow" | "command";
+  /** The workflow's name, or the command as typed in chat ("!hype"). */
+  name: string;
+}
+
+/**
+ * What one scene's editor needs to warn that an edit leaves Alert steps with
+ * no alert widget to play on.
+ */
+export interface AlertTargetUsage {
+  /** The canonical ids of the widgets that host alerts, so the editor can tell its own alert widgets apart. */
+  alertWidgetIds: string[];
+  /** Names the alert widgets of every scene but the one asked about answer to. */
+  elsewhere: string[];
+  /** Every Alert step's target, in workflows and chat commands. */
+  uses: AlertTargetUse[];
 }
 
 // ==================== Workflows ====================

@@ -66,3 +66,19 @@ describe("modules.useDetailRequest", () => {
     expect(detail.moduleDbId).toBe("module-row-1" as typeof detail.moduleDbId);
   });
 });
+
+describe("modules.useStorageUsageRequest", () => {
+  test("asks about the scope's instance and maps the usage field by field", async () => {
+    result = { usedBytes: 600, limitBytes: 500, over: true, internalNote: "cloud only" };
+    const readUsage = renderInScope(() => convexModulesGateway.useStorageUsageRequest());
+    const usage = await readUsage();
+    expect(calls).toEqual([{ name: "moduleStorage:usage", args: { instanceId } }]);
+    expect(usage).toEqual({ usedBytes: 600, limitBytes: 500, over: true });
+  });
+
+  test("passes no limit through as null", async () => {
+    result = null;
+    const readUsage = renderInScope(() => convexModulesGateway.useStorageUsageRequest());
+    expect(await readUsage()).toBeNull();
+  });
+});

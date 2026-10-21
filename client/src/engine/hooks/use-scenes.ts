@@ -21,6 +21,11 @@ export function useAlertWidgetNames(options?: ReadOptions) {
   return useEngineGateway().scenes.useAlertWidgetNames(options);
 }
 
+/** Alert step targets, and the alert widget names on the instance's other scenes, for one scene's editor. */
+export function useAlertTargetUsage(engineSceneId: string) {
+  return useEngineGateway().scenes.useAlertTargetUsage(engineSceneId);
+}
+
 export function useCreateSceneRequest() {
   return useEngineGateway().scenes.useCreateRequest();
 }
@@ -36,6 +41,11 @@ export function useDeleteSceneRequest() {
 /** Lists the installed themes made for one widget. */
 export function useWidgetThemesRequest() {
   return useEngineGateway().scenes.useWidgetThemesRequest();
+}
+
+/** Asks the engine to repair a scene or alert it cannot read. */
+export function useRepairSceneRequest() {
+  return useEngineGateway().scenes.useRepairRequest();
 }
 
 /** Asks the engine for a short-lived grant to open sceneManager's editor socket for one scene. */

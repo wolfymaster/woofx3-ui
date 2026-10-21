@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CompanionCard } from "@/components/engine/companion-card";
 import { ManagedEngineCard } from "@/components/engine/managed-engine-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { ModuleStorageCard } from "@/components/modules/module-storage-usage";
 import { EngineSyncCard } from "@/components/settings/engine-sync-card";
 import {
   AlertDialog,
@@ -162,6 +163,7 @@ function EngineSettings() {
     return (
       <div className="space-y-4">
         <ManagedEngineCard instanceId={instance._id} />
+        {instance.clientId && engineInstanceId && <ModuleStorageCard />}
         {instance.clientId && engineInstanceId && <EngineSyncCard />}
         <CompanionCard instanceId={instance._id} />
         <DangerZone instanceId={instance._id} managed />

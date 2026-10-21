@@ -22,7 +22,7 @@ import {
   Users,
   Workflow,
 } from "lucide-react";
-import { ALERT_EDITOR_BASE, ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
+import { ALERT_LIBRARY_EDITOR_BASE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_BASE } from "@/lib/alert-run-route";
 import { FEEDBACK_PATH } from "@/lib/feedback";
 import { MARKETPLACE_PATH } from "@/lib/marketplace-route";
@@ -89,7 +89,7 @@ export const STREAM_ITEMS: NavItem[] = [
     label: "Alerts",
     icon: STREAM_OBJECT_ICONS.alerts,
     href: "/stream/alerts",
-    owns: [ALERT_EDITOR_BASE, ALERT_LIBRARY_EDITOR_BASE, ALERT_RUN_BASE],
+    owns: [ALERT_LIBRARY_EDITOR_BASE, ALERT_RUN_BASE],
     children: [
       { id: "counters", label: "Counters", icon: STREAM_OBJECT_ICONS.counters, href: "/stream/counters" },
       { id: "timers", label: "Timers", icon: STREAM_OBJECT_ICONS.timers, href: "/stream/timers" },

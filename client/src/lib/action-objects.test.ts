@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { Square } from "lucide-react";
-import { BUILTIN_MODULE_LABEL } from "./action-menu";
 import {
   type ActionObject,
   ADVANCED_OBJECT_KEY,
   acceptsInstance,
   actionObjectKey,
   actionObjects,
+  BUILTIN_MODULE_LABEL,
   FLOW_BLOCKS,
   findTargetField,
   initialParameters,

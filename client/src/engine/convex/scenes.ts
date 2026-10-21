@@ -3,13 +3,23 @@ import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ScenesGateway } from "@/engine/gateway";
-import type { NewScene, ReadOptions, SceneChanges, SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
+import type {
+  AlertTargetUsage,
+  AlertTargetUse,
+  NewScene,
+  ReadOptions,
+  SceneChanges,
+  SceneRecord,
+  SceneWidgetCatalogRow,
+} from "@/engine/types";
 import { toModuleId, toSceneId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 type SceneRow = FunctionReturnType<typeof api.scenes.list>[number];
 type WidgetCatalogRow = FunctionReturnType<typeof api.sceneWidgets.listForInstance>[number];
+type AlertTargetUsageRow = NonNullable<FunctionReturnType<typeof api.sceneWidgets.alertTargetUsage>>;
+type AlertTargetUseRow = AlertTargetUsageRow["uses"][number];
 
 function toSceneRecord(row: SceneRow): SceneRecord {
   return {
@@ -49,6 +59,18 @@ function toSceneWidgetCatalogRow(row: WidgetCatalogRow): SceneWidgetCatalogRow {
   };
 }
 
+function toAlertTargetUse(row: AlertTargetUseRow): AlertTargetUse {
+  return { target: row.target, kind: row.kind, name: row.name };
+}
+
+function toAlertTargetUsage(row: AlertTargetUsageRow): AlertTargetUsage {
+  return {
+    alertWidgetIds: row.alertWidgetIds,
+    elsewhere: row.elsewhere,
+    uses: row.uses.map(toAlertTargetUse),
+  };
+}
+
 function useScenes({ enabled = true }: ReadOptions = {}) {
   const instanceId = useScopeInstanceId();
   const rows = useQuery(api.scenes.list, enabled && instanceId ? { instanceId } : "skip");
@@ -70,6 +92,12 @@ function useWidgetCatalog({ enabled = true }: ReadOptions = {}) {
 function useAlertWidgetNames({ enabled = true }: ReadOptions = {}) {
   const instanceId = useScopeInstanceId();
   return useQuery(api.sceneWidgets.alertWidgetNames, enabled && instanceId ? { instanceId } : "skip");
+}
+
+function useAlertTargetUsage(engineSceneId: string) {
+  const instanceId = useScopeInstanceId();
+  const usage = useQuery(api.sceneWidgets.alertTargetUsage, instanceId ? { instanceId, engineSceneId } : "skip");
+  return useMappedValue(usage, toAlertTargetUsage);
 }
 
 function useCreateRequest() {
@@ -100,14 +128,21 @@ function useEditorSessionRequest() {
   return useCallback((engineSceneId: string) => getSceneEditorSession({ engineSceneId }), [getSceneEditorSession]);
 }
 
+function useRepairRequest() {
+  const repairScene = useInstanceAction(api.sceneActions.repairScene);
+  return useCallback((engineSceneId: string) => repairScene({ engineSceneId }), [repairScene]);
+}
+
 export const convexScenesGateway: ScenesGateway = {
   useScenes,
   useScene,
   useWidgetCatalog,
   useAlertWidgetNames,
+  useAlertTargetUsage,
   useCreateRequest,
   useUpdateRequest,
   useRemoveRequest,
   useWidgetThemesRequest,
   useEditorSessionRequest,
+  useRepairRequest,
 };

@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ModulesGateway } from "@/engine/gateway";
-import type { MarketplaceBundleInstall, ModuleDetail, ModuleId } from "@/engine/types";
+import type { MarketplaceBundleInstall, ModuleDetail, ModuleId, ModuleStorageUsage } from "@/engine/types";
 import { fromModuleId, toModuleId } from "./ids";
 import { useInstanceAction } from "./scope";
 
@@ -108,6 +108,18 @@ function useMarketplaceInstallRequest() {
   );
 }
 
+function toModuleStorageUsage(result: FunctionReturnType<typeof api.moduleStorage.usage>): ModuleStorageUsage | null {
+  if (result === null) {
+    return null;
+  }
+  return { usedBytes: result.usedBytes, limitBytes: result.limitBytes, over: result.over };
+}
+
+function useStorageUsageRequest() {
+  const moduleStorageUsage = useInstanceAction(api.moduleStorage.usage);
+  return useCallback(() => moduleStorageUsage({}).then(toModuleStorageUsage), [moduleStorageUsage]);
+}
+
 export const convexModulesGateway: ModulesGateway = {
   useDetailRequest,
   useSettingsRequest,
@@ -119,4 +131,5 @@ export const convexModulesGateway: ModulesGateway = {
   useWorkflowsRequest,
   useMarketplaceInstallRequest,
   useBundleInstallRequest,
+  useStorageUsageRequest,
 };

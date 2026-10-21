@@ -1,5 +1,13 @@
 import type { CatalogWidget, Peer } from "@woofx3/scene/editor";
-import { type CompositionDocument, evenKeys, type PlacementDocument, stackOrder } from "@woofx3/scene/model";
+import {
+  type CompositionDocument,
+  evenKeys,
+  type PlacementDocument,
+  parseWidgetCanonicalId,
+  placementOfStored,
+  stackOrder,
+  storedWidgetId,
+} from "@woofx3/scene/model";
 import type { SceneWidgetCatalogRow } from "@/engine/types";
 import type { Scene, Widget } from "@/types";
 
@@ -21,32 +29,35 @@ export interface CanvasSettings {
 export type StoredScene = Pick<Scene, "width" | "height" | "backgroundColor" | "widgets">;
 
 /**
- * A scene as Convex caches it (`widgetsJson`, an array) as a composition.
- * Stacking follows `zIndex`, ties broken by array order, which is the order
- * the scene manager stacks a saved scene in.
+ * Whether a cached entry is a placement the scene manager can read: an object
+ * with an id and a widget canonical id. The cache keeps a scene's widgets as
+ * the engine stores them, and the scene manager reports the rest as
+ * unreadable (see `UnreadSceneNotice`), so an editor shows the same placements
+ * and never fails on the others.
+ */
+function isReadablePlacement(entry: unknown): entry is Record<string, unknown> & { id: string } {
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+    return false;
+  }
+  const record = entry as Record<string, unknown>;
+  return typeof record.id === "string" && record.id !== "" && parseWidgetCanonicalId(storedWidgetId(record)) !== null;
+}
+
+/**
+ * A scene as Convex caches it (`widgetsJson`, an array) as a composition,
+ * read with the scene manager's codec (`placementOfStored`). Stacking follows
+ * `zIndex`, ties broken by array order, which is the order the scene manager
+ * stacks a saved scene in. Entries it cannot read are left out.
  */
 export function compositionOfStoredScene(scene: StoredScene): CompositionDocument {
-  const stacked = scene.widgets
-    .map((widget, index) => ({ widget, index }))
-    .sort((a, b) => a.widget.zIndex - b.widget.zIndex || a.index - b.index);
+  const stacked = (scene.widgets as unknown[])
+    .filter(isReadablePlacement)
+    .map((entry, index) => ({ entry, index, zIndex: numberOr(entry.zIndex, 0) }))
+    .sort((a, b) => a.zIndex - b.zIndex || a.index - b.index);
   const keys = evenKeys(stacked.length);
   const widgets: Record<string, PlacementDocument> = {};
-  stacked.forEach(({ widget }, rank) => {
-    widgets[widget.id] = {
-      widget: widget.widgetCanonicalId,
-      x: widget.position.x,
-      y: widget.position.y,
-      width: widget.size.width,
-      height: widget.size.height,
-      visible: widget.visible !== false,
-      z: keys[rank] as string,
-      settings: widget.settings ?? {},
-      name: widget.name,
-      rotation: widget.rotation ?? 0,
-      opacity: widget.opacity ?? 1,
-      locked: widget.locked === true,
-      extra: {},
-    };
+  stacked.forEach(({ entry }, rank) => {
+    widgets[entry.id] = placementOfStored(entry, keys[rank] as string);
   });
   return {
     layout: { width: scene.width, height: scene.height, backgroundColor: scene.backgroundColor },
