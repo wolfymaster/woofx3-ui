@@ -59,7 +59,6 @@ import type {
   RecordedWorkflowRun,
   Resource,
   ResourceChanges,
-  ResourceKindDefinition,
   ResourcePage,
   ResourceQuery,
   ResourceValues,
@@ -296,7 +295,7 @@ export interface ModuleResourcesGateway {
    * The module providing a kind, and its declaration; null when no installed
    * module declares it. Skipped (always loading) for a null id or kind.
    */
-  useKind(instanceId: InstanceId | null, kind: string | null): Live<ResourceKindDefinition | null>;
+  useKind(instanceId: InstanceId | null, kind: string | null): Live<DeclaredResourceKind | null>;
   /** Every kind the installed modules declare. Skipped (always loading) for a null id. */
   useKinds(instanceId: InstanceId | null): Live<DeclaredResourceKind[]>;
   useCreateRequest(): (

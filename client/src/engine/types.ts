@@ -491,9 +491,6 @@ export interface DeclaredResourceKind {
   moduleName: string;
 }
 
-/** The installed module that provides a resource kind, merged with the kind's declaration. */
-export type ResourceKindDefinition = DeclaredResourceKind;
-
 /** Every resource value on the instance, keyed by canonical id. */
 export type ResourceValues = Record<string, unknown>;
 
@@ -974,13 +971,6 @@ export type EngineCallFailure =
   | { status: "unreachable"; message: string }
   | { status: "failed"; message: string };
 
-export interface RecapSupporter {
-  platformUserId: string;
-  userName: string | null;
-  total: number;
-  events: number;
-}
-
 export interface RecapViewerSample {
   /** ISO time. */
   sampledAt: string;
@@ -992,8 +982,8 @@ export type StreamRecapEngineDetail =
   | {
       status: "ok";
       viewerSamples: RecapViewerSample[];
-      topCheerers: RecapSupporter[];
-      topGifters: RecapSupporter[];
+      topCheerers: Supporter[];
+      topGifters: Supporter[];
     }
   | { status: "unregistered" }
   | { status: "unknown_session" }
@@ -1033,6 +1023,7 @@ export interface SupporterStream {
   segments: { startedAt: string; endedAt: string | null }[];
 }
 
+/** A viewer's support in one metric: the amount (`total`) and the events behind it. */
 export interface Supporter {
   platformUserId: string;
   userName: string | null;
