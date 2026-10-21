@@ -23,11 +23,6 @@ import { countActionSteps, treeToDefinition, type WorkflowTree } from "@/lib/wor
 const keepUnsaved = async () => true;
 
 /**
- * A workflow not yet saved: first what starts it, picked from the same event list a wait
- * uses, then its steps in the flow editor every other surface edits with. It is created
- * once it has an action, named after its trigger, and opens in the workflow editor.
- */
-/**
  * The events a workflow can start on by itself. A chat command's event names the command
  * (a commands setting, or a wildcard filled in per command), and commands are made on the
  * Commands page, so those events are left out.
@@ -47,7 +42,12 @@ function startableGroups(
     .filter((group) => group.choices.length > 0);
 }
 
-export function NewWorkflowEditor({ instanceId }: { instanceId: Id<"instances"> }) {
+/**
+ * A workflow not yet saved: first what starts it, picked from the same event list a wait
+ * uses, then its steps in the flow editor every other surface edits with. It is created
+ * once it has an action, named after its trigger, and opens in the workflow editor.
+ */
+export function WorkflowEditor({ instanceId }: { instanceId: Id<"instances"> }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { catalogTriggers, catalogActions, triggerPresets, actionPresets, loading } = useWorkflowCatalog();
@@ -121,7 +121,7 @@ export function NewWorkflowEditor({ instanceId }: { instanceId: Id<"instances"> 
           onPick={pickTrigger}
           onClose={() => navigate("/stream/workflows")}
           legend="Events that can start a workflow"
-          testId="new-workflow-event"
+          testId="workflow-event"
         />
         <p className="text-xs text-muted-foreground">
           To answer a chat command, make it on the{" "}
@@ -149,7 +149,7 @@ export function NewWorkflowEditor({ instanceId }: { instanceId: Id<"instances"> 
             setTriggerPreset(null);
             setTree(null);
           }}
-          data-testid="button-new-workflow-change-trigger"
+          data-testid="button-workflow-change-trigger"
         >
           Pick a different trigger
         </Button>

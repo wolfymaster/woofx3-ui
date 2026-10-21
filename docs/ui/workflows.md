@@ -1,7 +1,7 @@
 # Workflows
 
 **Routes:** `/stream/workflows`, `/stream/workflows/new`, `/stream/workflows/:id`, `/stream/workflows/:id/runs/:engineRunId`, `/stream/starter-packs`
-**Primary files:** `client/src/pages/workflows.tsx`, `client/src/components/workflows/new-workflow-editor.tsx`, `client/src/components/workflows/workflow-flow-editor.tsx`, `client/src/components/flow/flow-editor.tsx`, `client/src/lib/workflow-display.ts`, `client/src/hooks/use-workflow-catalog.ts`
+**Primary files:** `client/src/pages/workflows.tsx`, `client/src/components/workflows/workflow-editor.tsx`, `client/src/components/workflows/workflow-flow-editor.tsx`, `client/src/components/flow/flow-editor.tsx`, `client/src/lib/workflow-display.ts`, `client/src/hooks/use-workflow-catalog.ts`
 
 `pages/workflows.tsx` serves the first three routes and picks one of three screens from the location: the list, the create flow, or the editor.
 
@@ -38,7 +38,7 @@ Curated sets of workflows and chat commands (raid welcome, follower thanks, sub 
 
 ## Create flow (`/stream/workflows/new`)
 
-- A full-width screen with a back link, wrapping **`NewWorkflowEditor`** (`components/workflows/new-workflow-editor.tsx`).
+- A full-width screen with a back link, wrapping **`WorkflowEditor`** (`components/workflows/workflow-editor.tsx`).
 - It first asks what starts the workflow, in place: the event list a wait step uses (`EventCatalog` in `components/flow/event-catalog.tsx`, grouped by `waitEventGroups`), searchable and grouped by what each event is about. Chat command events are left out, with a pointer to the Commands page, since a command's steps are its own workflow there (see [Chat commands](./commands.md)); so is any event named with a wildcard, which would need a name filled in.
 - Picking an event builds an unsaved tree with `newTriggerTree` (`lib/alert-triggers.ts`), its conditions at their fields' defaults and no order, and opens it in the flow editor below a line naming the trigger, with **Pick a different trigger** to start over. Nothing is saved while editing: `onCommit` keeps the edit.
 - **Create workflow** is enabled once the workflow has an action. It creates the workflow through `workflowActions.createFromDefinition`, named after its trigger, and opens it in the editor.

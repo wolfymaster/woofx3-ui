@@ -48,9 +48,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { NewWorkflowEditor } from "@/components/workflows/new-workflow-editor";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { TestRunSheet } from "@/components/workflows/test-run-sheet";
+import { WorkflowEditor } from "@/components/workflows/workflow-editor";
 import { WorkflowFlowEditor } from "@/components/workflows/workflow-flow-editor";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
 import {
@@ -426,7 +426,7 @@ function CreateWorkflowScreen() {
 
       <PageHeader title="Create a new workflow" description="Pick what starts it, then add its steps" />
 
-      {instance && <NewWorkflowEditor instanceId={instance._id as Id<"instances">} />}
+      {instance && <WorkflowEditor instanceId={instance._id as Id<"instances">} />}
     </div>
   );
 }
