@@ -2,7 +2,6 @@ import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
 import { functionLocation, type ModuleFunctionSummary } from "@convex/lib/moduleFunctionSummary";
-import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
@@ -55,7 +54,7 @@ import {
   useSyncModuleResourceInstancesRequest,
 } from "@/engine/hooks/use-module-resources";
 import { useModuleSettingsRequest, useUpdateModuleSettingRequest } from "@/engine/hooks/use-modules";
-import type { ModuleId } from "@/engine/types";
+import type { ManifestResourceKind, ManifestSettingField, ModuleId } from "@/engine/types";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
 import { actionErrorMessage } from "@/lib/action-error";
