@@ -13,14 +13,17 @@ import type {
 import { fromInstanceId, fromModuleId, toModuleId } from "./ids";
 import { useMappedList } from "./mapped";
 
-function toModuleResourceInstance({
-  _id,
-  _creationTime,
-  instanceId,
-  moduleId,
-  ...resource
-}: Doc<"moduleResourceInstances">): ModuleResourceInstance {
-  return { moduleId: toModuleId(moduleId), ...resource };
+function toModuleResourceInstance(row: Doc<"moduleResourceInstances">): ModuleResourceInstance {
+  return {
+    canonicalId: row.canonicalId,
+    engineInstanceId: row.engineInstanceId,
+    resourceInstanceId: row.resourceInstanceId,
+    kind: row.kind,
+    moduleId: toModuleId(row.moduleId),
+    moduleName: row.moduleName,
+    displayName: row.displayName,
+    settings: row.settings,
+  };
 }
 
 function useInstances(instanceId: InstanceId | null) {

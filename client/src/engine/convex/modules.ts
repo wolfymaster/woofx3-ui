@@ -6,11 +6,32 @@ import type { ModulesGateway } from "@/engine/gateway";
 import type { InstanceId, ModuleDetail, ModuleId } from "@/engine/types";
 import { fromInstanceId, fromModuleId, toModuleId } from "./ids";
 
-function toModuleDetail({
-  moduleDbId,
-  ...detail
-}: FunctionReturnType<typeof api.moduleDetail.getModuleDetail>): ModuleDetail {
-  return { ...detail, moduleDbId: toModuleId(moduleDbId) };
+function toModuleDetail(result: FunctionReturnType<typeof api.moduleDetail.getModuleDetail>): ModuleDetail {
+  return {
+    id: result.id,
+    name: result.name,
+    description: result.description,
+    version: result.version,
+    latestVersion: result.latestVersion,
+    author: result.author,
+    category: result.category,
+    tags: result.tags,
+    iconUrl: result.iconUrl,
+    readme: result.readme,
+    isInstalled: result.isInstalled,
+    triggers: result.triggers,
+    actions: result.actions,
+    functions: result.functions,
+    widgets: result.widgets,
+    workflows: result.workflows,
+    moduleDbId: toModuleId(result.moduleDbId),
+    manifestSettings: result.manifestSettings,
+    manifestResourceKinds: result.manifestResourceKinds,
+    permissions: result.permissions,
+    latestPermissions: result.latestPermissions,
+    localEndpoints: result.localEndpoints,
+    latestLocalEndpoints: result.latestLocalEndpoints,
+  };
 }
 
 function useDetailRequest() {

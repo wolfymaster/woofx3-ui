@@ -60,13 +60,19 @@ function useObsStatusRequest() {
   return useCallback((instanceId: InstanceId) => get({ instanceId: fromInstanceId(instanceId) }), [get]);
 }
 
-function toInstanceLiveState({
-  _id,
-  _creationTime,
-  instanceId,
-  ...state
-}: Doc<"instanceLiveState">): InstanceLiveState {
-  return state;
+function toInstanceLiveState(row: Doc<"instanceLiveState">): InstanceLiveState {
+  return {
+    isLive: row.isLive,
+    twitchUserId: row.twitchUserId,
+    startedAt: row.startedAt,
+    sessionId: row.sessionId,
+    sessionStartedAt: row.sessionStartedAt,
+    streamTitle: row.streamTitle,
+    gameName: row.gameName,
+    viewerCount: row.viewerCount,
+    lastUpdateSource: row.lastUpdateSource,
+    lastUpdatedAt: row.lastUpdatedAt,
+  };
 }
 
 function useLiveState({ optimisticInstanceId, isInstanceLoading }: OptimisticInstance) {
@@ -86,17 +92,39 @@ function useLiveStatePollRequest() {
   );
 }
 
-function toEngineSyncSchedule({
-  _id,
-  _creationTime,
-  instanceId,
-  ...schedule
-}: Doc<"instanceSync">): EngineSyncSchedule {
-  return schedule;
+function toEngineSyncSchedule(row: Doc<"instanceSync">): EngineSyncSchedule {
+  return {
+    status: row.status,
+    nextEligibleAt: row.nextEligibleAt,
+    lastError: row.lastError,
+    lastSyncedAt: row.lastSyncedAt,
+    lastDurationMs: row.lastDurationMs,
+    consecutiveErrorCount: row.consecutiveErrorCount,
+    syncIntervalMs: row.syncIntervalMs,
+  };
 }
 
-function toEngineSyncRun({ _id, _creationTime, instanceId, ...run }: Doc<"syncRuns">): EngineSyncRun {
-  return { id: _id, ...run };
+function toEngineSyncStep(step: Doc<"syncRuns">["steps"][number]): EngineSyncRun["steps"][number] {
+  return {
+    name: step.name,
+    status: step.status,
+    itemsProcessed: step.itemsProcessed,
+    startedAt: step.startedAt,
+    completedAt: step.completedAt,
+    error: step.error,
+  };
+}
+
+function toEngineSyncRun(row: Doc<"syncRuns">): EngineSyncRun {
+  return {
+    id: row._id,
+    trigger: row.trigger,
+    status: row.status,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    error: row.error,
+    steps: row.steps.map(toEngineSyncStep),
+  };
 }
 
 function toEngineSyncState(

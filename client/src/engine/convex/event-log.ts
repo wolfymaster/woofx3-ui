@@ -14,8 +14,14 @@ import { fromInstanceId, fromWebhookEventId, toWebhookEventId } from "./ids";
 
 type WebhookEventRow = FunctionReturnType<typeof api.engineEventLog.list>["page"][number];
 
-function toWebhookEventSummary({ _id, ...summary }: WebhookEventRow): WebhookEventSummary {
-  return { id: toWebhookEventId(_id), ...summary };
+function toWebhookEventSummary(row: WebhookEventRow): WebhookEventSummary {
+  return {
+    id: toWebhookEventId(row._id),
+    eventType: row.eventType,
+    source: row.source,
+    receivedAt: row.receivedAt,
+    payloadLength: row.payloadLength,
+  };
 }
 
 function useWebhookEvents(

@@ -16,8 +16,15 @@ import type {
 import { fromInstanceId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
 
-function toTransientEvent({ _id, _creationTime, instanceId, ...event }: Doc<"transientEvents">): TransientEvent {
-  return event;
+function toTransientEvent(row: Doc<"transientEvents">): TransientEvent {
+  return {
+    correlationKey: row.correlationKey,
+    type: row.type,
+    status: row.status,
+    message: row.message,
+    data: row.data,
+    expiresAt: row.expiresAt,
+  };
 }
 
 function toLiveTransientEvent(row: Doc<"transientEvents"> | null | undefined): TransientEvent | null | undefined {
