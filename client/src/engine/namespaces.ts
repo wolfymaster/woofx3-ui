@@ -57,6 +57,7 @@ export const ENGINE_NAMESPACE_MODULES = {
     "storage",
   ],
   overlays: ["browserSource"],
+  moduleOAuth: ["moduleOAuth"],
   twitchLink: [
     // finishConnect completes Convex's own OAuth redirect on the callback page,
     // which a gateway that links another way never reaches.

@@ -1206,3 +1206,21 @@ export interface TwitchLinkFlow {
   /** Abandons the attempt under way and returns to `idle`. */
   cancel: () => void;
 }
+
+// ==================== Module OAuth ====================
+
+/** Connecting one of an installed module's declared OAuth integrations. */
+export interface ModuleOAuthConnect {
+  /** What the module detail was asked for with: an installed module's key or a marketplace id. */
+  moduleId: string;
+  /** The integration's id in the module's manifest. */
+  integration: string;
+  /** The app path the provider sends the browser back to. */
+  returnTo: string;
+}
+
+/**
+ * How finishing a connect went. `error` is an OAuth error code, which
+ * lib/oauthErrors words for the streamer.
+ */
+export type ModuleOAuthFinish = { ok: true; integration: string } | { ok: false; error: string };

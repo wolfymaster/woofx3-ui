@@ -5,6 +5,7 @@ import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
 import { convexEventLogGateway } from "./event-log";
 import { convexMacrosGateway } from "./macros";
+import { convexModuleOAuthGateway } from "./module-oauth";
 import { convexModuleResourcesGateway } from "./module-resources";
 import { convexModulesGateway } from "./modules";
 import { convexOverlaysGateway } from "./overlays";
@@ -41,4 +42,5 @@ export const convexEngineGateway: EngineGateway = {
   session: convexSessionGateway,
   twitchLink: convexTwitchLinkGateway,
   overlays: convexOverlaysGateway,
+  moduleOAuth: convexModuleOAuthGateway,
 };

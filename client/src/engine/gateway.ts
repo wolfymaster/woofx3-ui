@@ -41,6 +41,8 @@ import type {
   ModuleFileContent,
   ModuleFileList,
   ModuleId,
+  ModuleOAuthConnect,
+  ModuleOAuthFinish,
   ModuleResourceInstance,
   ModuleResourceInstanceChanges,
   ModuleSettingValue,
@@ -130,6 +132,7 @@ export interface EngineGateway {
   readonly session: SessionGateway;
   readonly twitchLink: TwitchLinkGateway;
   readonly overlays: OverlaysGateway;
+  readonly moduleOAuth: ModuleOAuthGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -572,4 +575,20 @@ export interface OverlaysGateway {
    * Null when the scene has not reached the engine or the caller cannot see it.
    */
   usePreviewUrlRequest(): (sceneId: SceneId) => Promise<string | null>;
+}
+
+/**
+ * Connecting an installed module to a provider its manifest declares under
+ * `oauth[]`. The engine keeps the tokens; the provider's approval page needs
+ * the browser, so connecting leaves the page and the provider sends it back.
+ */
+export interface ModuleOAuthGateway {
+  /**
+   * Sends the browser to the provider to approve, coming back to `returnTo`.
+   * Rejects, before leaving, for an integration the module does not declare
+   * or an engine that cannot connect one.
+   */
+  useConnectRequest(): (connect: ModuleOAuthConnect) => Promise<void>;
+  /** Finishes the connect the provider came back with, given the one-time code it was handed. */
+  useFinishRequest(): (connectCode: string) => Promise<ModuleOAuthFinish>;
 }
