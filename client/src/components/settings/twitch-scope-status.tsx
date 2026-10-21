@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { MissingTwitchCapability, TwitchScopeHealth } from "@convex/lib/twitchScopeHealth";
 import { CheckCircle2, Loader2, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 
 interface TwitchScopeStatusProps {
-  instanceId: Id<"instances">;
   health: TwitchScopeHealth;
   /** The linked account's name, so the creator signs in to Twitch as that account and not another. */
   platformUsername: string;
@@ -15,7 +13,7 @@ interface TwitchScopeStatusProps {
 }
 
 /** Which Twitch permissions the linked account granted, with a way to fix a gap. */
-export function TwitchScopeStatus({ instanceId, health, platformUsername, canRelink }: TwitchScopeStatusProps) {
+export function TwitchScopeStatus({ health, platformUsername, canRelink }: TwitchScopeStatusProps) {
   const { connect, starting, error: connectError } = useTwitchConnect();
 
   if (health.state === "unlinked") {
@@ -26,7 +24,7 @@ export function TwitchScopeStatus({ instanceId, health, platformUsername, canRel
     <Button
       variant="outline"
       size="sm"
-      onClick={() => void connect(instanceId, "/admin/integrations")}
+      onClick={() => void connect("/admin/integrations")}
       disabled={starting}
       data-testid="button-status-reconnect-twitch"
     >

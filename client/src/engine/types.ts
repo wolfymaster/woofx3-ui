@@ -23,7 +23,6 @@ export type {
   ViewerFact,
   WidgetThemes,
 } from "@woofx3/api";
-export type { WorkflowRun } from "@/lib/transport";
 
 /** A grant to open sceneManager's editor socket for one scene. */
 export type SceneEditorGrant = SceneEditorSession;
@@ -54,6 +53,9 @@ export type WebhookEventId = GatewayId<"webhookEvent">;
  * the scene is `engineSceneId`; this one keys the gateway's copy of it.
  */
 export type SceneId = GatewayId<"scene">;
+
+/** An import of another bot's setup, as the gateway that keeps imports knows it. */
+export type SetupImportId = GatewayId<"setupImport">;
 
 // ==================== Read shapes ====================
 
@@ -818,6 +820,20 @@ export interface WorkflowCatalog {
 }
 
 /** Who started a run, which the run history and the replay controls tell apart. */
+/** A workflow run as the engine pushes it while it happens. */
+export interface WorkflowRun {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  startedAt: Date;
+  completedAt?: Date;
+  triggeredBy?: string;
+  error?: string;
+  /** How far through its steps the run is, 0 to 100, when the engine reports it. */
+  progress?: number;
+}
+
 export type WorkflowRunOrigin = "dashboard" | "test" | "replay";
 
 /** A manual run: the workflow by name or id, its parameters, and test-run options. */
@@ -1162,4 +1178,165 @@ export interface ConfigImportResultItem {
 export interface ConfigImportResult {
   items: ConfigImportResultItem[];
   summary: Record<ConfigImportOutcome, number>;
+}
+
+// ==================== Twitch link ====================
+
+/** The Twitch account the instance acts as on Twitch. */
+export interface TwitchLink {
+  platformUserId: string;
+  platformUsername: string;
+  profileImageUrl: string | undefined;
+  /** The scopes Twitch granted when the account was linked. */
+  scopes: string[];
+  /** When Twitch last refused the link's token (epoch ms); undefined while Twitch accepts it. */
+  authFailedAt: number | undefined;
+  /** Whether the viewer may replace or remove the link (an owner or admin). */
+  viewerCanRelink: boolean;
+}
+
+/**
+ * How an attempt to link Twitch stands. A gateway either sends the browser to
+ * Twitch to approve (`redirecting`: the page is about to leave, and the link
+ * shows up when it comes back), or has the streamer approve on any device
+ * with a code (`awaitingApproval`: the link shows up through `useLink` once
+ * they have).
+ */
+export type TwitchLinking =
+  | { status: "idle" }
+  | { status: "starting" }
+  | { status: "redirecting" }
+  | {
+      status: "awaitingApproval";
+      /** The code the streamer types at `verificationUri`. */
+      userCode: string;
+      verificationUri: string;
+      /** When the code stops working, in epoch ms. */
+      expiresAt: number;
+    }
+  | { status: "failed"; error: string };
+
+export interface TwitchLinkStart {
+  /** The app path to come back to, for a gateway that leaves the page for Twitch. */
+  returnTo: string;
+}
+
+/** Linking Twitch, for one component: what the attempt is doing and how to start or abandon one. */
+export interface TwitchLinkFlow {
+  linking: TwitchLinking;
+  /** Starts linking, replacing the account already linked. */
+  start: (request: TwitchLinkStart) => void;
+  /** Abandons the attempt under way and returns to `idle`. */
+  cancel: () => void;
+}
+
+// ==================== Module OAuth ====================
+
+/** Connecting one of an installed module's declared OAuth integrations. */
+export interface ModuleOAuthConnect {
+  /** What the module detail was asked for with: an installed module's key or a marketplace id. */
+  moduleId: string;
+  /** The integration's id in the module's manifest. */
+  integration: string;
+  /** The app path the provider sends the browser back to. */
+  returnTo: string;
+}
+
+/**
+ * How finishing a connect went. `error` is an OAuth error code, which
+ * lib/oauthErrors words for the streamer.
+ */
+export type ModuleOAuthFinish = { ok: true; integration: string } | { ok: false; error: string };
+
+// ==================== Setup imports ====================
+
+export type SetupImportSource = "firebot" | "streamerbot";
+
+/**
+ * - `review`: read and waiting for the streamer to look it over; nothing is on the engine yet.
+ * - `queued`, `applying`: its items are being created on the engine.
+ * - `done`: every item has an outcome.
+ */
+export type SetupImportStatus = "review" | "queued" | "applying" | "done";
+
+export type SetupImportItemKind = "group" | "counter" | "command" | "workflow";
+
+/** Whether an item comes over as it was (`ready`), with changes (`partial`), or not at all. */
+export type SetupImportReadiness = "ready" | "partial" | "unsupported";
+
+export type SetupImportOutcome = "created" | "exists" | "needs_module" | "skipped" | "pending" | "failed";
+
+export interface SetupImportNote {
+  message: string;
+  detail?: string;
+  /** Set when the note is why the item cannot come over. */
+  blocking?: boolean;
+}
+
+/** Something in the export that is not an item and does not come over, with why. */
+export interface SetupImportLeftover {
+  origin: string;
+  name: string;
+  message: string;
+  detail?: string;
+}
+
+/** One engine object an import creates, and how creating it went. */
+export interface SetupImportItem {
+  id: string;
+  kind: SetupImportItemKind;
+  name: string;
+  /** Where it came from in the other bot, as the streamer would find it there. */
+  origin: string;
+  readiness: SetupImportReadiness;
+  notes: SetupImportNote[];
+  /** What it does, step by step. */
+  steps: string[];
+  outcome: SetupImportOutcome | null;
+  message: string | null;
+}
+
+export interface SetupImportReport {
+  id: SetupImportId;
+  source: SetupImportSource;
+  label: string;
+  status: SetupImportStatus;
+  createdAt: number;
+  /** Why a queued import has not started; null when it is not waiting. */
+  waitingFor: string | null;
+  /** Gave up waiting on something outside the import; retrying starts it once that is fixed. */
+  stalled: boolean;
+  leftovers: SetupImportLeftover[];
+  items: SetupImportItem[];
+}
+
+/** An export to read for review: the decoded document's JSON text, in chunks to join. */
+export interface SetupImportAnalysis {
+  source: SetupImportSource;
+  documentChunks: string[];
+}
+
+// ==================== Marketplace installs and starter packs ====================
+
+/** What installing a marketplace bundle (a scene or an alert) made on the engine. */
+export interface MarketplaceBundleInstall {
+  kind: "scene" | "alert";
+  /** The engine's id for the scene or alert composition it made. */
+  engineId: string;
+}
+
+/** Whether a starter-pack item is in place on the engine. */
+export type StarterPackItemState = "installed" | "installing" | "conflict" | "available";
+
+/** How installing one starter-pack item went. */
+export interface StarterPackInstallOutcome {
+  itemId: string;
+  outcome: "installed" | "already-installed" | "pending" | "conflict" | "busy" | "unavailable" | "failed";
+  message?: string;
+}
+
+/** A starter pack to install, with the values the streamer filled in for its fields. */
+export interface StarterPackInstall {
+  packId: string;
+  values: Record<string, string | number>;
 }

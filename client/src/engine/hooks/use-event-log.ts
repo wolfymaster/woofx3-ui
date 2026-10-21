@@ -1,9 +1,7 @@
-import { useStore } from "@nanostores/react";
 import { useEffect, useMemo, useState } from "react";
 import { useEngineGateway, useEngineScope } from "@/engine/context";
 import type { StreamEventFrame } from "@/engine/types";
 import type { ActivityEvent } from "@/lib/activity-feed";
-import { $engineConnected } from "@/lib/transport/engine-connection";
 
 /** One page: the engine keeps a few days of detail, and the feed shows the latest of it. */
 const HISTORY_LIMIT = 50;
@@ -44,7 +42,7 @@ export function useEventLog(types: readonly string[] | null | undefined): {
   const { eventLog } = useEngineGateway();
   const subscribeStreamEvents = eventLog.useStreamEventsSubscription();
   const listEvents = eventLog.useEventsRequest();
-  const connected = useStore($engineConnected);
+  const connected = useEngineGateway().session.useConnected();
   const [history, setHistory] = useState<ActivityEvent[]>([]);
   const [live, setLive] = useState<ActivityEvent[]>([]);
   const [historyStatus, setHistoryStatus] = useState<EventLogStatus>("loading");
@@ -100,4 +98,13 @@ export function useEventLog(types: readonly string[] | null | undefined): {
   const events = useMemo(() => [...live, ...history], [live, history]);
   const status = typesKey === null ? "unsupported" : typesKey === undefined ? "loading" : historyStatus;
   return { events, status };
+}
+
+/**
+ * Subscribes to pushed events of some types (null: every type the engine
+ * pushes) and returns the unsubscribe. Throws without a current instance, so
+ * callers subscribe only once there is one.
+ */
+export function useStreamEventsSubscription() {
+  return useEngineGateway().eventLog.useStreamEventsSubscription();
 }

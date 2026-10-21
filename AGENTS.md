@@ -78,7 +78,7 @@ Summary (see `CLAUDE.md` for the full list): `internal*` for private APIs; valid
 - **Biome** — 2 spaces, double quotes, semicolons, ES5 trailing commas, 120 cols.
 - **Wouter v3** — use `navigate` in `useEffect`, not `<Redirect>`.
 - **State:** Nanostores for UI-only; Convex for persisted data.
-- **Transport:** `client/src/lib/transport/`; do not use deprecated `rpc-client.ts`.
+- **Engine access:** through the engine gateway (`client/src/engine/`); only the Convex adapter (`client/src/engine/convex/`) imports `client/src/lib/transport/`. Do not use deprecated `rpc-client.ts`.
 - **Shadcn** in `client/src/components/ui/` — compose, don’t edit primitives.
 - **Instance-scoped queries:** `useQuery(api.foo.bar, instance ? { instanceId: instance._id } : "skip")`.
 

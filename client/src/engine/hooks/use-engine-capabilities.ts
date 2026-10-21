@@ -7,7 +7,6 @@ import {
   createReconnectDetector,
   type EngineCapabilitiesState,
 } from "@/lib/engine-capabilities";
-import { $engineConnected } from "@/lib/transport/engine-connection";
 
 const LOADING: EngineCapabilitiesState = { status: "loading" };
 
@@ -35,14 +34,23 @@ function subscribe(listener: () => void): () => void {
 }
 
 const isReconnect = createReconnectDetector();
-$engineConnected.subscribe((connected) => {
-  if (isReconnect(connected)) {
-    generation += 1;
-    entries.clear();
-    inFlight.clear();
-    notify();
-  }
-});
+
+/**
+ * Drops every cached answer when the live connection comes back after a
+ * drop, so mounted hooks ask again. Mounted once, with the live connection,
+ * so it sees every drop whatever is on screen.
+ */
+export function useCapabilitiesReconnectReset(): void {
+  const connected = useEngineGateway().session.useConnected();
+  useEffect(() => {
+    if (isReconnect(connected)) {
+      generation += 1;
+      entries.clear();
+      inFlight.clear();
+      notify();
+    }
+  }, [connected]);
+}
 
 function requestErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);

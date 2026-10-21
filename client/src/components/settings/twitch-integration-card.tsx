@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { canManageTwitchLink } from "@convex/lib/twitchLinkPolicy";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { Loader2, Unlink } from "lucide-react";
 import { useState } from "react";
 import {
@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useUnlinkTwitchRequest } from "@/engine/hooks/use-twitch-link";
 import { useTwitchConnect } from "@/hooks/use-twitch-connect";
 
 interface TwitchIntegrationCardProps {
@@ -32,7 +33,7 @@ interface TwitchIntegrationCardProps {
 export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isLoading }: TwitchIntegrationCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const disconnect = useAction(api.twitchIntegration.disconnect);
+  const unlink = useUnlinkTwitchRequest();
   const { connect, starting, error: connectError } = useTwitchConnect();
   // The server refuses a member's connect or disconnect; this only keeps the
   // buttons from offering what will be refused. Undefined while loading, which
@@ -41,17 +42,13 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
   const canManage = canManageTwitchLink(viewerRole);
 
   const handleConnect = () => {
-    if (!instanceId) {
-      return;
-    }
-    void connect(instanceId, "/admin/integrations");
+    connect("/admin/integrations");
   };
 
   const handleDisconnect = async () => {
-    if (!instanceId) return;
     setIsDisconnecting(true);
     try {
-      await disconnect({ instanceId, platform: "twitch" });
+      await unlink();
     } catch (err) {
       console.error("Failed to disconnect Twitch:", err);
     } finally {

@@ -1,8 +1,8 @@
 import { api } from "@convex/_generated/api";
 import { useQuery } from "convex/react";
 import { useEffect, useRef } from "react";
+import { useLiveReconnectRequest } from "@/engine/hooks/use-live-connection";
 import { useInstance } from "@/hooks/use-instance";
-import { transport } from "@/lib/transport";
 
 /**
  * Whether the current instance's managed engine is down for an upgrade. The
@@ -26,12 +26,13 @@ export function useEngineUpgrading(): boolean {
  */
 export function useReconnectAfterUpgrade(): void {
   const upgrading = useEngineUpgrading();
+  const reconnectNow = useLiveReconnectRequest();
   const wasUpgrading = useRef(false);
 
   useEffect(() => {
     if (wasUpgrading.current && !upgrading) {
-      transport.reconnectNow();
+      reconnectNow();
     }
     wasUpgrading.current = upgrading;
-  }, [upgrading]);
+  }, [upgrading, reconnectNow]);
 }

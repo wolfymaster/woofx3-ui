@@ -37,10 +37,13 @@ import type {
   MacroId,
   MacroRunResult,
   MacroVariableValue,
+  MarketplaceBundleInstall,
   ModuleDetail,
   ModuleFileContent,
   ModuleFileList,
   ModuleId,
+  ModuleOAuthConnect,
+  ModuleOAuthFinish,
   ModuleResourceInstance,
   ModuleResourceInstanceChanges,
   ModuleSettingValue,
@@ -64,8 +67,15 @@ import type {
   ResourceValues,
   SceneChanges,
   SceneEditorGrant,
+  SceneId,
   SceneRecord,
   SceneWidgetCatalogRow,
+  SetupImportAnalysis,
+  SetupImportId,
+  SetupImportReport,
+  StarterPackInstall,
+  StarterPackInstallOutcome,
+  StarterPackItemState,
   StorageConfig,
   StreamEventFrame,
   StreamRecapEngineDetail,
@@ -74,6 +84,8 @@ import type {
   SupporterStream,
   TestRunCapabilities,
   TransientEvent,
+  TwitchLink,
+  TwitchLinkFlow,
   UploadGrant,
   UploadRequest,
   ViewerFact,
@@ -123,6 +135,12 @@ export interface EngineGateway {
   readonly macros: MacrosGateway;
   readonly streamOps: StreamOpsGateway;
   readonly config: ConfigGateway;
+  readonly session: SessionGateway;
+  readonly twitchLink: TwitchLinkGateway;
+  readonly overlays: OverlaysGateway;
+  readonly moduleOAuth: ModuleOAuthGateway;
+  readonly setupImports: SetupImportsGateway;
+  readonly starterPacks: StarterPacksGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -333,6 +351,11 @@ export interface ModulesGateway {
     approvedPermissions: string[],
     approvedLocalEndpoints: string[]
   ) => Promise<{ moduleKey: string }>;
+  /**
+   * Installs a marketplace bundle (a scene or an alert) onto the engine and
+   * resolves with what it made. Rejects for a listing the instance may not install.
+   */
+  useBundleInstallRequest(): (listingId: string) => Promise<MarketplaceBundleInstall>;
 }
 
 /**
@@ -522,4 +545,96 @@ export interface ConfigGateway {
   useStorageConfigRequest(): () => Promise<StorageConfig | null>;
   /** Replaces the storage backend, and its credentials, for everyone on the instance. */
   useSetStorageConfigRequest(): (config: Record<string, unknown>) => Promise<{ success: boolean }>;
+}
+
+/**
+ * The live connection the engine pushes events and runs over, which the
+ * subscriptions in other namespaces share. A gateway opens it to the scope's
+ * engine.
+ */
+export interface SessionGateway {
+  /** Keeps the live connection pointed at the scope's engine while mounted. Mount it once, in the app shell. */
+  useLiveConnection(): void;
+  /** Retries a dropped connection now instead of waiting out its backoff; does nothing while connected. */
+  useReconnectRequest(): () => void;
+  /** True while the connection holds an engine session that has completed an authenticated round trip. */
+  useConnected(): boolean;
+}
+
+/**
+ * The Twitch account the instance acts as. Owners and admins link and unlink
+ * it; anyone who can see the instance reads it. Linking is a flow the UI
+ * follows rather than a URL to visit, so a gateway can link with a browser
+ * redirect or with a code the streamer approves elsewhere.
+ */
+export interface TwitchLinkGateway {
+  /** The linked account; null when there is none or the caller cannot see the instance. */
+  useLink(): Live<TwitchLink | null>;
+  /** Starts and follows linking for the calling component. */
+  useLinkFlow(): TwitchLinkFlow;
+  /** Removes the link. Rejects for a caller who is not an owner or admin. */
+  useUnlinkRequest(): () => Promise<void>;
+}
+
+/** The addresses a scene's overlay is served at: the one OBS loads, and previews of it. */
+export interface OverlaysGateway {
+  /**
+   * The URL OBS loads the scene from, made on first ask and the same after
+   * that until rotated. Rejects for a scene that has not reached the engine.
+   */
+  useBrowserSourceUrlRequest(): (sceneId: SceneId) => Promise<string>;
+  /** Replaces the scene's browser-source URL; the one before stops working. */
+  useRotateBrowserSourceUrlRequest(): (sceneId: SceneId) => Promise<string>;
+  /**
+   * A short-lived URL of the scene's live overlay, for an editor's preview.
+   * Null when the scene has not reached the engine or the caller cannot see it.
+   */
+  usePreviewUrlRequest(): (sceneId: SceneId) => Promise<string | null>;
+}
+
+/**
+ * Connecting an installed module to a provider its manifest declares under
+ * `oauth[]`. The engine keeps the tokens; the provider's approval page needs
+ * the browser, so connecting leaves the page and the provider sends it back.
+ */
+export interface ModuleOAuthGateway {
+  /**
+   * Sends the browser to the provider to approve, coming back to `returnTo`.
+   * Rejects, before leaving, for an integration the module does not declare
+   * or an engine that cannot connect one.
+   */
+  useConnectRequest(): (connect: ModuleOAuthConnect) => Promise<void>;
+  /** Finishes the connect the provider came back with, given the one-time code it was handed. */
+  useFinishRequest(): (connectCode: string) => Promise<ModuleOAuthFinish>;
+}
+
+/**
+ * Bringing a setup over from another bot (Firebot, Streamer.bot): an export
+ * is read into a report of the groups, counters, commands and workflows it
+ * would create, which the streamer reviews before any of it reaches the
+ * engine. Owners and admins only.
+ */
+export interface SetupImportsGateway {
+  /** The instance's most recent import with its items; null when it has none. */
+  useLatest(): Live<SetupImportReport | null>;
+  /** Reads an export into a report to review. Rejects, with words for the streamer, an export it cannot read. */
+  useAnalyzeRequest(): (analysis: SetupImportAnalysis) => Promise<{ importId: SetupImportId }>;
+  /** Starts creating a reviewed import's items on the engine; each item's outcome arrives through `useLatest`. */
+  useStartRequest(): (importId: SetupImportId) => Promise<void>;
+  /** Tries again the items that needed a module or failed, and an import that gave up waiting. */
+  useRetryRequest(): (importId: SetupImportId) => Promise<void>;
+  /** Throws away an import still in review. */
+  useDiscardRequest(): (importId: SetupImportId) => Promise<void>;
+}
+
+/**
+ * The app's starter packs of ready-made commands and workflows, installed
+ * onto the engine. The packs are the app's own; what each item made on the
+ * engine is tracked so a pack shows what is already in place.
+ */
+export interface StarterPacksGateway {
+  /** Each item's state, keyed by `starterItemKey`; null when the caller cannot see the instance. */
+  useStatus(): Live<Record<string, StarterPackItemState> | null>;
+  /** Installs a pack's items and resolves with how each went; an item can still be pending on the engine. */
+  useInstallRequest(): (install: StarterPackInstall) => Promise<StarterPackInstallOutcome[]>;
 }

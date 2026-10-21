@@ -137,8 +137,10 @@ as it read then.
 ### One stream subscription per page
 
 Every widget that listens to pushed events (Events, Stream Stats, Ad Breaks)
-goes through `transport.subscribeStreamEvents(instanceId, types, callback)`,
-declaring the event types it takes. The browser transport holds one engine
+goes through the gateway's `eventLog.useStreamEventsSubscription()`
+(`useStreamEventsSubscription` in `client/src/engine/hooks/use-event-log.ts`),
+declaring the event types it takes. Under the Convex gateway that is the
+browser transport's `subscribeStreamEvents`. The browser transport holds one engine
 subscription per session and registers the union of every listener's types
 with `subscribeStreamEvents(subscriber, types)`. Calling it again replaces the
 previous registration, so the transport registers again whenever the union

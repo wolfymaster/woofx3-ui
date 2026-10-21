@@ -6,7 +6,6 @@ import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { EventLogSettings } from "@/engine/types";
 import { withEventTypeEnabled } from "@/lib/activity-feed";
 import { type CapabilitySupport, EVENT_LOG_CAPABILITIES } from "@/lib/engine-capabilities";
-import { $engineConnected } from "@/lib/transport/engine-connection";
 
 /**
  * - `unsupported`: the engine has no selection, so nothing can be chosen.
@@ -55,7 +54,7 @@ export function useEventLogSettings(): EventLogSettingsHandle {
   const { eventLog } = useEngineGateway();
   const getEventLogSettings = eventLog.useSettingsRequest();
   const setEventLogSelection = eventLog.useSetSelectionRequest();
-  const connected = useStore($engineConnected);
+  const connected = useEngineGateway().session.useConnected();
   const settingsByInstance = useStore($settingsByInstance);
   const settings = instanceId ? settingsByInstance[instanceId] : undefined;
   const [error, setError] = useState<string | null>(null);

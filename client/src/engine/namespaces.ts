@@ -31,8 +31,9 @@ export const ENGINE_NAMESPACE_MODULES = {
     "moduleSettingsActions",
     "moduleFiles",
     "moduleDetail",
-    // The rest of marketplace is the catalog, which the cloud serves.
+    // The rest of marketplace and marketplaceCatalog is the catalog, which the cloud serves.
     "marketplace.installModule",
+    "marketplaceCatalog.installBundle",
   ],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],
@@ -55,6 +56,16 @@ export const ENGINE_NAMESPACE_MODULES = {
     "configBackup.previewImport",
     "configBackup.importConfig",
     "storage",
+  ],
+  overlays: ["browserSource"],
+  moduleOAuth: ["moduleOAuth"],
+  setupImports: ["setupImports"],
+  starterPacks: ["starterPacks"],
+  twitchLink: [
+    // finishConnect completes Convex's own OAuth redirect on the callback page,
+    // which a gateway that links another way never reaches.
+    "twitchIntegration.startConnect",
+    "twitchIntegration.disconnect",
   ],
 } as const satisfies Record<string, readonly string[]>;
 

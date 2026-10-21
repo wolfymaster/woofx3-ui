@@ -27,7 +27,7 @@ import {
 export function TwitchReconnectBanner() {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const { health, twitchLink } = useTwitchIntegration(instanceId);
+  const { health, twitchLink } = useTwitchIntegration();
   const [location] = useLocation();
   const search = useSearch();
   const { connect, starting, error: connectError } = useTwitchConnect();
@@ -65,7 +65,7 @@ export function TwitchReconnectBanner() {
           size="sm"
           variant="outline"
           className="h-7 shrink-0"
-          onClick={() => void connect(instanceId, reconnectReturnPath(location, search))}
+          onClick={() => void connect(reconnectReturnPath(location, search))}
           disabled={starting}
           data-testid="button-banner-reconnect-twitch"
         >

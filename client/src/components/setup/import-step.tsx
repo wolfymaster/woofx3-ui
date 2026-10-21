@@ -1,11 +1,12 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { SetupStatus } from "@convex/setup";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { SetupImportPanel } from "@/components/setup-import/setup-import-panel";
 import { Button } from "@/components/ui/button";
+import { useLatestSetupImport } from "@/engine/hooks/use-setup-imports";
 
 interface ImportStepProps {
   instanceId: Id<"instances">;
@@ -20,7 +21,7 @@ interface ImportStepProps {
  */
 export function ImportStep({ instanceId, status, onContinue }: ImportStepProps) {
   const chooseImport = useMutation(api.setup.chooseImport);
-  const latest = useQuery(api.setupImports.latest, { instanceId });
+  const latest = useLatestSetupImport();
   const [importing, setImporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +72,7 @@ export function ImportStep({ instanceId, status, onContinue }: ImportStepProps) 
 
   return (
     <div className="space-y-4">
-      <SetupImportPanel instanceId={instanceId} canImport={status.canManageSetup} />
+      <SetupImportPanel canImport={status.canManageSetup} />
       {queued && (
         <p className="text-sm text-muted-foreground">
           Your setup is created once setup finishes installing your platforms. Since you are bringing your own, you can

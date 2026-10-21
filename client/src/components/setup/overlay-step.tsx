@@ -1,16 +1,13 @@
-import { api } from "@convex/_generated/api";
 import type { SetupStatus } from "@convex/setup";
-import { useAction } from "convex/react";
 import { Copy, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useEngineScope } from "@/engine/context";
 import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
+import { useBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import { useCreateSceneRequest, useScenes, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useToast } from "@/hooks/use-toast";
-import { browserSourceUrlForKey } from "@/lib/browser-source-url";
-import { fromSceneId } from "@/lib/cloud-ids";
 import {
   findAlertWidget,
   overlayCatalogState,
@@ -55,7 +52,7 @@ export function OverlayStep({ status, onContinue }: OverlayStepProps) {
   const syncState = useEngineSyncState({ enabled: status.engineRegistered });
   const syncNow = useEngineSyncRequest();
   const createScene = useCreateSceneRequest();
-  const getOrCreateKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
+  const getBrowserSourceUrl = useBrowserSourceUrlRequest();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -66,7 +63,7 @@ export function OverlayStep({ status, onContinue }: OverlayStepProps) {
   // The engine announces a new scene by webhook, so a created scene shows up
   // in `scenes` a moment after createScene returns.
   const scene = scenes ? [...scenes].sort((a, b) => a.createdAt - b.createdAt)[0] : undefined;
-  const sceneId = scene?.engineSceneId ? fromSceneId(scene.id) : null;
+  const sceneId = scene?.engineSceneId ? scene.id : null;
 
   const alertWidget = catalog ? findAlertWidget(catalog) : undefined;
   const syncRuns = syncState?.recentRuns ?? [];
@@ -96,10 +93,10 @@ export function OverlayStep({ status, onContinue }: OverlayStepProps) {
       return;
     }
     let cancelled = false;
-    getOrCreateKey({ sceneId })
-      .then((key) => {
+    getBrowserSourceUrl(sceneId)
+      .then((browserSourceUrl) => {
         if (!cancelled) {
-          setUrl(browserSourceUrlForKey(key));
+          setUrl(browserSourceUrl);
         }
       })
       .catch((err: unknown) => {
@@ -110,7 +107,7 @@ export function OverlayStep({ status, onContinue }: OverlayStepProps) {
     return () => {
       cancelled = true;
     };
-  }, [sceneId, url, getOrCreateKey]);
+  }, [sceneId, url, getBrowserSourceUrl]);
 
   if (!status.engineRegistered) {
     return (

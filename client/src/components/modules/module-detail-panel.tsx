@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
 import { functionLocation, type ModuleFunctionSummary } from "@convex/lib/moduleFunctionSummary";
 import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
   ArrowLeft,
@@ -46,6 +46,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineScope } from "@/engine/context";
+import { useModuleOAuthConnectRequest } from "@/engine/hooks/use-module-oauth";
 import {
   useCreateResourceInstanceRequest,
   useDeleteResourceInstanceRequest,
@@ -1070,7 +1071,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
         )}
         {manifestSettings.map((field) => {
           if (field.type === "button") {
-            return <SettingButtonRow key={field.id} instanceId={instanceId} moduleId={moduleId} field={field} />;
+            return <SettingButtonRow key={field.id} moduleId={moduleId} field={field} />;
           }
           if (field.type === "resource_ref" && field.resourceKind) {
             const linked = values[field.id] ?? loadedValues?.[field.id] ?? "";
@@ -1356,17 +1357,16 @@ function SecretSettingRow({
 }
 
 interface SettingButtonRowProps {
-  instanceId?: Id<"instances">;
   moduleId: string;
   field: ManifestSettingField;
 }
 
-function SettingButtonRow({ instanceId, moduleId, field }: SettingButtonRowProps) {
+function SettingButtonRow({ moduleId, field }: SettingButtonRowProps) {
   if (field.action?.kind === "internal") {
     return <InternalSettingButton moduleId={moduleId} field={field} />;
   }
   if (field.action?.kind === "integration") {
-    return <IntegrationSettingButton instanceId={instanceId} moduleId={moduleId} field={field} action={field.action} />;
+    return <IntegrationSettingButton moduleId={moduleId} field={field} action={field.action} />;
   }
   return null;
 }
@@ -1396,17 +1396,16 @@ function InternalSettingButton({ moduleId, field }: { moduleId: string; field: M
 }
 
 function IntegrationSettingButton({
-  instanceId,
   moduleId,
   field,
   action,
 }: {
-  instanceId?: Id<"instances">;
   moduleId: string;
   field: ManifestSettingField;
   action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "integration" }>;
 }) {
-  const startModuleOAuth = useAction(api.moduleOAuth.start);
+  const { instanceId } = useEngineScope();
+  const connectModuleOAuth = useModuleOAuthConnectRequest();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Only an integration the manifest declares under `oauth[]` can connect;
@@ -1423,14 +1422,7 @@ function IntegrationSettingButton({
       // The current path already deep-links back to this module (modules.tsx
       // resolves /modules/:id via routeModuleId), so returning to it as-is
       // — plus whatever result params the callback appends — is enough.
-      const redirectTo = window.location.pathname;
-      const { authorizeUrl } = await startModuleOAuth({
-        instanceId,
-        moduleId,
-        integration: action.integration,
-        redirectTo,
-      });
-      window.location.assign(authorizeUrl);
+      await connectModuleOAuth({ moduleId, integration: action.integration, returnTo: window.location.pathname });
     } catch (err) {
       setError(actionErrorMessage(err));
       setStarting(false);

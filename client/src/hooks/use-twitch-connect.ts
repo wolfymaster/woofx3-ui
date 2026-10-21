@@ -1,32 +1,22 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+import { useTwitchLinkFlow } from "@/engine/hooks/use-twitch-link";
 
 /**
- * Starts Twitch's integration OAuth flow for an instance and navigates the
- * browser to Twitch. Convex mints the OAuth state only for an owner or admin,
- * so a refusal surfaces here as `error` before the browser leaves the page.
+ * Starts linking Twitch for the instance, coming back to `returnTo` when the
+ * gateway sends the browser to Twitch to approve. Only an owner or admin may
+ * link, so a refusal surfaces here as `error` before anything else happens.
+ *
+ * `starting` covers the whole attempt, including waiting for the streamer to
+ * approve a code elsewhere; `linking` is the attempt itself, for a caller
+ * that shows that code.
  */
 export function useTwitchConnect() {
-  const startConnect = useAction(api.twitchIntegration.startConnect);
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { linking, start, cancel } = useTwitchLinkFlow();
 
-  const connect = useCallback(
-    async (instanceId: Id<"instances">, redirectTo: string) => {
-      setStarting(true);
-      setError(null);
-      try {
-        const { authorizeUrl } = await startConnect({ instanceId, redirectTo });
-        window.location.assign(authorizeUrl);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-        setStarting(false);
-      }
-    },
-    [startConnect]
-  );
+  const connect = useCallback((returnTo: string) => start({ returnTo }), [start]);
+  const starting =
+    linking.status === "starting" || linking.status === "redirecting" || linking.status === "awaitingApproval";
+  const error = linking.status === "failed" ? linking.error : null;
 
-  return { connect, starting, error };
+  return { connect, cancel, starting, error, linking };
 }

@@ -16,7 +16,7 @@ import { ensureInstanceMember, mapAccountRoleToInstanceRole } from "./lib/teamAc
  * An instance row as members may see it. `webhookSecret` authenticates the
  * engine's callbacks to Convex and no browser has a use for it. `clientSecret`
  * stays: the browser's live WebSocket to the engine authenticates with it
- * (hooks/use-sync-engine-transport.ts).
+ * (the Convex gateway's `session.useLiveConnection`, client/src/engine/convex/session.ts).
  */
 function withoutWebhookSecret(instance: Doc<"instances">): Omit<Doc<"instances">, "webhookSecret"> {
   const { webhookSecret: _webhookSecret, ...rest } = instance;

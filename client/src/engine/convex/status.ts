@@ -2,7 +2,6 @@ import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { useAction, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { ConvexError } from "convex/values";
 import { useCallback } from "react";
 import type { StatusGateway } from "@/engine/gateway";
 import { useEngineScope } from "@/engine/scope";
@@ -14,21 +13,10 @@ import type {
   ReadOptions,
 } from "@/engine/types";
 import { useOptimisticInstanceQueryFor } from "@/hooks/use-optimistic-instance-query";
+import { withPlainError } from "./errors";
 import { fromInstanceId } from "./ids";
 import { useMappedValue } from "./mapped";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
-
-/**
- * A refusal Convex raised for the caller carries its text in `data`; it is
- * rethrown as a plain Error so callers read one error shape whichever gateway
- * answered.
- */
-function withPlainError(error: unknown): never {
-  if (error instanceof ConvexError && typeof error.data === "string") {
-    throw new Error(error.data);
-  }
-  throw error;
-}
 
 function useCapabilitiesRequest() {
   const get = useInstanceAction(api.engineCapabilities.get);

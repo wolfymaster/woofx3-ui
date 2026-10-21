@@ -5,7 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { convexSiteUrl } from "@/lib/convexSiteUrl";
 
 interface WebhookEndpointSummary {
   endpointId: string;
@@ -45,7 +45,7 @@ export function ModuleWebhookEndpoints({ instanceId, modulePrefix }: ModuleWebho
 }
 
 function WebhookEndpointRow({ endpoint }: { endpoint: WebhookEndpointSummary }) {
-  const url = `${CONVEX_SITE_URL}/api/webhooks/${endpoint.endpointId}`;
+  const url = `${convexSiteUrl()}/api/webhooks/${endpoint.endpointId}`;
   const [copied, setCopied] = useState(false);
 
   async function copyUrl() {

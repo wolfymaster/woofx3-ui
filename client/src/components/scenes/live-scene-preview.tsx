@@ -1,11 +1,10 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { PreviewLayoutMessage } from "@woofx3/scene/editor";
-import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useOverlayPreviewUrlRequest } from "@/engine/hooks/use-overlays";
+import type { SceneId } from "@/engine/types";
 
 interface LiveScenePreviewProps {
-  sceneId: Id<"scenes"> | undefined;
+  sceneId: SceneId | undefined;
   width: number;
   height: number;
   /**
@@ -50,7 +49,7 @@ export function LiveScenePreview({
   layoutMessage,
   followDraft = false,
 }: LiveScenePreviewProps) {
-  const getOrCreatePreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
+  const getPreviewUrl = useOverlayPreviewUrlRequest();
   // undefined = loading; null = not ready yet (scene not synced, or mint failed).
   const [overlayUrl, setOverlayUrl] = useState<string | null | undefined>(undefined);
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -83,7 +82,7 @@ export function LiveScenePreview({
     }
     let cancelled = false;
     setOverlayUrl(undefined);
-    getOrCreatePreviewUrl({ sceneId }).then((url) => {
+    getPreviewUrl(sceneId).then((url) => {
       if (!cancelled) {
         setOverlayUrl(url);
       }
@@ -91,7 +90,7 @@ export function LiveScenePreview({
     return () => {
       cancelled = true;
     };
-  }, [sceneId, getOrCreatePreviewUrl]);
+  }, [sceneId, getPreviewUrl]);
 
   if (!overlayUrl) {
     return (

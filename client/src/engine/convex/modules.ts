@@ -2,7 +2,7 @@ import { api } from "@convex/_generated/api";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ModulesGateway } from "@/engine/gateway";
-import type { ModuleDetail, ModuleId } from "@/engine/types";
+import type { MarketplaceBundleInstall, ModuleDetail, ModuleId } from "@/engine/types";
 import { fromModuleId, toModuleId } from "./ids";
 import { useInstanceAction } from "./scope";
 
@@ -84,6 +84,17 @@ function useWorkflowsRequest() {
   return useCallback(() => listWorkflows({}), [listWorkflows]);
 }
 
+function useBundleInstallRequest() {
+  const installBundle = useInstanceAction(api.marketplaceCatalog.installBundle);
+  return useCallback(
+    async (listingId: string): Promise<MarketplaceBundleInstall> => {
+      const { kind, engineId } = await installBundle({ listingId });
+      return { kind, engineId };
+    },
+    [installBundle]
+  );
+}
+
 function useMarketplaceInstallRequest() {
   const installModule = useInstanceAction(api.marketplace.installModule);
   return useCallback(
@@ -107,4 +118,5 @@ export const convexModulesGateway: ModulesGateway = {
   useReconcileUninstallRequest,
   useWorkflowsRequest,
   useMarketplaceInstallRequest,
+  useBundleInstallRequest,
 };
