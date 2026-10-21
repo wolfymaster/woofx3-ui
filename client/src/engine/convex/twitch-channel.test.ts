@@ -14,7 +14,7 @@ type FunctionRef = Parameters<typeof getFunctionName>[0];
 
 const calls: Array<{ name: string; args: unknown }> = [];
 const queries: Array<{ name: string; args: unknown }> = [];
-const optimistic: Array<{ name: string; hasUpdate: boolean }> = [];
+const optimistic: Array<{ name: string; update: unknown }> = [];
 let results: Record<string, unknown> = {};
 
 const SCHEDULE = {
@@ -75,8 +75,8 @@ mock.module("convex/react", () => ({
   useMutation: (mutation: FunctionRef) => {
     const name = getFunctionName(mutation);
     return Object.assign(recordingCall(name), {
-      withOptimisticUpdate: () => {
-        optimistic.push({ name, hasUpdate: true });
+      withOptimisticUpdate: (update: unknown) => {
+        optimistic.push({ name, update });
         return recordingCall(name);
       },
     });
@@ -320,10 +320,11 @@ describe("requests carry the scope's instance", () => {
   test("the queue reorder and the preset removal show their result before Convex answers", () => {
     renderInScope(() => convexShoutoutsGateway.useReorderRequest());
     renderInScope(() => convexStreamInfoGateway.useRemovePresetRequest());
-    expect(optimistic).toEqual([
-      { name: "shoutouts:reorderQueue", hasUpdate: true },
-      { name: "streamInfo:removePreset", hasUpdate: true },
-    ]);
+    expect(optimistic).toHaveLength(2);
+    expect(optimistic[0]?.name).toBe("shoutouts:reorderQueue");
+    expect(optimistic[0]?.update).toBe(reorderQueueOptimistically);
+    expect(optimistic[1]?.name).toBe("streamInfo:removePreset");
+    expect(optimistic[1]?.update).toBe(removePresetOptimistically);
   });
 });
 
@@ -413,15 +414,15 @@ describe("reads", () => {
     });
   }
 
-  test("a history entry crosses with the gateway's id and without the row's other fields", () => {
+  test("a history entry crosses with the gateway's id, and a field Convex left out reads as null", () => {
     results["pins:listHistory"] = [
-      { id: "pin-1", content: "hi", authorName: undefined, twitchMessageId: "m-1", createdAt: 1, lastPinnedAt: 2 },
+      { id: "pin-1", content: "hi", twitchMessageId: "m-1", createdAt: 1, lastPinnedAt: 2, extra: true },
     ];
-    expect(renderInScope(() => convexPinsGateway.useHistory())).toEqual([
+    expect(renderInScope(() => convexPinsGateway.useHistory())).toStrictEqual([
       {
         id: "pin-1" as PinHistoryEntryId,
         content: "hi",
-        authorName: undefined,
+        authorName: null,
         twitchMessageId: "m-1",
         createdAt: 1,
         lastPinnedAt: 2,
@@ -581,4 +582,40 @@ describe("mappers", () => {
       expect(map()).toEqual(expected);
     });
   }
+});
+
+describe("stream categories", () => {
+  test("a category without art reads as null art, and goes back to Convex with none", async () => {
+    results["streamInfo:searchCategories"] = [{ id: "1", name: "Art" }];
+    const search = renderInScope(() => convexStreamInfoGateway.useSearchCategoriesRequest());
+    const [category] = await search("art");
+    expect(category).toStrictEqual({ id: "1", name: "Art", boxArtUrl: null });
+    if (!category) {
+      throw new Error("expected a category");
+    }
+
+    calls.length = 0;
+    await renderInScope(() => convexStreamInfoGateway.useUpdateRequest())({ category });
+    await renderInScope(() => convexStreamInfoGateway.useSavePresetRequest())({
+      name: "Art",
+      info: { title: "Drawing", category, tags: [] },
+    });
+    expect(calls).toStrictEqual([
+      {
+        name: "streamInfo:updateChannelInfo",
+        args: { instanceId, title: undefined, category: { id: "1", name: "Art" }, tags: undefined },
+      },
+      {
+        name: "streamInfo:savePreset",
+        args: { instanceId, name: "Art", title: "Drawing", category: { id: "1", name: "Art" }, tags: [] },
+      },
+    ]);
+  });
+
+  test("clearing the category sends null, and leaving it out sends nothing", async () => {
+    const update = renderInScope(() => convexStreamInfoGateway.useUpdateRequest());
+    await update({ category: null });
+    await update({ title: "Cozy" });
+    expect(calls.map((call) => (call.args as { category?: unknown }).category)).toStrictEqual([null, undefined]);
+  });
 });

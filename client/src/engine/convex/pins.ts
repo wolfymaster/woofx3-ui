@@ -19,10 +19,10 @@ export function toPinHistoryEntry(row: HistoryRow): PinHistoryEntry {
   return {
     id: toPinHistoryEntryId(row.id),
     content: row.content,
-    authorName: row.authorName,
-    twitchMessageId: row.twitchMessageId,
+    authorName: row.authorName ?? null,
+    twitchMessageId: row.twitchMessageId ?? null,
     createdAt: row.createdAt,
-    lastPinnedAt: row.lastPinnedAt,
+    lastPinnedAt: row.lastPinnedAt ?? null,
   };
 }
 
@@ -31,7 +31,7 @@ export function toCurrentPin(pin: CurrentPinRow): CurrentPin {
     messageId: pin.messageId,
     content: pin.content,
     authorName: pin.authorName,
-    expiresAt: pin.expiresAt,
+    expiresAt: pin.expiresAt ?? null,
   };
 }
 

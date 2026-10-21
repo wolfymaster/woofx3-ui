@@ -21,6 +21,7 @@ import type {
   GoLiveStreamInfoFacts,
   GoLiveTwitchFacts,
   StreamInfoField,
+  StreamInfoPresetId,
 } from "@/engine/types";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { dispatchErrorMessage } from "@/lib/field-options-request";
@@ -114,7 +115,7 @@ export interface GoLiveChecklist {
   setDismissed: (id: GoLiveCheckId, dismissed: boolean) => Promise<void>;
   complete: (options: GoLiveFinish) => Promise<GoLiveCompletion>;
   /** Writes a saved preset's title, category and tags to Twitch; returns the fields Twitch kept its own. */
-  applyPreset: (presetId: string) => Promise<StreamInfoField[]>;
+  applyPreset: (presetId: StreamInfoPresetId) => Promise<StreamInfoField[]>;
 }
 
 export function useGoLiveChecklist(): GoLiveChecklist {
@@ -258,7 +259,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
   );
 
   const applyPreset = useCallback(
-    async (presetId: string) => {
+    async (presetId: StreamInfoPresetId) => {
       if (!instanceId) {
         throw new Error("Pick an instance first");
       }

@@ -10,7 +10,7 @@ import type { ShoutoutEntry, ShoutoutEntryId } from "@/engine/types";
 import { cn } from "@/lib/utils";
 
 /** Twitch sends "" for a channel that is neither. */
-function broadcasterBadge(broadcasterType: string | undefined): string | null {
+function broadcasterBadge(broadcasterType: string | null): string | null {
   if (broadcasterType === "partner") {
     return "Partner";
   }
@@ -65,7 +65,7 @@ function QueueRow({ entry, now, onRemove }: RowProps) {
       </button>
 
       <Avatar className="h-7 w-7 shrink-0">
-        <AvatarImage src={entry.profileImageUrl} alt="" />
+        <AvatarImage src={entry.profileImageUrl ?? undefined} alt="" />
         <AvatarFallback className="text-[10px]">{entry.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
       </Avatar>
 

@@ -510,8 +510,8 @@ function ViewerDetail({
         twitchUserId: user.twitchUserId,
         login: user.login,
         displayName: user.displayName,
-        profileImageUrl: user.profileImageUrl,
-        broadcasterType: user.broadcasterType,
+        profileImageUrl: user.profileImageUrl ?? null,
+        broadcasterType: user.broadcasterType ?? null,
       });
       toast({
         title: "Shoutout queued",

@@ -28,7 +28,13 @@ type CategoryRow = FunctionReturnType<typeof api.streamInfo.searchCategories>[nu
 type PresetRow = FunctionReturnType<typeof api.streamInfo.listPresets>[number];
 
 function toStreamCategory(category: CategoryRow): StreamCategory {
-  return { id: category.id, name: category.name, boxArtUrl: category.boxArtUrl };
+  return { id: category.id, name: category.name, boxArtUrl: category.boxArtUrl ?? null };
+}
+
+/** Convex stores a category without art as one with no `boxArtUrl` at all. */
+function fromStreamCategory(category: StreamCategory): { id: string; name: string; boxArtUrl?: string } {
+  const { id, name, boxArtUrl } = category;
+  return boxArtUrl === null ? { id, name } : { id, name, boxArtUrl };
 }
 
 export function toStreamInfo(info: StreamInfoRow): StreamInfo {
@@ -78,7 +84,11 @@ function useUpdateRequest() {
   const updateChannelInfo = useInstanceAction(api.streamInfo.updateChannelInfo);
   return useCallback(
     async ({ title, category, tags }: StreamInfoChanges) => {
-      const { info, unapplied } = await updateChannelInfo({ title, category, tags }).catch(withPlainError);
+      const { info, unapplied } = await updateChannelInfo({
+        title,
+        category: category ? fromStreamCategory(category) : category,
+        tags,
+      }).catch(withPlainError);
       return { info: toStreamInfo(info), unapplied };
     },
     [updateChannelInfo]
@@ -106,9 +116,12 @@ function useSavePresetRequest() {
   const savePreset = useInstanceMutation(api.streamInfo.savePreset);
   return useCallback(
     async ({ name, info }: NewStreamInfoPreset) => {
-      const presetId = await savePreset({ name, title: info.title, category: info.category, tags: info.tags }).catch(
-        withPlainError
-      );
+      const presetId = await savePreset({
+        name,
+        title: info.title,
+        category: info.category ? fromStreamCategory(info.category) : null,
+        tags: info.tags,
+      }).catch(withPlainError);
       return toStreamInfoPresetId(presetId);
     },
     [savePreset]

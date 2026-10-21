@@ -188,13 +188,24 @@ export type StreamInfoField = "title" | "category" | "tags";
 export type StreamInfoChanges = Partial<StreamInfo>;
 
 /**
+ * What the diff helpers read of a channel: category by id alone. The client
+ * calls them with the engine gateway's `StreamInfo`, whose category art is
+ * null rather than absent, so they take any shape with these fields.
+ */
+interface StreamInfoShape {
+  title: string;
+  category: { id: string } | null;
+  tags: string[];
+}
+
+/**
  * The fields of `next` that differ from `base`. Only these are sent to
  * Twitch: re-sending a field the editor never touched would revert whatever
  * changed it elsewhere since `base` was read (Twitch's dashboard, a moderator,
  * a chat command). Category compares by id alone; its name and art are display.
  */
-export function diffStreamInfo(base: StreamInfo, next: StreamInfo): StreamInfoChanges {
-  const changes: StreamInfoChanges = {};
+export function diffStreamInfo<Info extends StreamInfoShape>(base: Info, next: Info): Partial<Info> {
+  const changes: Partial<Info> = {};
   if (base.title !== next.title) {
     changes.title = next.title;
   }
@@ -207,7 +218,7 @@ export function diffStreamInfo(base: StreamInfo, next: StreamInfo): StreamInfoCh
   return changes;
 }
 
-export function changedFields(changes: StreamInfoChanges): StreamInfoField[] {
+export function changedFields(changes: Partial<StreamInfoShape>): StreamInfoField[] {
   const fields: StreamInfoField[] = [];
   if (changes.title !== undefined) {
     fields.push("title");
@@ -221,7 +232,7 @@ export function changedFields(changes: StreamInfoChanges): StreamInfoField[] {
   return fields;
 }
 
-export function isEmptyChanges(changes: StreamInfoChanges): boolean {
+export function isEmptyChanges(changes: Partial<StreamInfoShape>): boolean {
   return changedFields(changes).length === 0;
 }
 
