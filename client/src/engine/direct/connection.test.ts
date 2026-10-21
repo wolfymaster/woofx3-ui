@@ -101,6 +101,37 @@ describe("createDirectConnection", () => {
     await connection.session.stop();
   });
 
+  test("subscribes again when the engine ends the subscription on an open session", async () => {
+    const { engine, clock, connection, events, resyncs, connected } = setup();
+    connection.session.start();
+    await connected();
+    engine.dropSubscriptions();
+    await waitFor(() => connection.session.state.status === "waiting", "waiting");
+    clock.advance(DEFAULT_DIRECT_GATEWAY_CONFIG.session.reconnectMaxMs);
+    await connected();
+    expect(engine.subscribeCalls).toBe(2);
+    expect(resyncs).toEqual(["connected", "connected"]);
+    await engine.pushEvent(response("e-4"));
+    expect(events).toEqual(["e-4"]);
+    await connection.session.stop();
+  });
+
+  test("a resync or event listener that throws does not fail the session", async () => {
+    const { engine, connection, events, connected } = setup();
+    connection.onResync(() => {
+      throw new Error("resync listener broke");
+    });
+    connection.onEvent(() => {
+      throw new Error("event listener broke");
+    });
+    connection.session.start();
+    await connected();
+    await engine.pushEvent(response("e-5"));
+    expect(events).toEqual(["e-5"]);
+    expect(engine.sessionsOpened).toBe(1);
+    await connection.session.stop();
+  });
+
   test("a new target drops the old engine's transients", async () => {
     const { engine, connection, resyncs, connected, retarget } = setup();
     connection.session.start();

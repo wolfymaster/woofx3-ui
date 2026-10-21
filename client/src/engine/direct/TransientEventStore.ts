@@ -1,6 +1,6 @@
 import { type CallbackEnvelope, type CallbackEventByType, EngineEventType } from "@woofx3/api";
 import type { TransientEvent } from "@/engine/types";
-import type { Clock } from "@/lib/engine-session/deps";
+import { type Clock, type Logger, notifyAll } from "@/lib/engine-session/deps";
 
 type TransientDraft = Omit<TransientEvent, "expiresAt">;
 
@@ -138,6 +138,7 @@ export class TransientEventStore {
 
   constructor(
     private readonly clock: Clock,
+    private readonly logger: Logger,
     private readonly config: TransientEventStoreConfig
   ) {}
 
@@ -192,8 +193,6 @@ export class TransientEventStore {
   };
 
   private notify(): void {
-    for (const listener of this.listeners) {
-      listener();
-    }
+    notifyAll(this.listeners, this.logger, "TransientEventStore");
   }
 }

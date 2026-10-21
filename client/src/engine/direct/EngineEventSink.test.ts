@@ -14,19 +14,25 @@ import { type EngineEventRoutes, EngineEventSink } from "./EngineEventSink";
 function harness(routes: Partial<EngineEventRoutes> = {}) {
   const events: string[] = [];
   const requests: string[] = [];
-  const gaps: Array<[number, number]> = [];
+  let missed = 0;
+  let ended = 0;
   const logger = new RecordingLogger();
   const sink = new EngineEventSink(
     {
       event: (envelope: CallbackEnvelope) => events.push(envelope.id),
       request: (envelope: RequestEnvelope) => requests.push(envelope.id),
-      gap: (expected, received) => gaps.push([expected, received]),
+      missed: () => {
+        missed += 1;
+      },
+      ended: () => {
+        ended += 1;
+      },
       ...routes,
     },
     logger,
     2
   );
-  return { sink, events, requests, gaps, logger };
+  return { sink, events, requests, logger, missed: () => missed, ended: () => ended };
 }
 
 const event = (id: string, seq: number): EngineEventFrame => ({
@@ -37,7 +43,7 @@ const event = (id: string, seq: number): EngineEventFrame => ({
 
 describe("EngineEventSink", () => {
   test("routes events and requests in order", async () => {
-    const { sink, events, requests, gaps } = harness();
+    const { sink, events, requests, missed } = harness();
     await sink.onEngineEvent(event("a", 1));
     await sink.onEngineEvent({
       kind: "request",
@@ -46,15 +52,42 @@ describe("EngineEventSink", () => {
     });
     expect(events).toEqual(["a"]);
     expect(requests).toEqual(["r"]);
-    expect(gaps).toEqual([]);
+    expect(missed()).toBe(0);
   });
 
   test("reports a seq gap and still routes the frame that showed it", async () => {
-    const { sink, events, gaps } = harness();
+    const { sink, events, missed } = harness();
     await sink.onEngineEvent(event("a", 1));
     await sink.onEngineEvent(event("b", 4));
-    expect(gaps).toEqual([[2, 4]]);
-    expect(events).toEqual(["a", "b"]);
+    await sink.onEngineEvent(event("c", 5));
+    expect(missed()).toBe(1);
+    expect(events).toEqual(["a", "b", "c"]);
+  });
+
+  const invalid: Array<{ name: string; seq: number }> = [
+    { name: "a repeated seq", seq: 2 },
+    { name: "a seq that moves back", seq: 1 },
+    { name: "a seq that is not an integer", seq: 2.5 },
+    { name: "a seq that is not a number", seq: Number.NaN },
+  ];
+
+  for (const { name, seq } of invalid) {
+    test(`logs ${name} as a gap and keeps counting from the last valid one`, async () => {
+      const { sink, events, missed, logger } = harness();
+      await sink.onEngineEvent(event("a", 1));
+      await sink.onEngineEvent(event("b", 2));
+      await sink.onEngineEvent(event("c", seq));
+      await sink.onEngineEvent(event("d", 3));
+      expect(missed()).toBe(1);
+      expect(events).toEqual(["a", "b", "c", "d"]);
+      expect(logger.entries).toMatchObject([{ level: "warn", fields: { last: 2 } }]);
+    });
+  }
+
+  test("reports the end of the subscription when the engine releases it", () => {
+    const { sink, ended } = harness();
+    sink[Symbol.dispose]();
+    expect(ended()).toBe(1);
   });
 
   test("drops an event id it has seen recently, and forgets the oldest past its limit", async () => {

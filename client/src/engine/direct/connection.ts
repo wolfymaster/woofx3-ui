@@ -1,6 +1,6 @@
 import { type CallbackEnvelope, ENGINE_CAPABILITIES, type RequestEnvelope, type Woofx3EngineApi } from "@woofx3/api";
 import type { RpcTarget } from "@woofx3/api/client";
-import type { Clock, Logger, Random } from "@/lib/engine-session/deps";
+import { type Clock, type Logger, notifyAll, type Random } from "@/lib/engine-session/deps";
 import { EngineSession, type OpenEngineSession } from "@/lib/engine-session/EngineSession";
 import type { EngineTargetSource } from "@/lib/engine-session/target";
 import { type DirectGatewayConfig, validateDirectGatewayConfig } from "./config";
@@ -48,14 +48,15 @@ export interface DirectConnection {
 export function createDirectConnection(deps: DirectConnectionDeps): DirectConnection {
   const { clock, logger, config } = deps;
   validateDirectGatewayConfig(config);
-  const transients = new TransientEventStore(clock, { ttlMs: config.transientTtlMs, perKey: config.transientsPerKey });
+  const transients = new TransientEventStore(clock, logger, {
+    ttlMs: config.transientTtlMs,
+    perKey: config.transientsPerKey,
+  });
   const eventListeners = new Set<(envelope: CallbackEnvelope) => void>();
   const resyncListeners = new Set<(reason: ResyncReason) => void>();
 
   const resync = (reason: ResyncReason): void => {
-    for (const listener of resyncListeners) {
-      listener(reason);
-    }
+    notifyAll(resyncListeners, logger, "DirectConnection resync", reason);
   };
 
   // Answered without awaiting: the engine pushes nothing more on the stream
@@ -82,20 +83,21 @@ export function createDirectConnection(deps: DirectConnectionDeps): DirectConnec
     logger,
     config: config.session,
     hooks: {
-      attach: async (api) => {
+      attach: async (api, lost) => {
         // capnweb exports the sink by reference, and its export table keeps
-        // the sink alive while the engine holds the stub, which it does for
-        // the life of the session.
+        // the sink alive while the engine holds the stub. The engine holds it
+        // for the life of the subscription, which can end before the
+        // session's: `ended` then reports the session lost, so it reconnects
+        // and subscribes again.
         const sink = new EngineEventSink(
           {
             event: (envelope) => {
               transients.ingest(envelope);
-              for (const listener of eventListeners) {
-                listener(envelope);
-              }
+              notifyAll(eventListeners, logger, "DirectConnection event", envelope);
             },
             request: answer,
-            gap: () => resync("gap"),
+            missed: () => resync("gap"),
+            ended: () => lost(new Error("the engine ended the event subscription")),
           },
           logger,
           config.seenEnvelopeIds

@@ -29,3 +29,23 @@ export function requirePositiveInteger(owner: string, name: string, value: numbe
     throw new Error(`${owner}: ${name} must be a positive integer, got ${value}`);
   }
 }
+
+/**
+ * Calls every listener with `args`, each in its own try/catch: a listener
+ * that throws is logged and the rest still run, so no subscriber can knock
+ * the state machine that notifies it into a wrong state.
+ */
+export function notifyAll<Args extends unknown[]>(
+  listeners: Iterable<(...args: Args) => void>,
+  logger: Logger,
+  what: string,
+  ...args: Args
+): void {
+  for (const listener of listeners) {
+    try {
+      listener(...args);
+    } catch (error) {
+      logger.error(`${what}: a listener threw`, { error });
+    }
+  }
+}

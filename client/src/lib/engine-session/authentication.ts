@@ -1,20 +1,24 @@
 /**
- * The message the engine's `ApiGateway.authenticate` rejects with for client
- * credentials it does not know. Must match woofx3 `api/src/gateway.ts`.
+ * How the engine's `ApiGateway.authenticate` words a refusal of client
+ * credentials it does not know (woofx3 `api/src/gateway.ts`). An engine that
+ * names the refusal starts its message with the prefix; an older one rejects
+ * with the plain message alone.
  */
-const ENGINE_AUTHENTICATION_REFUSAL = "Invalid client credentials";
+const AUTHENTICATION_REFUSED_PREFIX = "AuthenticationRefused: ";
+const LEGACY_AUTHENTICATION_REFUSAL = "Invalid client credentials";
 
 /**
  * Whether `error` is the engine refusing the session's client credentials,
  * as opposed to a transport failure. A refusal is final until the
- * credentials change, so the session stops retrying.
+ * credentials change, so the session stops retrying. A wording this does not
+ * recognise is read as a transport failure and retried, which is safe.
  *
- * TODO: replace the message match with the `@woofx3/api` type guard for the
- * named authentication refusal (`AUTHENTICATION_REFUSED` in `rpc.ts`, the
- * counterpart of `REGISTRATION_REFUSED`). The engine does not name the error
- * yet: today it rejects with a plain `Error`, so its message is the only
- * signal, and the guard does not exist to import.
+ * TODO: drop the legacy message once every engine the desktop app can run
+ * sends the prefix; engines released before it still send the plain message.
  */
 export function isAuthenticationRefused(error: unknown): boolean {
-  return error instanceof Error && error.message === ENGINE_AUTHENTICATION_REFUSAL;
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return error.message.startsWith(AUTHENTICATION_REFUSED_PREFIX) || error.message === LEGACY_AUTHENTICATION_REFUSAL;
 }

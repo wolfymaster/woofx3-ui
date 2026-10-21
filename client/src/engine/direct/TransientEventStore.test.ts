@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { type CallbackEvent, EngineEventType, makeCallbackEnvelope } from "@woofx3/api";
 import { FakeClock } from "@/lib/engine-session/testing/FakeClock";
+import { RecordingLogger } from "@/lib/engine-session/testing/RecordingLogger";
 import { TransientEventStore, transientOf } from "./TransientEventStore";
 
 const AT = "2026-10-21T12:00:00.000Z";
@@ -146,7 +147,7 @@ describe("TransientEventStore", () => {
 
   test("keeps events by key, oldest first, until they expire", () => {
     const clock = new FakeClock();
-    const store = new TransientEventStore(clock, { ttlMs: 1_000, perKey: 10 });
+    const store = new TransientEventStore(clock, new RecordingLogger(), { ttlMs: 1_000, perKey: 10 });
     store.ingest(response("k", "a"));
     clock.advance(600);
     store.ingest(response("k", "b"));
@@ -159,7 +160,7 @@ describe("TransientEventStore", () => {
   });
 
   test("keeps at most perKey events under one key, dropping the oldest", () => {
-    const store = new TransientEventStore(new FakeClock(), { ttlMs: 1_000, perKey: 2 });
+    const store = new TransientEventStore(new FakeClock(), new RecordingLogger(), { ttlMs: 1_000, perKey: 2 });
     for (const id of ["a", "b", "c"]) {
       store.ingest(response("k", id));
     }
@@ -167,7 +168,7 @@ describe("TransientEventStore", () => {
   });
 
   test("reads the same snapshot until something changes, and tells subscribers", () => {
-    const store = new TransientEventStore(new FakeClock(), { ttlMs: 1_000, perKey: 10 });
+    const store = new TransientEventStore(new FakeClock(), new RecordingLogger(), { ttlMs: 1_000, perKey: 10 });
     let notified = 0;
     store.subscribe(() => {
       notified += 1;

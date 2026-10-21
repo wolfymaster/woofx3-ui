@@ -6,7 +6,7 @@ export interface EngineSessionConfig {
   reconnectBaseMs: number;
   /** Ceiling the reconnect delay grows to and stays at, before jitter. */
   reconnectMaxMs: number;
-  /** How long a new session has to prove itself: the capability read plus the host's attach step. */
+  /** How long a new session has to prove itself: one budget for the capability read and the host's attach step together. */
   connectTimeoutMs: number;
   /** How long one call may wait for the engine's answer. capnweb sets no deadline of its own. */
   rpcTimeoutMs: number;

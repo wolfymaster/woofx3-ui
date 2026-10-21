@@ -12,34 +12,54 @@ type TestApi = Pick<Woofx3EngineApi, "ping" | "getEngineCapabilities">;
 
 const CONFIG = { reconnectBaseMs: 100, reconnectMaxMs: 400, connectTimeoutMs: 1_000, rpcTimeoutMs: 500 };
 
-function setup(required: readonly EngineCapability[] = [ENGINE_CAPABILITIES.engineEventStream]) {
+interface AttachStep {
+  attempt: number;
+  engine: FakeEngine;
+  clock: FakeClock;
+}
+
+interface SetupOptions {
+  required?: readonly EngineCapability[];
+  /** Runs after the default attach step records the session; `attempt` counts from 1. */
+  attach?: (step: AttachStep) => Promise<void>;
+  /** Replaces the target source's `current`, to hold or fail the read. */
+  current?: (target: EngineTarget) => Promise<EngineTarget>;
+  retargeted?: () => void;
+}
+
+function setup(options: SetupOptions = {}) {
   const engine = new FakeEngine();
   const clock = new FakeClock();
+  const logger = new RecordingLogger();
   let target: EngineTarget = engine.target();
   const targetListeners = new Set<() => void>();
   const attached: TestApi[] = [];
+  const losers: Array<(reason: unknown) => void> = [];
   let retargets = 0;
   const session = new EngineSession<TestApi>({
     targets: {
-      current: async () => target,
+      current: async () => (options.current ? options.current(target) : target),
       onChange: (listener) => {
         targetListeners.add(listener);
         return () => targetListeners.delete(listener);
       },
     },
     open: engine.open,
-    required,
+    required: options.required ?? [ENGINE_CAPABILITIES.engineEventStream],
     hooks: {
-      attach: async (api) => {
+      attach: async (api, lost) => {
         attached.push(api);
+        losers.push(lost);
+        await options.attach?.({ attempt: attached.length, engine, clock });
       },
       retargeted: () => {
         retargets += 1;
+        options.retargeted?.();
       },
     },
     clock,
     random: () => 0,
-    logger: new RecordingLogger(),
+    logger,
     config: CONFIG,
   });
   const reach = (status: SessionState["status"]) =>
@@ -50,7 +70,7 @@ function setup(required: readonly EngineCapability[] = [ENGINE_CAPABILITIES.engi
       listener();
     }
   };
-  return { engine, clock, session, attached, reach, retarget, retargets: () => retargets };
+  return { engine, clock, session, logger, attached, losers, reach, retarget, retargets: () => retargets };
 }
 
 describe("EngineSession connect", () => {
@@ -217,6 +237,174 @@ describe("EngineSession call", () => {
     const pending = session.call("ping", (api) => api.ping());
     engine.breakSessions();
     await expect(pending).rejects.toBeInstanceOf(EngineDisconnectedError);
+    await session.stop();
+  });
+});
+
+describe("EngineSession failure paths", () => {
+  const never = () => new Promise<void>(() => {});
+
+  test("a capability read that never answers times out into waiting", async () => {
+    const { engine, clock, session, reach } = setup();
+    engine.unanswered.add("getEngineCapabilities");
+    session.start();
+    await waitFor(() => engine.sessions.length === 1, "the session to open");
+    clock.advance(CONFIG.connectTimeoutMs - 1);
+    expect(session.state.status).toBe("connecting");
+    clock.advance(1);
+    await reach("waiting");
+    const state = session.state;
+    expect(state.status === "waiting" && state.lastError).toContain("getEngineCapabilities");
+    await session.stop();
+  });
+
+  test("the capability read and the attach step share one connect budget", async () => {
+    const { clock, session, attached, reach } = setup({
+      attach: (step) => {
+        step.clock.advance(600);
+        return never();
+      },
+    });
+    session.start();
+    await waitFor(() => attached.length === 1, "the attach step");
+    clock.advance(CONFIG.connectTimeoutMs - 600);
+    await reach("waiting");
+    const state = session.state;
+    expect(state.status === "waiting" && state.lastError).toContain("attach");
+    await session.stop();
+  });
+
+  test("an attach step that rejects is retried and never reports connected", async () => {
+    const { clock, session, attached, reach } = setup({
+      attach: async ({ attempt }) => {
+        if (attempt === 1) {
+          throw new Error("subscribe failed");
+        }
+      },
+    });
+    const seen: string[] = [];
+    session.subscribe(() => seen.push(session.state.status));
+    session.start();
+    await reach("waiting");
+    expect(seen).not.toContain("connected");
+    clock.advance(CONFIG.reconnectBaseMs);
+    await reach("connected");
+    expect(attached).toHaveLength(2);
+    await session.stop();
+  });
+
+  test("a target change while the target is still being read leaves the old read unused", async () => {
+    let release: (() => void) | null = null;
+    let reads = 0;
+    const { engine, session, reach, retarget } = setup({
+      current: async (target) => {
+        reads += 1;
+        if (reads === 1) {
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+        return target;
+      },
+    });
+    session.start();
+    await waitFor(() => release !== null, "the first read");
+    retarget(engine.target());
+    await reach("connected");
+    release?.();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(engine.sessionsOpened).toBe(1);
+    expect(session.state.status).toBe("connected");
+    await session.stop();
+  });
+
+  test("a session that breaks during the attach step is retried", async () => {
+    const { clock, session, attached, reach } = setup({
+      attach: ({ attempt, engine }) => {
+        if (attempt === 1) {
+          engine.breakSessions();
+          return never();
+        }
+        return Promise.resolve();
+      },
+    });
+    session.start();
+    await reach("waiting");
+    clock.advance(CONFIG.reconnectBaseMs);
+    await reach("connected");
+    expect(attached).toHaveLength(2);
+    await session.stop();
+  });
+
+  test("a session the host reports lost reconnects, and a stale report does nothing", async () => {
+    const { clock, session, attached, losers, reach } = setup();
+    session.start();
+    await reach("connected");
+    losers[0](new Error("the engine ended the event subscription"));
+    expect(session.state.status).toBe("waiting");
+    clock.advance(CONFIG.reconnectBaseMs);
+    await reach("connected");
+    expect(attached).toHaveLength(2);
+    losers[0](new Error("late"));
+    expect(session.state.status).toBe("connected");
+    await session.stop();
+  });
+
+  test("a state listener that throws is logged and the session stays connected", async () => {
+    const { engine, session, logger, reach } = setup();
+    session.subscribe(() => {
+      if (session.state.status === "connected") {
+        throw new Error("listener broke");
+      }
+    });
+    session.start();
+    await reach("connected");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(session.state.status).toBe("connected");
+    expect(engine.sessionsOpened).toBe(1);
+    expect(logger.entries.some((entry) => entry.level === "error")).toBe(true);
+  });
+
+  test("a retargeted hook that throws still reconnects to the new target", async () => {
+    const { engine, session, reach, retarget } = setup({
+      retargeted: () => {
+        throw new Error("hook broke");
+      },
+    });
+    session.start();
+    await reach("connected");
+    retarget(engine.target());
+    await reach("connected");
+    expect(engine.sessionsOpened).toBe(2);
+    await session.stop();
+  });
+
+  test("reconnectNow and a target change check an incompatible engine again", async () => {
+    const { engine, session, reach, retarget } = setup();
+    const full = engine.capabilities;
+    engine.capabilities = [ENGINE_CAPABILITIES.eventsLog];
+    session.start();
+    await reach("refused");
+    engine.capabilities = full;
+    session.reconnectNow();
+    await reach("connected");
+    engine.capabilities = [ENGINE_CAPABILITIES.eventsLog];
+    retarget(engine.target());
+    await reach("refused");
+    engine.capabilities = full;
+    retarget(engine.target());
+    await reach("connected");
+    await session.stop();
+  });
+
+  test("reconnectNow does not retry refused credentials", async () => {
+    const { engine, session, reach, retarget } = setup();
+    retarget({ ...engine.target(), clientSecret: "cd".repeat(32) });
+    session.start();
+    await reach("refused");
+    session.reconnectNow();
+    expect(session.state.status).toBe("refused");
+    expect(engine.sessionsOpened).toBe(1);
     await session.stop();
   });
 });
