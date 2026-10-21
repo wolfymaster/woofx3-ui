@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-confirm-address"
+description = "Enables the confirm_address command without any pre-configured scope."
+commands.allow = ["confirm_address"]
+
+[[permission]]
+identifier = "deny-confirm-address"
+description = "Denies the confirm_address command without any pre-configured scope."
+commands.deny = ["confirm_address"]

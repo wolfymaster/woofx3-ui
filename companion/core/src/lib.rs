@@ -19,6 +19,18 @@ pub use relay::{
     run_relay, run_relay_with, CredentialSource, RelayGrant, RelayOptions, RelayStatus, Stopped,
 };
 
+/// Installs ring as the process's rustls crypto provider. rustls adopts it
+/// on its own only when something builds a config through rustls first, as
+/// the Convex and relay WebSockets do; reqwest instead panics when no
+/// provider is installed. The updater's HTTP client, and anything else built
+/// before a WebSocket connects (always, on a companion that is not paired),
+/// needs it installed up front. Safe to call more than once.
+pub fn install_tls_provider() {
+    // Fails only when a provider is already installed, which is the outcome
+    // wanted.
+    let _already_installed = rustls::crypto::ring::default_provider().install_default();
+}
+
 #[cfg(test)]
 mod tests {
     /// tokio-tungstenite builds its TLS config with `ClientConfig::builder()`,
@@ -28,5 +40,12 @@ mod tests {
         let _ = rustls::ClientConfig::builder()
             .with_root_certificates(rustls::RootCertStore::empty())
             .with_no_client_auth();
+    }
+
+    #[test]
+    fn test_install_tls_provider_installs_a_default_once_or_more() {
+        crate::install_tls_provider();
+        crate::install_tls_provider();
+        assert!(rustls::crypto::CryptoProvider::get_default().is_some());
     }
 }

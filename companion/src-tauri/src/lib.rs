@@ -384,6 +384,7 @@ macro_rules! command_handler {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    woofx3_companion_core::install_tls_provider();
     tauri::Builder::default()
         // First, so a second launch hands over to this one before it opens a
         // second Convex connection.
