@@ -27,10 +27,19 @@ pub enum HostError {
     ApiPortZero,
     #[error("there is no engine orchestrator at {0}")]
     OrchestratorMissing(PathBuf),
-    /// The engine answered and said no: a refused registration, or
-    /// credentials it does not accept.
+    /// The engine answered a call with an error: a refused registration, or
+    /// a failure inside the engine.
     #[error("the engine refused: {name}: {message}")]
     EngineRefused { name: String, message: String },
+    /// `authenticate` refused the credentials, so the engine does not know
+    /// them (see `is_authentication_refused`).
+    #[error("the engine does not accept this host's credentials: {message}")]
+    CredentialsRefused { message: String },
+    /// The engine ended the capnweb session instead of answering.
+    #[error("the engine ended the session: {name}: {message}")]
+    EngineSessionAborted { name: String, message: String },
+    #[error("could not set up the HTTP client for the engine: {0}")]
+    HttpClientBuild(#[source] reqwest::Error),
     #[error("could not reach the engine: {0}")]
     EngineUnreachable(#[source] reqwest::Error),
     #[error("the engine answered HTTP {0}")]

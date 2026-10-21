@@ -18,14 +18,13 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use tauri::async_runtime::JoinHandle;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 use woofx3_companion_core::host::{
     orchestrator_spec, run_registration, run_sidecar, EngineGateway, EnginePhase, EngineStatus,
-    HostError, HttpEngineGateway, LocalEngineLayout, LocalEngineSettings, LocalSession,
+    HostError, HttpEngineGateway, LocalEngineLayout, LocalEngineSettings, LocalSession, Registrar,
     RegistrationOptions, SidecarSpec,
 };
 
@@ -35,9 +34,6 @@ use crate::state::LocalEngineSession;
 
 /// The bundled engine release, relative to the app's resource directory.
 pub const BUNDLED_ENGINE_DIR: &str = "engine";
-
-/// Bounds each call to the local engine's gateway, connecting included.
-const GATEWAY_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Whether this host runs a local engine. Fixed at startup by the host mode.
 pub enum LocalEngine {
@@ -58,11 +54,13 @@ impl LocalEngine {
         let bundled = resource_dir.join(BUNDLED_ENGINE_DIR);
         let layout = LocalEngineLayout::under(app_local_data_dir, settings.api_port());
         let spec = orchestrator_spec(settings.engine_dir(&bundled), &layout)?;
-        let gateway = HttpEngineGateway::new(layout.api_url(), GATEWAY_TIMEOUT)?;
+        let options = RegistrationOptions::default();
+        let gateway = HttpEngineGateway::new(layout.api_url(), options.request_timeout)?;
         Ok(LocalEngine::Supervised(Box::new(EngineSidecar::start(
             spec,
             layout,
             Arc::new(gateway),
+            options,
         ))))
     }
 
@@ -104,6 +102,7 @@ pub struct EngineSidecar {
     spec: SidecarSpec,
     layout: LocalEngineLayout,
     gateway: Arc<HttpEngineGateway>,
+    options: RegistrationOptions,
     /// What the current run reports, swapped when the engine is resumed.
     views: std::sync::Mutex<Views>,
     /// The tasks while they run. Async, so a second stop waits for the first
@@ -128,12 +127,14 @@ impl EngineSidecar {
         spec: SidecarSpec,
         layout: LocalEngineLayout,
         gateway: Arc<HttpEngineGateway>,
+        options: RegistrationOptions,
     ) -> Self {
-        let (views, tasks) = launch(&spec, &layout, &gateway);
+        let (views, tasks) = launch(&spec, &layout, &gateway, &options);
         EngineSidecar {
             spec,
             layout,
             gateway,
+            options,
             views: std::sync::Mutex::new(views),
             tasks: tokio::sync::Mutex::new(Some(tasks)),
         }
@@ -183,7 +184,7 @@ impl EngineSidecar {
         if tasks.is_some() {
             return;
         }
-        let (views, started) = launch(&self.spec, &self.layout, &self.gateway);
+        let (views, started) = launch(&self.spec, &self.layout, &self.gateway, &self.options);
         *lock(&self.views) = views;
         *tasks = Some(started);
     }
@@ -193,18 +194,22 @@ fn launch(
     spec: &SidecarSpec,
     layout: &LocalEngineLayout,
     gateway: &Arc<HttpEngineGateway>,
+    options: &RegistrationOptions,
 ) -> (Views, Tasks) {
     let (status_tx, status) = watch::channel(EngineStatus::starting());
     let (session_tx, session) = watch::channel(LocalSession::Starting);
     let cancel = CancellationToken::new();
     let supervisor =
         tauri::async_runtime::spawn(run_sidecar(spec.clone(), status_tx, cancel.clone()));
-    let registration = tauri::async_runtime::spawn(run_registration(
-        status.clone(),
+    let registrar = Registrar::new(
         Arc::clone(gateway) as Arc<dyn EngineGateway>,
         Arc::new(EngineClientStore),
         layout.registration_token_file.clone(),
-        RegistrationOptions::default(),
+    );
+    let registration = tauri::async_runtime::spawn(run_registration(
+        status.clone(),
+        registrar,
+        options.clone(),
         session_tx,
         cancel.clone(),
     ));
@@ -276,8 +281,9 @@ mod tests {
         let app_data =
             std::env::temp_dir().join(format!("woofx3-no-orchestrator-{}", uuid::Uuid::new_v4()));
         let layout = LocalEngineLayout::under(&app_data, 1);
-        let gateway =
-            HttpEngineGateway::new(layout.api_url(), GATEWAY_TIMEOUT).expect("a gateway client");
+        let options = RegistrationOptions::default();
+        let gateway = HttpEngineGateway::new(layout.api_url(), options.request_timeout)
+            .expect("a gateway client");
         LocalEngine::Supervised(Box::new(EngineSidecar::start(
             SidecarSpec {
                 program: app_data.join("orchestrator"),
@@ -287,6 +293,7 @@ mod tests {
             },
             layout,
             Arc::new(gateway),
+            options,
         )))
     }
 

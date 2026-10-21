@@ -142,17 +142,70 @@ async fn test_http_engine_gateway_verifies_credentials_in_one_batch() {
     );
 }
 
+/// Whether an error is the one a case expects.
+type Expected = fn(&HostError) -> bool;
+
 #[tokio::test]
-async fn test_http_engine_gateway_reports_credentials_the_engine_refuses() {
+async fn test_http_engine_gateway_tells_refused_credentials_from_other_failures() {
+    let cases: [(&str, Expected); 4] = [
+        (
+            "[\"reject\",2,[\"error\",\"Error\",\"AuthenticationRefused: Invalid client credentials\"]]",
+            |err| matches!(err, HostError::CredentialsRefused { .. }),
+        ),
+        (
+            "[\"reject\",2,[\"error\",\"Error\",\"Invalid client credentials\"]]",
+            |err| matches!(err, HostError::CredentialsRefused { .. }),
+        ),
+        (
+            "[\"reject\",2,[\"error\",\"Error\",\"db-proxy unavailable\"]]",
+            |err| matches!(err, HostError::EngineRefused { message, .. } if message == "db-proxy unavailable"),
+        ),
+        (
+            "[\"abort\",[\"error\",\"Error\",\"the session broke\"]]",
+            |err| matches!(err, HostError::EngineSessionAborted { message, .. } if message == "the session broke"),
+        ),
+    ];
+    for (body, expected) in cases {
+        let (url, _) = stand_in(Answer::Reply { status: 200, body }).await;
+        let err = gateway(url)
+            .verify(&credentials())
+            .await
+            .expect_err("fails");
+        assert!(expected(&err), "{body}: {err:?}");
+    }
+}
+
+#[tokio::test]
+async fn test_http_engine_gateway_verify_ignores_values_it_does_not_read() {
     let (url, _) = stand_in(Answer::Reply {
         status: 200,
-        body: "[\"reject\",2,[\"error\",\"Error\",\"Invalid client credentials\"]]",
+        body: "[\"resolve\",2,{\"version\":\"dev\",\"hosting\":[\"undefined\"],\"startedAt\":[\"date\",1]}]",
     })
     .await;
-    assert!(matches!(
-        gateway(url).verify(&credentials()).await,
-        Err(HostError::EngineRefused { .. })
-    ));
+    gateway(url).verify(&credentials()).await.expect("verifies");
+}
+
+#[tokio::test]
+async fn test_http_engine_gateway_ignores_proxies_from_the_environment() {
+    // A proxy that is not there: a client that used it could not connect.
+    let closed = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let proxy = format!("http://{}", closed.local_addr().expect("address"));
+    drop(closed);
+    std::env::set_var("HTTP_PROXY", &proxy);
+    std::env::set_var("http_proxy", &proxy);
+    std::env::set_var("ALL_PROXY", &proxy);
+
+    let (url, bodies) = stand_in(Answer::Reply {
+        status: 200,
+        body: "[\"resolve\",2,{\"version\":\"dev\"}]",
+    })
+    .await;
+    let verified = gateway(url).verify(&credentials()).await;
+    std::env::remove_var("HTTP_PROXY");
+    std::env::remove_var("http_proxy");
+    std::env::remove_var("ALL_PROXY");
+    verified.expect("goes straight to the engine");
+    assert_eq!(bodies.lock().expect("lock").len(), 1);
 }
 
 #[tokio::test]

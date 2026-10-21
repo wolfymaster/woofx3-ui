@@ -141,16 +141,17 @@ The engine's recipe also allows `null` on sceneManager alone, for sandboxed widg
 Once the engine is ready, the companion becomes its client (`core/src/host/registration.rs`):
 
 1. If the credential store holds client credentials (account `local-engine-client`, next to the companion token), it checks them with one capnweb batch, `authenticate(clientId, clientSecret).getEngineInfo()`. If the engine accepts them, they are used.
-2. Otherwise, or if the engine refuses them (its data was wiped), it reads the token file and calls `registerClient("woofx3-desktop", { registrationToken })`, then stores the new credentials.
+2. Otherwise, or if `authenticate` refuses them (the engine no longer knows the client, say because its data was wiped), it reads the token file and calls `registerClient("woofx3-desktop", { registrationToken })`, then stores the new credentials. A refusal is recognised in one place, `is_authentication_refused` in `gateway.rs`: a message starting `AuthenticationRefused: `, or the plain `Invalid client credentials` older engines send. Any other failure, from `getEngineInfo` or the engine itself, keeps the stored credentials and is retried, so a passing engine fault never leaves an orphaned client behind.
 3. A failure (engine unreachable, token missing, registration refused, store unavailable) is retried with backoff for as long as the engine stays ready. Every time the engine becomes ready again after a restart, the credentials are checked again.
+4. Registering is the one step with an effect on the engine, which issues a new client each time. Credentials it issued are kept in memory until the credential store takes them, so a locked keychain makes the companion retry the store alone, not register again.
 
-The capnweb calls are plain HTTP batch requests to `http://127.0.0.1:<apiPort>/api` (`core/src/host/capnweb.rs`, `gateway.rs`), with a 10-second timeout. Each call is a single request with no origin, which the engine allows.
+The capnweb calls are plain HTTP batch requests to `http://127.0.0.1:<apiPort>/api` (`core/src/host/capnweb.rs`, `gateway.rs`), with a 10-second timeout. Each call is a single request with no origin, which the engine allows. They never go through a proxy, whatever the environment or the OS says, since they carry the registration token and the client secret. A reply is decoded only where the companion reads it (`registerClient`'s credentials), so a field the engine adds to `getEngineInfo` cannot break the check. An `abort` from the engine, which ends the whole session, is reported with the engine's reason.
 
 The client secret stays in the Rust process and the credential store. The window asks for it with the `local_engine_session` command, wrapped in `companion/ui/src/host.ts`, which answers `notLocal` in companion mode, `starting` until registration succeeds, `failed` with the reason, or `ready` with the api URL, client id and client secret the window needs to open its own capnweb session.
 
 ### Window permissions
 
-`build.rs` declares every command in `src/command_names.rs` to Tauri, which then checks each call against the window's capability (`capabilities/main.json`). The capability grants the window only those commands plus listening for events, and nothing from Tauri's core or its plugins. A test keeps the capability and the list in step.
+The commands are listed once, in `src/command_names.rs`: `lib.rs` builds the invoke handler from that list, and `build.rs` declares the same list to Tauri, which then checks each call against the window's capability (`capabilities/main.json`). The capability grants the window only those commands plus listening for events, and nothing from Tauri's core or its plugins. A test keeps the capability and the list in step.
 
 ## Updates
 

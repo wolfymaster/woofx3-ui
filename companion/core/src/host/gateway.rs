@@ -9,8 +9,25 @@ use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::capnweb::{batch_reply, batch_request, BatchReply, Call, MAIN_STUB};
+use super::capnweb::{batch_reply, batch_request, decode_value, BatchReply, Call, MAIN_STUB};
 use super::HostError;
+
+/// How the engine's `authenticate` words a refusal: its message starts with
+/// this marker. capnweb rebuilds errors with a custom name as plain `Error`
+/// on the way to JS clients, so the marker is in the message. Must match
+/// `AUTHENTICATION_REFUSED` in the engine's shared/clients/typescript/api/rpc.ts.
+const AUTHENTICATION_REFUSED_PREFIX: &str = "AuthenticationRefused: ";
+
+/// The refusal message of engines older than the marker. Must match
+/// `ApiGateway.authenticate` in those engines' api/src/gateway.ts.
+const LEGACY_INVALID_CREDENTIALS: &str = "Invalid client credentials";
+
+/// Whether an error from `authenticate` says the engine does not know the
+/// credentials, as opposed to failing for some other reason. The one place
+/// that decides it.
+pub fn is_authentication_refused(message: &str) -> bool {
+    message.starts_with(AUTHENTICATION_REFUSED_PREFIX) || message == LEGACY_INVALID_CREDENTIALS
+}
 
 /// What a client authenticates to the engine with. `registerClient` returns
 /// the secret once; whoever loses it must register again.
@@ -41,7 +58,8 @@ pub trait EngineGateway: Send + Sync {
     ) -> BoxFuture<'a, Result<ClientCredentials, HostError>>;
 
     /// Succeeds when `credentials` authenticate and an authenticated call
-    /// goes through.
+    /// goes through. Fails with [`HostError::CredentialsRefused`] only when
+    /// `authenticate` refused them; any other failure leaves them in doubt.
     fn verify<'a>(
         &'a self,
         credentials: &'a ClientCredentials,
@@ -59,11 +77,16 @@ impl HttpEngineGateway {
     pub fn new(api_url: String, timeout: Duration) -> Result<Self, HostError> {
         let http = reqwest::Client::builder()
             .timeout(timeout)
+            // The engine is on loopback, and the calls carry the registration
+            // token and the client secret in plain HTTP, so no proxy from the
+            // environment or the OS may see them.
+            .no_proxy()
             .build()
-            .map_err(HostError::EngineUnreachable)?;
+            .map_err(HostError::HttpClientBuild)?;
         Ok(HttpEngineGateway { http, api_url })
     }
 
+    /// The last call's result, as capnweb wrote it.
     async fn call(&self, calls: &[Call<'_>]) -> Result<Value, HostError> {
         let response = self
             .http
@@ -84,6 +107,9 @@ impl HttpEngineGateway {
             Ok(BatchReply::Resolved(value)) => Ok(value),
             Ok(BatchReply::Rejected { name, message }) => {
                 Err(HostError::EngineRefused { name, message })
+            }
+            Ok(BatchReply::Aborted { name, message }) => {
+                Err(HostError::EngineSessionAborted { name, message })
             }
             Err(unreadable) => Err(HostError::EngineReplyUnreadable(unreadable.0)),
         }
@@ -107,6 +133,8 @@ impl EngineGateway for HttpEngineGateway {
                     ],
                 }])
                 .await?;
+            let value = decode_value(&value)
+                .map_err(|unreadable| HostError::EngineReplyUnreadable(unreadable.0))?;
             serde_json::from_value(value).map_err(|_| {
                 HostError::EngineReplyUnreadable("registerClient did not return credentials")
             })
@@ -134,7 +162,39 @@ impl EngineGateway for HttpEngineGateway {
                 },
             ])
             .await
+            // A refused authenticate rejects the pipelined call with the same
+            // error; anything else came from getEngineInfo or the engine.
+            .map_err(|err| match err {
+                HostError::EngineRefused { message, .. } if is_authentication_refused(&message) => {
+                    HostError::CredentialsRefused { message }
+                }
+                other => other,
+            })
+            // Only whether the call went through matters, so the value is
+            // never decoded: a field the host cannot read must not fail it.
             .map(|_| ())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_authentication_refused_recognises_only_the_refusal() {
+        let cases = [
+            ("AuthenticationRefused: Invalid client credentials", true),
+            ("AuthenticationRefused: client revoked", true),
+            ("Invalid client credentials", true),
+            ("Invalid client credentials (db-proxy unavailable)", false),
+            ("authenticationrefused: Invalid client credentials", false),
+            ("AuthenticationRefused", false),
+            ("db-proxy unavailable", false),
+            ("", false),
+        ];
+        for (message, refused) in cases {
+            assert_eq!(is_authentication_refused(message), refused, "{message:?}");
+        }
     }
 }

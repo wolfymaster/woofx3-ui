@@ -50,13 +50,14 @@ pub fn batch_request(calls: &[Call<'_>]) -> String {
 /// How the pulled call ended.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BatchReply {
+    /// The value as capnweb wrote it. [`decode_value`] reads it, and only a
+    /// caller that uses the value needs to.
     Resolved(Value),
     /// The engine threw. `name` is the error's name (`RegistrationRefused`,
     /// or `Error`), `message` its message.
-    Rejected {
-        name: String,
-        message: String,
-    },
+    Rejected { name: String, message: String },
+    /// The engine ended the whole session (`["abort", error]`).
+    Aborted { name: String, message: String },
 }
 
 /// What a reply that is not a capnweb batch reply looked like.
@@ -64,7 +65,8 @@ pub enum BatchReply {
 pub struct UnreadableReply(pub &'static str);
 
 /// Reads the answer to `pulled` from a batch response body. Messages about
-/// other ids are skipped.
+/// other ids are skipped; an abort ends the reading, since no answer
+/// follows it.
 pub fn batch_reply(body: &str, pulled: u64) -> Result<BatchReply, UnreadableReply> {
     for line in body.lines().map(str::trim).filter(|line| !line.is_empty()) {
         let message: Value =
@@ -72,6 +74,10 @@ pub fn batch_reply(body: &str, pulled: u64) -> Result<BatchReply, UnreadableRepl
         let Some(parts) = message.as_array() else {
             return Err(UnreadableReply("a message is not an array"));
         };
+        if parts.first().and_then(Value::as_str) == Some("abort") {
+            let (name, message) = error_parts(parts.get(1))?;
+            return Ok(BatchReply::Aborted { name, message });
+        }
         let (Some(kind), Some(id)) = (
             parts.first().and_then(Value::as_str),
             parts.get(1).and_then(Value::as_u64),
@@ -85,8 +91,11 @@ pub fn batch_reply(body: &str, pulled: u64) -> Result<BatchReply, UnreadableRepl
             .get(2)
             .ok_or(UnreadableReply("a result has no value"))?;
         return match kind {
-            "resolve" => Ok(BatchReply::Resolved(unescape(payload)?)),
-            "reject" => rejection(payload),
+            "resolve" => Ok(BatchReply::Resolved(payload.clone())),
+            "reject" => {
+                let (name, message) = error_parts(Some(payload))?;
+                Ok(BatchReply::Rejected { name, message })
+            }
             _ => Err(UnreadableReply(
                 "the result is neither resolved nor rejected",
             )),
@@ -95,16 +104,16 @@ pub fn batch_reply(body: &str, pulled: u64) -> Result<BatchReply, UnreadableRepl
     Err(UnreadableReply("the reply has no result for the call"))
 }
 
-fn rejection(payload: &Value) -> Result<BatchReply, UnreadableReply> {
-    let parts = payload
-        .as_array()
-        .ok_or(UnreadableReply("a rejection is not an error"))?;
+/// The name and message of an `["error", name, message, stack?]` value.
+fn error_parts(value: Option<&Value>) -> Result<(String, String), UnreadableReply> {
+    let parts = value
+        .and_then(Value::as_array)
+        .ok_or(UnreadableReply("an error is not an error expression"))?;
     match parts.as_slice() {
-        [tag, name, message, ..] if tag == "error" => Ok(BatchReply::Rejected {
-            name: name.as_str().unwrap_or_default().to_string(),
-            message: message.as_str().unwrap_or_default().to_string(),
-        }),
-        _ => Err(UnreadableReply("a rejection is not an error")),
+        [tag, Value::String(name), Value::String(message), ..] if tag == "error" => {
+            Ok((name.clone(), message.clone()))
+        }
+        _ => Err(UnreadableReply("an error is not an error expression")),
     }
 }
 
@@ -123,12 +132,12 @@ fn escape(value: &Value) -> Value {
 }
 
 /// A capnweb value as plain JSON. Special forms (stubs, dates, bigints,
-/// undefined) are refused: nothing the host calls returns one.
-fn unescape(value: &Value) -> Result<Value, UnreadableReply> {
+/// undefined) are refused, so only a value the host reads is decoded.
+pub fn decode_value(value: &Value) -> Result<Value, UnreadableReply> {
     match value {
         Value::Array(outer) => match outer.as_slice() {
             [Value::Array(items)] => Ok(Value::Array(
-                items.iter().map(unescape).collect::<Result<_, _>>()?,
+                items.iter().map(decode_value).collect::<Result<_, _>>()?,
             )),
             _ => Err(UnreadableReply(
                 "the value holds a form this host does not read",
@@ -137,7 +146,7 @@ fn unescape(value: &Value) -> Result<Value, UnreadableReply> {
         Value::Object(fields) => Ok(Value::Object(
             fields
                 .iter()
-                .map(|(key, value)| Ok((key.clone(), unescape(value)?)))
+                .map(|(key, value)| Ok((key.clone(), decode_value(value)?)))
                 .collect::<Result<_, UnreadableReply>>()?,
         )),
         other => Ok(other.clone()),
@@ -211,10 +220,25 @@ mod tests {
                 BatchReply::Resolved(json!({ "clientId": "id-1", "clientSecret": "s3cret" })),
             ),
             (
-                "an escaped array in the value",
+                "the value as written, escaped array and all",
                 "[\"resolve\",2,{\"version\":\"dev\",\"list\":[[1,2]]}]",
                 2,
-                BatchReply::Resolved(json!({ "version": "dev", "list": [1, 2] })),
+                BatchReply::Resolved(json!({ "version": "dev", "list": [[1, 2]] })),
+            ),
+            (
+                "a special form is left for the caller",
+                "[\"resolve\",2,{\"hosting\":[\"undefined\"]}]",
+                2,
+                BatchReply::Resolved(json!({ "hosting": ["undefined"] })),
+            ),
+            (
+                "an aborted session",
+                "[\"abort\",[\"error\",\"Error\",\"the session broke\"]]",
+                2,
+                BatchReply::Aborted {
+                    name: "Error".to_string(),
+                    message: "the session broke".to_string(),
+                },
             ),
             (
                 "a refused registration",
@@ -260,10 +284,39 @@ mod tests {
                 "[\"reject\",1,\"boom\"]",
                 1,
             ),
-            ("a stub in the value", "[\"resolve\",1,[\"export\",-1]]", 1),
+            (
+                "rejection without a name",
+                "[\"reject\",1,[\"error\",null,\"boom\"]]",
+                1,
+            ),
+            (
+                "rejection without a message",
+                "[\"reject\",1,[\"error\",\"Error\"]]",
+                1,
+            ),
+            ("abort that is not an error", "[\"abort\",\"boom\"]", 1),
         ];
         for (case, body, pulled) in cases {
             assert!(batch_reply(body, pulled).is_err(), "{case}");
+        }
+    }
+
+    #[test]
+    fn test_decode_value_reads_plain_values_and_refuses_special_forms() {
+        let plain = [
+            (json!({ "list": [[1, [[2]]]] }), json!({ "list": [1, [2]] })),
+            (json!("text"), json!("text")),
+            (json!({ "n": 1, "ok": true }), json!({ "n": 1, "ok": true })),
+        ];
+        for (written, read) in plain {
+            assert_eq!(decode_value(&written), Ok(read));
+        }
+        for special in [
+            json!(["export", -1]),
+            json!({ "at": ["date", 1] }),
+            json!(["undefined"]),
+        ] {
+            assert!(decode_value(&special).is_err(), "{special}");
         }
     }
 }
