@@ -17,9 +17,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useChatCommands } from "@/engine/hooks/use-chat-commands";
-import { useInstance } from "@/hooks/use-instance";
 import { unitFor } from "@/lib/amount-unit";
 import { commandNameToSubjectSegment } from "@/lib/command-slug";
 import {
@@ -303,9 +302,8 @@ function SelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
 // table. The saved value is a NATS subject slug (not the raw "!command"
 // string) so downstream code can assemble `chat.command.${value}` verbatim.
 function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
-  const commands = useChatCommands(toInstanceId(instanceId ?? null));
+  const { instanceId } = useEngineScope();
+  const commands = useChatCommands(instanceId);
 
   const options = useMemo(() => {
     if (!commands) {

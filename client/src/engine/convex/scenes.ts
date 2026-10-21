@@ -4,18 +4,48 @@ import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ScenesGateway } from "@/engine/gateway";
 import type { InstanceId, NewScene, SceneChanges, SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
-import { fromInstanceId, toModuleId } from "./ids";
+import { fromInstanceId, toModuleId, toSceneId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
 
 type SceneRow = FunctionReturnType<typeof api.scenes.list>[number];
 type WidgetCatalogRow = FunctionReturnType<typeof api.sceneWidgets.listForInstance>[number];
 
-function toSceneRecord({ _id, _creationTime, instanceId, id, ...scene }: SceneRow): SceneRecord {
-  return { id, ...scene };
+function toSceneRecord(row: SceneRow): SceneRecord {
+  return {
+    id: toSceneId(row.id),
+    engineSceneId: row.engineSceneId,
+    name: row.name,
+    description: row.description,
+    widgets: row.widgets,
+    layout: row.layout,
+    sceneWidgets: row.sceneWidgets,
+    width: row.width,
+    height: row.height,
+    backgroundColor: row.backgroundColor,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
-function toSceneWidgetCatalogRow({ _id, _creationTime, moduleId, ...widget }: WidgetCatalogRow): SceneWidgetCatalogRow {
-  return { moduleId: toModuleId(moduleId), ...widget };
+function toSceneWidgetCatalogRow(row: WidgetCatalogRow): SceneWidgetCatalogRow {
+  return {
+    widgetId: row.widgetId,
+    name: row.name,
+    description: row.description,
+    moduleId: toModuleId(row.moduleId),
+    moduleName: row.moduleName,
+    directory: row.directory,
+    alertTypes: row.alertTypes,
+    settings: row.settings,
+    surfaces: row.surfaces,
+    hostsSurface: row.hostsSurface,
+    taxonomy: row.taxonomy,
+    projectionKey: row.projectionKey,
+    createdByType: row.createdByType,
+    createdByRef: row.createdByRef,
+    behaviorKinds: row.behaviorKinds,
+    createdAt: row.createdAt,
+  };
 }
 
 function useScenes(instanceId: InstanceId | null) {

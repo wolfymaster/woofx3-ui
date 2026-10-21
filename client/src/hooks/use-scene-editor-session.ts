@@ -3,8 +3,8 @@ import type { Id } from "@convex/_generated/dataModel";
 import { SceneSyncClient, type SceneSyncState } from "@woofx3/api/scene-editor/client";
 import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useSceneEditorSessionRequest } from "@/engine/hooks/use-scenes";
+import type { InstanceId } from "@/engine/types";
 import { toast } from "@/hooks/use-toast";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
 import {
@@ -16,7 +16,7 @@ import {
 import { syncReportToast } from "@/lib/scene-sync-report";
 
 interface UseSceneEditorSessionArgs {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   engineSceneId: string;
   /** The Convex scene, whose preview URL names sceneManager's public origin. */
   sceneId: Id<"scenes"> | undefined;
@@ -92,12 +92,12 @@ export function useSceneEditorSession({
   const socketSourceRef = useRef<SceneSocketSource | null>(null);
   if (publicUrl) {
     socketSourceRef.current = {
-      getGrant: () => getSession(toInstanceId(instanceId), engineSceneId),
+      getGrant: () => getSession(instanceId, engineSceneId),
       getPreviewUrl: publicUrl,
     };
   } else if (sceneId) {
     socketSourceRef.current = {
-      getGrant: () => getSession(toInstanceId(instanceId), engineSceneId),
+      getGrant: () => getSession(instanceId, engineSceneId),
       getPreviewUrl: () => getPreviewUrl({ sceneId }),
     };
   }

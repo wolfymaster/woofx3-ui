@@ -11,10 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
 import type { ModuleResourceInstance } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import type { AlertMenuSection } from "@/lib/alert-groups";
 import { eventsChangingResource, resourceActions } from "@/lib/resource-actions";
@@ -31,9 +30,9 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
  * event's list without its heading (`bare`).
  */
 export function ResourceActionEditors({ kind, instance }: { kind: string; instance: ModuleResourceInstance }) {
-  const { instance: engineInstance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
-  const workflows = useWorkflows(toInstanceId(engineInstance ? engineInstance._id : null));
+  const workflows = useWorkflows(instanceId);
 
   // The trigger being added, on its event's list, until it is saved or dropped.
   const [adding, setAdding] = useState<{ event: string; request: NewTriggerRequest } | null>(null);

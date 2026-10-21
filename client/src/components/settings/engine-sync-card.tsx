@@ -1,15 +1,14 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { formatDistanceToNow } from "date-fns";
 import { CheckCircle2, Circle, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
+import type { InstanceId } from "@/engine/types";
 
 interface EngineSyncCardProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
 }
 
 type StepStatus = "pending" | "running" | "success" | "error";
@@ -28,7 +27,7 @@ function StepIcon({ status }: { status: StepStatus }) {
 }
 
 export function EngineSyncCard({ instanceId }: EngineSyncCardProps) {
-  const state = useEngineSyncState(toInstanceId(instanceId));
+  const state = useEngineSyncState(instanceId);
   const syncNow = useEngineSyncRequest();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -37,7 +36,7 @@ export function EngineSyncCard({ instanceId }: EngineSyncCardProps) {
     setError(null);
     setPending(true);
     try {
-      const res = await syncNow(toInstanceId(instanceId));
+      const res = await syncNow(instanceId);
       if (!res.scheduled) {
         setError("A sync is already in progress.");
       }

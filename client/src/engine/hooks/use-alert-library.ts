@@ -1,9 +1,7 @@
 import { useEffect } from "react";
-import { useEngineGateway } from "@/engine/context";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { AlertComposition, InstanceId } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
 
 export interface AlertLibrary {
@@ -23,8 +21,7 @@ const refreshed = new Set<string>();
  * dashboard cached them, or while it was unreachable).
  */
 export function useAlertLibrary(): AlertLibrary {
-  const { instance } = useInstance();
-  const instanceId = toInstanceId(instance?._id);
+  const { instanceId } = useEngineScope();
   const enabled = useEngineCapabilities(instanceId).support(...ALERT_LIBRARY_CAPABILITIES) === "supported";
   const { alertLibrary } = useEngineGateway();
   const alerts = alertLibrary.useAlerts(enabled && instanceId ? instanceId : null);

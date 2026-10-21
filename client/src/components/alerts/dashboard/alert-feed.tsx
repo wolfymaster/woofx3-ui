@@ -1,12 +1,10 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { BellRing, Loader2, RotateCcw, ScrollText } from "lucide-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useReplayAlert } from "@/engine/hooks/use-replay-alert";
-import type { EngineAlert } from "@/engine/types";
+import type { EngineAlert, InstanceId } from "@/engine/types";
 import { useDescribeAlert } from "@/hooks/use-describe-alert";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
@@ -17,7 +15,7 @@ import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
 interface AlertFeedProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   alerts: EngineAlert[];
 }
 
@@ -46,14 +44,14 @@ export function AlertFeed({ instanceId, alerts }: AlertFeedProps) {
 }
 
 interface AlertFeedRowProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   alert: EngineAlert;
   /** Who did what, e.g. "wolfy_fan redeemed Hydrate", and the facts worth a glance. */
   summary: AlertSummary;
 }
 
 function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
-  const { replay, busy } = useReplayAlert(toInstanceId(instanceId));
+  const { replay, busy } = useReplayAlert(instanceId);
 
   const style = engineAlertStyle(alert);
   const StatusIcon = style.icon;

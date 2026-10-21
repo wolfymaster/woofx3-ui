@@ -7,8 +7,27 @@ import type { EngineAlert, InstanceId } from "@/engine/types";
 import { fromInstanceId } from "./ids";
 import { useMappedList } from "./mapped";
 
-function toEngineAlert({ _id, _creationTime, instanceId, ...alert }: Doc<"engineAlerts">): EngineAlert {
-  return { id: _id, ...alert };
+function toEngineAlert(row: Doc<"engineAlerts">): EngineAlert {
+  return {
+    id: row._id,
+    engineAlertId: row.engineAlertId,
+    status: row.status,
+    payload: row.payload,
+    workflowId: row.workflowId,
+    sourceEventId: row.sourceEventId,
+    engineStatus: row.engineStatus,
+    envelopeId: row.envelopeId,
+    dispatchedAt: row.dispatchedAt,
+    playedAt: row.playedAt,
+    completedAt: row.completedAt,
+    error: row.error,
+    engineCreatedAt: row.engineCreatedAt,
+    engineUpdatedAt: row.engineUpdatedAt,
+    engineVersion: row.engineVersion,
+    createdAt: row.createdAt,
+    progressedAt: row.progressedAt,
+    unconfirmedAt: row.unconfirmedAt,
+  };
 }
 
 function useAlerts(instanceId: InstanceId | null, limit: number) {

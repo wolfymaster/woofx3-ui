@@ -159,13 +159,13 @@ export interface PreviewUrl {
   expiresAt: number;
 }
 
-export interface PreviewUrlCache {
+export interface PreviewUrlCache<InstanceKey extends string> {
   /**
    * A URL to frame for `instanceId`: the one held while it has time left,
    * else a new one. `fresh` asks for a new one regardless, after a framed
    * page did not answer. Null when the engine has no preview.
    */
-  get(instanceId: string, options?: { fresh?: boolean }): Promise<PreviewUrl | null>;
+  get(instanceId: InstanceKey, options?: { fresh?: boolean }): Promise<PreviewUrl | null>;
 }
 
 /**
@@ -173,11 +173,11 @@ export interface PreviewUrlCache {
  * URL is needed only when a frame loads; the page then keeps its own session,
  * so reopening the editor within a few minutes reuses it.
  */
-export function createPreviewUrlCache(
-  fetchUrl: (instanceId: string) => Promise<PreviewUrl | null>,
+export function createPreviewUrlCache<InstanceKey extends string>(
+  fetchUrl: (instanceId: InstanceKey) => Promise<PreviewUrl | null>,
   now: () => number = Date.now
-): PreviewUrlCache {
-  const held = new Map<string, PreviewUrl>();
+): PreviewUrlCache<InstanceKey> {
+  const held = new Map<InstanceKey, PreviewUrl>();
   return {
     async get(instanceId, options = {}) {
       const cached = held.get(instanceId);

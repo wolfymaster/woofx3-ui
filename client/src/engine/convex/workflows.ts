@@ -10,6 +10,8 @@ import type {
   RecordedWorkflowRun,
   Workflow,
   WorkflowCatalog,
+  WorkflowCatalogAction,
+  WorkflowCatalogTrigger,
   WorkflowHealthResyncTrigger,
   WorkflowReplay,
   WorkflowRun,
@@ -26,31 +28,125 @@ type CatalogRow = NonNullable<FunctionReturnType<typeof api.workflowCatalog.get>
 type RunDetailRow = NonNullable<FunctionReturnType<typeof api.workflowRuns.runWithSteps>>;
 type RecordedRunRow = FunctionReturnType<typeof api.workflowRuns.listForWorkflow>[number];
 
-function toWorkflow({ _id, _creationTime, instanceId, ...workflow }: Doc<"workflows">): Workflow {
-  return workflow;
-}
-
-function toWorkflowCatalog({ triggers, actions }: CatalogRow): WorkflowCatalog {
+function toWorkflow(row: Doc<"workflows">): Workflow {
   return {
-    triggers: triggers.map(({ moduleId, ...trigger }) => ({ ...trigger, moduleId: toModuleId(moduleId) })),
-    actions: actions.map(({ moduleId, ...action }) => ({ ...action, moduleId: toModuleId(moduleId) })),
+    engineWorkflowId: row.engineWorkflowId,
+    definition: row.definition,
+    isEnabled: row.isEnabled,
+    nodes: row.nodes,
+    edges: row.edges,
+    projectionKey: row.projectionKey,
+    projectionUpdatedAt: row.projectionUpdatedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
-function toWorkflowRunRecord({ _id, _creationTime, instanceId, ...run }: RunDetailRow["run"]): WorkflowRunRecord {
-  return run;
+function toWorkflowCatalogTrigger(row: CatalogRow["triggers"][number]): WorkflowCatalogTrigger {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    category: row.category,
+    color: row.color,
+    icon: row.icon,
+    event: row.event,
+    allowVariants: row.allowVariants,
+    configFields: row.configFields,
+    emits: row.emits,
+    sentence: row.sentence,
+    summary: row.summary,
+    summaryDetails: row.summaryDetails,
+    projectionKey: row.projectionKey,
+    taxonomy: row.taxonomy,
+    transport: row.transport,
+    canonicalRef: row.canonicalRef,
+    moduleId: toModuleId(row.moduleId),
+    moduleName: row.moduleName,
+    moduleLabel: row.moduleLabel,
+  };
 }
 
-function toWorkflowRunStep({ _id, _creationTime, instanceId, ...step }: Doc<"workflowRunSteps">): WorkflowRunStep {
-  return step;
+function toWorkflowCatalogAction(row: CatalogRow["actions"][number]): WorkflowCatalogAction {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    category: row.category,
+    color: row.color,
+    icon: row.icon,
+    configFields: row.configFields,
+    returns: row.returns,
+    sentence: row.sentence,
+    projectionKey: row.projectionKey,
+    taxonomy: row.taxonomy,
+    canonicalRef: row.canonicalRef,
+    handlerType: row.handlerType,
+    functionCall: row.functionCall,
+    moduleId: toModuleId(row.moduleId),
+    moduleName: row.moduleName,
+    moduleLabel: row.moduleLabel,
+  };
+}
+
+function toWorkflowCatalog({ triggers, actions }: CatalogRow): WorkflowCatalog {
+  return { triggers: triggers.map(toWorkflowCatalogTrigger), actions: actions.map(toWorkflowCatalogAction) };
+}
+
+function toWorkflowRunRecord(row: RunDetailRow["run"]): WorkflowRunRecord {
+  return {
+    engineRunId: row.engineRunId,
+    workflowId: row.workflowId,
+    workflowName: row.workflowName,
+    status: row.status,
+    triggeredBy: row.triggeredBy,
+    triggerEvent: row.triggerEvent,
+    dryRun: row.dryRun,
+    error: row.error,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    engineCreatedAt: row.engineCreatedAt,
+    engineUpdatedAt: row.engineUpdatedAt,
+    createdAt: row.createdAt,
+  };
+}
+
+function toWorkflowRunStep(row: Doc<"workflowRunSteps">): WorkflowRunStep {
+  return {
+    engineStepId: row.engineStepId,
+    runId: row.runId,
+    taskId: row.taskId,
+    stepIndex: row.stepIndex,
+    attempt: row.attempt,
+    name: row.name,
+    status: row.status,
+    inputs: row.inputs,
+    outputs: row.outputs,
+    error: row.error,
+    durationMs: row.durationMs,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    engineCreatedAt: row.engineCreatedAt,
+    engineUpdatedAt: row.engineUpdatedAt,
+    createdAt: row.createdAt,
+  };
 }
 
 function toWorkflowRunDetail({ run, steps, alerts }: RunDetailRow): NonNullable<WorkflowRunDetail> {
   return { run: toWorkflowRunRecord(run), steps: steps.map(toWorkflowRunStep), alerts };
 }
 
-function toRecordedWorkflowRun({ _id, ...run }: RecordedRunRow): RecordedWorkflowRun {
-  return run;
+function toRecordedWorkflowRun(row: RecordedRunRow): RecordedWorkflowRun {
+  return {
+    engineRunId: row.engineRunId,
+    status: row.status,
+    triggeredBy: row.triggeredBy,
+    error: row.error,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    hasTriggerEvent: row.hasTriggerEvent,
+    dryRun: row.dryRun,
+  };
 }
 
 function useWorkflows(instanceId: InstanceId | null) {
@@ -169,7 +265,7 @@ function useRuns(instanceId: InstanceId, engineWorkflowId: string, limit: number
 }
 
 // The transport is a module singleton, so this keeps its identity without memoising.
-const subscribeRuns = (instanceId: string, onRun: (run: WorkflowRun) => void) =>
+const subscribeRuns = (instanceId: InstanceId, onRun: (run: WorkflowRun) => void) =>
   transport.subscribeWorkflowRuns(instanceId, onRun);
 
 function useNotRunning(instanceId: InstanceId | null) {

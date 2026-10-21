@@ -1,18 +1,17 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { PackagePlus } from "lucide-react";
 import { Link } from "wouter";
 import { STARTER_PACKS_PATH } from "@/components/layout/nav-config";
 import { Button } from "@/components/ui/button";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useHasWorkflows } from "@/engine/hooks/use-workflows";
+import type { InstanceId } from "@/engine/types";
 
 /**
  * Points an instance with no workflows at the starter packs. Renders nothing
  * until the query confirms the instance is empty, so it never flashes for an
  * instance that has workflows.
  */
-export function StarterPacksNudge({ instanceId }: { instanceId: Id<"instances"> }) {
-  const hasWorkflows = useHasWorkflows(toInstanceId(instanceId));
+export function StarterPacksNudge({ instanceId }: { instanceId: InstanceId }) {
+  const hasWorkflows = useHasWorkflows(instanceId);
   if (hasWorkflows !== false) {
     return null;
   }

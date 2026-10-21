@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { Bell, Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useParams } from "wouter";
@@ -6,10 +5,9 @@ import { AlertLayoutEditor } from "@/components/alert-editor/alert-layout-editor
 import { EmptyState } from "@/components/common/empty-state";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
-import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { alertMenuPath } from "@/lib/alert-groups";
 import { sentenceParts } from "@/lib/condition-sentence";
@@ -32,9 +30,9 @@ export default function AlertEditorPage() {
   const triggerId = decodeParam(params.triggerId);
   const actionId = decodeParam(params.actionId);
   const [, navigate] = useLocation();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { triggerPresets, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
-  const workflows = useWorkflows(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
+  const workflows = useWorkflows(instanceId);
 
   const triggerPreset = triggerPresets.find((preset) => preset.event === event);
   const conditionFields = useMemo(

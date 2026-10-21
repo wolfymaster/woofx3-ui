@@ -1,10 +1,9 @@
 import type { ActionStep } from "@woofx3/api";
 import { useState } from "react";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useRunResourceActionsRequest } from "@/engine/hooks/use-module-resources";
 import type { ModuleResourceInstance } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
@@ -102,18 +101,14 @@ export function useAimedResourceActionRunner() {
 
 /** Sends one action step about `instance` to the engine; false when no engine instance is selected. */
 function useResourceActionSender() {
-  const { instance: engineInstance } = useInstance();
+  const { instanceId } = useEngineScope();
   const runActions = useRunResourceActionsRequest();
 
   return async function sendStep(instance: ModuleResourceInstance, step: ActionStep): Promise<boolean> {
-    if (!engineInstance) {
+    if (!instanceId) {
       return false;
     }
-    await runActions(
-      toInstanceId(engineInstance._id),
-      `dashboard:${instance.canonicalId}`,
-      escapeDollarKeys([step]) as unknown[]
-    );
+    await runActions(instanceId, `dashboard:${instance.canonicalId}`, escapeDollarKeys([step]) as unknown[]);
     return true;
   };
 }

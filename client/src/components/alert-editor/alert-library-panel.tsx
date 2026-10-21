@@ -18,10 +18,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useRemoveLibraryAlertRequest } from "@/engine/hooks/use-alert-library";
 import type { AlertComposition } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert } from "@/lib/alert-library";
 import { cn } from "@/lib/utils";
@@ -178,18 +177,18 @@ export function LibraryAlertPreview({ alert, className }: { alert: LibraryAlert;
 
 /** Confirms deleting a library alert. Steps keep the copies they were given. */
 function DeleteLibraryAlertDialog({ alert, onClose }: { alert: LibraryAlert | null; onClose: () => void }) {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
   const remove = useRemoveLibraryAlertRequest();
   const [pending, setPending] = useState(false);
 
   const confirm = async () => {
-    if (!alert || !instance) {
+    if (!alert || !instanceId) {
       return;
     }
     setPending(true);
     try {
-      const result = await remove(toInstanceId(instance._id), alert.engineCompositionId);
+      const result = await remove(instanceId, alert.engineCompositionId);
       if (!result.success) {
         toast({ title: "The alert wasn't deleted", description: "The engine refused.", variant: "destructive" });
         return;

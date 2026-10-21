@@ -1,6 +1,7 @@
 // A macro pad button. Its `{{name}}` variables live in
 // convex/lib/macroVariables.ts, shared with the remote trigger route.
 
+import type { Id } from "@convex/_generated/dataModel";
 import type { MacroActionStep, MacroActionType, MacroConfig } from "@convex/lib/macroVariables";
 import type { ActionNode } from "@/lib/workflow-tree";
 
@@ -18,7 +19,8 @@ export {
 export type MacroInput = Omit<MacroButton, "id">;
 
 export interface MacroButton {
-  id: string;
+  /** Macros are kept by the dashboard, so a macro is its Convex row. */
+  id: Id<"macros">;
   label: string;
   /** Lucide icon name, resolved through resolveLucideIcon. */
   icon?: string;

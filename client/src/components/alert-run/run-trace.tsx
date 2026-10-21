@@ -1,11 +1,10 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { AlertCircle, BellRing, Clock, type LucideIcon, Zap } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useWorkflowRun } from "@/engine/hooks/use-workflows";
+import type { InstanceId } from "@/engine/types";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { engineAlertStyle } from "@/lib/alert-status";
 import { alertTone, buildTrace, initialSpanId, type RunAlertRecord, type TraceSpan } from "@/lib/run-trace";
@@ -23,7 +22,7 @@ import { TONE_STYLE } from "./tone-style";
 import { TraceWaterfall } from "./trace-waterfall";
 
 interface RunTraceProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   engineRunId: string;
   /** Controls rendered beside the summary, such as replay. */
   actions?: (run: { failedStepTaskId: string | null }) => ReactNode;
@@ -37,7 +36,7 @@ interface RunTraceProps {
  * people come here.
  */
 export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
-  const data = useWorkflowRun(toInstanceId(instanceId), engineRunId);
+  const data = useWorkflowRun(instanceId, engineRunId);
   const timeline = useMemo(() => (data ? buildTimeline(data.run, data.steps) : null), [data]);
   const trace = useMemo(
     () => (data && timeline ? buildTrace(data.run, timeline, data.alerts) : null),

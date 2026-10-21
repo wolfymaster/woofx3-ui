@@ -26,6 +26,7 @@ import {
 import { Carousel, type CarouselApi, CarouselContent, CarouselItem } from "@/components/ui/carousel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NotRunningNotice } from "@/components/workflows/not-running-notice";
+import { useEngineScope } from "@/engine/context";
 import { useInstance } from "@/hooks/use-instance";
 import { useOptimisticInstanceQuery } from "@/hooks/use-optimistic-instance-query";
 import { useToast } from "@/hooks/use-toast";
@@ -101,6 +102,7 @@ export default function Dashboard() {
   const wheelCooldownRef = useRef(false);
 
   const instanceId = instance?._id;
+  const { instanceId: engineInstanceId } = useEngineScope();
   // Read by the stable handlers below. Convex hands back a new panels array on
   // every change, and depending on it would give every canvas new handlers too.
   const panelsRef = useRef(panels);
@@ -422,7 +424,7 @@ export default function Dashboard() {
         <NotRunningNotice />
 
         {!commandBarHidden && <CommandBar onDismiss={() => $commandBarHidden.set(true)} />}
-        <StarterPacksNudge instanceId={instance._id} />
+        {engineInstanceId && <StarterPacksNudge instanceId={engineInstanceId} />}
 
         {/* Swiping between panels is off while editing, so dragging a widget
             does not also drag the carousel. */}

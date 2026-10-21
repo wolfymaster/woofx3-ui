@@ -1,9 +1,8 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { ModuleFileContent, ModuleFileList } from "@woofx3/api/api";
 import { useCallback, useRef, useState } from "react";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useModuleFileRequest, useModuleFilesRequest } from "@/engine/hooks/use-modules";
+import type { InstanceId } from "@/engine/types";
 import { actionErrorMessage } from "@/lib/action-error";
 import type { CapabilitySupport } from "@/lib/engine-capabilities";
 
@@ -47,7 +46,7 @@ function emptyLoaded(key: string | null): LoadedFiles {
 }
 
 interface UseModuleFilesArgs {
-  instanceId: Id<"instances"> | undefined;
+  instanceId: InstanceId | null;
   /** What getModuleDetail identified the module by; the actions resolve installed vs marketplace from it. */
   moduleId: string | undefined;
   isInstalled: boolean;
@@ -61,7 +60,7 @@ interface UseModuleFilesArgs {
 export function useModuleFiles({ instanceId, moduleId, isInstalled, version }: UseModuleFilesArgs): ModuleFiles {
   const listAction = useModuleFilesRequest();
   const readAction = useModuleFileRequest();
-  const capabilities = useEngineCapabilities(toInstanceId(isInstalled ? instanceId : undefined));
+  const capabilities = useEngineCapabilities(isInstalled ? instanceId : null);
 
   const key = instanceId && moduleId ? `${instanceId}|${moduleId}|${isInstalled}|${version}` : null;
   // Stamped with the module it belongs to, so switching modules shows nothing
@@ -88,7 +87,7 @@ export function useModuleFiles({ instanceId, moduleId, isInstalled, version }: U
     }
     requested.current.add(requestId);
     update(key, (state) => ({ ...state, list: { status: "loading" } }));
-    listAction(toInstanceId(instanceId), moduleId).then(
+    listAction(instanceId, moduleId).then(
       (result) => {
         update(key, (state) => ({ ...state, list: { status: "ready", list: result } }));
       },
@@ -113,7 +112,7 @@ export function useModuleFiles({ instanceId, moduleId, isInstalled, version }: U
         update(key, (prev) => ({ ...prev, files: new Map(prev.files).set(path, state) }));
       };
       setFile({ status: "loading" });
-      readAction(toInstanceId(instanceId), moduleId, path).then(
+      readAction(instanceId, moduleId, path).then(
         (result) => {
           setFile({ status: "ready", file: result });
         },

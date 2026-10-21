@@ -81,7 +81,7 @@ export interface EngineCapabilities {
  * asked again when the engine reconnects. See lib/engine-capabilities.ts for
  * turning the answer into a gate.
  */
-export function useEngineCapabilities(instanceId: InstanceId | undefined): EngineCapabilities {
+export function useEngineCapabilities(instanceId: InstanceId | null): EngineCapabilities {
   const getCapabilities = useEngineGateway().status.useCapabilitiesRequest();
   const key = instanceId ?? "";
   const state = useSyncExternalStore(subscribe, () => (key ? (entries.get(key) ?? LOADING) : LOADING));

@@ -1,8 +1,7 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { RecapTimelineEvents } from "@convex/lib/streamRecap";
 import { useEffect, useState } from "react";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useRecapTimelineEventsRequest } from "@/engine/hooks/use-stream-recap";
+import type { InstanceId } from "@/engine/types";
 
 export type RecapTimelineEventsState =
   | { kind: "loading" }
@@ -16,7 +15,7 @@ export type RecapTimelineEventsState =
  * the events on screen stay while that runs or if it fails.
  */
 export function useRecapTimelineEvents(
-  instanceId: Id<"instances">,
+  instanceId: InstanceId | null,
   sessionId: string,
   enabled: boolean,
   refreshKey = 0
@@ -26,12 +25,12 @@ export function useRecapTimelineEvents(
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey is a deliberate re-run trigger
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !instanceId) {
       return;
     }
     let cancelled = false;
     setState((prev) => (prev.kind === "loaded" ? prev : { kind: "loading" }));
-    loadTimelineEvents(toInstanceId(instanceId), sessionId)
+    loadTimelineEvents(instanceId, sessionId)
       .then((result) => {
         if (!cancelled) {
           setState({ kind: "loaded", result });

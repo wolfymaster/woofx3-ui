@@ -10,7 +10,7 @@ import type { HostedStorageUsage, InstanceId } from "@/engine/types";
  * Fetched through an action for the same reason as `useResources`: the usage
  * is the engine's, so callers `refresh()` after anything that changes it.
  */
-export function useHostedStorageUsage(instanceId: InstanceId | undefined) {
+export function useHostedStorageUsage(instanceId: InstanceId | null) {
   const read = useEngineGateway().resources.useHostedStorageUsageRequest();
   const [usage, setUsage] = useState<HostedStorageUsage | null>(null);
   const [reloadToken, setReloadToken] = useState(0);

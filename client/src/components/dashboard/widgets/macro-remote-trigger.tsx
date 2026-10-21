@@ -104,7 +104,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
   const setAllowGet = useMutation(api.macroTriggers.setAllowGet);
   const reconfirm = useMutation(api.macroTriggers.reconfirm);
 
-  const macroId = macro.id as Id<"macros">;
+  const macroId = macro.id;
   const [revealedToken, setRevealedToken] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<"rotate" | "revoke" | null>(null);
   const [busy, setBusy] = useState(false);

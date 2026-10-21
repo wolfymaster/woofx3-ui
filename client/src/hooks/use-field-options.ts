@@ -1,9 +1,8 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import type { InternalConfigFieldSource } from "@woofx3/api/ui-schema";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useCorrelatedRequest } from "@/engine/hooks/use-correlated-request";
+import type { InstanceId } from "@/engine/types";
 import { type FieldOption, parseFieldOptionsReply } from "@/lib/field-options";
 import { fieldOptionsReferenceOf, MISSING_FIELD_OPTIONS_REFERENCE } from "@/lib/field-options-reference";
 import { dispatchErrorMessage, fieldOptionsRequestKey } from "@/lib/field-options-request";
@@ -18,11 +17,11 @@ export interface FieldOptionsState {
 }
 
 export function useFieldOptions(
-  instanceId: Id<"instances"> | undefined,
+  instanceId: InstanceId | null,
   source: InternalConfigFieldSource | undefined
 ): FieldOptionsState {
   // A failure is a dispatch that never reached the worker, so no reply will arrive for it.
-  const { start, clear, event, failure } = useCorrelatedRequest("fieldOptions", toInstanceId(instanceId ?? null));
+  const { start, clear, event, failure } = useCorrelatedRequest("fieldOptions", instanceId);
   const [requestCount, setRequestCount] = useState(0);
   const refresh = useCallback(() => setRequestCount((count) => count + 1), []);
   const reference = fieldOptionsReferenceOf(source);

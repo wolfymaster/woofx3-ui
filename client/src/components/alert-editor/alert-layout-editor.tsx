@@ -37,11 +37,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useEngineScope } from "@/engine/context";
 import { useAlertLibrary } from "@/engine/hooks/use-alert-library";
 import { type AlertEditorHandle, useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
 import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
@@ -455,7 +455,7 @@ export function useAlertEditorView(
   const editor = session?.editor ?? null;
   const state = session?.state ?? null;
 
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const committed = state?.doc ?? null;
   const previewDocument = useMemo(
     () => (committed === null ? null : previewDocumentOf(committed, names)),
@@ -468,7 +468,7 @@ export function useAlertEditorView(
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputsKey stands for previewInputs' content
   const boundInputs = useMemo(() => previewInputs, [inputsKey]);
   const preview = useCompositionPreview({
-    instanceId: instance?._id,
+    instanceId,
     editor,
     state,
     document: previewDocument,

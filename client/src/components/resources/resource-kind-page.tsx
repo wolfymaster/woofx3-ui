@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import {
   useCreateResourceInstanceRequest,
   useDeleteResourceInstanceRequest,
@@ -37,7 +37,6 @@ import {
   useUpdateResourceInstanceRequest,
 } from "@/engine/hooks/use-module-resources";
 import type { ModuleResourceInstance } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
@@ -77,13 +76,12 @@ interface ResourceKindPageProps {
  */
 export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   const [location, navigate] = useLocation();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
-  const instanceId = instance?._id;
 
-  const kindDefinition = useResourceKind(toInstanceId(instanceId ?? null), kind);
-  const instances = useResourceInstancesOfKind(toInstanceId(instanceId ?? null), kind);
-  const values = useResourceValues(toInstanceId(instanceId ?? null));
+  const kindDefinition = useResourceKind(instanceId, kind);
+  const instances = useResourceInstancesOfKind(instanceId, kind);
+  const values = useResourceValues(instanceId);
   const createInstance = useCreateResourceInstanceRequest();
   const updateInstance = useUpdateResourceInstanceRequest();
   const deleteInstance = useDeleteResourceInstanceRequest();
@@ -98,7 +96,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues(toInstanceId(instanceId), kind).catch(() => {
+    refreshValues(instanceId, kind).catch(() => {
       // The mirror still shows the last known values; the next change updates it.
     });
   }, [instanceId, kind, refreshValues]);
@@ -241,7 +239,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                 settings={resourceSettings(selected)}
                 onSave={async (displayName, settings) => {
                   try {
-                    await updateInstance(toInstanceId(instanceId), {
+                    await updateInstance(instanceId, {
                       canonicalId: selected.canonicalId,
                       displayName,
                       settings,
@@ -266,7 +264,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
           kind={{ kind: kindDefinition.kind, name: kindDefinition.name, schema: kindDefinition.schema }}
           onClose={() => setCreating(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            await createInstance(toInstanceId(instanceId), {
+            await createInstance(instanceId, {
               moduleName: kindDefinition.moduleName,
               kind: kindDefinition.kind,
               resourceInstanceId,
@@ -295,7 +293,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                   return;
                 }
                 try {
-                  await deleteInstance(toInstanceId(instanceId), deleteTarget.canonicalId);
+                  await deleteInstance(instanceId, deleteTarget.canonicalId);
                   navigate(basePath);
                 } catch (err) {
                   toast({

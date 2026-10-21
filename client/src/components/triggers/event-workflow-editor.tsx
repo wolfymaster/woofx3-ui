@@ -6,7 +6,7 @@ import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
 import { SaveState } from "@/components/triggers/save-state";
 import { TriggerCard } from "@/components/triggers/trigger-card";
 import { Button } from "@/components/ui/button";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import {
   useCreateWorkflowRequest,
   useSetWorkflowEnabledRequest,
@@ -14,7 +14,6 @@ import {
 } from "@/engine/hooks/use-workflows";
 import type { Workflow } from "@/engine/types";
 import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
 import { alertEditorPath } from "@/lib/alert-editor-route";
@@ -53,7 +52,7 @@ interface OpenField {
 export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }: EventWorkflowEditorProps) {
   const event = triggerPreset.event ?? "";
   const [, navigate] = useLocation();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
   const createFromDefinition = useCreateWorkflowRequest();
   const updateFromDefinition = useUpdateWorkflowRequest();
@@ -165,7 +164,7 @@ export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }:
   };
 
   async function handleSave() {
-    if (!instance || !state) {
+    if (!instanceId || !state) {
       return;
     }
     const incomplete = firstIncompleteTrigger(state, conditionFields);
@@ -181,7 +180,7 @@ export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }:
     setIsSaving(true);
     try {
       const { enabled } = await saveEventDraft(event, state, conditionFields, {
-        instanceId: toInstanceId(instance._id),
+        instanceId: instanceId,
         createFromDefinition,
         updateFromDefinition,
         setEnabled,

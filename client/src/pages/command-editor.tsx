@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import {
   useChatCommandGroups,
   useChatCommands,
@@ -26,7 +26,6 @@ import {
 } from "@/engine/hooks/use-chat-commands";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useOpenCommandDraft } from "@/hooks/use-command-draft";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -63,13 +62,13 @@ export default function CommandEditor() {
   const draftKey = engineCommandId ?? NEW_COMMAND_KEY;
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
-  const commandsRaw = useChatCommands(toInstanceId(instance?._id ?? null));
-  const groupsRaw = useChatCommandGroups(toInstanceId(instance?._id ?? null));
+  const commandsRaw = useChatCommands(instanceId);
+  const groupsRaw = useChatCommandGroups(instanceId);
   const groups = useMemo(() => groupsRaw ?? [], [groupsRaw]);
-  const resourceInstances = useResourceInstances(toInstanceId(instance?._id ?? null));
+  const resourceInstances = useResourceInstances(instanceId);
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -125,7 +124,7 @@ export default function CommandEditor() {
   };
 
   async function handleSave() {
-    if (!form || !instance) {
+    if (!form || !instanceId) {
       return;
     }
     setFormError(null);
@@ -159,10 +158,10 @@ export default function CommandEditor() {
     setSaving(true);
     try {
       if (existing) {
-        await updateCommand(toInstanceId(instance._id), { ...fields, engineCommandId: existing.engineCommandId });
+        await updateCommand(instanceId, { ...fields, engineCommandId: existing.engineCommandId });
         toast({ title: "Command updated" });
       } else {
-        await createCommand(toInstanceId(instance._id), fields);
+        await createCommand(instanceId, fields);
         toast({ title: "Command created" });
       }
       discardAndLeave();

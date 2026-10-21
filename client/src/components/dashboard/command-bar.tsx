@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import {
   useRefreshResourceValuesRequest,
@@ -259,11 +259,12 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
   const { instance } = useInstance();
   const { toast } = useToast();
   const instanceId = instance?._id;
+  const { instanceId: engineInstanceId } = useEngineScope();
 
   const liveState = useLiveState();
   const platformLinks = useQuery(api.instances.getPlatformLinks, instanceId ? { instanceId } : "skip");
-  const counters = useResourceInstancesOfKind(toInstanceId(instanceId ?? null), COUNTER_KIND);
-  const values = useResourceValues(toInstanceId(instanceId ?? null));
+  const counters = useResourceInstancesOfKind(engineInstanceId, COUNTER_KIND);
+  const values = useResourceValues(engineInstanceId);
   const pinnedRows = useQuery(api.dashboardCounters.list, instanceId ? { instanceId } : "skip");
   const pinCounter = useMutation(api.dashboardCounters.add);
   const unpinCounter = useMutation(api.dashboardCounters.remove);
@@ -280,13 +281,13 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
   // Counter values arrive by webhook while the dashboard is open; this fills in
   // any written before it was, or while a webhook went missing.
   useEffect(() => {
-    if (!instanceId) {
+    if (!engineInstanceId) {
       return;
     }
-    refreshValues(toInstanceId(instanceId), COUNTER_KIND).catch(() => {
+    refreshValues(engineInstanceId, COUNTER_KIND).catch(() => {
       // The mirror still shows the last known numbers; the next change updates it.
     });
-  }, [instanceId, refreshValues]);
+  }, [engineInstanceId, refreshValues]);
 
   const sortedCounters = useMemo(
     () => [...(counters ?? [])].sort((a, b) => resourceName(a).localeCompare(resourceName(b))),

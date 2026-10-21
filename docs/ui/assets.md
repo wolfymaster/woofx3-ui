@@ -9,7 +9,7 @@
 
 ## Behavior
 
-- Scoped with **`useInstance()`** — all operations are tied to the selected instance’s `instanceId`.
+- Scoped with **`useEngineScope()`** — all operations are tied to the selected instance’s `instanceId`.
 - Resources are the engine's: every call goes through the Convex actions in `convex/resources.ts`, which proxy to the engine. Uploads (`useResourceUpload`) ask for a grant (`requestUpload`), PUT the file straight to storage with the grant's headers, then confirm (`completeUpload`). Bytes never pass through Convex.
 - A grant is bound to the file's exact size, so storage refuses a body of any other length. The browser sends `Content-Length` from the file itself; the hook skips that header in the grant because page code may not set it.
 

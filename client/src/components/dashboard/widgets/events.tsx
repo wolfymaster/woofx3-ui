@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { isFailureStatus } from "@convex/lib/engineAlertLifecycle";
 import { Info, ListFilter, Loader2, Radio, RotateCcw, ScrollText, Star } from "lucide-react";
 import { useMemo } from "react";
@@ -10,13 +9,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useEngineAlerts } from "@/engine/hooks/use-alert-queue";
 import { type EventLogStatus, useEventLog } from "@/engine/hooks/use-event-log";
 import { type EventLogSettingsHandle, useEventLogSettings } from "@/engine/hooks/use-event-log-settings";
 import { useReplayAlert } from "@/engine/hooks/use-replay-alert";
-import type { EngineAlert } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
+import type { EngineAlert, InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { type ActivityRow, eventTypeGroups, mergeActivity, triggersByEventType } from "@/lib/activity-feed";
@@ -57,11 +55,10 @@ interface EventsWidgetProps extends DashboardWidgetProps {
  * Events widget on it.
  */
 export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
   const { triggerPresets } = useWorkflowCatalog();
   const byEvent = useMemo(() => triggersByEventType(triggerPresets), [triggerPresets]);
-  const selection = useEventLogSettings(toInstanceId(instanceId));
+  const selection = useEventLogSettings(instanceId);
   const settings = selection.state;
 
   // Undefined until the selection is known; null for an engine without one,
@@ -70,7 +67,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
     settings.status === "ready" ? settings.settings.enabled : settings.status === "unsupported" ? null : undefined;
   const enabledTypes = useMemo(() => (enabled === null ? null : new Set(enabled ?? [])), [enabled]);
 
-  const alerts = useEngineAlerts(toInstanceId(instanceId ?? null), ALERT_LIMIT);
+  const alerts = useEngineAlerts(instanceId, ALERT_LIMIT);
   const { events, status } = useEventLog(instanceId, enabled);
   const rows = useMemo(() => mergeActivity(events, alerts ?? [], enabledTypes), [events, alerts, enabledTypes]);
 
@@ -275,7 +272,7 @@ interface EventsRowItemProps {
   row: EventsRow;
   trigger: TriggerPreset | undefined;
   summary: AlertSummary;
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   onSaveHighlight?: (row: EventsRow, summary: AlertSummary) => void;
 }
 
@@ -359,8 +356,8 @@ function EventsRowItem({ row, trigger, summary, instanceId, onSaveHighlight }: E
 }
 
 /** Replay and "open run" for the newest alert of a row. */
-function AlertRowActions({ instanceId, alert }: { instanceId: Id<"instances">; alert: EngineAlert }) {
-  const { replay, busy } = useReplayAlert(toInstanceId(instanceId));
+function AlertRowActions({ instanceId, alert }: { instanceId: InstanceId; alert: EngineAlert }) {
+  const { replay, busy } = useReplayAlert(instanceId);
   return (
     <>
       {/* `workflowId` on an alert row is the execution that fired it, which is

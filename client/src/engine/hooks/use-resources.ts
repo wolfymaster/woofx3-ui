@@ -28,7 +28,7 @@ interface ResourcesState {
  * paging are all sent to the engine rather than applied to a local array, so
  * search reaches beyond the current page.
  */
-export function useResources(instanceId: InstanceId | undefined, query: ResourceQuery): ResourcesState {
+export function useResources(instanceId: InstanceId | null, query: ResourceQuery): ResourcesState {
   const list = useEngineGateway().resources.useListRequest();
 
   const [resources, setResources] = useState<Resource[]>([]);

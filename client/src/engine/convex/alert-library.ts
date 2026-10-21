@@ -7,13 +7,20 @@ import type { AlertComposition, InstanceId, NewLibraryAlert } from "@/engine/typ
 import { fromInstanceId } from "./ids";
 import { useMappedList, useMappedValue } from "./mapped";
 
-function toAlertComposition({
-  _id,
-  _creationTime,
-  instanceId,
-  ...composition
-}: Doc<"alertCompositions">): AlertComposition {
-  return composition;
+function toAlertComposition(row: Doc<"alertCompositions">): AlertComposition {
+  return {
+    engineCompositionId: row.engineCompositionId,
+    name: row.name,
+    description: row.description,
+    widgets: row.widgets,
+    layout: row.layout,
+    behaviors: row.behaviors,
+    inputs: row.inputs,
+    createdByType: row.createdByType,
+    createdByRef: row.createdByRef,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 function useAlerts(instanceId: InstanceId | null) {

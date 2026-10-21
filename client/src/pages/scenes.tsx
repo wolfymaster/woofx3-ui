@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { Layers, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
@@ -25,10 +24,9 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useDeleteSceneRequest, useScenes } from "@/engine/hooks/use-scenes";
 import type { SceneRecord } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
 type SceneRow = SceneRecord;
@@ -39,17 +37,17 @@ const DEFAULT_HEIGHT = 1080;
 
 export default function Scenes() {
   const [, params] = useRoute("/stream/scenes/:id");
-  const { instance, isLoading } = useInstance();
+  const { instanceId, isInstanceLoading } = useEngineScope();
   const engineSceneId = params?.id ?? null;
 
   if (!engineSceneId) {
     return <SceneListScreen />;
   }
 
-  if (!instance) {
+  if (!instanceId) {
     return (
       <div className="flex items-center justify-center h-full">
-        {isLoading ? <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /> : null}
+        {isInstanceLoading ? <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /> : null}
       </div>
     );
   }
@@ -58,11 +56,7 @@ export default function Scenes() {
   // Keyed by instance too: another instance is another engine, and none of
   // the editor's state (its session, the capability it saw) carries over.
   return (
-    <SceneCanvasEditor
-      key={`${instance._id}:${engineSceneId}`}
-      instanceId={instance._id}
-      engineSceneId={engineSceneId}
-    />
+    <SceneCanvasEditor key={`${instanceId}:${engineSceneId}`} instanceId={instanceId} engineSceneId={engineSceneId} />
   );
 }
 
@@ -105,9 +99,9 @@ function SceneTableSkeleton() {
 function SceneListScreen() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading } = useEngineScope();
 
-  const scenesRaw = useScenes(toInstanceId(instance ? instance._id : null));
+  const scenesRaw = useScenes(instanceId);
   const deleteScene = useDeleteSceneRequest();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -115,7 +109,7 @@ function SceneListScreen() {
   const [deleteTarget, setDeleteTarget] = useState<SceneRow | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const isLoading = instanceLoading || scenesRaw === undefined;
+  const isLoading = isInstanceLoading || scenesRaw === undefined;
   const scenes = useMemo(() => (scenesRaw ?? []) as SceneRow[], [scenesRaw]);
 
   const visibleScenes = useMemo(() => {
@@ -133,12 +127,12 @@ function SceneListScreen() {
   };
 
   async function handleDelete() {
-    if (!instance || !deleteTarget?.engineSceneId) {
+    if (!instanceId || !deleteTarget?.engineSceneId) {
       return;
     }
     setIsDeleting(true);
     try {
-      await deleteScene(toInstanceId(instance._id as Id<"instances">), deleteTarget.engineSceneId);
+      await deleteScene(instanceId, deleteTarget.engineSceneId);
       toast({ title: "Scene deleted" });
       setDeleteTarget(null);
     } catch (err) {
@@ -184,7 +178,7 @@ function SceneListScreen() {
               data-testid="input-search-scenes"
             />
           </div>
-          <Button onClick={() => setCreateOpen(true)} disabled={!instance} data-testid="button-new-scene">
+          <Button onClick={() => setCreateOpen(true)} disabled={!instanceId} data-testid="button-new-scene">
             <Plus className="h-4 w-4 mr-2" />
             New Scene
           </Button>

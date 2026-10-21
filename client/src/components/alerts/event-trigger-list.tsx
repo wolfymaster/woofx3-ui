@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { ChevronRight, ExternalLink, Plus, Zap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -11,10 +10,9 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
-import type { Workflow } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
+import type { InstanceId, Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
@@ -101,7 +99,7 @@ export function EventTriggerList({
   children,
 }: EventTriggerListProps) {
   const event = triggerPreset.event ?? "";
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { actionPresets } = useWorkflowCatalog();
   const conditionFields = useMemo(() => conditionFieldsOf(triggerPreset), [triggerPreset]);
   const dynamicFields = useMemo(() => conditionFields.filter(isInternalSource), [conditionFields]);
@@ -236,7 +234,7 @@ export function EventTriggerList({
             )}
             <Button
               onClick={() => startDraft()}
-              disabled={!instance}
+              disabled={!instanceId}
               className="h-11 w-11 px-0 sm:h-10 sm:w-auto sm:pl-3.5 sm:pr-4"
               aria-label="New trigger"
               data-testid={`add-trigger-${event}`}
@@ -285,11 +283,11 @@ export function EventTriggerList({
           )
         ) : null}
 
-        {instance &&
+        {instanceId &&
           shown.map((trigger) => (
             <TriggerCard
               key={trigger.row.engineWorkflowId}
-              instanceId={instance._id as Id<"instances">}
+              instanceId={instanceId}
               trigger={trigger}
               triggerPreset={triggerPreset}
               sentence={sentenceFor(trigger.conditions)}
@@ -299,7 +297,7 @@ export function EventTriggerList({
               }
               editor={(read) => (
                 <TriggerEditor
-                  instanceId={instance._id as Id<"instances">}
+                  instanceId={instanceId}
                   triggerPreset={triggerPreset}
                   conditionFields={conditionFields}
                   saved={
@@ -323,13 +321,13 @@ export function EventTriggerList({
             />
           ))}
 
-        {instance && draft && (
+        {instanceId && draft && (
           <article
             className="rounded-2xl border border-foreground/20 bg-card p-4 sm:p-5"
             data-testid="trigger-card-new"
           >
             <TriggerEditor
-              instanceId={instance._id as Id<"instances">}
+              instanceId={instanceId}
               triggerPreset={triggerPreset}
               conditionFields={conditionFields}
               saved={undefined}
@@ -357,7 +355,7 @@ function aimFor(seed: ActionPreset, scope: TriggerActionScope): TriggerPin | und
 }
 
 interface TriggerCardProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   trigger: EventTrigger;
   triggerPreset: TriggerPreset;
   sentence: SentencePart[];
@@ -415,7 +413,7 @@ function TriggerCard({
   async function toggleEnabled() {
     setIsSwitching(true);
     try {
-      await setEnabled(toInstanceId(instanceId), row.engineWorkflowId, !row.isEnabled);
+      await setEnabled(instanceId, row.engineWorkflowId, !row.isEnabled);
     } catch (err) {
       toast({
         title: row.isEnabled ? "Couldn't pause the trigger" : "Couldn't switch the trigger on",

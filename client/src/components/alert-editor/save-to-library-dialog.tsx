@@ -11,9 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useCreateLibraryAlertRequest } from "@/engine/hooks/use-alert-library";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { libraryAlertOfStep, libraryJsonOf } from "@/lib/alert-library";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -44,7 +43,7 @@ export function SaveToLibraryDialog({
   takenNames,
   onSaved,
 }: SaveToLibraryDialogProps) {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
   const create = useCreateLibraryAlertRequest();
   const [name, setName] = useState("");
@@ -52,13 +51,13 @@ export function SaveToLibraryDialog({
   const taken = takenNames?.includes(name.trim()) ?? false;
 
   const save = async () => {
-    if (!instance || !doc || name.trim() === "" || taken) {
+    if (!instanceId || !doc || name.trim() === "" || taken) {
       return;
     }
     setPending(true);
     try {
       const savedName = name.trim();
-      await create(toInstanceId(instance._id), {
+      await create(instanceId, {
         name: savedName,
         ...libraryJsonOf(libraryAlertOfStep(doc, availableVariables)),
       });

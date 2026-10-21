@@ -49,6 +49,12 @@ export type MacroId = GatewayId<"macro">;
 /** A callback recorded from the engine, kept for debugging. */
 export type WebhookEventId = GatewayId<"webhookEvent">;
 
+/**
+ * A scene as the gateway that lists scenes knows it. The engine's own id for
+ * the scene is `engineSceneId`; this one keys the gateway's copy of it.
+ */
+export type SceneId = GatewayId<"scene">;
+
 // ==================== Read shapes ====================
 
 /**
@@ -485,9 +491,6 @@ export interface DeclaredResourceKind {
   moduleName: string;
 }
 
-/** The installed module that provides a resource kind, merged with the kind's declaration. */
-export type ResourceKindDefinition = DeclaredResourceKind;
-
 /** Every resource value on the instance, keyed by canonical id. */
 export type ResourceValues = Record<string, unknown>;
 
@@ -683,7 +686,7 @@ export interface EventWatch {
 /** One overlay scene. `widgets` and `layout` are the engine's stored JSON, parsed. */
 export interface SceneRecord {
   /** The gateway's id of the scene, for keys and selection. */
-  id: string;
+  id: SceneId;
   engineSceneId?: string;
   name: string;
   description?: string;
@@ -968,13 +971,6 @@ export type EngineCallFailure =
   | { status: "unreachable"; message: string }
   | { status: "failed"; message: string };
 
-export interface RecapSupporter {
-  platformUserId: string;
-  userName: string | null;
-  total: number;
-  events: number;
-}
-
 export interface RecapViewerSample {
   /** ISO time. */
   sampledAt: string;
@@ -986,8 +982,8 @@ export type StreamRecapEngineDetail =
   | {
       status: "ok";
       viewerSamples: RecapViewerSample[];
-      topCheerers: RecapSupporter[];
-      topGifters: RecapSupporter[];
+      topCheerers: Supporter[];
+      topGifters: Supporter[];
     }
   | { status: "unregistered" }
   | { status: "unknown_session" }
@@ -1027,6 +1023,7 @@ export interface SupporterStream {
   segments: { startedAt: string; endedAt: string | null }[];
 }
 
+/** A viewer's support in one metric: the amount (`total`) and the events behind it. */
 export interface Supporter {
   platformUserId: string;
   userName: string | null;

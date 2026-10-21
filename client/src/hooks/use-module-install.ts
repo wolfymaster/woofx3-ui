@@ -1,10 +1,9 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
 import { useCallback, useEffect, useState } from "react";
 import type { PermissionApprovalMode } from "@/components/modules/module-permissions";
-import { toInstanceId } from "@/engine/convex/ids";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useMarketplaceInstallRequest } from "@/engine/hooks/use-modules";
+import type { InstanceId } from "@/engine/types";
 import { actionErrorMessage } from "@/lib/action-error";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 
@@ -86,7 +85,7 @@ interface PendingApproval {
  * to refetch a detail view the install has made stale.
  */
 export function useModuleInstall(
-  instanceId: Id<"instances"> | undefined,
+  instanceId: InstanceId | null,
   onInstalled?: (moduleKey: string) => void
 ): ModuleInstall {
   const installMarketplaceModule = useMarketplaceInstallRequest();
@@ -98,7 +97,7 @@ export function useModuleInstall(
   // The engine reports progress through transient events keyed by the module
   // key, so the install is watched rather than awaited: the action returns as
   // soon as the engine accepts the work.
-  const installEvent = useTransientEvent(toInstanceId(instanceId ?? null), pendingModuleKey || null);
+  const installEvent = useTransientEvent(instanceId, pendingModuleKey || null);
 
   const run = useCallback(
     async (marketplaceId: string, approvedPermissions: string[], approvedLocalEndpoints: string[]) => {
@@ -109,7 +108,7 @@ export function useModuleInstall(
       setError(null);
       try {
         const { moduleKey } = await installMarketplaceModule(
-          toInstanceId(instanceId),
+          instanceId,
           marketplaceId,
           approvedPermissions,
           approvedLocalEndpoints

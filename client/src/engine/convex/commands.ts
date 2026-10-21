@@ -15,12 +15,36 @@ import type {
 import { fromInstanceId } from "./ids";
 import { useMappedList } from "./mapped";
 
-function toChatCommand({ _id, _creationTime, instanceId, ...command }: Doc<"chatCommands">): ChatCommand {
-  return command;
+function toChatCommand(row: Doc<"chatCommands">): ChatCommand {
+  return {
+    engineCommandId: row.engineCommandId,
+    command: row.command,
+    actions: row.actions,
+    engineWorkflowId: row.engineWorkflowId,
+    steps: row.steps,
+    workflowError: row.workflowError,
+    argumentPattern: row.argumentPattern,
+    cooldown: row.cooldown,
+    priority: row.priority,
+    enabled: row.enabled,
+    visibility: row.visibility,
+    groupIds: row.groupIds,
+    usernames: row.usernames,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
-function toChatCommandGroup({ _id, _creationTime, instanceId, ...group }: Doc<"chatCommandGroups">): ChatCommandGroup {
-  return group;
+function toChatCommandGroup(row: Doc<"chatCommandGroups">): ChatCommandGroup {
+  return {
+    engineGroupId: row.engineGroupId,
+    name: row.name,
+    description: row.description,
+    isBuiltIn: row.isBuiltIn,
+    engineCreatedAt: row.engineCreatedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
 function useCommands(instanceId: InstanceId | null) {

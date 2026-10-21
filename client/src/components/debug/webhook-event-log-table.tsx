@@ -9,10 +9,9 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useRetriggerEvent, useWebhookEventLog } from "@/engine/hooks/use-webhook-event-log";
 import type { WebhookEventId, WebhookEventSummary } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
 
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -159,7 +158,7 @@ const EventRow = memo(function EventRow({ event, index, isPending, measureRef, o
 });
 
 export function WebhookEventLogTable() {
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const [typeFilter, setTypeFilter] = useState("all");
   const [pendingIds, setPendingIds] = useState<Set<WebhookEventId>>(new Set());
   const retriggerEvent = useRetriggerEvent();
@@ -171,7 +170,7 @@ export function WebhookEventLogTable() {
     results: events,
     status,
     loadMore,
-  } = useWebhookEventLog(toInstanceId(instance?._id ?? null), typeFilter !== "all" ? typeFilter : null, PAGE_SIZE);
+  } = useWebhookEventLog(instanceId, typeFilter !== "all" ? typeFilter : null, PAGE_SIZE);
 
   const isLoading = instanceLoading || status === "LoadingFirstPage";
 

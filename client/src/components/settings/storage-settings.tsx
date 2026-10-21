@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toInstanceId } from "@/engine/convex/ids";
+import { useEngineScope } from "@/engine/context";
 import { useSetStorageConfigRequest, useStorageConfigRequest } from "@/engine/hooks/use-engine-config";
 import { useEngineInfoRequest, useSetOverlayPublicUrlRequest } from "@/engine/hooks/use-engine-status";
 import { useInstance } from "@/hooks/use-instance";
@@ -41,6 +41,7 @@ function isValidBaseUrl(value: string): boolean {
 
 export function StorageSettings() {
   const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const getConfig = useStorageConfigRequest();
   const setConfig = useSetStorageConfigRequest();
   const getEngineInfo = useEngineInfoRequest();
@@ -70,13 +71,12 @@ export function StorageSettings() {
   const [isLoading, setIsLoading] = useState(true);
 
   const loadConfig = useCallback(async () => {
-    if (!instance) return;
+    if (!instanceId) {
+      return;
+    }
     setIsLoading(true);
     try {
-      const [result, engineInfo] = await Promise.all([
-        getConfig(toInstanceId(instance._id)),
-        getEngineInfo(toInstanceId(instance._id)),
-      ]);
+      const [result, engineInfo] = await Promise.all([getConfig(instanceId), getEngineInfo(instanceId)]);
       if (result) {
         setConfigState(result as unknown as StorageConfig);
       }
@@ -85,14 +85,14 @@ export function StorageSettings() {
     } finally {
       setIsLoading(false);
     }
-  }, [instance, getConfig, getEngineInfo]);
+  }, [instanceId, getConfig, getEngineInfo]);
 
   useEffect(() => {
     loadConfig();
   }, [loadConfig]);
 
   const handleSave = async () => {
-    if (!instance || !canEdit) {
+    if (!instanceId || !canEdit) {
       return;
     }
     setOverlayUrlError(null);
@@ -104,8 +104,8 @@ export function StorageSettings() {
     setIsSaving(true);
     try {
       await Promise.all([
-        setConfig(toInstanceId(instance._id), config as unknown as Record<string, unknown>),
-        setOverlayPublicUrl(toInstanceId(instance._id), trimmedOverlayUrl),
+        setConfig(instanceId, config as unknown as Record<string, unknown>),
+        setOverlayPublicUrl(instanceId, trimmedOverlayUrl),
       ]);
       setOverlayPublicUrlState(trimmedOverlayUrl);
       toast({ title: "Settings saved" });
