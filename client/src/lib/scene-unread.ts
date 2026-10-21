@@ -24,6 +24,13 @@ export function unreadPlacementCount(report: UnreadReport): number {
   return report.placements.published + report.placements.draft;
 }
 
+/** What happens to `count` unreadable layers, worded for one or several. */
+export function unreadPlacementsText(count: number): string {
+  return count === 1
+    ? "It's kept as it was stored, but isn't shown or played."
+    : "They're kept as they were stored, but aren't shown or played.";
+}
+
 /** Whether a session ended because the scene could not be read, rather than because it is gone. */
 export function endedUnreadable(conn: string | null, unread: UnreadReport | null | undefined): boolean {
   return conn === "gone" && unread != null && unread.columns.length > 0;

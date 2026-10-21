@@ -13,7 +13,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { endedUnreadable, unreadColumnsText, unreadPlacementCount } from "@/lib/scene-unread";
+import { endedUnreadable, unreadColumnsText, unreadPlacementCount, unreadPlacementsText } from "@/lib/scene-unread";
 
 interface UnreadSceneNoticeProps {
   /** The session's state: whether it ended, and what the engine could not read. */
@@ -50,7 +50,7 @@ export function UnreadSceneNotice({ conn, unread, noun, repairSupported, onRepai
     : `${placements} ${placements === 1 ? "layer" : "layers"} in this ${noun} can't be read`;
   const explanation = blocked
     ? `It can't read ${unreadColumnsText(unread)}, so the ${noun} can't be edited. This can happen after moving to an older engine version.`
-    : `They're kept as they were stored, but aren't shown or played. This can happen after moving to an older engine version.`;
+    : `${unreadPlacementsText(placements)} This can happen after moving to an older engine version.`;
   const repairLabel = blocked ? `Repair ${noun}` : `Set ${placements === 1 ? "it" : "them"} aside`;
 
   const repair = async () => {
