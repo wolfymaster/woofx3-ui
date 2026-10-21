@@ -21,6 +21,7 @@ mod installation;
 mod integration_store;
 mod integrations;
 mod pairing;
+mod startup_failure;
 mod state;
 mod tray;
 mod update;
@@ -279,7 +280,9 @@ async fn unpair(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
 /// fails, in which case the update stays ready.
 #[tauri::command]
 async fn install_update(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    update::install(&companion).inspect_err(|err| eprintln!("[companion] {err}"))
+    update::install(&companion)
+        .await
+        .inspect_err(|err| eprintln!("[companion] {err}"))
 }
 
 #[tauri::command]
@@ -372,11 +375,14 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let app_data_dir = app.path().app_data_dir()?;
-            let host_mode = HostMode::load(&app.path().app_config_dir()?.join(HOST_CONFIG_FILE))?;
-            let engine = match host_mode {
-                HostMode::Companion => LocalEngine::Off,
-                HostMode::Local(settings) => {
-                    LocalEngine::start(&settings, &app.path().resource_dir()?)?
+            let engine = match start_local_engine(app) {
+                Ok(engine) => engine,
+                Err(err) => {
+                    startup_failure::report(
+                        app.path().app_log_dir().ok().as_deref(),
+                        &format!("{err:#}"),
+                    );
+                    std::process::exit(1);
                 }
             };
             let installation_id = installation::load_or_create(&app_data_dir)?;
@@ -452,10 +458,25 @@ pub fn run() {
         });
 }
 
+/// The local engine the host configuration asks for, started. An invalid
+/// configuration, or a release with no orchestrator, is an error the caller
+/// shows before exiting.
+fn start_local_engine(app: &tauri::App) -> anyhow::Result<LocalEngine> {
+    let config = app.path().app_config_dir()?.join(HOST_CONFIG_FILE);
+    match HostMode::load(&config)? {
+        HostMode::Companion => Ok(LocalEngine::Off),
+        HostMode::Local(settings) => Ok(LocalEngine::start(
+            &settings,
+            &app.path().resource_dir()?,
+            &app.path().app_local_data_dir()?,
+        )?),
+    }
+}
+
 /// Holds a quit until the local engine has stopped, so its services shut
 /// down in order rather than being cut off, then quits with the same code.
-/// A restart cannot be held (Tauri ignores `prevent_exit` for it); the
-/// engine then stops on its own when its stdin closes with this process.
+/// A restart cannot be held (Tauri ignores `prevent_exit` for it), which is
+/// why installing an update stops the engine before it restarts.
 fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: Option<i32>) {
     let Some(companion) = app.try_state::<Arc<Companion>>() else {
         return;

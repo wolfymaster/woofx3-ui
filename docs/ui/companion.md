@@ -108,17 +108,19 @@ In local mode the companion is the desktop host for a woofx3 engine that runs on
 
 - Without the file, or with `{ "mode": "companion" }`, the companion is the tray app described above and runs no engine.
 - `engineDir` is an unpacked engine release (the `woofx3-<version>-<os>-amd64.zip` an engine release attaches): the orchestrator, `services.json` and every service binary. It must be absolute. Without it, local mode runs the release bundled with the app in `engine/` under its resource directory. Installers do not bundle one, so local mode needs `engineDir`.
-- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup with the reason, so a typo never quietly turns local mode off.
+- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup, so a typo never quietly turns local mode off. The reason appears in a message box and is appended to `startup-error.log` in the app's log directory (`%LOCALAPPDATA%\tv.woofx3.companion\logs` on Windows).
 
 ### The engine sidecar
 
 In local mode the companion runs the engine's orchestrator as its one sidecar process (`engine_host.rs`, supervised by `core/src/host/sidecar.rs`). The orchestrator runs inside the engine release, from that directory, because it finds `services.json` and every service binary next to itself; that is why the companion does not use a Tauri `externalBin`, which would place a lone orchestrator beside the companion's own executable.
 
+- The engine keeps its state (databases, modules, uploads, logs) in `engine/` under the app's local data directory (`%LOCALAPPDATA%\tv.woofx3.companion` on Windows), passed as `WOOFX3_DATA_DIR`, never in the release, which may be read-only and is replaced by updates.
 - It is started with `WOOFX3_SUPERVISOR_STATUS=stdout-jsonl` and `--exit-on-stdin-eof`. Its stdout carries only status lines, parsed into typed states (`core/src/host/status.rs`); unknown event types and statuses are ignored, as the engine's format asks.
 - The companion holds the orchestrator's stdin. Closing it is the stop request: the orchestrator stops its services in dependency order and exits. If the companion dies, the pipe closes with it and the engine stops just the same.
-- Quitting from the tray waits for the engine to stop. A stop that takes longer than 35 seconds (the orchestrator itself allows its services 25) kills the process tree. Restarting into an update cannot wait (Tauri does not let an app hold a restart), so the engine then stops on its own as its stdin closes.
-- On Windows the orchestrator is started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs to stop its services gracefully, and its job object ends every service when it exits. Elsewhere it is started in a process group of its own, and the group is killed whenever the orchestrator exits, so no service it left behind holds a port the next run needs.
-- When the orchestrator exits on its own it is started again after a capped exponential backoff with jitter (1 second doubling to at most 60). A run that stayed ready for 60 seconds starts the backoff over.
+- Quitting from the tray waits for the engine to stop. A stop that takes longer than 35 seconds (the orchestrator itself allows its services 25) kills the process tree. Installing an update stops the engine first, since Windows will not replace a running executable and the new companion needs the engine's ports; if the install fails, the engine starts again.
+- On Windows the orchestrator is started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs to stop its services gracefully, and its job object ends every service when it exits. Elsewhere it is started in a process group of its own, and the group is killed whenever the orchestrator exits, so no service it left behind holds a port the next run needs. The exit is noticed without reaping the orchestrator, so the group id stays reserved until it has been killed and a kill can never reach an unrelated group. A supervisor that is dropped rather than stopped kills the tree as well.
+- When the orchestrator fails it is started again after a capped exponential backoff with jitter (1 second doubling to at most 60). A run that stayed ready for 60 seconds starts the backoff over.
+- When it exits cleanly without being asked (it has no enabled services, or something else stopped it), the sidecar stops for good with that reason rather than restarting it.
 
 ## Updates
 
