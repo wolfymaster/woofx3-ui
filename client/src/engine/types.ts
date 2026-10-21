@@ -58,6 +58,15 @@ export type SceneId = GatewayId<"scene">;
 /** An import of another bot's setup, as the gateway that keeps imports knows it. */
 export type SetupImportId = GatewayId<"setupImport">;
 
+/** A message kept in the pinned-message history, as the gateway that keeps the history knows it. */
+export type PinHistoryEntryId = GatewayId<"pinHistoryEntry">;
+
+/** A channel waiting in the shoutout queue, as the gateway that keeps the queue knows it. */
+export type ShoutoutEntryId = GatewayId<"shoutoutEntry">;
+
+/** A saved stream info preset, as the gateway that keeps presets knows it. */
+export type StreamInfoPresetId = GatewayId<"streamInfoPreset">;
+
 // ==================== Read shapes ====================
 
 /**
@@ -1374,4 +1383,302 @@ export interface StarterPackInstallOutcome {
 export interface StarterPackInstall {
   packId: string;
   values: Record<string, string | number>;
+}
+
+// ==================== Twitch channel ====================
+// What the dashboard does on the linked Twitch channel, as the broadcaster.
+// The engine makes these calls itself (its `twitch.*` capabilities) and
+// answers with Twitch's own bodies; a gateway parses them into these.
+
+/**
+ * The channel's ad schedule. Times are ISO-8601 strings, null when Twitch
+ * reported none, and are read against `serverNow`, the gateway's clock when
+ * Twitch answered.
+ */
+export interface AdSchedule {
+  /** When the next scheduled mid-roll starts; null when none is scheduled. */
+  nextAdAt: string | null;
+  /** When the last ad break started. */
+  lastAdAt: string | null;
+  /** Length of the next scheduled ad break. */
+  durationSeconds: number;
+  /** Preroll-free time left at the moment Twitch answered. */
+  prerollFreeSeconds: number;
+  /** Snoozes left to spend. */
+  snoozeCount: number;
+  /** When the next snooze is added back; null when the count is full. */
+  snoozeRefreshAt: string | null;
+  serverNow: string;
+}
+
+/** The schedule after a snooze, read against `serverNow` like `AdSchedule`. */
+export interface AdSnoozeResult {
+  snoozeCount: number;
+  snoozeRefreshAt: string | null;
+  nextAdAt: string | null;
+  serverNow: string;
+}
+
+/** A moderation action the widget offers, each with its own role rule and Twitch scope. */
+export type ModerationCapability = "addBlockedTerm" | "removeBlockedTerm" | "timeout" | "ban" | "chatSettings";
+
+/**
+ * Whether the caller can use a capability now: `not-linked` (no Twitch link),
+ * `not-allowed` (their role may not), `needs-reconnect` (the link lacks the
+ * scope) or `ready`.
+ */
+export type ModerationCapabilityStatus = "ready" | "not-linked" | "not-allowed" | "needs-reconnect";
+
+export type ModerationAccess = Record<ModerationCapability, ModerationCapabilityStatus>;
+
+/** A term Twitch's AutoMod holds back in the channel's chat. Times are ISO-8601; null when Twitch sent none. */
+export interface BlockedTerm {
+  id: string;
+  text: string;
+  createdAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface BlockedTermList {
+  terms: BlockedTerm[];
+  /** True when the channel has more terms than one read returns. */
+  truncated: boolean;
+}
+
+/** The viewer a timeout, ban or unban was applied to. */
+export interface ModeratedUser {
+  login: string;
+  displayName: string;
+}
+
+/** The channel's chat modes. */
+export interface ChatSettings {
+  emoteMode: boolean;
+  followerMode: boolean;
+  /** Minutes an account must have followed; null while follower mode is off. */
+  followerModeDuration: number | null;
+  slowMode: boolean;
+  /** Seconds between messages; null while slow mode is off. */
+  slowModeWaitTime: number | null;
+  subscriberMode: boolean;
+}
+
+/** The chat modes to change; an absent field is left as it is. */
+export interface ChatSettingsPatch {
+  emoteMode?: boolean;
+  followerMode?: boolean;
+  followerModeDuration?: number;
+  slowMode?: boolean;
+  slowModeWaitTime?: number;
+  subscriberMode?: boolean;
+}
+
+/** What Twitch has pinned in chat now. Twitch reports no text for some pins. */
+export interface CurrentPin {
+  messageId: string;
+  content: string | null;
+  authorName: string | null;
+  /** ISO-8601; absent when the pin lasts until the stream ends. */
+  expiresAt: string | undefined;
+}
+
+/** A message worth pinning again, kept across streams. Times are epoch ms. */
+export interface PinHistoryEntry {
+  id: PinHistoryEntryId;
+  content: string;
+  authorName: string | undefined;
+  /** The chat message's id on Twitch; absent for an entry this app never posted. */
+  twitchMessageId: string | undefined;
+  createdAt: number;
+  lastPinnedAt: number | undefined;
+}
+
+export interface PinnedMessage {
+  messageId: string;
+}
+
+export interface RepinnedMessage {
+  messageId: string;
+  /** True when the original message could no longer be pinned, so its text was posted again and pinned. */
+  resent: boolean;
+}
+
+/** Someone in the channel's chat right now. */
+export interface Chatter {
+  userId: string;
+  login: string;
+  displayName: string;
+}
+
+/** A Twitch channel, as a shoutout confirms it. */
+export interface TwitchChannel {
+  twitchUserId: string;
+  login: string;
+  displayName: string;
+  profileImageUrl: string | undefined;
+  /** `partner`, `affiliate`, or empty for neither. */
+  broadcasterType: string | undefined;
+}
+
+/** A channel waiting to be shouted out; the queue paces shoutouts within Twitch's limits. Times are epoch ms. */
+export interface ShoutoutEntry {
+  id: ShoutoutEntryId;
+  login: string;
+  displayName: string;
+  profileImageUrl: string | undefined;
+  broadcasterType: string | undefined;
+  attempts: number;
+  /** Not tried again before this. */
+  nextEligibleAt: number;
+  lastError: string | undefined;
+}
+
+/** Twitch's announcement colors; there is no free-form one. */
+export type AnnouncementColor = "primary" | "blue" | "green" | "orange" | "purple";
+
+export interface Announcement {
+  message: string;
+  color: AnnouncementColor;
+}
+
+/** A clip made from the live stream. It stays a draft until trimmed and published at `editUrl`. */
+export interface CreatedClip {
+  clipId: string;
+  editUrl: string;
+}
+
+export interface StreamCategory {
+  id: string;
+  name: string;
+  /** Sized box art URL; absent when Twitch has none for the category. */
+  boxArtUrl?: string;
+}
+
+/** The channel's title, category and tags. */
+export interface StreamInfo {
+  title: string;
+  /** Null when the channel has no category set. */
+  category: StreamCategory | null;
+  tags: string[];
+}
+
+export type StreamInfoField = "title" | "category" | "tags";
+
+/** Some of a channel's fields; an absent field is left as it is and `category: null` clears it. */
+export type StreamInfoChanges = Partial<StreamInfo>;
+
+/** Box art the caller already shows for a category, reused while the category is unchanged. */
+export interface KnownBoxArt {
+  categoryId: string;
+  boxArtUrl: string;
+}
+
+export interface StreamInfoUpdate {
+  /** The channel as Twitch holds it after the change. */
+  info: StreamInfo;
+  /** Requested fields Twitch did not take; it answers success even when it ignores a value. */
+  unapplied: StreamInfoField[];
+}
+
+/** A marker on the live stream's VOD. Null fields are ones Twitch did not report. */
+export interface StreamMarker {
+  positionSeconds: number | null;
+  /** ISO-8601. */
+  createdAt: string | null;
+}
+
+/** A named title, category and tags to apply in one go. */
+export interface StreamInfoPreset {
+  id: StreamInfoPresetId;
+  name: string;
+  info: StreamInfo;
+}
+
+export interface NewStreamInfoPreset {
+  /** Saving under a name a preset already has replaces that preset. */
+  name: string;
+  info: StreamInfo;
+}
+
+// ==================== Go live ====================
+
+/** Every check the go-live checklist runs. Dismissals are kept by these ids. */
+export type GoLiveCheckId = "engine" | "twitch" | "overlays" | "obs" | "stream-info" | "workflows";
+
+/** The channel as it stood when the checklist was last completed. Epoch ms. */
+export interface LastGoLive {
+  completedAt: number;
+  title: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+}
+
+export interface GoLiveWorkflowFacts {
+  /** Whether the instance has any workflow at all, enabled or not. */
+  any: boolean;
+  /** Enabled workflows, counted up to a cap. */
+  enabled: number;
+  /** True when there are more enabled workflows than `enabled` says. */
+  enabledCapped: boolean;
+}
+
+/** What the checklist keeps between runs, and the workflow facts it checks. */
+export interface GoLiveChecklistState {
+  dismissedCheckIds: string[];
+  lastGoLive: LastGoLive | null;
+  /** A "Stream start" marker is waiting for the stream to go live. */
+  markerPending: boolean;
+  workflows: GoLiveWorkflowFacts;
+}
+
+export interface GoLiveOverlayFacts {
+  hasScene: boolean;
+  /** Browser-source keys meant for OBS; the scene editor's preview keys are not counted. */
+  browserSourceKeyCount: number;
+  /** The key most recently loaded by a browser source, else the newest one. */
+  featuredKey: string | null;
+  /** When any browser source last loaded one of those keys, in epoch ms. */
+  lastLoadedAt: number | null;
+}
+
+export type GoLiveTwitchFacts =
+  | { linked: false }
+  | {
+      linked: true;
+      login: string;
+      /** False when Twitch refused the token and it could not be refreshed. */
+      tokenValid: boolean;
+      tokenProblem: string | null;
+      /** Scopes of required Twitch capabilities the link was never granted. */
+      missingScopes: string[];
+    };
+
+export type GoLiveStreamInfoFacts =
+  | { kind: "unlinked" }
+  | {
+      kind: "ok";
+      login: string;
+      title: string;
+      categoryId: string;
+      categoryName: string;
+      tags: string[];
+    };
+
+export interface GoLiveFinish {
+  /** Posted to chat as the broadcaster when present. */
+  announcement?: string;
+  /** Dropped now when live, else when the stream next goes live. */
+  dropMarker: boolean;
+}
+
+export type GoLiveStepOutcome =
+  | { status: "done" }
+  /** Waiting on something outside the request, such as the stream going live. */
+  | { status: "queued"; reason: string }
+  | { status: "skipped"; reason: string }
+  | { status: "failed"; message: string };
+
+export interface GoLiveCompletion {
+  announcement: GoLiveStepOutcome;
+  marker: GoLiveStepOutcome;
 }

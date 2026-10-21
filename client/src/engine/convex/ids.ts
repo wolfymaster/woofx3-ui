@@ -1,5 +1,15 @@
 import type { Id } from "@convex/_generated/dataModel";
-import type { InstanceId, MacroId, ModuleId, SceneId, SetupImportId, WebhookEventId } from "@/engine/types";
+import type {
+  InstanceId,
+  MacroId,
+  ModuleId,
+  PinHistoryEntryId,
+  SceneId,
+  SetupImportId,
+  ShoutoutEntryId,
+  StreamInfoPresetId,
+  WebhookEventId,
+} from "@/engine/types";
 
 // The Convex gateway's ids are Convex document ids: an instance is its
 // `instances` row, an installed module its `moduleRepository` row, a scene
@@ -64,4 +74,28 @@ export function toSetupImportId(id: Id<"setupImports">): SetupImportId {
 
 export function fromSetupImportId(id: SetupImportId): Id<"setupImports"> {
   return id as string as Id<"setupImports">;
+}
+
+export function toPinHistoryEntryId(id: Id<"pinnedMessages">): PinHistoryEntryId {
+  return id as string as PinHistoryEntryId;
+}
+
+export function fromPinHistoryEntryId(id: PinHistoryEntryId): Id<"pinnedMessages"> {
+  return id as string as Id<"pinnedMessages">;
+}
+
+export function toShoutoutEntryId(id: Id<"shoutoutQueue">): ShoutoutEntryId {
+  return id as string as ShoutoutEntryId;
+}
+
+export function fromShoutoutEntryId(id: ShoutoutEntryId): Id<"shoutoutQueue"> {
+  return id as string as Id<"shoutoutQueue">;
+}
+
+export function toStreamInfoPresetId(id: Id<"streamInfoPresets">): StreamInfoPresetId {
+  return id as string as StreamInfoPresetId;
+}
+
+export function fromStreamInfoPresetId(id: StreamInfoPresetId): Id<"streamInfoPresets"> {
+  return id as string as Id<"streamInfoPresets">;
 }
