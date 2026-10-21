@@ -22,7 +22,7 @@ mock.module("convex/react", () => ({
   },
 }));
 
-const { convexTwitchLinkGateway, twitchLinkOf } = await import("./twitch-link");
+const { convexTwitchLinkGateway, nextRedirectLinking, twitchLinkOf } = await import("./twitch-link");
 
 const instanceId = TEST_INSTANCE_ID;
 
@@ -111,4 +111,50 @@ describe("twitchLink.useUnlinkRequest", () => {
     await unlink();
     expect(actions).toEqual([{ name: "twitchIntegration:disconnect", args: { instanceId, platform: "twitch" } }]);
   });
+});
+
+describe("nextRedirectLinking", () => {
+  type Linking = Parameters<typeof nextRedirectLinking>[0];
+  type LinkingEvent = Parameters<typeof nextRedirectLinking>[1];
+  const idle: Linking = { status: "idle" };
+  const starting: Linking = { status: "starting" };
+  const redirecting: Linking = { status: "redirecting" };
+  const failed: Linking = { status: "failed", error: "Only an owner or admin can connect Twitch" };
+
+  const cases: Array<{ name: string; current: Linking; event: LinkingEvent; expected: Linking }> = [
+    { name: "starting from idle", current: idle, event: { type: "start" }, expected: starting },
+    { name: "starting again after a failure", current: failed, event: { type: "start" }, expected: starting },
+    { name: "a start while starting changes nothing", current: starting, event: { type: "start" }, expected: starting },
+    {
+      name: "a start while redirecting changes nothing",
+      current: redirecting,
+      event: { type: "start" },
+      expected: redirecting,
+    },
+    {
+      name: "the authorize URL arriving starts the redirect",
+      current: starting,
+      event: { type: "authorizeUrlReady" },
+      expected: redirecting,
+    },
+    {
+      name: "a refusal fails with its text",
+      current: starting,
+      event: { type: "refused", error: new Error("Only an owner or admin can connect Twitch") },
+      expected: failed,
+    },
+    {
+      name: "a refusal that is not an Error fails with it as text",
+      current: starting,
+      event: { type: "refused", error: "offline" },
+      expected: { status: "failed", error: "offline" },
+    },
+    { name: "cancelling returns to idle", current: failed, event: { type: "cancel" }, expected: idle },
+  ];
+
+  for (const { name, current, event, expected } of cases) {
+    test(name, () => {
+      expect(nextRedirectLinking(current, event)).toEqual(expected);
+    });
+  }
 });

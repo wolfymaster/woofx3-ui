@@ -39,30 +39,67 @@ function useLink() {
   return useMemo(() => (rows === undefined ? undefined : twitchLinkOf(rows)), [rows]);
 }
 
+/** What happens to an OAuth-redirect linking attempt. */
+export type RedirectLinkingEvent =
+  | { type: "start" }
+  | { type: "authorizeUrlReady" }
+  | { type: "refused"; error: unknown }
+  | { type: "cancel" };
+
+/**
+ * The next state of a linking attempt under the redirect flow. A start while
+ * one is under way changes nothing, and `redirecting` lasts until the page
+ * leaves for Twitch. Nothing is pending on Convex's side before the
+ * redirect, so a cancel only returns to idle: the OAuth state it minted
+ * expires unused.
+ */
+export function nextRedirectLinking(current: TwitchLinking, event: RedirectLinkingEvent): TwitchLinking {
+  switch (event.type) {
+    case "start": {
+      return current.status === "starting" || current.status === "redirecting" ? current : { status: "starting" };
+    }
+    case "authorizeUrlReady": {
+      return { status: "redirecting" };
+    }
+    case "refused": {
+      return { status: "failed", error: event.error instanceof Error ? event.error.message : String(event.error) };
+    }
+    case "cancel": {
+      return IDLE;
+    }
+  }
+}
+
+function isUnderWay(linking: TwitchLinking): boolean {
+  return linking.status === "starting" || linking.status === "redirecting";
+}
+
 function useLinkFlow(): TwitchLinkFlow {
   const startConnect = useInstanceAction(api.twitchIntegration.startConnect);
   const [linking, setLinking] = useState<TwitchLinking>(IDLE);
+  const apply = useCallback((event: RedirectLinkingEvent) => {
+    setLinking((current) => nextRedirectLinking(current, event));
+  }, []);
 
   const start = useCallback(
     ({ returnTo }: TwitchLinkStart) => {
-      setLinking({ status: "starting" });
+      if (isUnderWay(linking)) {
+        return;
+      }
+      apply({ type: "start" });
       startConnect({ redirectTo: returnTo })
         .then(({ authorizeUrl }) => {
-          // Stays redirecting: the page is leaving for Twitch, and comes back
-          // to `returnTo` with the link made.
-          setLinking({ status: "redirecting" });
+          apply({ type: "authorizeUrlReady" });
           window.location.assign(authorizeUrl);
         })
-        .catch((err: unknown) => {
-          setLinking({ status: "failed", error: err instanceof Error ? err.message : String(err) });
+        .catch((error: unknown) => {
+          apply({ type: "refused", error });
         });
     },
-    [startConnect]
+    [linking, startConnect, apply]
   );
 
-  // Nothing is pending on Convex's side before the redirect: the OAuth state
-  // it minted simply expires unused.
-  const cancel = useCallback(() => setLinking(IDLE), []);
+  const cancel = useCallback(() => apply({ type: "cancel" }), [apply]);
 
   return { linking, start, cancel };
 }
