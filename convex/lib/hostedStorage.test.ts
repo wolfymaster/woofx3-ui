@@ -6,6 +6,7 @@ import {
   hostedUploadRefusal,
   isByteLimit,
   isOnHostedStorage,
+  moduleStorageUsage,
 } from "./hostedStorage";
 
 const GiB = 1024 * 1024 * 1024;
@@ -35,10 +36,11 @@ describe("isOnHostedStorage", () => {
 });
 
 describe("hostedStorageLimits", () => {
-  it("defaults to 50 MB in total and 10 MB a file", () => {
+  it("defaults to 50 MB in total, 10 MB a file and 500 MB of module storage", () => {
     expect(hostedStorageLimits(resolveEntitlements(null, null, 0, ENTITLEMENT_CATALOG))).toEqual({
       totalBytes: 50 * MiB,
       fileBytes: 10 * MiB,
+      moduleStorageBytes: 500 * MiB,
     });
   });
 
@@ -50,11 +52,13 @@ describe("hostedStorageLimits", () => {
       limits: [
         { key: "storage.hostedAssetBytes", value: 50 * GiB },
         { key: "storage.hostedFileBytes", value: null },
+        { key: "storage.moduleStorageBytes", value: GiB },
       ],
     };
     expect(hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG))).toEqual({
       totalBytes: 50 * GiB,
       fileBytes: null,
+      moduleStorageBytes: GiB,
     });
   });
 });
@@ -70,13 +74,20 @@ describe("hostedStorageLimits with an engine override", () => {
   it("takes the engine's value where it sets one and the account's elsewhere", () => {
     expect(
       hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), { totalBytes: 200 * MiB })
-    ).toEqual({ totalBytes: 200 * MiB, fileBytes: 10 * MiB });
+    ).toEqual({ totalBytes: 200 * MiB, fileBytes: 10 * MiB, moduleStorageBytes: 500 * MiB });
+    expect(
+      hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), { moduleStorageBytes: 2 * GiB })
+    ).toEqual({ totalBytes: GiB, fileBytes: 10 * MiB, moduleStorageBytes: 2 * GiB });
   });
 
   it("can make a limit unlimited, or lower it to nothing", () => {
     expect(
-      hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), { totalBytes: null, fileBytes: 0 })
-    ).toEqual({ totalBytes: null, fileBytes: 0 });
+      hostedStorageLimits(resolveEntitlements(plan, null, 0, ENTITLEMENT_CATALOG), {
+        totalBytes: null,
+        fileBytes: 0,
+        moduleStorageBytes: null,
+      })
+    ).toEqual({ totalBytes: null, fileBytes: 0, moduleStorageBytes: null });
   });
 });
 
@@ -88,7 +99,7 @@ describe("isByteLimit", () => {
 });
 
 describe("hostedUploadRefusal", () => {
-  const limits = { totalBytes: GiB, fileBytes: 100 * MiB };
+  const limits = { totalBytes: GiB, fileBytes: 100 * MiB, moduleStorageBytes: 500 * MiB };
 
   it("allows an upload that fits exactly", () => {
     expect(hostedUploadRefusal(limits, GiB - 100 * MiB, 100 * MiB)).toBeNull();
@@ -109,7 +120,9 @@ describe("hostedUploadRefusal", () => {
   });
 
   it("allows anything when both are unlimited", () => {
-    expect(hostedUploadRefusal({ totalBytes: null, fileBytes: null }, 10 * GiB, 10 * GiB)).toBeNull();
+    expect(
+      hostedUploadRefusal({ totalBytes: null, fileBytes: null, moduleStorageBytes: null }, 10 * GiB, 10 * GiB)
+    ).toBeNull();
   });
 });
 
@@ -119,5 +132,22 @@ describe("formatStorageBytes", () => {
     expect(formatStorageBytes(1536)).toBe("1.5 KB");
     expect(formatStorageBytes(100 * MiB)).toBe("100 MB");
     expect(formatStorageBytes(GiB)).toBe("1 GB");
+  });
+});
+
+describe("moduleStorageUsage", () => {
+  const limits = { totalBytes: GiB, fileBytes: 100 * MiB, moduleStorageBytes: 500 * MiB };
+
+  it("is over only once usage passes the limit", () => {
+    expect(moduleStorageUsage(500 * MiB, limits)).toEqual({ usedBytes: 500 * MiB, limitBytes: 500 * MiB, over: false });
+    expect(moduleStorageUsage(500 * MiB + 1, limits).over).toBe(true);
+  });
+
+  it("is never over an unlimited limit", () => {
+    expect(moduleStorageUsage(10 * GiB, { ...limits, moduleStorageBytes: null })).toEqual({
+      usedBytes: 10 * GiB,
+      limitBytes: null,
+      over: false,
+    });
   });
 });
