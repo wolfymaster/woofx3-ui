@@ -4,6 +4,7 @@ import type {
   AlertOverview,
   AlertReplayResult,
   AlertSkipResult,
+  AlertTargetUsage,
   ChatCommand,
   ChatCommandChanges,
   ChatCommandGroup,
@@ -67,6 +68,7 @@ import type {
   SceneChanges,
   SceneEditorGrant,
   SceneRecord,
+  SceneRepairResult,
   SceneWidgetCatalogRow,
   StorageConfig,
   StreamEventFrame,
@@ -387,6 +389,13 @@ export interface ScenesGateway {
    * (always loading) for a null id.
    */
   useAlertWidgetNames(instanceId: InstanceId | null): Live<string[]>;
+  /**
+   * What one scene's editor needs to warn that an edit leaves Alert steps
+   * with no alert widget to play on: every Alert step's target, and the names
+   * the alert widgets of the instance's other scenes answer to. Null when the
+   * caller cannot see the instance.
+   */
+  useAlertTargetUsage(instanceId: InstanceId, engineSceneId: string): Live<AlertTargetUsage | null>;
   useCreateRequest(): (instanceId: InstanceId, scene: NewScene) => Promise<{ engineSceneId: string }>;
   useUpdateRequest(): (
     instanceId: InstanceId,
@@ -402,6 +411,12 @@ export interface ScenesGateway {
    * reach sceneManager. Needs `scenes.editorSync`.
    */
   useEditorSessionRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<SceneEditorGrant | null>;
+  /**
+   * Repair a scene or alert whose stored data the engine cannot read: the
+   * engine keeps a copy of what it cannot read, then writes back the readable
+   * rest. Needs `scenes.repair`.
+   */
+  useRepairRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<SceneRepairResult>;
 }
 
 /**

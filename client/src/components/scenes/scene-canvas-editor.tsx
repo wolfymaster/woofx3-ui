@@ -1,5 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
+import { alertWidgetNamesOf, orphanedAlertTargets } from "@convex/lib/alertWidgets";
 import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
@@ -25,8 +26,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
+  useAlertTargetUsage,
   useCreateSceneRequest,
   useDeleteSceneRequest,
+  useRepairSceneRequest,
   useScene,
   useSceneWidgetCatalog,
   useUpdateSceneRequest,
@@ -37,6 +40,7 @@ import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-edi
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
+import { draftSaveStatus } from "@/lib/draft-save-status";
 import {
   type CanvasSettings,
   canvasSettingsOf,
@@ -45,9 +49,12 @@ import {
   remoteSelectionsOf,
   storedSceneJson,
 } from "@/lib/scene-composition";
+import { endedUnreadable, repairResultToast } from "@/lib/scene-unread";
 import type { Scene, Widget } from "@/types";
 import { type DraftCommand, DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "./draft-live-controls";
 import { LiveScenePreview } from "./live-scene-preview";
+import { OrphanedAlertTargetsNotice } from "./orphaned-alert-targets-notice";
+import { UnreadSceneNotice } from "./unread-scene-notice";
 import { WidgetLayoutCanvas } from "./widget-layout-canvas";
 
 interface SceneCanvasEditorProps {
@@ -100,6 +107,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const syncSupport = capabilities.support("scenes.editorSync");
   const syncSupported = syncSupport === "supported";
   const needsEngineUpgrade = !syncSupported && capabilities.support("scenes.editorSessions") === "supported";
+  const repairSupported = capabilities.support("scenes.repair") === "supported";
+  const repairScene = useRepairSceneRequest();
   const [sessionMode, setSessionMode] = useState(syncSupported);
   if (syncSupported && !sessionMode) {
     setSessionMode(true);
@@ -206,6 +215,25 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
 
   const shownDoc = editorState?.doc ?? null;
   const canvasSettings = useMemo(() => (shownDoc === null ? null : canvasSettingsOf(shownDoc)), [shownDoc]);
+
+  // Alert steps this editor's changes leave with no alert widget to play on,
+  // measured against the scene as the editor first had it: the published
+  // scene in session mode, the last save otherwise.
+  const alertTargetUsage = useAlertTargetUsage(instanceId, engineSceneId);
+  const orphanedTargets = useMemo(() => {
+    if (!alertTargetUsage || scene === null || shownDoc === null) {
+      return [];
+    }
+    const alertWidgetIds = new Set(alertTargetUsage.alertWidgetIds);
+    const namesOf = (doc: CompositionDocument) =>
+      alertWidgetNamesOf(
+        Object.values(doc.widgets).map((placement) => ({ widgetId: placement.widget, settings: placement.settings })),
+        alertWidgetIds
+      );
+    const before = namesOf(compositionOfStoredScene(scene));
+    const after = namesOf(shownDoc);
+    return orphanedAlertTargets(alertTargetUsage.uses, before, after, new Set(alertTargetUsage.elsewhere));
+  }, [alertTargetUsage, scene, shownDoc]);
 
   // Who else is editing this version, and where: other editors' selections,
   // in a colour each keeps for as long as it is connected.
@@ -340,6 +368,26 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     await navigator.clipboard.writeText(browserSourceUrl);
     return browserSourceUrl;
   }, []);
+
+  // A scene that could not be read ended its session, so a repaired one opens
+  // a new session; one that only had unreadable layers is reconnected by the
+  // engine itself.
+  const reopenSession = session.reopen;
+  const handleRepair = useCallback(async () => {
+    try {
+      const result = await repairScene(instanceId, engineSceneId);
+      toast(repairResultToast(result, "scene"));
+      if (result.ok) {
+        reopenSession();
+      }
+    } catch (err) {
+      toast({
+        title: "Couldn't repair this scene",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  }, [repairScene, instanceId, engineSceneId, toast, reopenSession]);
 
   const handleCopyBrowserSource = useCallback(async () => {
     if (!convexSceneId) {
@@ -576,7 +624,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             pendingCommand={pendingCommand}
             onCommand={runDraftCommand}
             hasDraft={syncState?.hasDraft ?? false}
-            unsaved={hasUnsavedEdits(syncState, live)}
+            saveStatus={draftSaveStatus(syncState, live)}
             copy={SCENE_DRAFT_COPY}
             testIds={SCENE_DRAFT_TEST_IDS}
           />
@@ -721,7 +769,19 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
 
   return (
     <WidgetLayoutCanvas
-      header={header}
+      header={
+        <>
+          {header}
+          <UnreadSceneNotice
+            conn={conn}
+            unread={syncState?.unread}
+            noun="scene"
+            repairSupported={repairSupported}
+            onRepair={handleRepair}
+          />
+          <OrphanedAlertTargetsNotice targets={orphanedTargets} />
+        </>
+      }
       editor={editor}
       state={editorState}
       catalog={catalogRows ?? NO_ROWS}
@@ -752,7 +812,7 @@ export function sessionStatusText(state: SceneSyncState | null, live: boolean, n
   }
   switch (state.conn) {
     case "gone":
-      return `This ${noun} no longer exists`;
+      return endedUnreadable(state.conn, state.unread) ? `Can't read this ${noun}` : `This ${noun} no longer exists`;
     case "closed":
       return `Disconnected · open the ${noun} again`;
     case "unavailable":
@@ -792,17 +852,6 @@ export function sessionNotice(state: SceneSyncState | null, noun = "scene"): str
   return null;
 }
 
-/**
- * Edits not yet where this editor's mode puts them: still on their way to the scene
- * manager, or, while not live updating, waiting in a draft that has not been published.
- */
-export function hasUnsavedEdits(state: SceneSyncState | null, live: boolean): boolean {
-  if (state === null) {
-    return false;
-  }
-  return state.pendingItems > 0 || state.retrying || (!live && state.hasDraft);
-}
-
 type FetchedScene = SceneRecord;
 
 function sceneOf(fetchedScene: FetchedScene): Scene {
@@ -832,7 +881,7 @@ const SCENE_DRAFT_COPY: DraftLiveCopy = {
 };
 
 const SCENE_DRAFT_TEST_IDS: DraftLiveTestIds = {
-  live: "menu-scene-live-update",
+  live: "switch-scene-live-update",
   discard: "button-discard-draft",
   confirmDiscard: "button-confirm-discard-draft",
   publish: "button-publish-scene",
