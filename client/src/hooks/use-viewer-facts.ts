@@ -1,5 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { useEffect, useMemo, useState } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useViewerFactsRequest } from "@/engine/hooks/use-workflows";
 import type { EngineConditionSupport } from "@/lib/condition-builder";
@@ -10,7 +11,7 @@ import type { ViewerFact, ViewerFactsState } from "@/lib/viewer-facts";
  * while `enabled`. Only engines with `workflow.viewerFacts` are asked.
  */
 export function useViewerFacts(instanceId: Id<"instances"> | undefined, enabled: boolean): ViewerFactsState {
-  const support = useEngineCapabilities(instanceId).support("workflow.viewerFacts");
+  const support = useEngineCapabilities(toInstanceId(instanceId)).support("workflow.viewerFacts");
   const listFacts = useViewerFactsRequest();
   const [loaded, setLoaded] = useState<{ instanceId: string; result: ViewerFact[] | "failed" } | null>(null);
   const ask = Boolean(instanceId) && enabled && support === "supported";
@@ -21,7 +22,7 @@ export function useViewerFacts(instanceId: Id<"instances"> | undefined, enabled:
       return;
     }
     let cancelled = false;
-    listFacts(instanceId)
+    listFacts(toInstanceId(instanceId))
       .then((facts) => {
         if (!cancelled) {
           setLoaded({ instanceId, result: facts });
@@ -53,7 +54,7 @@ export function useViewerFacts(instanceId: Id<"instances"> | undefined, enabled:
 
 /** What the instance's engine lets the condition builder offer; see EngineConditionSupport. */
 export function useEngineConditionSupport(instanceId: Id<"instances"> | undefined): EngineConditionSupport {
-  const capabilities = useEngineCapabilities(instanceId);
+  const capabilities = useEngineCapabilities(toInstanceId(instanceId));
   const viewerFacts = useViewerFacts(instanceId, true);
   const listReferences = capabilities.support("workflow.conditionListReferences") === "supported";
   return useMemo(() => ({ viewerFacts, listReferences }), [viewerFacts, listReferences]);

@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
+import { toInstanceId } from "@/engine/convex/ids";
 import {
   useChatCommandGroups,
   useChatCommands,
@@ -65,10 +66,10 @@ export default function CommandEditor() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const { catalogTriggers, catalogActions, actionPresets, loading: catalogLoading } = useWorkflowCatalog();
 
-  const commandsRaw = useChatCommands(instance?._id ?? null);
-  const groupsRaw = useChatCommandGroups(instance?._id ?? null);
+  const commandsRaw = useChatCommands(toInstanceId(instance?._id ?? null));
+  const groupsRaw = useChatCommandGroups(toInstanceId(instance?._id ?? null));
   const groups = useMemo(() => groupsRaw ?? [], [groupsRaw]);
-  const resourceInstances = useResourceInstances(instance?._id ?? null);
+  const resourceInstances = useResourceInstances(toInstanceId(instance?._id ?? null));
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -158,10 +159,10 @@ export default function CommandEditor() {
     setSaving(true);
     try {
       if (existing) {
-        await updateCommand(instance._id, { ...fields, engineCommandId: existing.engineCommandId });
+        await updateCommand(toInstanceId(instance._id), { ...fields, engineCommandId: existing.engineCommandId });
         toast({ title: "Command updated" });
       } else {
-        await createCommand(instance._id, fields);
+        await createCommand(toInstanceId(instance._id), fields);
         toast({ title: "Command created" });
       }
       discardAndLeave();

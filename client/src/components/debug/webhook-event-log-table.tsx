@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { EngineEventType } from "@woofx3/api/webhooks";
 import { Clock, RotateCcw, Webhook } from "lucide-react";
@@ -10,8 +9,9 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useRetriggerEvent, useWebhookEventLog } from "@/engine/hooks/use-webhook-event-log";
-import type { WebhookEventSummary } from "@/engine/types";
+import type { WebhookEventId, WebhookEventSummary } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 
 function formatRelativeTime(timestamp: number): string {
@@ -117,7 +117,7 @@ interface EventRowProps {
   index: number;
   isPending: boolean;
   measureRef: (element: HTMLTableRowElement | null) => void;
-  onRetrigger: (logId: Id<"engineEventLog">, eventType: string) => void;
+  onRetrigger: (logId: WebhookEventId, eventType: string) => void;
 }
 
 const EventRow = memo(function EventRow({ event, index, isPending, measureRef, onRetrigger }: EventRowProps) {
@@ -140,13 +140,13 @@ const EventRow = memo(function EventRow({ event, index, isPending, measureRef, o
         </Badge>
       </TableCell>
       <TableCell className="whitespace-nowrap">
-        <WebhookEventPayloadDialog logId={event._id} eventType={event.eventType} />
+        <WebhookEventPayloadDialog logId={event.id} eventType={event.eventType} />
         <span className="ml-1 text-xs text-muted-foreground">{formatPayloadSize(event.payloadLength)}</span>
       </TableCell>
       <TableCell>
         <button
           type="button"
-          onClick={() => onRetrigger(event._id, event.eventType)}
+          onClick={() => onRetrigger(event.id, event.eventType)}
           disabled={isPending}
           className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
         >
@@ -161,7 +161,7 @@ const EventRow = memo(function EventRow({ event, index, isPending, measureRef, o
 export function WebhookEventLogTable() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const [typeFilter, setTypeFilter] = useState("all");
-  const [pendingIds, setPendingIds] = useState<Set<Id<"engineEventLog">>>(new Set());
+  const [pendingIds, setPendingIds] = useState<Set<WebhookEventId>>(new Set());
   const retriggerEvent = useRetriggerEvent();
   const retriggerEventRef = useRef(retriggerEvent);
   retriggerEventRef.current = retriggerEvent;
@@ -171,7 +171,7 @@ export function WebhookEventLogTable() {
     results: events,
     status,
     loadMore,
-  } = useWebhookEventLog(instance?._id ?? null, typeFilter !== "all" ? typeFilter : null, PAGE_SIZE);
+  } = useWebhookEventLog(toInstanceId(instance?._id ?? null), typeFilter !== "all" ? typeFilter : null, PAGE_SIZE);
 
   const isLoading = instanceLoading || status === "LoadingFirstPage";
 
@@ -190,7 +190,7 @@ export function WebhookEventLogTable() {
     }
   }, [status, lastVisibleIndex, events.length, loadMore]);
 
-  const handleRetrigger = useCallback(async (logId: Id<"engineEventLog">, eventType: string) => {
+  const handleRetrigger = useCallback(async (logId: WebhookEventId, eventType: string) => {
     setPendingIds((prev) => new Set(prev).add(logId));
     try {
       await retriggerEventRef.current(logId, eventType);
@@ -272,10 +272,10 @@ export function WebhookEventLogTable() {
                   const event = events[virtualRow.index];
                   return (
                     <EventRow
-                      key={event._id}
+                      key={event.id}
                       event={event}
                       index={virtualRow.index}
-                      isPending={pendingIds.has(event._id)}
+                      isPending={pendingIds.has(event.id)}
                       measureRef={virtualizer.measureElement}
                       onRetrigger={handleRetrigger}
                     />

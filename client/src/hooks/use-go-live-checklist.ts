@@ -4,6 +4,7 @@ import type { StreamInfoField } from "@convex/lib/streamInfo";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useSendCorrelatedRequest, useTransientEventWatchRequest } from "@/engine/hooks/use-correlated-request";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useLiveState } from "@/engine/hooks/use-live-state";
@@ -150,9 +151,9 @@ export function useGoLiveChecklist(): GoLiveChecklist {
         pending = checkTwitch({ instanceId }).then((facts) => ({ kind: "twitch", facts }));
       } else if (id === "obs") {
         const correlationKey = crypto.randomUUID();
-        pending = dispatchFieldOptions(instanceId, OBS_SCENES_FIELD, correlationKey)
+        pending = dispatchFieldOptions(toInstanceId(instanceId), OBS_SCENES_FIELD, correlationKey)
           .then(
-            () => awaitObsReply(watchEvent(instanceId, correlationKey)),
+            () => awaitObsReply(watchEvent(toInstanceId(instanceId), correlationKey)),
             (error: unknown) => obsFactsFromDispatchError(dispatchErrorMessage(error))
           )
           .then((facts) => ({ kind: "obs", facts }));

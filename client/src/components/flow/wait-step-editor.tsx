@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
 import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
@@ -1015,6 +1016,6 @@ function OutputsNote({ step, catalogTriggers }: { step: WaitNode; catalogTrigger
 /** The streamer's counters, timers and queues by canonical id, so a sentence names them. */
 function useResourceLabels(): ReadonlyMap<string, string> | undefined {
   const { instance } = useInstance();
-  const rows = useResourceInstances(instance ? (instance._id as Id<"instances">) : null);
+  const rows = useResourceInstances(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
   return useMemo(() => (rows ? new Map(rows.map((row) => [row.canonicalId, row.displayName])) : undefined), [rows]);
 }

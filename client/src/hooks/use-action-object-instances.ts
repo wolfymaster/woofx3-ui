@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useResourceInstancesOfKinds } from "@/engine/hooks/use-module-resources";
 import { useAlertWidgetNames, useScenes } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
@@ -46,9 +47,11 @@ export function useActionObjectInstances(
   const needsSource = (source: "scenes" | "alertWidgets") =>
     objects.some((object) => object.target?.type === "source" && object.target.source === source);
 
-  const resourceRows = useResourceInstancesOfKinds(instanceId ?? null, kinds);
-  const scenes = useScenes(instanceId && needsSource("scenes") ? instanceId : null);
-  const alertWidgetNames = useAlertWidgetNames(instanceId && needsSource("alertWidgets") ? instanceId : null);
+  const resourceRows = useResourceInstancesOfKinds(toInstanceId(instanceId ?? null), kinds);
+  const scenes = useScenes(toInstanceId(instanceId && needsSource("scenes") ? instanceId : null));
+  const alertWidgetNames = useAlertWidgetNames(
+    toInstanceId(instanceId && needsSource("alertWidgets") ? instanceId : null)
+  );
 
   return useMemo(() => {
     const result = new Map<string, readonly ObjectInstance[] | undefined>();

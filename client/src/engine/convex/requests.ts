@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import type { Doc } from "@convex/_generated/dataModel";
 import { useAction, useConvex, useQuery } from "convex/react";
 import { useCallback, useMemo, useState } from "react";
 import type { RequestsGateway } from "@/engine/gateway";
@@ -10,7 +11,18 @@ import type {
   CorrelatedRequests,
   EventWatch,
   InstanceId,
+  TransientEvent,
 } from "@/engine/types";
+import { fromInstanceId } from "./ids";
+import { useMappedList, useMappedValue } from "./mapped";
+
+function toTransientEvent({ _id, _creationTime, instanceId, ...event }: Doc<"transientEvents">): TransientEvent {
+  return event;
+}
+
+function toLiveTransientEvent(row: Doc<"transientEvents"> | null | undefined): TransientEvent | null | undefined {
+  return row === undefined || row === null ? row : toTransientEvent(row);
+}
 
 // Every correlated request kind is a Convex action taking the instance, the
 // request and the key the engine answers under.
@@ -19,17 +31,19 @@ const DISPATCH = {
 } as const satisfies Record<CorrelatedRequestKind, unknown>;
 
 function useEvent(instanceId: InstanceId | null, correlationKey: string | null) {
-  return useQuery(
+  const row = useQuery(
     api.transientEvents.get,
-    instanceId && correlationKey !== null ? { instanceId, correlationKey } : "skip"
+    instanceId && correlationKey !== null ? { instanceId: fromInstanceId(instanceId), correlationKey } : "skip"
   );
+  return useMappedValue(row, toTransientEvent);
 }
 
 function useEvents(instanceId: InstanceId | null, correlationKey: string | null) {
-  return useQuery(
+  const rows = useQuery(
     api.transientEvents.listByCorrelation,
-    instanceId && correlationKey !== null ? { instanceId, correlationKey } : "skip"
+    instanceId && correlationKey !== null ? { instanceId: fromInstanceId(instanceId), correlationKey } : "skip"
   );
+  return useMappedList(rows, toTransientEvent);
 }
 
 function useCorrelated(
@@ -47,9 +61,11 @@ function useCorrelated(
       }
       const key = crypto.randomUUID();
       setCorrelationKey(key);
-      dispatch({ instanceId, reference: request, correlationKey: key }).catch((error: unknown) => {
-        setFailure({ correlationKey: key, error });
-      });
+      dispatch({ instanceId: fromInstanceId(instanceId), reference: request, correlationKey: key }).catch(
+        (error: unknown) => {
+          setFailure({ correlationKey: key, error });
+        }
+      );
     },
     [instanceId, dispatch]
   );
@@ -66,7 +82,7 @@ function useSendRequest(kind: CorrelatedRequestKind) {
   const dispatch = useAction(DISPATCH[kind]);
   return useCallback(
     (instanceId: InstanceId, request: CorrelatedRequests[CorrelatedRequestKind], correlationKey: string) =>
-      dispatch({ instanceId, reference: request, correlationKey }),
+      dispatch({ instanceId: fromInstanceId(instanceId), reference: request, correlationKey }),
     [dispatch]
   );
 }
@@ -75,8 +91,14 @@ function useEventWatchRequest() {
   const convex = useConvex();
   return useCallback(
     (instanceId: InstanceId, correlationKey: string): EventWatch => {
-      const watch = convex.watchQuery(api.transientEvents.get, { instanceId, correlationKey });
-      return { current: () => watch.localQueryResult(), onUpdate: (onChange) => watch.onUpdate(onChange) };
+      const watch = convex.watchQuery(api.transientEvents.get, {
+        instanceId: fromInstanceId(instanceId),
+        correlationKey,
+      });
+      return {
+        current: () => toLiveTransientEvent(watch.localQueryResult()),
+        onUpdate: (onChange) => watch.onUpdate(onChange),
+      };
     },
     [convex]
   );

@@ -67,8 +67,17 @@ describe("modules.useMarketplaceInstallRequest", () => {
 
 describe("modules.useDetailRequest", () => {
   test("asks for the detail of a marketplace id", async () => {
+    result = { id: "listing-1", name: "OBS" };
     const getDetail = renderRequest(() => convexModulesGateway.useDetailRequest());
-    await getDetail(instanceId, "listing-1");
+    const detail = await getDetail(instanceId, "listing-1");
     expect(calls).toEqual([{ name: "moduleDetail:getModuleDetail", args: { instanceId, moduleId: "listing-1" } }]);
+    expect(detail).toEqual({ id: "listing-1", name: "OBS" } as unknown as typeof detail);
+  });
+
+  test("passes an installed module's id through", async () => {
+    result = { id: "obs", moduleDbId: "module-row-1" };
+    const getDetail = renderRequest(() => convexModulesGateway.useDetailRequest());
+    const detail = await getDetail(instanceId, "obs");
+    expect(detail.moduleDbId).toBe("module-row-1" as typeof detail.moduleDbId);
   });
 });

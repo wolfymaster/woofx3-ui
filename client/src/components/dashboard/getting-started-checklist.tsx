@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useToast } from "@/hooks/use-toast";
@@ -101,7 +102,7 @@ export function useGettingStarted(instanceId: Id<"instances">): GettingStarted |
   const [busyAction, setBusyAction] = useState<GettingStartedAction["kind"] | null>(null);
 
   const watchesObs = Boolean(state && !state.dismissed && setup?.platformsNeedingSettings.includes(OBS_MODULE_ID));
-  const { status: obsStatus } = useObsStatus(instanceId, watchesObs);
+  const { status: obsStatus } = useObsStatus(toInstanceId(instanceId), watchesObs);
 
   const followPreset = useMemo(() => triggerPresets.find((preset) => preset.event === FOLLOW_EVENT), [triggerPresets]);
 

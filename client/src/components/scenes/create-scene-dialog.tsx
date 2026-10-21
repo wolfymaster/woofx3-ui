@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useCreateSceneRequest } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -37,7 +38,7 @@ export function CreateSceneDialog({ open, onOpenChange, onCreated }: CreateScene
     }
     setIsCreating(true);
     try {
-      const { engineSceneId } = await createScene(instance._id, {
+      const { engineSceneId } = await createScene(toInstanceId(instance._id), {
         name: name.trim(),
         layoutJson: JSON.stringify({ width: 1920, height: 1080, backgroundColor: "transparent" }),
       });

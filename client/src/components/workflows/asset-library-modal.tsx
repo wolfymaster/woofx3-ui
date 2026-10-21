@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useResourceUpload } from "@/engine/hooks/use-resource-upload";
 import { type Resource, useResources } from "@/engine/hooks/use-resources";
 import { useInstance } from "@/hooks/use-instance";
@@ -96,9 +97,9 @@ export function AssetLibraryModal({
   }, [open, currentExternalUrl]);
 
   const currentFolderId = trail[trail.length - 1].id;
-  const { upload, isUploading, progress } = useResourceUpload(instance?._id);
+  const { upload, isUploading, progress } = useResourceUpload(toInstanceId(instance?._id));
 
-  const { resources, isLoading, error, refetch } = useResources(instance?._id, {
+  const { resources, isLoading, error, refetch } = useResources(toInstanceId(instance?._id), {
     folderId: currentFolderId,
     kind: filterTypes?.length === 1 ? filterTypes[0] : undefined,
     search: search || undefined,

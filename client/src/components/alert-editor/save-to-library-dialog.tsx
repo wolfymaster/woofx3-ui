@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useCreateLibraryAlertRequest } from "@/engine/hooks/use-alert-library";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -57,7 +58,7 @@ export function SaveToLibraryDialog({
     setPending(true);
     try {
       const savedName = name.trim();
-      await create(instance._id, {
+      await create(toInstanceId(instance._id), {
         name: savedName,
         ...libraryJsonOf(libraryAlertOfStep(doc, availableVariables)),
       });

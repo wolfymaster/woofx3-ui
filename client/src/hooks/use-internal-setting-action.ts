@@ -1,6 +1,7 @@
 import type { Id } from "@convex/_generated/dataModel";
 import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import { useCallback, useMemo } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useCorrelatedRequest } from "@/engine/hooks/use-correlated-request";
 import { dispatchErrorMessage } from "@/lib/field-options-request";
 
@@ -17,7 +18,10 @@ export function useInternalSettingAction(
   message: string | null;
   data: unknown;
 } {
-  const { correlationKey, start, event, failure } = useCorrelatedRequest("fieldOptions", instanceId ?? null);
+  const { correlationKey, start, event, failure } = useCorrelatedRequest(
+    "fieldOptions",
+    toInstanceId(instanceId ?? null)
+  );
 
   const trigger = useCallback(() => {
     if (!instanceId || !reference) {

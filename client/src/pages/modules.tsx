@@ -16,6 +16,7 @@ import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dia
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
@@ -181,7 +182,7 @@ export default function Modules() {
     setModuleDetail(null);
     setModuleDetailError(null);
     let cancelled = false;
-    void getModuleDetail(instance._id, detailModuleId)
+    void getModuleDetail(toInstanceId(instance._id), detailModuleId)
       .then((detail) => {
         if (!cancelled) {
           setModuleDetail(detail);

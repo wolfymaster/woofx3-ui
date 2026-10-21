@@ -1,5 +1,6 @@
 import { createContext, type ReactNode, useContext, useMemo } from "react";
 import { convexEngineGateway } from "@/engine/convex/gateway";
+import { toInstanceId } from "@/engine/convex/ids";
 import type { EngineGateway } from "@/engine/gateway";
 import type { EngineScope } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
@@ -22,9 +23,13 @@ const EngineScopeContext = createContext<EngineScope | null>(null);
  */
 export function EngineGatewayProvider({ children }: { children: ReactNode }) {
   const { instance, optimisticInstanceId, isLoading } = useInstance();
-  const instanceId = instance?._id ?? null;
+  const instanceId = toInstanceId(instance?._id) ?? null;
   const scope = useMemo(
-    (): EngineScope => ({ instanceId, optimisticInstanceId, isInstanceLoading: isLoading }),
+    (): EngineScope => ({
+      instanceId,
+      optimisticInstanceId: toInstanceId(optimisticInstanceId),
+      isInstanceLoading: isLoading,
+    }),
     [instanceId, optimisticInstanceId, isLoading]
   );
   return (

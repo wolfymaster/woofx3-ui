@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toInstanceId } from "@/engine/convex/ids";
 import {
   useCancelWorkflowRunRequest,
   useReplayWorkflowRunRequest,
@@ -58,7 +59,7 @@ interface WorkflowRunsPanelProps {
 export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRunsPanelProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const runs = useWorkflowRuns(instanceId, engineWorkflowId, RUN_LIMIT);
+  const runs = useWorkflowRuns(toInstanceId(instanceId), engineWorkflowId, RUN_LIMIT);
   const replay = useReplayWorkflowRunRequest();
   const cancelRun = useCancelWorkflowRunRequest();
   const realCancel = useTestRunSupport(instanceId).realCancel;
@@ -76,7 +77,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
   const handleReplay = async (run: RunDoc) => {
     setReplayingId(run.engineRunId);
     try {
-      await replay(instanceId, { engineRunId: run.engineRunId, origin: REPLAY_ORIGIN });
+      await replay(toInstanceId(instanceId), { engineRunId: run.engineRunId, origin: REPLAY_ORIGIN });
       toast({ title: "Replay requested", description: "It will appear at the top of this list when it starts." });
     } catch (err) {
       toast({
@@ -95,7 +96,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
     }
     setIsCancelling(true);
     try {
-      const result = await cancelRun(instanceId, cancelTarget.engineRunId);
+      const result = await cancelRun(toInstanceId(instanceId), cancelTarget.engineRunId);
       setCancelTarget(null);
       toast(describeStopOutcome(result.outcome, result.status));
     } catch (err) {
@@ -150,7 +151,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
 
                   return (
                     <TableRow
-                      key={run._id}
+                      key={run.engineRunId}
                       className="cursor-pointer"
                       onClick={() => navigate(workflowRunPath(engineWorkflowId, run.engineRunId))}
                       data-testid={`row-workflow-run-${run.engineRunId}`}

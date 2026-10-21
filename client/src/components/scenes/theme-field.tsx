@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useWidgetThemesRequest } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -38,7 +39,7 @@ function ThemeField({ field, value, onChange }: Parameters<CustomFieldRenderer>[
       return;
     }
     let cancelled = false;
-    listWidgetThemes(instanceId, widgetCanonicalId)
+    listWidgetThemes(toInstanceId(instanceId), widgetCanonicalId)
       .then((result) => {
         if (!cancelled) {
           setList({ status: "loaded", themes: result.themes });

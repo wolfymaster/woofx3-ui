@@ -1,5 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { AlertCircle, CheckCircle2, CircleHelp, Loader2 } from "lucide-react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { describeObsStatus, type ObsStatusTone } from "@/lib/obs-status";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,7 @@ function ToneIcon({ tone }: { tone: ObsStatusTone }) {
  * on an engine that cannot report it.
  */
 export function ObsConnectionStatus({ instanceId }: { instanceId: Id<"instances"> }) {
-  const { support, status } = useObsStatus(instanceId, true);
+  const { support, status } = useObsStatus(toInstanceId(instanceId), true);
   if (support !== "supported") {
     return null;
   }

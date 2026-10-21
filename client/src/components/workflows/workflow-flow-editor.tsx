@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { FlowEditor } from "@/components/flow/flow-editor";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useResourceInstances } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useUpdateWorkflowRequest, useWorkflow } from "@/engine/hooks/use-workflows";
@@ -43,9 +44,9 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
   const { toast } = useToast();
   const conditionSupport = useEngineConditionSupport(instanceId);
   const updateFromDefinition = useUpdateWorkflowRequest();
-  const workflow = useWorkflow(instanceId, engineWorkflowId);
-  const resourceInstances = useResourceInstances(instanceId);
-  const scenes = useScenes(instanceId);
+  const workflow = useWorkflow(toInstanceId(instanceId), engineWorkflowId);
+  const resourceInstances = useResourceInstances(toInstanceId(instanceId));
+  const scenes = useScenes(toInstanceId(instanceId));
   const resourceLabels = useMemo(
     () =>
       resourceInstances ? new Map(resourceInstances.map((inst) => [inst.canonicalId, inst.displayName])) : undefined,
@@ -95,7 +96,11 @@ export function WorkflowFlowEditor({ instanceId, engineWorkflowId, onDefinitionC
         return true;
       }
       try {
-        await updateFromDefinition(instanceId, engineWorkflowId, escapeDollarKeys(definition) as WorkflowDefinition);
+        await updateFromDefinition(
+          toInstanceId(instanceId),
+          engineWorkflowId,
+          escapeDollarKeys(definition) as WorkflowDefinition
+        );
         return true;
       } catch (err) {
         toast({

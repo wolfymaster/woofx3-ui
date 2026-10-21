@@ -64,7 +64,7 @@ export function setupOverlayWidgets(alertWidget: WidgetCatalogEntry | undefined)
 
 /** An engine sync run as the overlay step reads it; see engineSync.getSyncState. */
 export interface OverlaySyncRun {
-  _id: string;
+  id: string;
   status: "running" | "success" | "error";
   steps: readonly { name: string; status: string }[];
 }
@@ -93,7 +93,7 @@ export function overlayCatalogState(
     return "ready";
   }
   const latest = runs[0];
-  const latestId = latest?._id ?? null;
+  const latestId = latest?.id ?? null;
   if (requestedAfterRunId !== undefined && requestedAfterRunId === latestId) {
     return "syncing";
   }

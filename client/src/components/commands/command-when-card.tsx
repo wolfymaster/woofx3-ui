@@ -1,4 +1,3 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { AlertTriangle, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { GroupMultiSelect } from "@/components/commands/group-multi-select";
@@ -9,11 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import type { ChatCommandGroup } from "@/engine/types";
 import type { CommandEditorState, CommandVisibility } from "@/lib/command-drafts";
 import { commandWhenOptions, commandWhenTitle } from "@/lib/command-when";
 import { groupLabel } from "@/lib/group-display";
 
-type GroupDoc = Doc<"chatCommandGroups">;
+type GroupDoc = ChatCommandGroup;
 
 interface CommandWhenCardProps {
   value: CommandEditorState;

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { toInstanceId, toModuleId } from "@/engine/convex/ids";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useReconcileModuleUninstallRequest, useUninstallModuleRequest } from "@/engine/hooks/use-modules";
 import { usedByContext, usedByHeading } from "@/lib/uninstall-conflicts";
@@ -73,7 +74,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<ConflictResource[]>([]);
 
-  const uninstallEvent = useTransientEvent(instanceId, pendingKey || null);
+  const uninstallEvent = useTransientEvent(toInstanceId(instanceId), pendingKey || null);
 
   const reset = useCallback(() => {
     setPhase("confirm");
@@ -126,7 +127,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
       // the dialog (and the stale Convex record) stuck on a webhook that may
       // never come.
       try {
-        const result = await reconcileUninstall(instanceId, module._id, key);
+        const result = await reconcileUninstall(toInstanceId(instanceId), toModuleId(module._id), key);
         if (!result.stillInstalled) {
           setPendingKey(null);
           onOpenChange(false);
@@ -159,7 +160,7 @@ export function UninstallModuleDialog({ open, onOpenChange, instanceId, module, 
     setErrorMessage(null);
     setConflicts([]);
     try {
-      const result = await requestModuleUninstall(instanceId, module._id);
+      const result = await requestModuleUninstall(toInstanceId(instanceId), toModuleId(module._id));
       setPendingKey(result.moduleKey);
       setPhase("awaiting-engine");
     } catch (err) {

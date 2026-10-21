@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { toInstanceId, toMacroId } from "@/engine/convex/ids";
 import { useChatCommands } from "@/engine/hooks/use-chat-commands";
 import { useRunMacroRequest } from "@/engine/hooks/use-macros";
 import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
@@ -187,7 +188,7 @@ export function MacroPadModule() {
   const listArgs = instanceId ? { instanceId } : "skip";
 
   const macros = useQuery(api.macros.list, listArgs);
-  const commands = useChatCommands(instanceId ?? null);
+  const commands = useChatCommands(toInstanceId(instanceId ?? null));
   const remoteTriggers = useQuery(api.macroTriggers.listForInstance, listArgs);
   const addMacro = useMutation(api.macros.addMacro);
   const updateMacro = useMutation(api.macros.updateMacro);
@@ -213,7 +214,7 @@ export function MacroPadModule() {
   // biome-ignore lint/correctness/useExhaustiveDependencies: depends on instance?._id (not the instance object) so it doesn't re-fetch on every reference change
   useEffect(() => {
     if (!instance) return;
-    listEngineWorkflows(instance._id).then(setWorkflows).catch(console.error);
+    listEngineWorkflows(toInstanceId(instance._id)).then(setWorkflows).catch(console.error);
   }, [instance?._id, listEngineWorkflows]);
 
   const variableCounts = useMemo(() => {
@@ -314,8 +315,8 @@ export function MacroPadModule() {
           await sendChatMessage({ instanceId, message: resolved.message ?? "" });
         } else {
           await runMacroOnServer(
-            instanceId,
-            macro.id as Id<"macros">,
+            toInstanceId(instanceId),
+            toMacroId(macro.id as Id<"macros">),
             Object.entries(values).map(([name, value]) => ({ name, value }))
           );
         }

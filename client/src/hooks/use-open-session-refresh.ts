@@ -1,5 +1,6 @@
 import type { Id } from "@convex/_generated/dataModel";
 import { useCallback, useEffect } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useOpenSessionRefreshRequest } from "@/engine/hooks/use-stream-recap";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
@@ -29,7 +30,7 @@ export function useOpenSessionRefresh(instanceId: Id<"instances"> | undefined): 
     }
     // Best effort: a failed snapshot leaves the last stored one on screen, and
     // the engine's own summary arrives when the session ends either way.
-    refreshOpenSession(instanceId).catch(() => undefined);
+    refreshOpenSession(toInstanceId(instanceId)).catch(() => undefined);
   }, [instanceId, refreshOpenSession]);
 
   useEffect(() => {

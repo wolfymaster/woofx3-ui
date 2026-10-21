@@ -11,6 +11,7 @@ import { OpenSessionBadge } from "@/components/stream-recap/open-session-badge";
 import { RecapTimeline } from "@/components/stream-recap/recap-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
@@ -365,7 +366,7 @@ function SupportersCard({
 
 function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: string }) {
   const platformLinks = useQuery(api.instances.getPlatformLinks, { instanceId: row.instanceId });
-  const capabilities = useEngineCapabilities(row.instanceId);
+  const capabilities = useEngineCapabilities(toInstanceId(row.instanceId));
   const engineSupport = capabilities.support(...RECAP_ENGINE_CAPABILITIES);
   // Keyed on any open session, not only a live one: the snapshot taken after
   // the stream goes offline carries its last minutes, which the chart and

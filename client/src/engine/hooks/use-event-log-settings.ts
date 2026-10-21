@@ -1,10 +1,9 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
 import { atom } from "nanostores";
 import { useCallback, useEffect, useState } from "react";
 import { useEngineGateway } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import type { EventLogSettings } from "@/engine/types";
+import type { EventLogSettings, InstanceId } from "@/engine/types";
 import { withEventTypeEnabled } from "@/lib/activity-feed";
 import { type CapabilitySupport, EVENT_LOG_CAPABILITIES } from "@/lib/engine-capabilities";
 import { $engineConnected } from "@/lib/transport/engine-connection";
@@ -50,7 +49,7 @@ export interface EventLogSettingsHandle {
  * logs and pushes, its defaults and what it offers. Read on mount, on every
  * reconnect and on `refresh`.
  */
-export function useEventLogSettings(instanceId: Id<"instances"> | undefined): EventLogSettingsHandle {
+export function useEventLogSettings(instanceId: InstanceId | undefined): EventLogSettingsHandle {
   const support = useEngineCapabilities(instanceId).support(...EVENT_LOG_CAPABILITIES);
   const { eventLog } = useEngineGateway();
   const getEventLogSettings = eventLog.useSettingsRequest();

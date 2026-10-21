@@ -2,6 +2,7 @@ import { Bell, Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { LibraryAlertEditor } from "@/components/alert-editor/library-alert-editor";
 import { EmptyState } from "@/components/common/empty-state";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
@@ -12,7 +13,7 @@ export default function LibraryAlertEditorPage() {
   const compositionId = decodeParam(params.compositionId);
   const [, navigate] = useLocation();
   const { instance } = useInstance();
-  const support = useEngineCapabilities(instance?._id).support(...ALERT_LIBRARY_CAPABILITIES);
+  const support = useEngineCapabilities(toInstanceId(instance?._id)).support(...ALERT_LIBRARY_CAPABILITIES);
 
   // Back returns to the editor the library was opened from, when there is one.
   const back = () => {

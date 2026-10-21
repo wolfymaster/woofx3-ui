@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useChatCommands } from "@/engine/hooks/use-chat-commands";
 import { useInstance } from "@/hooks/use-instance";
 import { unitFor } from "@/lib/amount-unit";
@@ -304,7 +305,7 @@ function SelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
 function CommandsSelectFieldRenderer({ field, value, onChange }: FieldRendererProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const commands = useChatCommands(instanceId ?? null);
+  const commands = useChatCommands(toInstanceId(instanceId ?? null));
 
   const options = useMemo(() => {
     if (!commands) {

@@ -1,4 +1,3 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
 import { Loader2, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -7,11 +6,13 @@ import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
 import { SaveState } from "@/components/triggers/save-state";
 import { TriggerCard } from "@/components/triggers/trigger-card";
 import { Button } from "@/components/ui/button";
+import { toInstanceId } from "@/engine/convex/ids";
 import {
   useCreateWorkflowRequest,
   useSetWorkflowEnabledRequest,
   useUpdateWorkflowRequest,
 } from "@/engine/hooks/use-workflows";
+import type { Workflow } from "@/engine/types";
 import { useEventWorkflowDraft } from "@/hooks/use-event-workflow-draft";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +30,7 @@ interface EventWorkflowEditorProps {
   triggerPreset: TriggerPreset;
   actionPresets: ActionPreset[];
   /** The workflow holding the event's triggers together, as the only entry. */
-  workflows: Doc<"workflows">[];
+  workflows: Workflow[];
 }
 
 /** A condition value picker that is open, and on which trigger. */
@@ -180,7 +181,7 @@ export function EventWorkflowEditor({ triggerPreset, actionPresets, workflows }:
     setIsSaving(true);
     try {
       const { enabled } = await saveEventDraft(event, state, conditionFields, {
-        instanceId: instance._id as Id<"instances">,
+        instanceId: toInstanceId(instance._id),
         createFromDefinition,
         updateFromDefinition,
         setEnabled,

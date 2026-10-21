@@ -1,4 +1,3 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { randomNodeId } from "@woofx3/scene/editor";
 import {
   type BehaviorDocument,
@@ -13,6 +12,7 @@ import {
   type PlacementDocument,
   stackOrder,
 } from "@woofx3/scene/model";
+import type { AlertComposition } from "@/engine/types";
 import { compositionOfLegacyAlert, DEFAULT_ALERT_CANVAS, legacyAlertLayoutOf } from "@/lib/alert-layout";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -35,7 +35,7 @@ import type { VariableOption } from "@/lib/workflow-variables";
  * stores them with `$`-prefixed keys (an input reference's `$input`)
  * escaped; see lib/dollar-keys.ts.
  */
-export type LibraryAlertDocument = Pick<Doc<"alertCompositions">, "widgets" | "layout" | "behaviors" | "inputs">;
+export type LibraryAlertDocument = Pick<AlertComposition, "widgets" | "layout" | "behaviors" | "inputs">;
 
 /** A library alert's declared inputs as the engine holds them. */
 export function libraryAlertInputs(row: Pick<LibraryAlertDocument, "inputs">): unknown[] {

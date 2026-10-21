@@ -45,6 +45,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { toInstanceId, toModuleId } from "@/engine/convex/ids";
 import {
   useCreateResourceInstanceRequest,
   useDeleteResourceInstanceRequest,
@@ -972,7 +973,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     }
     setLoadState("loading");
     setLoadError(null);
-    void getSettingsAction(instanceId, moduleId)
+    void getSettingsAction(toInstanceId(instanceId), moduleId)
       .then((settings) => {
         const map: Record<string, string> = {};
         const secrets: Record<string, boolean> = {};
@@ -1027,7 +1028,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
     setSaveError(null);
     setSaveSuccess(null);
     try {
-      await updateSettingAction(instanceId, moduleId, key, value);
+      await updateSettingAction(toInstanceId(instanceId), moduleId, key, value);
       if (isSecret) {
         setSecretIsSet((prev) => ({ ...prev, [key]: value !== "" }));
         // The typed secret is not kept once the engine has it.
@@ -1201,7 +1202,7 @@ interface ResourceRefSettingRowProps {
 function ResourceRefSettingRow({ field, resourceKind, value, busy, saved, onChange }: ResourceRefSettingRowProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  const kind = useResourceKind(instanceId ?? null, resourceKind);
+  const kind = useResourceKind(toInstanceId(instanceId ?? null), resourceKind);
   const ResourcePicker = configFieldRenderers.resource_ref;
   return (
     <div className="space-y-2">
@@ -1521,7 +1522,7 @@ export function ManageResourcesTab({
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const instances = useModuleResourceInstances(instanceId ?? null, moduleDbId ?? null);
+  const instances = useModuleResourceInstances(toInstanceId(instanceId ?? null), toModuleId(moduleDbId ?? null));
 
   const createAction = useCreateResourceInstanceRequest();
   const deleteAction = useDeleteResourceInstanceRequest();
@@ -1535,7 +1536,7 @@ export function ManageResourcesTab({
     let cancelled = false;
     setSyncing(true);
     setSyncError(null);
-    void syncAction(instanceId, moduleDbId)
+    void syncAction(toInstanceId(instanceId), toModuleId(moduleDbId))
       .catch((err: unknown) => {
         if (!cancelled) {
           setSyncError(err instanceof Error ? err.message : "Failed to sync resource instances from the engine.");
@@ -1563,10 +1564,10 @@ export function ManageResourcesTab({
     setDeleting(deleteTarget.canonicalId);
     setOpError(null);
     try {
-      await deleteAction(instanceId, deleteTarget.canonicalId);
+      await deleteAction(toInstanceId(instanceId), deleteTarget.canonicalId);
       setDeleteTarget(null);
       if (moduleDbId) {
-        await syncAction(instanceId, moduleDbId);
+        await syncAction(toInstanceId(instanceId), toModuleId(moduleDbId));
       }
     } catch (err) {
       setOpError(err instanceof Error ? err.message : "Failed to delete resource.");
@@ -1644,7 +1645,7 @@ export function ManageResourcesTab({
               ) : (
                 <div className="space-y-2">
                   {kindInstances.map((inst) => (
-                    <div key={inst._id} className="flex items-center gap-3 p-3 rounded-md border bg-card">
+                    <div key={inst.canonicalId} className="flex items-center gap-3 p-3 rounded-md border bg-card">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{inst.displayName}</p>
                         <p className="text-xs text-muted-foreground font-mono truncate">{inst.canonicalId}</p>
@@ -1684,14 +1685,14 @@ export function ManageResourcesTab({
           kind={createDialogKind}
           onClose={() => setCreateDialogKind(null)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            await createAction(instanceId, {
+            await createAction(toInstanceId(instanceId), {
               moduleName,
               kind: createDialogKind.kind,
               resourceInstanceId,
               displayName,
               settings,
             });
-            await syncAction(instanceId, moduleDbId);
+            await syncAction(toInstanceId(instanceId), toModuleId(moduleDbId));
           }}
         />
       )}

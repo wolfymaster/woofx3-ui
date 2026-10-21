@@ -1,4 +1,3 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AlertLayoutPreview } from "@/components/alerts/alert-layout-preview";
@@ -19,13 +18,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useRemoveLibraryAlertRequest } from "@/engine/hooks/use-alert-library";
+import type { AlertComposition } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert } from "@/lib/alert-library";
 import { cn } from "@/lib/utils";
 
-export type LibraryAlert = Doc<"alertCompositions">;
+export type LibraryAlert = AlertComposition;
 
 interface LibraryAlertListProps {
   /** The library, undefined while it loads. */
@@ -66,7 +67,7 @@ export function LibraryAlertList({ alerts, layout, onPick, onEdit }: LibraryAler
       >
         {alerts.map((alert) => (
           <li
-            key={alert._id}
+            key={alert.engineCompositionId}
             className={cn(
               "flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-1.5 hover:border-foreground/20 hover:bg-accent",
               layout === "row" && "w-40 shrink-0"
@@ -188,7 +189,7 @@ function DeleteLibraryAlertDialog({ alert, onClose }: { alert: LibraryAlert | nu
     }
     setPending(true);
     try {
-      const result = await remove(instance._id, alert.engineCompositionId);
+      const result = await remove(toInstanceId(instance._id), alert.engineCompositionId);
       if (!result.success) {
         toast({ title: "The alert wasn't deleted", description: "The engine refused.", variant: "destructive" });
         return;

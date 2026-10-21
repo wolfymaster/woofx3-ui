@@ -4,6 +4,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useWorkflowRun } from "@/engine/hooks/use-workflows";
 import { describeAlertFailure } from "@/lib/alert-failure";
 import { engineAlertStyle } from "@/lib/alert-status";
@@ -36,7 +37,7 @@ interface RunTraceProps {
  * people come here.
  */
 export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
-  const data = useWorkflowRun(instanceId, engineRunId);
+  const data = useWorkflowRun(toInstanceId(instanceId), engineRunId);
   const timeline = useMemo(() => (data ? buildTimeline(data.run, data.steps) : null), [data]);
   const trace = useMemo(
     () => (data && timeline ? buildTrace(data.run, timeline, data.alerts) : null),

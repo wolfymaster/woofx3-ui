@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
 
 interface EngineSyncCardProps {
@@ -27,7 +28,7 @@ function StepIcon({ status }: { status: StepStatus }) {
 }
 
 export function EngineSyncCard({ instanceId }: EngineSyncCardProps) {
-  const state = useEngineSyncState(instanceId);
+  const state = useEngineSyncState(toInstanceId(instanceId));
   const syncNow = useEngineSyncRequest();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -36,7 +37,7 @@ export function EngineSyncCard({ instanceId }: EngineSyncCardProps) {
     setError(null);
     setPending(true);
     try {
-      const res = await syncNow(instanceId);
+      const res = await syncNow(toInstanceId(instanceId));
       if (!res.scheduled) {
         setError("A sync is already in progress.");
       }

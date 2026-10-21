@@ -29,6 +29,7 @@ import {
   Type,
   UserCheck,
 } from "lucide-react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useClearAlertQueueRequest, useSkipCurrentAlertRequest } from "@/engine/hooks/use-alert-queue";
 import { useAuthActions } from "@/hooks/use-convex-auth";
 import { useTheme } from "@/hooks/use-theme";
@@ -216,7 +217,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await skipCurrentAlert(id);
+            const result = await skipCurrentAlert(toInstanceId(id));
             if (!result.ok) {
               throw new Error(result.reason ?? "The engine refused to skip");
             }
@@ -235,7 +236,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await clearAlertQueue(id);
+            const result = await clearAlertQueue(toInstanceId(id));
             if (!result.ok) {
               throw new Error(result.reason ?? "The engine refused to clear the queue");
             }

@@ -1,4 +1,4 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
 import {
   ArrowLeft,
@@ -53,12 +53,14 @@ import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { TestRunSheet } from "@/components/workflows/test-run-sheet";
 import { WorkflowFlowEditor } from "@/components/workflows/workflow-flow-editor";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
+import { toInstanceId } from "@/engine/convex/ids";
 import {
   useDeleteWorkflowRequest,
   useSetWorkflowEnabledRequest,
   useUpdateWorkflowRequest,
   useWorkflows,
 } from "@/engine/hooks/use-workflows";
+import type { Workflow } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -75,7 +77,7 @@ import {
 import { type WorkflowEditorTab, workflowEditorTab } from "@/lib/workflow-run-route";
 import { otherWorkflowsOnEvent, testRunPreset, workflowEventTrigger } from "@/lib/workflow-test-run";
 
-type WorkflowRow = Doc<"workflows">;
+type WorkflowRow = Workflow;
 type EnabledFilter = "all" | "enabled" | "disabled";
 
 const LIST_PATH = "/stream/workflows";
@@ -145,7 +147,7 @@ function WorkflowListScreen() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const { catalogTriggers } = useWorkflowCatalog();
 
-  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
+  const workflows = useWorkflows(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
   const { byId: notRunning } = useNotRunningWorkflows();
   useWorkflowHealthResyncOnMount();
   const setEnabled = useSetWorkflowEnabledRequest();
@@ -189,7 +191,7 @@ function WorkflowListScreen() {
     }
     setTogglingId(workflow.engineWorkflowId);
     try {
-      await setEnabled(instance._id as Id<"instances">, workflow.engineWorkflowId, !workflow.isEnabled);
+      await setEnabled(toInstanceId(instance._id as Id<"instances">), workflow.engineWorkflowId, !workflow.isEnabled);
     } catch (err) {
       toast({
         title: "Failed to toggle workflow",
@@ -207,7 +209,7 @@ function WorkflowListScreen() {
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId(instance._id as Id<"instances">, deleteTarget.engineWorkflowId);
+      await deleteByEngineId(toInstanceId(instance._id as Id<"instances">), deleteTarget.engineWorkflowId);
       toast({ title: "Workflow deleted" });
       setDeleteTarget(null);
     } catch (err) {
@@ -298,7 +300,7 @@ function WorkflowListScreen() {
 
                   return (
                     <TableRow
-                      key={workflow._id}
+                      key={workflow.engineWorkflowId}
                       className="cursor-pointer"
                       onClick={() => navigate(`${LIST_PATH}/${workflow.engineWorkflowId}`)}
                       data-testid={`row-workflow-${workflow.engineWorkflowId}`}
@@ -439,7 +441,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const { toast } = useToast();
   const { instance } = useInstance();
 
-  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
+  const workflows = useWorkflows(toInstanceId(instance ? (instance._id as Id<"instances">) : null));
   const updateFromDefinition = useUpdateWorkflowRequest();
   const deleteByEngineId = useDeleteWorkflowRequest();
   const notRunningHealth = useNotRunningWorkflows().byId.get(engineWorkflowId);
@@ -517,7 +519,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     try {
       const def = unescapeDollarKeys(workflow.definition) as WorkflowDefinition;
       await updateFromDefinition(
-        instance._id as Id<"instances">,
+        toInstanceId(instance._id as Id<"instances">),
         engineWorkflowId,
         escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition
       );
@@ -549,7 +551,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     setIsSaving(true);
     try {
       await updateFromDefinition(
-        instance._id as Id<"instances">,
+        toInstanceId(instance._id as Id<"instances">),
         engineWorkflowId,
         escapeDollarKeys(currentDefinition) as WorkflowDefinition
       );
@@ -571,7 +573,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId(instance._id as Id<"instances">, engineWorkflowId);
+      await deleteByEngineId(toInstanceId(instance._id as Id<"instances">), engineWorkflowId);
       setDeleteDialogOpen(false);
       navigate(LIST_PATH);
     } catch (err) {

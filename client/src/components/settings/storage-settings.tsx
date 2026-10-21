@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useSetStorageConfigRequest, useStorageConfigRequest } from "@/engine/hooks/use-engine-config";
 import { useEngineInfoRequest, useSetOverlayPublicUrlRequest } from "@/engine/hooks/use-engine-status";
 import { useInstance } from "@/hooks/use-instance";
@@ -72,7 +73,10 @@ export function StorageSettings() {
     if (!instance) return;
     setIsLoading(true);
     try {
-      const [result, engineInfo] = await Promise.all([getConfig(instance._id), getEngineInfo(instance._id)]);
+      const [result, engineInfo] = await Promise.all([
+        getConfig(toInstanceId(instance._id)),
+        getEngineInfo(toInstanceId(instance._id)),
+      ]);
       if (result) {
         setConfigState(result as unknown as StorageConfig);
       }
@@ -100,8 +104,8 @@ export function StorageSettings() {
     setIsSaving(true);
     try {
       await Promise.all([
-        setConfig(instance._id, config as unknown as Record<string, unknown>),
-        setOverlayPublicUrl(instance._id, trimmedOverlayUrl),
+        setConfig(toInstanceId(instance._id), config as unknown as Record<string, unknown>),
+        setOverlayPublicUrl(toInstanceId(instance._id), trimmedOverlayUrl),
       ]);
       setOverlayPublicUrlState(trimmedOverlayUrl);
       toast({ title: "Settings saved" });

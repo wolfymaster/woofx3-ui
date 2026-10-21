@@ -5,6 +5,7 @@ import { ReplayControls } from "@/components/alert-run/replay-controls";
 import { RunTrace } from "@/components/alert-run/run-trace";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
 import { Badge } from "@/components/ui/badge";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useWorkflowRun } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { decodeRouteParam } from "@/lib/route-param";
@@ -22,7 +23,7 @@ export default function WorkflowRun() {
   const [, navigate] = useLocation();
   const { instance } = useInstance();
   // The same subscription RunTrace makes, so Convex serves both from one.
-  const recorded = useWorkflowRun(instance ? instance._id : null, engineRunId);
+  const recorded = useWorkflowRun(toInstanceId(instance ? instance._id : null), engineRunId);
 
   return (
     <div className="flex h-full flex-col overflow-hidden">

@@ -6,17 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toInstanceId } from "@/engine/convex/ids";
 import {
   useRefreshResourceValuesRequest,
   useResourceInstancesOfKind,
   useResourceKind,
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
+import type { ModuleResourceInstance } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useResourceAction } from "@/hooks/use-resource-action";
 import { useTimerState } from "@/hooks/use-timer-state";
 import type { DashboardWidgetProps } from "@/lib/dashboard-widgets/types";
-import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
+import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import {
   formatDuration,
   parseDuration,
@@ -46,9 +48,9 @@ export function TimerWidget({ config, onConfigChange }: DashboardWidgetProps) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
 
-  const kindDefinition = useResourceKind(instanceId ?? null, TIMER_KIND);
-  const timers = useResourceInstancesOfKind(instanceId ?? null, TIMER_KIND);
-  const values = useResourceValues(instanceId ?? null);
+  const kindDefinition = useResourceKind(toInstanceId(instanceId ?? null), TIMER_KIND);
+  const timers = useResourceInstancesOfKind(toInstanceId(instanceId ?? null), TIMER_KIND);
+  const values = useResourceValues(toInstanceId(instanceId ?? null));
   const refreshValues = useRefreshResourceValuesRequest();
 
   // Values arrive by webhook while the dashboard is open; this fills in any
@@ -57,7 +59,7 @@ export function TimerWidget({ config, onConfigChange }: DashboardWidgetProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues(instanceId, TIMER_KIND).catch(() => {
+    refreshValues(toInstanceId(instanceId), TIMER_KIND).catch(() => {
       // The mirror still shows the last known value; the next change updates it.
     });
   }, [instanceId, refreshValues]);
@@ -114,8 +116,8 @@ function TimerHeader({
   selected,
   onSelect,
 }: {
-  timers: ResourceInstanceDoc[];
-  selected: ResourceInstanceDoc;
+  timers: ModuleResourceInstance[];
+  selected: ModuleResourceInstance;
   onSelect: (canonicalId: string) => void;
 }) {
   if (timers.length === 1) {
@@ -150,7 +152,15 @@ function TimerHeader({
   );
 }
 
-function TimerBody({ timer, moduleName, value }: { timer: ResourceInstanceDoc; moduleName: string; value: unknown }) {
+function TimerBody({
+  timer,
+  moduleName,
+  value,
+}: {
+  timer: ModuleResourceInstance;
+  moduleName: string;
+  value: unknown;
+}) {
   const { run, pending } = useResourceAction({ instance: timer, moduleName });
   const settings = resourceSettings(timer);
   const state = useTimerState(value, settings);

@@ -1,6 +1,7 @@
 import type { Id } from "@convex/_generated/dataModel";
 import type { StreamRecapEngineDetail } from "@convex/lib/streamRecap";
 import { useCallback, useEffect, useState } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useRecapEngineDetailRequest } from "@/engine/hooks/use-stream-recap";
 
 export type StreamRecapEngineState =
@@ -34,7 +35,7 @@ export function useStreamRecapEngineDetail(
     }
     let cancelled = false;
     setState((prev) => (prev.kind === "loaded" ? prev : { kind: "loading" }));
-    loadEngineDetail(instanceId, sessionId)
+    loadEngineDetail(toInstanceId(instanceId), sessionId)
       .then((detail) => {
         if (!cancelled) {
           setState({ kind: "loaded", detail });

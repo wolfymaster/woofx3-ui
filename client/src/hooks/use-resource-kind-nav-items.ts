@@ -1,6 +1,7 @@
 import { Boxes } from "lucide-react";
 import { useMemo } from "react";
 import type { NavItem } from "@/components/layout/nav-config";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useResourceKinds } from "@/engine/hooks/use-module-resources";
 import { useInstance } from "@/hooks/use-instance";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
@@ -13,7 +14,7 @@ import { isBuiltInKind, pluralKindName, resourceKindPath } from "@/lib/resource-
  */
 export function useResourceKindNavItems(): NavItem[] {
   const { instance } = useInstance();
-  const kinds = useResourceKinds(instance?._id ?? null);
+  const kinds = useResourceKinds(toInstanceId(instance?._id ?? null));
 
   return useMemo(
     () =>

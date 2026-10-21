@@ -1,6 +1,7 @@
 import type { Id } from "@convex/_generated/dataModel";
 import type { RecapTimelineEvents } from "@convex/lib/streamRecap";
 import { useEffect, useState } from "react";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useRecapTimelineEventsRequest } from "@/engine/hooks/use-stream-recap";
 
 export type RecapTimelineEventsState =
@@ -30,7 +31,7 @@ export function useRecapTimelineEvents(
     }
     let cancelled = false;
     setState((prev) => (prev.kind === "loaded" ? prev : { kind: "loading" }));
-    loadTimelineEvents(instanceId, sessionId)
+    loadTimelineEvents(toInstanceId(instanceId), sessionId)
       .then((result) => {
         if (!cancelled) {
           setState({ kind: "loaded", result });

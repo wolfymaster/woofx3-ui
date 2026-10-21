@@ -1,4 +1,4 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Id } from "@convex/_generated/dataModel";
 import { Layers, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
@@ -25,11 +25,13 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { toInstanceId } from "@/engine/convex/ids";
 import { useDeleteSceneRequest, useScenes } from "@/engine/hooks/use-scenes";
+import type { SceneRecord } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
-type SceneRow = Doc<"scenes">;
+type SceneRow = SceneRecord;
 
 const LIST_PATH = "/stream/scenes";
 const DEFAULT_WIDTH = 1920;
@@ -105,7 +107,7 @@ function SceneListScreen() {
   const { toast } = useToast();
   const { instance, isLoading: instanceLoading } = useInstance();
 
-  const scenesRaw = useScenes(instance ? instance._id : null);
+  const scenesRaw = useScenes(toInstanceId(instance ? instance._id : null));
   const deleteScene = useDeleteSceneRequest();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -136,7 +138,7 @@ function SceneListScreen() {
     }
     setIsDeleting(true);
     try {
-      await deleteScene(instance._id as Id<"instances">, deleteTarget.engineSceneId);
+      await deleteScene(toInstanceId(instance._id as Id<"instances">), deleteTarget.engineSceneId);
       toast({ title: "Scene deleted" });
       setDeleteTarget(null);
     } catch (err) {
@@ -216,10 +218,10 @@ function SceneListScreen() {
 
                   return (
                     <TableRow
-                      key={scene._id}
+                      key={scene.id}
                       className={isSyncing ? undefined : "cursor-pointer"}
                       onClick={() => openScene(scene)}
-                      data-testid={`row-scene-${scene._id}`}
+                      data-testid={`row-scene-${scene.id}`}
                     >
                       <TableCell className="font-medium max-w-[420px]">
                         <span className="flex items-center gap-2">

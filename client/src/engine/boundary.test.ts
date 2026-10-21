@@ -11,6 +11,15 @@ import { ENGINE_NAMESPACE_MODULES } from "./namespaces";
 
 const CLIENT_SRC = join(import.meta.dir, "..");
 const SCANNED_DIRS = ["components", "pages", "hooks", "lib"];
+const ENGINE_DIR = import.meta.dir;
+const CONVEX_ADAPTER_DIR = join(ENGINE_DIR, "convex");
+
+// The gateway's interface and types have to be implementable without Convex,
+// so only the Convex adapter may import Convex modules or name its generated
+// types. Reaching the adapter itself (`@/engine/convex/...`) is how the app
+// wires it in, and stays allowed.
+const CONVEX_IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*)["'](?:@convex\/|convex(?:\/|["'])|(?:\.\.\/){3,}convex\/)/;
+const CONVEX_GENERATED_TYPE = /\b(?:Id|Doc|FunctionReturnType|FunctionArgs)</;
 
 function engineReferencePattern(): RegExp {
   const entries: readonly string[] = Object.values(ENGINE_NAMESPACE_MODULES).flat();
@@ -38,6 +47,40 @@ function filesReferencingEngineModules(): string[] {
     .map((path) => relative(CLIENT_SRC, path))
     .sort();
 }
+
+function convexLeaks(source: string): string[] {
+  return [CONVEX_IMPORT, CONVEX_GENERATED_TYPE].flatMap((pattern) => source.match(pattern) ?? []);
+}
+
+function engineFilesNamingConvex(): string[] {
+  return (
+    sourceFiles(ENGINE_DIR)
+      // This file spells the patterns out in its own cases.
+      .filter((path) => path !== import.meta.path && !path.startsWith(`${CONVEX_ADAPTER_DIR}/`))
+      .filter((path) => convexLeaks(readFileSync(path, "utf8")).length > 0)
+      .map((path) => relative(CLIENT_SRC, path))
+      .sort()
+  );
+}
+
+describe("engine gateway types", () => {
+  test("only the Convex adapter in client/src/engine imports Convex or names its generated types", () => {
+    expect(engineFilesNamingConvex(), "map Convex shapes into @/engine/types inside client/src/engine/convex").toEqual(
+      []
+    );
+  });
+
+  test("the Convex check matches imports and generated types", () => {
+    expect(convexLeaks('import type { Id } from "@convex/_generated/dataModel";')).not.toEqual([]);
+    expect(convexLeaks('import { useQuery } from "convex/react";')).not.toEqual([]);
+    expect(convexLeaks('import type { Report } from "../../../convex/lib/report";')).not.toEqual([]);
+    expect(convexLeaks('type Report = import("@convex/lib/report").Report;')).not.toEqual([]);
+    expect(convexLeaks('type Row = Doc<"scenes">;')).not.toEqual([]);
+    expect(convexLeaks("type Out = FunctionReturnType<typeof list>;")).not.toEqual([]);
+    expect(convexLeaks('import { convexEngineGateway } from "@/engine/convex/gateway";')).toEqual([]);
+    expect(convexLeaks("type Id = InstanceId;")).toEqual([]);
+  });
+});
 
 describe("engine boundary", () => {
   const offenders = filesReferencingEngineModules();
