@@ -20,6 +20,10 @@ describe("matchOpsRoute", () => {
       method: "GET",
       name: "engines.capabilities",
     });
+    expect(matchOpsRoute("GET", "/api/ops/engines/module-storage-limits")).toEqual({
+      method: "GET",
+      name: "engines.moduleStorageLimits",
+    });
     expect(matchOpsRoute("GET", "/api/ops/engines/by-maintenance-id/0a1b2c3d-4e5f")).toEqual({
       method: "GET",
       name: "engines.byMaintenanceId",

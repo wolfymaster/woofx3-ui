@@ -8,6 +8,7 @@ import {
   newTriggerTree,
   nextTriggerOrder,
   SEED_STEP_ID,
+  storedTriggerCount,
   triggerAimsAt,
   withFieldConditions,
 } from "@/lib/alert-triggers";
@@ -15,6 +16,7 @@ import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { resourceActions } from "@/lib/resource-actions";
 import type { ActionPreset, ConfigField, TriggerPreset } from "@/lib/workflow-presets";
 import { definitionToTree, treeToDefinition } from "@/lib/workflow-tree";
+import multiTriggerAlerts from "./workflow-tree.multi-trigger-alerts.json";
 
 const icon = (() => null) as unknown as ActionPreset["icon"];
 
@@ -188,6 +190,11 @@ describe("newTriggerTree", () => {
     expect(definition.tasks).toEqual([]);
   });
 
+  test("a workflow made on its own has no order", () => {
+    const tree = newTriggerTree({ triggerPreset: preset, conditionFields: [] });
+    expect(treeToDefinition(tree).trigger).not.toHaveProperty("order");
+  });
+
   test("a seeded step aimed at an instance carries no other settings", () => {
     const tree = newTriggerTree({
       triggerPreset: preset,
@@ -227,5 +234,24 @@ describe("a trigger split from a workflow of several", () => {
     if (read.editable) {
       expect(treeToDefinition(read.tree)).toEqual(split as unknown as WorkflowDefinition);
     }
+  });
+});
+
+describe("storedTriggerCount", () => {
+  const multiTrigger = multiTriggerAlerts as unknown as Record<string, WorkflowDefinition>;
+  const definition = (tasks: unknown[]) =>
+    ({ id: "wf", name: "wf", trigger: cheer(), tasks }) as unknown as WorkflowDefinition;
+  const always = { id: "always", type: "action", action: "alert", parameters: {} };
+
+  test.each([
+    ["one condition task", multiTrigger.one, 1],
+    ["two condition tasks", multiTrigger.two, 2],
+    ["a step shared by two conditions through its guard", multiTrigger.shared, 2],
+    ["actions side by side under one condition", multiTrigger.concurrent, 1],
+    ["conditions and an action no condition guards", definition([...multiTrigger.two.tasks, always]), 3],
+    ["only actions", definition([always]), 1],
+    ["no tasks", definition([]), 0],
+  ])("%s", (_name, workflow, expected) => {
+    expect(storedTriggerCount(workflow)).toBe(expected);
   });
 });

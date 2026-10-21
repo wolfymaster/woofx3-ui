@@ -80,6 +80,11 @@ function useMarketplaceInstallRequest() {
   );
 }
 
+function useStorageUsageRequest() {
+  const moduleStorageUsage = useAction(api.moduleStorage.usage);
+  return useCallback((instanceId: InstanceId) => moduleStorageUsage({ instanceId }), [moduleStorageUsage]);
+}
+
 export const convexModulesGateway: ModulesGateway = {
   useDetailRequest,
   useSettingsRequest,
@@ -90,4 +95,5 @@ export const convexModulesGateway: ModulesGateway = {
   useReconcileUninstallRequest,
   useWorkflowsRequest,
   useMarketplaceInstallRequest,
+  useStorageUsageRequest,
 };

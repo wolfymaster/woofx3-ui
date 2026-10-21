@@ -31,6 +31,7 @@ export const ENGINE_NAMESPACE_MODULES = {
     "moduleSettingsActions",
     "moduleFiles",
     "moduleDetail",
+    "moduleStorage",
     // The rest of marketplace is the catalog, which the cloud serves.
     "marketplace.installModule",
   ],

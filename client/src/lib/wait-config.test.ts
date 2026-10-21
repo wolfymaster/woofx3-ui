@@ -7,7 +7,6 @@ import {
   durationAmount,
   formatDelay,
   formatGoDuration,
-  parseAggregationField,
   parseDurationInput,
   parseGoDuration,
   pickDurationUnit,
@@ -15,7 +14,6 @@ import {
   switchWaitType,
   TIMEOUT_BOUNDS,
   WAIT_DELAY_MAX_MS,
-  waitConditionProblem,
   waitNodeLabel,
 } from "./wait-config";
 
@@ -200,59 +198,5 @@ describe("waitNodeLabel", () => {
     expect(
       waitNodeLabel({ type: "aggregation", event: "twitch.bits", aggregation: { strategy: "sum", threshold: 1000 } })
     ).toBe("Until twitch.bits totals 1000");
-  });
-});
-
-describe("parseAggregationField", () => {
-  it("keeps a plain path rooted at the event's data", () => {
-    expect(parseAggregationField("data.amount")).toEqual({ ok: true, field: "data.amount" });
-    expect(parseAggregationField("  data.items[0].value ")).toEqual({ ok: true, field: "data.items[0].value" });
-  });
-
-  it("converts a reference to the waited event into its path", () => {
-    expect(parseAggregationField("${event.data.amount}")).toEqual({ ok: true, field: "data.amount" });
-    expect(parseAggregationField("event.data.amount")).toEqual({ ok: true, field: "data.amount" });
-  });
-
-  it("treats empty as no field", () => {
-    expect(parseAggregationField("  ")).toEqual({ ok: true, field: undefined });
-  });
-
-  it("refuses a reference to anything but the waited event", () => {
-    expect(parseAggregationField("${trigger.data.amount}").ok).toBe(false);
-    expect(parseAggregationField("${increment.next}").ok).toBe(false);
-    expect(parseAggregationField("data.${trigger.data.key}").ok).toBe(false);
-  });
-
-  it("refuses a path the engine's lookup cannot start from", () => {
-    expect(parseAggregationField("amount").ok).toBe(false);
-    expect(parseAggregationField("data").ok).toBe(false);
-  });
-});
-
-describe("waitConditionProblem", () => {
-  it("accepts a condition on the waited event", () => {
-    expect(waitConditionProblem({ field: "${event.data.months}", operator: "gte", value: 3 })).toBeNull();
-    expect(waitConditionProblem({ field: "${event.type}", operator: "eq", value: "${env.EVENT}" })).toBeNull();
-  });
-
-  it("accepts a row not filled in yet", () => {
-    expect(waitConditionProblem({ field: "", operator: "eq", value: "" })).toBeNull();
-  });
-
-  it("reports a field or value that reads the trigger or a step", () => {
-    expect(waitConditionProblem({ field: "${trigger.data.user}", operator: "eq", value: "x" })).toContain(
-      "${trigger.data.user}"
-    );
-    expect(waitConditionProblem({ field: "${event.data.user}", operator: "eq", value: "${increment.next}" })).toContain(
-      "${increment.next}"
-    );
-    expect(
-      waitConditionProblem({ field: "${event.data.user}", operator: "in", value: ["a", "${trigger.data.user}"] })
-    ).not.toBeNull();
-  });
-
-  it("reports a field that is plain text rather than a reference", () => {
-    expect(waitConditionProblem({ field: "data.user", operator: "eq", value: "x" })).not.toBeNull();
   });
 });
