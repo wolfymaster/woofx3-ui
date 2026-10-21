@@ -1,5 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { endedUnreadable, repairResultToast, unreadColumnsText, unreadPlacementCount } from "./scene-unread";
+import {
+  endedUnreadable,
+  repairResultToast,
+  unreadColumnsText,
+  unreadPlacementCount,
+  unreadPlacementsText,
+} from "./scene-unread";
 
 const none = { published: 0, draft: 0 };
 
@@ -24,6 +30,16 @@ describe("unreadColumnsText", () => {
 describe("unreadPlacementCount", () => {
   it("adds both versions", () => {
     expect(unreadPlacementCount({ columns: [], placements: { published: 2, draft: 1 } })).toBe(3);
+  });
+});
+
+describe("unreadPlacementsText", () => {
+  it("speaks of one layer in the singular", () => {
+    expect(unreadPlacementsText(1)).toBe("It's kept as it was stored, but isn't shown or played.");
+  });
+
+  it("speaks of several in the plural", () => {
+    expect(unreadPlacementsText(3)).toBe("They're kept as they were stored, but aren't shown or played.");
   });
 });
 
