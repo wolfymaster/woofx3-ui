@@ -229,7 +229,7 @@ Configured in `tsconfig.json`, `convex/tsconfig.json`, and `vite.config.ts`. Alw
 - **Braces on all branches and loops**: `if (!x) { return null; }` — never `if (!x) return null;`. Same for `for`, `while`, `else` — always use a block body. No exceptions.
 - **Routing**: Wouter v3 — no `<Redirect>` component exists; use `useEffect(() => navigate('/path'), [])` for redirects.
 - **State**: Nanostores (`$`-prefixed atoms) for UI-only state (theme, sidebar, engine URL, current instance ID). Convex for all server-persisted data.
-- **Transport**: Use `client/src/lib/transport/` for woofx3 API calls. `WoofxTransport` is the interface for realtime browser↔engine channels. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
+- **Engine access**: Screens reach the engine through the engine gateway (`useEngineGateway()` and the hooks in `client/src/engine/hooks/`; see `docs/patterns/engine-gateway.md`). `client/src/lib/transport/` (`WoofxTransport`, the realtime browser↔engine channel) is the Convex gateway's own and only `client/src/engine/convex/` imports it. Do NOT use `client/src/lib/rpc-client.ts` (deprecated).
 - **Shadcn/ui**: Components in `client/src/components/ui/` — extend via composition, never modify directly.
 - **Dashboard widgets keep a fixed height**: nothing inside a widget expands or collapses. Secondary content (history, queues, full lists, extra settings) opens in an overlay via `WidgetOverlay`, like the macro pad's editor. See `docs/patterns/dashboard-widgets.md`.
 - **Instance-scoped queries**: Always use `"skip"` when instanceId may be null:
