@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
+import { NoInstanceSelectedError } from "@/engine/scope";
 import type { Correlated, FieldOptionsReference, InstanceId } from "@/engine/types";
 import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
@@ -47,7 +48,6 @@ mock.module("convex/react", () => ({
 }));
 
 const { convexRequestsGateway } = await import("./requests");
-const { NoInstanceSelectedError } = await import("./scope");
 
 function render(hook: () => unknown, instanceId: InstanceId | null = TEST_INSTANCE_ID) {
   renderInScope(hook, instanceId);

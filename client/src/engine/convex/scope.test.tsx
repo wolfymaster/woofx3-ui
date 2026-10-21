@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
+import { act, create } from "react-test-renderer";
+import { EngineScopeProvider, NoInstanceSelectedError } from "@/engine/scope";
+import type { InstanceId } from "@/engine/types";
 import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // Gateway calls carry no instance, so these check that the adapter fills it
@@ -8,6 +11,7 @@ import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 const queries: Array<{ name: string; args: unknown }> = [];
 const actions: Array<{ name: string; args: unknown }> = [];
+const stableActions = new Map<string, (args: unknown) => Promise<null>>();
 
 // Bun runs every test file in one process and a module mock is not undone,
 // so the rest of convex/react stays real for the files loaded after this one.
@@ -19,13 +23,23 @@ mock.module("convex/react", () => ({
     queries.push({ name: getFunctionName(query), args });
     return undefined;
   },
-  useAction: (action: Parameters<typeof getFunctionName>[0]) => (args: unknown) => {
-    actions.push({ name: getFunctionName(action), args });
-    return Promise.resolve(null);
+  // Convex keeps a useAction function for as long as the action's name stays
+  // the same, so this does too.
+  useAction: (action: Parameters<typeof getFunctionName>[0]) => {
+    const name = getFunctionName(action);
+    const known = stableActions.get(name);
+    if (known) {
+      return known;
+    }
+    const run = (args: unknown) => {
+      actions.push({ name, args });
+      return Promise.resolve(null);
+    };
+    stableActions.set(name, run);
+    return run;
   },
 }));
 
-const { NoInstanceSelectedError } = await import("./scope");
 const { convexAlertQueueGateway } = await import("./alert-queue");
 const { convexEventLogGateway } = await import("./event-log");
 const { convexScenesGateway } = await import("./scenes");
@@ -87,5 +101,41 @@ describe("live subscriptions need an instance", () => {
   test("an event-log read rejects while the scope has no instance", async () => {
     const listEvents = renderInScope(() => convexEventLogGateway.useEventsRequest(), null);
     await expect(listEvents()).rejects.toBeInstanceOf(NoInstanceSelectedError);
+  });
+});
+
+describe("a request keeps its identity until the scope's instance changes", () => {
+  // Re-rendering needs a renderer that keeps hook state between renders,
+  // which server rendering does not.
+  function scopeOf(id: InstanceId) {
+    return { instanceId: id, optimisticInstanceId: id, isInstanceLoading: false };
+  }
+
+  test("the same function across re-renders, a new one for another instance", () => {
+    const seen: unknown[] = [];
+    function Probe({ tick }: { tick: number }) {
+      seen.push(convexAlertQueueGateway.useReplayRequest());
+      return <span>{tick}</span>;
+    }
+    const tree = (id: InstanceId, tick: number) => (
+      <EngineScopeProvider scope={scopeOf(id)}>
+        <Probe tick={tick} />
+      </EngineScopeProvider>
+    );
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(tree(instanceId, 0));
+    });
+    act(() => {
+      renderer?.update(tree(instanceId, 1));
+    });
+    act(() => {
+      renderer?.update(tree("instance-2" as InstanceId, 2));
+    });
+
+    expect(seen).toHaveLength(3);
+    expect(seen[1]).toBe(seen[0]);
+    expect(seen[2]).not.toBe(seen[1]);
   });
 });

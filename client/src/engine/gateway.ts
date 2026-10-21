@@ -107,8 +107,7 @@ import type {
 
 /**
  * Everything the UI asks of the instance's engine, one namespace per domain
- * (namespaces.ts lists every domain; this interface gains each one as its
- * call sites move behind it).
+ * (namespaces.ts lists the Convex modules behind each).
  *
  * Members are React hooks. A gateway is chosen once when the app boots and
  * never swapped, so a component calls the same hooks in the same order on

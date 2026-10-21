@@ -7,6 +7,17 @@ import type { EngineScope } from "@/engine/types";
 
 const EngineScopeContext = createContext<EngineScope | null>(null);
 
+/**
+ * What every gateway throws, or rejects with, for a call made while the scope
+ * has no instance.
+ */
+export class NoInstanceSelectedError extends Error {
+  constructor() {
+    super("No instance is selected, so there is no engine to ask");
+    this.name = "NoInstanceSelectedError";
+  }
+}
+
 /** Sets the instance the engine hooks and the gateway below it act on. */
 export function EngineScopeProvider({ scope, children }: { scope: EngineScope; children: ReactNode }) {
   return <EngineScopeContext.Provider value={scope}>{children}</EngineScopeContext.Provider>;
