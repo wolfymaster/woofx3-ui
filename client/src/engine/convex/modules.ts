@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
@@ -11,8 +10,7 @@ function toModuleDetail({
   moduleDbId,
   ...detail
 }: FunctionReturnType<typeof api.moduleDetail.getModuleDetail>): ModuleDetail {
-  // The action types this id as a plain string; it is the installed module's moduleRepository row.
-  return { ...detail, moduleDbId: toModuleId(moduleDbId as Id<"moduleRepository"> | undefined) };
+  return { ...detail, moduleDbId: toModuleId(moduleDbId) };
 }
 
 function useDetailRequest() {
