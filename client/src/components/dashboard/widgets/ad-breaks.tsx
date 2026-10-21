@@ -6,6 +6,7 @@ import { AlarmClockOff, Loader2, Megaphone } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useStreamEventsSubscription } from "@/engine/hooks/use-event-log";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useInstance } from "@/hooks/use-instance";
@@ -24,7 +25,6 @@ import {
   scheduleFetch,
 } from "@/lib/ad-break-view";
 import { $nowPerSecond } from "@/lib/now";
-import { transport } from "@/lib/transport";
 
 /**
  * Twitch pushes nothing to the browser about the schedule itself, and a
@@ -41,6 +41,7 @@ export function AdBreaksWidget() {
   const instanceId = instance?._id;
   const liveState = useLiveState();
   const { twitchLink, isLoading: linksLoading } = useTwitchIntegration(instanceId);
+  const subscribeStreamEvents = useStreamEventsSubscription();
   const getSchedule = useAction(api.adBreaks.getSchedule);
   const snoozeNextAd = useAction(api.adBreaks.snoozeNextAd);
   const now = useStore($nowPerSecond);
@@ -94,10 +95,10 @@ export function AdBreaksWidget() {
   useAttendedInterval(refresh, SCHEDULE_REFRESH_MS, active);
 
   useEffect(() => {
-    if (!active || !instanceId) {
+    if (!active) {
       return;
     }
-    return transport.subscribeStreamEvents(instanceId, Object.values(AD_BREAK_EVENTS), (frame) => {
+    return subscribeStreamEvents(Object.values(AD_BREAK_EVENTS), (frame) => {
       if (frame.type === AD_BREAK_EVENTS.begin) {
         setRunning(runningAdFromBegin(frame.data, Date.now()));
       } else if (frame.type === AD_BREAK_EVENTS.end) {
@@ -107,7 +108,7 @@ export function AdBreaksWidget() {
         refresh();
       }
     });
-  }, [active, instanceId, refresh]);
+  }, [active, refresh, subscribeStreamEvents]);
 
   const snooze = async () => {
     if (!instanceId) {

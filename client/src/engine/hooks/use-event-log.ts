@@ -101,3 +101,12 @@ export function useEventLog(types: readonly string[] | null | undefined): {
   const status = typesKey === null ? "unsupported" : typesKey === undefined ? "loading" : historyStatus;
   return { events, status };
 }
+
+/**
+ * Subscribes to pushed events of some types (null: every type the engine
+ * pushes) and returns the unsubscribe. Throws without a current instance, so
+ * callers subscribe only once there is one.
+ */
+export function useStreamEventsSubscription() {
+  return useEngineGateway().eventLog.useStreamEventsSubscription();
+}

@@ -1,15 +1,15 @@
 import { Clock, Gamepad2, Gift, HandHeart, Heart, Radio, UserPlus, Users, Zap } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Uptime } from "@/components/common/uptime";
+import { useEngineScope } from "@/engine/context";
+import { useStreamEventsSubscription } from "@/engine/hooks/use-event-log";
 import { useLiveState } from "@/engine/hooks/use-live-state";
-import { useInstance } from "@/hooks/use-instance";
 import { EMPTY_TALLIES, STREAM_TALLY_EVENTS, type StreamTallies, tallyStreamEvent } from "@/lib/stream-tallies";
-import { transport } from "@/lib/transport";
 
 // Every number here comes from a path that already exists: the channel facts
 // from the same `instanceLiveState` row the stream-status widget reads, and
 // the tallies from the engine's stream-event push (one engine subscription the
-// transport fans out, so this widget adds no second connection). Nothing is
+// live connection fans out, so this widget adds no second connection). Nothing is
 // invented, and no third metrics table was added — the engine reports no
 // running follower/sub/bits totals to read instead.
 
@@ -26,8 +26,8 @@ function StatRow({ icon: Icon, label, value }: { icon: typeof Users; label: stri
 }
 
 export function StreamStatsWidget() {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
+  const subscribeStreamEvents = useStreamEventsSubscription();
   const liveState = useLiveState();
   const [tallies, setTallies] = useState<StreamTallies>(EMPTY_TALLIES);
 
@@ -50,10 +50,10 @@ export function StreamStatsWidget() {
     if (!instanceId) {
       return;
     }
-    return transport.subscribeStreamEvents(instanceId, STREAM_TALLY_EVENTS, (frame) => {
+    return subscribeStreamEvents(STREAM_TALLY_EVENTS, (frame) => {
       setTallies((previous) => tallyStreamEvent(previous, frame));
     });
-  }, [instanceId]);
+  }, [instanceId, subscribeStreamEvents]);
 
   const uptime = isLive && startedAt ? <Uptime startedAt={startedAt} /> : "—";
 
