@@ -13,11 +13,18 @@
 //! started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs
 //! to stop its services gracefully. Elsewhere it is started in a process
 //! group of its own, and the group is killed whenever the orchestrator exits,
-//! so no service it left behind holds a port the next run needs.
+//! so no service it left behind holds a port the next run needs. The exit is
+//! noticed without reaping the orchestrator (`waitid` with `WNOWAIT`), so its
+//! zombie keeps the group id reserved until the group has been killed: the
+//! kill can never reach a group that later took the same id. Dropping the
+//! process kills the tree too, so a supervisor task that is aborted rather
+//! than cancelled leaves nothing behind.
 //!
-//! When the orchestrator exits on its own it is started again after a capped,
-//! jittered exponential backoff. A run that stayed ready for
-//! [`SidecarOptions::stable_after`] starts the backoff over.
+//! When the orchestrator fails it is started again after a capped, jittered
+//! exponential backoff. A run that stayed ready for
+//! [`SidecarOptions::stable_after`] starts the backoff over. When it exits
+//! cleanly without being asked to (no enabled services, or a stop request
+//! from outside the host), the sidecar stops for good and says why.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::OsString;
@@ -104,6 +111,10 @@ pub fn random_jitter() -> f64 {
 pub struct EngineStatus {
     pub phase: EnginePhase,
     pub services: BTreeMap<String, ServiceStatus>,
+    /// The last time killing the orchestrator's process tree failed for a
+    /// reason other than there being nothing left to kill. Services may then
+    /// still be running.
+    pub kill_failure: Option<String>,
 }
 
 impl EngineStatus {
@@ -111,6 +122,7 @@ impl EngineStatus {
         EngineStatus {
             phase: EnginePhase::Starting { attempt: 0 },
             services: BTreeMap::new(),
+            kill_failure: None,
         }
     }
 }
@@ -133,7 +145,17 @@ pub enum EnginePhase {
     /// The host asked the orchestrator to stop.
     Stopping,
     /// The orchestrator and its services are gone, and stay gone.
-    Stopped,
+    Stopped(StopCause),
+}
+
+/// Why the sidecar stopped for good.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StopCause {
+    /// The host cancelled it.
+    Requested,
+    /// The orchestrator exited cleanly without the host asking. Starting it
+    /// again would only repeat that.
+    ExitedOnItsOwn { reason: String },
 }
 
 pub async fn run_sidecar(
@@ -144,8 +166,9 @@ pub async fn run_sidecar(
     run_sidecar_with(spec, SidecarOptions::default(), status, cancel).await;
 }
 
-/// Runs the orchestrator until `cancel` fires, then stops it and returns.
-/// The last status sent is always [`EnginePhase::Stopped`].
+/// Runs the orchestrator until `cancel` fires, then stops it and returns, or
+/// until it exits cleanly on its own. The last status sent is always
+/// [`EnginePhase::Stopped`].
 pub async fn run_sidecar_with(
     spec: SidecarSpec,
     options: SidecarOptions,
@@ -158,9 +181,16 @@ pub async fn run_sidecar_with(
             current.phase = EnginePhase::Starting { attempt };
             current.services.clear();
         });
-        let ended = run_once(&spec, &options, &status, &cancel).await;
-        let RunEnd::Exited { reason, ready_for } = ended else {
-            break;
+        let (reason, ready_for) = match run_once(&spec, &options, &status, &cancel).await {
+            RunEnd::Stopped => break,
+            RunEnd::ExitedCleanly { reason } => {
+                status.send_modify(|current| {
+                    current.phase = EnginePhase::Stopped(StopCause::ExitedOnItsOwn { reason });
+                    current.services.clear();
+                });
+                return;
+            }
+            RunEnd::Failed { reason, ready_for } => (reason, ready_for),
         };
         if ready_for.is_some_and(|ready_for| ready_for >= options.stable_after) {
             attempt = 0;
@@ -182,15 +212,17 @@ pub async fn run_sidecar_with(
             _ = sleep(after) => {}
         }
     }
-    status.send_modify(|current| current.phase = EnginePhase::Stopped);
+    status.send_modify(|current| current.phase = EnginePhase::Stopped(StopCause::Requested));
 }
 
 enum RunEnd {
     /// The host stopped the orchestrator.
     Stopped,
-    /// The orchestrator exited, or never started. `ready_for` is how long it
+    /// The orchestrator exited with success without being asked to.
+    ExitedCleanly { reason: String },
+    /// The orchestrator failed, or never started. `ready_for` is how long it
     /// had been ready when it exited.
-    Exited {
+    Failed {
         reason: String,
         ready_for: Option<Duration>,
     },
@@ -206,25 +238,29 @@ async fn run_once(
     let mut process = match OrchestratorProcess::spawn(spec) {
         Ok(process) => process,
         Err(err) => {
-            return RunEnd::Exited {
+            return RunEnd::Failed {
                 reason: format!("could not start {}: {err}", spec.program.display()),
                 ready_for: None,
             };
         }
     };
     let mut run = RunState::default();
-    let exit = tokio::select! {
+    let exited = tokio::select! {
         _ = cancel.cancelled() => None,
-        exit = process.follow(status, &mut run) => Some(exit),
+        exited = process.follow(status, &mut run) => Some(exited),
     };
-    let Some(exit) = exit else {
+    let Some(exited) = exited else {
         process.stop(options.stop_grace, status, &mut run).await;
         return RunEnd::Stopped;
     };
-    process.kill_tree();
+    let exit = process.finish(exited, status).await;
     let stderr_tail = process.stderr_tail().await;
-    RunEnd::Exited {
-        reason: run.exit_reason(&exit, &stderr_tail),
+    let reason = run.exit_reason(&exit, &stderr_tail);
+    if exit.as_ref().is_ok_and(ExitStatus::success) {
+        return RunEnd::ExitedCleanly { reason };
+    }
+    RunEnd::Failed {
+        reason,
         ready_for: run.ready_at.map(|ready_at| ready_at.elapsed()),
     }
 }
@@ -301,16 +337,26 @@ impl RunState {
 
 struct OrchestratorProcess {
     child: Child,
-    /// The orchestrator's pid, which is also its process group. Kept past its
-    /// exit, when the child no longer reports it, so the services it left
-    /// behind can still be found.
-    #[cfg(unix)]
-    group: Option<u32>,
+    /// Where the orchestrator is in leaving. Its process group is only ever
+    /// signalled before it is reaped.
+    exit: ExitWatch,
     /// Held open for as long as the orchestrator should run.
     stdin: Option<ChildStdin>,
     /// None once stdout has closed.
     lines: Option<Lines<BufReader<ChildStdout>>>,
     stderr_tail: Option<JoinHandle<VecDeque<String>>>,
+}
+
+enum ExitWatch {
+    Running,
+    /// A blocking thread is waiting for the exit without reaping it.
+    #[cfg(unix)]
+    Watching(JoinHandle<std::io::Result<()>>),
+    /// It has exited and is not reaped yet, so on Unix its zombie still holds
+    /// its pid and so its process group id.
+    Exited,
+    /// Reaped: its group id may now belong to someone else.
+    Reaped,
 }
 
 impl OrchestratorProcess {
@@ -324,10 +370,7 @@ impl OrchestratorProcess {
             .env(STATUS_MODE_ENV, STATUS_MODE_STDOUT_JSONL)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            // A host task dropped without stopping the orchestrator still
-            // takes it down.
-            .kill_on_drop(true);
+            .stderr(Stdio::piped());
         #[cfg(unix)]
         command.process_group(0);
         #[cfg(windows)]
@@ -335,8 +378,7 @@ impl OrchestratorProcess {
 
         let mut child = command.spawn()?;
         Ok(OrchestratorProcess {
-            #[cfg(unix)]
-            group: child.id(),
+            exit: ExitWatch::Running,
             stdin: child.stdin.take(),
             lines: child
                 .stdout
@@ -350,6 +392,10 @@ impl OrchestratorProcess {
         })
     }
 
+    async fn exited(&mut self) -> std::io::Result<()> {
+        watch_exit(&mut self.child, &mut self.exit).await
+    }
+
     /// Applies status lines until the orchestrator exits, then the lines it
     /// wrote before exiting. Stdout is not waited on to close: a process the
     /// orchestrator started could hold it open.
@@ -357,11 +403,11 @@ impl OrchestratorProcess {
         &mut self,
         status: &watch::Sender<EngineStatus>,
         run: &mut RunState,
-    ) -> std::io::Result<ExitStatus> {
-        let exit = loop {
+    ) -> std::io::Result<()> {
+        let exited = loop {
             let reading = self.lines.is_some();
             tokio::select! {
-                exit = self.child.wait() => break exit,
+                exited = watch_exit(&mut self.child, &mut self.exit) => break exited,
                 line = next_line(&mut self.lines), if reading => {
                     if let Some(line) = line {
                         run.apply(&line, status);
@@ -378,7 +424,34 @@ impl OrchestratorProcess {
         if drained.is_err() {
             self.lines = None;
         }
-        exit
+        exited
+    }
+
+    /// After the orchestrator exited: kills whatever it left behind, then
+    /// reaps it. If its exit could not be watched, the group cannot be told
+    /// apart from a later one with the same id, so only the orchestrator
+    /// itself is killed.
+    async fn finish(
+        &mut self,
+        exited: std::io::Result<()>,
+        status: &watch::Sender<EngineStatus>,
+    ) -> std::io::Result<ExitStatus> {
+        let killed = match exited {
+            Ok(()) => self.kill_tree(),
+            Err(err) => {
+                let killed = self.kill_orchestrator();
+                Err(std::io::Error::other(format!(
+                    "could not watch the orchestrator's exit, so its services were not killed: {err}{}",
+                    killed.err().map(|err| format!("; {err}")).unwrap_or_default()
+                )))
+            }
+        };
+        if let Err(err) = killed {
+            status.send_modify(|current| current.kill_failure = Some(err.to_string()));
+        }
+        let reaped = self.child.wait().await;
+        self.exit = ExitWatch::Reaped;
+        reaped
     }
 
     /// Closes stdin and gives the orchestrator `grace` to stop its services
@@ -391,26 +464,54 @@ impl OrchestratorProcess {
     ) {
         status.send_modify(|current| current.phase = EnginePhase::Stopping);
         drop(self.stdin.take());
-        if timeout(grace, self.follow(status, run)).await.is_err() {
-            self.kill_tree();
-            // The kill is delivered, so this only reaps the process; an error
-            // here leaves nothing more to do.
-            let _reaped = self.child.wait().await;
-        }
-        self.kill_tree();
+        let exited = match timeout(grace, self.follow(status, run)).await {
+            Ok(exited) => exited,
+            Err(_) => {
+                if let Err(err) = self.kill_tree() {
+                    status.send_modify(|current| current.kill_failure = Some(err.to_string()));
+                }
+                self.exited().await
+            }
+        };
+        // Only the reap's outcome is left to learn, and nothing more can be
+        // done whichever it is.
+        let _reaped = self.finish(exited, status).await;
     }
 
-    /// Kills the orchestrator and everything it started. Safe to call after
-    /// it exited, when there is nothing left to kill.
-    fn kill_tree(&mut self) {
+    /// Kills the orchestrator and everything it started. Only called before
+    /// the orchestrator is reaped, so on Unix its group id is still its own.
+    fn kill_tree(&mut self) -> std::io::Result<()> {
+        debug_assert!(
+            !matches!(self.exit, ExitWatch::Reaped),
+            "the process group of a reaped orchestrator is not ours to signal"
+        );
         #[cfg(unix)]
-        if let Some(group) = self.group {
-            kill_process_group(group);
+        if let Some(group) = self.group() {
+            kill_process_group(group)?;
         }
         // On Windows this ends the orchestrator, and its job object ends the
-        // services. It fails only for an orchestrator that already exited,
-        // which is the outcome wanted.
-        let _already_exited = self.child.start_kill();
+        // services.
+        self.kill_orchestrator()
+    }
+
+    /// Kills the orchestrator alone. One that already exited cannot be
+    /// killed, which is the outcome wanted.
+    fn kill_orchestrator(&mut self) -> std::io::Result<()> {
+        match self.child.start_kill() {
+            Err(err) if err.kind() != std::io::ErrorKind::InvalidInput => Err(err),
+            _ => Ok(()),
+        }
+    }
+
+    /// The orchestrator's process group, which is its pid, while it is not
+    /// reaped. tokio forgets the pid only once `wait` has seen the exit,
+    /// which happens only in the reap.
+    #[cfg(unix)]
+    fn group(&self) -> Option<u32> {
+        if matches!(self.exit, ExitWatch::Reaped) {
+            return None;
+        }
+        self.child.id()
     }
 
     /// The orchestrator's last lines on stderr. Waits a moment at most, for
@@ -424,6 +525,45 @@ impl OrchestratorProcess {
             Ok(Ok(tail)) => tail.into(),
             Ok(Err(_)) | Err(_) => Vec::new(),
         }
+    }
+}
+
+/// A supervisor task that is dropped, not cancelled, still takes the tree
+/// down. Errors cannot be reported from here, and nothing else would see them.
+impl Drop for OrchestratorProcess {
+    fn drop(&mut self) {
+        if !matches!(self.exit, ExitWatch::Reaped) {
+            let _best_effort = self.kill_tree();
+        }
+    }
+}
+
+/// Resolves once the orchestrator has exited, leaving it unreaped on Unix.
+/// Cancel-safe: the wait carries on where it left off.
+async fn watch_exit(child: &mut Child, exit: &mut ExitWatch) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        if matches!(exit, ExitWatch::Running) {
+            let Some(pid) = child.id() else {
+                *exit = ExitWatch::Exited;
+                return Ok(());
+            };
+            *exit = ExitWatch::Watching(tokio::task::spawn_blocking(move || wait_unreaped(pid)));
+        }
+        if let ExitWatch::Watching(waiter) = exit {
+            let watched = waiter.await;
+            *exit = ExitWatch::Exited;
+            return watched.unwrap_or_else(|join| Err(std::io::Error::other(join)));
+        }
+        Ok(())
+    }
+    #[cfg(windows)]
+    {
+        if matches!(exit, ExitWatch::Running) {
+            child.wait().await?;
+            *exit = ExitWatch::Exited;
+        }
+        Ok(())
     }
 }
 
@@ -456,15 +596,64 @@ async fn keep_tail(stderr: impl AsyncRead + Unpin) -> VecDeque<String> {
     tail
 }
 
+/// Kills a process group. ESRCH, an empty group, is success: there is
+/// nothing left to kill.
 #[cfg(unix)]
-fn kill_process_group(group: u32) {
-    let Ok(group) = libc::pid_t::try_from(group) else {
-        return;
-    };
-    // SAFETY: killpg only sends a signal; it touches no memory of ours. The
-    // group is the one the orchestrator was started in, and an ESRCH (the
-    // group is already empty) is the outcome wanted.
-    unsafe {
-        libc::killpg(group, libc::SIGKILL);
+fn kill_process_group(group: u32) -> std::io::Result<()> {
+    let group = libc::pid_t::try_from(group).map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{group} is not a process group id"),
+        )
+    })?;
+    // SAFETY: killpg only sends a signal; it touches no memory of ours.
+    let result = unsafe { libc::killpg(group, libc::SIGKILL) };
+    if result == 0 {
+        return Ok(());
+    }
+    let err = std::io::Error::last_os_error();
+    if err.raw_os_error() == Some(libc::ESRCH) {
+        return Ok(());
+    }
+    Err(std::io::Error::new(
+        err.kind(),
+        format!("could not kill the orchestrator's process group {group}: {err}"),
+    ))
+}
+
+/// Blocks until `pid` has exited, leaving it unreaped.
+#[cfg(unix)]
+fn wait_unreaped(pid: u32) -> std::io::Result<()> {
+    loop {
+        // SAFETY: an all-zero siginfo_t is a valid value for waitid to fill.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // SAFETY: `info` is a valid, writable siginfo_t for the whole call.
+        let result =
+            unsafe { libc::waitid(libc::P_PID, pid, &mut info, libc::WEXITED | libc::WNOWAIT) };
+        if result == 0 {
+            return Ok(());
+        }
+        let err = std::io::Error::last_os_error();
+        if err.kind() != std::io::ErrorKind::Interrupted {
+            return Err(err);
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_kill_process_group_reports_an_id_that_is_not_a_group() {
+        let err = kill_process_group(u32::MAX).expect_err("not a pid_t");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn test_kill_process_group_treats_an_empty_group_as_killed() {
+        // Above the default pid_max (4194304 at most on Linux), so no process
+        // or group can have it.
+        assert!(kill_process_group(1 << 30).is_ok());
     }
 }
