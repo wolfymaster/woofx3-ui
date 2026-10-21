@@ -55,6 +55,9 @@ export type WebhookEventId = GatewayId<"webhookEvent">;
  */
 export type SceneId = GatewayId<"scene">;
 
+/** An import of another bot's setup, as the gateway that keeps imports knows it. */
+export type SetupImportId = GatewayId<"setupImport">;
+
 // ==================== Read shapes ====================
 
 /**
@@ -1224,3 +1227,71 @@ export interface ModuleOAuthConnect {
  * lib/oauthErrors words for the streamer.
  */
 export type ModuleOAuthFinish = { ok: true; integration: string } | { ok: false; error: string };
+
+// ==================== Setup imports ====================
+
+export type SetupImportSource = "firebot" | "streamerbot";
+
+/**
+ * - `review`: read and waiting for the streamer to look it over; nothing is on the engine yet.
+ * - `queued`, `applying`: its items are being created on the engine.
+ * - `done`: every item has an outcome.
+ */
+export type SetupImportStatus = "review" | "queued" | "applying" | "done";
+
+export type SetupImportItemKind = "group" | "counter" | "command" | "workflow";
+
+/** Whether an item comes over as it was (`ready`), with changes (`partial`), or not at all. */
+export type SetupImportReadiness = "ready" | "partial" | "unsupported";
+
+export type SetupImportOutcome = "created" | "exists" | "needs_module" | "skipped" | "pending" | "failed";
+
+export interface SetupImportNote {
+  message: string;
+  detail?: string;
+  /** Set when the note is why the item cannot come over. */
+  blocking?: boolean;
+}
+
+/** Something in the export that is not an item and does not come over, with why. */
+export interface SetupImportLeftover {
+  origin: string;
+  name: string;
+  message: string;
+  detail?: string;
+}
+
+/** One engine object an import creates, and how creating it went. */
+export interface SetupImportItem {
+  id: string;
+  kind: SetupImportItemKind;
+  name: string;
+  /** Where it came from in the other bot, as the streamer would find it there. */
+  origin: string;
+  readiness: SetupImportReadiness;
+  notes: SetupImportNote[];
+  /** What it does, step by step. */
+  steps: string[];
+  outcome: SetupImportOutcome | null;
+  message: string | null;
+}
+
+export interface SetupImportReport {
+  id: SetupImportId;
+  source: SetupImportSource;
+  label: string;
+  status: SetupImportStatus;
+  createdAt: number;
+  /** Why a queued import has not started; null when it is not waiting. */
+  waitingFor: string | null;
+  /** Gave up waiting on something outside the import; retrying starts it once that is fixed. */
+  stalled: boolean;
+  leftovers: SetupImportLeftover[];
+  items: SetupImportItem[];
+}
+
+/** An export to read for review: the decoded document's JSON text, in chunks to join. */
+export interface SetupImportAnalysis {
+  source: SetupImportSource;
+  documentChunks: string[];
+}

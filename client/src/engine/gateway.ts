@@ -69,6 +69,9 @@ import type {
   SceneId,
   SceneRecord,
   SceneWidgetCatalogRow,
+  SetupImportAnalysis,
+  SetupImportId,
+  SetupImportReport,
   StorageConfig,
   StreamEventFrame,
   StreamRecapEngineDetail,
@@ -133,6 +136,7 @@ export interface EngineGateway {
   readonly twitchLink: TwitchLinkGateway;
   readonly overlays: OverlaysGateway;
   readonly moduleOAuth: ModuleOAuthGateway;
+  readonly setupImports: SetupImportsGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -591,4 +595,23 @@ export interface ModuleOAuthGateway {
   useConnectRequest(): (connect: ModuleOAuthConnect) => Promise<void>;
   /** Finishes the connect the provider came back with, given the one-time code it was handed. */
   useFinishRequest(): (connectCode: string) => Promise<ModuleOAuthFinish>;
+}
+
+/**
+ * Bringing a setup over from another bot (Firebot, Streamer.bot): an export
+ * is read into a report of the groups, counters, commands and workflows it
+ * would create, which the streamer reviews before any of it reaches the
+ * engine. Owners and admins only.
+ */
+export interface SetupImportsGateway {
+  /** The instance's most recent import with its items; null when it has none. */
+  useLatest(): Live<SetupImportReport | null>;
+  /** Reads an export into a report to review. Rejects, with words for the streamer, an export it cannot read. */
+  useAnalyzeRequest(): (analysis: SetupImportAnalysis) => Promise<{ importId: SetupImportId }>;
+  /** Starts creating a reviewed import's items on the engine; each item's outcome arrives through `useLatest`. */
+  useStartRequest(): (importId: SetupImportId) => Promise<void>;
+  /** Tries again the items that needed a module or failed, and an import that gave up waiting. */
+  useRetryRequest(): (importId: SetupImportId) => Promise<void>;
+  /** Throws away an import still in review. */
+  useDiscardRequest(): (importId: SetupImportId) => Promise<void>;
 }

@@ -1,5 +1,5 @@
 import type { Id } from "@convex/_generated/dataModel";
-import type { InstanceId, MacroId, ModuleId, SceneId, WebhookEventId } from "@/engine/types";
+import type { InstanceId, MacroId, ModuleId, SceneId, SetupImportId, WebhookEventId } from "@/engine/types";
 
 // The Convex gateway's ids are Convex document ids: an instance is its
 // `instances` row, an installed module its `moduleRepository` row, a scene
@@ -56,4 +56,12 @@ export function toSceneId(id: Id<"scenes">): SceneId {
 
 export function fromSceneId(id: SceneId): Id<"scenes"> {
   return id as string as Id<"scenes">;
+}
+
+export function toSetupImportId(id: Id<"setupImports">): SetupImportId {
+  return id as string as SetupImportId;
+}
+
+export function fromSetupImportId(id: SetupImportId): Id<"setupImports"> {
+  return id as string as Id<"setupImports">;
 }

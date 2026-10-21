@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { Id } from "@convex/_generated/dataModel";
-import type { ImportReport, ImportReportItem } from "@convex/setupImports";
+import type { SetupImportItem, SetupImportReport } from "@/engine/types";
 import { applyProgress, canRetry, importFileProblem, reportSections, reviewSummary } from "./setup-import";
 
-function item(overrides: Partial<ImportReportItem>): ImportReportItem {
+function item(overrides: Partial<SetupImportItem>): SetupImportItem {
   return {
     id: crypto.randomUUID() as Id<"setupImportItems">,
     kind: "workflow",
@@ -18,7 +18,7 @@ function item(overrides: Partial<ImportReportItem>): ImportReportItem {
   };
 }
 
-function report(status: ImportReport["status"], items: ImportReportItem[], stalled = false): ImportReport {
+function report(status: SetupImportReport["status"], items: SetupImportItem[], stalled = false): SetupImportReport {
   return {
     id: "import" as Id<"setupImports">,
     source: "firebot",

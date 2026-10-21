@@ -1,4 +1,4 @@
-import type { ImportItemOutcome, ImportReport, ImportReportItem } from "@convex/setupImports";
+import type { SetupImportItem, SetupImportOutcome, SetupImportReport } from "@/engine/types";
 
 /**
  * How an import from Firebot or Streamer.bot reads in the UI: the sections its
@@ -61,7 +61,7 @@ const SECTION_ORDER: readonly ImportSection[] = [
   "unsupported",
 ];
 
-export function itemSection(item: ImportReportItem, status: ImportReport["status"]): ImportSection {
+export function itemSection(item: SetupImportItem, status: SetupImportReport["status"]): ImportSection {
   if (item.outcome !== null) {
     return item.outcome;
   }
@@ -74,11 +74,11 @@ export function itemSection(item: ImportReportItem, status: ImportReport["status
 export interface ReportSection {
   section: ImportSection;
   label: string;
-  items: ImportReportItem[];
+  items: SetupImportItem[];
 }
 
-export function reportSections(report: ImportReport): ReportSection[] {
-  const bySection = new Map<ImportSection, ImportReportItem[]>();
+export function reportSections(report: SetupImportReport): ReportSection[] {
+  const bySection = new Map<ImportSection, SetupImportItem[]>();
   for (const item of report.items) {
     const section = itemSection(item, report.status);
     bySection.set(section, [...(bySection.get(section) ?? []), item]);
@@ -96,7 +96,7 @@ export interface ReviewSummary {
   unsupported: number;
 }
 
-export function reviewSummary(report: ImportReport): ReviewSummary {
+export function reviewSummary(report: SetupImportReport): ReviewSummary {
   let importable = 0;
   let withChanges = 0;
   let unsupported = 0;
@@ -114,23 +114,23 @@ export function reviewSummary(report: ImportReport): ReviewSummary {
 }
 
 /** How far an apply has got: items with an outcome, out of all of them. */
-export function applyProgress(report: ImportReport): { done: number; total: number } {
+export function applyProgress(report: SetupImportReport): { done: number; total: number } {
   return {
     done: report.items.filter((item) => item.outcome !== null && item.outcome !== "pending").length,
     total: report.items.length,
   };
 }
 
-const RETRYABLE: ReadonlySet<ImportItemOutcome> = new Set(["needs_module", "failed"]);
+const RETRYABLE: ReadonlySet<SetupImportOutcome> = new Set(["needs_module", "failed"]);
 
-export function canRetry(report: ImportReport): boolean {
+export function canRetry(report: SetupImportReport): boolean {
   if (report.status === "queued") {
     return report.stalled;
   }
   return report.status === "done" && report.items.some((item) => item.outcome !== null && RETRYABLE.has(item.outcome));
 }
 
-export const IMPORT_KIND_LABELS: Record<ImportReportItem["kind"], string> = {
+export const IMPORT_KIND_LABELS: Record<SetupImportItem["kind"], string> = {
   group: "Group",
   counter: "Counter",
   command: "Command",

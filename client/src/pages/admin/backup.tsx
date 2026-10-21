@@ -662,7 +662,7 @@ export default function AdminBackup() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SetupImportPanel instanceId={instance._id} canImport={access.canImport} />
+              <SetupImportPanel canImport={access.canImport} />
             </CardContent>
           </Card>
         </>

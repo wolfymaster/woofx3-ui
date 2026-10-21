@@ -13,6 +13,7 @@ import { convexRequestsGateway } from "./requests";
 import { convexResourcesGateway } from "./resources";
 import { convexScenesGateway } from "./scenes";
 import { convexSessionGateway } from "./session";
+import { convexSetupImportsGateway } from "./setup-imports";
 import { convexStatusGateway } from "./status";
 import { convexStreamOpsGateway } from "./stream-ops";
 import { convexTwitchLinkGateway } from "./twitch-link";
@@ -43,4 +44,5 @@ export const convexEngineGateway: EngineGateway = {
   twitchLink: convexTwitchLinkGateway,
   overlays: convexOverlaysGateway,
   moduleOAuth: convexModuleOAuthGateway,
+  setupImports: convexSetupImportsGateway,
 };
