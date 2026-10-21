@@ -18,10 +18,10 @@ import type {
 import { createEngineBrowserSession, type EngineBrowserSession, type RpcTarget } from "@woofx3/api/client";
 import { createReconnectBackoff } from "@/lib/reconnect-backoff";
 import { $documentVisible } from "@/lib/stores";
+import { listenerTakes, type StreamListener, streamTypesUnion } from "@/lib/stream-listeners";
 import { startVisibleInterval } from "@/lib/visible-interval";
 import { $engineConnected } from "./engine-connection";
 import type { ChatMessage, EngineModule, StreamStatus, WoofxTransport, Workflow, WorkflowRun } from "./interface";
-import { listenerTakes, type StreamListener, streamTypesUnion } from "./stream-listeners";
 
 /**
  * Local intersection: Woofx3EngineApi with an extra method the engine
