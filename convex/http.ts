@@ -1,5 +1,5 @@
 import type { InboundWebhookResponse } from "@woofx3/api";
-import type { CallbackEnvelope, CallbackEvent } from "@woofx3/api/webhooks";
+import type { CallbackEnvelope, CallbackEvent, WorkflowRunCancelledEvent } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
@@ -44,6 +44,12 @@ import { SESSION_SUMMARY_EVENT_TYPE } from "./lib/sessionSummary";
 import { parseEngineShoutoutTarget, SHOUTOUT_ENQUEUE_REQUESTED_EVENT_TYPE } from "./lib/shoutoutEngineRequest";
 import { canManageTwitchLink } from "./lib/twitchLinkPolicy";
 import { TWITCH_TOKEN_REQUESTED_EVENT_TYPE } from "./lib/twitchTokenGrant";
+import {
+  engineResponseTransient,
+  runLifecycleTransient,
+  storageChangedTransient,
+  widgetStatusTransient,
+} from "./lib/webhookTransients";
 import { readWidgetBehaviorKinds } from "./lib/widgetBehaviorKinds";
 import { widgetCanonicalKey } from "./lib/widgetKey";
 import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
@@ -571,30 +577,11 @@ http.route({
     // caller watching the run's triggerId; the history row settles through
     // WORKFLOW_RUN_UPDATED.
     if (eventType === WORKFLOW_RUN_CANCELLED_EVENT_TYPE) {
-      const cancelled = event as unknown as {
-        workflowId?: string;
-        executionId?: string;
-        triggerId?: string;
-        triggeredBy?: string;
-        reason?: string;
-        occurredAt?: string;
-      };
-      if (!cancelled.triggerId) {
+      const transient = runLifecycleTransient(event as unknown as WorkflowRunCancelledEvent);
+      if (!transient) {
         return corsJson({ success: true, type: eventType, handled: false });
       }
-      await ctx.runMutation(internal.transientEvents.emit, {
-        instanceId: instance._id,
-        correlationKey: cancelled.triggerId,
-        type: eventType,
-        status: "error",
-        message: cancelled.reason,
-        data: {
-          workflowId: cancelled.workflowId,
-          executionId: cancelled.executionId,
-          triggeredBy: cancelled.triggeredBy,
-          occurredAt: cancelled.occurredAt,
-        },
-      });
+      await ctx.runMutation(internal.transientEvents.emit, { instanceId: instance._id, ...transient });
       return corsJson({ success: true, type: eventType });
     }
 
@@ -659,7 +646,7 @@ http.route({
           correlationKey: event.moduleKey,
           moduleName: event.moduleName,
           moduleVersion: event.version,
-          statusMessage: event.error || "Module installation failed on the engine.",
+          statusMessage: event.error || undefined,
         });
         return corsJson({ success: true, type: event.type });
       }
@@ -997,16 +984,7 @@ http.route({
         }
         await ctx.runMutation(internal.transientEvents.emit, {
           instanceId: instance._id,
-          correlationKey: `${event.moduleId}:${event.key}`,
-          type: "module.storage.changed",
-          status: "success",
-          data: {
-            moduleId: event.moduleId,
-            key: event.key,
-            value: event.value,
-            previousValue: event.previousValue,
-            occurredAt: event.occurredAt,
-          },
+          ...storageChangedTransient(event),
         });
         return corsJson({ success: true, type: event.type });
       }
@@ -1014,11 +992,7 @@ http.route({
       case EngineEventType.ENGINE_RESPONSE_RECEIVED: {
         await ctx.runMutation(internal.transientEvents.emit, {
           instanceId: instance._id,
-          correlationKey: event.correlationKey,
-          type: "engine.response",
-          status: event.status,
-          message: event.error,
-          data: event.data,
+          ...engineResponseTransient(event),
         });
         return corsJson({ success: true, type: event.type });
       }
@@ -1030,31 +1004,15 @@ http.route({
       case EngineEventType.WORKFLOW_RUN_STARTED:
       case EngineEventType.WORKFLOW_RUN_COMPLETED:
       case EngineEventType.WORKFLOW_RUN_FAILED: {
-        if (!event.triggerId) {
+        const transient = runLifecycleTransient(event);
+        if (!transient) {
           // The api-side relay already drops these, so arriving here means an
           // older engine or a hand-published event. There is nothing to
           // correlate it to, and writing a row under an undefined key would
           // put it somewhere no subscriber looks.
           return corsJson({ success: true, type: event.type, handled: false });
         }
-        await ctx.runMutation(internal.transientEvents.emit, {
-          instanceId: instance._id,
-          correlationKey: event.triggerId,
-          type: event.type,
-          status:
-            event.type === EngineEventType.WORKFLOW_RUN_FAILED
-              ? "error"
-              : event.type === EngineEventType.WORKFLOW_RUN_COMPLETED
-                ? "success"
-                : "progress",
-          message: event.type === EngineEventType.WORKFLOW_RUN_FAILED ? event.error : undefined,
-          data: {
-            workflowId: event.workflowId,
-            executionId: event.executionId,
-            triggeredBy: event.triggeredBy,
-            occurredAt: event.occurredAt,
-          },
-        });
+        await ctx.runMutation(internal.transientEvents.emit, { instanceId: instance._id, ...transient });
         return corsJson({ success: true, type: event.type });
       }
 
@@ -1086,20 +1044,9 @@ http.route({
       }
 
       case EngineEventType.WIDGET_STATUS_CHANGED: {
-        const correlationKey = event.widgetCanonicalId ?? `${event.moduleId}:${event.instanceId}:${event.key}`;
         await ctx.runMutation(internal.transientEvents.emit, {
           instanceId: instance._id,
-          correlationKey,
-          type: "widget.status.changed",
-          status: "success",
-          data: {
-            moduleId: event.moduleId,
-            widgetInstanceId: event.instanceId,
-            widgetCanonicalId: event.widgetCanonicalId,
-            key: event.key,
-            value: event.value,
-            occurredAt: event.occurredAt,
-          },
+          ...widgetStatusTransient(event),
         });
         return corsJson({ success: true, type: event.type });
       }
