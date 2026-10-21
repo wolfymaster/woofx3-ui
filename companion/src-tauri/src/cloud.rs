@@ -1,9 +1,9 @@
 //! The companion's connection to Convex. The Rust process owns it, so it lives
 //! as long as the tray icon, not the window.
 //!
-//! The connection is optional: a host that is not paired runs without Convex
-//! at all. [`CloudLink`] opens it only when a pairing starts or a stored one
-//! resumes.
+//! The connection is optional: a companion that is not paired holds no
+//! Convex connection. [`CloudLink`] opens it when a pairing starts or a stored
+//! one resumes, and closes it again when the companion unpairs.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -216,16 +216,19 @@ impl Cloud {
     }
 }
 
-/// Whether this host talks to Convex. It starts [`LinkState::Dormant`] and
-/// moves to [`LinkState::Connected`] the first time something needs Convex;
-/// from then on every caller shares the one connection, for the life of the
-/// process.
+/// Whether this host talks to Convex. It starts [`LinkState::Dormant`], moves
+/// to [`LinkState::Connected`] the first time something needs Convex, and
+/// goes back to dormant when the companion unpairs. While connected, every
+/// caller shares the one connection.
+///
+/// An enum behind a mutex rather than a `OnceCell`, because the link goes back
+/// to dormant, which a `OnceCell` cannot.
 pub struct CloudLink {
     state: tokio::sync::Mutex<LinkState>,
 }
 
 enum LinkState {
-    /// No connection was asked for, so none is open.
+    /// No connection is wanted, so none is open.
     Dormant,
     Connected(Cloud),
 }
@@ -238,7 +241,8 @@ impl CloudLink {
     }
 
     /// The connection, opened on first use. Opening does not wait for the
-    /// network, so it succeeds offline.
+    /// network, and build.rs only accepts a valid deployment URL, so a
+    /// failure here is a bug rather than a network problem.
     pub async fn connect(&self) -> Result<Cloud> {
         let mut state = self.state.lock().await;
         if let LinkState::Connected(cloud) = &*state {
@@ -249,12 +253,16 @@ impl CloudLink {
         Ok(cloud)
     }
 
-    /// The connection if one is open, without opening one.
-    pub async fn current(&self) -> Option<Cloud> {
-        match &*self.state.lock().await {
-            LinkState::Dormant => None,
-            LinkState::Connected(cloud) => Some(cloud.clone()),
-        }
+    /// Goes back to dormant. The connection closes once the last task still
+    /// holding it (a release call to Convex, say) lets it go: the client's
+    /// worker stops when its last clone is dropped.
+    pub async fn disconnect(&self) {
+        *self.state.lock().await = LinkState::Dormant;
+    }
+
+    #[cfg(test)]
+    async fn is_dormant(&self) -> bool {
+        matches!(&*self.state.lock().await, LinkState::Dormant)
     }
 }
 
@@ -554,7 +562,26 @@ mod tests {
     #[tokio::test]
     async fn test_cloud_link_starts_dormant() {
         let link = CloudLink::dormant();
-        assert!(link.current().await.is_none());
+        assert!(link.is_dormant().await);
+    }
+
+    #[tokio::test]
+    async fn test_cloud_link_connect_is_shared() {
+        let link = CloudLink::dormant();
+        let first = link.connect().await.expect("connects offline");
+        let second = link.connect().await.expect("reuses the connection");
+        assert!(!link.is_dormant().await);
+        assert!(first.connection().same_channel(&second.connection()));
+    }
+
+    #[tokio::test]
+    async fn test_cloud_link_disconnect_goes_back_to_dormant() {
+        let link = CloudLink::dormant();
+        let before = link.connect().await.expect("connects offline");
+        link.disconnect().await;
+        assert!(link.is_dormant().await);
+        let after = link.connect().await.expect("connects again");
+        assert!(!before.connection().same_channel(&after.connection()));
     }
 
     #[test]

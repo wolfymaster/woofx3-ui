@@ -1,6 +1,6 @@
 //! The woofx3 companion: a tray app that pairs this computer with a woofx3
 //! instance through the browser and stays connected to Convex while paired.
-//! Without a pairing it runs with no Convex connection at all. Its window
+//! An unpaired companion holds no Convex connection. Its window
 //! renders `WindowState`; all work happens here, in Rust commands.
 //!
 //! Commands are async so none of them runs on the main thread: tray updates
@@ -35,7 +35,7 @@ use update::Downloaded;
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
-    cloud: CloudLink,
+    cloud_link: CloudLink,
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
     integrations: Arc<Integrations>,
@@ -372,7 +372,7 @@ pub fn run() {
             ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
-                cloud: CloudLink::dormant(),
+                cloud_link: CloudLink::dormant(),
                 installation_id,
                 integrations,
                 view: Mutex::new(WindowState {
