@@ -1206,7 +1206,14 @@ export type TwitchLinking =
   | { status: "idle" }
   | { status: "starting" }
   | { status: "redirecting" }
-  | { status: "awaitingApproval"; userCode: string; verificationUri: string; expiresAt: number }
+  | {
+      status: "awaitingApproval";
+      /** The code the streamer types at `verificationUri`. */
+      userCode: string;
+      verificationUri: string;
+      /** When the code stops working, in epoch ms. */
+      expiresAt: number;
+    }
   | { status: "failed"; error: string };
 
 export interface TwitchLinkStart {
