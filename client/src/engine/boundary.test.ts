@@ -236,6 +236,103 @@ describe("live transport boundary", () => {
   });
 });
 
+// The direct adapter drives the engine itself, with no Convex behind it, so
+// it and the live session it runs on must not know a backend exists. Only the
+// boot wiring picks it, as it picks the Convex adapter, and TanStack Query is
+// its cache alone: a screen that used it would cache outside the gateway.
+const DIRECT_ADAPTER_DIR = join(ENGINE_DIR, "direct");
+const ENGINE_SESSION_DIR = join(CLIENT_SRC, "lib", "engine-session");
+const TANSTACK_QUERY = /^@tanstack\/react-query(?:\/|$)/;
+
+/** What a file of the direct adapter or the live session imports from a backend, or from the Convex adapter's own inputs. */
+function directLeaks(file: string, source: string): string[] {
+  const reaching = importSpecifiers(source).filter((specifier) => {
+    const target = resolveSpecifier(file, specifier);
+    return (
+      target !== null &&
+      (isWithin(target, CONVEX_ADAPTER_DIR) || isWithin(target, TRANSPORT_DIR) || target === INSTANCE_SELECTION)
+    );
+  });
+  return [...convexLeaks(source), ...reaching];
+}
+
+/** What a file imports from the direct adapter. */
+function directAdapterImports(file: string, source: string): string[] {
+  return importSpecifiers(source).filter((specifier) => {
+    const target = resolveSpecifier(file, specifier);
+    return target !== null && isWithin(target, DIRECT_ADAPTER_DIR);
+  });
+}
+
+function tanstackQueryImports(source: string): string[] {
+  return importSpecifiers(source).filter((specifier) => TANSTACK_QUERY.test(specifier));
+}
+
+function offenders(files: string[], leaks: (file: string, source: string) => string[]): string[] {
+  return files
+    .filter((path) => path !== import.meta.path)
+    .filter((path) => leaks(path, readFileSync(path, "utf8")).length > 0)
+    .map((path) => relative(CLIENT_SRC, path))
+    .sort();
+}
+
+describe("direct adapter boundary", () => {
+  const appFiles = sourceFiles(CLIENT_SRC).filter((path) => !isWithin(path, DIRECT_ADAPTER_DIR));
+  const leakingBackend = offenders(
+    [...sourceFiles(DIRECT_ADAPTER_DIR), ...sourceFiles(ENGINE_SESSION_DIR)],
+    directLeaks
+  );
+  const reachingDirect = offenders(
+    appFiles.filter((path) => path !== BOOT_WIRING),
+    directAdapterImports
+  );
+  const usingTanstack = offenders(appFiles, (_file, source) => tanstackQueryImports(source));
+  const convexReachingDirect = offenders(sourceFiles(CONVEX_ADAPTER_DIR), directAdapterImports);
+
+  test("the direct adapter and the live session import no backend", () => {
+    expect(leakingBackend, "map through @/engine/types; never import Convex, its adapter or the transport").toEqual([]);
+  });
+
+  test("outside client/src/engine/direct only the boot wiring reaches the direct adapter", () => {
+    expect(reachingDirect, "go through useEngineGateway() instead of @/engine/direct").toEqual([]);
+  });
+
+  test("only the direct adapter imports TanStack Query", () => {
+    expect(usingTanstack, "read through the engine gateway instead of caching beside it").toEqual([]);
+  });
+
+  test("the Convex adapter does not import the direct adapter", () => {
+    expect(convexReachingDirect, "share code through @/engine or @/lib instead").toEqual([]);
+  });
+
+  test("the backend check matches Convex, its adapter, the transport and the instance selection", () => {
+    const file = join(DIRECT_ADAPTER_DIR, "example.ts");
+    expect(directLeaks(file, 'import { api } from "@convex/_generated/api";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { toInstanceId } from "../convex/ids";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { transport } from "@/lib/transport";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { transport } from "../../lib/transport/browser-transport";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { useInstance } from "@/hooks/use-instance";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { EngineSession } from "@/lib/engine-session/EngineSession";')).toEqual([]);
+    expect(directLeaks(file, 'import type { TransientEvent } from "@/engine/types";')).toEqual([]);
+  });
+
+  test("the direct adapter check matches aliased, relative and deep imports", () => {
+    const file = join(CLIENT_SRC, "components", "dashboard", "example.tsx");
+    expect(directAdapterImports(file, 'import { x } from "@/engine/direct/connection";')).not.toEqual([]);
+    expect(directAdapterImports(file, 'import { x } from "../../engine/direct";')).not.toEqual([]);
+    expect(directAdapterImports(file, 'import type { X } from "@/engine/direct/testing/x";')).not.toEqual([]);
+    expect(directAdapterImports(file, 'import { useEngineScope } from "@/engine/context";')).toEqual([]);
+    expect(directAdapterImports(file, 'import { x } from "@/engine/directory";')).toEqual([]);
+  });
+
+  test("the TanStack check matches the package and its subpaths only", () => {
+    expect(tanstackQueryImports('import { useQuery } from "@tanstack/react-query";')).not.toEqual([]);
+    expect(tanstackQueryImports('import type { QueryKey } from "@tanstack/react-query/build/modern";')).not.toEqual([]);
+    expect(tanstackQueryImports('import { useVirtualizer } from "@tanstack/react-virtual";')).toEqual([]);
+    expect(tanstackQueryImports('import { useQuery } from "convex/react";')).toEqual([]);
+  });
+});
+
 describe("engine boundary", () => {
   const offenders = filesReferencingEngineModules();
   const allowed = new Set<string>(allowlist);
