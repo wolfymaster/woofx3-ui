@@ -140,6 +140,21 @@ export function conditionFieldsOf(triggerPreset: TriggerPreset | undefined): Con
   return (triggerPreset?.config?.fields ?? []).filter((field) => !isCommandsSource(field));
 }
 
+/**
+ * How many triggers a workflow holds as condition tasks: one per `condition` task, plus
+ * one for the actions no condition branches to or guards, which run on every event.
+ */
+export function storedTriggerCount(definition: WorkflowDefinition): number {
+  const tasks = definition.tasks ?? [];
+  const conditions = tasks.filter((task) => task.type === "condition");
+  const branched = new Set(conditions.flatMap((task) => [...(task.onTrue ?? []), ...(task.onFalse ?? [])]));
+  const unguarded = tasks.some(
+    (task) =>
+      task.type === "action" && !branched.has(task.id) && (task.conditions ?? []).length === 0 && !task.condition
+  );
+  return conditions.length + (unguarded ? 1 : 0);
+}
+
 export interface NewTriggerOptions {
   triggerPreset: TriggerPreset;
   conditionFields: ConfigField[];

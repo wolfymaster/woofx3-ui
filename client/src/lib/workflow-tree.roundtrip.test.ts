@@ -18,7 +18,7 @@ import {
   updateStepInTree,
   type WorkflowTree,
 } from "./workflow-tree";
-import legacyAlertWorkflows from "./workflow-tree.legacy-alerts.json";
+import multiTriggerAlerts from "./workflow-tree.multi-trigger-alerts.json";
 
 /**
  * The tree round trip is lossless: every definition the editor can open saves back as itself.
@@ -556,18 +556,21 @@ describe("definitions the app writes round-trip", () => {
     });
   }
 
-  // Workflows the Alerts screen wrote when it kept all of an event's triggers in one
-  // workflow: a condition task per trigger, its actions in `onTrue`. The engine's upgrade
-  // splits most of them; these are the shapes the step editor still has to read.
-  const legacy = legacyAlertWorkflows as unknown as Record<"one" | "two" | "shared" | "concurrent", WorkflowDefinition>;
+  // Alerts workflows holding several triggers: a condition task per trigger, its actions
+  // in `onTrue`. The engine splits most into one workflow per trigger on upgrade; these
+  // are the shapes it leaves as they are.
+  const multiTrigger = multiTriggerAlerts as unknown as Record<
+    "one" | "two" | "shared" | "concurrent",
+    WorkflowDefinition
+  >;
 
   test("an Alerts workflow with one trigger is a tree", () => {
-    expectRoundTrip(legacy.one, "nested");
+    expectRoundTrip(multiTrigger.one, "nested");
   });
 
   test("an Alerts workflow with two triggers, a shared action or concurrent actions is not", () => {
-    expect(definitionToTree(legacy.two).editable).toBe(false);
-    expectNotATree(legacy.shared, { kind: "joined-step", taskId: "s1" });
-    expectNotATree(legacy.concurrent, { kind: "unsequenced-step", taskId: "a2" });
+    expect(definitionToTree(multiTrigger.two).editable).toBe(false);
+    expectNotATree(multiTrigger.shared, { kind: "joined-step", taskId: "s1" });
+    expectNotATree(multiTrigger.concurrent, { kind: "unsequenced-step", taskId: "a2" });
   });
 });

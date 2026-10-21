@@ -23,6 +23,7 @@ import {
   isPinnedTo,
   newTriggerTree,
   nextTriggerOrder,
+  storedTriggerCount,
   type TriggerPin,
   triggerAimsAt,
   triggerFieldValues,
@@ -31,7 +32,6 @@ import { type OptionLabels, type SentencePart, sentenceParts, sentenceText } fro
 import { isInternalSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
 import { stepSummary } from "@/lib/step-summary";
-import { projectWorkflow } from "@/lib/trigger-projection";
 import { cn } from "@/lib/utils";
 import { resolveCatalogAction } from "@/lib/workflow-node-label";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
@@ -82,8 +82,8 @@ const NEW_TRIGGER = "new";
  * the "When" card. Every trigger whose sentence holds runs, top to bottom.
  *
  * A workflow the step editor can't read is still listed and still opens, saying why it
- * can't be edited here. One still holding several triggers, the way this page once stored
- * them, is one the engine's upgrade could not split into a workflow per trigger.
+ * can't be edited here. One holding several triggers, a condition task each, is one card
+ * named by its count (`storedTriggerCount`).
  */
 export function EventTriggerList({
   triggerPreset,
@@ -367,8 +367,7 @@ function TriggerCard({ instanceId, trigger, triggerPreset, sentence, isExpanded,
   const { row } = trigger;
 
   const read = useMemo(() => definitionToTree(trigger.definition), [trigger.definition]);
-  const stored = useMemo(() => (read.editable ? null : projectWorkflow(row)), [read, row]);
-  const storedTogether = stored?.ok === true ? stored.projection.triggers.length : 0;
+  const storedTogether = read.editable ? 0 : storedTriggerCount(trigger.definition);
 
   const title =
     storedTogether > 1
@@ -387,7 +386,7 @@ function TriggerCard({ instanceId, trigger, triggerPreset, sentence, isExpanded,
               }).title
           )
           .join("  →  ")
-    : "Opens in the editor it was written in";
+    : "Can't be edited here";
   const health = row.isEnabled ? notRunning.get(row.engineWorkflowId) : undefined;
 
   async function toggleEnabled() {
