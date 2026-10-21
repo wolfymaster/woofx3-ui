@@ -9,6 +9,7 @@ import type { InstanceId } from "@/engine/types";
 // and its ids converted.
 
 let rows: Record<string, unknown> = {};
+let pages: Record<string, unknown[]> = {};
 
 // Bun runs every test file in one process and a module mock is not undone,
 // so the rest of convex/react stays real for the files loaded after this one.
@@ -17,10 +18,20 @@ const convexReact = await import("convex/react");
 mock.module("convex/react", () => ({
   ...convexReact,
   useQuery: (query: Parameters<typeof getFunctionName>[0]) => rows[getFunctionName(query)],
+  usePaginatedQuery: (query: Parameters<typeof getFunctionName>[0]) => ({
+    results: pages[getFunctionName(query)] ?? [],
+    status: "Exhausted",
+    isLoading: false,
+    loadMore: () => undefined,
+  }),
 }));
 
+const { convexAlertLibraryGateway } = await import("./alert-library");
 const { convexAlertQueueGateway } = await import("./alert-queue");
+const { convexCommandsGateway } = await import("./commands");
+const { convexEventLogGateway } = await import("./event-log");
 const { convexModuleResourcesGateway } = await import("./module-resources");
+const { convexRequestsGateway } = await import("./requests");
 const { convexScenesGateway } = await import("./scenes");
 const { convexStatusGateway } = await import("./status");
 const { convexWorkflowsGateway } = await import("./workflows");
@@ -43,7 +54,22 @@ const convexFields = { _creationTime: 1_700_000_000_000, instanceId: "instance-1
 
 beforeEach(() => {
   rows = {};
+  pages = {};
 });
+
+/** Every key a mapped value carries, at any depth, that only Convex would put there. */
+function convexKeysIn(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(convexKeysIn);
+  }
+  if (value === null || typeof value !== "object") {
+    return [];
+  }
+  return Object.entries(value).flatMap(([key, inner]) => [
+    ...(key.startsWith("_") || key === "instanceId" ? [key] : []),
+    ...convexKeysIn(inner),
+  ]);
+}
 
 describe("Convex rows become engine-neutral records", () => {
   test("a scene keeps its id and loses Convex's fields", () => {
@@ -122,5 +148,256 @@ describe("Convex rows become engine-neutral records", () => {
     expect(read(() => convexWorkflowsGateway.useWorkflows(instanceId))).toBeUndefined();
     rows["workflows:getByEngineId"] = null;
     expect(read(() => convexWorkflowsGateway.useWorkflow(instanceId, "wf-1"))).toBeNull();
+  });
+});
+
+interface MappingCase {
+  name: string;
+  /** The Convex function the read subscribes to, and what it answers. */
+  query: string;
+  answer: unknown;
+  paginated?: boolean;
+  read: () => unknown;
+  expected: unknown;
+}
+
+const catalogTrigger = {
+  id: "twitch.follow",
+  name: "Follow",
+  description: "Someone followed",
+  category: "Twitch",
+  color: "purple",
+  icon: "heart",
+  event: "follow",
+  moduleId: "module-row-1",
+  moduleName: "twitch",
+  moduleLabel: "Twitch",
+};
+
+const catalogAction = {
+  id: "obs.scene",
+  name: "Switch scene",
+  description: "Shows a scene",
+  category: "OBS",
+  color: "blue",
+  icon: "monitor",
+  moduleId: undefined,
+  moduleName: undefined,
+  moduleLabel: "Built in",
+};
+
+const MAPPING_CASES: MappingCase[] = [
+  {
+    name: "a chat command loses Convex's fields",
+    query: "chatCommands:list",
+    answer: [
+      {
+        _id: "row-1",
+        ...convexFields,
+        engineCommandId: "cmd-1",
+        command: "lurk",
+        actions: [],
+        cooldown: 5,
+        priority: 0,
+        enabled: true,
+        visibility: "public",
+        groupIds: [],
+        usernames: [],
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+    read: () => convexCommandsGateway.useCommands(instanceId),
+    expected: [
+      {
+        engineCommandId: "cmd-1",
+        command: "lurk",
+        actions: [],
+        cooldown: 5,
+        priority: 0,
+        enabled: true,
+        visibility: "public",
+        groupIds: [],
+        usernames: [],
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+  },
+  {
+    name: "a chat command group loses Convex's fields",
+    query: "chatCommandGroups:list",
+    answer: [
+      {
+        _id: "row-1",
+        ...convexFields,
+        engineGroupId: "group-1",
+        name: "Mods",
+        description: "",
+        isBuiltIn: true,
+        engineCreatedAt: "2026-01-01T00:00:00Z",
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+    read: () => convexCommandsGateway.useGroups(instanceId),
+    expected: [
+      {
+        engineGroupId: "group-1",
+        name: "Mods",
+        description: "",
+        isBuiltIn: true,
+        engineCreatedAt: "2026-01-01T00:00:00Z",
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+  },
+  {
+    name: "a catalog entry carries its module as a gateway id, or none",
+    query: "workflowCatalog:get",
+    answer: { triggers: [catalogTrigger], actions: [catalogAction] },
+    read: () => convexWorkflowsGateway.useCatalog(instanceId),
+    expected: { triggers: [catalogTrigger], actions: [catalogAction] },
+  },
+  {
+    name: "a scene widget loses Convex's fields and carries its module as a gateway id",
+    query: "sceneWidgets:listForInstance",
+    answer: [
+      {
+        _id: "widget-row-1",
+        _creationTime: 1,
+        widgetId: "alert-box",
+        name: "Alert box",
+        moduleId: "module-row-1",
+        moduleName: "alerts",
+        directory: "widgets/alert-box",
+        alertTypes: ["follow"],
+        settings: [],
+        createdAt: 3,
+      },
+    ],
+    read: () => convexScenesGateway.useWidgetCatalog(instanceId),
+    expected: [
+      {
+        widgetId: "alert-box",
+        name: "Alert box",
+        moduleId: "module-row-1",
+        moduleName: "alerts",
+        directory: "widgets/alert-box",
+        alertTypes: ["follow"],
+        settings: [],
+        createdAt: 3,
+      },
+    ],
+  },
+  {
+    name: "a logged webhook event keeps its record id as a gateway id",
+    query: "engineEventLog:list",
+    paginated: true,
+    answer: [
+      {
+        _id: "log-row-1",
+        _creationTime: 1,
+        eventType: "follow",
+        source: "webhook",
+        receivedAt: 4,
+        payloadLength: 120,
+      },
+    ],
+    read: () => convexEventLogGateway.useWebhookEvents(instanceId, null, 10).results,
+    expected: [{ id: "log-row-1", eventType: "follow", source: "webhook", receivedAt: 4, payloadLength: 120 }],
+  },
+  {
+    name: "a library alert loses Convex's fields and keeps its stored shapes",
+    query: "alertCompositions:list",
+    answer: [
+      {
+        _id: "composition-row-1",
+        ...convexFields,
+        engineCompositionId: "composition-1",
+        name: "Follow",
+        widgets: [{ id: "w1" }],
+        layout: { width: 1920 },
+        behaviors: { enter: "fade" },
+        inputs: [],
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+    read: () => convexAlertLibraryGateway.useAlerts(instanceId),
+    expected: [
+      {
+        engineCompositionId: "composition-1",
+        name: "Follow",
+        widgets: [{ id: "w1" }],
+        layout: { width: 1920 },
+        behaviors: { enter: "fade" },
+        inputs: [],
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    ],
+  },
+  {
+    name: "a transient event loses Convex's fields",
+    query: "transientEvents:get",
+    answer: {
+      _id: "event-row-1",
+      ...convexFields,
+      correlationKey: "key-1",
+      type: "module.install",
+      status: "success",
+      data: { moduleKey: "obs" },
+      expiresAt: 9,
+    },
+    read: () => convexRequestsGateway.useEvent(instanceId, "key-1"),
+    expected: {
+      correlationKey: "key-1",
+      type: "module.install",
+      status: "success",
+      data: { moduleKey: "obs" },
+      expiresAt: 9,
+    },
+  },
+  {
+    name: "a missing transient event passes through as null",
+    query: "transientEvents:get",
+    answer: null,
+    read: () => convexRequestsGateway.useEvent(instanceId, "key-1"),
+    expected: null,
+  },
+];
+
+describe("each mapper builds its domain record from named fields", () => {
+  for (const mappingCase of MAPPING_CASES) {
+    test(mappingCase.name, () => {
+      if (mappingCase.paginated) {
+        pages[mappingCase.query] = mappingCase.answer as unknown[];
+      } else {
+        rows[mappingCase.query] = mappingCase.answer;
+      }
+      const mapped = read(mappingCase.read);
+      expect(mapped).toEqual(mappingCase.expected);
+      expect(convexKeysIn(mapped)).toEqual([]);
+    });
+  }
+
+  test("a column the domain type does not name stays behind", () => {
+    rows["chatCommandGroups:list"] = [
+      {
+        _id: "row-1",
+        ...convexFields,
+        engineGroupId: "group-1",
+        name: "Mods",
+        description: "",
+        engineCreatedAt: "2026-01-01T00:00:00Z",
+        createdAt: 1,
+        updatedAt: 2,
+        internalNote: "cloud only",
+      },
+    ];
+    const [group] = read(() => convexCommandsGateway.useGroups(instanceId)) ?? [];
+    expect(group).not.toHaveProperty("internalNote");
   });
 });
