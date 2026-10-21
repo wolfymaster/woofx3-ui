@@ -21,5 +21,6 @@ pub use registration::{
 };
 pub use sidecar::{
     run_sidecar, run_sidecar_with, EnginePhase, EngineStatus, SidecarOptions, SidecarSpec,
+    StopCause,
 };
 pub use status::{parse_status_line, ServiceStatus, StatusEvent, StatusLine};

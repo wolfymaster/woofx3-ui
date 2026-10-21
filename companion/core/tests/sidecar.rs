@@ -13,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 use woofx3_companion_core::backoff::Backoff;
 use woofx3_companion_core::host::{
     run_sidecar_with, EnginePhase, EngineStatus, ServiceStatus, SidecarOptions, SidecarSpec,
+    StopCause,
 };
 
 const FAKE_ORCHESTRATOR: &str = env!("CARGO_BIN_EXE_fake-orchestrator");
@@ -203,8 +204,9 @@ async fn test_sidecar_reports_ready_and_stops_when_stdin_closes() {
     let stopped = running.stop().await;
     // The fake stops on stdin closing, long before the grace period.
     assert!(started.elapsed() < Duration::from_secs(5));
-    assert_eq!(stopped.phase, EnginePhase::Stopped);
+    assert_eq!(stopped.phase, EnginePhase::Stopped(StopCause::Requested));
     assert_eq!(stopped.services.get("api"), Some(&ServiceStatus::Stopped));
+    assert_eq!(stopped.kill_failure, None);
 
     assert_eq!(
         scratch.recorded("arg"),
@@ -328,6 +330,9 @@ async fn test_sidecar_backoff_grows_after_runs_shorter_than_stable() {
     running.stop().await;
 }
 
+// On Windows the tree kill is the orchestrator's own job object, which the
+// engine's build/orchestrator/process_test.go covers; here only the
+// orchestrator itself can be checked, and only on Unix.
 #[tokio::test]
 async fn test_sidecar_kills_an_orchestrator_that_ignores_the_stop_request() {
     let scratch = Scratch::new("stubborn");
@@ -337,7 +342,7 @@ async fn test_sidecar_kills_an_orchestrator_that_ignores_the_stop_request() {
     running.wait_for("ready", is_ready).await;
 
     let stopped = running.stop().await;
-    assert_eq!(stopped.phase, EnginePhase::Stopped);
+    assert_eq!(stopped.phase, EnginePhase::Stopped(StopCause::Requested));
     #[cfg(unix)]
     {
         let pid: u32 = only(scratch.recorded("pid"), "pid").parse().expect("a pid");
@@ -398,7 +403,7 @@ async fn test_sidecar_retries_a_program_that_cannot_start() {
     assert!(reason.starts_with("could not start"), "{reason}");
     assert!(reason.contains("no-orchestrator"), "{reason}");
     let stopped = running.stop().await;
-    assert_eq!(stopped.phase, EnginePhase::Stopped);
+    assert_eq!(stopped.phase, EnginePhase::Stopped(StopCause::Requested));
 }
 
 #[tokio::test]
@@ -416,6 +421,40 @@ async fn test_sidecar_stops_while_waiting_to_restart() {
         })
         .await;
     let stopped = running.stop().await;
-    assert_eq!(stopped.phase, EnginePhase::Stopped);
+    assert_eq!(stopped.phase, EnginePhase::Stopped(StopCause::Requested));
     assert!(Path::new(&scratch.path("runs")).exists());
+}
+
+#[tokio::test]
+async fn test_sidecar_stops_for_good_when_the_orchestrator_exits_cleanly() {
+    let scratch = Scratch::new("clean-exit");
+    let mut running = start(spec(&scratch, "ready-then-exit-cleanly"), options());
+    timeout(WITHIN, &mut running.task)
+        .await
+        .expect("the supervisor ends on its own")
+        .expect("the supervisor does not panic");
+    let status = running.status.borrow().clone();
+    let EnginePhase::Stopped(StopCause::ExitedOnItsOwn { reason }) = status.phase else {
+        panic!("expected a stop on its own, got {:?}", status.phase);
+    };
+    assert!(reason.contains("exited"), "{reason}");
+    assert_eq!(scratch.recorded("pid").len(), 1, "it is not started again");
+    assert!(running.restart_attempts().is_empty());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn test_sidecar_dropped_without_a_stop_kills_the_tree() {
+    let scratch = Scratch::new("dropped");
+    let mut running = start(spec(&scratch, "stubborn-with-service"), options());
+    running.wait_for("ready", is_ready).await;
+    let orchestrator: u32 = only(scratch.recorded("pid"), "pid").parse().expect("a pid");
+    let service: u32 = only(scratch.recorded("service_pid"), "service pid")
+        .parse()
+        .expect("a pid");
+
+    running.task.abort();
+    let _aborted = running.task.await;
+    wait_until_gone(service).await;
+    wait_until_gone(orchestrator).await;
 }

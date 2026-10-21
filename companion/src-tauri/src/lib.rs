@@ -1,6 +1,6 @@
 //! The woofx3 companion: a tray app that pairs this computer with a woofx3
 //! instance through the browser and stays connected to Convex while paired.
-//! Without a pairing it runs with no Convex connection at all. Its window
+//! An unpaired companion holds no Convex connection. Its window
 //! renders `WindowState`; all work happens here, in Rust commands.
 //!
 //! In local mode, chosen by the host configuration file, it also runs the
@@ -15,12 +15,15 @@
 mod cloud;
 #[cfg(test)]
 mod command_names;
+#[cfg(test)]
+mod convex_url;
 mod credentials;
 mod engine_host;
 mod installation;
 mod integration_store;
 mod integrations;
 mod pairing;
+mod startup_failure;
 mod state;
 mod tray;
 mod update;
@@ -45,7 +48,7 @@ use update::Downloaded;
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
-    cloud: CloudLink,
+    cloud_link: CloudLink,
     engine: LocalEngine,
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
@@ -282,7 +285,9 @@ async fn unpair(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
 /// fails, in which case the update stays ready.
 #[tauri::command]
 async fn install_update(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    update::install(&companion).inspect_err(|err| eprintln!("[companion] {err}"))
+    update::install(&companion)
+        .await
+        .inspect_err(|err| eprintln!("[companion] {err}"))
 }
 
 #[tauri::command]
@@ -384,14 +389,15 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let app_data_dir = app.path().app_data_dir()?;
-            let host_mode = HostMode::load(&app.path().app_config_dir()?.join(HOST_CONFIG_FILE))?;
-            let engine = match host_mode {
-                HostMode::Companion => LocalEngine::Off,
-                HostMode::Local(settings) => LocalEngine::start(
-                    &settings,
-                    &app.path().resource_dir()?,
-                    &app.path().app_local_data_dir()?,
-                )?,
+            let engine = match start_local_engine(app) {
+                Ok(engine) => engine,
+                Err(err) => {
+                    startup_failure::report(
+                        app.path().app_log_dir().ok().as_deref(),
+                        &format!("{err:#}"),
+                    );
+                    std::process::exit(1);
+                }
             };
             let installation_id = installation::load_or_create(&app_data_dir)?;
             let integrations = Arc::new(Integrations::new(
@@ -401,7 +407,7 @@ pub fn run() {
             ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
-                cloud: CloudLink::dormant(),
+                cloud_link: CloudLink::dormant(),
                 engine,
                 installation_id,
                 integrations,
@@ -467,10 +473,25 @@ pub fn run() {
         });
 }
 
+/// The local engine the host configuration asks for, started. An invalid
+/// configuration, or a release with no orchestrator, is an error the caller
+/// shows before exiting.
+fn start_local_engine(app: &tauri::App) -> anyhow::Result<LocalEngine> {
+    let config = app.path().app_config_dir()?.join(HOST_CONFIG_FILE);
+    match HostMode::load(&config)? {
+        HostMode::Companion => Ok(LocalEngine::Off),
+        HostMode::Local(settings) => Ok(LocalEngine::start(
+            &settings,
+            &app.path().resource_dir()?,
+            &app.path().app_local_data_dir()?,
+        )?),
+    }
+}
+
 /// Holds a quit until the local engine has stopped, so its services shut
 /// down in order rather than being cut off, then quits with the same code.
-/// A restart cannot be held (Tauri ignores `prevent_exit` for it); the
-/// engine then stops on its own when its stdin closes with this process.
+/// A restart cannot be held (Tauri ignores `prevent_exit` for it), which is
+/// why installing an update stops the engine before it restarts.
 fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: Option<i32>) {
     let Some(companion) = app.try_state::<Arc<Companion>>() else {
         return;
@@ -490,6 +511,7 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
 #[cfg(test)]
 mod tests {
     use super::command_names::COMMAND_NAMES;
+    use super::convex_url::check_convex_url;
 
     #[test]
     fn test_capabilities_grant_exactly_the_declared_commands() {
@@ -508,5 +530,31 @@ mod tests {
             .collect();
         assert_eq!(granted, declared);
         assert_eq!(capability["windows"], serde_json::json!(["main"]));
+    }
+
+    #[test]
+    fn test_check_convex_url_accepts_deployment_urls() {
+        for url in [
+            "https://happy-animal-123.convex.cloud",
+            "http://127.0.0.1:3210",
+            "https://convex.example.test/",
+        ] {
+            assert_eq!(check_convex_url(url), Ok(()), "{url}");
+        }
+    }
+
+    #[test]
+    fn test_check_convex_url_refuses_what_convex_cannot_connect_to() {
+        for url in [
+            "happy-animal-123.convex.cloud",
+            "wss://happy-animal-123.convex.cloud",
+            "ftp://example.test",
+            "https://",
+            " https://happy-animal-123.convex.cloud",
+            "https://happy-animal-123.convex.cloud\n",
+            "not a url",
+        ] {
+            assert!(check_convex_url(url).is_err(), "{url}");
+        }
     }
 }

@@ -24,9 +24,9 @@ companion/
                       supervision of a local engine (core/src/host). No Tauri.
 ```
 
-The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Once open, it stays open until the companion quits. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
+The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Unpairing, or a pairing that fails or is cancelled, closes it again once the calls that release the pairing on the server have finished. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
 
-The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
+The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails, and so does any build whose URL is not an `http` or `https` URL with a host; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
 
 ```bash
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev
@@ -109,17 +109,19 @@ In local mode the companion is the desktop host for a woofx3 engine that runs on
 - Without the file, or with `{ "mode": "companion" }`, the companion is the tray app described above and runs no engine.
 - `engineDir` is an unpacked engine release (the `woofx3-<version>-<os>-amd64.zip` an engine release attaches): the orchestrator, `services.json` and every service binary. It must be absolute. Without it, local mode runs the release bundled with the app in `engine/` under its resource directory. Installers do not bundle one, so local mode needs `engineDir`.
 - `apiPort` is the port the engine's api listens on, 5050 (an engine release's own default) unless set.
-- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup with the reason, so a typo never quietly turns local mode off.
+- A file that is there but invalid (unknown mode or field, a relative `engineDir`, a release with no orchestrator) stops the companion at startup, so a typo never quietly turns local mode off. The reason appears in a message box and is appended to `startup-error.log` in the app's log directory (`%LOCALAPPDATA%\tv.woofx3.companion\logs` on Windows).
 
 ### The engine sidecar
 
 In local mode the companion runs the engine's orchestrator as its one sidecar process (`engine_host.rs`, supervised by `core/src/host/sidecar.rs`). The orchestrator runs inside the engine release, from that directory, because it finds `services.json` and every service binary next to itself; that is why the companion does not use a Tauri `externalBin`, which would place a lone orchestrator beside the companion's own executable.
 
+- The engine keeps its state (databases, modules, uploads, logs) in `engine/` under the app's local data directory (`%LOCALAPPDATA%\tv.woofx3.companion` on Windows), passed as `WOOFX3_DATA_DIR`, never in the release, which may be read-only and is replaced by updates.
 - It is started with `WOOFX3_SUPERVISOR_STATUS=stdout-jsonl` and `--exit-on-stdin-eof`. Its stdout carries only status lines, parsed into typed states (`core/src/host/status.rs`); unknown event types and statuses are ignored, as the engine's format asks.
 - The companion holds the orchestrator's stdin. Closing it is the stop request: the orchestrator stops its services in dependency order and exits. If the companion dies, the pipe closes with it and the engine stops just the same.
-- Quitting from the tray waits for the engine to stop. A stop that takes longer than 35 seconds (the orchestrator itself allows its services 25) kills the process tree. Restarting into an update cannot wait (Tauri does not let an app hold a restart), so the engine then stops on its own as its stdin closes.
-- On Windows the orchestrator is started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs to stop its services gracefully, and its job object ends every service when it exits. Elsewhere it is started in a process group of its own, and the group is killed whenever the orchestrator exits, so no service it left behind holds a port the next run needs.
-- When the orchestrator exits on its own it is started again after a capped exponential backoff with jitter (1 second doubling to at most 60). A run that stayed ready for 60 seconds starts the backoff over.
+- Quitting from the tray waits for the engine to stop. A stop that takes longer than 35 seconds (the orchestrator itself allows its services 25) kills the process tree. Installing an update stops the engine first, since Windows will not replace a running executable and the new companion needs the engine's ports; if the install fails, the engine starts again.
+- On Windows the orchestrator is started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs to stop its services gracefully, and its job object ends every service when it exits. Elsewhere it is started in a process group of its own, and the group is killed whenever the orchestrator exits, so no service it left behind holds a port the next run needs. The exit is noticed without reaping the orchestrator, so the group id stays reserved until it has been killed and a kill can never reach an unrelated group. A supervisor that is dropped rather than stopped kills the tree as well.
+- When the orchestrator fails it is started again after a capped exponential backoff with jitter (1 second doubling to at most 60). A run that stayed ready for 60 seconds starts the backoff over.
+- When it exits cleanly without being asked (it has no enabled services, or something else stopped it), the sidecar stops for good with that reason rather than restarting it.
 
 The engine is configured as a local engine (`core/src/host/engine.rs`), following the desktop recipe in the engine's `docs/services/deployment.md`:
 
@@ -154,10 +156,10 @@ The client secret stays in the Rust process and the credential store. The window
 
 The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases).
 
-- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours. While the Convex connection is open it checks only while connected, since that is its sign of network access; without one it checks on schedule and tries again at the next interval when offline. Debug builds never check.
+- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours. A failed check is tried again after 1 minute, doubling with each failure in a row up to 6 hours, with jitter, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
 - A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
 - Once downloaded, `WindowState.update` carries its version. The window shows "woofx3 companion {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
-- A failed check, download or signature is logged and tried again at the next interval. It never becomes the `error` state, which is about pairing.
+- A failed check, download or signature is logged and tried again on that backoff. It never becomes the `error` state, which is about pairing.
 - The installer is per user, so installs and updates need no administrator prompt.
 
 ## Pairing

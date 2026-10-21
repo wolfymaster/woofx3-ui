@@ -83,7 +83,7 @@ pub fn build(app: &AppHandle, initial_label: &str) -> tauri::Result<Tray> {
 fn install_update(app: &AppHandle) {
     let companion = Arc::clone(app.state::<Arc<Companion>>().inner());
     tauri::async_runtime::spawn(async move {
-        if let Err(err) = update::install(&companion) {
+        if let Err(err) = update::install(&companion).await {
             eprintln!("[companion] {err}");
             companion.show_window();
         }

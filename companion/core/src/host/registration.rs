@@ -431,7 +431,7 @@ mod tests {
     fn status(phase: EnginePhase) -> EngineStatus {
         EngineStatus {
             phase,
-            services: Default::default(),
+            ..EngineStatus::starting()
         }
     }
 

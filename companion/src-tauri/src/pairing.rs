@@ -65,8 +65,9 @@ fn device_name() -> String {
 /// Tells Convex, in the background, that this companion gave up a pairing
 /// and a token. Both calls are idempotent and either may be absent. Having
 /// either means a pairing was underway, so this opens the Convex connection
-/// if it is not open yet.
-fn release_on_server(
+/// if it is not open yet. The background calls hold their own handle on the
+/// connection, so going dormant right after does not cut them off.
+async fn release_on_server(
     companion: &Arc<Companion>,
     token: Option<String>,
     device_code: Option<String>,
@@ -74,15 +75,14 @@ fn release_on_server(
     if token.is_none() && device_code.is_none() {
         return;
     }
-    let companion = Arc::clone(companion);
+    let cloud = match companion.cloud_link.connect().await {
+        Ok(cloud) => cloud,
+        Err(err) => {
+            eprintln!("[companion] could not open the connection to release a pairing: {err:#}");
+            return;
+        }
+    };
     tauri::async_runtime::spawn(async move {
-        let cloud = match companion.cloud.connect().await {
-            Ok(cloud) => cloud,
-            Err(err) => {
-                eprintln!("[companion] could not reach woofx3 to release a pairing: {err:#}");
-                return;
-            }
-        };
         if let Some(device_code) = device_code {
             if let Err(err) = cloud.cancel_pairing(&device_code).await {
                 eprintln!("[companion] pairing cancel did not reach woofx3: {err:#}");
@@ -99,7 +99,8 @@ fn release_on_server(
 /// Forgets the local token first, so a slow or offline Convex can never keep
 /// it, then releases it on the server in the background. The endpoints this
 /// companion served go with it, so a later pairing starts with nothing
-/// enabled.
+/// enabled. An unpaired companion keeps no Convex connection, so the link
+/// goes dormant before the window offers Pair again.
 pub async fn forget_and_unpair(
     companion: &Arc<Companion>,
     token: Option<String>,
@@ -109,8 +110,9 @@ pub async fn forget_and_unpair(
         eprintln!("[companion] could not clear the stored token: {err:#}");
     }
     companion.integrations.forget().await;
+    release_on_server(companion, token, device_code).await;
+    companion.cloud_link.disconnect().await;
     companion.set_state(CompanionState::Unpaired);
-    release_on_server(companion, token, device_code);
 }
 
 /// Ends a pairing attempt that cannot complete, as `forget_and_unpair` does,
@@ -124,10 +126,11 @@ async fn fail(
     if let Err(err) = credentials::clear().await {
         eprintln!("[companion] could not clear the pairing token: {err:#}");
     }
+    release_on_server(companion, token, device_code).await;
+    companion.cloud_link.disconnect().await;
     companion.set_state(CompanionState::Error {
         message: message.into(),
     });
-    release_on_server(companion, token, device_code);
 }
 
 /// The whole device flow, from asking for a code to the paired session.
@@ -135,14 +138,14 @@ async fn fail(
 pub async fn pair(companion: Arc<Companion>) {
     let start_claim = StartClaim(Arc::clone(&companion));
 
-    let cloud = match companion.cloud.connect().await {
+    let cloud = match companion.cloud_link.connect().await {
         Ok(cloud) => cloud,
         Err(err) => {
             fail(
                 &companion,
                 None,
                 None,
-                format!("Could not reach woofx3: {err:#}"),
+                format!("Could not open the connection to woofx3: {err:#}"),
             )
             .await;
             return;
@@ -152,7 +155,7 @@ pub async fn pair(companion: Arc<Companion>) {
     // A token left over from an earlier pairing is given up before a new one
     // replaces it, so its row (if any) does not linger.
     match credentials::load().await {
-        Ok(Some(previous)) => release_on_server(&companion, Some(previous.token), None),
+        Ok(Some(previous)) => release_on_server(&companion, Some(previous.token), None).await,
         Ok(None) => {}
         Err(err) => eprintln!("[companion] could not read the previous token: {err:#}"),
     }
@@ -337,11 +340,11 @@ pub async fn run_session(
     local_confirmed: bool,
     known_name: Option<String>,
 ) {
-    let cloud = match companion.cloud.connect().await {
+    let cloud = match companion.cloud_link.connect().await {
         Ok(cloud) => cloud,
         Err(err) => {
             companion.set_state(CompanionState::Error {
-                message: format!("Could not reach woofx3: {err:#}"),
+                message: format!("Could not open the connection to woofx3: {err:#}"),
             });
             return;
         }
@@ -469,10 +472,10 @@ pub async fn confirm(companion: Arc<Companion>, instance_name: String) -> Result
         .map_err(|err| format!("{err:#}"))?
         .ok_or_else(|| "The pairing token is missing. Pair again.".to_string())?;
     let cloud = companion
-        .cloud
+        .cloud_link
         .connect()
         .await
-        .map_err(|err| format!("Could not reach woofx3: {err:#}"))?;
+        .map_err(|err| format!("Could not open the connection to woofx3: {err:#}"))?;
     let reply = cloud
         .confirm(&stored.token)
         .await

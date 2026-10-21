@@ -6,6 +6,7 @@
 const DEBUG_CONVEX_URL: &str = "http://127.0.0.1:3210";
 
 include!("src/command_names.rs");
+include!("src/convex_url.rs");
 
 fn main() {
     println!("cargo:rerun-if-env-changed=WOOFX3_CONVEX_URL");
@@ -22,6 +23,9 @@ fn main() {
             DEBUG_CONVEX_URL.to_string()
         }
     };
+    if let Err(reason) = check_convex_url(&url) {
+        panic!("WOOFX3_CONVEX_URL is not a Convex deployment URL: {reason}");
+    }
     println!("cargo:rustc-env=WOOFX3_CONVEX_URL={url}");
 
     // Declaring the commands makes Tauri check each call against the

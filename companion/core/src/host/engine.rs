@@ -18,6 +18,9 @@ const ROOT_PATH_ENV: &str = "WOOFX3_ROOT_PATH";
 const HOSTING_ENV: &str = "WOOFX3_HOSTING";
 /// Adds the `engine.localMode` capability and reports `hosting: "local"`.
 const HOSTING_LOCAL: &str = "local";
+/// Where the engine writes everything: databases, module storage, uploaded
+/// modules, caches and logs. Without it the engine writes into its release
+/// directory, which may be read-only and is replaced by every update.
 const DATA_DIR_ENV: &str = "WOOFX3_DATA_DIR";
 const REGISTRATION_TOKEN_FILE_ENV: &str = "WOOFX3_REGISTRATION_TOKEN_FILE";
 const API_PORT_ENV: &str = "WOOFX3_API_PORT";
@@ -90,7 +93,9 @@ impl LocalEngineLayout {
 /// The orchestrator in `engine_dir`, configured as a local engine laid out
 /// as `layout` says. A release without an orchestrator is an error, so a
 /// wrong `engineDir` stops the host at startup rather than turning into
-/// endless restarts.
+/// endless restarts. So is a data directory that is not absolute (the engine
+/// refuses one) or that lies inside the release: the orchestrator would then
+/// try to copy the release's own data into it, which it refuses.
 pub fn orchestrator_spec(
     engine_dir: &Path,
     layout: &LocalEngineLayout,
@@ -98,6 +103,12 @@ pub fn orchestrator_spec(
     let program = engine_dir.join(orchestrator_file_name());
     if !program.is_file() {
         return Err(HostError::OrchestratorMissing(program));
+    }
+    if !layout.data_dir.is_absolute() {
+        return Err(HostError::DataDirNotAbsolute(layout.data_dir.clone()));
+    }
+    if layout.data_dir.starts_with(engine_dir) {
+        return Err(HostError::DataDirInsideEngine(layout.data_dir.clone()));
     }
     let mut env = vec![(
         OsString::from(ROOT_PATH_ENV),
@@ -146,7 +157,10 @@ mod tests {
         let dir = scratch("release");
         let program = dir.join(orchestrator_file_name());
         std::fs::write(&program, b"").expect("write");
-        let layout = LocalEngineLayout::under(Path::new("/data/app"), DEFAULT_API_PORT);
+        let layout = LocalEngineLayout::under(
+            &std::env::temp_dir().join("woofx3-app-data"),
+            DEFAULT_API_PORT,
+        );
         let spec = orchestrator_spec(&dir, &layout).expect("found");
         assert_eq!(spec.program, program);
         assert_eq!(spec.current_dir, dir);
@@ -175,9 +189,29 @@ mod tests {
     }
 
     #[test]
+    fn test_orchestrator_spec_refuses_a_data_directory_it_cannot_use() {
+        let dir = scratch("bad-data");
+        std::fs::write(dir.join(orchestrator_file_name()), b"").expect("write");
+        let relative = LocalEngineLayout::under(Path::new("app"), DEFAULT_API_PORT);
+        assert!(matches!(
+            orchestrator_spec(&dir, &relative),
+            Err(HostError::DataDirNotAbsolute(_))
+        ));
+        let inside = LocalEngineLayout::under(&dir, DEFAULT_API_PORT);
+        assert!(matches!(
+            orchestrator_spec(&dir, &inside),
+            Err(HostError::DataDirInsideEngine(_))
+        ));
+        std::fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    #[test]
     fn test_orchestrator_spec_refuses_a_directory_without_an_orchestrator() {
         let dir = scratch("empty");
-        let layout = LocalEngineLayout::under(Path::new("/data/app"), DEFAULT_API_PORT);
+        let layout = LocalEngineLayout::under(
+            &std::env::temp_dir().join("woofx3-app-data"),
+            DEFAULT_API_PORT,
+        );
         assert!(matches!(
             orchestrator_spec(&dir, &layout),
             Err(HostError::OrchestratorMissing(path)) if path == dir.join(orchestrator_file_name())

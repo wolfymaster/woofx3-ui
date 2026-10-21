@@ -9,6 +9,8 @@
 //! - `fail-runs:<n>`: fails on its first `n` runs, then behaves as `ready`.
 //!   Runs are counted in `FAKE_ORCHESTRATOR_RUNS`.
 //! - `ready-then-exit:<ms>`: reports ready, then exits 1 after `ms`.
+//! - `ready-then-exit-cleanly`: reports ready, then stops its services and
+//!   exits 0 without being asked, as after a SIGTERM from elsewhere.
 //! - `stubborn`: reports ready, then ignores stdin closing.
 //! - `stubborn-with-service`: as `stubborn`, after starting a service that
 //!   also never exits.
@@ -49,6 +51,11 @@ fn main() {
             report_ready();
             std::thread::sleep(Duration::from_millis(parse_number(ms)));
             std::process::exit(1);
+        }
+        ("ready-then-exit-cleanly", _) => {
+            report_ready();
+            report_stopped();
+            std::process::exit(0);
         }
         ("stubborn", _) => {
             report_ready();
@@ -96,12 +103,16 @@ fn report_ready() {
 fn ready_until_stdin_closes() -> ! {
     report_ready();
     wait_for_stdin_to_close();
+    report_stopped();
+    std::process::exit(0);
+}
+
+fn report_stopped() {
     let pid = std::process::id();
     status(&format!(
         r#"{{"event":"service","time":"t","name":"api","status":"stopped","pid":{pid},"message":"exit status 0"}}"#
     ));
     status(r#"{"event":"stopped","time":"t"}"#);
-    std::process::exit(0);
 }
 
 fn fail() -> ! {

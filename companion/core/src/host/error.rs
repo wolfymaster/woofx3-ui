@@ -49,4 +49,8 @@ pub enum HostError {
     CredentialStoreRead(#[source] anyhow::Error),
     #[error("could not save the engine client credentials: {0:#}")]
     CredentialStoreWrite(#[source] anyhow::Error),
+    #[error("the engine's data directory must be an absolute path, not {0}")]
+    DataDirNotAbsolute(PathBuf),
+    #[error("the engine's data directory {0} is inside the engine release")]
+    DataDirInsideEngine(PathBuf),
 }
