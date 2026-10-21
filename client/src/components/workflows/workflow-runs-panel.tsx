@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { REPLAY_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { History, Loader2, RotateCcw, Square } from "lucide-react";
 import { useState } from "react";
@@ -43,7 +42,6 @@ const RUN_LIMIT = 50;
 const CLOCK_TICK_MS = 1000;
 
 interface WorkflowRunsPanelProps {
-  instanceId: Id<"instances">;
   engineWorkflowId: string;
 }
 
@@ -55,13 +53,13 @@ interface WorkflowRunsPanelProps {
  * fired by hand outside a test are not recorded by the engine and so are not
  * listed.
  */
-export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRunsPanelProps) {
+export function WorkflowRunsPanel({ engineWorkflowId }: WorkflowRunsPanelProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const runs = useWorkflowRuns(instanceId, engineWorkflowId, RUN_LIMIT);
+  const runs = useWorkflowRuns(engineWorkflowId, RUN_LIMIT);
   const replay = useReplayWorkflowRunRequest();
   const cancelRun = useCancelWorkflowRunRequest();
-  const realCancel = useTestRunSupport(instanceId).realCancel;
+  const realCancel = useTestRunSupport().realCancel;
 
   const [now, setNow] = useState(() => Date.now());
   const hasActiveRun = runs?.some(isActiveRun) ?? false;
@@ -76,7 +74,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
   const handleReplay = async (run: RunDoc) => {
     setReplayingId(run.engineRunId);
     try {
-      await replay(instanceId, { engineRunId: run.engineRunId, origin: REPLAY_ORIGIN });
+      await replay({ engineRunId: run.engineRunId, origin: REPLAY_ORIGIN });
       toast({ title: "Replay requested", description: "It will appear at the top of this list when it starts." });
     } catch (err) {
       toast({
@@ -95,7 +93,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
     }
     setIsCancelling(true);
     try {
-      const result = await cancelRun(instanceId, cancelTarget.engineRunId);
+      const result = await cancelRun(cancelTarget.engineRunId);
       setCancelTarget(null);
       toast(describeStopOutcome(result.outcome, result.status));
     } catch (err) {
@@ -150,7 +148,7 @@ export function WorkflowRunsPanel({ instanceId, engineWorkflowId }: WorkflowRuns
 
                   return (
                     <TableRow
-                      key={run._id}
+                      key={run.engineRunId}
                       className="cursor-pointer"
                       onClick={() => navigate(workflowRunPath(engineWorkflowId, run.engineRunId))}
                       data-testid={`row-workflow-run-${run.engineRunId}`}

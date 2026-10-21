@@ -1,89 +1,110 @@
 import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
+import type { Doc } from "@convex/_generated/dataModel";
+import { useQuery } from "convex/react";
 import { useCallback } from "react";
 import type { CommandsGateway } from "@/engine/gateway";
 import type {
+  ChatCommand,
   ChatCommandChanges,
+  ChatCommandGroup,
   ChatCommandGroupChanges,
-  InstanceId,
   NewChatCommand,
   NewChatCommandGroup,
 } from "@/engine/types";
+import { useMappedList } from "./mapped";
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
-function useCommands(instanceId: InstanceId | null) {
-  return useQuery(api.chatCommands.list, instanceId ? { instanceId } : "skip");
+function toChatCommand(row: Doc<"chatCommands">): ChatCommand {
+  return {
+    engineCommandId: row.engineCommandId,
+    command: row.command,
+    actions: row.actions,
+    engineWorkflowId: row.engineWorkflowId,
+    steps: row.steps,
+    workflowError: row.workflowError,
+    argumentPattern: row.argumentPattern,
+    cooldown: row.cooldown,
+    priority: row.priority,
+    enabled: row.enabled,
+    visibility: row.visibility,
+    groupIds: row.groupIds,
+    usernames: row.usernames,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
-function useGroups(instanceId: InstanceId | null) {
-  return useQuery(api.chatCommandGroups.list, instanceId ? { instanceId } : "skip");
+function toChatCommandGroup(row: Doc<"chatCommandGroups">): ChatCommandGroup {
+  return {
+    engineGroupId: row.engineGroupId,
+    name: row.name,
+    description: row.description,
+    isBuiltIn: row.isBuiltIn,
+    engineCreatedAt: row.engineCreatedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
-function useGroupMembers(instanceId: InstanceId, engineGroupId: string) {
-  return useQuery(api.chatCommandGroups.listMembers, { instanceId, engineGroupId });
+function useCommands() {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(api.chatCommands.list, instanceId ? { instanceId } : "skip");
+  return useMappedList(rows, toChatCommand);
+}
+
+function useGroups() {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(api.chatCommandGroups.list, instanceId ? { instanceId } : "skip");
+  return useMappedList(rows, toChatCommandGroup);
+}
+
+function useGroupMembers(engineGroupId: string) {
+  const instanceId = useScopeInstanceId();
+  return useQuery(api.chatCommandGroups.listMembers, instanceId ? { instanceId, engineGroupId } : "skip");
 }
 
 function useCreateCommandRequest() {
-  const createCommand = useAction(api.chatCommandActions.createCommand);
-  return useCallback(
-    (instanceId: InstanceId, command: NewChatCommand) => createCommand({ instanceId, ...command }),
-    [createCommand]
-  );
+  const createCommand = useInstanceAction(api.chatCommandActions.createCommand);
+  return useCallback((command: NewChatCommand) => createCommand(command), [createCommand]);
 }
 
 function useUpdateCommandRequest() {
-  const updateCommand = useAction(api.chatCommandActions.updateCommand);
-  return useCallback(
-    (instanceId: InstanceId, command: ChatCommandChanges) => updateCommand({ instanceId, ...command }),
-    [updateCommand]
-  );
+  const updateCommand = useInstanceAction(api.chatCommandActions.updateCommand);
+  return useCallback((command: ChatCommandChanges) => updateCommand(command), [updateCommand]);
 }
 
 function useDeleteCommandRequest() {
-  const deleteCommand = useAction(api.chatCommandActions.deleteCommand);
-  return useCallback(
-    (instanceId: InstanceId, engineCommandId: string) => deleteCommand({ instanceId, engineCommandId }),
-    [deleteCommand]
-  );
+  const deleteCommand = useInstanceAction(api.chatCommandActions.deleteCommand);
+  return useCallback((engineCommandId: string) => deleteCommand({ engineCommandId }), [deleteCommand]);
 }
 
 function useCreateGroupRequest() {
-  const createGroup = useAction(api.chatCommandActions.createGroup);
-  return useCallback(
-    (instanceId: InstanceId, group: NewChatCommandGroup) => createGroup({ instanceId, ...group }),
-    [createGroup]
-  );
+  const createGroup = useInstanceAction(api.chatCommandActions.createGroup);
+  return useCallback((group: NewChatCommandGroup) => createGroup(group), [createGroup]);
 }
 
 function useUpdateGroupRequest() {
-  const updateGroup = useAction(api.chatCommandActions.updateGroup);
-  return useCallback(
-    (instanceId: InstanceId, group: ChatCommandGroupChanges) => updateGroup({ instanceId, ...group }),
-    [updateGroup]
-  );
+  const updateGroup = useInstanceAction(api.chatCommandActions.updateGroup);
+  return useCallback((group: ChatCommandGroupChanges) => updateGroup(group), [updateGroup]);
 }
 
 function useDeleteGroupRequest() {
-  const deleteGroup = useAction(api.chatCommandActions.deleteGroup);
-  return useCallback(
-    (instanceId: InstanceId, engineGroupId: string) => deleteGroup({ instanceId, engineGroupId }),
-    [deleteGroup]
-  );
+  const deleteGroup = useInstanceAction(api.chatCommandActions.deleteGroup);
+  return useCallback((engineGroupId: string) => deleteGroup({ engineGroupId }), [deleteGroup]);
 }
 
 function useAddGroupMemberRequest() {
-  const addUserToGroup = useAction(api.chatCommandActions.addUserToGroup);
+  const addUserToGroup = useInstanceAction(api.chatCommandActions.addUserToGroup);
   return useCallback(
-    (instanceId: InstanceId, engineGroupId: string, username: string) =>
-      addUserToGroup({ instanceId, engineGroupId, username }),
+    (engineGroupId: string, username: string) => addUserToGroup({ engineGroupId, username }),
     [addUserToGroup]
   );
 }
 
 function useRemoveGroupMemberRequest() {
-  const removeUserFromGroup = useAction(api.chatCommandActions.removeUserFromGroup);
+  const removeUserFromGroup = useInstanceAction(api.chatCommandActions.removeUserFromGroup);
   return useCallback(
-    (instanceId: InstanceId, engineGroupId: string, username: string) =>
-      removeUserFromGroup({ instanceId, engineGroupId, username }),
+    (engineGroupId: string, username: string) => removeUserFromGroup({ engineGroupId, username }),
     [removeUserFromGroup]
   );
 }

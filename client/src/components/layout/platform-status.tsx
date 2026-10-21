@@ -28,8 +28,8 @@ const twitch: StatusBarPlatform = {
   useIsEnabled(instanceId) {
     return useQuery(api.setup.status, { instanceId })?.twitchRequired;
   },
-  useConnection(instanceId) {
-    const { health, twitchLink, isLoading } = useTwitchIntegration(instanceId);
+  useConnection() {
+    const { health, twitchLink, isLoading } = useTwitchIntegration();
     return isLoading ? undefined : twitchConnection(health, twitchLink?.platformUsername);
   },
 };

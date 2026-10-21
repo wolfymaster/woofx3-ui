@@ -1,9 +1,7 @@
-import { useStore } from "@nanostores/react";
 import { useEffect, useMemo, useState } from "react";
-import { useEngineGateway } from "@/engine/context";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
 import type { StreamEventFrame } from "@/engine/types";
 import type { ActivityEvent } from "@/lib/activity-feed";
-import { $engineConnected } from "@/lib/transport/engine-connection";
 
 /** One page: the engine keeps a few days of detail, and the feed shows the latest of it. */
 const HISTORY_LIMIT = 50;
@@ -36,14 +34,15 @@ function withId(frame: StreamEventFrame): ActivityEvent {
  *   the engine pushes.
  * - `types` undefined: not known yet; nothing is read or subscribed.
  */
-export function useEventLog(
-  instanceId: string | undefined,
-  types: readonly string[] | null | undefined
-): { events: ActivityEvent[]; status: EventLogStatus } {
+export function useEventLog(types: readonly string[] | null | undefined): {
+  events: ActivityEvent[];
+  status: EventLogStatus;
+} {
+  const { instanceId } = useEngineScope();
   const { eventLog } = useEngineGateway();
   const subscribeStreamEvents = eventLog.useStreamEventsSubscription();
   const listEvents = eventLog.useEventsRequest();
-  const connected = useStore($engineConnected);
+  const connected = useEngineGateway().session.useConnected();
   const [history, setHistory] = useState<ActivityEvent[]>([]);
   const [live, setLive] = useState<ActivityEvent[]>([]);
   const [historyStatus, setHistoryStatus] = useState<EventLogStatus>("loading");
@@ -62,7 +61,7 @@ export function useEventLog(
       return;
     }
     const wanted = typesKey === null ? null : typesKey.split(",").filter(Boolean);
-    return subscribeStreamEvents(instanceId, wanted, (frame) => {
+    return subscribeStreamEvents(wanted, (frame) => {
       setLive((previous) => [withId(frame), ...previous].slice(0, LIVE_LIMIT));
     });
   }, [instanceId, typesKey, subscribeStreamEvents]);
@@ -78,7 +77,7 @@ export function useEventLog(
       return;
     }
     let cancelled = false;
-    listEvents(instanceId, { types: wanted, limit: HISTORY_LIMIT })
+    listEvents({ types: wanted, limit: HISTORY_LIMIT })
       .then((page) => {
         if (!cancelled) {
           setHistory(page.events.map(withId));
@@ -99,4 +98,13 @@ export function useEventLog(
   const events = useMemo(() => [...live, ...history], [live, history]);
   const status = typesKey === null ? "unsupported" : typesKey === undefined ? "loading" : historyStatus;
   return { events, status };
+}
+
+/**
+ * Subscribes to pushed events of some types (null: every type the engine
+ * pushes) and returns the unsubscribe. Throws without a current instance, so
+ * callers subscribe only once there is one.
+ */
+export function useStreamEventsSubscription() {
+  return useEngineGateway().eventLog.useStreamEventsSubscription();
 }

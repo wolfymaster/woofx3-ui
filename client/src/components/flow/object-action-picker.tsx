@@ -5,9 +5,9 @@ import { Link } from "wouter";
 import { CreateResourceForm } from "@/components/modules/create-resource-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useEngineScope } from "@/engine/context";
 import { useCreateResourceInstanceRequest, useResourceKind } from "@/engine/hooks/use-module-resources";
 import { useActionObjectInstances } from "@/hooks/use-action-object-instances";
-import { useInstance } from "@/hooks/use-instance";
 import {
   type ActionObject,
   type ActionSearchHit,
@@ -619,10 +619,9 @@ function InlineCreateForm({
   onCreated: (instance: ResourceInstanceRow) => void;
   onCancel: () => void;
 }) {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
   const createInstance = useCreateResourceInstanceRequest();
-  const kindDefinition = useResourceKind(instanceId ?? null, kind);
+  const kindDefinition = useResourceKind(kind);
   const owner = kindDefinition?.moduleName ?? parseKindRef(kind)?.module;
   const createdRef = useRef<ResourceInstanceRow | null>(null);
 
@@ -653,7 +652,7 @@ function InlineCreateForm({
         moduleId={owner}
         kind={{ kind: bareKind(kind), name: kindDefinition?.name ?? noun, schema: kindDefinition?.schema }}
         onCreate={async (resourceInstanceId, displayName, settings) => {
-          const created = await createInstance(instanceId, {
+          const created = await createInstance({
             moduleName: owner,
             kind: bareKind(kind),
             resourceInstanceId,

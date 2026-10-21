@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useEngineGateway } from "@/engine/context";
-import type { InstanceId, Resource, ResourceQuery } from "@/engine/types";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
+import type { Resource, ResourceQuery } from "@/engine/types";
 
 export type { Resource, ResourceQuery };
 
@@ -28,7 +28,8 @@ interface ResourcesState {
  * paging are all sent to the engine rather than applied to a local array, so
  * search reaches beyond the current page.
  */
-export function useResources(instanceId: InstanceId | undefined, query: ResourceQuery): ResourcesState {
+export function useResources(query: ResourceQuery): ResourcesState {
+  const { instanceId } = useEngineScope();
   const list = useEngineGateway().resources.useListRequest();
 
   const [resources, setResources] = useState<Resource[]>([]);
@@ -65,7 +66,7 @@ export function useResources(instanceId: InstanceId | undefined, query: Resource
     setError(null);
 
     const parsed = JSON.parse(queryKey) as Required<ResourceQuery>;
-    void list(instanceId, {
+    void list({
       folderId: parsed.folderId,
       kind: parsed.kind ?? undefined,
       search: parsed.search || undefined,

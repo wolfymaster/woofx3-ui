@@ -9,6 +9,7 @@ import { BroadcastShell } from "@/components/layout/broadcast-shell";
 import { OnboardingGuard } from "@/components/layout/onboarding-guard";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { EngineGatewayProvider } from "@/engine/context";
 import { ALERT_LIBRARY_EDITOR_ROUTE } from "@/lib/alert-editor-route";
 import { ALERT_RUN_ROUTE } from "@/lib/alert-run-route";
 import {
@@ -158,7 +159,9 @@ function AppRoutes() {
       </Route>
       <Route path="/setup/:step?">
         <AuthGuard>
-          <Setup />
+          <EngineGatewayProvider>
+            <Setup />
+          </EngineGatewayProvider>
         </AuthGuard>
       </Route>
       {/* Outside OnboardingGuard: pairing the companion comes before a local engine has an instance. */}
@@ -171,155 +174,159 @@ function AppRoutes() {
       {/* Protected app routes */}
       <Route>
         <AuthGuard>
-          <BroadcastShell>
-            <OnboardingGuard>
-              <PageBoundary resetKey={location}>
-                <Switch>
-                  <Route path="/" component={Dashboard} />
+          <EngineGatewayProvider>
+            <BroadcastShell>
+              <OnboardingGuard>
+                <PageBoundary resetKey={location}>
+                  <Switch>
+                    <Route path="/" component={Dashboard} />
 
-                  {/* Stream section */}
-                  <Route path="/stream">
-                    <Redirect to="/stream/alerts" />
-                  </Route>
-                  <Route path="/stream/go-live" component={GoLive} />
-                  <Route path="/stream/alerts" component={Alerts} />
-                  <Route path="/stream/alerts/*" component={Alerts} />
-                  <Route path={ALERT_LIBRARY_EDITOR_ROUTE} component={LibraryAlertEditor} />
-                  <Route path={ALERT_RUN_ROUTE} component={AlertRun} />
-                  {/* Order matters: the fixed segments must be matched before :engineCommandId. */}
-                  <Route path={COMMAND_GROUP_NEW_ROUTE} component={CommandGroupEditor} />
-                  <Route path={COMMAND_GROUP_EDITOR_ROUTE} component={CommandGroupEditor} />
-                  <Route path={COMMAND_GROUPS_PATH} component={Commands} />
-                  <Route path={COMMAND_NEW_ROUTE} component={CommandEditor} />
-                  <Route path={COMMAND_EDITOR_ROUTE} component={CommandEditor} />
-                  <Route path="/stream/commands" component={Commands} />
-                  {builtInKindRoutes().flatMap(({ moduleName, kind, path }) =>
-                    [path, `${path}/*`].map((pattern) => (
-                      <Route key={pattern} path={pattern}>
-                        <ResourceKind moduleName={moduleName} kind={kind} />
-                      </Route>
-                    ))
-                  )}
-                  <Route path="/stream/resources/:module/:kind">
-                    {(params) => <ResourceKind moduleName={params.module} kind={params.kind} />}
-                  </Route>
-                  <Route path="/stream/resources/:module/:kind/*">
-                    {(params) => <ResourceKind moduleName={params.module} kind={params.kind} />}
-                  </Route>
-                  <Route path={STREAM_RECAPS_PATH} component={StreamRecaps} />
-                  <Route path={STREAM_RECAP_ROUTE} component={StreamRecap} />
-                  <Route path="/stream/scenes" component={Scenes} />
-                  <Route path="/stream/scenes/:id" component={Scenes} />
-                  <Route path="/stream/supporters" component={Supporters} />
-                  <Route path="/stream/assets" component={Assets} />
-                  <Route path="/stream/starter-packs" component={StarterPacks} />
-                  <Route path="/stream/workflows" component={Workflows} />
-                  <Route path="/stream/workflows/new" component={Workflows} />
-                  <Route path="/stream/workflows/:id" component={Workflows} />
-                  <Route path="/stream/workflows/:id/edit" component={Workflows} />
-                  <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
+                    {/* Stream section */}
+                    <Route path="/stream">
+                      <Redirect to="/stream/alerts" />
+                    </Route>
+                    <Route path="/stream/go-live" component={GoLive} />
+                    <Route path="/stream/alerts" component={Alerts} />
+                    <Route path="/stream/alerts/*" component={Alerts} />
+                    <Route path={ALERT_LIBRARY_EDITOR_ROUTE} component={LibraryAlertEditor} />
+                    <Route path={ALERT_RUN_ROUTE} component={AlertRun} />
+                    {/* Order matters: the fixed segments must be matched before :engineCommandId. */}
+                    <Route path={COMMAND_GROUP_NEW_ROUTE} component={CommandGroupEditor} />
+                    <Route path={COMMAND_GROUP_EDITOR_ROUTE} component={CommandGroupEditor} />
+                    <Route path={COMMAND_GROUPS_PATH} component={Commands} />
+                    <Route path={COMMAND_NEW_ROUTE} component={CommandEditor} />
+                    <Route path={COMMAND_EDITOR_ROUTE} component={CommandEditor} />
+                    <Route path="/stream/commands" component={Commands} />
+                    {builtInKindRoutes().flatMap(({ moduleName, kind, path }) =>
+                      [path, `${path}/*`].map((pattern) => (
+                        <Route key={pattern} path={pattern}>
+                          <ResourceKind moduleName={moduleName} kind={kind} />
+                        </Route>
+                      ))
+                    )}
+                    <Route path="/stream/resources/:module/:kind">
+                      {(params) => <ResourceKind moduleName={params.module} kind={params.kind} />}
+                    </Route>
+                    <Route path="/stream/resources/:module/:kind/*">
+                      {(params) => <ResourceKind moduleName={params.module} kind={params.kind} />}
+                    </Route>
+                    <Route path={STREAM_RECAPS_PATH} component={StreamRecaps} />
+                    <Route path={STREAM_RECAP_ROUTE} component={StreamRecap} />
+                    <Route path="/stream/scenes" component={Scenes} />
+                    <Route path="/stream/scenes/:id" component={Scenes} />
+                    <Route path="/stream/supporters" component={Supporters} />
+                    <Route path="/stream/assets" component={Assets} />
+                    <Route path="/stream/starter-packs" component={StarterPacks} />
+                    <Route path="/stream/workflows" component={Workflows} />
+                    <Route path="/stream/workflows/new" component={Workflows} />
+                    <Route path="/stream/workflows/:id" component={Workflows} />
+                    <Route path="/stream/workflows/:id/edit" component={Workflows} />
+                    <Route path={WORKFLOW_RUN_ROUTE} component={WorkflowRun} />
 
-                  {/* Marketplace section */}
-                  <Route path={MARKETPLACE_AUTHOR_ROUTE} component={MarketplaceAuthor} />
-                  <Route path={MARKETPLACE_LISTING_ROUTE} component={MarketplaceListing} />
-                  <Route path={MARKETPLACE_PATH} component={Marketplace} />
+                    {/* Marketplace section */}
+                    <Route path={MARKETPLACE_AUTHOR_ROUTE} component={MarketplaceAuthor} />
+                    <Route path={MARKETPLACE_LISTING_ROUTE} component={MarketplaceListing} />
+                    <Route path={MARKETPLACE_PATH} component={Marketplace} />
 
-                  {/* The install surface. /modules/install and /modules/installed are
+                    {/* The install surface. /modules/install and /modules/installed are
                       linked from elsewhere in the app and from an install's own redirect,
                       so they stay; the two storefront routes under /modules forward to
                       their /marketplace equivalents for old bookmarks. */}
-                  <Route path="/modules/install" component={ModuleInstall} />
-                  <Route path="/modules/installed" component={Modules} />
-                  <Route path="/modules/:moduleId" component={Modules} />
-                  <Route path="/modules" component={ModulesIndexRedirect} />
+                    <Route path="/modules/install" component={ModuleInstall} />
+                    <Route path="/modules/installed" component={Modules} />
+                    <Route path="/modules/:moduleId" component={Modules} />
+                    <Route path="/modules" component={ModulesIndexRedirect} />
 
-                  {/* Help section */}
-                  <Route path="/help">
-                    <Redirect to="/help/learning" />
-                  </Route>
-                  <Route path="/help/learning" component={Learning} />
-                  <Route path="/help/logs" component={Logs} />
-                  <Route path={FEEDBACK_PATH} component={Feedback} />
-                  <Route path={FEEDBACK_NEW_PATH} component={FeedbackNew} />
-                  <Route path={FEEDBACK_POST_ROUTE} component={FeedbackPost} />
-                  <Route path={FEEDBACK_EDIT_ROUTE} component={FeedbackEdit} />
+                    {/* Help section */}
+                    <Route path="/help">
+                      <Redirect to="/help/learning" />
+                    </Route>
+                    <Route path="/help/learning" component={Learning} />
+                    <Route path="/help/logs" component={Logs} />
+                    <Route path={FEEDBACK_PATH} component={Feedback} />
+                    <Route path={FEEDBACK_NEW_PATH} component={FeedbackNew} />
+                    <Route path={FEEDBACK_POST_ROUTE} component={FeedbackPost} />
+                    <Route path={FEEDBACK_EDIT_ROUTE} component={FeedbackEdit} />
 
-                  {/* Admin section */}
-                  <Route path="/admin">
-                    <Redirect to="/admin/engine" />
-                  </Route>
-                  <Route path="/admin/engine">
-                    <AdminOnly>
-                      <AdminEngine />
-                    </AdminOnly>
-                  </Route>
-                  <Route path="/admin/integrations">
-                    <AdminOnly>
-                      <AdminIntegrations />
-                    </AdminOnly>
-                  </Route>
-                  <Route path="/admin/storage">
-                    <AdminOnly>
-                      <AdminStorage />
-                    </AdminOnly>
-                  </Route>
-                  <Route path="/admin/backup">
-                    <AdminOnly>
-                      <AdminBackup />
-                    </AdminOnly>
-                  </Route>
-                  <Route path="/admin/appearance">
-                    <AdminOnly>
-                      <AdminAppearance />
-                    </AdminOnly>
-                  </Route>
+                    {/* Admin section */}
+                    <Route path="/admin">
+                      <Redirect to="/admin/engine" />
+                    </Route>
+                    <Route path="/admin/engine">
+                      <AdminOnly>
+                        <AdminEngine />
+                      </AdminOnly>
+                    </Route>
+                    <Route path="/admin/integrations">
+                      <AdminOnly>
+                        <AdminIntegrations />
+                      </AdminOnly>
+                    </Route>
+                    <Route path="/admin/storage">
+                      <AdminOnly>
+                        <AdminStorage />
+                      </AdminOnly>
+                    </Route>
+                    <Route path="/admin/backup">
+                      <AdminOnly>
+                        <AdminBackup />
+                      </AdminOnly>
+                    </Route>
+                    <Route path="/admin/appearance">
+                      <AdminOnly>
+                        <AdminAppearance />
+                      </AdminOnly>
+                    </Route>
 
-                  <Route path="/team" component={Team} />
-                  <Route path="/team/invite" component={TeamInvite} />
+                    <Route path="/team" component={Team} />
+                    <Route path="/team/invite" component={TeamInvite} />
 
-                  {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}
-                  <Route path="/alerts">
-                    <Redirect to="/stream/alerts" />
-                  </Route>
-                  <Route path="/commands">
-                    <Redirect to="/stream/commands" />
-                  </Route>
-                  <Route path="/assets">
-                    <Redirect to="/stream/assets" />
-                  </Route>
-                  <Route path="/workflows">
-                    <Redirect to="/stream/workflows" />
-                  </Route>
-                  <Route path="/workflows/:id">{(params) => <Redirect to={`/stream/workflows/${params.id}`} />}</Route>
-                  <Route path="/workflows/:id/edit">
-                    {(params) => <Redirect to={`/stream/workflows/${params.id}/edit`} />}
-                  </Route>
-                  <Route path="/scenes">
-                    <Redirect to="/stream/scenes" />
-                  </Route>
-                  <Route path="/scenes/:id">{(params) => <Redirect to={`/stream/scenes/${params.id}`} />}</Route>
-                  {/* Runs are reached from the alert they fired, one at a time. */}
-                  <Route path="/stream/alert-history">
-                    <Redirect to="/stream/alerts" />
-                  </Route>
-                  {/* Test events moved onto the Alerts screen, beside each event. */}
-                  <Route path="/debug">
-                    <Redirect to="/stream/alerts" />
-                  </Route>
-                  <Route path="/help/debug">
-                    <Redirect to="/stream/alerts" />
-                  </Route>
-                  <Route path="/settings/:tab?">
-                    {(params) => (
-                      <Redirect to={ADMIN_PATHS.has(params.tab ?? "") ? `/admin/${params.tab}` : "/admin/engine"} />
-                    )}
-                  </Route>
+                    {/* Legacy top-level paths, kept so existing links survive the menu restructure. */}
+                    <Route path="/alerts">
+                      <Redirect to="/stream/alerts" />
+                    </Route>
+                    <Route path="/commands">
+                      <Redirect to="/stream/commands" />
+                    </Route>
+                    <Route path="/assets">
+                      <Redirect to="/stream/assets" />
+                    </Route>
+                    <Route path="/workflows">
+                      <Redirect to="/stream/workflows" />
+                    </Route>
+                    <Route path="/workflows/:id">
+                      {(params) => <Redirect to={`/stream/workflows/${params.id}`} />}
+                    </Route>
+                    <Route path="/workflows/:id/edit">
+                      {(params) => <Redirect to={`/stream/workflows/${params.id}/edit`} />}
+                    </Route>
+                    <Route path="/scenes">
+                      <Redirect to="/stream/scenes" />
+                    </Route>
+                    <Route path="/scenes/:id">{(params) => <Redirect to={`/stream/scenes/${params.id}`} />}</Route>
+                    {/* Runs are reached from the alert they fired, one at a time. */}
+                    <Route path="/stream/alert-history">
+                      <Redirect to="/stream/alerts" />
+                    </Route>
+                    {/* Test events moved onto the Alerts screen, beside each event. */}
+                    <Route path="/debug">
+                      <Redirect to="/stream/alerts" />
+                    </Route>
+                    <Route path="/help/debug">
+                      <Redirect to="/stream/alerts" />
+                    </Route>
+                    <Route path="/settings/:tab?">
+                      {(params) => (
+                        <Redirect to={ADMIN_PATHS.has(params.tab ?? "") ? `/admin/${params.tab}` : "/admin/engine"} />
+                      )}
+                    </Route>
 
-                  <Route component={NotFound} />
-                </Switch>
-              </PageBoundary>
-            </OnboardingGuard>
-          </BroadcastShell>
+                    <Route component={NotFound} />
+                  </Switch>
+                </PageBoundary>
+              </OnboardingGuard>
+            </BroadcastShell>
+          </EngineGatewayProvider>
         </AuthGuard>
       </Route>
     </Switch>

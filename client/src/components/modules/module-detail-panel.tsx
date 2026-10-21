@@ -3,7 +3,7 @@ import type { Id } from "@convex/_generated/dataModel";
 import type { LocalEndpointSummary } from "@convex/lib/localEndpoints";
 import { functionLocation, type ModuleFunctionSummary } from "@convex/lib/moduleFunctionSummary";
 import type { ManifestResourceKind, ManifestSettingField } from "@convex/moduleDetail";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
   ArrowLeft,
@@ -45,6 +45,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { useEngineScope } from "@/engine/context";
+import { useModuleOAuthConnectRequest } from "@/engine/hooks/use-module-oauth";
 import {
   useCreateResourceInstanceRequest,
   useDeleteResourceInstanceRequest,
@@ -53,7 +55,7 @@ import {
   useSyncModuleResourceInstancesRequest,
 } from "@/engine/hooks/use-module-resources";
 import { useModuleSettingsRequest, useUpdateModuleSettingRequest } from "@/engine/hooks/use-modules";
-import { useInstance } from "@/hooks/use-instance";
+import type { ModuleId } from "@/engine/types";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { type ModuleFiles, useModuleFiles } from "@/hooks/use-module-files";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -124,7 +126,7 @@ interface ModuleDetailPanelProps {
   installError?: string | null;
   onDismissError?: () => void;
   instanceId?: Id<"instances">;
-  moduleDbId?: Id<"moduleRepository">;
+  moduleDbId?: ModuleId;
   manifestSettings?: ManifestSettingField[];
   manifestResourceKinds?: ManifestResourceKind[];
   /** Permissions the shown version declares; null when they could not be read. */
@@ -183,7 +185,6 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
 
   const [topTab, setTopTab] = useState<TopTab>("details");
   const moduleFiles = useModuleFiles({
-    instanceId,
     moduleId: module.identifier,
     isInstalled: module.isInstalled,
     version: module.version,
@@ -291,7 +292,6 @@ export function ModuleDetailPanel(props: ModuleDetailPanelProps) {
               />
             ) : (
               <ManageResourcesTab
-                instanceId={instanceId}
                 moduleDbId={moduleDbId}
                 moduleName={module.identifier ?? ""}
                 manifestResourceKinds={manifestResourceKinds ?? []}
@@ -911,11 +911,12 @@ export function ModuleSettingsSections({
   manifestSettings,
   className,
 }: SettingsTabProps & { className?: string }) {
+  const { instanceId: engineInstanceId } = useEngineScope();
   return (
     <div className={cn("flex flex-col gap-6", className)}>
       {instanceId && moduleId && <ModuleWebhookEndpoints instanceId={instanceId} modulePrefix={moduleId} />}
       {instanceId && moduleId && <LocalEndpointPanel instanceId={instanceId} moduleId={moduleId} />}
-      {instanceId && moduleId === OBS_MODULE_ID && <ObsConnectionStatus instanceId={instanceId} />}
+      {engineInstanceId && moduleId === OBS_MODULE_ID && <ObsConnectionStatus />}
       <SettingsTab instanceId={instanceId} moduleId={moduleId} manifestSettings={manifestSettings} />
     </div>
   );
@@ -936,6 +937,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
 
+  const { instanceId: engineInstanceId } = useEngineScope();
   const getSettingsAction = useModuleSettingsRequest();
   const updateSettingAction = useUpdateModuleSettingRequest();
 
@@ -967,12 +969,12 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
   }
 
   function loadSettings() {
-    if (!instanceId || !moduleId) {
+    if (!engineInstanceId || !moduleId) {
       return;
     }
     setLoadState("loading");
     setLoadError(null);
-    void getSettingsAction(instanceId, moduleId)
+    void getSettingsAction(moduleId)
       .then((settings) => {
         const map: Record<string, string> = {};
         const secrets: Record<string, boolean> = {};
@@ -991,7 +993,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
       });
   }
 
-  if (loadState === "idle" && instanceId) {
+  if (loadState === "idle" && engineInstanceId) {
     loadSettings();
   }
 
@@ -1020,14 +1022,14 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
   }
 
   async function saveSetting(key: string, value: string, isSecret: boolean) {
-    if (!instanceId) {
+    if (!engineInstanceId) {
       return;
     }
     setSaving(key);
     setSaveError(null);
     setSaveSuccess(null);
     try {
-      await updateSettingAction(instanceId, moduleId, key, value);
+      await updateSettingAction(moduleId, key, value);
       if (isSecret) {
         setSecretIsSet((prev) => ({ ...prev, [key]: value !== "" }));
         // The typed secret is not kept once the engine has it.
@@ -1069,7 +1071,7 @@ function SettingsTab({ instanceId, moduleId, manifestSettings }: SettingsTabProp
         )}
         {manifestSettings.map((field) => {
           if (field.type === "button") {
-            return <SettingButtonRow key={field.id} instanceId={instanceId} moduleId={moduleId} field={field} />;
+            return <SettingButtonRow key={field.id} moduleId={moduleId} field={field} />;
           }
           if (field.type === "resource_ref" && field.resourceKind) {
             const linked = values[field.id] ?? loadedValues?.[field.id] ?? "";
@@ -1199,9 +1201,7 @@ interface ResourceRefSettingRowProps {
  * that declares the kind (`woofx3` for a timer), never under this module.
  */
 function ResourceRefSettingRow({ field, resourceKind, value, busy, saved, onChange }: ResourceRefSettingRowProps) {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
-  const kind = useResourceKind(instanceId ?? null, resourceKind);
+  const kind = useResourceKind(resourceKind);
   const ResourcePicker = configFieldRenderers.resource_ref;
   return (
     <div className="space-y-2">
@@ -1357,32 +1357,23 @@ function SecretSettingRow({
 }
 
 interface SettingButtonRowProps {
-  instanceId?: Id<"instances">;
   moduleId: string;
   field: ManifestSettingField;
 }
 
-function SettingButtonRow({ instanceId, moduleId, field }: SettingButtonRowProps) {
+function SettingButtonRow({ moduleId, field }: SettingButtonRowProps) {
   if (field.action?.kind === "internal") {
-    return <InternalSettingButton instanceId={instanceId} moduleId={moduleId} field={field} />;
+    return <InternalSettingButton moduleId={moduleId} field={field} />;
   }
   if (field.action?.kind === "integration") {
-    return <IntegrationSettingButton instanceId={instanceId} moduleId={moduleId} field={field} action={field.action} />;
+    return <IntegrationSettingButton moduleId={moduleId} field={field} action={field.action} />;
   }
   return null;
 }
 
-function InternalSettingButton({
-  instanceId,
-  moduleId,
-  field,
-}: {
-  instanceId?: Id<"instances">;
-  moduleId: string;
-  field: ManifestSettingField;
-}) {
+function InternalSettingButton({ moduleId, field }: { moduleId: string; field: ManifestSettingField }) {
   const reference = useMemo(() => settingFieldOptionsReference(moduleId, field.id), [moduleId, field.id]);
-  const { trigger, status, message } = useInternalSettingAction(instanceId, reference);
+  const { trigger, status, message } = useInternalSettingAction(reference);
   return (
     <div className="space-y-2">
       <Button size="sm" variant="outline" disabled={!reference || status === "pending"} onClick={trigger}>
@@ -1405,17 +1396,16 @@ function InternalSettingButton({
 }
 
 function IntegrationSettingButton({
-  instanceId,
   moduleId,
   field,
   action,
 }: {
-  instanceId?: Id<"instances">;
   moduleId: string;
   field: ManifestSettingField;
   action: Extract<NonNullable<ManifestSettingField["action"]>, { kind: "integration" }>;
 }) {
-  const startModuleOAuth = useAction(api.moduleOAuth.start);
+  const { instanceId } = useEngineScope();
+  const connectModuleOAuth = useModuleOAuthConnectRequest();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Only an integration the manifest declares under `oauth[]` can connect;
@@ -1432,14 +1422,7 @@ function IntegrationSettingButton({
       // The current path already deep-links back to this module (modules.tsx
       // resolves /modules/:id via routeModuleId), so returning to it as-is
       // — plus whatever result params the callback appends — is enough.
-      const redirectTo = window.location.pathname;
-      const { authorizeUrl } = await startModuleOAuth({
-        instanceId,
-        moduleId,
-        integration: action.integration,
-        redirectTo,
-      });
-      window.location.assign(authorizeUrl);
+      await connectModuleOAuth({ moduleId, integration: action.integration, returnTo: window.location.pathname });
     } catch (err) {
       setError(actionErrorMessage(err));
       setStarting(false);
@@ -1497,18 +1480,13 @@ function buildResourceKindSections(
 }
 
 interface ManageResourcesTabProps {
-  instanceId?: Id<"instances">;
-  moduleDbId?: Id<"moduleRepository">;
+  moduleDbId?: ModuleId;
   moduleName: string;
   manifestResourceKinds: ManifestResourceKind[];
 }
 
-export function ManageResourcesTab({
-  instanceId,
-  moduleDbId,
-  moduleName,
-  manifestResourceKinds,
-}: ManageResourcesTabProps) {
+export function ManageResourcesTab({ moduleDbId, moduleName, manifestResourceKinds }: ManageResourcesTabProps) {
+  const { instanceId } = useEngineScope();
   const [createDialogKind, setCreateDialogKind] = useState<ManifestResourceKind | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{
     canonicalId: string;
@@ -1521,7 +1499,7 @@ export function ManageResourcesTab({
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
-  const instances = useModuleResourceInstances(instanceId ?? null, moduleDbId ?? null);
+  const instances = useModuleResourceInstances(moduleDbId ?? null);
 
   const createAction = useCreateResourceInstanceRequest();
   const deleteAction = useDeleteResourceInstanceRequest();
@@ -1535,7 +1513,7 @@ export function ManageResourcesTab({
     let cancelled = false;
     setSyncing(true);
     setSyncError(null);
-    void syncAction(instanceId, moduleDbId)
+    void syncAction(moduleDbId)
       .catch((err: unknown) => {
         if (!cancelled) {
           setSyncError(err instanceof Error ? err.message : "Failed to sync resource instances from the engine.");
@@ -1563,10 +1541,10 @@ export function ManageResourcesTab({
     setDeleting(deleteTarget.canonicalId);
     setOpError(null);
     try {
-      await deleteAction(instanceId, deleteTarget.canonicalId);
+      await deleteAction(deleteTarget.canonicalId);
       setDeleteTarget(null);
       if (moduleDbId) {
-        await syncAction(instanceId, moduleDbId);
+        await syncAction(moduleDbId);
       }
     } catch (err) {
       setOpError(err instanceof Error ? err.message : "Failed to delete resource.");
@@ -1644,7 +1622,7 @@ export function ManageResourcesTab({
               ) : (
                 <div className="space-y-2">
                   {kindInstances.map((inst) => (
-                    <div key={inst._id} className="flex items-center gap-3 p-3 rounded-md border bg-card">
+                    <div key={inst.canonicalId} className="flex items-center gap-3 p-3 rounded-md border bg-card">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{inst.displayName}</p>
                         <p className="text-xs text-muted-foreground font-mono truncate">{inst.canonicalId}</p>
@@ -1684,14 +1662,14 @@ export function ManageResourcesTab({
           kind={createDialogKind}
           onClose={() => setCreateDialogKind(null)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            await createAction(instanceId, {
+            await createAction({
               moduleName,
               kind: createDialogKind.kind,
               resourceInstanceId,
               displayName,
               settings,
             });
-            await syncAction(instanceId, moduleDbId);
+            await syncAction(moduleDbId);
           }}
         />
       )}

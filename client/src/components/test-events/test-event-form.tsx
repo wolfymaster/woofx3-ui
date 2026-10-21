@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
-import { useInstance } from "@/hooks/use-instance";
 import {
   describeTestEventOutcome,
   type RunRecord,
@@ -69,9 +68,8 @@ export function useTestEventWaits(): { waitElapsed: boolean; gaveUp: boolean } {
 
 /** The latest run under `triggerId`. Keyed by it, so a new fire starts a new wait. */
 function DefaultTestEventOutcome({ triggerId }: { triggerId: string }) {
-  const { instance } = useInstance();
   const { waitElapsed, gaveUp } = useTestEventWaits();
-  const record = useTransientEvent(instance?._id ?? null, triggerId);
+  const record = useTransientEvent(triggerId);
 
   return <TestEventOutcome record={record} waitElapsed={waitElapsed} gaveUp={gaveUp} />;
 }

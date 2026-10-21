@@ -2,8 +2,8 @@ import { Bell, Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { LibraryAlertEditor } from "@/components/alert-editor/library-alert-editor";
 import { EmptyState } from "@/components/common/empty-state";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import { useInstance } from "@/hooks/use-instance";
 import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
 
 /** A library alert's editor, on its own route so a deep link and the browser's back button work. */
@@ -11,8 +11,8 @@ export default function LibraryAlertEditorPage() {
   const params = useParams<{ compositionId: string }>();
   const compositionId = decodeParam(params.compositionId);
   const [, navigate] = useLocation();
-  const { instance } = useInstance();
-  const support = useEngineCapabilities(instance?._id).support(...ALERT_LIBRARY_CAPABILITIES);
+  const { instanceId } = useEngineScope();
+  const support = useEngineCapabilities().support(...ALERT_LIBRARY_CAPABILITIES);
 
   // Back returns to the editor the library was opened from, when there is one.
   const back = () => {
@@ -23,7 +23,7 @@ export default function LibraryAlertEditorPage() {
     navigate("/stream/alerts");
   };
 
-  if (!instance || support === "checking") {
+  if (!instanceId || support === "checking") {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -44,7 +44,7 @@ export default function LibraryAlertEditorPage() {
     );
   }
 
-  return <LibraryAlertEditor instanceId={instance._id} compositionId={compositionId} onBack={back} />;
+  return <LibraryAlertEditor instanceId={instanceId} compositionId={compositionId} onBack={back} />;
 }
 
 /** A route segment decoded; one that is not valid percent-encoding is kept as written, and matches nothing. */

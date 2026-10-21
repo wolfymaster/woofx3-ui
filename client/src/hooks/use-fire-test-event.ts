@@ -1,6 +1,6 @@
 import { type ManualRunOrigin, TEST_RUN_ORIGIN } from "@convex/lib/manualRunOrigin";
+import { useEngineScope } from "@/engine/context";
 import { usePublishTestEventRequest, useSimulateTwitchEventRequest } from "@/engine/hooks/use-test-events";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { TEST_EVENT_PUBLISH_TIMEOUT_MS, withinTimeout } from "@/lib/test-event-outcome";
 import type { TriggerPreset } from "@/lib/workflow-presets";
@@ -33,7 +33,7 @@ const TWITCH_PLATFORM_AXIS = "platform.twitch";
  * simulator for other platforms.
  */
 export function useFireTestEvent() {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const simulateTwitchEvent = useSimulateTwitchEventRequest();
   const publishEvent = usePublishTestEventRequest();
   const { toast } = useToast();
@@ -43,7 +43,7 @@ export function useFireTestEvent() {
     eventData: object,
     origin: ManualRunOrigin = TEST_RUN_ORIGIN
   ): Promise<string | null> {
-    if (!instance) {
+    if (!instanceId) {
       toast({
         variant: "destructive",
         title: "No instance selected",
@@ -64,7 +64,7 @@ export function useFireTestEvent() {
     const triggerId = crypto.randomUUID();
     try {
       const published = await withinTimeout(
-        fire(instance._id, { eventType, eventData, triggerId, triggeredBy: origin }),
+        fire({ eventType, eventData, triggerId, triggeredBy: origin }),
         TEST_EVENT_PUBLISH_TIMEOUT_MS,
         "The engine didn't answer. Check that it is running, then try again."
       );

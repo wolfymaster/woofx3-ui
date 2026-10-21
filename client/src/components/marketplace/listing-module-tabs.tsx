@@ -1,5 +1,4 @@
 import type { Id } from "@convex/_generated/dataModel";
-import type { ModuleDetailResult } from "@convex/moduleDetail";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { useCallback, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
@@ -14,6 +13,7 @@ import { ModuleFilesTab } from "@/components/modules/module-files";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { ModuleDetail } from "@/engine/types";
 import { useModuleFiles } from "@/hooks/use-module-files";
 import { localEndpointsToApprove, permissionsToApprove } from "@/lib/module-permissions";
 import { isNewerVersion } from "@/lib/utils";
@@ -23,7 +23,7 @@ type ListingTab = (typeof LISTING_TABS)[number];
 
 export type ModuleDetailLoad =
   | { status: "loading" }
-  | { status: "ready"; detail: ModuleDetailResult }
+  | { status: "ready"; detail: ModuleDetail }
   | { status: "error"; message: string };
 
 interface ListingModuleTabsProps {
@@ -48,7 +48,6 @@ export function ListingModuleTabs({ instanceId, load, onRetry, children }: Listi
   // One loader for both the file browser and the function rows, so moving
   // between the tabs does not list the files again.
   const files = useModuleFiles({
-    instanceId,
     moduleId: detail?.id,
     isInstalled: detail?.isInstalled ?? false,
     version: detail?.version ?? "",
@@ -102,8 +101,7 @@ export function ListingModuleTabs({ instanceId, load, onRetry, children }: Listi
           {tabs.includes("resources") && (
             <TabsContent value="resources" className="mt-0">
               <ManageResourcesTab
-                instanceId={instanceId}
-                moduleDbId={detail.moduleDbId as Id<"moduleRepository"> | undefined}
+                moduleDbId={detail.moduleDbId}
                 moduleName={detail.id}
                 manifestResourceKinds={detail.manifestResourceKinds}
               />
@@ -115,7 +113,7 @@ export function ListingModuleTabs({ instanceId, load, onRetry, children }: Listi
   );
 }
 
-function availableTabs(detail: ModuleDetailResult | null): ListingTab[] {
+function availableTabs(detail: ModuleDetail | null): ListingTab[] {
   const tabs: ListingTab[] = ["overview", "contents", "files"];
   if (detail?.isInstalled) {
     tabs.push("settings");
@@ -169,7 +167,7 @@ function TabCount({ count }: { count: number }) {
   return <span className="rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">{count}</span>;
 }
 
-function definitionCount(detail: ModuleDetailResult): number {
+function definitionCount(detail: ModuleDetail): number {
   return (
     detail.triggers.length +
     detail.actions.length +
@@ -203,7 +201,7 @@ function OverviewTab({
   );
 }
 
-function OverviewRail({ detail }: { detail: ModuleDetailResult }) {
+function OverviewRail({ detail }: { detail: ModuleDetail }) {
   const updateAvailable =
     detail.isInstalled && detail.latestVersion !== undefined && isNewerVersion(detail.latestVersion, detail.version);
   const updatePermissions = useMemo(

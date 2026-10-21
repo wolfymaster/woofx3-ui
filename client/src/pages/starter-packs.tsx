@@ -1,5 +1,3 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import {
   fieldTokenNames,
   NO_STARTER_FEATURES,
@@ -13,8 +11,6 @@ import {
   starterPackDefaults,
   validateStarterValues,
 } from "@convex/lib/starterPacks";
-import type { StarterInstallOutcome } from "@convex/starterPacks";
-import { useAction, useQuery } from "convex/react";
 import {
   AlarmClock,
   Check,
@@ -48,6 +44,8 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useInstallStarterPackRequest, useStarterPackStatus } from "@/engine/hooks/use-starter-packs";
+import type { StarterPackInstallOutcome } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -75,7 +73,7 @@ type PackViews = { pack: StarterPack; views: StarterItemView[]; summary: Starter
 
 export default function StarterPacks() {
   const { instance, catalogTriggers, catalogActions, loading: catalogLoading } = useWorkflowCatalog();
-  const states = useQuery(api.starterPacks.status, instance ? { instanceId: instance._id } : "skip");
+  const states = useStarterPackStatus();
   const [openPackId, setOpenPackId] = useState<string | null>(null);
 
   const packs = useMemo<PackViews[]>(() => {
@@ -110,9 +108,7 @@ export default function StarterPacks() {
         </div>
       )}
 
-      {open && instance && (
-        <InstallDialog key={open.pack.id} instanceId={instance._id} entry={open} onClose={() => setOpenPackId(null)} />
-      )}
+      {open && instance && <InstallDialog key={open.pack.id} entry={open} onClose={() => setOpenPackId(null)} />}
     </div>
   );
 }
@@ -303,8 +299,8 @@ interface OutcomeSummary {
   notices: string[];
 }
 
-function outcomeSummary(pack: StarterPack, results: StarterInstallOutcome[]): OutcomeSummary {
-  const describe = (result: StarterInstallOutcome) => {
+function outcomeSummary(pack: StarterPack, results: StarterPackInstallOutcome[]): OutcomeSummary {
+  const describe = (result: StarterPackInstallOutcome) => {
     const item = pack.items.find((candidate) => candidate.id === result.itemId);
     return `${item ? starterItemTitle(item) : result.itemId}: ${result.message ?? result.outcome}`;
   };
@@ -323,20 +319,12 @@ function outcomeSummary(pack: StarterPack, results: StarterInstallOutcome[]): Ou
   return { title: `Installed ${installed} item${installed === 1 ? "" : "s"}`, problems, notices };
 }
 
-function InstallDialog({
-  instanceId,
-  entry,
-  onClose,
-}: {
-  instanceId: Id<"instances">;
-  entry: PackViews;
-  onClose: () => void;
-}) {
+function InstallDialog({ entry, onClose }: { entry: PackViews; onClose: () => void }) {
   const { pack, summary } = entry;
   const { toast } = useToast();
-  const install = useAction(api.starterPacks.install);
+  const install = useInstallStarterPackRequest();
   const [draft, setDraft] = useState<DraftValues>(() => starterPackDefaults(pack));
-  const { state: capabilities } = useEngineCapabilities(instanceId);
+  const { state: capabilities } = useEngineCapabilities();
   // Until the engine answers, a feature it may lack stays off; the install
   // action checks again against the engine's own answer.
   const features = useMemo(
@@ -356,7 +344,7 @@ function InstallDialog({
     }
     setInstalling(true);
     try {
-      const { results } = await install({ instanceId, packId: pack.id, values: checked.values });
+      const results = await install({ packId: pack.id, values: checked.values });
       const { title, problems, notices } = outcomeSummary(pack, results);
       const lines = [...problems, ...notices];
       toast({

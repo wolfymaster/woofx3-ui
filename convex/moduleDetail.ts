@@ -78,7 +78,7 @@ export interface ModuleDetailResult {
   widgets: Array<{ slug: string; name: string }>;
   workflows: Array<{ slug: string; name: string }>;
   /** Convex _id of the installed module, only present for installed modules. */
-  moduleDbId?: string;
+  moduleDbId?: Id<"moduleRepository">;
   /** Module-level settings declared in the manifest. */
   manifestSettings: ManifestSettingField[];
   /** Runtime instance types declared in the manifest. */
@@ -262,7 +262,7 @@ export function parseManifestSettings(manifest: unknown): ManifestSettingField[]
 
 function formatInstalledDetail(
   module: {
-    _id: string;
+    _id: Id<"moduleRepository">;
     name: string;
     description: string;
     version: string;

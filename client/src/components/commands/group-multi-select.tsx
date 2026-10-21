@@ -1,4 +1,3 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -12,10 +11,11 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { ChatCommandGroup } from "@/engine/types";
 import { groupLabel, sortGroups } from "@/lib/group-display";
 import { cn } from "@/lib/utils";
 
-type GroupDoc = Doc<"chatCommandGroups">;
+type GroupDoc = ChatCommandGroup;
 
 interface GroupMultiSelectProps {
   groups: GroupDoc[];

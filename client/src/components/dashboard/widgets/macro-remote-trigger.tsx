@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { convexSiteUrl } from "@/lib/convexSiteUrl";
 import { extractMacroVariables, type MacroButton } from "@/lib/macro-pad";
 import { type MacroTriggerTarget, macroTriggerExamples, macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
 
@@ -104,7 +104,7 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
   const setAllowGet = useMutation(api.macroTriggers.setAllowGet);
   const reconfirm = useMutation(api.macroTriggers.reconfirm);
 
-  const macroId = macro.id as Id<"macros">;
+  const macroId = macro.id;
   const [revealedToken, setRevealedToken] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<"rotate" | "revoke" | null>(null);
   const [busy, setBusy] = useState(false);
@@ -258,8 +258,8 @@ export function MacroRemoteTrigger({ instanceId, macro }: MacroRemoteTriggerProp
       {trigger && revealedToken && (
         <RevealedTrigger
           target={{
-            endpoint: macroTriggerEndpoint(CONVEX_SITE_URL),
-            url: macroTriggerUrl(CONVEX_SITE_URL, revealedToken),
+            endpoint: macroTriggerEndpoint(convexSiteUrl()),
+            url: macroTriggerUrl(convexSiteUrl(), revealedToken),
             token: revealedToken,
           }}
           variables={variables}

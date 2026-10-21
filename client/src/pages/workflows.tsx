@@ -1,4 +1,3 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
 import {
   ArrowLeft,
@@ -53,13 +52,14 @@ import { TestRunSheet } from "@/components/workflows/test-run-sheet";
 import { WorkflowEditor } from "@/components/workflows/workflow-editor";
 import { WorkflowFlowEditor } from "@/components/workflows/workflow-flow-editor";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
+import { useEngineScope } from "@/engine/context";
 import {
   useDeleteWorkflowRequest,
   useSetWorkflowEnabledRequest,
   useUpdateWorkflowRequest,
   useWorkflows,
 } from "@/engine/hooks/use-workflows";
-import { useInstance } from "@/hooks/use-instance";
+import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows, useWorkflowHealthResyncOnMount } from "@/hooks/use-workflow-health";
@@ -75,7 +75,7 @@ import {
 import { type WorkflowEditorTab, workflowEditorTab } from "@/lib/workflow-run-route";
 import { otherWorkflowsOnEvent, testRunPreset, workflowEventTrigger } from "@/lib/workflow-test-run";
 
-type WorkflowRow = Doc<"workflows">;
+type WorkflowRow = Workflow;
 type EnabledFilter = "all" | "enabled" | "disabled";
 
 const LIST_PATH = "/stream/workflows";
@@ -142,10 +142,10 @@ function WorkflowTableSkeleton() {
 function WorkflowListScreen() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const { catalogTriggers } = useWorkflowCatalog();
 
-  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
+  const workflows = useWorkflows();
   const { byId: notRunning } = useNotRunningWorkflows();
   useWorkflowHealthResyncOnMount();
   const setEnabled = useSetWorkflowEnabledRequest();
@@ -184,12 +184,12 @@ function WorkflowListScreen() {
   const enabledCount = allWorkflows.filter((w) => w.isEnabled).length;
 
   async function handleToggleEnabled(workflow: WorkflowRow) {
-    if (!instance) {
+    if (!instanceId) {
       return;
     }
     setTogglingId(workflow.engineWorkflowId);
     try {
-      await setEnabled(instance._id as Id<"instances">, workflow.engineWorkflowId, !workflow.isEnabled);
+      await setEnabled(workflow.engineWorkflowId, !workflow.isEnabled);
     } catch (err) {
       toast({
         title: "Failed to toggle workflow",
@@ -202,12 +202,12 @@ function WorkflowListScreen() {
   }
 
   async function handleDelete() {
-    if (!instance || !deleteTarget) {
+    if (!instanceId || !deleteTarget) {
       return;
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId(instance._id as Id<"instances">, deleteTarget.engineWorkflowId);
+      await deleteByEngineId(deleteTarget.engineWorkflowId);
       toast({ title: "Workflow deleted" });
       setDeleteTarget(null);
     } catch (err) {
@@ -252,7 +252,7 @@ function WorkflowListScreen() {
               data-testid="input-search-workflows"
             />
           </div>
-          <Button onClick={() => navigate(CREATE_PATH)} disabled={!instance} data-testid="button-create-workflow">
+          <Button onClick={() => navigate(CREATE_PATH)} disabled={!instanceId} data-testid="button-create-workflow">
             <Plus className="h-4 w-4 mr-2" />
             Create Workflow
           </Button>
@@ -298,7 +298,7 @@ function WorkflowListScreen() {
 
                   return (
                     <TableRow
-                      key={workflow._id}
+                      key={workflow.engineWorkflowId}
                       className="cursor-pointer"
                       onClick={() => navigate(`${LIST_PATH}/${workflow.engineWorkflowId}`)}
                       data-testid={`row-workflow-${workflow.engineWorkflowId}`}
@@ -415,7 +415,7 @@ function WorkflowListScreen() {
 
 function CreateWorkflowScreen() {
   const [, navigate] = useLocation();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
@@ -426,7 +426,7 @@ function CreateWorkflowScreen() {
 
       <PageHeader title="Create a new workflow" description="Pick what starts it, then add its steps" />
 
-      {instance && <WorkflowEditor instanceId={instance._id as Id<"instances">} />}
+      {instanceId && <WorkflowEditor />}
     </div>
   );
 }
@@ -438,9 +438,9 @@ function CreateWorkflowScreen() {
 function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
 
-  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
+  const workflows = useWorkflows();
   const updateFromDefinition = useUpdateWorkflowRequest();
   const deleteByEngineId = useDeleteWorkflowRequest();
   const notRunningHealth = useNotRunningWorkflows().byId.get(engineWorkflowId);
@@ -507,7 +507,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   };
 
   const saveTitle = async () => {
-    if (!instance) {
+    if (!instanceId) {
       return;
     }
     const trimmed = editedTitle.trim();
@@ -517,11 +517,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     try {
       const def = unescapeDollarKeys(workflow.definition) as WorkflowDefinition;
-      await updateFromDefinition(
-        instance._id as Id<"instances">,
-        engineWorkflowId,
-        escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition
-      );
+      await updateFromDefinition(engineWorkflowId, escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition);
       toast({ title: "Workflow name updated" });
     } catch (err) {
       toast({
@@ -544,16 +540,12 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   };
 
   const handleSave = async () => {
-    if (!instance || !currentDefinition) {
+    if (!instanceId || !currentDefinition) {
       return;
     }
     setIsSaving(true);
     try {
-      await updateFromDefinition(
-        instance._id as Id<"instances">,
-        engineWorkflowId,
-        escapeDollarKeys(currentDefinition) as WorkflowDefinition
-      );
+      await updateFromDefinition(engineWorkflowId, escapeDollarKeys(currentDefinition) as WorkflowDefinition);
       toast({ title: "Workflow saved" });
     } catch (err) {
       toast({
@@ -567,12 +559,12 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   };
 
   const confirmDelete = async () => {
-    if (!instance) {
+    if (!instanceId) {
       return;
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId(instance._id as Id<"instances">, engineWorkflowId);
+      await deleteByEngineId(engineWorkflowId);
       setDeleteDialogOpen(false);
       navigate(LIST_PATH);
     } catch (err) {
@@ -646,7 +638,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
             size="sm"
             variant="outline"
             onClick={() => setTestRunOpen(true)}
-            disabled={!instance}
+            disabled={!instanceId}
             data-testid="button-workflow-test-run"
           >
             <Play className="h-4 w-4 mr-2" />
@@ -682,21 +674,17 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
 
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
-        {instance ? (
-          <WorkflowFlowEditor
-            instanceId={instance._id as Id<"instances">}
-            engineWorkflowId={engineWorkflowId}
-            onDefinitionChange={setCurrentDefinition}
-          />
+        {instanceId ? (
+          <WorkflowFlowEditor engineWorkflowId={engineWorkflowId} onDefinitionChange={setCurrentDefinition} />
         ) : (
           <div className="flex h-full items-center justify-center">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         )}
       </div>
-      {tab === "runs" && instance && (
+      {tab === "runs" && instanceId && (
         <div className="flex-1 overflow-hidden">
-          <WorkflowRunsPanel instanceId={instance._id as Id<"instances">} engineWorkflowId={engineWorkflowId} />
+          <WorkflowRunsPanel engineWorkflowId={engineWorkflowId} />
         </div>
       )}
 

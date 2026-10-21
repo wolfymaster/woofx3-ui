@@ -6,16 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEngineScope } from "@/engine/context";
 import {
   useRefreshResourceValuesRequest,
   useResourceInstancesOfKind,
   useResourceKind,
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
-import { useInstance } from "@/hooks/use-instance";
+import type { ModuleResourceInstance } from "@/engine/types";
 import { useResourceAction } from "@/hooks/use-resource-action";
 import type { DashboardWidgetProps } from "@/lib/dashboard-widgets/types";
-import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
+import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import {
   QUEUE_MAX_ENTRY_LENGTH,
   QUEUE_REFUSAL_MESSAGES,
@@ -41,12 +42,11 @@ function configuredCanonicalId(config: Record<string, unknown> | undefined): str
  * change event rather than being guessed at locally.
  */
 export function QueueWidget({ config, onConfigChange }: DashboardWidgetProps) {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
 
-  const kindDefinition = useResourceKind(instanceId ?? null, QUEUE_KIND);
-  const queues = useResourceInstancesOfKind(instanceId ?? null, QUEUE_KIND);
-  const values = useResourceValues(instanceId ?? null);
+  const kindDefinition = useResourceKind(QUEUE_KIND);
+  const queues = useResourceInstancesOfKind(QUEUE_KIND);
+  const values = useResourceValues();
   const refreshValues = useRefreshResourceValuesRequest();
 
   // Entries arrive by webhook while the dashboard is open; this fills in any
@@ -55,7 +55,7 @@ export function QueueWidget({ config, onConfigChange }: DashboardWidgetProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues(instanceId, QUEUE_KIND).catch(() => {
+    refreshValues(QUEUE_KIND).catch(() => {
       // The mirror still shows the last known line; the next change updates it.
     });
   }, [instanceId, refreshValues]);
@@ -113,8 +113,8 @@ function QueueHeader({
   selected,
   onSelect,
 }: {
-  queues: ResourceInstanceDoc[];
-  selected: ResourceInstanceDoc;
+  queues: ModuleResourceInstance[];
+  selected: ModuleResourceInstance;
   onSelect: (canonicalId: string) => void;
 }) {
   // One queue needs no chooser; a dropdown of a single option is a control that
@@ -151,7 +151,15 @@ function QueueHeader({
   );
 }
 
-function QueueBody({ queue, moduleName, value }: { queue: ResourceInstanceDoc; moduleName: string; value: unknown }) {
+function QueueBody({
+  queue,
+  moduleName,
+  value,
+}: {
+  queue: ModuleResourceInstance;
+  moduleName: string;
+  value: unknown;
+}) {
   const { run, pending } = useResourceAction({ instance: queue, moduleName });
   const [entry, setEntry] = useState("");
 

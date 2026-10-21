@@ -1,4 +1,3 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
 import { ChevronRight, ExternalLink, Plus, Zap } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
@@ -10,8 +9,9 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
 import { WorkflowNotEditable } from "@/components/workflows/workflow-not-editable";
+import { useEngineScope } from "@/engine/context";
 import { useSetWorkflowEnabledRequest } from "@/engine/hooks/use-workflows";
-import { useInstance } from "@/hooks/use-instance";
+import type { Workflow } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
@@ -53,7 +53,7 @@ export interface NewTriggerRequest {
 interface EventTriggerListProps {
   triggerPreset: TriggerPreset;
   /** Every workflow on this instance; the ones for this event are found here. */
-  workflows: Doc<"workflows">[];
+  workflows: Workflow[];
   /** Where this event sits in the Alerts menu, above its own title. */
   breadcrumb: string[];
   /** h1 when the event is the page; h2 when it shares the page with others. */
@@ -98,7 +98,7 @@ export function EventTriggerList({
   children,
 }: EventTriggerListProps) {
   const event = triggerPreset.event ?? "";
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const conditionFields = useMemo(() => conditionFieldsOf(triggerPreset), [triggerPreset]);
   const dynamicFields = useMemo(() => conditionFields.filter(isInternalSource), [conditionFields]);
   const [loadedOptions, setLoadedOptions] = useState<ReadonlyMap<string, LoadedFieldOptions>>(new Map());
@@ -232,7 +232,7 @@ export function EventTriggerList({
             )}
             <Button
               onClick={() => startDraft()}
-              disabled={!instance}
+              disabled={!instanceId}
               className="h-11 w-11 px-0 sm:h-10 sm:w-auto sm:pl-3.5 sm:pr-4"
               aria-label="New trigger"
               data-testid={`add-trigger-${event}`}
@@ -281,11 +281,10 @@ export function EventTriggerList({
           )
         ) : null}
 
-        {instance &&
+        {instanceId &&
           shown.map((trigger) => (
             <TriggerCard
               key={trigger.row.engineWorkflowId}
-              instanceId={instance._id as Id<"instances">}
               trigger={trigger}
               triggerPreset={triggerPreset}
               sentence={sentenceFor(trigger.conditions)}
@@ -295,7 +294,6 @@ export function EventTriggerList({
               }
               editor={(read) => (
                 <TriggerEditor
-                  instanceId={instance._id as Id<"instances">}
                   triggerPreset={triggerPreset}
                   conditionFields={conditionFields}
                   saved={
@@ -312,13 +310,12 @@ export function EventTriggerList({
             />
           ))}
 
-        {instance && draft && (
+        {instanceId && draft && (
           <article
             className="rounded-2xl border border-foreground/20 bg-card p-4 sm:p-5"
             data-testid="trigger-card-new"
           >
             <TriggerEditor
-              instanceId={instance._id as Id<"instances">}
               triggerPreset={triggerPreset}
               conditionFields={conditionFields}
               saved={undefined}
@@ -346,7 +343,6 @@ function aimFor(seed: ActionPreset, scope: TriggerActionScope): TriggerPin | und
 }
 
 interface TriggerCardProps {
-  instanceId: Id<"instances">;
   trigger: EventTrigger;
   triggerPreset: TriggerPreset;
   sentence: SentencePart[];
@@ -357,7 +353,7 @@ interface TriggerCardProps {
 }
 
 /** One trigger: its sentence and steps on one card, opening onto its editor. */
-function TriggerCard({ instanceId, trigger, triggerPreset, sentence, isExpanded, onToggle, editor }: TriggerCardProps) {
+function TriggerCard({ trigger, triggerPreset, sentence, isExpanded, onToggle, editor }: TriggerCardProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { catalogActions } = useWorkflowCatalog();
@@ -392,7 +388,7 @@ function TriggerCard({ instanceId, trigger, triggerPreset, sentence, isExpanded,
   async function toggleEnabled() {
     setIsSwitching(true);
     try {
-      await setEnabled(instanceId, row.engineWorkflowId, !row.isEnabled);
+      await setEnabled(row.engineWorkflowId, !row.isEnabled);
     } catch (err) {
       toast({
         title: row.isEnabled ? "Couldn't pause the trigger" : "Couldn't switch the trigger on",

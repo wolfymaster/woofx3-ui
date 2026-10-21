@@ -56,16 +56,16 @@ What those settings are is decided by the trigger, not by the UI: `components/te
 
 ## Instance scope
 
-Most Convex-backed screens use **`useInstance()`** (`client/src/hooks/use-instance.ts`): it reads `instances.listForCurrentUser`, picks the Nanostore-selected `currentInstanceId` or falls back to the first instance, and exposes `instance`, `setInstance`, and loading state. Queries and mutations should pass `instanceId` when talking to Convex functions that proxy to the engine.
+Most Convex-backed screens use **`useInstance()`** (`client/src/hooks/use-instance.ts`): it reads `instances.listForCurrentUser`, picks the Nanostore-selected `currentInstanceId` or falls back to the first instance, and exposes `instance`, `setInstance`, and loading state. Cloud queries and mutations pass its `instance._id`. Engine reads and requests go through the engine gateway instead, and take the instance from **`useEngineScope().instanceId`** (see [Engine gateway](/patterns/engine-gateway)).
 
 ## Where data comes from (today)
 
 The codebase is intentionally **hybrid**:
 
 - **Convex** (`useQuery` / `useMutation` / `useAction`) — multi-tenant control-plane data: accounts, instances, workflows metadata, assets, module catalog, dashboard layout, engine health checks, etc. Engine-proxied reads (e.g. `moduleEngine.listEngineModules`, `workflowCatalog.fetchMerged`) are Convex **actions** that talk to the engine over capnweb on the server side.
-- **`WoofxTransport`** (`client/src/lib/transport/`) — direct **browser ↔ engine** WebSocket for **realtime** channels only (chat, stream status, workflow runs). Documented in-repo as *not* for Convex-proxied calls. Browsing / installing / uninstalling modules does **not** use the transport — those flows go browser → Convex mutation/action → engine.
+- **`WoofxTransport`** (`client/src/lib/transport/`) — direct **browser ↔ engine** WebSocket for **realtime** channels only (chat, stream status, workflow runs), used only by the Convex gateway adapter (`client/src/engine/convex/`). Screens reach it through the gateway: `session.useLiveConnection` keeps it open and `eventLog.useStreamEventsSubscription` subscribes. Documented in-repo as *not* for Convex-proxied calls. Browsing / installing / uninstalling modules does **not** use the transport — those flows go browser → Convex mutation/action → engine.
 - **`transientEvents`** (Convex realtime subscription) — the bridge the UI uses to observe async engine operations correlated via an operation-specific key. Any flow that RPCs the engine and later receives a webhook callback (module install, uninstall, future async operations) emits progress/success/error events to this table; components subscribe by `correlationKey` and get realtime pushes the moment the webhook handler writes.
-When you touch a screen, check imports: `from "convex/react"` vs `@/lib/transport` tells you which path it uses.
+When you touch a screen, check imports: engine data comes through `@/engine/hooks/*` (the engine gateway, see [Engine gateway](../patterns/engine-gateway.md)), and cloud data through `convex/react`. No screen imports `@/lib/transport`; `client/src/engine/boundary.test.ts` holds that.
 
 ## Related docs
 

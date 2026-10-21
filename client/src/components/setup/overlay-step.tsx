@@ -1,15 +1,13 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { SetupStatus } from "@convex/setup";
-import { useAction } from "convex/react";
 import { Copy, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useEngineScope } from "@/engine/context";
 import { useEngineSyncRequest, useEngineSyncState } from "@/engine/hooks/use-engine-status";
+import { useBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import { useCreateSceneRequest, useScenes, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useToast } from "@/hooks/use-toast";
-import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import {
   findAlertWidget,
   overlayCatalogState,
@@ -19,7 +17,6 @@ import {
 } from "@/lib/setup-overlay";
 
 interface OverlayStepProps {
-  instanceId: Id<"instances">;
   status: SetupStatus;
   onContinue: () => void;
 }
@@ -47,13 +44,15 @@ function Actions({ onContinue, continueLabel }: { onContinue: () => void; contin
  * creating waits until a sync has read the engine's widgets, and asks for one
  * if none has run, rather than making an overlay with nothing on it.
  */
-export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps) {
-  const scenes = useScenes(status.engineRegistered ? instanceId : null);
-  const catalog = useSceneWidgetCatalog(status.engineRegistered ? instanceId : null);
-  const syncState = useEngineSyncState(status.engineRegistered ? instanceId : null);
+export function OverlayStep({ status, onContinue }: OverlayStepProps) {
+  const { instanceId } = useEngineScope();
+  const engineReady = status.engineRegistered && instanceId !== null;
+  const scenes = useScenes({ enabled: status.engineRegistered });
+  const catalog = useSceneWidgetCatalog({ enabled: status.engineRegistered });
+  const syncState = useEngineSyncState({ enabled: status.engineRegistered });
   const syncNow = useEngineSyncRequest();
   const createScene = useCreateSceneRequest();
-  const getOrCreateKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
+  const getBrowserSourceUrl = useBrowserSourceUrlRequest();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [url, setUrl] = useState<string | null>(null);
@@ -63,22 +62,25 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
 
   // The engine announces a new scene by webhook, so a created scene shows up
   // in `scenes` a moment after createScene returns.
-  const scene = scenes ? [...scenes].sort((a, b) => a._creationTime - b._creationTime)[0] : undefined;
-  const sceneId = scene?.engineSceneId ? scene._id : null;
+  const scene = scenes ? [...scenes].sort((a, b) => a.createdAt - b.createdAt)[0] : undefined;
+  const sceneId = scene?.engineSceneId ? scene.id : null;
 
   const alertWidget = catalog ? findAlertWidget(catalog) : undefined;
   const syncRuns = syncState?.recentRuns ?? [];
-  const latestRunId = syncRuns[0]?._id ?? null;
+  const latestRunId = syncRuns[0]?.id ?? null;
   const catalogState = overlayCatalogState(alertWidget !== undefined, syncRuns, syncRequestedAfter);
   const needsScene = scenes !== undefined && !scene;
 
   const requestSync = useCallback(() => {
+    if (!engineReady) {
+      return;
+    }
     setError(null);
     setSyncRequestedAfter(latestRunId);
-    syncNow(instanceId).catch((err: unknown) => {
+    syncNow().catch((err: unknown) => {
       setError(err instanceof Error ? err.message : String(err));
     });
-  }, [instanceId, latestRunId, syncNow]);
+  }, [engineReady, latestRunId, syncNow]);
 
   useEffect(() => {
     if (needsScene && syncState !== undefined && catalogState === "unsynced" && syncRequestedAfter === undefined) {
@@ -91,10 +93,10 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
       return;
     }
     let cancelled = false;
-    getOrCreateKey({ sceneId })
-      .then((key) => {
+    getBrowserSourceUrl(sceneId)
+      .then((browserSourceUrl) => {
         if (!cancelled) {
-          setUrl(browserSourceUrlForKey(key));
+          setUrl(browserSourceUrl);
         }
       })
       .catch((err: unknown) => {
@@ -105,7 +107,7 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
     return () => {
       cancelled = true;
     };
-  }, [sceneId, url, getOrCreateKey]);
+  }, [sceneId, url, getBrowserSourceUrl]);
 
   if (!status.engineRegistered) {
     return (
@@ -120,10 +122,13 @@ export function OverlayStep({ instanceId, status, onContinue }: OverlayStepProps
   }
 
   async function handleCreate() {
+    if (!engineReady) {
+      return;
+    }
     setError(null);
     setCreating(true);
     try {
-      await createScene(instanceId, {
+      await createScene({
         name: SETUP_OVERLAY_NAME,
         widgetsJson: JSON.stringify(setupOverlayWidgets(alertWidget)),
         layoutJson: JSON.stringify({ ...SETUP_OVERLAY_SIZE, backgroundColor: "transparent" }),

@@ -1,10 +1,10 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
 import { BellRing, Loader2, RotateCcw, ScrollText } from "lucide-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useReplayAlert } from "@/engine/hooks/use-replay-alert";
+import type { EngineAlert } from "@/engine/types";
 import { useDescribeAlert } from "@/hooks/use-describe-alert";
 import { alertTarget } from "@/lib/alert-envelope";
 import { describeAlertFailure } from "@/lib/alert-failure";
@@ -15,12 +15,11 @@ import { formatTimeAgo } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
 
 interface AlertFeedProps {
-  instanceId: Id<"instances">;
-  alerts: Doc<"engineAlerts">[];
+  alerts: EngineAlert[];
 }
 
 /** Recent dispatches, newest first, each replayable. */
-export function AlertFeed({ instanceId, alerts }: AlertFeedProps) {
+export function AlertFeed({ alerts }: AlertFeedProps) {
   const describe = useDescribeAlert();
   if (alerts.length === 0) {
     return (
@@ -37,21 +36,20 @@ export function AlertFeed({ instanceId, alerts }: AlertFeedProps) {
   return (
     <ul className="divide-y divide-border" data-testid="alert-feed">
       {alerts.map((alert) => (
-        <AlertFeedRow key={alert._id} instanceId={instanceId} alert={alert} summary={describe(alert.payload)} />
+        <AlertFeedRow key={alert.id} alert={alert} summary={describe(alert.payload)} />
       ))}
     </ul>
   );
 }
 
 interface AlertFeedRowProps {
-  instanceId: Id<"instances">;
-  alert: Doc<"engineAlerts">;
+  alert: EngineAlert;
   /** Who did what, e.g. "wolfy_fan redeemed Hydrate", and the facts worth a glance. */
   summary: AlertSummary;
 }
 
-function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
-  const { replay, busy } = useReplayAlert(instanceId);
+function AlertFeedRow({ alert, summary }: AlertFeedRowProps) {
+  const { replay, busy } = useReplayAlert();
 
   const style = engineAlertStyle(alert);
   const StatusIcon = style.icon;
@@ -59,7 +57,7 @@ function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
   const failure = alert.error ? describeAlertFailure(alert.error) : null;
 
   return (
-    <li className="group flex items-start gap-3 px-3 py-2.5" data-testid={`alert-feed-${alert._id}`}>
+    <li className="group flex items-start gap-3 px-3 py-2.5" data-testid={`alert-feed-${alert.id}`}>
       <span className={cn("mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md", style.bg)}>
         <StatusIcon className={cn("h-4 w-4", style.color)} />
       </span>
@@ -122,7 +120,7 @@ function AlertFeedRow({ instanceId, alert, summary }: AlertFeedRowProps) {
               className="h-7 w-7"
               disabled={busy}
               onClick={() => void replay(alert.engineAlertId)}
-              data-testid={`button-replay-alert-${alert._id}`}
+              data-testid={`button-replay-alert-${alert.id}`}
             >
               {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
               <span className="sr-only">Play this alert again</span>

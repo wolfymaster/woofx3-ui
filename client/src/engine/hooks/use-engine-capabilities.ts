@@ -1,15 +1,12 @@
-import type { Id } from "@convex/_generated/dataModel";
-import type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
-import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
-import { useEngineGateway } from "@/engine/context";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
+import type { EngineCapability, EngineCapabilityReport, ReadOptions } from "@/engine/types";
 import {
   type CapabilitySupport,
   capabilitySupport,
   createReconnectDetector,
   type EngineCapabilitiesState,
 } from "@/lib/engine-capabilities";
-import { $engineConnected } from "@/lib/transport/engine-connection";
 
 const LOADING: EngineCapabilitiesState = { status: "loading" };
 
@@ -37,19 +34,25 @@ function subscribe(listener: () => void): () => void {
 }
 
 const isReconnect = createReconnectDetector();
-$engineConnected.subscribe((connected) => {
-  if (isReconnect(connected)) {
-    generation += 1;
-    entries.clear();
-    inFlight.clear();
-    notify();
-  }
-});
+
+/**
+ * Drops every cached answer when the live connection comes back after a
+ * drop, so mounted hooks ask again. Mounted once, with the live connection,
+ * so it sees every drop whatever is on screen.
+ */
+export function useCapabilitiesReconnectReset(): void {
+  const connected = useEngineGateway().session.useConnected();
+  useEffect(() => {
+    if (isReconnect(connected)) {
+      generation += 1;
+      entries.clear();
+      inFlight.clear();
+      notify();
+    }
+  }, [connected]);
+}
 
 function requestErrorMessage(err: unknown): string {
-  if (err instanceof ConvexError && typeof err.data === "string") {
-    return err.data;
-  }
   return err instanceof Error ? err.message : String(err);
 }
 
@@ -83,27 +86,23 @@ export interface EngineCapabilities {
 
 /**
  * The features the instance's engine supports, cached for the page session and
- * asked again when the engine reconnects. See lib/engine-capabilities.ts for
+ * asked again when the engine reconnects. `enabled: false` asks nothing and
+ * reads as loading. See lib/engine-capabilities.ts for
  * turning the answer into a gate.
  */
-export function useEngineCapabilities(instanceId: Id<"instances"> | undefined): EngineCapabilities {
+export function useEngineCapabilities({ enabled = true }: ReadOptions = {}): EngineCapabilities {
+  const scope = useEngineScope();
+  const instanceId = enabled ? scope.instanceId : null;
   const getCapabilities = useEngineGateway().status.useCapabilitiesRequest();
   const key = instanceId ?? "";
   const state = useSyncExternalStore(subscribe, () => (key ? (entries.get(key) ?? LOADING) : LOADING));
   const cached = key !== "" && entries.has(key);
 
-  const fetchReport = useCallback(() => {
-    if (!instanceId) {
-      throw new Error("useEngineCapabilities: fetch without an instance");
-    }
-    return getCapabilities(instanceId);
-  }, [instanceId, getCapabilities]);
-
   useEffect(() => {
     if (instanceId && !cached) {
-      load(instanceId, fetchReport);
+      load(instanceId, getCapabilities);
     }
-  }, [instanceId, cached, fetchReport]);
+  }, [instanceId, cached, getCapabilities]);
 
   const refresh = useCallback(() => {
     if (instanceId) {

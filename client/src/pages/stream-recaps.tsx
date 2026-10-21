@@ -61,7 +61,7 @@ function RecapRow({ row }: { row: SessionSummaryRow }) {
 
 export default function StreamRecaps() {
   const { instance, isLoading } = useInstance();
-  useOpenSessionRefresh(instance?._id);
+  useOpenSessionRefresh();
   const rows = useQuery(
     api.streamSessionSummaries.listRecent,
     instance ? { instanceId: instance._id, limit: RECAP_LIST_LIMIT } : "skip"

@@ -216,7 +216,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await skipCurrentAlert(id);
+            const result = await skipCurrentAlert();
             if (!result.ok) {
               throw new Error(result.reason ?? "The engine refused to skip");
             }
@@ -235,7 +235,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await clearAlertQueue(id);
+            const result = await clearAlertQueue();
             if (!result.ok) {
               throw new Error(result.reason ?? "The engine refused to clear the queue");
             }

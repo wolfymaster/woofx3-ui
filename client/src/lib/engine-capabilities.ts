@@ -1,5 +1,5 @@
-import type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 import type { OptionsSupport } from "@convex/lib/engineTestRun";
+import type { EngineCapability, EngineCapabilityReport } from "@/engine/types";
 
 /** What the browser knows about an instance's engine features; see useEngineCapabilities. */
 export type EngineCapabilitiesState =

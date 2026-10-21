@@ -1,9 +1,9 @@
 import { describe, expect, it } from "bun:test";
-import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import { SceneSyncClient } from "@woofx3/api/scene-editor/client";
 import { diffDocuments } from "@woofx3/api/scene-editor/document";
 import { createCompositionEditor, LocalDocumentSource, offeredKinds, SyncDocumentSource } from "@woofx3/scene/editor";
 import { PROFILES, stackOrder } from "@woofx3/scene/model";
+import type { SceneWidgetCatalogRow } from "@/engine/types";
 import {
   canvasSettingsOf,
   catalogOfRows,

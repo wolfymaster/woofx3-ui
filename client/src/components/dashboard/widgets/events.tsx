@@ -1,4 +1,3 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
 import { isFailureStatus } from "@convex/lib/engineAlertLifecycle";
 import { Info, ListFilter, Loader2, Radio, RotateCcw, ScrollText, Star } from "lucide-react";
 import { useMemo } from "react";
@@ -10,11 +9,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEngineScope } from "@/engine/context";
 import { useEngineAlerts } from "@/engine/hooks/use-alert-queue";
 import { type EventLogStatus, useEventLog } from "@/engine/hooks/use-event-log";
 import { type EventLogSettingsHandle, useEventLogSettings } from "@/engine/hooks/use-event-log-settings";
 import { useReplayAlert } from "@/engine/hooks/use-replay-alert";
-import { useInstance } from "@/hooks/use-instance";
+import type { EngineAlert } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { type ActivityRow, eventTypeGroups, mergeActivity, triggersByEventType } from "@/lib/activity-feed";
@@ -29,7 +29,6 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
 
 const ALERT_LIMIT = 50;
 
-type EngineAlert = Doc<"engineAlerts">;
 export type EventsRow = ActivityRow<EngineAlert>;
 
 function describeRow(row: EventsRow, trigger: TriggerPreset | undefined): AlertSummary {
@@ -56,11 +55,10 @@ interface EventsWidgetProps extends DashboardWidgetProps {
  * Events widget on it.
  */
 export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
   const { triggerPresets } = useWorkflowCatalog();
   const byEvent = useMemo(() => triggersByEventType(triggerPresets), [triggerPresets]);
-  const selection = useEventLogSettings(instanceId);
+  const selection = useEventLogSettings();
   const settings = selection.state;
 
   // Undefined until the selection is known; null for an engine without one,
@@ -69,8 +67,8 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
     settings.status === "ready" ? settings.settings.enabled : settings.status === "unsupported" ? null : undefined;
   const enabledTypes = useMemo(() => (enabled === null ? null : new Set(enabled ?? [])), [enabled]);
 
-  const alerts = useEngineAlerts(instanceId ?? null, ALERT_LIMIT);
-  const { events, status } = useEventLog(instanceId, enabled);
+  const alerts = useEngineAlerts(ALERT_LIMIT);
+  const { events, status } = useEventLog(enabled);
   const rows = useMemo(() => mergeActivity(events, alerts ?? [], enabledTypes), [events, alerts, enabledTypes]);
 
   const failures = rows.filter((row) => row.alerts[0] && isFailureStatus(row.alerts[0].status)).length;
@@ -92,7 +90,7 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
           <HistoryNote status={historyStatus} />
         </div>
         <div className="flex items-center gap-1">
-          {instanceId && <AlertQueueControls instanceId={instanceId} />}
+          {instanceId && <AlertQueueControls />}
           {instanceId && <EventsFilterButton selection={selection} byEvent={byEvent} />}
         </div>
       </div>
@@ -116,7 +114,6 @@ export function EventsWidget({ onSaveHighlight }: EventsWidgetProps) {
                   row={row}
                   trigger={trigger}
                   summary={describeRow(row, trigger)}
-                  instanceId={instanceId}
                   onSaveHighlight={onSaveHighlight}
                 />
               );
@@ -274,11 +271,10 @@ interface EventsRowItemProps {
   row: EventsRow;
   trigger: TriggerPreset | undefined;
   summary: AlertSummary;
-  instanceId: Id<"instances">;
   onSaveHighlight?: (row: EventsRow, summary: AlertSummary) => void;
 }
 
-function EventsRowItem({ row, trigger, summary, instanceId, onSaveHighlight }: EventsRowItemProps) {
+function EventsRowItem({ row, trigger, summary, onSaveHighlight }: EventsRowItemProps) {
   const alert = row.alerts[0];
   const style = alert ? engineAlertStyle(alert) : null;
   const Icon = style?.icon ?? trigger?.icon ?? Radio;
@@ -335,7 +331,7 @@ function EventsRowItem({ row, trigger, summary, instanceId, onSaveHighlight }: E
                 {row.alerts.length} alerts
               </Badge>
             )}
-            <AlertRowActions instanceId={instanceId} alert={alert} />
+            <AlertRowActions alert={alert} />
           </>
         ) : (
           <EventDetailsButton row={row} trigger={trigger} title={summary.title} />
@@ -358,8 +354,8 @@ function EventsRowItem({ row, trigger, summary, instanceId, onSaveHighlight }: E
 }
 
 /** Replay and "open run" for the newest alert of a row. */
-function AlertRowActions({ instanceId, alert }: { instanceId: Id<"instances">; alert: EngineAlert }) {
-  const { replay, busy } = useReplayAlert(instanceId);
+function AlertRowActions({ alert }: { alert: EngineAlert }) {
+  const { replay, busy } = useReplayAlert();
   return (
     <>
       {/* `workflowId` on an alert row is the execution that fired it, which is
@@ -385,7 +381,7 @@ function AlertRowActions({ instanceId, alert }: { instanceId: Id<"instances">; a
             className="h-7 w-7"
             disabled={busy}
             onClick={() => void replay(alert.engineAlertId)}
-            data-testid={`button-replay-alert-${alert._id}`}
+            data-testid={`button-replay-alert-${alert.id}`}
           >
             {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
             <span className="sr-only">Play this alert again</span>

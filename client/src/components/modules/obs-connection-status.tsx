@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { AlertCircle, CheckCircle2, CircleHelp, Loader2 } from "lucide-react";
 import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { describeObsStatus, type ObsStatusTone } from "@/lib/obs-status";
@@ -22,8 +21,8 @@ function ToneIcon({ tone }: { tone: ObsStatusTone }) {
  * a wrong password or address shows as soon as it is saved. Renders nothing
  * on an engine that cannot report it.
  */
-export function ObsConnectionStatus({ instanceId }: { instanceId: Id<"instances"> }) {
-  const { support, status } = useObsStatus(instanceId, true);
+export function ObsConnectionStatus() {
+  const { support, status } = useObsStatus(true);
   if (support !== "supported") {
     return null;
   }

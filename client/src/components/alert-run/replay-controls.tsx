@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { isRecordedOrigin, type ManualRunOrigin, UNRECORDED_ORIGIN } from "@convex/lib/manualRunOrigin";
 import { AlertCircle, CheckCircle2, Loader2, RotateCcw, StepForward } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -20,7 +19,6 @@ const OUTCOME_TIMEOUT_MS = 8000;
 type Mode = "run" | "resume";
 
 interface ReplayControlsProps {
-  instanceId: Id<"instances">;
   engineRunId: string;
   /** The step that ended the run, when it ended by failing. Offers resume from it. */
   failedStepTaskId: string | null;
@@ -35,19 +33,14 @@ interface ReplayControlsProps {
  * The outcome is shown here because an unrecorded replay has nowhere else to
  * appear; a recorded one also shows up in its workflow's runs.
  */
-export function ReplayControls({
-  instanceId,
-  engineRunId,
-  failedStepTaskId,
-  origin = UNRECORDED_ORIGIN,
-}: ReplayControlsProps) {
+export function ReplayControls({ engineRunId, failedStepTaskId, origin = UNRECORDED_ORIGIN }: ReplayControlsProps) {
   const replay = useReplayWorkflowRunRequest();
   const { toast } = useToast();
   const [busy, setBusy] = useState<Mode | null>(null);
   const [triggerId, setTriggerId] = useState<string | null>(null);
   const [waitElapsed, setWaitElapsed] = useState(false);
 
-  const record = useTransientEvent(instanceId, triggerId || null);
+  const record = useTransientEvent(triggerId || null);
 
   // A different run was selected: the previous replay's outcome is not this run's.
   // biome-ignore lint/correctness/useExhaustiveDependencies: engineRunId is the trigger, not a value read inside
@@ -69,7 +62,7 @@ export function ReplayControls({
     // Cleared first so the previous replay's outcome cannot be read as this one's.
     setTriggerId(null);
     try {
-      const result = await replay(instanceId, { engineRunId, fromTaskId, origin });
+      const result = await replay({ engineRunId, fromTaskId, origin });
       setTriggerId(result.triggerId);
     } catch (err) {
       toast({

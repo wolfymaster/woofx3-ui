@@ -4,7 +4,7 @@ import { useLocation, useParams } from "wouter";
 import { ReplayControls } from "@/components/alert-run/replay-controls";
 import { RunTrace } from "@/components/alert-run/run-trace";
 import { EditorBackLink } from "@/components/layout/editor-back-link";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
 import { decodeRouteParam } from "@/lib/route-param";
 
 const ALERTS_PATH = "/stream/alerts";
@@ -19,7 +19,7 @@ export default function AlertRun() {
   const params = useParams<{ engineRunId: string }>();
   const engineRunId = decodeRouteParam(params.engineRunId);
   const [, navigate] = useLocation();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -33,19 +33,13 @@ export default function AlertRun() {
 
       <div className="flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-[1200px] p-4 sm:p-6">
-          {!instance ? (
+          {!instanceId ? (
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           ) : (
             <RunTrace
-              instanceId={instance._id}
               engineRunId={engineRunId}
               actions={({ failedStepTaskId }) => (
-                <ReplayControls
-                  instanceId={instance._id}
-                  engineRunId={engineRunId}
-                  failedStepTaskId={failedStepTaskId}
-                  origin={REPLAY_ORIGIN}
-                />
+                <ReplayControls engineRunId={engineRunId} failedStepTaskId={failedStepTaskId} origin={REPLAY_ORIGIN} />
               )}
             />
           )}

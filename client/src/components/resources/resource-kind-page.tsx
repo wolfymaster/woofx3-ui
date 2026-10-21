@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
+import { useEngineScope } from "@/engine/context";
 import {
   useCreateResourceInstanceRequest,
   useDeleteResourceInstanceRequest,
@@ -35,21 +36,19 @@ import {
   useResourceValues,
   useUpdateResourceInstanceRequest,
 } from "@/engine/hooks/use-module-resources";
-import { useInstance } from "@/hooks/use-instance";
+import type { ModuleResourceInstance } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
 import { parseConfigFields } from "@/lib/parse-config-fields";
-import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
+import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import { pluralKindName } from "@/lib/resource-kind-route";
 import { summarizeResourceValue } from "@/lib/resource-values";
 import { subPathSegments } from "@/lib/route-subpath";
 import { cn } from "@/lib/utils";
 
-export type { ResourceInstanceDoc };
-
 export interface ResourceDetailProps {
-  instance: ResourceInstanceDoc;
+  instance: ModuleResourceInstance;
   /** The instance's current value; null when it holds nothing yet. */
   value: unknown;
   settings: Record<string, unknown>;
@@ -77,20 +76,19 @@ interface ResourceKindPageProps {
  */
 export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   const [location, navigate] = useLocation();
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
-  const instanceId = instance?._id;
 
-  const kindDefinition = useResourceKind(instanceId ?? null, kind);
-  const instances = useResourceInstancesOfKind(instanceId ?? null, kind);
-  const values = useResourceValues(instanceId ?? null);
+  const kindDefinition = useResourceKind(kind);
+  const instances = useResourceInstancesOfKind(kind);
+  const values = useResourceValues();
   const createInstance = useCreateResourceInstanceRequest();
   const updateInstance = useUpdateResourceInstanceRequest();
   const deleteInstance = useDeleteResourceInstanceRequest();
   const refreshValues = useRefreshResourceValuesRequest();
 
   const [creating, setCreating] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<ResourceInstanceDoc | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ModuleResourceInstance | null>(null);
 
   // Values change through webhooks once the page is open; this fills in any
   // written before it was, or while a webhook went missing.
@@ -98,7 +96,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
     if (!instanceId) {
       return;
     }
-    refreshValues(instanceId, kind).catch(() => {
+    refreshValues(kind).catch(() => {
       // The mirror still shows the last known values; the next change updates it.
     });
   }, [instanceId, kind, refreshValues]);
@@ -117,7 +115,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
   const icon = kindDefinition?.icon ? dynamicLucideIcon(kindDefinition.icon) : (view.icon ?? Boxes);
   const description = view.description ?? kindDefinition?.description ?? "";
 
-  const detailProps = (row: ResourceInstanceDoc): ResourceDetailProps => ({
+  const detailProps = (row: ModuleResourceInstance): ResourceDetailProps => ({
     instance: row,
     value: values?.[row.canonicalId] ?? null,
     settings: resourceSettings(row),
@@ -166,7 +164,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
               sorted.map((row) => {
                 const isActive = row.resourceInstanceId === selectedId;
                 return (
-                  <Link key={row._id} href={`${basePath}/${encodeURIComponent(row.resourceInstanceId)}`}>
+                  <Link key={row.canonicalId} href={`${basePath}/${encodeURIComponent(row.resourceInstanceId)}`}>
                     <span
                       className={cn(
                         "flex items-center justify-between gap-2 rounded-md px-2.5 py-2 text-[15px] cursor-pointer hover:bg-accent",
@@ -241,7 +239,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                 settings={resourceSettings(selected)}
                 onSave={async (displayName, settings) => {
                   try {
-                    await updateInstance(instanceId, {
+                    await updateInstance({
                       canonicalId: selected.canonicalId,
                       displayName,
                       settings,
@@ -266,7 +264,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
           kind={{ kind: kindDefinition.kind, name: kindDefinition.name, schema: kindDefinition.schema }}
           onClose={() => setCreating(false)}
           onCreate={async (resourceInstanceId, displayName, settings) => {
-            await createInstance(instanceId, {
+            await createInstance({
               moduleName: kindDefinition.moduleName,
               kind: kindDefinition.kind,
               resourceInstanceId,
@@ -295,7 +293,7 @@ export function ResourceKindPage({ kind, basePath }: ResourceKindPageProps) {
                   return;
                 }
                 try {
-                  await deleteInstance(instanceId, deleteTarget.canonicalId);
+                  await deleteInstance(deleteTarget.canonicalId);
                   navigate(basePath);
                 } catch (err) {
                   toast({
@@ -332,7 +330,7 @@ function SettingsCard({
   settings,
   onSave,
 }: {
-  instance: ResourceInstanceDoc;
+  instance: ModuleResourceInstance;
   /** Manifest-local id of the module that declares the instance's kind. */
   moduleId: string;
   schema: unknown[];

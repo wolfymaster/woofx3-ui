@@ -5,13 +5,19 @@ import { convexCommandsGateway } from "./commands";
 import { convexConfigGateway } from "./config";
 import { convexEventLogGateway } from "./event-log";
 import { convexMacrosGateway } from "./macros";
+import { convexModuleOAuthGateway } from "./module-oauth";
 import { convexModuleResourcesGateway } from "./module-resources";
 import { convexModulesGateway } from "./modules";
+import { convexOverlaysGateway } from "./overlays";
 import { convexRequestsGateway } from "./requests";
 import { convexResourcesGateway } from "./resources";
 import { convexScenesGateway } from "./scenes";
+import { convexSessionGateway } from "./session";
+import { convexSetupImportsGateway } from "./setup-imports";
+import { convexStarterPacksGateway } from "./starter-packs";
 import { convexStatusGateway } from "./status";
 import { convexStreamOpsGateway } from "./stream-ops";
+import { convexTwitchLinkGateway } from "./twitch-link";
 import { convexWorkflowsGateway } from "./workflows";
 
 /**
@@ -35,4 +41,10 @@ export const convexEngineGateway: EngineGateway = {
   macros: convexMacrosGateway,
   streamOps: convexStreamOpsGateway,
   config: convexConfigGateway,
+  session: convexSessionGateway,
+  twitchLink: convexTwitchLinkGateway,
+  overlays: convexOverlaysGateway,
+  moduleOAuth: convexModuleOAuthGateway,
+  setupImports: convexSetupImportsGateway,
+  starterPacks: convexStarterPacksGateway,
 };

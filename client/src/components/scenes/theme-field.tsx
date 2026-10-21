@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { CustomFieldRenderer } from "@/components/common/configuration-form";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useEngineScope } from "@/engine/context";
 import { useWidgetThemesRequest } from "@/engine/hooks/use-scenes";
 import { useInstance } from "@/hooks/use-instance";
 import {
@@ -28,17 +29,18 @@ type ThemeList = { status: "loading" } | { status: "loaded"; themes: WidgetTheme
 function ThemeField({ field, value, onChange }: Parameters<CustomFieldRenderer>[0]) {
   const { instance } = useInstance();
   const instanceId = instance?._id;
+  const { instanceId: engineInstanceId } = useEngineScope();
   const widgetCanonicalId = typeof field.widgetCanonicalId === "string" ? field.widgetCanonicalId : undefined;
   const listWidgetThemes = useWidgetThemesRequest();
   const revision = useQuery(api.moduleRepository.installedRevision, instanceId ? { instanceId } : "skip");
   const [list, setList] = useState<ThemeList>({ status: "loading" });
 
   useEffect(() => {
-    if (!instanceId || !widgetCanonicalId || revision === undefined) {
+    if (!engineInstanceId || !widgetCanonicalId || revision === undefined) {
       return;
     }
     let cancelled = false;
-    listWidgetThemes(instanceId, widgetCanonicalId)
+    listWidgetThemes(widgetCanonicalId)
       .then((result) => {
         if (!cancelled) {
           setList({ status: "loaded", themes: result.themes });
@@ -53,7 +55,7 @@ function ThemeField({ field, value, onChange }: Parameters<CustomFieldRenderer>[
     return () => {
       cancelled = true;
     };
-  }, [instanceId, widgetCanonicalId, revision, listWidgetThemes]);
+  }, [engineInstanceId, widgetCanonicalId, revision, listWidgetThemes]);
 
   const themes = list.status === "loaded" ? list.themes : [];
   const selection = useMemo(() => themeSelection(value, themes), [value, themes]);

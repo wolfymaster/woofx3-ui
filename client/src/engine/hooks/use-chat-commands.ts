@@ -1,19 +1,18 @@
 import { useEngineGateway } from "@/engine/context";
-import type { InstanceId } from "@/engine/types";
 
-/** The instance's chat commands; a null id skips the read. */
-export function useChatCommands(instanceId: InstanceId | null) {
-  return useEngineGateway().commands.useCommands(instanceId);
+/** The instance's chat commands. */
+export function useChatCommands() {
+  return useEngineGateway().commands.useCommands();
 }
 
-/** The instance's chat command groups; a null id skips the read. */
-export function useChatCommandGroups(instanceId: InstanceId | null) {
-  return useEngineGateway().commands.useGroups(instanceId);
+/** The instance's chat command groups. */
+export function useChatCommandGroups() {
+  return useEngineGateway().commands.useGroups();
 }
 
 /** The usernames in one chat command group. */
-export function useChatCommandGroupMembers(instanceId: InstanceId, engineGroupId: string) {
-  return useEngineGateway().commands.useGroupMembers(instanceId, engineGroupId);
+export function useChatCommandGroupMembers(engineGroupId: string) {
+  return useEngineGateway().commands.useGroupMembers(engineGroupId);
 }
 
 export function useCreateChatCommandRequest() {

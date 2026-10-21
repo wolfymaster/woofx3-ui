@@ -33,16 +33,18 @@ import type {
   EventLogSettings,
   EventWatch,
   HostedStorageUsage,
-  InstanceId,
   InstanceLiveState,
   Live,
   MacroId,
   MacroRunResult,
   MacroVariableValue,
+  MarketplaceBundleInstall,
   ModuleDetail,
   ModuleFileContent,
   ModuleFileList,
   ModuleId,
+  ModuleOAuthConnect,
+  ModuleOAuthFinish,
   ModuleResourceInstance,
   ModuleResourceInstanceChanges,
   ModuleSettingValue,
@@ -57,19 +59,26 @@ import type {
   OpenSessionRefresh,
   Paginated,
   PublishedTestEvent,
+  ReadOptions,
   RecapTimelineEvents,
   RecordedWorkflowRun,
   Resource,
   ResourceChanges,
-  ResourceKindDefinition,
   ResourcePage,
   ResourceQuery,
   ResourceValues,
   SceneChanges,
   SceneEditorGrant,
+  SceneId,
   SceneRecord,
   SceneRepairResult,
   SceneWidgetCatalogRow,
+  SetupImportAnalysis,
+  SetupImportId,
+  SetupImportReport,
+  StarterPackInstall,
+  StarterPackInstallOutcome,
+  StarterPackItemState,
   StorageConfig,
   StreamEventFrame,
   StreamRecapEngineDetail,
@@ -78,6 +87,8 @@ import type {
   SupporterStream,
   TestRunCapabilities,
   TransientEvent,
+  TwitchLink,
+  TwitchLinkFlow,
   UploadGrant,
   UploadRequest,
   ViewerFact,
@@ -99,13 +110,18 @@ import type {
 
 /**
  * Everything the UI asks of the instance's engine, one namespace per domain
- * (namespaces.ts lists every domain; this interface gains each one as its
- * call sites move behind it).
+ * (namespaces.ts lists the Convex modules behind each).
  *
  * Members are React hooks. A gateway is chosen once when the app boots and
  * never swapped, so a component calls the same hooks in the same order on
- * every render. A member named `use...Request` returns a stable function that
+ * every render. A member named `use...Request` returns a function that
  * performs one call; any other member is a read.
+ *
+ * No member takes an instance: a gateway acts on the instance its engine
+ * scope (`useEngineScope()`) holds. While the scope has none, reads stay
+ * loading and requests reject. A request function keeps its identity until
+ * the scope's instance changes, so it is safe in effect dependencies and an
+ * effect using it runs again for a newly selected instance.
  */
 export interface EngineGateway {
   readonly status: StatusGateway;
@@ -122,50 +138,57 @@ export interface EngineGateway {
   readonly macros: MacrosGateway;
   readonly streamOps: StreamOpsGateway;
   readonly config: ConfigGateway;
+  readonly session: SessionGateway;
+  readonly twitchLink: TwitchLinkGateway;
+  readonly overlays: OverlaysGateway;
+  readonly moduleOAuth: ModuleOAuthGateway;
+  readonly setupImports: SetupImportsGateway;
+  readonly starterPacks: StarterPacksGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
 export interface StatusGateway {
   /** Rejects when the caller is not a member, the instance has no engine, or the engine cannot be asked. */
-  useCapabilitiesRequest(): (instanceId: InstanceId) => Promise<EngineCapabilityReport>;
+  useCapabilitiesRequest(): () => Promise<EngineCapabilityReport>;
   /** Null when the engine is not registered or did not answer. */
-  useEngineInfoRequest(): (instanceId: InstanceId) => Promise<EngineInfo | null>;
-  useSetOverlayPublicUrlRequest(): (instanceId: InstanceId, value: string) => Promise<{ success: boolean }>;
-  /** Pings an engine by URL, before or apart from registration. Resolves with the failure rather than rejecting. */
-  useConnectionTestRequest(): (url: string) => Promise<EngineConnectionTest>;
-  useObsStatusRequest(): (instanceId: InstanceId) => Promise<ObsStatus>;
+  useEngineInfoRequest(): () => Promise<EngineInfo | null>;
+  useSetOverlayPublicUrlRequest(): (value: string) => Promise<{ success: boolean }>;
   /**
-   * The instance's live state, read with the scope's optimistic id. While that
-   * id is unconfirmed an error reads as loading, because a cached id can be
-   * malformed for this deployment and is replaced one round trip later.
+   * Pings an engine by URL, before or apart from registration, so it names
+   * its target and needs no scope. Resolves with the failure rather than
+   * rejecting.
    */
-  useLiveState(scope: OptimisticInstance): Live<InstanceLiveState | null>;
+  useConnectionTestRequest(): (url: string) => Promise<EngineConnectionTest>;
+  useObsStatusRequest(): () => Promise<ObsStatus>;
+  /**
+   * The instance's live state, read with the scope's optimistic id so it
+   * shows before the membership list loads. While that id is unconfirmed an
+   * error reads as loading, because a cached id can be malformed for this
+   * deployment and is replaced one round trip later.
+   */
+  useLiveState(): Live<InstanceLiveState | null>;
   /** Asks the engine for the stream state now rather than waiting for its callbacks. */
-  useLiveStatePollRequest(): (instanceId: InstanceId) => Promise<{ ok: boolean }>;
-  /** Null when the caller cannot see the instance. Skipped (always loading) for a null id. */
-  useSyncState(instanceId: InstanceId | null): Live<EngineSyncState | null>;
-  useSyncRequest(): (instanceId: InstanceId) => Promise<EngineSyncRequest>;
+  useLiveStatePollRequest(): () => Promise<{ ok: boolean }>;
+  /** Null when the caller cannot see the instance. */
+  useSyncState(options?: ReadOptions): Live<EngineSyncState | null>;
+  useSyncRequest(): () => Promise<EngineSyncRequest>;
 }
 
 /** The engine's uploaded files and folders. */
 export interface ResourcesGateway {
-  useListRequest(): (instanceId: InstanceId, query: ResourceQuery) => Promise<ResourcePage>;
+  useListRequest(): (query: ResourceQuery) => Promise<ResourcePage>;
   /** Null when the instance is not on hosted storage. */
-  useHostedStorageUsageRequest(): (instanceId: InstanceId) => Promise<HostedStorageUsage | null>;
+  useHostedStorageUsageRequest(): () => Promise<HostedStorageUsage | null>;
   /** Reserves a pending resource and returns where to PUT its bytes. Rejects when a plan limit refuses it. */
-  useUploadGrantRequest(): (instanceId: InstanceId, file: UploadRequest) => Promise<UploadGrant>;
+  useUploadGrantRequest(): (file: UploadRequest) => Promise<UploadGrant>;
   /** Marks a granted upload's bytes as landed. */
-  useCompleteUploadRequest(): (instanceId: InstanceId, resourceId: string) => Promise<Resource>;
+  useCompleteUploadRequest(): (resourceId: string) => Promise<Resource>;
   /** Asks for a derived file such as a thumbnail; resolves once the request is accepted, not when it is done. */
-  useProcessingRequest(): (
-    instanceId: InstanceId,
-    resourceId: string,
-    utility: string
-  ) => Promise<{ accepted: boolean }>;
-  useCreateFolderRequest(): (instanceId: InstanceId, name: string, parentId: string | null) => Promise<Resource>;
+  useProcessingRequest(): (resourceId: string, utility: string) => Promise<{ accepted: boolean }>;
+  useCreateFolderRequest(): (name: string, parentId: string | null) => Promise<Resource>;
   /** Renames (`name`) or moves (`parentId`) a resource. */
-  useUpdateRequest(): (instanceId: InstanceId, resourceId: string, changes: ResourceChanges) => Promise<Resource>;
-  useRemoveRequest(): (instanceId: InstanceId, resourceId: string) => Promise<{ deleted: boolean }>;
+  useUpdateRequest(): (resourceId: string, changes: ResourceChanges) => Promise<Resource>;
+  useRemoveRequest(): (resourceId: string) => Promise<{ deleted: boolean }>;
 }
 
 /**
@@ -174,49 +197,44 @@ export interface ResourcesGateway {
  * its live push and type selection.
  */
 export interface EventLogGateway {
-  /** Newest first, optionally of one type. Skipped (always loading) for a null id. */
-  useWebhookEvents(
-    instanceId: InstanceId | null,
-    eventType: string | null,
-    initialNumItems: number
-  ): Paginated<WebhookEventSummary>;
+  /** Newest first, optionally of one type. */
+  useWebhookEvents(eventType: string | null, initialNumItems: number): Paginated<WebhookEventSummary>;
   /** The raw payload JSON; null when the entry is gone or not the caller's. */
   useWebhookPayload(logId: WebhookEventId): Live<string | null>;
   /** Fires a logged event's type and payload at the engine again. */
-  useRetriggerRequest(): (
-    instanceId: InstanceId,
-    logId: WebhookEventId
-  ) => Promise<{ success: boolean; message: string }>;
-  /** Subscribes to pushed events of `types` (null: every type the engine pushes); returns the unsubscribe. */
+  useRetriggerRequest(): (logId: WebhookEventId) => Promise<{ success: boolean; message: string }>;
+  /**
+   * Subscribes to pushed events of `types` (null: every type the engine
+   * pushes); returns the unsubscribe. Throws while the scope has no instance.
+   */
   useStreamEventsSubscription(): (
-    instanceId: string,
     types: readonly string[] | null,
     onFrame: (frame: StreamEventFrame) => void
   ) => () => void;
   /** A page of the engine's event log. Needs `events.log`. */
-  useEventsRequest(): (instanceId: string, query?: EventLogQuery) => Promise<EventLogPage>;
+  useEventsRequest(): (query?: EventLogQuery) => Promise<EventLogPage>;
   /** Which event types the engine logs and pushes, and which it offers. Needs `events.log`. */
-  useSettingsRequest(): (instanceId: string) => Promise<EventLogSettings>;
+  useSettingsRequest(): () => Promise<EventLogSettings>;
   /** Replaces the engine's selection and resolves with the settings it results in. */
-  useSetSelectionRequest(): (instanceId: string, selection: EventLogSelection) => Promise<EventLogSettings>;
+  useSetSelectionRequest(): (selection: EventLogSelection) => Promise<EventLogSettings>;
 }
 
 /** The alerts the engine dispatched, as its callbacks report them, and its overlay queue. */
 export interface AlertQueueGateway {
-  /** Newest first. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
-  useAlerts(instanceId: InstanceId | null, limit: number): Live<EngineAlert[]>;
+  /** Newest first. Empty when the caller cannot see the instance. */
+  useAlerts(limit: number): Live<EngineAlert[]>;
   /**
    * Totals by outcome and hourly buckets for the window ending with the hour
    * starting at `hourStart` (epoch ms on the hour). Null when the caller cannot
-   * see the instance; skipped (always loading) for a null id.
+   * see the instance.
    */
-  useOverview(instanceId: InstanceId | null, hourStart: number): Live<AlertOverview | null>;
+  useOverview(hourStart: number): Live<AlertOverview | null>;
   /** Plays a recorded alert again. Resolves with the engine's answer, including a refusal. */
-  useReplayRequest(): (instanceId: InstanceId, engineAlertId: string) => Promise<AlertReplayResult>;
+  useReplayRequest(): (engineAlertId: string) => Promise<AlertReplayResult>;
   /** Ends the alert playing on every open overlay. */
-  useSkipCurrentRequest(): (instanceId: InstanceId) => Promise<AlertSkipResult>;
+  useSkipCurrentRequest(): () => Promise<AlertSkipResult>;
   /** Drops every alert still waiting; the one playing keeps playing. */
-  useClearQueueRequest(): (instanceId: InstanceId) => Promise<AlertClearResult>;
+  useClearQueueRequest(): () => Promise<AlertClearResult>;
 }
 
 /**
@@ -224,17 +242,17 @@ export interface AlertQueueGateway {
  * keep in Convex, and the page that previews a composition.
  */
 export interface AlertLibraryGateway {
-  /** By name. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
-  useAlerts(instanceId: InstanceId | null): Live<AlertComposition[]>;
+  /** By name. Empty when the caller cannot see the instance. */
+  useAlerts(options?: ReadOptions): Live<AlertComposition[]>;
   /** Null until its webhook arrives, once it is deleted, or when the caller cannot see the instance. */
-  useAlert(instanceId: InstanceId, engineCompositionId: string): Live<AlertComposition | null>;
+  useAlert(engineCompositionId: string): Live<AlertComposition | null>;
   /** Reads the engine's whole library into the cache, for alerts no webhook brought. */
-  useRefreshRequest(): (instanceId: InstanceId) => Promise<{ count: number }>;
+  useRefreshRequest(): () => Promise<{ count: number }>;
   /** Rejects when the engine keeps no alert library or the name is blank. */
-  useCreateRequest(): (instanceId: InstanceId, alert: NewLibraryAlert) => Promise<{ engineCompositionId: string }>;
-  useRemoveRequest(): (instanceId: InstanceId, engineCompositionId: string) => Promise<{ success: boolean }>;
+  useCreateRequest(): (alert: NewLibraryAlert) => Promise<{ engineCompositionId: string }>;
+  useRemoveRequest(): (engineCompositionId: string) => Promise<{ success: boolean }>;
   /** A short-lived URL of the engine's composition preview page; null when the engine has none. */
-  usePreviewUrlRequest(): (instanceId: InstanceId) => Promise<CompositionPreviewUrl | null>;
+  usePreviewUrlRequest(): () => Promise<CompositionPreviewUrl | null>;
 }
 
 /**
@@ -243,34 +261,20 @@ export interface AlertLibraryGateway {
  * their result reaches the mirror the same way.
  */
 export interface CommandsGateway {
-  /** Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
-  useCommands(instanceId: InstanceId | null): Live<ChatCommand[]>;
-  /** Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
-  useGroups(instanceId: InstanceId | null): Live<ChatCommandGroup[]>;
+  /** Empty when the caller cannot see the instance. */
+  useCommands(): Live<ChatCommand[]>;
+  /** Empty when the caller cannot see the instance. */
+  useGroups(): Live<ChatCommandGroup[]>;
   /** One group's usernames. */
-  useGroupMembers(instanceId: InstanceId, engineGroupId: string): Live<string[]>;
-  useCreateCommandRequest(): (instanceId: InstanceId, command: NewChatCommand) => Promise<{ engineCommandId: string }>;
-  useUpdateCommandRequest(): (
-    instanceId: InstanceId,
-    command: ChatCommandChanges
-  ) => Promise<{ engineCommandId: string }>;
-  useDeleteCommandRequest(): (instanceId: InstanceId, engineCommandId: string) => Promise<{ deleted: boolean }>;
-  useCreateGroupRequest(): (instanceId: InstanceId, group: NewChatCommandGroup) => Promise<{ engineGroupId: string }>;
-  useUpdateGroupRequest(): (
-    instanceId: InstanceId,
-    group: ChatCommandGroupChanges
-  ) => Promise<{ engineGroupId: string }>;
-  useDeleteGroupRequest(): (instanceId: InstanceId, engineGroupId: string) => Promise<{ deleted: boolean }>;
-  useAddGroupMemberRequest(): (
-    instanceId: InstanceId,
-    engineGroupId: string,
-    username: string
-  ) => Promise<{ ok: true }>;
-  useRemoveGroupMemberRequest(): (
-    instanceId: InstanceId,
-    engineGroupId: string,
-    username: string
-  ) => Promise<{ ok: true }>;
+  useGroupMembers(engineGroupId: string): Live<string[]>;
+  useCreateCommandRequest(): (command: NewChatCommand) => Promise<{ engineCommandId: string }>;
+  useUpdateCommandRequest(): (command: ChatCommandChanges) => Promise<{ engineCommandId: string }>;
+  useDeleteCommandRequest(): (engineCommandId: string) => Promise<{ deleted: boolean }>;
+  useCreateGroupRequest(): (group: NewChatCommandGroup) => Promise<{ engineGroupId: string }>;
+  useUpdateGroupRequest(): (group: ChatCommandGroupChanges) => Promise<{ engineGroupId: string }>;
+  useDeleteGroupRequest(): (engineGroupId: string) => Promise<{ deleted: boolean }>;
+  useAddGroupMemberRequest(): (engineGroupId: string, username: string) => Promise<{ ok: true }>;
+  useRemoveGroupMemberRequest(): (engineGroupId: string, username: string) => Promise<{ ok: true }>;
 }
 
 /**
@@ -279,44 +283,41 @@ export interface CommandsGateway {
  * mirror the engine's webhooks keep in Convex; writes go to the engine.
  */
 export interface ModuleResourcesGateway {
-  /** Every resource instance. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
-  useInstances(instanceId: InstanceId | null): Live<ModuleResourceInstance[]>;
-  /** One installed module's instances. Skipped (always loading) unless both ids are set. */
-  useModuleInstances(instanceId: InstanceId | null, moduleId: ModuleId | null): Live<ModuleResourceInstance[]>;
+  /** Every resource instance. Empty when the caller cannot see the instance. */
+  useInstances(): Live<ModuleResourceInstance[]>;
+  /** One installed module's instances. Skipped (always loading) for a null module id. */
+  useModuleInstances(moduleId: ModuleId | null): Live<ModuleResourceInstance[]>;
   /**
    * The instances of one kind: `module:kind`, or a bare kind. Skipped (always
-   * loading) for a null id or kind.
+   * loading) for a null kind.
    */
-  useKindInstances(instanceId: InstanceId | null, kind: string | null): Live<ModuleResourceInstance[]>;
+  useKindInstances(kind: string | null): Live<ModuleResourceInstance[]>;
   /**
    * The instances of several kinds in one read, each `module:kind` or bare.
-   * Skipped (always loading) for a null id or no kinds.
+   * Skipped (always loading) for no kinds.
    */
-  useKindsInstances(instanceId: InstanceId | null, kinds: readonly string[]): Live<ModuleResourceInstance[]>;
-  /** Every mirrored value, keyed by canonical id. Skipped (always loading) for a null id. */
-  useValues(instanceId: InstanceId | null): Live<ResourceValues>;
+  useKindsInstances(kinds: readonly string[]): Live<ModuleResourceInstance[]>;
+  /** Every mirrored value, keyed by canonical id. */
+  useValues(): Live<ResourceValues>;
   /**
    * The module providing a kind, and its declaration; null when no installed
-   * module declares it. Skipped (always loading) for a null id or kind.
+   * module declares it. Skipped (always loading) for a null kind.
    */
-  useKind(instanceId: InstanceId | null, kind: string | null): Live<ResourceKindDefinition | null>;
-  /** Every kind the installed modules declare. Skipped (always loading) for a null id. */
-  useKinds(instanceId: InstanceId | null): Live<DeclaredResourceKind[]>;
-  useCreateRequest(): (
-    instanceId: InstanceId,
-    resource: NewModuleResourceInstance
-  ) => Promise<CreatedModuleResourceInstance>;
-  useUpdateRequest(): (instanceId: InstanceId, changes: ModuleResourceInstanceChanges) => Promise<null>;
-  useRemoveRequest(): (instanceId: InstanceId, canonicalId: string) => Promise<null>;
+  useKind(kind: string | null): Live<DeclaredResourceKind | null>;
+  /** Every kind the installed modules declare. */
+  useKinds(): Live<DeclaredResourceKind[]>;
+  useCreateRequest(): (resource: NewModuleResourceInstance) => Promise<CreatedModuleResourceInstance>;
+  useUpdateRequest(): (changes: ModuleResourceInstanceChanges) => Promise<null>;
+  useRemoveRequest(): (canonicalId: string) => Promise<null>;
   /** Reads one module's instances from the engine into the mirror, for any no webhook brought. */
-  useSyncModuleRequest(): (instanceId: InstanceId, moduleId: ModuleId) => Promise<{ itemsProcessed: number }>;
+  useSyncModuleRequest(): (moduleId: ModuleId) => Promise<{ itemsProcessed: number }>;
   /** Reads the current value of every instance of a kind from the engine into the mirror. */
-  useRefreshValuesRequest(): (instanceId: InstanceId, kind: string) => Promise<null>;
+  useRefreshValuesRequest(): (kind: string) => Promise<null>;
   /**
    * Runs action steps on the engine now. `actions` carry their `$` keys escaped
    * (lib/dollar-keys); the result arrives through the values they change.
    */
-  useRunActionsRequest(): (instanceId: InstanceId, label: string, actions: unknown[]) => Promise<null>;
+  useRunActionsRequest(): (label: string, actions: unknown[]) => Promise<null>;
 }
 
 /**
@@ -326,31 +327,22 @@ export interface ModuleResourcesGateway {
  */
 export interface ModulesGateway {
   /** The module's manifest-derived detail, merged with its marketplace listing when it has one. */
-  useDetailRequest(): (instanceId: InstanceId, moduleId: string) => Promise<ModuleDetail>;
+  useDetailRequest(): (moduleId: string) => Promise<ModuleDetail>;
   /** The declared settings' current values; a secret's value never comes back, only whether one is set. */
-  useSettingsRequest(): (instanceId: InstanceId, moduleId: string) => Promise<ModuleSettingValue[]>;
+  useSettingsRequest(): (moduleId: string) => Promise<ModuleSettingValue[]>;
   /** Rejects for a key the module does not declare as a setting. */
-  useUpdateSettingRequest(): (
-    instanceId: InstanceId,
-    moduleId: string,
-    key: string,
-    value: string
-  ) => Promise<ModuleSettingValue>;
-  useFilesRequest(): (instanceId: InstanceId, moduleId: string) => Promise<ModuleFileList>;
-  useFileRequest(): (instanceId: InstanceId, moduleId: string, path: string) => Promise<ModuleFileContent>;
+  useUpdateSettingRequest(): (moduleId: string, key: string, value: string) => Promise<ModuleSettingValue>;
+  useFilesRequest(): (moduleId: string) => Promise<ModuleFileList>;
+  useFileRequest(): (moduleId: string, path: string) => Promise<ModuleFileContent>;
   /**
    * Asks the engine to uninstall; resolves with the key its outcome is
    * reported under (`transientEvents`), not when the module is gone.
    */
-  useUninstallRequest(): (instanceId: InstanceId, moduleId: ModuleId) => Promise<{ moduleKey: string }>;
+  useUninstallRequest(): (moduleId: ModuleId) => Promise<{ moduleKey: string }>;
   /** Asks the engine whether an uninstall whose outcome never arrived took effect, and settles the mirror. */
-  useReconcileUninstallRequest(): (
-    instanceId: InstanceId,
-    moduleId: ModuleId,
-    correlationKey: string
-  ) => Promise<{ stillInstalled: boolean }>;
+  useReconcileUninstallRequest(): (moduleId: ModuleId, correlationKey: string) => Promise<{ stillInstalled: boolean }>;
   /** The engine's workflows, by id and name. */
-  useWorkflowsRequest(): (instanceId: InstanceId) => Promise<EngineWorkflowOption[]>;
+  useWorkflowsRequest(): () => Promise<EngineWorkflowOption[]>;
   /**
    * Installs or updates a marketplace module; resolves with the key its
    * progress and outcome are reported under (`transientEvents`), not when it
@@ -358,13 +350,17 @@ export interface ModulesGateway {
    * endpoint (by id) outside the approved lists.
    */
   useMarketplaceInstallRequest(): (
-    instanceId: InstanceId,
     marketplaceModuleId: string,
     approvedPermissions: string[],
     approvedLocalEndpoints: string[]
   ) => Promise<{ moduleKey: string }>;
+  /**
+   * Installs a marketplace bundle (a scene or an alert) onto the engine and
+   * resolves with what it made. Rejects for a listing the instance may not install.
+   */
+  useBundleInstallRequest(): (listingId: string) => Promise<MarketplaceBundleInstall>;
   /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */
-  useStorageUsageRequest(): (instanceId: InstanceId) => Promise<ModuleStorageUsage | null>;
+  useStorageUsageRequest(): () => Promise<ModuleStorageUsage | null>;
 }
 
 /**
@@ -373,50 +369,44 @@ export interface ModulesGateway {
  * reaches the cache the same way.
  */
 export interface ScenesGateway {
-  /** Every scene. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
-  useScenes(instanceId: InstanceId | null): Live<SceneRecord[]>;
+  /** Every scene. Empty when the caller cannot see the instance. */
+  useScenes(options?: ReadOptions): Live<SceneRecord[]>;
   /** One scene by the engine's id; null until its webhook arrives, or when the caller cannot see the instance. */
-  useScene(instanceId: InstanceId, engineSceneId: string): Live<SceneRecord | null>;
+  useScene(engineSceneId: string): Live<SceneRecord | null>;
   /**
    * The widgets the instance can place, with the name of the module providing
-   * each. Empty when the caller cannot see the instance; skipped (always
-   * loading) for a null id.
+   * each. Empty when the caller cannot see the instance.
    */
-  useWidgetCatalog(instanceId: InstanceId | null): Live<SceneWidgetCatalogRow[]>;
+  useWidgetCatalog(options?: ReadOptions): Live<SceneWidgetCatalogRow[]>;
   /**
    * Every name an alert widget on the instance's scenes answers to, the
-   * default first. Empty when the caller cannot see the instance; skipped
-   * (always loading) for a null id.
+   * default first. Empty when the caller cannot see the instance.
    */
-  useAlertWidgetNames(instanceId: InstanceId | null): Live<string[]>;
+  useAlertWidgetNames(options?: ReadOptions): Live<string[]>;
   /**
    * What one scene's editor needs to warn that an edit leaves Alert steps
    * with no alert widget to play on: every Alert step's target, and the names
    * the alert widgets of the instance's other scenes answer to. Null when the
    * caller cannot see the instance.
    */
-  useAlertTargetUsage(instanceId: InstanceId, engineSceneId: string): Live<AlertTargetUsage | null>;
-  useCreateRequest(): (instanceId: InstanceId, scene: NewScene) => Promise<{ engineSceneId: string }>;
-  useUpdateRequest(): (
-    instanceId: InstanceId,
-    engineSceneId: string,
-    changes: SceneChanges
-  ) => Promise<{ success: boolean }>;
-  useRemoveRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<{ success: boolean }>;
+  useAlertTargetUsage(engineSceneId: string): Live<AlertTargetUsage | null>;
+  useCreateRequest(): (scene: NewScene) => Promise<{ engineSceneId: string }>;
+  useUpdateRequest(): (engineSceneId: string, changes: SceneChanges) => Promise<{ success: boolean }>;
+  useRemoveRequest(): (engineSceneId: string) => Promise<{ success: boolean }>;
   /** The installed themes made for one widget. */
-  useWidgetThemesRequest(): (instanceId: InstanceId, widgetCanonicalId: string) => Promise<WidgetThemes>;
+  useWidgetThemesRequest(): (widgetCanonicalId: string) => Promise<WidgetThemes>;
   /**
    * A short-lived token for sceneManager's editor socket for one scene, and
    * the socket's path. Null when the engine does not know the scene or cannot
    * reach sceneManager. Needs `scenes.editorSync`.
    */
-  useEditorSessionRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<SceneEditorGrant | null>;
+  useEditorSessionRequest(): (engineSceneId: string) => Promise<SceneEditorGrant | null>;
   /**
    * Repair a scene or alert whose stored data the engine cannot read: the
    * engine keeps a copy of what it cannot read, then writes back the readable
    * rest. Needs `scenes.repair`.
    */
-  useRepairRequest(): (instanceId: InstanceId, engineSceneId: string) => Promise<SceneRepairResult>;
+  useRepairRequest(): (engineSceneId: string) => Promise<SceneRepairResult>;
 }
 
 /**
@@ -424,67 +414,50 @@ export interface ScenesGateway {
  * the mirror the engine's webhooks keep in Convex.
  */
 export interface WorkflowsGateway {
-  /** Every workflow. Empty when the caller cannot see the instance; skipped (always loading) for a null id. */
-  useWorkflows(instanceId: InstanceId | null): Live<Workflow[]>;
+  /** Every workflow. Empty when the caller cannot see the instance. */
+  useWorkflows(): Live<Workflow[]>;
   /** Whether the instance has any workflow; null while the caller's membership cannot be confirmed. */
-  useHasAny(instanceId: InstanceId): Live<boolean | null>;
+  useHasAny(): Live<boolean | null>;
   /**
    * One workflow by the engine's id; null until its webhook arrives, or when
-   * the caller cannot see the instance. Skipped (always loading) for a null id
-   * or engine id.
+   * the caller cannot see the instance. Skipped (always loading) for a null
+   * engine id.
    */
-  useWorkflow(instanceId: InstanceId | null, engineWorkflowId: string | null): Live<Workflow | null>;
-  /** Null when the caller cannot see the instance; skipped (always loading) for a null id. */
-  useCatalog(instanceId: InstanceId | null): Live<WorkflowCatalog | null>;
+  useWorkflow(engineWorkflowId: string | null): Live<Workflow | null>;
+  /** Null when the caller cannot see the instance. */
+  useCatalog(): Live<WorkflowCatalog | null>;
   /**
    * Creates a workflow from a definition with its `$` keys escaped
    * (lib/dollar-keys), and resolves once its webhook echo has landed, with
    * the id the engine gave it.
    */
-  useCreateRequest(): (instanceId: InstanceId, definition: unknown) => Promise<{ engineWorkflowId: string }>;
+  useCreateRequest(): (definition: unknown) => Promise<{ engineWorkflowId: string }>;
   /** Replaces a workflow's definition (`$` keys escaped); resolves once its webhook echo has landed. */
-  useUpdateRequest(): (
-    instanceId: InstanceId,
-    engineWorkflowId: string,
-    definition: unknown
-  ) => Promise<{ engineWorkflowId: string }>;
+  useUpdateRequest(): (engineWorkflowId: string, definition: unknown) => Promise<{ engineWorkflowId: string }>;
   /** Resolves once the delete's webhook echo has landed. */
-  useRemoveRequest(): (instanceId: InstanceId, engineWorkflowId: string) => Promise<{ deleted: true }>;
+  useRemoveRequest(): (engineWorkflowId: string) => Promise<{ deleted: true }>;
   /** Resolves once the change's webhook echo has landed. */
-  useSetEnabledRequest(): (
-    instanceId: InstanceId,
-    engineWorkflowId: string,
-    isEnabled: boolean
-  ) => Promise<{ isEnabled: boolean }>;
+  useSetEnabledRequest(): (engineWorkflowId: string, isEnabled: boolean) => Promise<{ isEnabled: boolean }>;
   /** Starts a manual run and resolves at once with its key; the run's progress arrives in transient events. */
-  useTriggerRequest(): (instanceId: InstanceId, run: WorkflowTrigger) => Promise<WorkflowTriggerResult>;
+  useTriggerRequest(): (run: WorkflowTrigger) => Promise<WorkflowTriggerResult>;
   /** Probes whether the engine takes test-run options, without starting a run. */
-  useTestRunCapabilitiesRequest(): (instanceId: InstanceId) => Promise<TestRunCapabilities>;
+  useTestRunCapabilitiesRequest(): () => Promise<TestRunCapabilities>;
   /** The values `${viewer.*}` resolves on the engine. Needs `workflow.viewerFacts`. */
-  useViewerFactsRequest(): (instanceId: InstanceId) => Promise<ViewerFact[]>;
+  useViewerFactsRequest(): () => Promise<ViewerFact[]>;
   /** Runs a recorded run again and resolves at once with its key, like a manual run. */
-  useReplayRequest(): (instanceId: InstanceId, replay: WorkflowReplay) => Promise<{ triggerId: string }>;
+  useReplayRequest(): (replay: WorkflowReplay) => Promise<{ triggerId: string }>;
   /** Stops a recorded run. */
-  useCancelRunRequest(): (instanceId: InstanceId, engineRunId: string) => Promise<WorkflowCancelResult>;
-  /**
-   * A recorded run with its steps, kept current by the run webhooks. Skipped
-   * (always loading) for a null id or run id.
-   */
-  useRun(instanceId: InstanceId | null, engineRunId: string | null): Live<WorkflowRunDetail>;
+  useCancelRunRequest(): (engineRunId: string) => Promise<WorkflowCancelResult>;
+  /** A recorded run with its steps, kept current by the run webhooks. Skipped (always loading) for a null run id. */
+  useRun(engineRunId: string | null): Live<WorkflowRunDetail>;
   /** A workflow's recorded runs, newest first, at most `limit`. */
-  useRuns(instanceId: InstanceId, engineWorkflowId: string, limit: number): Live<RecordedWorkflowRun[]>;
-  /** Subscribes to runs as the engine pushes them; returns the unsubscribe. */
-  useRunsSubscription(): (instanceId: string, onRun: (run: WorkflowRun) => void) => () => void;
-  /**
-   * Enabled workflows the engine reported it could not set up. Empty when the
-   * caller cannot see the instance; skipped (always loading) for a null id.
-   */
-  useNotRunning(instanceId: InstanceId | null): Live<NotRunningWorkflow[]>;
+  useRuns(engineWorkflowId: string, limit: number): Live<RecordedWorkflowRun[]>;
+  /** Subscribes to runs as the engine pushes them; returns the unsubscribe. Throws while the scope has no instance. */
+  useRunsSubscription(): (onRun: (run: WorkflowRun) => void) => () => void;
+  /** Enabled workflows the engine reported it could not set up. Empty when the caller cannot see the instance. */
+  useNotRunning(): Live<NotRunningWorkflow[]>;
   /** Asks the engine for current workflow health. Throttled per instance; never rejects for an engine problem. */
-  useHealthResyncRequest(): (
-    instanceId: InstanceId,
-    trigger: WorkflowHealthResyncTrigger
-  ) => Promise<WorkflowHealthResyncResult>;
+  useHealthResyncRequest(): (trigger: WorkflowHealthResyncTrigger) => Promise<WorkflowHealthResyncResult>;
 }
 
 /**
@@ -494,23 +467,21 @@ export interface WorkflowsGateway {
 export interface RequestsGateway {
   /**
    * The latest event under a key; null until one arrives, or when the caller
-   * cannot see the instance. Skipped (always loading) for a null id or key.
+   * cannot see the instance. Skipped (always loading) for a null key.
    */
-  useEvent(instanceId: InstanceId | null, correlationKey: string | null): Live<TransientEvent | null>;
+  useEvent(correlationKey: string | null): Live<TransientEvent | null>;
   /**
    * Every event under a key, oldest first, for keys several runs answer to.
    * Empty when the caller cannot see the instance; skipped (always loading)
-   * for a null id or key.
+   * for a null key.
    */
-  useEvents(instanceId: InstanceId | null, correlationKey: string | null): Live<TransientEvent[]>;
+  useEvents(correlationKey: string | null): Live<TransientEvent[]>;
   /**
    * Sends requests of one kind to the instance's engine under keys it makes
-   * up, and reads the answer. `kind` must not change while mounted.
+   * up, and reads the answer. `kind` must not change while mounted; `start`
+   * throws while the scope has no instance.
    */
-  useCorrelated<Kind extends CorrelatedRequestKind>(
-    kind: Kind,
-    instanceId: InstanceId | null
-  ): Correlated<CorrelatedRequests[Kind]>;
+  useCorrelated<Kind extends CorrelatedRequestKind>(kind: Kind): Correlated<CorrelatedRequests[Kind]>;
   /**
    * Sends one request of a kind under a key the caller made up, for a caller
    * that follows the answer itself. Resolves once the engine has taken the
@@ -518,13 +489,12 @@ export interface RequestsGateway {
    */
   useSendRequest<Kind extends CorrelatedRequestKind>(
     kind: Kind
-  ): (
-    instanceId: InstanceId,
-    request: CorrelatedRequests[Kind],
-    correlationKey: string
-  ) => Promise<{ correlationKey: string }>;
-  /** Follows the latest event under a key from outside a component, such as a check that awaits it. */
-  useEventWatchRequest(): (instanceId: InstanceId, correlationKey: string) => EventWatch;
+  ): (request: CorrelatedRequests[Kind], correlationKey: string) => Promise<{ correlationKey: string }>;
+  /**
+   * Follows the latest event under a key from outside a component, such as a
+   * check that awaits it. Throws while the scope has no instance.
+   */
+  useEventWatchRequest(): (correlationKey: string) => EventWatch;
 }
 
 /** Running the dashboard's macros. The macros themselves are kept in Convex, not on the engine. */
@@ -534,7 +504,7 @@ export interface MacrosGateway {
    * an HTTP-request macro, which the browser fetches itself, and for a
    * chat-command macro pressed by someone who does not manage the instance.
    */
-  useRunRequest(): (instanceId: InstanceId, macroId: MacroId, values: MacroVariableValue[]) => Promise<MacroRunResult>;
+  useRunRequest(): (macroId: MacroId, values: MacroVariableValue[]) => Promise<MacroRunResult>;
 }
 
 /**
@@ -550,31 +520,31 @@ export interface StreamOpsGateway {
    * gifters. An engine that is unregistered or cannot answer resolves with
    * that status rather than rejecting.
    */
-  useRecapEngineDetailRequest(): (instanceId: InstanceId, sessionId: string) => Promise<StreamRecapEngineDetail>;
+  useRecapEngineDetailRequest(): (sessionId: string) => Promise<StreamRecapEngineDetail>;
   /**
    * A recapped session's counted events in time order. Needs
    * `analytics.sessionEvents`; resolves with the failure like the detail.
    */
-  useRecapTimelineEventsRequest(): (instanceId: InstanceId, sessionId: string) => Promise<RecapTimelineEvents>;
+  useRecapTimelineEventsRequest(): (sessionId: string) => Promise<RecapTimelineEvents>;
   /**
    * Stores a snapshot of the engine's open session as its summary, unless a
    * fresh one is stored already; the summary itself arrives through the
    * stored-summary reads.
    */
-  useOpenSessionRefreshRequest(): (instanceId: InstanceId) => Promise<OpenSessionRefresh>;
+  useOpenSessionRefreshRequest(): () => Promise<OpenSessionRefresh>;
   /** Recent streams, newest first. Rejects with the reason when the engine cannot be asked. */
-  useSupporterStreamsRequest(): (instanceId: InstanceId) => Promise<SupporterStream[]>;
+  useSupporterStreamsRequest(): () => Promise<SupporterStream[]>;
   /** Top supporters, anonymous ones left out. Rejects for a stream the engine no longer has. */
-  useSupporterLeaderboardRequest(): (instanceId: InstanceId, query: SupporterLeaderboardQuery) => Promise<Supporter[]>;
+  useSupporterLeaderboardRequest(): (query: SupporterLeaderboardQuery) => Promise<Supporter[]>;
   /** Rejects for a blank id. */
-  useViewerSupportTotalsRequest(): (instanceId: InstanceId, platformUserId: string) => Promise<ViewerSupportTotals>;
+  useViewerSupportTotalsRequest(): (platformUserId: string) => Promise<ViewerSupportTotals>;
   /** Publishes an event as given, with no `platform` attribute. */
-  usePublishEventRequest(): (instanceId: InstanceId, event: EngineTestEvent) => Promise<PublishedTestEvent>;
+  usePublishEventRequest(): (event: EngineTestEvent) => Promise<PublishedTestEvent>;
   /**
    * Publishes a synthetic Twitch event, which the engine stamps
    * `platform: "twitch"` so it passes the same filters as a real one.
    */
-  useSimulateTwitchEventRequest(): (instanceId: InstanceId, event: EngineTestEvent) => Promise<PublishedTestEvent>;
+  useSimulateTwitchEventRequest(): (event: EngineTestEvent) => Promise<PublishedTestEvent>;
 }
 
 /**
@@ -584,21 +554,105 @@ export interface StreamOpsGateway {
  */
 export interface ConfigGateway {
   /** The configuration as backup JSON text, in chunks to join. */
-  useExportRequest(): (instanceId: InstanceId, request: ConfigExportRequest) => Promise<string[]>;
+  useExportRequest(): (request: ConfigExportRequest) => Promise<string[]>;
   /** What importing a backup would do, without doing it. Rejects with the engine's list of problems for a malformed one. */
-  usePreviewImportRequest(): (instanceId: InstanceId, request: ConfigImportRequest) => Promise<ConfigImportPlan>;
+  usePreviewImportRequest(): (request: ConfigImportRequest) => Promise<ConfigImportPlan>;
   /** Imports a backup. The engine plans it again, so an earlier preview is advisory only. */
-  useImportRequest(): (instanceId: InstanceId, request: ConfigImportRequest) => Promise<ConfigImportResult>;
+  useImportRequest(): (request: ConfigImportRequest) => Promise<ConfigImportResult>;
   /** The storage backend; null when the engine is not registered or does not answer. */
-  useStorageConfigRequest(): (instanceId: InstanceId) => Promise<StorageConfig | null>;
+  useStorageConfigRequest(): () => Promise<StorageConfig | null>;
   /** Replaces the storage backend, and its credentials, for everyone on the instance. */
-  useSetStorageConfigRequest(): (
-    instanceId: InstanceId,
-    config: Record<string, unknown>
-  ) => Promise<{ success: boolean }>;
+  useSetStorageConfigRequest(): (config: Record<string, unknown>) => Promise<{ success: boolean }>;
 }
 
-export interface OptimisticInstance {
-  optimisticInstanceId: InstanceId | null;
-  isInstanceLoading: boolean;
+/**
+ * The live connection the engine pushes events and runs over, which the
+ * subscriptions in other namespaces share. A gateway opens it to the scope's
+ * engine.
+ */
+export interface SessionGateway {
+  /** Keeps the live connection pointed at the scope's engine while mounted. Mount it once, in the app shell. */
+  useLiveConnection(): void;
+  /** Retries a dropped connection now instead of waiting out its backoff; does nothing while connected. */
+  useReconnectRequest(): () => void;
+  /** True while the connection holds an engine session that has completed an authenticated round trip. */
+  useConnected(): boolean;
+}
+
+/**
+ * The Twitch account the instance acts as. Owners and admins link and unlink
+ * it; anyone who can see the instance reads it. Linking is a flow the UI
+ * follows rather than a URL to visit, so a gateway can link with a browser
+ * redirect or with a code the streamer approves elsewhere.
+ */
+export interface TwitchLinkGateway {
+  /** The linked account; null when there is none or the caller cannot see the instance. */
+  useLink(): Live<TwitchLink | null>;
+  /** Starts and follows linking for the calling component. */
+  useLinkFlow(): TwitchLinkFlow;
+  /** Removes the link. Rejects for a caller who is not an owner or admin. */
+  useUnlinkRequest(): () => Promise<void>;
+}
+
+/** The addresses a scene's overlay is served at: the one OBS loads, and previews of it. */
+export interface OverlaysGateway {
+  /**
+   * The URL OBS loads the scene from, made on first ask and the same after
+   * that until rotated. Rejects for a scene that has not reached the engine.
+   */
+  useBrowserSourceUrlRequest(): (sceneId: SceneId) => Promise<string>;
+  /** Replaces the scene's browser-source URL; the one before stops working. */
+  useRotateBrowserSourceUrlRequest(): (sceneId: SceneId) => Promise<string>;
+  /**
+   * A short-lived URL of the scene's live overlay, for an editor's preview.
+   * Null when the scene has not reached the engine or the caller cannot see it.
+   */
+  usePreviewUrlRequest(): (sceneId: SceneId) => Promise<string | null>;
+}
+
+/**
+ * Connecting an installed module to a provider its manifest declares under
+ * `oauth[]`. The engine keeps the tokens; the provider's approval page needs
+ * the browser, so connecting leaves the page and the provider sends it back.
+ */
+export interface ModuleOAuthGateway {
+  /**
+   * Sends the browser to the provider to approve, coming back to `returnTo`.
+   * Rejects, before leaving, for an integration the module does not declare
+   * or an engine that cannot connect one.
+   */
+  useConnectRequest(): (connect: ModuleOAuthConnect) => Promise<void>;
+  /** Finishes the connect the provider came back with, given the one-time code it was handed. */
+  useFinishRequest(): (connectCode: string) => Promise<ModuleOAuthFinish>;
+}
+
+/**
+ * Bringing a setup over from another bot (Firebot, Streamer.bot): an export
+ * is read into a report of the groups, counters, commands and workflows it
+ * would create, which the streamer reviews before any of it reaches the
+ * engine. Owners and admins only.
+ */
+export interface SetupImportsGateway {
+  /** The instance's most recent import with its items; null when it has none. */
+  useLatest(): Live<SetupImportReport | null>;
+  /** Reads an export into a report to review. Rejects, with words for the streamer, an export it cannot read. */
+  useAnalyzeRequest(): (analysis: SetupImportAnalysis) => Promise<{ importId: SetupImportId }>;
+  /** Starts creating a reviewed import's items on the engine; each item's outcome arrives through `useLatest`. */
+  useStartRequest(): (importId: SetupImportId) => Promise<void>;
+  /** Tries again the items that needed a module or failed, and an import that gave up waiting. */
+  useRetryRequest(): (importId: SetupImportId) => Promise<void>;
+  /** Throws away an import still in review. */
+  useDiscardRequest(): (importId: SetupImportId) => Promise<void>;
+}
+
+/**
+ * The app's starter packs of ready-made commands and workflows, installed
+ * onto the engine. The packs are the app's own; what each item made on the
+ * engine is tracked so a pack shows what is already in place.
+ */
+export interface StarterPacksGateway {
+  /** Each item's state, keyed by `starterItemKey`; null when the caller cannot see the instance. */
+  useStatus(): Live<Record<string, StarterPackItemState> | null>;
+  /** Installs a pack's items and resolves with how each went; an item can still be pending on the engine. */
+  useInstallRequest(): (install: StarterPackInstall) => Promise<StarterPackInstallOutcome[]>;
 }

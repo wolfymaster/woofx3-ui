@@ -1,4 +1,3 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { AlertLayoutPreview } from "@/components/alerts/alert-layout-preview";
@@ -19,12 +18,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useEngineScope } from "@/engine/context";
 import { useRemoveLibraryAlertRequest } from "@/engine/hooks/use-alert-library";
-import { useInstance } from "@/hooks/use-instance";
+import type { AlertComposition } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert } from "@/lib/alert-library";
 
-export type LibraryAlert = Doc<"alertCompositions">;
+export type LibraryAlert = AlertComposition;
 
 interface LibraryAlertListProps {
   /** The library, undefined while it loads. */
@@ -60,7 +60,7 @@ export function LibraryAlertList({ alerts, onPick, onEdit }: LibraryAlertListPro
       <ul className="flex flex-col gap-3" data-testid="library-alert-list">
         {alerts.map((alert) => (
           <li
-            key={alert._id}
+            key={alert.engineCompositionId}
             className="flex flex-col gap-1.5 rounded-xl border bg-muted/30 p-1.5 hover:border-foreground/20 hover:bg-accent"
           >
             <button
@@ -168,18 +168,18 @@ export function LibraryAlertPreview({ alert, className }: { alert: LibraryAlert;
 
 /** Confirms deleting a library alert. Steps keep the copies they were given. */
 function DeleteLibraryAlertDialog({ alert, onClose }: { alert: LibraryAlert | null; onClose: () => void }) {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
   const remove = useRemoveLibraryAlertRequest();
   const [pending, setPending] = useState(false);
 
   const confirm = async () => {
-    if (!alert || !instance) {
+    if (!alert || !instanceId) {
       return;
     }
     setPending(true);
     try {
-      const result = await remove(instance._id, alert.engineCompositionId);
+      const result = await remove(alert.engineCompositionId);
       if (!result.success) {
         toast({ title: "The alert wasn't deleted", description: "The engine refused.", variant: "destructive" });
         return;

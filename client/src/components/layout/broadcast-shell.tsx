@@ -21,16 +21,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { EngineGatewayProvider } from "@/engine/context";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useEngineVersion } from "@/engine/hooks/use-engine-version";
+import { useLiveConnection } from "@/engine/hooks/use-live-connection";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAuthActions, useConvexUser } from "@/hooks/use-convex-auth";
 import { useEngineUpgrading, useReconnectAfterUpgrade } from "@/hooks/use-engine-upgrading";
 import { useInstance } from "@/hooks/use-instance";
 import { useIsInstanceAdmin } from "@/hooks/use-instance-role";
 import { useResourceKindNavItems } from "@/hooks/use-resource-kind-nav-items";
-import { useSyncEngineTransport } from "@/hooks/use-sync-engine-transport";
 import { useWorkflowHealthResyncOnReconnect } from "@/hooks/use-workflow-health";
 import { formatEngineVersion } from "@/lib/engine-version";
 import { $commandPaletteOpen } from "@/lib/stores";
@@ -335,7 +334,7 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   const activeSection = findActiveSection(location);
   const { instance } = useInstance();
   const resourceKindItems = useResourceKindNavItems();
-  useSyncEngineTransport();
+  useLiveConnection();
   useReconnectAfterUpgrade();
   useWorkflowHealthResyncOnReconnect();
 
@@ -352,31 +351,29 @@ export function BroadcastShell({ children }: BroadcastShellProps) {
   }, []);
 
   return (
-    <EngineGatewayProvider>
-      <StatusBarSlotProvider>
-        <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
-          <InstanceBar />
-          <AppHeader />
-          <TwitchReconnectBanner />
-          <EngineUpgradingBanner />
-          <SetupInstallBanner />
+    <StatusBarSlotProvider>
+      <div className="flex flex-col h-screen w-full overflow-hidden bg-background">
+        <InstanceBar />
+        <AppHeader />
+        <TwitchReconnectBanner />
+        <EngineUpgradingBanner />
+        <SetupInstallBanner />
 
-          <div className="flex-1 flex min-h-0 overflow-hidden">
-            {activeSection?.children && (
-              <SectionSidebar
-                title={activeSection.label}
-                items={navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting)}
-                location={location}
-              />
-            )}
-            <main className="flex-1 overflow-auto">{children}</main>
-          </div>
-
-          <StatusBar />
-
-          <CommandPalette open={commandPaletteOpen} onOpenChange={(open: boolean) => $commandPaletteOpen.set(open)} />
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {activeSection?.children && (
+            <SectionSidebar
+              title={activeSection.label}
+              items={navItemsFor(withAlertsChildren(activeSection.children, resourceKindItems), instance?.hosting)}
+              location={location}
+            />
+          )}
+          <main className="flex-1 overflow-auto">{children}</main>
         </div>
-      </StatusBarSlotProvider>
-    </EngineGatewayProvider>
+
+        <StatusBar />
+
+        <CommandPalette open={commandPaletteOpen} onOpenChange={(open: boolean) => $commandPaletteOpen.set(open)} />
+      </div>
+    </StatusBarSlotProvider>
   );
 }

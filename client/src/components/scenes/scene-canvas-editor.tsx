@@ -1,12 +1,10 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { alertWidgetNamesOf, orphanedAlertTargets } from "@convex/lib/alertWidgets";
-import type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 import type { SceneSyncState } from "@woofx3/api/scene-editor/client";
 import type { Version } from "@woofx3/api/scene-editor/document";
 import { type CommandResult, LocalDocumentSource, SyncDocumentSource } from "@woofx3/scene/editor";
 import { type CompositionDocument, PROFILES } from "@woofx3/scene/model";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { ArrowLeft, ChevronDown, Link, MoreVertical, RefreshCw, Save, Settings, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -25,6 +23,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useBrowserSourceUrlRequest, useRotateBrowserSourceUrlRequest } from "@/engine/hooks/use-overlays";
 import {
   useAlertTargetUsage,
   useCreateSceneRequest,
@@ -34,12 +33,11 @@ import {
   useSceneWidgetCatalog,
   useUpdateSceneRequest,
 } from "@/engine/hooks/use-scenes";
-import type { SceneRecord } from "@/engine/types";
+import type { InstanceId, SceneRecord, SceneWidgetCatalogRow } from "@/engine/types";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
 import { useToast } from "@/hooks/use-toast";
-import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { draftSaveStatus } from "@/lib/draft-save-status";
 import {
   type CanvasSettings,
@@ -58,7 +56,7 @@ import { UnreadSceneNotice } from "./unread-scene-notice";
 import { WidgetLayoutCanvas } from "./widget-layout-canvas";
 
 interface SceneCanvasEditorProps {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   engineSceneId: string;
 }
 
@@ -67,12 +65,12 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const { toast } = useToast();
   useCollapsedSidebar();
 
-  const fetchedScene = useScene(instanceId, engineSceneId);
+  const fetchedScene = useScene(engineSceneId);
   // undefined = loading; null = synced id not in the cache yet (webhook pending).
   const isLoading = fetchedScene === undefined;
   const isAwaitingSync = fetchedScene === null;
 
-  const catalogRows = useSceneWidgetCatalog(instanceId);
+  const catalogRows = useSceneWidgetCatalog();
   const catalog = useMemo(() => catalogOfRows(catalogRows ?? []), [catalogRows]);
 
   // The scene's name and description, which are not part of the scene
@@ -103,7 +101,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // cache in for the draft on the canvas. The editor is keyed by instance
   // (see pages/scenes.tsx), so another instance starts over and has to show
   // the capability itself.
-  const capabilities = useEngineCapabilities(instanceId);
+  const capabilities = useEngineCapabilities();
   const syncSupport = capabilities.support("scenes.editorSync");
   const syncSupported = syncSupport === "supported";
   const needsEngineUpgrade = !syncSupported && capabilities.support("scenes.editorSessions") === "supported";
@@ -125,14 +123,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // editor chooses for itself, and every one starts on the draft.
   const [live, setLive] = useState(false);
   const uiVersion: Version = live ? "published" : "draft";
-  const convexSceneId = fetchedScene?._id as Id<"scenes"> | undefined;
+  const sceneId = fetchedScene?.id;
 
   const me = useQuery(api.users.getMe);
   const myName = me === undefined ? undefined : (me?.name ?? me?.email ?? "");
   const session = useSceneEditorSession({
     instanceId,
     engineSceneId,
-    sceneId: convexSceneId,
+    sceneId,
     enabled: sessionMode,
     editorName: myName,
     unsavedOutsideSession: sessionMode && isDirty,
@@ -219,7 +217,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // Alert steps this editor's changes leave with no alert widget to play on,
   // measured against the scene as the editor first had it: the published
   // scene in session mode, the last save otherwise.
-  const alertTargetUsage = useAlertTargetUsage(instanceId, engineSceneId);
+  const alertTargetUsage = useAlertTargetUsage(engineSceneId);
   const orphanedTargets = useMemo(() => {
     if (!alertTargetUsage || scene === null || shownDoc === null) {
       return [];
@@ -252,8 +250,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const updateSceneAction = useUpdateSceneRequest();
   const deleteSceneAction = useDeleteSceneRequest();
   const createSceneAction = useCreateSceneRequest();
-  const getOrCreateBrowserSourceKey = useAction(api.browserSource.getOrCreateBrowserSourceKey);
-  const rotateBrowserSourceKey = useAction(api.browserSource.rotateBrowserSourceKey);
+  const getBrowserSourceUrl = useBrowserSourceUrlRequest();
+  const rotateBrowserSourceUrl = useRotateBrowserSourceUrlRequest();
 
   const reportRefused = useCallback(
     (result: CommandResult) => {
@@ -304,7 +302,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const sceneDescription = scene?.description;
   const saveNameAndDescription = useCallback(
     (name: string, description: string | undefined) => {
-      updateSceneAction(instanceId, engineSceneId, { name, description }).catch((err) =>
+      updateSceneAction(engineSceneId, { name, description }).catch((err) =>
         toast({
           title: "Couldn't save the scene's name",
           description: err instanceof Error ? err.message : String(err),
@@ -312,7 +310,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         })
       );
     },
-    [updateSceneAction, instanceId, engineSceneId, toast]
+    [updateSceneAction, engineSceneId, toast]
   );
   const unsavedNameRef = useRef<{ name: string; description: string | undefined } | null>(null);
   // While the scene is being deleted its name is not saved: that would only
@@ -363,19 +361,13 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     };
   }, [saveUnsavedName]);
 
-  const copyKeyToClipboard = useCallback(async (key: string) => {
-    const browserSourceUrl = browserSourceUrlForKey(key);
-    await navigator.clipboard.writeText(browserSourceUrl);
-    return browserSourceUrl;
-  }, []);
-
   // A scene that could not be read ended its session, so a repaired one opens
   // a new session; one that only had unreadable layers is reconnected by the
   // engine itself.
   const reopenSession = session.reopen;
   const handleRepair = useCallback(async () => {
     try {
-      const result = await repairScene(instanceId, engineSceneId);
+      const result = await repairScene(engineSceneId);
       toast(repairResultToast(result, "scene"));
       if (result.ok) {
         reopenSession();
@@ -387,15 +379,15 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [repairScene, instanceId, engineSceneId, toast, reopenSession]);
+  }, [repairScene, engineSceneId, toast, reopenSession]);
 
   const handleCopyBrowserSource = useCallback(async () => {
-    if (!convexSceneId) {
+    if (!sceneId) {
       return;
     }
     try {
-      const key = await getOrCreateBrowserSourceKey({ sceneId: convexSceneId });
-      const browserSourceUrl = await copyKeyToClipboard(key);
+      const browserSourceUrl = await getBrowserSourceUrl(sceneId);
+      await navigator.clipboard.writeText(browserSourceUrl);
       toast({ title: "Browser source URL copied", description: browserSourceUrl });
     } catch (err) {
       toast({
@@ -404,15 +396,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [convexSceneId, getOrCreateBrowserSourceKey, copyKeyToClipboard, toast]);
+  }, [sceneId, getBrowserSourceUrl, toast]);
 
   const handleRotateBrowserSource = useCallback(async () => {
-    if (!convexSceneId) {
+    if (!sceneId) {
       return;
     }
     try {
-      const key = await rotateBrowserSourceKey({ sceneId: convexSceneId });
-      await copyKeyToClipboard(key);
+      await navigator.clipboard.writeText(await rotateBrowserSourceUrl(sceneId));
       toast({ title: "Browser source URL rotated", description: "Old URLs revoked. New URL copied." });
     } catch (err) {
       toast({
@@ -421,7 +412,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [convexSceneId, rotateBrowserSourceKey, copyKeyToClipboard, toast]);
+  }, [sceneId, rotateBrowserSourceUrl, toast]);
 
   const handleSave = useCallback(async () => {
     if (!scene || !shownDoc || sessionMode || !editorModeKnown) {
@@ -432,7 +423,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     // it was before this save.
     echoWatermark.current = fetchedScene?.updatedAt ?? echoWatermark.current;
     try {
-      await updateSceneAction(instanceId, engineSceneId, {
+      await updateSceneAction(engineSceneId, {
         name: scene.name,
         description: scene.description,
         ...storedSceneJson(shownDoc),
@@ -449,24 +440,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     } finally {
       setIsSaving(false);
     }
-  }, [
-    scene,
-    shownDoc,
-    sessionMode,
-    editorModeKnown,
-    instanceId,
-    engineSceneId,
-    updateSceneAction,
-    toast,
-    fetchedScene?.updatedAt,
-  ]);
+  }, [scene, shownDoc, sessionMode, editorModeKnown, engineSceneId, updateSceneAction, toast, fetchedScene?.updatedAt]);
 
   const abandonSession = session.abandon;
   const handleDeleteScene = useCallback(async () => {
     deletingRef.current = true;
     setDeleting(true);
     try {
-      await deleteSceneAction(instanceId, engineSceneId);
+      await deleteSceneAction(engineSceneId);
       unsavedNameRef.current = null;
       // Edits still on their way would only be resent to a scene that is gone,
       // including by a session left draining if the editor closed meanwhile.
@@ -487,14 +468,14 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [deleteSceneAction, instanceId, engineSceneId, navigate, toast, abandonSession, saveUnsavedName]);
+  }, [deleteSceneAction, engineSceneId, navigate, toast, abandonSession, saveUnsavedName]);
 
   const handleDuplicateScene = useCallback(async () => {
     if (!scene || !shownDoc) {
       return;
     }
     try {
-      const { engineSceneId: newId } = await createSceneAction(instanceId, {
+      const { engineSceneId: newId } = await createSceneAction({
         name: `${scene.name} (Copy)`,
         description: scene.description || undefined,
         ...storedSceneJson(shownDoc),
@@ -508,7 +489,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
         variant: "destructive",
       });
     }
-  }, [scene, shownDoc, createSceneAction, instanceId, navigate, toast]);
+  }, [scene, shownDoc, createSceneAction, navigate, toast]);
 
   const runDraftCommand = useCallback(
     (command: DraftCommand) => {
@@ -586,7 +567,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
             variant="outline"
             className="rounded-r-none"
             onClick={handleCopyBrowserSource}
-            disabled={!convexSceneId}
+            disabled={!sceneId}
             data-testid="button-copy-browser-source"
           >
             <Link className="h-4 w-4 mr-2" />
@@ -598,7 +579,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
                 variant="outline"
                 size="icon"
                 className="rounded-l-none border-l-0"
-                disabled={!convexSceneId}
+                disabled={!sceneId}
                 aria-label="More browser source options"
                 data-testid="button-browser-source-menu"
               >
@@ -791,7 +772,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       onRefused={reportRefused}
       preview={
         <LiveScenePreview
-          sceneId={convexSceneId}
+          sceneId={sceneId}
           width={canvasSettings.width}
           height={canvasSettings.height}
           layoutMessage={previewMessage}
@@ -856,7 +837,7 @@ type FetchedScene = SceneRecord;
 
 function sceneOf(fetchedScene: FetchedScene): Scene {
   return {
-    id: fetchedScene._id as string,
+    id: fetchedScene.id,
     engineSceneId: fetchedScene.engineSceneId ?? "",
     name: fetchedScene.name,
     description: fetchedScene.description ?? "",

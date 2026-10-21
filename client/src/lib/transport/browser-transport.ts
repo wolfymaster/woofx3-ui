@@ -80,7 +80,7 @@ export class BrowserTransport implements WoofxTransport {
   private generation = 0;
 
   connect(url: string, clientId?: string, clientSecret?: string): void {
-    // Idempotent for an unchanged target. `useSyncEngineTransport` re-runs
+    // Idempotent for an unchanged target. The gateway's `useLiveConnection` re-runs
     // whenever the Convex instance row's object identity changes, which is any
     // update at all -- rebuilding the socket each time would drop every
     // registered stream subscription with it.

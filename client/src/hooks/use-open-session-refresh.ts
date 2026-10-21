@@ -1,5 +1,5 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { useCallback, useEffect } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useOpenSessionRefreshRequest } from "@/engine/hooks/use-stream-recap";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
@@ -19,7 +19,8 @@ const refreshThrottle = createPollThrottle(LIVE_REFRESH_MS / 2);
  * is live. The summaries themselves arrive through the usual
  * `streamSessionSummaries` queries; this only asks Convex to take a snapshot.
  */
-export function useOpenSessionRefresh(instanceId: Id<"instances"> | undefined): void {
+export function useOpenSessionRefresh(): void {
+  const { instanceId } = useEngineScope();
   const refreshOpenSession = useOpenSessionRefreshRequest();
   const isLive = useLiveState()?.isLive ?? false;
 
@@ -29,7 +30,7 @@ export function useOpenSessionRefresh(instanceId: Id<"instances"> | undefined): 
     }
     // Best effort: a failed snapshot leaves the last stored one on screen, and
     // the engine's own summary arrives when the session ends either way.
-    refreshOpenSession(instanceId).catch(() => undefined);
+    refreshOpenSession().catch(() => undefined);
   }, [instanceId, refreshOpenSession]);
 
   useEffect(() => {

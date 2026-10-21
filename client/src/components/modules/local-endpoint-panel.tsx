@@ -21,7 +21,7 @@ type EndpointView = ModuleLocalEndpoints["endpoints"][number];
  */
 export function LocalEndpointPanel({ instanceId, moduleId }: { instanceId: Id<"instances">; moduleId: string }) {
   const view = useQuery(api.companionIntegrations.forModule, moduleId ? { instanceId, moduleId } : "skip");
-  const capability = useEngineCapabilities(instanceId).support("modules.localEndpoints");
+  const capability = useEngineCapabilities().support("modules.localEndpoints");
   const now = useMinuteClock();
   if (!view || view.endpoints.length === 0) {
     return null;

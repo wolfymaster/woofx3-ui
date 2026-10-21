@@ -1,5 +1,4 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import {
   CONFIG_CONFLICT_POLICIES,
   CONFIG_SECTIONS,
@@ -38,6 +37,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
   useConfigExportRequest,
@@ -154,15 +154,7 @@ function SectionPicker({
   );
 }
 
-function ExportCard({
-  instanceId,
-  instanceName,
-  canExportMembers,
-}: {
-  instanceId: Id<"instances">;
-  instanceName: string;
-  canExportMembers: boolean;
-}) {
+function ExportCard({ instanceName, canExportMembers }: { instanceName: string; canExportMembers: boolean }) {
   const exportConfig = useConfigExportRequest();
   const { toast } = useToast();
   const [sections, setSections] = useState<ConfigSection[]>([...CONFIG_SECTIONS]);
@@ -172,7 +164,7 @@ function ExportCard({
   async function handleExport() {
     setIsExporting(true);
     try {
-      const chunks = await exportConfig(instanceId, { include: sections, includeMembers });
+      const chunks = await exportConfig({ include: sections, includeMembers });
       const fileName = backupFileName(instanceName, new Date());
       saveTextFile(fileName, chunks.join(""));
       toast({ title: "Backup downloaded", description: fileName });
@@ -403,7 +395,7 @@ interface PickedFile {
   chunks: string[];
 }
 
-function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; canImport: boolean }) {
+function ImportCard({ canImport }: { canImport: boolean }) {
   const previewImport = useConfigImportPreviewRequest();
   const importConfig = useConfigImportRequest();
   const { toast } = useToast();
@@ -448,7 +440,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setResult(null);
     try {
       setPlan(
-        await previewImport(instanceId, {
+        await previewImport({
           bundleChunks: file.chunks,
           onConflict,
           include: sections,
@@ -470,7 +462,7 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
     setConfirming(false);
     setBusy("import");
     try {
-      const outcome = await importConfig(instanceId, {
+      const outcome = await importConfig({
         bundleChunks: file.chunks,
         onConflict,
         include: sections,
@@ -636,7 +628,8 @@ function ImportCard({ instanceId, canImport }: { instanceId: Id<"instances">; ca
 export default function AdminBackup() {
   const { instance, isLoading } = useInstance();
   const access = useQuery(api.configBackup.access, instance ? { instanceId: instance._id } : "skip");
-  const capabilities = useEngineCapabilities(instance?._id);
+  const { instanceId: engineInstanceId } = useEngineScope();
+  const capabilities = useEngineCapabilities();
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -647,7 +640,7 @@ export default function AdminBackup() {
 
       {isLoading || (instance && access === undefined) ? (
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      ) : !instance || !access?.canExport ? (
+      ) : !instance || !engineInstanceId || !access?.canExport ? (
         <p className="text-sm text-muted-foreground">Select an instance you are a member of to back it up.</p>
       ) : (
         <>
@@ -657,12 +650,8 @@ export default function AdminBackup() {
             feature="Backups"
             onRetry={capabilities.refresh}
           >
-            <ExportCard
-              instanceId={instance._id}
-              instanceName={instance.name}
-              canExportMembers={access.canExportMembers}
-            />
-            <ImportCard instanceId={instance._id} canImport={access.canImport} />
+            <ExportCard instanceName={instance.name} canExportMembers={access.canExportMembers} />
+            <ImportCard canImport={access.canImport} />
           </EngineFeatureGate>
           <Card>
             <CardHeader>
@@ -673,7 +662,7 @@ export default function AdminBackup() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <SetupImportPanel instanceId={instance._id} canImport={access.canImport} />
+              <SetupImportPanel canImport={access.canImport} />
             </CardContent>
           </Card>
         </>

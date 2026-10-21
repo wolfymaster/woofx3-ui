@@ -1,14 +1,14 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { Copy } from "lucide-react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWebhookEventPayload } from "@/engine/hooks/use-webhook-event-log";
+import type { WebhookEventId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 
 interface WebhookEventPayloadDialogProps {
-  logId: Id<"engineEventLog">;
+  logId: WebhookEventId;
   eventType: string;
 }
 
@@ -22,7 +22,7 @@ function formatPayload(payload: string): string {
 
 // Mounted only while the dialog is open (Radix renders DialogContent's children
 // on open), so a closed dialog neither subscribes to the payload nor parses it.
-function PayloadBody({ logId }: { logId: Id<"engineEventLog"> }) {
+function PayloadBody({ logId }: { logId: WebhookEventId }) {
   const { toast } = useToast();
   const payload = useWebhookEventPayload(logId);
   const formatted = useMemo(() => (typeof payload === "string" ? formatPayload(payload) : null), [payload]);

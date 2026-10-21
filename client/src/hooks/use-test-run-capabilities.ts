@@ -1,8 +1,9 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { OptionsSupport } from "@convex/lib/engineTestRun";
 import { useEffect, useState } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useTestRunCapabilitiesRequest } from "@/engine/hooks/use-workflows";
+import type { InstanceId } from "@/engine/types";
 import { type TestRunSupport, testRunSupport } from "@/lib/engine-capabilities";
 
 /** `checking` while the engine is being asked; otherwise what it answered. */
@@ -23,13 +24,14 @@ const ignoredOptions = new Set<string>();
  * Record that an instance's engine ignored test-run options it was sent, for
  * when a real call reveals what neither capabilities nor the probe did.
  */
-export function rememberOptionsUnsupported(instanceId: Id<"instances">): void {
+export function rememberOptionsUnsupported(instanceId: InstanceId): void {
   ignoredOptions.add(instanceId);
   probed.set(instanceId, "unsupported");
 }
 
 /** Probes only when `enabled`; see `workflowActions.testRunCapabilities`. */
-function useLegacyOptionsProbe(instanceId: Id<"instances"> | undefined, enabled: boolean): TestRunOptionsState {
+function useLegacyOptionsProbe(enabled: boolean): TestRunOptionsState {
+  const { instanceId } = useEngineScope();
   const probe = useTestRunCapabilitiesRequest();
   const [state, setState] = useState<TestRunOptionsState>(() =>
     instanceId ? (probed.get(instanceId) ?? "checking") : "checking"
@@ -46,7 +48,7 @@ function useLegacyOptionsProbe(instanceId: Id<"instances"> | undefined, enabled:
     }
     let cancelled = false;
     setState("checking");
-    probe(instanceId)
+    probe()
       .then(({ options }) => {
         if (options !== "unknown") {
           probed.set(instanceId, options);
@@ -72,10 +74,11 @@ function useLegacyOptionsProbe(instanceId: Id<"instances"> | undefined, enabled:
  * What the instance's engine supports for test runs: sample trigger data and
  * skipping conditions for one workflow, dry runs, and a Stop that halts a run.
  */
-export function useTestRunSupport(instanceId: Id<"instances"> | undefined): TestRunSupport {
-  const { state } = useEngineCapabilities(instanceId);
+export function useTestRunSupport(): TestRunSupport {
+  const { instanceId } = useEngineScope();
+  const { state } = useEngineCapabilities();
   const legacy = state.status === "ready" && state.report.legacy;
-  const legacyProbe = useLegacyOptionsProbe(instanceId, legacy);
+  const legacyProbe = useLegacyOptionsProbe(legacy);
   const support = testRunSupport(state, legacyProbe);
   if (instanceId && ignoredOptions.has(instanceId)) {
     return { ...support, options: "unsupported", dryRun: "unsupported" };

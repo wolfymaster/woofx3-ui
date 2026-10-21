@@ -1,13 +1,13 @@
 import type { ActionStep } from "@woofx3/api";
 import { useState } from "react";
 import type { ResourceDetailProps } from "@/components/resources/resource-kind-page";
+import { useEngineScope } from "@/engine/context";
 import { useRunResourceActionsRequest } from "@/engine/hooks/use-module-resources";
-import { useInstance } from "@/hooks/use-instance";
+import type { ModuleResourceInstance } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { escapeDollarKeys } from "@/lib/dollar-keys";
 import { type ResourceAction, resourceActionStep, resourceActionStepFor } from "@/lib/resource-actions";
-import type { ResourceInstanceDoc } from "@/lib/resource-instance";
 
 /**
  * Runs one of a resource kind's own actions against the instance on show — the
@@ -69,7 +69,7 @@ export function useResourceActionRunner() {
   const sendStep = useResourceActionSender();
 
   return async function runResourceAction(
-    instance: ResourceInstanceDoc,
+    instance: ModuleResourceInstance,
     moduleName: string,
     actionId: string,
     parameters: Record<string, unknown> = {}
@@ -91,7 +91,7 @@ export function useAimedResourceActionRunner() {
   const sendStep = useResourceActionSender();
 
   return function runAimedAction(
-    instance: ResourceInstanceDoc,
+    instance: ModuleResourceInstance,
     action: ResourceAction,
     parameters: Record<string, unknown> = {}
   ): Promise<boolean> {
@@ -101,14 +101,14 @@ export function useAimedResourceActionRunner() {
 
 /** Sends one action step about `instance` to the engine; false when no engine instance is selected. */
 function useResourceActionSender() {
-  const { instance: engineInstance } = useInstance();
+  const { instanceId } = useEngineScope();
   const runActions = useRunResourceActionsRequest();
 
-  return async function sendStep(instance: ResourceInstanceDoc, step: ActionStep): Promise<boolean> {
-    if (!engineInstance) {
+  return async function sendStep(instance: ModuleResourceInstance, step: ActionStep): Promise<boolean> {
+    if (!instanceId) {
       return false;
     }
-    await runActions(engineInstance._id, `dashboard:${instance.canonicalId}`, escapeDollarKeys([step]) as unknown[]);
+    await runActions(`dashboard:${instance.canonicalId}`, escapeDollarKeys([step]) as unknown[]);
     return true;
   };
 }

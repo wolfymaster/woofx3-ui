@@ -1,11 +1,6 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { chunkText } from "@convex/lib/configBundle";
 import { decodeFirebotFile, decodeStreamerbotExport, ImportFileError } from "@convex/lib/setupImport/decode";
 import { IMPORT_SOURCE_LABELS, type ImportSource } from "@convex/lib/setupImport/types";
-import type { ImportReport } from "@convex/setupImports";
-import { useAction, useMutation, useQuery } from "convex/react";
-import { ConvexError } from "convex/values";
 import { FileUp, Loader2, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -14,6 +9,14 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  useAnalyzeSetupImportRequest,
+  useDiscardSetupImportRequest,
+  useLatestSetupImport,
+  useRetrySetupImportRequest,
+  useStartSetupImportRequest,
+} from "@/engine/hooks/use-setup-imports";
+import type { SetupImportReport } from "@/engine/types";
 import { applyProgress, canRetry, importFileProblem, reviewSummary } from "@/lib/setup-import";
 import { ImportReportView } from "./import-report-view";
 
@@ -39,14 +42,10 @@ const SOURCE_HELP: Record<ImportSource, { steps: string[]; accept: string; choos
 };
 
 function errorMessage(error: unknown): string {
-  if (error instanceof ConvexError) {
-    return String(error.data);
-  }
   return error instanceof Error ? error.message : String(error);
 }
 
 interface SetupImportPanelProps {
-  instanceId: Id<"instances">;
   /** Whether the viewer may import: owners and admins only. */
   canImport: boolean;
   /** Called once an import has been queued, so a wizard can move on while it applies. */
@@ -58,8 +57,8 @@ interface SetupImportPanelProps {
  * comes over and what cannot, then create it. Picks up the instance's latest
  * import, so leaving the page mid-import and coming back shows how it went.
  */
-export function SetupImportPanel({ instanceId, canImport, onQueued }: SetupImportPanelProps) {
-  const latest = useQuery(api.setupImports.latest, { instanceId });
+export function SetupImportPanel({ canImport, onQueued }: SetupImportPanelProps) {
+  const latest = useLatestSetupImport();
   const [startingOver, setStartingOver] = useState(false);
 
   if (latest === undefined) {
@@ -67,7 +66,7 @@ export function SetupImportPanel({ instanceId, canImport, onQueued }: SetupImpor
   }
   const active = latest && !(startingOver && latest.status === "done") ? latest : null;
   if (!active) {
-    return <ChooseExport instanceId={instanceId} canImport={canImport} onRead={() => setStartingOver(false)} />;
+    return <ChooseExport canImport={canImport} onRead={() => setStartingOver(false)} />;
   }
   return (
     <ImportProgress
@@ -79,16 +78,8 @@ export function SetupImportPanel({ instanceId, canImport, onQueued }: SetupImpor
   );
 }
 
-function ChooseExport({
-  instanceId,
-  canImport,
-  onRead,
-}: {
-  instanceId: Id<"instances">;
-  canImport: boolean;
-  onRead: () => void;
-}) {
-  const analyze = useAction(api.setupImports.analyze);
+function ChooseExport({ canImport, onRead }: { canImport: boolean; onRead: () => void }) {
+  const analyze = useAnalyzeSetupImportRequest();
   const fileInput = useRef<HTMLInputElement>(null);
   const [source, setSource] = useState<ImportSource>("firebot");
   const [pasted, setPasted] = useState("");
@@ -97,7 +88,6 @@ function ChooseExport({
 
   async function send(document: unknown) {
     const { importId } = await analyze({
-      instanceId,
       source,
       documentChunks: chunkText(JSON.stringify(document)),
     });
@@ -226,14 +216,14 @@ function ImportProgress({
   onQueued,
   onStartOver,
 }: {
-  report: ImportReport;
+  report: SetupImportReport;
   canImport: boolean;
   onQueued?: () => void;
   onStartOver: () => void;
 }) {
-  const start = useMutation(api.setupImports.start);
-  const retry = useMutation(api.setupImports.retry);
-  const discard = useMutation(api.setupImports.discard);
+  const start = useStartSetupImportRequest();
+  const retry = useRetrySetupImportRequest();
+  const discard = useDiscardSetupImportRequest();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -273,18 +263,14 @@ function ImportProgress({
       {report.status === "review" && (
         <div className="flex flex-wrap gap-3">
           <Button
-            onClick={() => void run(() => start({ importId: report.id }), onQueued)}
+            onClick={() => void run(() => start(report.id), onQueued)}
             disabled={disabled || summary.importable === 0}
             data-testid="button-start-import"
           >
             {busy && <Loader2 className="h-4 w-4 animate-spin" />}
             Import {summary.importable} {summary.importable === 1 ? "item" : "items"}
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => void run(() => discard({ importId: report.id }), onStartOver)}
-            disabled={disabled}
-          >
+          <Button variant="outline" onClick={() => void run(() => discard(report.id), onStartOver)} disabled={disabled}>
             Choose a different file
           </Button>
         </div>
@@ -297,7 +283,7 @@ function ImportProgress({
             {report.waitingFor ?? `Importing… ${progress.done} of ${progress.total} done. You can leave this page.`}
           </p>
           {canRetry(report) && (
-            <Button size="sm" onClick={() => void run(() => retry({ importId: report.id }))} disabled={disabled}>
+            <Button size="sm" onClick={() => void run(() => retry(report.id))} disabled={disabled}>
               <RotateCcw className="h-4 w-4" />
               Try again
             </Button>
@@ -315,7 +301,7 @@ function ImportProgress({
             </p>
             <div className="flex flex-wrap gap-3">
               {canRetry(report) && (
-                <Button size="sm" onClick={() => void run(() => retry({ importId: report.id }))} disabled={disabled}>
+                <Button size="sm" onClick={() => void run(() => retry(report.id))} disabled={disabled}>
                   <RotateCcw className="h-4 w-4" />
                   Try the rest again
                 </Button>

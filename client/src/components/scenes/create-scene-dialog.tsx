@@ -11,8 +11,8 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useEngineScope } from "@/engine/context";
 import { useCreateSceneRequest } from "@/engine/hooks/use-scenes";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
 interface CreateSceneDialogProps {
@@ -25,19 +25,19 @@ interface CreateSceneDialogProps {
  * empty-state prompt shown when no scene is selected, so scene creation always
  * goes through one path. */
 export function CreateSceneDialog({ open, onOpenChange, onCreated }: CreateSceneDialogProps) {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
   const [name, setName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const createScene = useCreateSceneRequest();
 
   const handleCreate = async () => {
-    if (!name.trim() || !instance) {
+    if (!name.trim() || !instanceId) {
       return;
     }
     setIsCreating(true);
     try {
-      const { engineSceneId } = await createScene(instance._id, {
+      const { engineSceneId } = await createScene({
         name: name.trim(),
         layoutJson: JSON.stringify({ width: 1920, height: 1080, backgroundColor: "transparent" }),
       });

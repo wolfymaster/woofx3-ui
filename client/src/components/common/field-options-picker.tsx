@@ -16,8 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEngineScope } from "@/engine/context";
 import { type FieldOptionsState, useFieldOptions } from "@/hooks/use-field-options";
-import { useInstance } from "@/hooks/use-instance";
 import {
   fieldOptionMismatch,
   groupFieldOptions,
@@ -87,8 +87,7 @@ function RefreshButton({ field, state }: { field: PickerField; state: FieldOptio
  * Options carrying a `group` are listed under its heading.
  */
 export function InternalSelectField({ field, value, onChange, source }: PickerProps) {
-  const { instance } = useInstance();
-  const state = useFieldOptions(instance?._id, source);
+  const state = useFieldOptions(source);
   const reason = emptyReason(state);
   const groups = groupFieldOptions(state.options);
 
@@ -171,8 +170,8 @@ export function InternalSuggestField({
   source,
   availableVariables,
 }: PickerProps & { availableVariables: VariableOption[] }) {
-  const { instance } = useInstance();
-  const state = useFieldOptions(instance?._id, source);
+  const { instanceId } = useEngineScope();
+  const state = useFieldOptions(source);
   const [open, setOpen] = useState(false);
   const listId = useId();
   const noticeId = useId();
@@ -216,7 +215,7 @@ export function InternalSuggestField({
                   aria-haspopup="listbox"
                   aria-controls={listId}
                   aria-label={`Pick ${field.label.toLowerCase()}`}
-                  disabled={!instance}
+                  disabled={!instanceId}
                   className="shrink-0"
                   data-testid={`button-pick-${field.id}`}
                 >

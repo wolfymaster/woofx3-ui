@@ -1,11 +1,9 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import type { CustomFieldRenderer, FieldDescriptor } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
+import { useModuleOAuthConnectRequest } from "@/engine/hooks/use-module-oauth";
 import { useInternalSettingAction } from "@/hooks/use-internal-setting-action";
 import { actionErrorMessage } from "@/lib/action-error";
 import { buttonActionOf } from "@/lib/field-options-reference";
@@ -18,7 +16,6 @@ import { buttonActionOf } from "@/lib/field-options-reference";
  * runs a request it can find in an installed manifest.
  */
 function ConfigButtonField({ field }: { field: FieldDescriptor }) {
-  const { instance } = useInstance();
   const action = buttonActionOf(field.action);
   if (!action) {
     return <p className="text-xs text-muted-foreground">{field.label} does nothing on this engine.</p>;
@@ -32,27 +29,21 @@ function ConfigButtonField({ field }: { field: FieldDescriptor }) {
   }
   if (action.kind === "integration") {
     return (
-      <IntegrationButton
-        instanceId={instance?._id}
-        label={field.label}
-        moduleId={action.reference.moduleId}
-        integration={action.integration}
-      />
+      <IntegrationButton label={field.label} moduleId={action.reference.moduleId} integration={action.integration} />
     );
   }
-  return <RequestButton instanceId={instance?._id} label={field.label} reference={action.reference} />;
+  return <RequestButton label={field.label} reference={action.reference} />;
 }
 
 function RequestButton({
-  instanceId,
   label,
   reference,
 }: {
-  instanceId: Id<"instances"> | undefined;
   label: string;
-  reference: Parameters<typeof useInternalSettingAction>[1];
+  reference: Parameters<typeof useInternalSettingAction>[0];
 }) {
-  const { trigger, status, message } = useInternalSettingAction(instanceId, reference);
+  const { instanceId } = useEngineScope();
+  const { trigger, status, message } = useInternalSettingAction(reference);
   return (
     <div className="space-y-2">
       <Button
@@ -80,18 +71,9 @@ function RequestButton({
   );
 }
 
-function IntegrationButton({
-  instanceId,
-  label,
-  moduleId,
-  integration,
-}: {
-  instanceId: Id<"instances"> | undefined;
-  label: string;
-  moduleId: string;
-  integration: string;
-}) {
-  const start = useAction(api.moduleOAuth.start);
+function IntegrationButton({ label, moduleId, integration }: { label: string; moduleId: string; integration: string }) {
+  const { instanceId } = useEngineScope();
+  const connectModuleOAuth = useModuleOAuthConnectRequest();
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,13 +85,7 @@ function IntegrationButton({
     setError(null);
     try {
       // Coming back to the same page leaves the streamer where they pressed it.
-      const { authorizeUrl } = await start({
-        instanceId,
-        moduleId,
-        integration,
-        redirectTo: window.location.pathname,
-      });
-      window.location.assign(authorizeUrl);
+      await connectModuleOAuth({ moduleId, integration, returnTo: window.location.pathname });
     } catch (err) {
       setError(actionErrorMessage(err));
       setStarting(false);

@@ -1,4 +1,4 @@
-import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
+import { convexSiteUrl } from "@/lib/convexSiteUrl";
 
 /**
  * The public URL for a browser-source key — what OBS is pointed at, and what the
@@ -6,5 +6,5 @@ import { CONVEX_SITE_URL } from "@/lib/convexSiteUrl";
  * editor previews can never be assembled differently.
  */
 export function browserSourceUrlForKey(key: string): string {
-  return `${CONVEX_SITE_URL.replace(/\/+$/, "")}/browser-source/${key}`;
+  return `${convexSiteUrl().replace(/\/+$/, "")}/browser-source/${key}`;
 }

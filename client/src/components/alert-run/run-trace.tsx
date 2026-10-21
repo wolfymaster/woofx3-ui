@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { AlertCircle, BellRing, Clock, type LucideIcon, Zap } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +21,6 @@ import { TONE_STYLE } from "./tone-style";
 import { TraceWaterfall } from "./trace-waterfall";
 
 interface RunTraceProps {
-  instanceId: Id<"instances">;
   engineRunId: string;
   /** Controls rendered beside the summary, such as replay. */
   actions?: (run: { failedStepTaskId: string | null }) => ReactNode;
@@ -35,8 +33,8 @@ interface RunTraceProps {
  * Opens on the span that broke the run when one did, since that is why most
  * people come here.
  */
-export function RunTrace({ instanceId, engineRunId, actions }: RunTraceProps) {
-  const data = useWorkflowRun(instanceId, engineRunId);
+export function RunTrace({ engineRunId, actions }: RunTraceProps) {
+  const data = useWorkflowRun(engineRunId);
   const timeline = useMemo(() => (data ? buildTimeline(data.run, data.steps) : null), [data]);
   const trace = useMemo(
     () => (data && timeline ? buildTrace(data.run, timeline, data.alerts) : null),

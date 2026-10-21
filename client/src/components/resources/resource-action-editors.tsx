@@ -1,4 +1,3 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { bareKind } from "@convex/lib/resourceKinds";
 import { Loader2, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -7,14 +6,13 @@ import {
   type NewTriggerRequest,
   type TriggerActionScope,
 } from "@/components/alerts/event-trigger-list";
-import type { ResourceInstanceDoc } from "@/components/resources/resource-kind-page";
 import { TriggerPicker } from "@/components/test-events/trigger-picker";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
-import { useInstance } from "@/hooks/use-instance";
+import type { ModuleResourceInstance } from "@/engine/types";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import type { AlertMenuSection } from "@/lib/alert-groups";
 import { eventsChangingResource, resourceActions } from "@/lib/resource-actions";
@@ -30,10 +28,9 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
  * one per trigger. This screen is one list across many events, so it borrows each
  * event's list without its heading (`bare`).
  */
-export function ResourceActionEditors({ kind, instance }: { kind: string; instance: ResourceInstanceDoc }) {
-  const { instance: engineInstance } = useInstance();
+export function ResourceActionEditors({ kind, instance }: { kind: string; instance: ModuleResourceInstance }) {
   const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
-  const workflows = useWorkflows(engineInstance ? engineInstance._id : null);
+  const workflows = useWorkflows();
 
   // The trigger being added, on its event's list, until it is saved or dropped.
   const [adding, setAdding] = useState<{ event: string; request: NewTriggerRequest } | null>(null);
@@ -47,7 +44,7 @@ export function ResourceActionEditors({ kind, instance }: { kind: string; instan
   // An event is listed once it has a trigger changing this instance, or while one is
   // being added to it — a trigger with no saved step exists only in its editor.
   const events = useMemo(() => {
-    const stored = eventsChangingResource((workflows as Doc<"workflows">[]) ?? [], actions, instance.canonicalId);
+    const stored = eventsChangingResource(workflows ?? [], actions, instance.canonicalId);
     return Array.from(new Set([...stored, ...(adding ? [adding.event] : [])])).sort();
   }, [workflows, actions, instance.canonicalId, adding]);
 
@@ -97,7 +94,7 @@ export function ResourceActionEditors({ kind, instance }: { kind: string; instan
                 key={event}
                 bare
                 triggerPreset={triggerPreset}
-                workflows={workflows as Doc<"workflows">[]}
+                workflows={workflows}
                 breadcrumb={[]}
                 headingLevel="h2"
                 actionScope={actionScope}

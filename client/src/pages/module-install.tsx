@@ -303,7 +303,7 @@ export default function ModuleInstall() {
   const uploadAndDeliver = useMutation(api.moduleRepository.uploadAndDeliver);
 
   // Subscribe to transient events — Convex realtime pushes the moment the webhook emits one
-  const installEvent = useTransientEvent(instance?._id ?? null, pendingModuleKey || null);
+  const installEvent = useTransientEvent(pendingModuleKey || null);
 
   const fileTree = useMemo(() => buildFileTree(files), [files]);
 

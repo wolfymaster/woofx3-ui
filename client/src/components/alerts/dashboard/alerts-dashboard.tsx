@@ -10,8 +10,8 @@ import { TestEventPicker } from "@/components/test-events/test-event-picker";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { useEngineScope } from "@/engine/context";
 import { useAlertOverview, useEngineAlerts } from "@/engine/hooks/use-alert-queue";
-import { useInstance } from "@/hooks/use-instance";
 import { useLastLoaded } from "@/hooks/use-last-loaded";
 import { useMinuteClock } from "@/hooks/use-minute-clock";
 import type { AlertMenuSection } from "@/lib/alert-groups";
@@ -35,13 +35,12 @@ interface AlertsDashboardProps {
  * published never reaches an overlay — and this page is about the second.
  */
 export function AlertsDashboard({ sections }: AlertsDashboardProps) {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
   // The overview's window ends with the current hour. Only the hour is sent, so
   // the query's arguments change once an hour rather than every minute.
   const hourStart = Math.floor(useMinuteClock() / HOUR_MS) * HOUR_MS;
-  const overview = useLastLoaded(useAlertOverview(instanceId ?? null, hourStart), instanceId);
-  const alerts = useEngineAlerts(instanceId ?? null, FEED_LIMIT);
+  const overview = useLastLoaded(useAlertOverview(hourStart), instanceId);
+  const alerts = useEngineAlerts(FEED_LIMIT);
 
   const [failuresOnly, setFailuresOnly] = useState(false);
   // Null until something is picked; the first trigger stands in so the card is
@@ -105,7 +104,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
           <Card>
             <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
               <h2 className="text-sm font-semibold">Recent alerts</h2>
-              <AlertQueueControls instanceId={instanceId} className="ml-auto" />
+              <AlertQueueControls className="ml-auto" />
               <label className="flex items-center gap-2 text-xs text-muted-foreground" htmlFor="alert-failures-only">
                 <Switch
                   id="alert-failures-only"
@@ -127,7 +126,7 @@ export function AlertsDashboard({ sections }: AlertsDashboardProps) {
                 No failures in the last {alerts.length} alerts. Nothing to diagnose.
               </p>
             ) : (
-              <AlertFeed instanceId={instanceId} alerts={shown} />
+              <AlertFeed alerts={shown} />
             )}
           </Card>
         </div>

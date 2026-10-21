@@ -1,8 +1,8 @@
-import { api } from "@convex/_generated/api";
 import { oauthErrorMessage } from "@convex/lib/oauthErrors";
-import { useAction, useConvexAuth } from "convex/react";
+import { useConvexAuth } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useModuleOAuthFinishRequest } from "@/engine/hooks/use-module-oauth";
 
 /**
  * A connect of a module's `oauth[]` integration (moduleOAuth.ts) the OAuth
@@ -48,7 +48,7 @@ export function useModuleOAuthReturn(returnSearch = ""): [ModuleOAuthResult | nu
     return null;
   });
 
-  const finishModuleOAuth = useAction(api.moduleOAuth.finish);
+  const finishModuleOAuth = useModuleOAuthFinishRequest();
   const { isAuthenticated } = useConvexAuth();
   const finishingCodeRef = useRef<string | null>(null);
   useEffect(() => {
@@ -57,7 +57,7 @@ export function useModuleOAuthReturn(returnSearch = ""): [ModuleOAuthResult | nu
     }
     finishingCodeRef.current = result.connectCode;
     const { label } = result;
-    finishModuleOAuth({ code: result.connectCode })
+    finishModuleOAuth(result.connectCode)
       .then((finished) => {
         setResult(
           finished.ok

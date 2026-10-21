@@ -1,88 +1,123 @@
 import { api } from "@convex/_generated/api";
-import { useAction } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ModulesGateway } from "@/engine/gateway";
-import type { InstanceId, ModuleId } from "@/engine/types";
+import type { MarketplaceBundleInstall, ModuleDetail, ModuleId, ModuleStorageUsage } from "@/engine/types";
+import { fromModuleId, toModuleId } from "./ids";
+import { useInstanceAction } from "./scope";
+
+function toModuleDetail(result: FunctionReturnType<typeof api.moduleDetail.getModuleDetail>): ModuleDetail {
+  return {
+    id: result.id,
+    name: result.name,
+    description: result.description,
+    version: result.version,
+    latestVersion: result.latestVersion,
+    author: result.author,
+    category: result.category,
+    tags: result.tags,
+    iconUrl: result.iconUrl,
+    readme: result.readme,
+    isInstalled: result.isInstalled,
+    triggers: result.triggers,
+    actions: result.actions,
+    functions: result.functions,
+    widgets: result.widgets,
+    workflows: result.workflows,
+    moduleDbId: toModuleId(result.moduleDbId),
+    manifestSettings: result.manifestSettings,
+    manifestResourceKinds: result.manifestResourceKinds,
+    permissions: result.permissions,
+    latestPermissions: result.latestPermissions,
+    localEndpoints: result.localEndpoints,
+    latestLocalEndpoints: result.latestLocalEndpoints,
+  };
+}
 
 function useDetailRequest() {
-  const getModuleDetail = useAction(api.moduleDetail.getModuleDetail);
-  return useCallback(
-    (instanceId: InstanceId, moduleId: string) => getModuleDetail({ instanceId, moduleId }),
-    [getModuleDetail]
-  );
+  const getModuleDetail = useInstanceAction(api.moduleDetail.getModuleDetail);
+  return useCallback((moduleId: string) => getModuleDetail({ moduleId }).then(toModuleDetail), [getModuleDetail]);
 }
 
 function useSettingsRequest() {
-  const getModuleSettings = useAction(api.moduleSettingsActions.getModuleSettings);
-  return useCallback(
-    (instanceId: InstanceId, moduleId: string) => getModuleSettings({ instanceId, moduleId }),
-    [getModuleSettings]
-  );
+  const getModuleSettings = useInstanceAction(api.moduleSettingsActions.getModuleSettings);
+  return useCallback((moduleId: string) => getModuleSettings({ moduleId }), [getModuleSettings]);
 }
 
 function useUpdateSettingRequest() {
-  const updateModuleSetting = useAction(api.moduleSettingsActions.updateModuleSetting);
+  const updateModuleSetting = useInstanceAction(api.moduleSettingsActions.updateModuleSetting);
   return useCallback(
-    (instanceId: InstanceId, moduleId: string, key: string, value: string) =>
-      updateModuleSetting({ instanceId, moduleId, key, value }),
+    (moduleId: string, key: string, value: string) => updateModuleSetting({ moduleId, key, value }),
     [updateModuleSetting]
   );
 }
 
 function useFilesRequest() {
-  const listModuleFiles = useAction(api.moduleFiles.listModuleFiles);
-  return useCallback(
-    (instanceId: InstanceId, moduleId: string) => listModuleFiles({ instanceId, moduleId }),
-    [listModuleFiles]
-  );
+  const listModuleFiles = useInstanceAction(api.moduleFiles.listModuleFiles);
+  return useCallback((moduleId: string) => listModuleFiles({ moduleId }), [listModuleFiles]);
 }
 
 function useFileRequest() {
-  const readModuleFile = useAction(api.moduleFiles.readModuleFile);
-  return useCallback(
-    (instanceId: InstanceId, moduleId: string, path: string) => readModuleFile({ instanceId, moduleId, path }),
-    [readModuleFile]
-  );
+  const readModuleFile = useInstanceAction(api.moduleFiles.readModuleFile);
+  return useCallback((moduleId: string, path: string) => readModuleFile({ moduleId, path }), [readModuleFile]);
 }
 
 function useUninstallRequest() {
-  const requestModuleUninstall = useAction(api.moduleEngine.requestModuleUninstall);
+  const requestModuleUninstall = useInstanceAction(api.moduleEngine.requestModuleUninstall);
   return useCallback(
-    (instanceId: InstanceId, moduleId: ModuleId) => requestModuleUninstall({ instanceId, moduleId }),
+    (moduleId: ModuleId) => requestModuleUninstall({ moduleId: fromModuleId(moduleId) }),
     [requestModuleUninstall]
   );
 }
 
 function useReconcileUninstallRequest() {
-  const reconcileUninstall = useAction(api.moduleEngine.reconcileUninstall);
+  const reconcileUninstall = useInstanceAction(api.moduleEngine.reconcileUninstall);
   return useCallback(
-    (instanceId: InstanceId, moduleId: ModuleId, correlationKey: string) =>
-      reconcileUninstall({ instanceId, moduleId, correlationKey }),
+    (moduleId: ModuleId, correlationKey: string) =>
+      reconcileUninstall({ moduleId: fromModuleId(moduleId), correlationKey }),
     [reconcileUninstall]
   );
 }
 
 function useWorkflowsRequest() {
-  const listWorkflows = useAction(api.moduleEngine.listWorkflows);
-  return useCallback((instanceId: InstanceId) => listWorkflows({ instanceId }), [listWorkflows]);
+  const listWorkflows = useInstanceAction(api.moduleEngine.listWorkflows);
+  return useCallback(() => listWorkflows({}), [listWorkflows]);
+}
+
+function useBundleInstallRequest() {
+  const installBundle = useInstanceAction(api.marketplaceCatalog.installBundle);
+  return useCallback(
+    async (listingId: string): Promise<MarketplaceBundleInstall> => {
+      const { kind, engineId } = await installBundle({ listingId });
+      return { kind, engineId };
+    },
+    [installBundle]
+  );
 }
 
 function useMarketplaceInstallRequest() {
-  const installModule = useAction(api.marketplace.installModule);
+  const installModule = useInstanceAction(api.marketplace.installModule);
   return useCallback(
-    (
-      instanceId: InstanceId,
-      marketplaceModuleId: string,
-      approvedPermissions: string[],
-      approvedLocalEndpoints: string[]
-    ) => installModule({ instanceId, marketplaceModuleId, approvedPermissions, approvedLocalEndpoints }),
+    (marketplaceModuleId: string, approvedPermissions: string[], approvedLocalEndpoints: string[]) =>
+      installModule({
+        marketplaceModuleId,
+        approvedPermissions,
+        approvedLocalEndpoints,
+      }),
     [installModule]
   );
 }
 
+function toModuleStorageUsage(result: FunctionReturnType<typeof api.moduleStorage.usage>): ModuleStorageUsage | null {
+  if (result === null) {
+    return null;
+  }
+  return { usedBytes: result.usedBytes, limitBytes: result.limitBytes, over: result.over };
+}
+
 function useStorageUsageRequest() {
-  const moduleStorageUsage = useAction(api.moduleStorage.usage);
-  return useCallback((instanceId: InstanceId) => moduleStorageUsage({ instanceId }), [moduleStorageUsage]);
+  const moduleStorageUsage = useInstanceAction(api.moduleStorage.usage);
+  return useCallback(() => moduleStorageUsage({}).then(toModuleStorageUsage), [moduleStorageUsage]);
 }
 
 export const convexModulesGateway: ModulesGateway = {
@@ -95,5 +130,6 @@ export const convexModulesGateway: ModulesGateway = {
   useReconcileUninstallRequest,
   useWorkflowsRequest,
   useMarketplaceInstallRequest,
+  useBundleInstallRequest,
   useStorageUsageRequest,
 };

@@ -15,9 +15,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useEngineScope } from "@/engine/context";
 import { useResourceUpload } from "@/engine/hooks/use-resource-upload";
 import { type Resource, useResources } from "@/engine/hooks/use-resources";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import {
   externalMediaValue,
@@ -69,7 +69,7 @@ export function AssetLibraryModal({
   title = "Select an asset",
   description = "Choose a file from your library, upload a new one, or link to one hosted elsewhere.",
 }: AssetLibraryModalProps) {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
 
   const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: "Media" }]);
@@ -96,9 +96,9 @@ export function AssetLibraryModal({
   }, [open, currentExternalUrl]);
 
   const currentFolderId = trail[trail.length - 1].id;
-  const { upload, isUploading, progress } = useResourceUpload(instance?._id);
+  const { upload, isUploading, progress } = useResourceUpload();
 
-  const { resources, isLoading, error, refetch } = useResources(instance?._id, {
+  const { resources, isLoading, error, refetch } = useResources({
     folderId: currentFolderId,
     kind: filterTypes?.length === 1 ? filterTypes[0] : undefined,
     search: search || undefined,
@@ -177,7 +177,7 @@ export function AssetLibraryModal({
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        {!instance ? (
+        {!instanceId ? (
           <p className="text-sm text-muted-foreground py-8 text-center">Select an instance to browse assets.</p>
         ) : (
           <Tabs value={tab} onValueChange={setTab}>

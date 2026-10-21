@@ -1,6 +1,5 @@
-import { useEngineGateway } from "@/engine/context";
-import type { InstanceId, WebhookEventId } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
+import type { WebhookEventId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 
 /**
@@ -9,12 +8,12 @@ import { useToast } from "@/hooks/use-toast";
  * use-fire-trigger.ts's UX contract (toast on success/failure).
  */
 export function useRetriggerEvent() {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const retrigger = useEngineGateway().eventLog.useRetriggerRequest();
   const { toast } = useToast();
 
   return async function retriggerEvent(logId: WebhookEventId, eventType: string): Promise<void> {
-    if (!instance) {
+    if (!instanceId) {
       toast({
         variant: "destructive",
         title: "No instance selected",
@@ -23,7 +22,7 @@ export function useRetriggerEvent() {
       return;
     }
     try {
-      const result = await retrigger(instance._id, logId);
+      const result = await retrigger(logId);
       toast({
         title: "Event retriggered",
         description: `${eventType} → ${result.message}`,
@@ -38,9 +37,9 @@ export function useRetriggerEvent() {
   };
 }
 
-/** The webhook log, newest first, optionally of one type; a null id skips the read. */
-export function useWebhookEventLog(instanceId: InstanceId | null, eventType: string | null, initialNumItems: number) {
-  return useEngineGateway().eventLog.useWebhookEvents(instanceId, eventType, initialNumItems);
+/** The webhook log, newest first, optionally of one type. */
+export function useWebhookEventLog(eventType: string | null, initialNumItems: number) {
+  return useEngineGateway().eventLog.useWebhookEvents(eventType, initialNumItems);
 }
 
 /** One logged event's raw payload JSON; null when it is gone. */

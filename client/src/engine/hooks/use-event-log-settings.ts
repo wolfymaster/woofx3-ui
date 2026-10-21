@@ -1,13 +1,11 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { useStore } from "@nanostores/react";
 import { atom } from "nanostores";
 import { useCallback, useEffect, useState } from "react";
-import { useEngineGateway } from "@/engine/context";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import type { EventLogSettings } from "@/engine/types";
 import { withEventTypeEnabled } from "@/lib/activity-feed";
 import { type CapabilitySupport, EVENT_LOG_CAPABILITIES } from "@/lib/engine-capabilities";
-import { $engineConnected } from "@/lib/transport/engine-connection";
 
 /**
  * - `unsupported`: the engine has no selection, so nothing can be chosen.
@@ -50,12 +48,13 @@ export interface EventLogSettingsHandle {
  * logs and pushes, its defaults and what it offers. Read on mount, on every
  * reconnect and on `refresh`.
  */
-export function useEventLogSettings(instanceId: Id<"instances"> | undefined): EventLogSettingsHandle {
-  const support = useEngineCapabilities(instanceId).support(...EVENT_LOG_CAPABILITIES);
+export function useEventLogSettings(): EventLogSettingsHandle {
+  const { instanceId } = useEngineScope();
+  const support = useEngineCapabilities().support(...EVENT_LOG_CAPABILITIES);
   const { eventLog } = useEngineGateway();
   const getEventLogSettings = eventLog.useSettingsRequest();
   const setEventLogSelection = eventLog.useSetSelectionRequest();
-  const connected = useStore($engineConnected);
+  const connected = useEngineGateway().session.useConnected();
   const settingsByInstance = useStore($settingsByInstance);
   const settings = instanceId ? settingsByInstance[instanceId] : undefined;
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +67,7 @@ export function useEventLogSettings(instanceId: Id<"instances"> | undefined): Ev
       return;
     }
     let cancelled = false;
-    getEventLogSettings(instanceId)
+    getEventLogSettings()
       .then((next) => {
         if (!cancelled) {
           storeSettings(instanceId, next);
@@ -98,7 +97,7 @@ export function useEventLogSettings(instanceId: Id<"instances"> | undefined): Ev
       setSaving(true);
       try {
         const selection = withEventTypeEnabled(settings.selection, settings.defaults, type, enabled);
-        storeSettings(instanceId, await setEventLogSelection(instanceId, selection));
+        storeSettings(instanceId, await setEventLogSelection(selection));
       } finally {
         setSaving(false);
       }

@@ -1,53 +1,94 @@
 import { api } from "@convex/_generated/api";
-import { useAction, usePaginatedQuery, useQuery } from "convex/react";
-import { useCallback } from "react";
+import { usePaginatedQuery, useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { useCallback, useMemo } from "react";
 import type { EventLogGateway } from "@/engine/gateway";
-import type { InstanceId, WebhookEventId } from "@/engine/types";
+import type {
+  EventLogQuery,
+  EventLogSelection,
+  Paginated,
+  StreamEventFrame,
+  WebhookEventId,
+  WebhookEventSummary,
+} from "@/engine/types";
 import { transport } from "@/lib/transport";
+import { fromWebhookEventId, toWebhookEventId } from "./ids";
+import { requireInstance, useInstanceAction, useScopeInstanceId } from "./scope";
 
 // The webhook log is what Convex recorded from engine callbacks; the event log
-// and its selection are the engine's own, read over the live transport. The
-// transport is a module singleton, so its functions keep their identity
-// without memoising.
+// and its selection are the engine's own, read over the live transport.
 
-function useWebhookEvents(instanceId: InstanceId | null, eventType: string | null, initialNumItems: number) {
-  return usePaginatedQuery(
+type WebhookEventRow = FunctionReturnType<typeof api.engineEventLog.list>["page"][number];
+
+function toWebhookEventSummary(row: WebhookEventRow): WebhookEventSummary {
+  return {
+    id: toWebhookEventId(row._id),
+    eventType: row.eventType,
+    source: row.source,
+    receivedAt: row.receivedAt,
+    payloadLength: row.payloadLength,
+  };
+}
+
+function useWebhookEvents(eventType: string | null, initialNumItems: number): Paginated<WebhookEventSummary> {
+  const instanceId = useScopeInstanceId();
+  const { results, status, isLoading, loadMore } = usePaginatedQuery(
     api.engineEventLog.list,
     instanceId ? { instanceId, ...(eventType !== null ? { eventType } : {}) } : "skip",
     { initialNumItems }
   );
+  const summaries = useMemo(() => results.map(toWebhookEventSummary), [results]);
+  return { results: summaries, status, isLoading, loadMore };
 }
 
 function useWebhookPayload(logId: WebhookEventId) {
-  return useQuery(api.engineEventLog.getPayload, { logId });
+  return useQuery(api.engineEventLog.getPayload, { logId: fromWebhookEventId(logId) });
 }
 
 function useRetriggerRequest() {
-  const retrigger = useAction(api.engineEventLog.retrigger);
-  return useCallback((instanceId: InstanceId, logId: WebhookEventId) => retrigger({ instanceId, logId }), [retrigger]);
+  const retrigger = useInstanceAction(api.engineEventLog.retrigger);
+  return useCallback((logId: WebhookEventId) => retrigger({ logId: fromWebhookEventId(logId) }), [retrigger]);
 }
 
-const subscribeStreamEvents: ReturnType<EventLogGateway["useStreamEventsSubscription"]> = (
-  instanceId,
-  types,
-  onFrame
-) => transport.subscribeStreamEvents(instanceId, types, onFrame);
+// The live transport holds one session, to the current instance's engine;
+// these still refuse while the scope has no instance, like every other call.
 
-const listEvents: ReturnType<EventLogGateway["useEventsRequest"]> = (instanceId, query) =>
-  transport.listEvents(instanceId, query);
+function useStreamEventsSubscription() {
+  const instanceId = useScopeInstanceId();
+  return useCallback(
+    (types: readonly string[] | null, onFrame: (frame: StreamEventFrame) => void) =>
+      transport.subscribeStreamEvents(requireInstance(instanceId), types, onFrame),
+    [instanceId]
+  );
+}
 
-const getEventLogSettings: ReturnType<EventLogGateway["useSettingsRequest"]> = (instanceId) =>
-  transport.getEventLogSettings(instanceId);
+function useEventsRequest() {
+  const instanceId = useScopeInstanceId();
+  return useCallback(
+    async (query?: EventLogQuery) => transport.listEvents(requireInstance(instanceId), query),
+    [instanceId]
+  );
+}
 
-const setEventLogSelection: ReturnType<EventLogGateway["useSetSelectionRequest"]> = (instanceId, selection) =>
-  transport.setEventLogSelection(instanceId, selection);
+function useSettingsRequest() {
+  const instanceId = useScopeInstanceId();
+  return useCallback(async () => transport.getEventLogSettings(requireInstance(instanceId)), [instanceId]);
+}
+
+function useSetSelectionRequest() {
+  const instanceId = useScopeInstanceId();
+  return useCallback(
+    async (selection: EventLogSelection) => transport.setEventLogSelection(requireInstance(instanceId), selection),
+    [instanceId]
+  );
+}
 
 export const convexEventLogGateway: EventLogGateway = {
   useWebhookEvents,
   useWebhookPayload,
   useRetriggerRequest,
-  useStreamEventsSubscription: () => subscribeStreamEvents,
-  useEventsRequest: () => listEvents,
-  useSettingsRequest: () => getEventLogSettings,
-  useSetSelectionRequest: () => setEventLogSelection,
+  useStreamEventsSubscription,
+  useEventsRequest,
+  useSettingsRequest,
+  useSetSelectionRequest,
 };

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useEngineGateway } from "@/engine/context";
-import type { HostedStorageUsage, InstanceId } from "@/engine/types";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
+import type { HostedStorageUsage } from "@/engine/types";
 
 /**
  * How much of the plan's hosted asset storage the instance uses, or null when
@@ -10,7 +10,8 @@ import type { HostedStorageUsage, InstanceId } from "@/engine/types";
  * Fetched through an action for the same reason as `useResources`: the usage
  * is the engine's, so callers `refresh()` after anything that changes it.
  */
-export function useHostedStorageUsage(instanceId: InstanceId | undefined) {
+export function useHostedStorageUsage() {
+  const { instanceId } = useEngineScope();
   const read = useEngineGateway().resources.useHostedStorageUsageRequest();
   const [usage, setUsage] = useState<HostedStorageUsage | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -23,7 +24,7 @@ export function useHostedStorageUsage(instanceId: InstanceId | undefined) {
       return;
     }
     const seq = ++requestSeq.current;
-    void read(instanceId)
+    void read()
       .then((result) => {
         if (seq === requestSeq.current) {
           setUsage(result);

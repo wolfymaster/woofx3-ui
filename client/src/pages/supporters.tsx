@@ -15,12 +15,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
   useSupporterLeaderboardRequest,
   useSupporterStreamsRequest,
   useViewerSupportTotalsRequest,
 } from "@/engine/hooks/use-supporters";
+import type { InstanceId } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useInstance } from "@/hooks/use-instance";
 import { toast } from "@/hooks/use-toast";
@@ -44,8 +46,6 @@ import {
   supporterName,
   thankYouLine,
 } from "@/lib/supporters";
-
-type InstanceId = Id<"instances">;
 
 const MIN_TOTAL_DEBOUNCE_MS = 300;
 
@@ -108,7 +108,8 @@ async function copyToClipboard(text: string): Promise<void> {
 
 export default function Supporters() {
   const { instance } = useInstance();
-  const capabilities = useEngineCapabilities(instance?._id);
+  const { instanceId: engineInstanceId } = useEngineScope();
+  const capabilities = useEngineCapabilities();
 
   return (
     <div className="p-6 lg:p-8 max-w-[1200px] mx-auto">
@@ -116,14 +117,14 @@ export default function Supporters() {
         title="Supporters"
         description="The viewers who cheer and gift subs, all time or for one stream. Look anyone up before a thank-you or a VIP decision."
       />
-      {instance ? (
+      {instance && engineInstanceId ? (
         <EngineFeatureGate
           support={capabilities.support(...SUPPORTER_CAPABILITIES)}
           state={capabilities.state}
           feature="Supporter stats"
           onRetry={capabilities.refresh}
         >
-          <SupportersView instanceId={instance._id} />
+          <SupportersView instanceId={instance._id} engineInstanceId={engineInstanceId} />
         </EngineFeatureGate>
       ) : (
         <p className="text-sm text-muted-foreground">No instance available yet.</p>
@@ -132,7 +133,13 @@ export default function Supporters() {
   );
 }
 
-function SupportersView({ instanceId }: { instanceId: InstanceId }) {
+function SupportersView({
+  instanceId,
+  engineInstanceId,
+}: {
+  instanceId: Id<"instances">;
+  engineInstanceId: InstanceId;
+}) {
   const listStreams = useSupporterStreamsRequest();
   const readLeaderboard = useSupporterLeaderboardRequest();
 
@@ -144,7 +151,7 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
   const settledMinTotal = useDebouncedValue(minTotal, MIN_TOTAL_DEBOUNCE_MS);
   const [selected, setSelected] = useState<SelectedViewer | null>(null);
 
-  const streams = useActionResult(instanceId, () => listStreams(instanceId));
+  const streams = useActionResult(engineInstanceId, () => listStreams());
   useEffect(() => {
     if (streams.data) {
       setRange((current) => reconcileRange(current, streams.data ?? []));
@@ -152,8 +159,8 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
   }, [streams.data]);
 
   const sessionId = rangeSessionId(range);
-  const board = useActionResult(`${instanceId}|${metric}|${rangeValue(range)}|${settledMinTotal}`, () =>
-    readLeaderboard(instanceId, {
+  const board = useActionResult(`${engineInstanceId}|${metric}|${rangeValue(range)}|${settledMinTotal}`, () =>
+    readLeaderboard({
       metric,
       minTotal: settledMinTotal,
       ...(sessionId !== undefined ? { sessionId } : {}),
@@ -186,7 +193,13 @@ function SupportersView({ instanceId }: { instanceId: InstanceId }) {
         }
         selectedId={selected?.platformUserId ?? null}
       />
-      <ViewerCard instanceId={instanceId} ranked={ranked} selected={selected} onSelect={setSelected} />
+      <ViewerCard
+        instanceId={instanceId}
+        engineInstanceId={engineInstanceId}
+        ranked={ranked}
+        selected={selected}
+        onSelect={setSelected}
+      />
     </div>
   );
 }
@@ -354,11 +367,13 @@ function LeaderboardCard(props: {
 
 function ViewerCard({
   instanceId,
+  engineInstanceId,
   ranked,
   selected,
   onSelect,
 }: {
-  instanceId: InstanceId;
+  instanceId: Id<"instances">;
+  engineInstanceId: InstanceId;
   ranked: RankedSupporter[];
   selected: SelectedViewer | null;
   onSelect: (viewer: SelectedViewer) => void;
@@ -442,7 +457,12 @@ function ViewerCard({
       </CardHeader>
       <CardContent>
         {selected ? (
-          <ViewerDetail key={selected.platformUserId} instanceId={instanceId} viewer={selected} />
+          <ViewerDetail
+            key={selected.platformUserId}
+            instanceId={instanceId}
+            engineInstanceId={engineInstanceId}
+            viewer={selected}
+          />
         ) : (
           <p className="text-sm text-muted-foreground">No viewer picked yet.</p>
         )}
@@ -451,15 +471,23 @@ function ViewerCard({
   );
 }
 
-function ViewerDetail({ instanceId, viewer }: { instanceId: InstanceId; viewer: SelectedViewer }) {
+function ViewerDetail({
+  instanceId,
+  engineInstanceId,
+  viewer,
+}: {
+  instanceId: Id<"instances">;
+  engineInstanceId: InstanceId;
+  viewer: SelectedViewer;
+}) {
   const readViewerTotals = useViewerSupportTotalsRequest();
   const findTwitchViewer = useAction(api.supporters.findTwitchViewer);
   const enqueueShoutout = useMutation(api.shoutouts.enqueue);
   const canShoutOut = useQuery(api.supporters.canShoutOut, { instanceId });
   const [queueing, setQueueing] = useState(false);
 
-  const totals = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
-    readViewerTotals(instanceId, viewer.platformUserId)
+  const totals = useActionResult(`${engineInstanceId}|${viewer.platformUserId}`, () =>
+    readViewerTotals(viewer.platformUserId)
   );
   const twitch = useActionResult(`${instanceId}|${viewer.platformUserId}`, () =>
     findTwitchViewer({ instanceId, by: { twitchUserId: viewer.platformUserId } })

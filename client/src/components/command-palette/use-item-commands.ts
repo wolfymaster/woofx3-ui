@@ -1,5 +1,5 @@
 import { api } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Doc } from "@convex/_generated/dataModel";
 import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
 import { useAction, useQuery } from "convex/react";
 import {
@@ -28,6 +28,7 @@ import {
   Workflow,
   Zap,
 } from "lucide-react";
+import { useEngineScope } from "@/engine/context";
 import { useChatCommandGroups, useChatCommands, useUpdateChatCommandRequest } from "@/engine/hooks/use-chat-commands";
 import { useRunMacroRequest } from "@/engine/hooks/use-macros";
 import {
@@ -39,17 +40,19 @@ import {
 } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
 import { useSetWorkflowEnabledRequest, useWorkflows } from "@/engine/hooks/use-workflows";
+import type { ModuleResourceInstance } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useAimedResourceActionRunner, useResourceActionRunner } from "@/hooks/use-resource-action";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { buildAlertTree, flattenAlertTree } from "@/lib/alert-groups";
+import { toMacroId } from "@/lib/cloud-ids";
 import { commandEditorPath, commandGroupEditorPath } from "@/lib/command-editor-route";
 import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { groupLabel } from "@/lib/group-display";
 import { applyMacroVariables, hasMacroVariables } from "@/lib/macro-pad";
 import { bareModuleKey } from "@/lib/module-key";
 import { resourceActions } from "@/lib/resource-actions";
-import { type ResourceInstanceDoc, resourceName, resourceSettings } from "@/lib/resource-instance";
+import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import { counterValue, formatDuration, parseDuration, queueEntries, timerState } from "@/lib/resource-values";
 import { streamRecapPath } from "@/lib/stream-recap-route";
 import { initialValues, payloadFromValues, testEventFields } from "@/lib/test-event-fields";
@@ -84,12 +87,13 @@ const RECENT_RECAPS = 10;
  */
 export function useItemCommands(instance: Doc<"instances"> | null): PaletteCommand[] {
   const instanceId = instance?._id;
+  const { instanceId: engineInstanceId } = useEngineScope();
   const args = instanceId ? { instanceId } : "skip";
 
-  const workflows = useWorkflows(instanceId ?? null);
-  const commands = useChatCommands(instanceId ?? null);
-  const commandGroups = useChatCommandGroups(instanceId ?? null);
-  const scenes = useScenes(instanceId ?? null);
+  const workflows = useWorkflows();
+  const commands = useChatCommands();
+  const commandGroups = useChatCommandGroups();
+  const scenes = useScenes();
   const modules = useQuery(api.moduleRepository.list, args);
   const recaps = useQuery(
     api.streamSessionSummaries.listRecent,
@@ -97,15 +101,15 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   );
   const macros = useQuery(api.macros.list, args);
   const presets = useQuery(api.streamInfo.listPresets, args);
-  const counters = useResourceInstancesOfKind(instanceId ?? null, COUNTER_KIND);
-  const timers = useResourceInstancesOfKind(instanceId ?? null, TIMER_KIND);
-  const queues = useResourceInstancesOfKind(instanceId ?? null, QUEUE_KIND);
-  const counterKind = useResourceKind(instanceId ?? null, COUNTER_KIND);
-  const timerKind = useResourceKind(instanceId ?? null, TIMER_KIND);
-  const queueKind = useResourceKind(instanceId ?? null, QUEUE_KIND);
-  const values = useResourceValues(instanceId ?? null);
-  const resourceInstances = useResourceInstances(instanceId ?? null);
-  const declaredKinds = useResourceKinds(instanceId ?? null);
+  const counters = useResourceInstancesOfKind(COUNTER_KIND);
+  const timers = useResourceInstancesOfKind(TIMER_KIND);
+  const queues = useResourceInstancesOfKind(QUEUE_KIND);
+  const counterKind = useResourceKind(COUNTER_KIND);
+  const timerKind = useResourceKind(TIMER_KIND);
+  const queueKind = useResourceKind(QUEUE_KIND);
+  const values = useResourceValues();
+  const resourceInstances = useResourceInstances();
+  const declaredKinds = useResourceKinds();
   const { triggerPresets, actionPresets } = useWorkflowCatalog();
 
   const setWorkflowEnabled = useSetWorkflowEnabledRequest();
@@ -117,7 +121,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const runAimedAction = useAimedResourceActionRunner();
   const fireTestEvent = useFireTestEvent();
 
-  if (!instanceId) {
+  if (!instanceId || !engineInstanceId) {
     return [];
   }
 
@@ -163,7 +167,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         action: {
           type: "run",
           run: async () => {
-            await setWorkflowEnabled(instanceId, row.engineWorkflowId, !enabled);
+            await setWorkflowEnabled(row.engineWorkflowId, !enabled);
             return `${item.title} ${enabled ? "disabled" : "enabled"}`;
           },
         },
@@ -195,7 +199,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         action: {
           type: "run",
           run: async () => {
-            await updateCommand(instanceId, {
+            await updateCommand({
               engineCommandId: cmd.engineCommandId,
               command: cmd.command,
               cooldown: cmd.cooldown,
@@ -227,9 +231,9 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
     });
   }
 
-  const moduleFor = (kind: { moduleName: string } | null | undefined, row: ResourceInstanceDoc) =>
+  const moduleFor = (kind: { moduleName: string } | null | undefined, row: ModuleResourceInstance) =>
     kind?.moduleName ?? row.moduleName;
-  const resourceRun = (row: ResourceInstanceDoc, moduleName: string, actionId: string, params = {}) => {
+  const resourceRun = (row: ModuleResourceInstance, moduleName: string, actionId: string, params = {}) => {
     return async () => {
       await runResourceAction(row, moduleName, actionId, params);
       return undefined;
@@ -556,7 +560,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
           if (macro.type === "send-message") {
             await sendChatMessage({ instanceId, message: applyMacroVariables(macro.config, {}).message ?? "" });
           } else {
-            await runMacro(instanceId, macro.id as Id<"macros">, []);
+            await runMacro(toMacroId(macro.id), []);
           }
           return `Ran ${macro.label}`;
         },

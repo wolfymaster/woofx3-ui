@@ -1,11 +1,9 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import { bareKind } from "@convex/lib/resourceKinds";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
 import { EventTriggerList } from "@/components/alerts/event-trigger-list";
-import type { ResourceInstanceDoc } from "@/components/resources/resource-kind-page";
 import { useWorkflows } from "@/engine/hooks/use-workflows";
-import { useInstance } from "@/hooks/use-instance";
+import type { ModuleResourceInstance } from "@/engine/types";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { resourceTriggers } from "@/lib/resource-triggers";
 import type { TriggerPreset } from "@/lib/workflow-presets";
@@ -25,13 +23,12 @@ export function ResourceTriggerEditors({
   triggerDetail,
 }: {
   kind: string;
-  instance: ResourceInstanceDoc;
+  instance: ModuleResourceInstance;
   /** What a trigger's section shows about this instance above its triggers; see ResourceKindPage. */
   triggerDetail?: (preset: TriggerPreset) => ReactNode;
 }) {
-  const { instance: engineInstance } = useInstance();
   const { triggerPresets, loading } = useWorkflowCatalog();
-  const workflows = useWorkflows(engineInstance ? engineInstance._id : null);
+  const workflows = useWorkflows();
   const triggers = useMemo(() => resourceTriggers(triggerPresets, kind), [triggerPresets, kind]);
 
   if (loading || workflows === undefined) {
@@ -48,7 +45,7 @@ export function ResourceTriggerEditors({
         <EventTriggerList
           key={preset.id}
           triggerPreset={preset}
-          workflows={workflows as Doc<"workflows">[]}
+          workflows={workflows}
           breadcrumb={[]}
           headingLevel="h2"
           pin={{ fieldId, value: instance.canonicalId, label }}

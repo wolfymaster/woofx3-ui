@@ -23,7 +23,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { AlertEditorHandle } from "@/hooks/use-alert-layout-editor";
 import { useCompositionPreview } from "@/hooks/use-composition-preview";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { durationOf, formatSeconds, layerLabel, playedLengthSeconds } from "@/lib/alert-editor";
 import {
@@ -232,7 +231,6 @@ export function useAlertEditorView(
   const editor = session?.editor ?? null;
   const state = session?.state ?? null;
 
-  const { instance } = useInstance();
   const committed = state?.doc ?? null;
   const previewDocument = useMemo(
     () => (committed === null ? null : previewDocumentOf(committed, names)),
@@ -245,7 +243,6 @@ export function useAlertEditorView(
   // biome-ignore lint/correctness/useExhaustiveDependencies: inputsKey stands for previewInputs' content
   const boundInputs = useMemo(() => previewInputs, [inputsKey]);
   const preview = useCompositionPreview({
-    instanceId: instance?._id,
     editor,
     state,
     document: previewDocument,

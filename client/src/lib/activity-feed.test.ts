@@ -19,8 +19,8 @@ function alert(
   options: { sourceEventId?: string; event?: Record<string, unknown> | null; createdAt?: string } = {}
 ): ActivityAlert {
   return {
-    _id: id,
-    _creationTime: 0,
+    id,
+    createdAt: 0,
     sourceEventId: options.sourceEventId,
     payload: JSON.stringify({ parameters: { target: "default" }, event: options.event ?? null }),
     engineCreatedAt: options.createdAt,
@@ -81,7 +81,7 @@ describe("mergeActivity", () => {
     const second = alert("a2", { sourceEventId: "e1", createdAt: "2026-10-01T10:00:02Z" });
     const rows = mergeActivity([event("e1", "channel.follow", "2026-10-01T10:00:00Z")], [first, second], ALL);
     expect(rows).toHaveLength(1);
-    expect(rows[0].alerts.map((a) => a._id)).toEqual(["a2", "a1"]);
+    expect(rows[0].alerts.map((a) => a.id)).toEqual(["a2", "a1"]);
   });
 
   test("shows an alert whose event type is switched off, worded from the event it carries", () => {

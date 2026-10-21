@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import { PackagePlus } from "lucide-react";
 import { Link } from "wouter";
 import { STARTER_PACKS_PATH } from "@/components/layout/nav-config";
@@ -10,8 +9,8 @@ import { useHasWorkflows } from "@/engine/hooks/use-workflows";
  * until the query confirms the instance is empty, so it never flashes for an
  * instance that has workflows.
  */
-export function StarterPacksNudge({ instanceId }: { instanceId: Id<"instances"> }) {
-  const hasWorkflows = useHasWorkflows(instanceId);
+export function StarterPacksNudge() {
+  const hasWorkflows = useHasWorkflows();
   if (hasWorkflows !== false) {
     return null;
   }

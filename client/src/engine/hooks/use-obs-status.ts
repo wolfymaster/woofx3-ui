@@ -1,9 +1,8 @@
-import type { Id } from "@convex/_generated/dataModel";
-import type { ObsStatus } from "@convex/lib/engineObsStatus";
 import { useStore } from "@nanostores/react";
 import { useEffect, useState } from "react";
-import { useEngineGateway } from "@/engine/context";
+import { useEngineGateway, useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import type { ObsStatus } from "@/engine/types";
 import type { CapabilitySupport } from "@/lib/engine-capabilities";
 import { $documentVisible } from "@/lib/stores";
 
@@ -25,8 +24,9 @@ export interface ObsStatusResult {
  * and the tab is visible. The state lives on the engine and nothing pushes
  * it, so this polls rather than subscribes.
  */
-export function useObsStatus(instanceId: Id<"instances"> | undefined, enabled: boolean): ObsStatusResult {
-  const support = useEngineCapabilities(instanceId).support("obs.status");
+export function useObsStatus(enabled: boolean): ObsStatusResult {
+  const { instanceId } = useEngineScope();
+  const support = useEngineCapabilities().support("obs.status");
   const getStatus = useEngineGateway().status.useObsStatusRequest();
   const visible = useStore($documentVisible);
   const [status, setStatus] = useState<ObsStatus | null>(null);
@@ -40,7 +40,7 @@ export function useObsStatus(instanceId: Id<"instances"> | undefined, enabled: b
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
       try {
-        const next = await getStatus(instanceId);
+        const next = await getStatus();
         if (!cancelled) {
           setStatus(next);
         }

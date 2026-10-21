@@ -1,88 +1,116 @@
 import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
+import type { Doc } from "@convex/_generated/dataModel";
+import { useQuery } from "convex/react";
 import { useCallback } from "react";
 import type { ModuleResourcesGateway } from "@/engine/gateway";
-import type { InstanceId, ModuleId, ModuleResourceInstanceChanges, NewModuleResourceInstance } from "@/engine/types";
+import type {
+  ModuleId,
+  ModuleResourceInstance,
+  ModuleResourceInstanceChanges,
+  NewModuleResourceInstance,
+} from "@/engine/types";
+import { fromModuleId, toModuleId } from "./ids";
+import { useMappedList } from "./mapped";
+import { useInstanceAction, useScopeInstanceId } from "./scope";
 
-function useInstances(instanceId: InstanceId | null) {
-  return useQuery(api.moduleResourceInstances.listForInstance, instanceId ? { instanceId } : "skip");
+function toModuleResourceInstance(row: Doc<"moduleResourceInstances">): ModuleResourceInstance {
+  return {
+    canonicalId: row.canonicalId,
+    engineInstanceId: row.engineInstanceId,
+    resourceInstanceId: row.resourceInstanceId,
+    kind: row.kind,
+    moduleId: toModuleId(row.moduleId),
+    moduleName: row.moduleName,
+    displayName: row.displayName,
+    settings: row.settings,
+  };
 }
 
-function useModuleInstances(instanceId: InstanceId | null, moduleId: ModuleId | null) {
-  return useQuery(api.moduleResourceInstances.listByModule, instanceId && moduleId ? { instanceId, moduleId } : "skip");
+function useInstances() {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(api.moduleResourceInstances.listForInstance, instanceId ? { instanceId } : "skip");
+  return useMappedList(rows, toModuleResourceInstance);
 }
 
-function useKindInstances(instanceId: InstanceId | null, kind: string | null) {
-  return useQuery(api.moduleResourceInstances.listByKind, instanceId && kind !== null ? { instanceId, kind } : "skip");
+function useModuleInstances(moduleId: ModuleId | null) {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(
+    api.moduleResourceInstances.listByModule,
+    instanceId && moduleId ? { instanceId, moduleId: fromModuleId(moduleId) } : "skip"
+  );
+  return useMappedList(rows, toModuleResourceInstance);
 }
 
-function useKindsInstances(instanceId: InstanceId | null, kinds: readonly string[]) {
-  return useQuery(
+function useKindInstances(kind: string | null) {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(
+    api.moduleResourceInstances.listByKind,
+    instanceId && kind !== null ? { instanceId, kind } : "skip"
+  );
+  return useMappedList(rows, toModuleResourceInstance);
+}
+
+function useKindsInstances(kinds: readonly string[]) {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(
     api.moduleResourceInstances.listByKinds,
     instanceId && kinds.length > 0 ? { instanceId, kinds: [...kinds] } : "skip"
   );
+  return useMappedList(rows, toModuleResourceInstance);
 }
 
-function useValues(instanceId: InstanceId | null) {
+function useValues() {
+  const instanceId = useScopeInstanceId();
   return useQuery(api.resourceValues.listForInstance, instanceId ? { instanceId } : "skip");
 }
 
-function useKind(instanceId: InstanceId | null, kind: string | null) {
+function useKind(kind: string | null) {
+  const instanceId = useScopeInstanceId();
   return useQuery(api.resourceKinds.getForInstance, instanceId && kind !== null ? { instanceId, kind } : "skip");
 }
 
-function useKinds(instanceId: InstanceId | null) {
+function useKinds() {
+  const instanceId = useScopeInstanceId();
   return useQuery(api.resourceKinds.listForInstance, instanceId ? { instanceId } : "skip");
 }
 
 function useCreateRequest() {
-  const createResourceInstance = useAction(api.moduleResourceActions.createResourceInstance);
+  const createResourceInstance = useInstanceAction(api.moduleResourceActions.createResourceInstance);
   return useCallback(
-    (instanceId: InstanceId, resource: NewModuleResourceInstance) =>
-      createResourceInstance({ instanceId, ...resource }),
+    (resource: NewModuleResourceInstance) => createResourceInstance(resource),
     [createResourceInstance]
   );
 }
 
 function useUpdateRequest() {
-  const updateResourceInstance = useAction(api.moduleResourceActions.updateResourceInstance);
+  const updateResourceInstance = useInstanceAction(api.moduleResourceActions.updateResourceInstance);
   return useCallback(
-    (instanceId: InstanceId, changes: ModuleResourceInstanceChanges) =>
-      updateResourceInstance({ instanceId, ...changes }),
+    (changes: ModuleResourceInstanceChanges) => updateResourceInstance(changes),
     [updateResourceInstance]
   );
 }
 
 function useRemoveRequest() {
-  const deleteResourceInstance = useAction(api.moduleResourceActions.deleteResourceInstance);
-  return useCallback(
-    (instanceId: InstanceId, canonicalId: string) => deleteResourceInstance({ instanceId, canonicalId }),
-    [deleteResourceInstance]
-  );
+  const deleteResourceInstance = useInstanceAction(api.moduleResourceActions.deleteResourceInstance);
+  return useCallback((canonicalId: string) => deleteResourceInstance({ canonicalId }), [deleteResourceInstance]);
 }
 
 function useSyncModuleRequest() {
-  const syncResourceInstancesForModule = useAction(api.moduleResourceActions.syncResourceInstancesForModule);
+  const syncResourceInstancesForModule = useInstanceAction(api.moduleResourceActions.syncResourceInstancesForModule);
   return useCallback(
-    (instanceId: InstanceId, moduleDbId: ModuleId) => syncResourceInstancesForModule({ instanceId, moduleDbId }),
+    (moduleDbId: ModuleId) => syncResourceInstancesForModule({ moduleDbId: fromModuleId(moduleDbId) }),
     [syncResourceInstancesForModule]
   );
 }
 
 function useRefreshValuesRequest() {
-  const refreshResourceValues = useAction(api.moduleResourceActions.refreshResourceValues);
-  return useCallback(
-    (instanceId: InstanceId, kind: string) => refreshResourceValues({ instanceId, kind }),
-    [refreshResourceValues]
-  );
+  const refreshResourceValues = useInstanceAction(api.moduleResourceActions.refreshResourceValues);
+  return useCallback((kind: string) => refreshResourceValues({ kind }), [refreshResourceValues]);
 }
 
 function useRunActionsRequest() {
-  const runActions = useAction(api.moduleResourceActions.runActions);
-  return useCallback(
-    (instanceId: InstanceId, label: string, actions: unknown[]) => runActions({ instanceId, label, actions }),
-    [runActions]
-  );
+  const runActions = useInstanceAction(api.moduleResourceActions.runActions);
+  return useCallback((label: string, actions: unknown[]) => runActions({ label, actions }), [runActions]);
 }
 
 export const convexModuleResourcesGateway: ModuleResourcesGateway = {

@@ -165,9 +165,7 @@ export default function Setup() {
           {step === "platforms" && (
             <PlatformsStep instanceId={instanceId} status={status} onContinue={() => goTo("twitch")} />
           )}
-          {step === "twitch" && (
-            <TwitchStep instanceId={instanceId} status={status} onContinue={() => goTo("import")} />
-          )}
+          {step === "twitch" && <TwitchStep status={status} onContinue={() => goTo("import")} />}
           {step === "import" && (
             <ImportStep instanceId={instanceId} status={status} onContinue={() => goTo("interests")} />
           )}
@@ -177,9 +175,7 @@ export default function Setup() {
           {step === "dashboard" && (
             <DashboardStep instanceId={instanceId} status={status} onContinue={() => goTo("overlay")} />
           )}
-          {step === "overlay" && (
-            <OverlayStep instanceId={instanceId} status={status} onContinue={() => goTo("finish")} />
-          )}
+          {step === "overlay" && <OverlayStep status={status} onContinue={() => goTo("finish")} />}
           {step === "finish" && <FinishStep instanceId={instanceId} status={status} />}
         </CardContent>
       </Card>

@@ -1,122 +1,283 @@
 import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
+import type { Doc } from "@convex/_generated/dataModel";
+import { useQuery } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { WorkflowsGateway } from "@/engine/gateway";
 import type {
-  InstanceId,
+  Live,
+  RecordedWorkflowRun,
+  Workflow,
+  WorkflowCatalog,
+  WorkflowCatalogAction,
+  WorkflowCatalogTrigger,
   WorkflowHealthResyncTrigger,
   WorkflowReplay,
   WorkflowRun,
+  WorkflowRunDetail,
+  WorkflowRunRecord,
+  WorkflowRunStep,
   WorkflowTrigger,
 } from "@/engine/types";
 import { transport } from "@/lib/transport";
+import type { WorkflowRun as TransportWorkflowRun } from "@/lib/transport/interface";
+import { toModuleId } from "./ids";
+import { useMappedList, useMappedValue } from "./mapped";
+import { requireInstance, useInstanceAction, useScopeInstanceId } from "./scope";
 
-function useWorkflows(instanceId: InstanceId | null) {
-  return useQuery(api.workflows.list, instanceId ? { instanceId } : "skip");
+type CatalogRow = NonNullable<FunctionReturnType<typeof api.workflowCatalog.get>>;
+type RunDetailRow = NonNullable<FunctionReturnType<typeof api.workflowRuns.runWithSteps>>;
+type RecordedRunRow = FunctionReturnType<typeof api.workflowRuns.listForWorkflow>[number];
+
+function toWorkflow(row: Doc<"workflows">): Workflow {
+  return {
+    engineWorkflowId: row.engineWorkflowId,
+    definition: row.definition,
+    isEnabled: row.isEnabled,
+    nodes: row.nodes,
+    edges: row.edges,
+    projectionKey: row.projectionKey,
+    projectionUpdatedAt: row.projectionUpdatedAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
 }
 
-function useHasAny(instanceId: InstanceId) {
-  return useQuery(api.workflows.hasAny, { instanceId });
+function toWorkflowCatalogTrigger(row: CatalogRow["triggers"][number]): WorkflowCatalogTrigger {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    category: row.category,
+    color: row.color,
+    icon: row.icon,
+    event: row.event,
+    allowVariants: row.allowVariants,
+    configFields: row.configFields,
+    emits: row.emits,
+    sentence: row.sentence,
+    summary: row.summary,
+    summaryDetails: row.summaryDetails,
+    projectionKey: row.projectionKey,
+    taxonomy: row.taxonomy,
+    transport: row.transport,
+    canonicalRef: row.canonicalRef,
+    moduleId: toModuleId(row.moduleId),
+    moduleName: row.moduleName,
+    moduleLabel: row.moduleLabel,
+  };
 }
 
-function useWorkflow(instanceId: InstanceId | null, engineWorkflowId: string | null) {
-  return useQuery(
+function toWorkflowCatalogAction(row: CatalogRow["actions"][number]): WorkflowCatalogAction {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    category: row.category,
+    color: row.color,
+    icon: row.icon,
+    configFields: row.configFields,
+    returns: row.returns,
+    sentence: row.sentence,
+    projectionKey: row.projectionKey,
+    taxonomy: row.taxonomy,
+    canonicalRef: row.canonicalRef,
+    handlerType: row.handlerType,
+    functionCall: row.functionCall,
+    moduleId: toModuleId(row.moduleId),
+    moduleName: row.moduleName,
+    moduleLabel: row.moduleLabel,
+  };
+}
+
+function toWorkflowCatalog({ triggers, actions }: CatalogRow): WorkflowCatalog {
+  return { triggers: triggers.map(toWorkflowCatalogTrigger), actions: actions.map(toWorkflowCatalogAction) };
+}
+
+function toWorkflowRunRecord(row: RunDetailRow["run"]): WorkflowRunRecord {
+  return {
+    engineRunId: row.engineRunId,
+    workflowId: row.workflowId,
+    workflowName: row.workflowName,
+    status: row.status,
+    triggeredBy: row.triggeredBy,
+    triggerEvent: row.triggerEvent,
+    dryRun: row.dryRun,
+    error: row.error,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    engineCreatedAt: row.engineCreatedAt,
+    engineUpdatedAt: row.engineUpdatedAt,
+    createdAt: row.createdAt,
+  };
+}
+
+function toWorkflowRunStep(row: Doc<"workflowRunSteps">): WorkflowRunStep {
+  return {
+    engineStepId: row.engineStepId,
+    runId: row.runId,
+    taskId: row.taskId,
+    stepIndex: row.stepIndex,
+    attempt: row.attempt,
+    name: row.name,
+    status: row.status,
+    inputs: row.inputs,
+    outputs: row.outputs,
+    error: row.error,
+    durationMs: row.durationMs,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    engineCreatedAt: row.engineCreatedAt,
+    engineUpdatedAt: row.engineUpdatedAt,
+    createdAt: row.createdAt,
+  };
+}
+
+function toWorkflowRunDetail({ run, steps, alerts }: RunDetailRow): NonNullable<WorkflowRunDetail> {
+  return { run: toWorkflowRunRecord(run), steps: steps.map(toWorkflowRunStep), alerts };
+}
+
+function toRecordedWorkflowRun(row: RecordedRunRow): RecordedWorkflowRun {
+  return {
+    engineRunId: row.engineRunId,
+    status: row.status,
+    triggeredBy: row.triggeredBy,
+    error: row.error,
+    startedAt: row.startedAt,
+    completedAt: row.completedAt,
+    hasTriggerEvent: row.hasTriggerEvent,
+    dryRun: row.dryRun,
+  };
+}
+
+function useWorkflows() {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(api.workflows.list, instanceId ? { instanceId } : "skip");
+  return useMappedList(rows, toWorkflow);
+}
+
+function useHasAny() {
+  const instanceId = useScopeInstanceId();
+  return useQuery(api.workflows.hasAny, instanceId ? { instanceId } : "skip");
+}
+
+function useWorkflow(engineWorkflowId: string | null) {
+  const instanceId = useScopeInstanceId();
+  const row = useQuery(
     api.workflows.getByEngineId,
     instanceId && engineWorkflowId !== null ? { instanceId, engineWorkflowId } : "skip"
   );
+  return useMappedValue(row, toWorkflow);
 }
 
-function useCatalog(instanceId: InstanceId | null) {
-  return useQuery(api.workflowCatalog.get, instanceId ? { instanceId } : "skip");
+function useCatalog() {
+  const instanceId = useScopeInstanceId();
+  const catalog = useQuery(api.workflowCatalog.get, instanceId ? { instanceId } : "skip");
+  return useMappedValue(catalog, toWorkflowCatalog);
 }
 
 function useCreateRequest() {
-  const createFromDefinition = useAction(api.workflowActions.createFromDefinition);
-  return useCallback(
-    (instanceId: InstanceId, definition: unknown) => createFromDefinition({ instanceId, definition }),
-    [createFromDefinition]
-  );
+  const createFromDefinition = useInstanceAction(api.workflowActions.createFromDefinition);
+  return useCallback((definition: unknown) => createFromDefinition({ definition }), [createFromDefinition]);
 }
 
 function useUpdateRequest() {
-  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
+  const updateFromDefinition = useInstanceAction(api.workflowActions.updateFromDefinition);
   return useCallback(
-    (instanceId: InstanceId, engineWorkflowId: string, definition: unknown) =>
-      updateFromDefinition({ instanceId, engineWorkflowId, definition }),
+    (engineWorkflowId: string, definition: unknown) => updateFromDefinition({ engineWorkflowId, definition }),
     [updateFromDefinition]
   );
 }
 
 function useRemoveRequest() {
-  const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
-  return useCallback(
-    (instanceId: InstanceId, engineWorkflowId: string) => deleteByEngineId({ instanceId, engineWorkflowId }),
-    [deleteByEngineId]
-  );
+  const deleteByEngineId = useInstanceAction(api.workflowActions.deleteByEngineId);
+  return useCallback((engineWorkflowId: string) => deleteByEngineId({ engineWorkflowId }), [deleteByEngineId]);
 }
 
 function useSetEnabledRequest() {
-  const setEnabled = useAction(api.workflowActions.setEnabled);
+  const setEnabled = useInstanceAction(api.workflowActions.setEnabled);
   return useCallback(
-    (instanceId: InstanceId, engineWorkflowId: string, isEnabled: boolean) =>
-      setEnabled({ instanceId, engineWorkflowId, isEnabled }),
+    (engineWorkflowId: string, isEnabled: boolean) => setEnabled({ engineWorkflowId, isEnabled }),
     [setEnabled]
   );
 }
 
 function useTriggerRequest() {
-  const trigger = useAction(api.workflowActions.trigger);
-  return useCallback((instanceId: InstanceId, run: WorkflowTrigger) => trigger({ instanceId, ...run }), [trigger]);
+  const trigger = useInstanceAction(api.workflowActions.trigger);
+  return useCallback((run: WorkflowTrigger) => trigger(run), [trigger]);
 }
 
 function useTestRunCapabilitiesRequest() {
-  const testRunCapabilities = useAction(api.workflowActions.testRunCapabilities);
-  return useCallback((instanceId: InstanceId) => testRunCapabilities({ instanceId }), [testRunCapabilities]);
+  const testRunCapabilities = useInstanceAction(api.workflowActions.testRunCapabilities);
+  return useCallback(() => testRunCapabilities({}), [testRunCapabilities]);
 }
 
 function useViewerFactsRequest() {
-  const listViewerFacts = useAction(api.viewerFacts.list);
-  return useCallback((instanceId: InstanceId) => listViewerFacts({ instanceId }), [listViewerFacts]);
+  const listViewerFacts = useInstanceAction(api.viewerFacts.list);
+  return useCallback(() => listViewerFacts({}), [listViewerFacts]);
 }
 
 function useReplayRequest() {
-  const replay = useAction(api.workflowActions.replay);
-  return useCallback((instanceId: InstanceId, run: WorkflowReplay) => replay({ instanceId, ...run }), [replay]);
+  const replay = useInstanceAction(api.workflowActions.replay);
+  return useCallback((run: WorkflowReplay) => replay(run), [replay]);
 }
 
 function useCancelRunRequest() {
-  const cancelRun = useAction(api.workflowActions.cancelRun);
-  return useCallback(
-    (instanceId: InstanceId, engineRunId: string) => cancelRun({ instanceId, engineRunId }),
-    [cancelRun]
-  );
+  const cancelRun = useInstanceAction(api.workflowActions.cancelRun);
+  return useCallback((engineRunId: string) => cancelRun({ engineRunId }), [cancelRun]);
 }
 
-function useRun(instanceId: InstanceId | null, engineRunId: string | null) {
-  return useQuery(
+function useRun(engineRunId: string | null): Live<WorkflowRunDetail> {
+  const instanceId = useScopeInstanceId();
+  const detail = useQuery(
     api.workflowRuns.runWithSteps,
     instanceId && engineRunId !== null ? { instanceId, engineRunId } : "skip"
   );
+  return useMappedValue(detail, toWorkflowRunDetail);
 }
 
-function useRuns(instanceId: InstanceId, engineWorkflowId: string, limit: number) {
-  return useQuery(api.workflowRuns.listForWorkflow, { instanceId, workflowId: engineWorkflowId, limit });
+function useRuns(engineWorkflowId: string, limit: number) {
+  const instanceId = useScopeInstanceId();
+  const rows = useQuery(
+    api.workflowRuns.listForWorkflow,
+    instanceId ? { instanceId, workflowId: engineWorkflowId, limit } : "skip"
+  );
+  return useMappedList(rows, toRecordedWorkflowRun);
 }
 
-// The transport is a module singleton, so this keeps its identity without memoising.
-const subscribeRuns = (instanceId: string, onRun: (run: WorkflowRun) => void) =>
-  transport.subscribeWorkflowRuns(instanceId, onRun);
+export function toWorkflowRun(run: TransportWorkflowRun): WorkflowRun {
+  return {
+    id: run.id,
+    workflowId: run.workflowId,
+    workflowName: run.workflowName,
+    status: run.status,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+    triggeredBy: run.triggeredBy,
+    error: run.error,
+    progress: run.progress,
+  };
+}
 
-function useNotRunning(instanceId: InstanceId | null) {
+// The live transport holds one session, to the current instance's engine;
+// this still refuses while the scope has no instance, like every other call.
+function useRunsSubscription() {
+  const instanceId = useScopeInstanceId();
+  return useCallback(
+    (onRun: (run: WorkflowRun) => void) =>
+      transport.subscribeWorkflowRuns(requireInstance(instanceId), (run) => onRun(toWorkflowRun(run))),
+    [instanceId]
+  );
+}
+
+function useNotRunning() {
+  const instanceId = useScopeInstanceId();
   return useQuery(api.workflowHealth.listNotRunning, instanceId ? { instanceId } : "skip");
 }
 
 function useHealthResyncRequest() {
-  const resync = useAction(api.workflowHealth.resync);
-  return useCallback(
-    (instanceId: InstanceId, trigger: WorkflowHealthResyncTrigger) => resync({ instanceId, trigger }),
-    [resync]
-  );
+  const resync = useInstanceAction(api.workflowHealth.resync);
+  return useCallback((trigger: WorkflowHealthResyncTrigger) => resync({ trigger }), [resync]);
 }
 
 export const convexWorkflowsGateway: WorkflowsGateway = {
@@ -135,7 +296,7 @@ export const convexWorkflowsGateway: WorkflowsGateway = {
   useCancelRunRequest,
   useRun,
   useRuns,
-  useRunsSubscription: () => subscribeRuns,
+  useRunsSubscription,
   useNotRunning,
   useHealthResyncRequest,
 };

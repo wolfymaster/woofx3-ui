@@ -2,12 +2,10 @@ import type { CustomFieldRenderer } from "@/components/common/configuration-form
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useScenes } from "@/engine/hooks/use-scenes";
-import { useInstance } from "@/hooks/use-instance";
 import { placementChoices, type SceneOption, sceneChoices } from "@/lib/scene-field-options";
 
 function useInstanceScenes() {
-  const { instance } = useInstance();
-  return useScenes(instance ? instance._id : null);
+  return useScenes();
 }
 
 function OptionSelect({

@@ -1,6 +1,6 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { ConfigField } from "@woofx3/api/ui-schema";
+import type { Workflow } from "@/engine/types";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import { isCommandsSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
@@ -28,7 +28,7 @@ import { definitionToTree, type StepNode, treeToDefinition, type WorkflowTree } 
  * A workflow without an order runs alongside them as soon as the event arrives.
  */
 export interface EventTrigger {
-  row: Doc<"workflows">;
+  row: Workflow;
   definition: WorkflowDefinition;
   /** `trigger.order`, or undefined for a workflow that runs alongside the ordered ones. */
   order: number | undefined;
@@ -38,7 +38,7 @@ export interface EventTrigger {
 type OrderedTrigger = WorkflowDefinition["trigger"] & { order?: unknown };
 
 /** The event's triggers in the order they run: the ordered ones as the engine orders them, then the rest. */
-export function eventTriggers(workflows: readonly Doc<"workflows">[], event: string): EventTrigger[] {
+export function eventTriggers(workflows: readonly Workflow[], event: string): EventTrigger[] {
   const found: EventTrigger[] = [];
   for (const row of workflows) {
     const definition = unescapeDollarKeys(row.definition) as WorkflowDefinition | undefined;

@@ -1,7 +1,7 @@
-import type { ImportReport, ImportReportItem } from "@convex/setupImports";
 import { ChevronDown } from "lucide-react";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import type { SetupImportItem, SetupImportReport } from "@/engine/types";
 import { IMPORT_KIND_LABELS, type ImportSection, reportSections } from "@/lib/setup-import";
 
 const SECTION_BADGE: Record<ImportSection, BadgeProps["variant"]> = {
@@ -17,7 +17,7 @@ const SECTION_BADGE: Record<ImportSection, BadgeProps["variant"]> = {
   waiting: "outline",
 };
 
-function ItemRow({ item }: { item: ImportReportItem }) {
+function ItemRow({ item }: { item: SetupImportItem }) {
   const notes = item.notes.filter((note) => note.message !== item.message);
   return (
     <li className="space-y-1.5 p-3" data-testid={`import-item-${item.id}`}>
@@ -55,7 +55,7 @@ function ItemRow({ item }: { item: ImportReportItem }) {
 }
 
 /** Every item of an import, sorted into sections by where it stands, and what the setup had that woofx3 does not. */
-export function ImportReportView({ report }: { report: ImportReport }) {
+export function ImportReportView({ report }: { report: SetupImportReport }) {
   const sections = reportSections(report);
   return (
     <div className="space-y-5">

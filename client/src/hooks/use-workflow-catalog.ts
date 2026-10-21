@@ -114,7 +114,7 @@ function toActionPreset(row: CatalogActionRow): ActionPreset {
 
 export function useWorkflowCatalog() {
   const { instance, isLoading: instanceLoading } = useInstance();
-  const raw = useRawWorkflowCatalog(instance ? instance._id : null);
+  const raw = useRawWorkflowCatalog();
 
   const triggers = (raw?.triggers ?? []) as CatalogTriggerRow[];
   const actions = (raw?.actions ?? []) as CatalogActionRow[];

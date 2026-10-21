@@ -101,7 +101,7 @@ export function useGettingStarted(instanceId: Id<"instances">): GettingStarted |
   const [busyAction, setBusyAction] = useState<GettingStartedAction["kind"] | null>(null);
 
   const watchesObs = Boolean(state && !state.dismissed && setup?.platformsNeedingSettings.includes(OBS_MODULE_ID));
-  const { status: obsStatus } = useObsStatus(instanceId, watchesObs);
+  const { status: obsStatus } = useObsStatus(watchesObs);
 
   const followPreset = useMemo(() => triggerPresets.find((preset) => preset.event === FOLLOW_EVENT), [triggerPresets]);
 

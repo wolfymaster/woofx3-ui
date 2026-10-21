@@ -39,3 +39,8 @@ export function useEngineWorkflowsRequest() {
 export function useMarketplaceInstallRequest() {
   return useEngineGateway().modules.useMarketplaceInstallRequest();
 }
+
+/** Installs a marketplace scene or alert bundle onto the engine. */
+export function useMarketplaceBundleInstallRequest() {
+  return useEngineGateway().modules.useBundleInstallRequest();
+}

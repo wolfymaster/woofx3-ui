@@ -77,7 +77,7 @@ function RecentStreamItem({ row }: { row: SessionSummaryRow }) {
 export function RecentStreamsWidget() {
   const { instance } = useInstance();
   const instanceId = instance?._id;
-  useOpenSessionRefresh(instanceId);
+  useOpenSessionRefresh();
   const rows = useQuery(
     api.streamSessionSummaries.listRecent,
     instanceId ? { instanceId, limit: RECENT_STREAM_LIMIT } : "skip"

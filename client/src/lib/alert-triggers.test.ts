@@ -1,7 +1,7 @@
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: fixtures hold engine ${...} expressions as plain strings
 import { describe, expect, test } from "bun:test";
-import type { Doc } from "@convex/_generated/dataModel";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
+import type { Workflow } from "@/engine/types";
 import {
   eventTriggers,
   isPinnedTo,
@@ -25,7 +25,7 @@ function row(
   trigger: Record<string, unknown>,
   tasks: unknown[] = [],
   createdAt = 0
-): Doc<"workflows"> {
+): Workflow {
   return {
     _id: `doc-${engineWorkflowId}`,
     _creationTime: 0,
@@ -35,7 +35,7 @@ function row(
     isEnabled: true,
     createdAt,
     updatedAt: 0,
-  } as unknown as Doc<"workflows">;
+  } as unknown as Workflow;
 }
 
 const cheer = (extra: Record<string, unknown> = {}) => ({ type: "event", event: "channel.cheer", ...extra });

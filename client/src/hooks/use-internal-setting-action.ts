@@ -1,6 +1,6 @@
-import type { Id } from "@convex/_generated/dataModel";
 import type { FieldOptionsReference } from "@convex/lib/fieldOptions";
 import { useCallback, useMemo } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useCorrelatedRequest } from "@/engine/hooks/use-correlated-request";
 import { dispatchErrorMessage } from "@/lib/field-options-request";
 
@@ -8,16 +8,14 @@ import { dispatchErrorMessage } from "@/lib/field-options-request";
  * Press a module settings button whose `action` is `internal`. The engine
  * sends the request the installed manifest declares for `reference`.
  */
-export function useInternalSettingAction(
-  instanceId: Id<"instances"> | undefined,
-  reference: FieldOptionsReference | undefined
-): {
+export function useInternalSettingAction(reference: FieldOptionsReference | undefined): {
   trigger: () => void;
   status: "idle" | "pending" | "success" | "error";
   message: string | null;
   data: unknown;
 } {
-  const { correlationKey, start, event, failure } = useCorrelatedRequest("fieldOptions", instanceId ?? null);
+  const { instanceId } = useEngineScope();
+  const { correlationKey, start, event, failure } = useCorrelatedRequest("fieldOptions");
 
   const trigger = useCallback(() => {
     if (!instanceId || !reference) {

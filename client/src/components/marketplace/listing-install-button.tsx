@@ -6,6 +6,7 @@ import { useAction } from "convex/react";
 import { AlertCircle, Check, CreditCard, Download, ExternalLink, Loader2 } from "lucide-react";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { useMarketplaceBundleInstallRequest } from "@/engine/hooks/use-modules";
 import { actionErrorMessage } from "@/lib/action-error";
 import { formatAmount } from "@/lib/listing-type";
 import { cn } from "@/lib/utils";
@@ -74,7 +75,7 @@ export function ListingInstallButton({
   className,
 }: ListingInstallButtonProps) {
   const createCheckout = useAction(api.marketplaceCatalog.createCheckout);
-  const installBundle = useAction(api.marketplaceCatalog.installBundle);
+  const installBundle = useMarketplaceBundleInstallRequest();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,8 +118,7 @@ export function ListingInstallButton({
     setBusy(true);
     setError(null);
     try {
-      const result = await installBundle({ instanceId, listingId: listing.id });
-      onBundleInstalled?.({ kind: result.kind, engineId: result.engineId });
+      onBundleInstalled?.(await installBundle(listing.id));
     } catch (err) {
       setError(actionErrorMessage(err));
     } finally {

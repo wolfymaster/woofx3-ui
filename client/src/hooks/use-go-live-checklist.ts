@@ -4,6 +4,7 @@ import type { StreamInfoField } from "@convex/lib/streamInfo";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEngineScope } from "@/engine/context";
 import { useSendCorrelatedRequest, useTransientEventWatchRequest } from "@/engine/hooks/use-correlated-request";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
 import { useLiveState } from "@/engine/hooks/use-live-state";
@@ -107,6 +108,7 @@ export interface GoLiveChecklist {
 export function useGoLiveChecklist(): GoLiveChecklist {
   const { instance } = useInstance();
   const instanceId = instance?._id;
+  const { instanceId: engineInstanceId } = useEngineScope();
   const { connected } = useEngineHealth();
   const liveState = useLiveState();
   const local = useQuery(api.goLive.checklist, instanceId ? { instanceId } : "skip");
@@ -133,7 +135,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
 
   const runRemote = useCallback(
     (id: RemoteCheckId) => {
-      if (!instanceId) {
+      if (!instanceId || !engineInstanceId) {
         return;
       }
       runIds.current[id] += 1;
@@ -150,9 +152,9 @@ export function useGoLiveChecklist(): GoLiveChecklist {
         pending = checkTwitch({ instanceId }).then((facts) => ({ kind: "twitch", facts }));
       } else if (id === "obs") {
         const correlationKey = crypto.randomUUID();
-        pending = dispatchFieldOptions(instanceId, OBS_SCENES_FIELD, correlationKey)
+        pending = dispatchFieldOptions(OBS_SCENES_FIELD, correlationKey)
           .then(
-            () => awaitObsReply(watchEvent(instanceId, correlationKey)),
+            () => awaitObsReply(watchEvent(correlationKey)),
             (error: unknown) => obsFactsFromDispatchError(dispatchErrorMessage(error))
           )
           .then((facts) => ({ kind: "obs", facts }));
@@ -161,7 +163,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
       }
       pending.then(settle, (error: unknown) => settle({ kind: "error", message: errorMessage(error) }));
     },
-    [instanceId, checkTwitch, watchEvent, dispatchFieldOptions, checkStreamInfo]
+    [instanceId, engineInstanceId, checkTwitch, watchEvent, dispatchFieldOptions, checkStreamInfo]
   );
 
   const runAll = useCallback(() => {

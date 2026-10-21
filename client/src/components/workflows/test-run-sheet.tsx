@@ -24,11 +24,11 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEngineScope } from "@/engine/context";
 import { useTransientEvents } from "@/engine/hooks/use-correlated-request";
 import { useTriggerWorkflowRequest, useWorkflowRun } from "@/engine/hooks/use-workflows";
 import type { WorkflowRunDetail, WorkflowTriggerResult } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
-import { useInstance } from "@/hooks/use-instance";
 import {
   rememberOptionsUnsupported,
   type TestRunOptionsState,
@@ -92,8 +92,7 @@ export function TestRunSheet({
   preset,
   otherWorkflows,
 }: TestRunSheetProps) {
-  const { instance } = useInstance();
-  const testRunSupport = useTestRunSupport(instance?._id);
+  const testRunSupport = useTestRunSupport();
   const optionsState = testRunSupport.options;
   const takesOptions = optionsState === "supported";
   // Null until someone picks a tab, so the default follows what loads in:
@@ -312,7 +311,7 @@ function DirectTest({
   optionsState: TestRunOptionsState;
   dryRunState: TestRunOptionsState;
 }) {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
   const trigger = useTriggerWorkflowRequest();
   const takesOptions = optionsState === "supported";
@@ -330,14 +329,14 @@ function DirectTest({
     triggerData: Record<string, unknown> | undefined,
     skipConditions: boolean
   ): Promise<string | null> => {
-    if (!instance) {
+    if (!instanceId) {
       return null;
     }
     setBusy(true);
     setAttempt(null);
     try {
       const result = await withinTimeout(
-        trigger(instance._id, {
+        trigger({
           workflowNameOrId: engineWorkflowId,
           origin: TEST_RUN_ORIGIN,
           options: takesOptions
@@ -353,7 +352,7 @@ function DirectTest({
         "The engine didn't answer. Check that it is running, then try again."
       );
       if (result.optionsIgnored) {
-        rememberOptionsUnsupported(instance._id);
+        rememberOptionsUnsupported(instanceId);
       }
       setAttempt({ triggerData, dryRun, result });
       return result.triggerId;
@@ -455,7 +454,7 @@ function DirectTest({
         <Button
           type="button"
           className="w-full gap-2"
-          disabled={busy || !instance}
+          disabled={busy || !instanceId}
           onClick={() => void run(undefined, false)}
           data-testid="button-test-run-direct"
         >
@@ -554,12 +553,11 @@ function TestRunOutcome({
   knownExecutionId?: string | null;
   dryRun?: boolean;
 }) {
-  const { instance } = useInstance();
   const { waitElapsed, gaveUp } = useTestEventWaits();
   const [executionId, setExecutionId] = useState<string | null>(knownExecutionId);
   const [sticky, setSticky] = useState<TestEventOutcome | null>(null);
-  const rows = useTransientEvents(instance?._id ?? null, triggerId);
-  const recorded = useWorkflowRun(instance ? instance._id : null, executionId || null);
+  const rows = useTransientEvents(triggerId);
+  const recorded = useWorkflowRun(executionId || null);
 
   const progress = testRunProgress(rows, engineWorkflowId, waitElapsed);
   const liveOutcome = progress.outcome;

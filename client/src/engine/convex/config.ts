@@ -1,44 +1,32 @@
 import { api } from "@convex/_generated/api";
-import { useAction } from "convex/react";
 import { useCallback } from "react";
 import type { ConfigGateway } from "@/engine/gateway";
-import type { ConfigExportRequest, ConfigImportRequest, InstanceId } from "@/engine/types";
+import type { ConfigExportRequest, ConfigImportRequest } from "@/engine/types";
+import { useInstanceAction } from "./scope";
 
 function useExportRequest() {
-  const exportConfig = useAction(api.configBackup.exportConfig);
-  return useCallback(
-    (instanceId: InstanceId, request: ConfigExportRequest) => exportConfig({ instanceId, ...request }),
-    [exportConfig]
-  );
+  const exportConfig = useInstanceAction(api.configBackup.exportConfig);
+  return useCallback((request: ConfigExportRequest) => exportConfig(request), [exportConfig]);
 }
 
 function usePreviewImportRequest() {
-  const previewImport = useAction(api.configBackup.previewImport);
-  return useCallback(
-    (instanceId: InstanceId, request: ConfigImportRequest) => previewImport({ instanceId, ...request }),
-    [previewImport]
-  );
+  const previewImport = useInstanceAction(api.configBackup.previewImport);
+  return useCallback((request: ConfigImportRequest) => previewImport(request), [previewImport]);
 }
 
 function useImportRequest() {
-  const importConfig = useAction(api.configBackup.importConfig);
-  return useCallback(
-    (instanceId: InstanceId, request: ConfigImportRequest) => importConfig({ instanceId, ...request }),
-    [importConfig]
-  );
+  const importConfig = useInstanceAction(api.configBackup.importConfig);
+  return useCallback((request: ConfigImportRequest) => importConfig(request), [importConfig]);
 }
 
 function useStorageConfigRequest() {
-  const getConfig = useAction(api.storage.getConfig);
-  return useCallback((instanceId: InstanceId) => getConfig({ instanceId }), [getConfig]);
+  const getConfig = useInstanceAction(api.storage.getConfig);
+  return useCallback(() => getConfig({}), [getConfig]);
 }
 
 function useSetStorageConfigRequest() {
-  const setConfig = useAction(api.storage.setConfig);
-  return useCallback(
-    (instanceId: InstanceId, config: Record<string, unknown>) => setConfig({ instanceId, config }),
-    [setConfig]
-  );
+  const setConfig = useInstanceAction(api.storage.setConfig);
+  return useCallback((config: Record<string, unknown>) => setConfig({ config }), [setConfig]);
 }
 
 export const convexConfigGateway: ConfigGateway = {

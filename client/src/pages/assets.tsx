@@ -1,4 +1,3 @@
-import type { Id } from "@convex/_generated/dataModel";
 import {
   ChevronRight,
   Copy,
@@ -56,6 +55,7 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Toggle } from "@/components/ui/toggle";
+import { useEngineScope } from "@/engine/context";
 import { useHostedStorageUsage } from "@/engine/hooks/use-hosted-storage-usage";
 import { useResourceUpload } from "@/engine/hooks/use-resource-upload";
 import {
@@ -67,7 +67,6 @@ import {
 } from "@/engine/hooks/use-resources";
 import type { HostedStorageUsage } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -265,7 +264,6 @@ function ResourceCardSkeleton() {
 interface UploadModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  instanceId: Id<"instances">;
   parentId: string | null;
   onUploaded: () => void;
 }
@@ -275,9 +273,9 @@ interface UploadModalProps {
  * sequence lives in useResourceUpload so this page and the asset picker
  * cannot drift apart.
  */
-function UploadResourcesModal({ open, onOpenChange, instanceId, parentId, onUploaded }: UploadModalProps) {
+function UploadResourcesModal({ open, onOpenChange, parentId, onUploaded }: UploadModalProps) {
   const { toast } = useToast();
-  const { upload, isUploading, progress } = useResourceUpload(instanceId);
+  const { upload, isUploading, progress } = useResourceUpload();
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -361,7 +359,7 @@ function UploadResourcesModal({ open, onOpenChange, instanceId, parentId, onUplo
 }
 
 export default function Assets() {
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const { toast } = useToast();
 
   const [trail, setTrail] = useState<Crumb[]>([{ id: null, name: "Media" }]);
@@ -404,14 +402,14 @@ export default function Assets() {
     isLoading,
     error,
     refetch: refetchResources,
-  } = useResources(instance?._id, {
+  } = useResources({
     folderId: currentFolderId,
     kind: kindFilter.length === 1 ? kindFilter[0] : undefined,
     search: searchQuery || undefined,
     page,
     pageSize: PAGE_SIZE,
   });
-  const { usage: storageUsage, refresh: refreshStorageUsage } = useHostedStorageUsage(instance?._id);
+  const { usage: storageUsage, refresh: refreshStorageUsage } = useHostedStorageUsage();
   // Anything that changes the listing can change how much storage is used.
   const refetch = useCallback(() => {
     refetchResources();
@@ -483,10 +481,10 @@ export default function Assets() {
   );
 
   const handleCreateFolder = async () => {
-    if (!instance || !folderName.trim()) {
+    if (!instanceId || !folderName.trim()) {
       return;
     }
-    const ok = await run("Couldn't create that folder", () => createFolder(instance._id, folderName, currentFolderId));
+    const ok = await run("Couldn't create that folder", () => createFolder(folderName, currentFolderId));
     if (ok) {
       setFolderName("");
       setNewFolderOpen(false);
@@ -494,23 +492,21 @@ export default function Assets() {
   };
 
   const handleRename = async () => {
-    if (!instance || !renaming || !renameValue.trim()) {
+    if (!instanceId || !renaming || !renameValue.trim()) {
       return;
     }
-    const ok = await run("Couldn't rename that", () =>
-      updateResource(instance._id, renaming.id, { name: renameValue })
-    );
+    const ok = await run("Couldn't rename that", () => updateResource(renaming.id, { name: renameValue }));
     if (ok) {
       setRenaming(null);
     }
   };
 
   const handleDelete = async () => {
-    if (!instance || !deleting) {
+    if (!instanceId || !deleting) {
       return;
     }
     const target = deleting;
-    const ok = await run("Couldn't delete that", () => removeResource(instance._id, target.id));
+    const ok = await run("Couldn't delete that", () => removeResource(target.id));
     if (ok) {
       setSelected((prev) => {
         const next = new Set(prev);
@@ -522,7 +518,7 @@ export default function Assets() {
   };
 
   const handleBulkDelete = async () => {
-    if (!instance) {
+    if (!instanceId) {
       return;
     }
     const ids = Array.from(selected);
@@ -531,7 +527,7 @@ export default function Assets() {
     // bottleneck for no gain.
     const ok = await run("Some items couldn't be deleted", async () => {
       for (const id of ids) {
-        await removeResource(instance._id, id);
+        await removeResource(id);
       }
     });
     if (ok) {
@@ -541,13 +537,13 @@ export default function Assets() {
   };
 
   const handleBulkMove = async (destinationId: string | null) => {
-    if (!instance) {
+    if (!instanceId) {
       return;
     }
     const ids = Array.from(selected);
     const ok = await run("Some items couldn't be moved", async () => {
       for (const id of ids) {
-        await updateResource(instance._id, id, { parentId: destinationId });
+        await updateResource(id, { parentId: destinationId });
       }
     });
     if (ok) {
@@ -571,13 +567,13 @@ export default function Assets() {
             <Button
               variant="outline"
               onClick={() => setNewFolderOpen(true)}
-              disabled={!instance}
+              disabled={!instanceId}
               data-testid="button-new-folder"
             >
               <FolderPlus className="h-4 w-4 mr-2" />
               New Folder
             </Button>
-            <Button onClick={() => setUploadOpen(true)} disabled={!instance} data-testid="button-upload-assets">
+            <Button onClick={() => setUploadOpen(true)} disabled={!instanceId} data-testid="button-upload-assets">
               <Upload className="h-4 w-4 mr-2" />
               Upload
             </Button>
@@ -853,11 +849,10 @@ export default function Assets() {
         </div>
       )}
 
-      {instance && (
+      {instanceId && (
         <UploadResourcesModal
           open={uploadOpen}
           onOpenChange={setUploadOpen}
-          instanceId={instance._id}
           parentId={currentFolderId}
           onUploaded={refetch}
         />

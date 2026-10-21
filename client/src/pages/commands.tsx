@@ -1,4 +1,3 @@
-import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { ActionStep } from "@woofx3/api";
 import {
   AlertTriangle,
@@ -35,6 +34,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useEngineScope } from "@/engine/context";
 import {
   useChatCommandGroups,
   useChatCommands,
@@ -42,7 +42,7 @@ import {
   useDeleteChatCommandRequest,
   useUpdateChatCommandRequest,
 } from "@/engine/hooks/use-chat-commands";
-import { useInstance } from "@/hooks/use-instance";
+import type { ChatCommand, ChatCommandGroup, InstanceId } from "@/engine/types";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import {
@@ -60,8 +60,8 @@ import { cn } from "@/lib/utils";
 import type { ActionPreset } from "@/lib/workflow-presets";
 import { actionStepLabel } from "@/lib/workflow-presets-json";
 
-type CommandDoc = Doc<"chatCommands">;
-type GroupDoc = Doc<"chatCommandGroups">;
+type CommandDoc = ChatCommand;
+type GroupDoc = ChatCommandGroup;
 
 /**
  * What a command does, for a row that shows no detail: the one action it runs,
@@ -147,11 +147,11 @@ function CommandTableSkeleton() {
  */
 export default function Commands() {
   const [location] = useLocation();
-  const { instance, isLoading: instanceLoading } = useInstance();
+  const { instanceId, isInstanceLoading: instanceLoading } = useEngineScope();
   const showingGroups = location.startsWith(COMMAND_GROUPS_PATH);
 
-  const commandsRaw = useChatCommands(instance?._id ?? null);
-  const groupsRaw = useChatCommandGroups(instance?._id ?? null);
+  const commandsRaw = useChatCommands();
+  const groupsRaw = useChatCommandGroups();
   const commands = commandsRaw ?? [];
   const groups = groupsRaw ?? [];
 
@@ -175,9 +175,9 @@ export default function Commands() {
       </nav>
 
       {showingGroups ? (
-        <GroupsTab instanceId={instance?._id} groups={groups} commands={commands} isLoading={groupsLoading} />
+        <GroupsTab instanceId={instanceId} groups={groups} commands={commands} isLoading={groupsLoading} />
       ) : (
-        <CommandsTab instanceId={instance?._id} commands={commands} isLoading={commandsLoading} />
+        <CommandsTab instanceId={instanceId} commands={commands} isLoading={commandsLoading} />
       )}
     </div>
   );
@@ -219,7 +219,7 @@ function CommandsTab({
   commands,
   isLoading,
 }: {
-  instanceId: Id<"instances"> | undefined;
+  instanceId: InstanceId | null;
   commands: CommandDoc[];
   isLoading: boolean;
 }) {
@@ -243,7 +243,7 @@ function CommandsTab({
       return;
     }
     try {
-      await deleteCommand(instanceId, deleteTarget.engineCommandId);
+      await deleteCommand(deleteTarget.engineCommandId);
       toast({ title: "Command deleted" });
     } catch (err: unknown) {
       toast({
@@ -260,7 +260,7 @@ function CommandsTab({
       return;
     }
     try {
-      await updateCommand(instanceId, {
+      await updateCommand({
         engineCommandId: cmd.engineCommandId,
         command: cmd.command,
         cooldown: cmd.cooldown,
@@ -323,7 +323,7 @@ function CommandsTab({
             <TableBody>
               {sortedCommands.map((cmd) => (
                 <TableRow
-                  key={cmd._id}
+                  key={cmd.engineCommandId}
                   className="cursor-pointer"
                   onClick={(event) => {
                     const selectedText = window.getSelection()?.toString() ?? "";
@@ -467,7 +467,7 @@ function GroupsTab({
   commands,
   isLoading,
 }: {
-  instanceId: Id<"instances"> | undefined;
+  instanceId: InstanceId | null;
   groups: GroupDoc[];
   commands: CommandDoc[];
   isLoading: boolean;
@@ -495,7 +495,7 @@ function GroupsTab({
       return;
     }
     try {
-      await deleteGroup(instanceId, deleteTarget.engineGroupId);
+      await deleteGroup(deleteTarget.engineGroupId);
       toast({ title: "Group deleted" });
     } catch (err: unknown) {
       toast({
@@ -660,7 +660,7 @@ function GroupTable({
             const hasRoster = group.name !== "everyone";
             const href = commandGroupEditorPath(group.engineGroupId);
             return (
-              <TableRow key={group._id} data-testid={`group-row-${group.engineGroupId}`}>
+              <TableRow key={group.engineGroupId} data-testid={`group-row-${group.engineGroupId}`}>
                 <TableCell className="font-medium">
                   <Link href={href} className="hover:underline" data-testid={`open-group-${group.engineGroupId}`}>
                     {groupLabel(group)}

@@ -1,9 +1,8 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { SceneSyncClient, type SceneSyncState } from "@woofx3/api/scene-editor/client";
-import { useAction } from "convex/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useOverlayPreviewUrlRequest } from "@/engine/hooks/use-overlays";
 import { useSceneEditorSessionRequest } from "@/engine/hooks/use-scenes";
+import type { InstanceId, SceneId } from "@/engine/types";
 import { toast } from "@/hooks/use-toast";
 import { sceneEditorSessions, sceneKeyOf } from "@/lib/scene-editor-sessions";
 import {
@@ -15,10 +14,10 @@ import {
 import { syncReportToast } from "@/lib/scene-sync-report";
 
 interface UseSceneEditorSessionArgs {
-  instanceId: Id<"instances">;
+  instanceId: InstanceId;
   engineSceneId: string;
   /** The Convex scene, whose preview URL names sceneManager's public origin. */
-  sceneId: Id<"scenes"> | undefined;
+  sceneId: SceneId | undefined;
   /**
    * sceneManager's public URL for a composition with no preview page (an
    * alert, which is never an overlay page). Used in place of `sceneId`'s
@@ -84,7 +83,7 @@ export function useSceneEditorSession({
   unsavedOutsideSession,
 }: UseSceneEditorSessionArgs): SceneEditorSession {
   const getSession = useSceneEditorSessionRequest();
-  const getPreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
+  const getPreviewUrl = useOverlayPreviewUrlRequest();
   const [sceneKey] = useState(() => sceneKeyOf(instanceId, engineSceneId));
   const [client, setClient] = useState<SceneSyncClient | null>(null);
   // Bumped by `reopen`: the effect below releases the ended client and acquires a new one.
@@ -98,11 +97,14 @@ export function useSceneEditorSession({
   // editor lost the scene's row still reconnects with the row it had.
   const socketSourceRef = useRef<SceneSocketSource | null>(null);
   if (publicUrl) {
-    socketSourceRef.current = { getGrant: () => getSession(instanceId, engineSceneId), getPreviewUrl: publicUrl };
+    socketSourceRef.current = {
+      getGrant: () => getSession(engineSceneId),
+      getPreviewUrl: publicUrl,
+    };
   } else if (sceneId) {
     socketSourceRef.current = {
-      getGrant: () => getSession(instanceId, engineSceneId),
-      getPreviewUrl: () => getPreviewUrl({ sceneId }),
+      getGrant: () => getSession(engineSceneId),
+      getPreviewUrl: () => getPreviewUrl(sceneId),
     };
   }
   const hasScene = sceneId !== undefined || publicUrl !== undefined;
