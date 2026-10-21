@@ -265,6 +265,8 @@ interface AlertEditorFrameProps {
   actions: ReactNode;
   /** Shown beside the desktop header's title, where its changing length never moves the controls. */
   status?: ReactNode;
+  /** A banner under the header, across the page. */
+  notice?: ReactNode;
   /** The phone header's one button. */
   phoneAction: ReactNode;
   /** Anything the phone layout shows above the palette. */
@@ -289,6 +291,7 @@ export function AlertEditorFrame({
   onBack,
   actions,
   status,
+  notice,
   phoneAction,
   phoneExtras,
   phoneStatus,
@@ -321,6 +324,7 @@ export function AlertEditorFrame({
             </div>
             <div className="flex shrink-0 items-center gap-2">{actions}</div>
           </header>
+          {notice}
           <AlertEditorShell view={view} library={library} />
         </>
       ) : (
@@ -334,6 +338,7 @@ export function AlertEditorFrame({
               </div>
               {phoneAction}
             </header>
+            {notice}
             <PhoneStageArea canvas={view.canvas} onZoom={(zoom) => session.editor.viewport.setZoom(zoom)}>
               {view.stage}
             </PhoneStageArea>

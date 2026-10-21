@@ -29,6 +29,7 @@ import {
   useAlertTargetUsage,
   useCreateSceneRequest,
   useDeleteSceneRequest,
+  useRepairSceneRequest,
   useScene,
   useSceneWidgetCatalog,
   useUpdateSceneRequest,
@@ -48,10 +49,12 @@ import {
   remoteSelectionsOf,
   storedSceneJson,
 } from "@/lib/scene-composition";
+import { endedUnreadable, repairResultToast } from "@/lib/scene-unread";
 import type { Scene, Widget } from "@/types";
 import { type DraftCommand, DraftLiveControls, type DraftLiveCopy, type DraftLiveTestIds } from "./draft-live-controls";
 import { LiveScenePreview } from "./live-scene-preview";
 import { OrphanedAlertTargetsNotice } from "./orphaned-alert-targets-notice";
+import { UnreadSceneNotice } from "./unread-scene-notice";
 import { WidgetLayoutCanvas } from "./widget-layout-canvas";
 
 interface SceneCanvasEditorProps {
@@ -104,6 +107,8 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   const syncSupport = capabilities.support("scenes.editorSync");
   const syncSupported = syncSupport === "supported";
   const needsEngineUpgrade = !syncSupported && capabilities.support("scenes.editorSessions") === "supported";
+  const repairSupported = capabilities.support("scenes.repair") === "supported";
+  const repairScene = useRepairSceneRequest();
   const [sessionMode, setSessionMode] = useState(syncSupported);
   if (syncSupported && !sessionMode) {
     setSessionMode(true);
@@ -220,17 +225,13 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       return [];
     }
     const alertWidgetIds = new Set(alertTargetUsage.alertWidgetIds);
-    const before = alertWidgetNamesOf(
-      scene.widgets.map((widget) => ({ widgetId: widget.widgetCanonicalId, settings: widget.settings })),
-      alertWidgetIds
-    );
-    const after = alertWidgetNamesOf(
-      Object.values(shownDoc.widgets).map((placement) => ({
-        widgetId: placement.widget,
-        settings: placement.settings,
-      })),
-      alertWidgetIds
-    );
+    const namesOf = (doc: CompositionDocument) =>
+      alertWidgetNamesOf(
+        Object.values(doc.widgets).map((placement) => ({ widgetId: placement.widget, settings: placement.settings })),
+        alertWidgetIds
+      );
+    const before = namesOf(compositionOfStoredScene(scene));
+    const after = namesOf(shownDoc);
     return orphanedAlertTargets(alertTargetUsage.uses, before, after, new Set(alertTargetUsage.elsewhere));
   }, [alertTargetUsage, scene, shownDoc]);
 
@@ -367,6 +368,26 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
     await navigator.clipboard.writeText(browserSourceUrl);
     return browserSourceUrl;
   }, []);
+
+  // A scene that could not be read ended its session, so a repaired one opens
+  // a new session; one that only had unreadable layers is reconnected by the
+  // engine itself.
+  const reopenSession = session.reopen;
+  const handleRepair = useCallback(async () => {
+    try {
+      const result = await repairScene(instanceId, engineSceneId);
+      toast(repairResultToast(result, "scene"));
+      if (result.ok) {
+        reopenSession();
+      }
+    } catch (err) {
+      toast({
+        title: "Couldn't repair this scene",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  }, [repairScene, instanceId, engineSceneId, toast, reopenSession]);
 
   const handleCopyBrowserSource = useCallback(async () => {
     if (!convexSceneId) {
@@ -751,6 +772,13 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       header={
         <>
           {header}
+          <UnreadSceneNotice
+            conn={conn}
+            unread={syncState?.unread}
+            noun="scene"
+            repairSupported={repairSupported}
+            onRepair={handleRepair}
+          />
           <OrphanedAlertTargetsNotice targets={orphanedTargets} />
         </>
       }
@@ -784,7 +812,7 @@ export function sessionStatusText(state: SceneSyncState | null, live: boolean, n
   }
   switch (state.conn) {
     case "gone":
-      return `This ${noun} no longer exists`;
+      return endedUnreadable(state.conn, state.unread) ? `Can't read this ${noun}` : `This ${noun} no longer exists`;
     case "closed":
       return `Disconnected · open the ${noun} again`;
     case "unavailable":

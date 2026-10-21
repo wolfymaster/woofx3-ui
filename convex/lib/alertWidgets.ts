@@ -64,6 +64,26 @@ export interface PlacedWidget {
   settings?: Record<string, unknown>;
 }
 
+/**
+ * The placements of a scene as the cache holds them, the engine's stored
+ * entries as they are: an entry with no widget canonical id, or none of an
+ * object's shape at all, is one the scene manager cannot read either, and is
+ * left out.
+ */
+export function placedWidgetsOf(widgets: readonly unknown[]): PlacedWidget[] {
+  return widgets.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      return [];
+    }
+    const { widgetCanonicalId, settings } = entry as Record<string, unknown>;
+    if (typeof widgetCanonicalId !== "string") {
+      return [];
+    }
+    const isSettings = typeof settings === "object" && settings !== null && !Array.isArray(settings);
+    return [{ widgetId: widgetCanonicalId, settings: isSettings ? (settings as Record<string, unknown>) : undefined }];
+  });
+}
+
 /** The names a scene's alert widgets answer to. `alertWidgetIds` are the widgets that host alerts. */
 export function alertWidgetNamesOf(
   placements: Iterable<PlacedWidget>,

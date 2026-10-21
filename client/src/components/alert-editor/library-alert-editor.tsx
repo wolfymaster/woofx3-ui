@@ -14,10 +14,12 @@ import {
   type DraftLiveTestIds,
 } from "@/components/scenes/draft-live-controls";
 import { sessionNotice, sessionStatusText } from "@/components/scenes/scene-canvas-editor";
+import { UnreadSceneNotice } from "@/components/scenes/unread-scene-notice";
 import { Button } from "@/components/ui/button";
 import { useLibraryAlert } from "@/engine/hooks/use-alert-library";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useEngineInfoRequest } from "@/engine/hooks/use-engine-status";
-import { useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
+import { useRepairSceneRequest, useSceneWidgetCatalog } from "@/engine/hooks/use-scenes";
 import { useCollapsedSidebar } from "@/hooks/use-collapsed-sidebar";
 import { useCompositionEditor, useEditorKeys } from "@/hooks/use-composition-editor";
 import { useSceneEditorSession } from "@/hooks/use-scene-editor-session";
@@ -25,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { compositionOfLibraryAlert, inputVariableOptions, libraryPreviewInputs } from "@/lib/alert-library";
 import { draftSaveStatus } from "@/lib/draft-save-status";
 import { catalogOfRows } from "@/lib/scene-composition";
+import { repairResultToast } from "@/lib/scene-unread";
 
 interface LibraryAlertEditorProps {
   instanceId: Id<"instances">;
@@ -50,6 +53,8 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
   const me = useQuery(api.users.getMe);
   const myName = me === undefined ? undefined : (me?.name ?? me?.email ?? "");
   const getEngineInfo = useEngineInfoRequest();
+  const repairScene = useRepairSceneRequest();
+  const capabilities = useEngineCapabilities(instanceId);
   // An alert has no preview page to take sceneManager's origin from, so the socket is
   // opened at the engine's overlay URL, which is sceneManager's public URL.
   const publicUrl = useCallback(
@@ -146,6 +151,22 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
 
   const notice = sessionNotice(syncState, "alert");
 
+  const handleRepair = async () => {
+    try {
+      const result = await repairScene(instanceId, compositionId);
+      toast(repairResultToast(result, "alert"));
+      if (result.ok) {
+        session.reopen();
+      }
+    } catch (err) {
+      toast({
+        title: "Couldn't repair this alert",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <AlertEditorFrame
       session={handle}
@@ -154,6 +175,15 @@ export function LibraryAlertEditor({ instanceId, compositionId, onBack }: Librar
       context="Alert library · new copies start from what you publish"
       backLabel="alerts"
       onBack={onBack}
+      notice={
+        <UnreadSceneNotice
+          conn={conn}
+          unread={syncState?.unread}
+          noun="alert"
+          repairSupported={capabilities.support("scenes.repair") === "supported"}
+          onRepair={handleRepair}
+        />
+      }
       status={
         notice === null ? undefined : (
           <span className="truncate text-xs text-muted-foreground" data-testid="text-alert-sync">

@@ -1,4 +1,5 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
+import type { SceneRepairResult } from "@woofx3/api";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -171,5 +172,23 @@ export const getSceneEditorSession = action({
       bundle.clientSecret
     );
     return await rpc.getSceneEditorSession(args.engineSceneId);
+  },
+});
+
+/**
+ * Make a scene or alert whose stored data the engine cannot read editable
+ * again. The engine copies what it cannot read into its `scene_backups` table
+ * first, then writes back the readable rest. Requires the `scenes.repair`
+ * capability.
+ */
+export const repairScene = action({
+  args: {
+    instanceId: v.id("instances"),
+    engineSceneId: v.string(),
+  },
+  handler: async (ctx, args): Promise<SceneRepairResult> => {
+    const bundle = await requireInstanceContext(ctx, args.instanceId);
+    const rpc = createEngineRpcSession<EngineApi>(bundle.url, bundle.clientId, bundle.clientSecret);
+    return await rpc.repairScene(args.engineSceneId);
   },
 });

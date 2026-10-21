@@ -7,6 +7,7 @@ import {
   DEFAULT_ALERT_WIDGET_NAME,
   nextAlertWidgetName,
   orphanedAlertTargets,
+  placedWidgetsOf,
 } from "./alertWidgets";
 
 describe("alertWidgetName", () => {
@@ -96,6 +97,24 @@ describe("orphanedAlertTargets", () => {
   it("lists a workflow once however many of its steps use the target", () => {
     expect(orphanedAlertTargets([follow, follow], set("sidebar"), set(), set())).toEqual([
       { target: "sidebar", uses: [follow] },
+    ]);
+  });
+});
+
+describe("placedWidgetsOf", () => {
+  it("leaves out cached entries that are no placement", () => {
+    const placed = placedWidgetsOf([
+      42,
+      null,
+      "alert",
+      [],
+      { settings: { name: "x" } },
+      { widgetCanonicalId: "woofx3:widget:alert", settings: { name: "main" } },
+      { widgetCanonicalId: "woofx3:widget:text", settings: "not settings" },
+    ]);
+    expect(placed).toEqual([
+      { widgetId: "woofx3:widget:alert", settings: { name: "main" } },
+      { widgetId: "woofx3:widget:text", settings: undefined },
     ]);
   });
 });

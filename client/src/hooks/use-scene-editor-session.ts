@@ -38,6 +38,12 @@ interface UseSceneEditorSessionArgs {
 }
 
 export interface SceneEditorSession {
+  /**
+   * Start a new session in place of one that ended (`gone` or `closed`): for
+   * a scene that could not be read until it was repaired. A session still
+   * running is left as it is.
+   */
+  reopen: () => void;
   /** The scene's sync client, or null while the session is idle. */
   client: SceneSyncClient | null;
   /** The client's state, or null with no client. */
@@ -81,6 +87,8 @@ export function useSceneEditorSession({
   const getPreviewUrl = useAction(api.browserSource.getOrCreatePreviewUrl);
   const [sceneKey] = useState(() => sceneKeyOf(instanceId, engineSceneId));
   const [client, setClient] = useState<SceneSyncClient | null>(null);
+  // Bumped by `reopen`: the effect below releases the ended client and acquires a new one.
+  const [generation, setGeneration] = useState(0);
   const unsavedOutsideSessionRef = useRef(unsavedOutsideSession);
   unsavedOutsideSessionRef.current = unsavedOutsideSession;
   const editorNameRef = useRef(editorName);
@@ -102,6 +110,7 @@ export function useSceneEditorSession({
   // The editor saves its own unsaved fields as it unmounts.
   useEffect(() => sceneEditorSessions.registerUnsavedCheck(() => unsavedOutsideSessionRef.current), []);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: generation only re-runs the effect, for reopen
   useEffect(() => {
     if (!enabled || !hasScene || !hasName) {
       return;
@@ -131,11 +140,17 @@ export function useSceneEditorSession({
       sceneEditorSessions.release(sceneKey, acquired);
       setClient(null);
     };
-  }, [enabled, hasScene, hasName, sceneKey]);
+  }, [enabled, hasScene, hasName, sceneKey, generation]);
 
   const state = useSyncExternalStore(client?.subscribe ?? noClient, client?.getState ?? noState);
 
   const abandon = useCallback(() => sceneEditorSessions.abandonScene(sceneKey), [sceneKey]);
+  const reopen = useCallback(() => {
+    const conn = client?.getState().conn;
+    if (conn === "gone" || conn === "closed") {
+      setGeneration((n) => n + 1);
+    }
+  }, [client]);
 
-  return { client, state, abandon };
+  return { client, state, abandon, reopen };
 }

@@ -31,6 +31,7 @@ export type {
   EventLogSettings,
   ModuleFileContent,
   ModuleFileList,
+  SceneRepairResult,
   StorageConfig,
   StreamEventFrame,
   UploadGrant,
