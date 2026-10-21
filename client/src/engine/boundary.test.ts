@@ -205,7 +205,7 @@ function convexModuleOf(file: string, specifier: string): string | null {
   if (target === null || !isWithin(target, CONVEX_DIR)) {
     return null;
   }
-  return relative(CONVEX_DIR, target).replace(/\.ts$/, "");
+  return relative(CONVEX_DIR, target).replace(/\.(ts|js)$/, "");
 }
 
 /** What a file imports from Convex modules a namespace owns. */
@@ -232,19 +232,26 @@ describe("engine module imports", () => {
     expect(importing, "import the gateway's types from @/engine/types instead").toEqual([]);
   });
 
-  test("the import check matches aliased and relative imports of owned modules only", () => {
-    const owned = new Set(["pins", "moderation"]);
-    const file = join(CLIENT_SRC, "components", "dashboard", "widgets", "example.tsx");
-    expect(engineModuleImports(file, 'import type { Row } from "@convex/pins";', owned)).not.toEqual([]);
-    expect(
-      engineModuleImports(file, 'import type { Row } from "../../../../../convex/moderation";', owned)
-    ).not.toEqual([]);
-    expect(engineModuleImports(file, 'import { validateBlockedTerm } from "@convex/lib/moderation";', owned)).toEqual(
-      []
-    );
-    expect(engineModuleImports(file, 'import type { Report } from "@convex/feedback";', owned)).toEqual([]);
-    expect(engineModuleImports(file, 'import { api } from "@convex/_generated/api";', owned)).toEqual([]);
-  });
+  const importCases: Array<{ specifier: string; guarded: boolean }> = [
+    { specifier: "@convex/pins", guarded: true },
+    { specifier: "@convex/pins.js", guarded: true },
+    { specifier: "../../../../../convex/moderation", guarded: true },
+    { specifier: "../../../../../convex/moderation.ts", guarded: true },
+    { specifier: "../../../../../convex/moderation.js", guarded: true },
+    { specifier: "@convex/lib/moderation", guarded: false },
+    { specifier: "../../../../../convex/lib/moderation.js", guarded: false },
+    { specifier: "@convex/feedback", guarded: false },
+    { specifier: "@convex/_generated/api", guarded: false },
+  ];
+
+  for (const { specifier, guarded } of importCases) {
+    test(`an import of ${specifier} is ${guarded ? "refused" : "allowed"}`, () => {
+      const owned = new Set(["pins", "moderation"]);
+      const file = join(CLIENT_SRC, "components", "dashboard", "widgets", "example.tsx");
+      const found = engineModuleImports(file, `import type { Row } from "${specifier}";`, owned);
+      expect(found).toEqual(guarded ? [specifier] : []);
+    });
+  }
 
   test("whole-module entries are guarded and function entries are not", () => {
     const owned = engineOwnedModules();
