@@ -17,7 +17,6 @@ import {
   COMMAND_GROUP_NEW_ROUTE,
   COMMAND_GROUPS_PATH,
   COMMAND_NEW_ROUTE,
-  COMMAND_STEP_ALERT_ROUTE,
 } from "@/lib/command-editor-route";
 import { FEEDBACK_EDIT_ROUTE, FEEDBACK_NEW_PATH, FEEDBACK_PATH, FEEDBACK_POST_ROUTE } from "@/lib/feedback";
 import {
@@ -48,7 +47,6 @@ const Register = lazy(() => import("@/pages/auth/register"));
 const TwitchCallback = lazy(() => import("@/pages/auth/twitch-callback"));
 const CommandEditor = lazy(() => import("@/pages/command-editor"));
 const CommandGroupEditor = lazy(() => import("@/pages/command-group-editor"));
-const CommandStepAlertEditor = lazy(() => import("@/pages/command-step-alert-editor"));
 const Commands = lazy(() => import("@/pages/commands"));
 const CompanionPair = lazy(() => import("@/pages/companion-pair"));
 const ResourceKind = lazy(() => import("@/pages/resource-kind"));
@@ -191,7 +189,6 @@ function AppRoutes() {
                   <Route path={ALERT_LIBRARY_EDITOR_ROUTE} component={LibraryAlertEditor} />
                   <Route path={ALERT_RUN_ROUTE} component={AlertRun} />
                   {/* Order matters: the fixed segments must be matched before :engineCommandId. */}
-                  <Route path={COMMAND_STEP_ALERT_ROUTE} component={CommandStepAlertEditor} />
                   <Route path={COMMAND_GROUP_NEW_ROUTE} component={CommandGroupEditor} />
                   <Route path={COMMAND_GROUP_EDITOR_ROUTE} component={CommandGroupEditor} />
                   <Route path={COMMAND_GROUPS_PATH} component={Commands} />

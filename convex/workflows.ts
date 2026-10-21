@@ -2,12 +2,14 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import { isCommandWorkflow } from "./lib/commandWorkflow";
 import { getInstanceMembership } from "./lib/teamAccess";
 
 /**
- * List all workflows mirrored into Convex for an instance. Rows arrive via
+ * List the workflows mirrored into Convex for an instance. Rows arrive via
  * webhook upsert after engine round-trips; nodes/edges are an optional
- * browser-computed projection cached back via `updateProjection`.
+ * browser-computed projection cached back via `updateProjection`. The
+ * workflow a chat command runs is left out: it is edited as that command.
  */
 export const list = query({
   args: { instanceId: v.id("instances") },
@@ -20,10 +22,11 @@ export const list = query({
     if (!membership) {
       return [];
     }
-    return ctx.db
+    const rows = await ctx.db
       .query("workflows")
       .withIndex("by_instance", (q) => q.eq("instanceId", instanceId))
-      .take(100);
+      .take(500);
+    return rows.filter((row) => !isCommandWorkflow(row.definition)).slice(0, 100);
   },
 });
 

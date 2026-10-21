@@ -3,10 +3,10 @@ import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useWorkflowRunsSubscription } from "@/engine/hooks/use-workflows";
+import type { WorkflowRun } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { describeAlertFailure } from "@/lib/alert-failure";
-import type { WorkflowRun } from "@/lib/transport";
-import { transport } from "@/lib/transport";
 import { cn } from "@/lib/utils";
 import { mergeWorkflowRun } from "@/lib/workflow-run-list";
 
@@ -90,6 +90,7 @@ interface WorkflowRunsModuleProps {
 
 export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps) {
   const { instance } = useInstance();
+  const subscribeWorkflowRuns = useWorkflowRunsSubscription();
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -101,7 +102,7 @@ export function WorkflowRunsModule({ config: _config }: WorkflowRunsModuleProps)
     if (!instance) return;
     const instanceId = instance._id;
 
-    const unsubscribe = transport.subscribeWorkflowRuns(instanceId, (run) => {
+    const unsubscribe = subscribeWorkflowRuns(instanceId, (run) => {
       setRuns((prev) => mergeWorkflowRun(prev, run, MAX_RUNS));
     });
 

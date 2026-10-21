@@ -2,9 +2,11 @@ import type { ConfigField, DataShapeField } from "@woofx3/api/ui-schema";
 import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { parseConfigFields, parseDataShapeFields } from "@/lib/parse-config-fields";
 import type { ProjectedAction } from "@/lib/trigger-projection";
+import type { WaitConfig } from "@/lib/wait-config";
+import { payloadFieldLabel, resolveWaitEvent } from "@/lib/wait-event";
 import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
-import type { StepNode, WorkflowTree } from "@/lib/workflow-tree";
+import type { StepNode, WaitNode, WorkflowTree } from "@/lib/workflow-tree";
 
 const STEP_ID_PATTERN = /^[A-Za-z0-9._-]+$/;
 
@@ -34,7 +36,7 @@ export function generateStepId(label: string, existingIds: ReadonlySet<string>):
   return `${base}-${n}`;
 }
 
-/** Every step id in the tree (condition/wait/action), including nested branches. Trigger isn't included —
+/** Every step id in the tree, including nested branches. Trigger isn't included —
  * it's addressed as the fixed "trigger" source, not by a user-editable id. */
 export function collectStepIds(steps: StepNode[]): Set<string> {
   const ids = new Set<string>();
@@ -51,8 +53,8 @@ export function collectStepIds(steps: StepNode[]): Set<string> {
   return ids;
 }
 
-/** Whether any step's parameters/conditions contain a ${stepId....} reference to the given id — used to warn
- * before a rename leaves those references dangling (renaming doesn't rewrite them). */
+/** Whether any step's fields (parameters, conditions, wait, ...) contain a ${stepId....} reference to the given
+ * id — used to warn before a rename leaves those references dangling (renaming doesn't rewrite them). */
 export function isStepIdReferenced(steps: StepNode[], stepId: string): boolean {
   const needle = `\${${stepId}.`;
   const containsReference = (value: unknown): boolean => {
@@ -69,18 +71,12 @@ export function isStepIdReferenced(steps: StepNode[], stepId: string): boolean {
   };
   const walk = (list: StepNode[]): boolean => {
     for (const step of list) {
-      if (step.type === "action" && containsReference(step.parameters)) {
-        return true;
-      }
       if (step.type === "condition") {
-        if (containsReference(step.conditions)) {
+        const { thenBranch, elseBranch, ...own } = step;
+        if (containsReference(own) || walk(thenBranch) || walk(elseBranch)) {
           return true;
         }
-        if (walk(step.thenBranch) || walk(step.elseBranch)) {
-          return true;
-        }
-      }
-      if (step.type === "wait" && containsReference(step.wait)) {
+      } else if (containsReference(step)) {
         return true;
       }
     }
@@ -133,8 +129,9 @@ function collectPredecessorSteps(steps: StepNode[], targetId: string): StepNode[
 
 /**
  * Every ${...} variable a field on `currentNodeId` could reference right now: the
- * trigger's payload, plus each predecessor action's declared return value and each
- * predecessor condition's boolean result. Steps that haven't necessarily run yet by
+ * trigger's payload (`triggerVariables` when the surface supplies it, else what the tree's
+ * catalog trigger emits), plus each predecessor action's declared return value, each
+ * predecessor condition's boolean result and each predecessor wait's exports. Steps that haven't necessarily run yet by
  * the time `currentNodeId` executes (later siblings, sibling branches, descendants)
  * are excluded — offering them would suggest references the engine can't reliably
  * resolve.
@@ -143,13 +140,10 @@ export function computeAvailableVariables(
   tree: WorkflowTree,
   currentNodeId: string,
   catalogActions: CatalogActionRow[],
-  catalogTriggers: CatalogTriggerRow[]
+  catalogTriggers: CatalogTriggerRow[],
+  triggerVariables?: readonly VariableOption[]
 ): VariableOption[] {
-  const triggerRow = resolveCatalogTrigger(tree.trigger, catalogTriggers);
-  const options = triggerDataVariables(
-    parseDataShapeFields(triggerRow?.emits),
-    parseConfigFields(triggerRow?.configFields)
-  );
+  const options = triggerVariables ? [...triggerVariables] : catalogTriggerVariables(tree, catalogTriggers);
 
   const predecessors = collectPredecessorSteps(tree.steps, currentNodeId) ?? [];
   for (const step of predecessors) {
@@ -166,10 +160,17 @@ export function computeAvailableVariables(
         type: "boolean",
         description: "Whether this condition matched.",
       });
+    } else if (step.type === "wait") {
+      options.push(...waitExportVariables(step, catalogTriggers));
     }
   }
 
   return options;
+}
+
+function catalogTriggerVariables(tree: WorkflowTree, catalogTriggers: CatalogTriggerRow[]): VariableOption[] {
+  const triggerRow = resolveCatalogTrigger(tree.trigger, catalogTriggers);
+  return triggerDataVariables(parseDataShapeFields(triggerRow?.emits), parseConfigFields(triggerRow?.configFields));
 }
 
 /**
@@ -203,6 +204,120 @@ export function projectedActionVariables(
 /** The trigger's payload, which every action a trigger preset runs may reference. */
 export function triggerPresetVariables(trigger: TriggerPreset): VariableOption[] {
   return triggerDataVariables(trigger.emits ?? [], trigger.config?.fields ?? []);
+}
+
+/**
+ * The catalog's description of the payload an event carries, when a trigger declares
+ * that event; a chat command's `chat.command.hug` is described by `chat.command.*`.
+ */
+function eventPayloadFields(event: string, catalogTriggers: CatalogTriggerRow[]): DataShapeField[] {
+  return resolveWaitEvent(event, catalogTriggers)?.choice.emits ?? [];
+}
+
+/**
+ * What a wait's match conditions can read: the event being waited for, and nothing else.
+ * The engine evaluates them against that event alone (matchesConditions in the engine's
+ * workflow/internal/tasks/wait.go), so the trigger and earlier steps are not offered.
+ */
+export function waitEventVariables(event: string, catalogTriggers: CatalogTriggerRow[]): VariableOption[] {
+  const group = "Waited event";
+  return [
+    ...eventPayloadFields(event, catalogTriggers).map((field) => ({
+      value: `\${event.data.${field.path}}`,
+      label: field.path,
+      group,
+      type: field.type,
+      description: field.description,
+    })),
+    { value: `\${event.type}`, label: "Event type", group, type: "string", description: "The event's subject." },
+    { value: `\${event.id}`, label: "Event ID", group, type: "string", description: "The event's unique id." },
+  ];
+}
+
+/**
+ * What a finished wait hands later steps, as `${waitId.field}`. Must match GetExports in
+ * the engine's workflow/internal/tasks/wait.go: every aggregation keeps both `count` and
+ * `sum`, whichever strategy decides it, and a wait that ends without an event has an
+ * empty `data` whose fields read as empty. A delay's exports never vary (always
+ * satisfied, never an event), so it offers none.
+ */
+export function waitExportVariables(step: WaitNode, catalogTriggers: CatalogTriggerRow[]): VariableOption[] {
+  const wait: WaitConfig = step.wait;
+  if (wait.type === "delay") {
+    return [];
+  }
+  const group = `Wait (${step.id})`;
+  const ref = (path: string) => `\${${step.id}.${path}}`;
+  const noEventNote =
+    wait.timeout && wait.onTimeout === "continue" ? " Empty if it gave up before any event matched." : "";
+
+  const options: VariableOption[] = [
+    {
+      value: ref("satisfied"),
+      label: "Whether it happened",
+      group,
+      type: "boolean",
+      description: "Whether the wait got what it was waiting for.",
+    },
+    {
+      value: ref("timedOut"),
+      label: "Whether it gave up",
+      group,
+      type: "boolean",
+      description: "Whether the wait gave up when its time limit ran out.",
+    },
+    { value: ref("events"), label: "Every match", group, type: "array", description: "Every event that matched." },
+  ];
+  if (wait.aggregation) {
+    options.push(
+      {
+        value: ref("count"),
+        label: "How many happened",
+        group,
+        type: "number",
+        description: "How many events matched.",
+      },
+      {
+        value: ref("sum"),
+        label: "Their total",
+        group,
+        type: "number",
+        description: wait.aggregation.field
+          ? `The total of their ${wait.aggregation.field.replace(/^data\./, "")}.`
+          : "The total of their amount, or of their value.",
+      }
+    );
+  }
+  options.push({
+    value: ref("lastEvent"),
+    label: "The last match",
+    group,
+    type: "object",
+    description: `The last event that matched.${noEventNote}`,
+  });
+
+  const payload = eventPayloadFields(wait.event, catalogTriggers);
+  if (payload.length === 0) {
+    options.push({
+      value: ref("data"),
+      label: "Its details",
+      group,
+      type: "object",
+      description: `The last matching event's payload.${noEventNote}`,
+    });
+  } else {
+    for (const field of payload) {
+      const description = field.description ?? "From the last matching event.";
+      options.push({
+        value: ref(`data.${field.path}`),
+        label: payloadFieldLabel(field.path),
+        group,
+        type: field.type,
+        description: `${description}${noEventNote}`,
+      });
+    }
+  }
+  return options;
 }
 
 /**

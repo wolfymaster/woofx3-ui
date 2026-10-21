@@ -2,7 +2,7 @@ import { Bell, Loader2 } from "lucide-react";
 import { useLocation, useParams } from "wouter";
 import { LibraryAlertEditor } from "@/components/alert-editor/library-alert-editor";
 import { EmptyState } from "@/components/common/empty-state";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useInstance } from "@/hooks/use-instance";
 import { ALERT_LIBRARY_CAPABILITIES } from "@/lib/engine-capabilities";
 

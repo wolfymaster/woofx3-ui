@@ -32,19 +32,16 @@ export function firstIncompleteTrigger(
   return null;
 }
 
-/** The engine writes saving needs, as a screen's `useAction` handles supply them. */
+/** The engine writes saving needs, as a screen's workflow request hooks supply them. */
 export interface EngineWorkflowWriters {
   instanceId: Id<"instances">;
-  createFromDefinition: (args: {
-    instanceId: Id<"instances">;
-    definition: never;
-  }) => Promise<{ engineWorkflowId: string }>;
-  updateFromDefinition: (args: {
-    instanceId: Id<"instances">;
-    engineWorkflowId: string;
-    definition: never;
-  }) => Promise<unknown>;
-  setEnabled: (args: { instanceId: Id<"instances">; engineWorkflowId: string; isEnabled: boolean }) => Promise<unknown>;
+  createFromDefinition: (instanceId: Id<"instances">, definition: unknown) => Promise<{ engineWorkflowId: string }>;
+  updateFromDefinition: (
+    instanceId: Id<"instances">,
+    engineWorkflowId: string,
+    definition: unknown
+  ) => Promise<unknown>;
+  setEnabled: (instanceId: Id<"instances">, engineWorkflowId: string, isEnabled: boolean) => Promise<unknown>;
 }
 
 /**
@@ -89,23 +86,12 @@ export async function saveEventDraft(
   let engineWorkflowId: string;
   if (state.engineWorkflowId) {
     engineWorkflowId = state.engineWorkflowId;
-    await writers.updateFromDefinition({
-      instanceId: writers.instanceId,
-      engineWorkflowId,
-      definition: stored as never,
-    });
+    await writers.updateFromDefinition(writers.instanceId, engineWorkflowId, stored);
   } else {
-    const created = await writers.createFromDefinition({
-      instanceId: writers.instanceId,
-      definition: stored as never,
-    });
+    const created = await writers.createFromDefinition(writers.instanceId, stored);
     engineWorkflowId = created.engineWorkflowId;
     try {
-      await writers.setEnabled({
-        instanceId: writers.instanceId,
-        engineWorkflowId: created.engineWorkflowId,
-        isEnabled: true,
-      });
+      await writers.setEnabled(writers.instanceId, created.engineWorkflowId, true);
     } catch {
       enabled = false;
     }

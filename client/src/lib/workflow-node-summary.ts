@@ -1,13 +1,13 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { stackOrder } from "@woofx3/scene/model";
-import type { CatalogActionRow, CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
+import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import { alertCompositionOf } from "@/lib/alert-layout";
 import { toMediaValue } from "@/lib/media-value";
 import { isCommandsSource, parseConfigFields } from "@/lib/parse-config-fields";
-import { resolveCatalogAction, resolveCatalogTrigger } from "@/lib/workflow-node-label";
+import { resolveCatalogTrigger } from "@/lib/workflow-node-label";
 import { formatConfigValue } from "@/lib/workflow-presets";
 import { ANY_CONDITION, decodeConditionValue } from "@/lib/workflow-presets-json";
-import type { ActionNode, TriggerNode } from "@/lib/workflow-tree";
+import type { TriggerNode } from "@/lib/workflow-tree";
 
 function formatFieldSummaryValue(field: ConfigField, raw: unknown, resourceLabels?: Map<string, string>): string {
   if (raw === null || raw === undefined || raw === "") {
@@ -91,27 +91,6 @@ export function triggerNodeSummary(
   for (const field of fields) {
     const decoded = decodeConditionValue(field, node.conditions);
     const formatted = decoded === ANY_CONDITION ? "any" : formatFieldSummaryValue(field, decoded, resourceLabels);
-    if (formatted) {
-      parts.push(`${field.label}: ${formatted}`);
-    }
-  }
-  return parts;
-}
-
-/** Configured-value summary lines for an action step, for display without opening its settings. */
-export function actionNodeSummary(
-  node: ActionNode,
-  catalog: CatalogActionRow[],
-  resourceLabels?: Map<string, string>
-): string[] {
-  const catalogAction = resolveCatalogAction(node, catalog);
-  const fields = parseConfigFields(catalogAction?.configFields);
-  if (fields.length === 0) {
-    return [];
-  }
-  const parts: string[] = [];
-  for (const field of fields) {
-    const formatted = formatFieldSummaryValue(field, node.parameters[field.id], resourceLabels);
     if (formatted) {
       parts.push(`${field.label}: ${formatted}`);
     }

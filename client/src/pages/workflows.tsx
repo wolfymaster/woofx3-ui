@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
 import type { Doc, Id } from "@convex/_generated/dataModel";
 import type { WorkflowDefinition } from "@woofx3/api";
-import { useAction, useQuery } from "convex/react";
 import {
   ArrowLeft,
   Code,
@@ -52,9 +50,15 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BasicWorkflowEditor } from "@/components/workflows/basic-editor";
 import { NotRunningBadge } from "@/components/workflows/not-running-badge";
-import StepListEditor from "@/components/workflows/step-list-editor";
 import { TestRunSheet } from "@/components/workflows/test-run-sheet";
+import { WorkflowFlowEditor } from "@/components/workflows/workflow-flow-editor";
 import { WorkflowRunsPanel } from "@/components/workflows/workflow-runs-panel";
+import {
+  useDeleteWorkflowRequest,
+  useSetWorkflowEnabledRequest,
+  useUpdateWorkflowRequest,
+  useWorkflows,
+} from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
@@ -141,11 +145,11 @@ function WorkflowListScreen() {
   const { instance, isLoading: instanceLoading } = useInstance();
   const { catalogTriggers } = useWorkflowCatalog();
 
-  const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
+  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
   const { byId: notRunning } = useNotRunningWorkflows();
   useWorkflowHealthResyncOnMount();
-  const setEnabled = useAction(api.workflowActions.setEnabled);
-  const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
+  const setEnabled = useSetWorkflowEnabledRequest();
+  const deleteByEngineId = useDeleteWorkflowRequest();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [enabledFilter, setEnabledFilter] = useState<EnabledFilter>("all");
@@ -185,11 +189,7 @@ function WorkflowListScreen() {
     }
     setTogglingId(workflow.engineWorkflowId);
     try {
-      await setEnabled({
-        instanceId: instance._id as Id<"instances">,
-        engineWorkflowId: workflow.engineWorkflowId,
-        isEnabled: !workflow.isEnabled,
-      });
+      await setEnabled(instance._id as Id<"instances">, workflow.engineWorkflowId, !workflow.isEnabled);
     } catch (err) {
       toast({
         title: "Failed to toggle workflow",
@@ -207,10 +207,7 @@ function WorkflowListScreen() {
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId({
-        instanceId: instance._id as Id<"instances">,
-        engineWorkflowId: deleteTarget.engineWorkflowId,
-      });
+      await deleteByEngineId(instance._id as Id<"instances">, deleteTarget.engineWorkflowId);
       toast({ title: "Workflow deleted" });
       setDeleteTarget(null);
     } catch (err) {
@@ -442,9 +439,9 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
   const { toast } = useToast();
   const { instance } = useInstance();
 
-  const workflows = useQuery(api.workflows.list, instance ? { instanceId: instance._id as Id<"instances"> } : "skip");
-  const updateFromDefinition = useAction(api.workflowActions.updateFromDefinition);
-  const deleteByEngineId = useAction(api.workflowActions.deleteByEngineId);
+  const workflows = useWorkflows(instance ? (instance._id as Id<"instances">) : null);
+  const updateFromDefinition = useUpdateWorkflowRequest();
+  const deleteByEngineId = useDeleteWorkflowRequest();
   const notRunningHealth = useNotRunningWorkflows().byId.get(engineWorkflowId);
   const { catalogTriggers, triggerPresets } = useWorkflowCatalog();
   const search = useSearch();
@@ -519,11 +516,11 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     try {
       const def = unescapeDollarKeys(workflow.definition) as WorkflowDefinition;
-      await updateFromDefinition({
-        instanceId: instance._id as Id<"instances">,
+      await updateFromDefinition(
+        instance._id as Id<"instances">,
         engineWorkflowId,
-        definition: escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition,
-      });
+        escapeDollarKeys({ ...def, name: trimmed }) as WorkflowDefinition
+      );
       toast({ title: "Workflow name updated" });
     } catch (err) {
       toast({
@@ -551,11 +548,11 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     setIsSaving(true);
     try {
-      await updateFromDefinition({
-        instanceId: instance._id as Id<"instances">,
+      await updateFromDefinition(
+        instance._id as Id<"instances">,
         engineWorkflowId,
-        definition: escapeDollarKeys(currentDefinition) as WorkflowDefinition,
-      });
+        escapeDollarKeys(currentDefinition) as WorkflowDefinition
+      );
       toast({ title: "Workflow saved" });
     } catch (err) {
       toast({
@@ -574,7 +571,7 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
     }
     setIsDeleting(true);
     try {
-      await deleteByEngineId({ instanceId: instance._id as Id<"instances">, engineWorkflowId });
+      await deleteByEngineId(instance._id as Id<"instances">, engineWorkflowId);
       setDeleteDialogOpen(false);
       navigate(LIST_PATH);
     } catch (err) {
@@ -684,7 +681,17 @@ function WorkflowEditorScreen({ engineWorkflowId }: { engineWorkflowId: string }
 
       {/* The steps stay mounted behind the Runs tab: unmounting them would drop unsaved edits. */}
       <div className={cn("flex-1 overflow-hidden", tab !== "steps" && "hidden")}>
-        <StepListEditor onDefinitionChange={setCurrentDefinition} />
+        {instance ? (
+          <WorkflowFlowEditor
+            instanceId={instance._id as Id<"instances">}
+            engineWorkflowId={engineWorkflowId}
+            onDefinitionChange={setCurrentDefinition}
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
       </div>
       {tab === "runs" && instance && (
         <div className="flex-1 overflow-hidden">

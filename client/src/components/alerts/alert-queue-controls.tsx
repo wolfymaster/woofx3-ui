@@ -1,10 +1,9 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { ListX, Loader2, SkipForward } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useEngineCapabilities } from "@/hooks/use-engine-capabilities";
+import { useClearAlertQueueRequest, useSkipCurrentAlertRequest } from "@/engine/hooks/use-alert-queue";
+import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import { clearResultToast, skipResultToast } from "@/lib/alert-queue";
 import { ALERT_QUEUE_CONTROL_CAPABILITIES, capabilitySupport } from "@/lib/engine-capabilities";
@@ -25,8 +24,8 @@ type Pending = "skip" | "clear" | null;
  * because it throws away alerts a viewer paid for.
  */
 export function AlertQueueControls({ instanceId, className }: AlertQueueControlsProps) {
-  const skipCurrent = useAction(api.alertActions.skipCurrent);
-  const clearQueue = useAction(api.alertActions.clearQueue);
+  const skipCurrent = useSkipCurrentAlertRequest();
+  const clearQueue = useClearAlertQueueRequest();
   const { toast } = useToast();
   const [pending, setPending] = useState<Pending>(null);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -42,9 +41,9 @@ export function AlertQueueControls({ instanceId, className }: AlertQueueControls
     setPending(kind);
     try {
       if (kind === "skip") {
-        toast(skipResultToast(await skipCurrent({ instanceId })));
+        toast(skipResultToast(await skipCurrent(instanceId)));
       } else {
-        toast(clearResultToast(await clearQueue({ instanceId })));
+        toast(clearResultToast(await clearQueue(instanceId)));
       }
     } catch (err) {
       toast({

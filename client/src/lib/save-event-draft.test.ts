@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Id } from "@convex/_generated/dataModel";
+import type { WorkflowRecord } from "@/engine/types";
 import { type EventEditorState, getDraft, isDraftDirty, setDraft, updateDraftValue } from "@/lib/event-drafts";
 import { eventEditorStateFor } from "@/lib/event-workflow-state";
-import { saveEventDraft } from "@/lib/save-event-draft";
+import { type EngineWorkflowWriters, saveEventDraft } from "@/lib/save-event-draft";
 import { UNCONDITIONAL_TRIGGER_ID } from "@/lib/trigger-projection";
 import type { TriggerPreset } from "@/lib/workflow-presets";
 
@@ -28,32 +29,23 @@ const anyTrigger: EventEditorState = {
 
 /** The engine's side: definitions as sent, and the rows the workflows query then returns. */
 function fakeEngine() {
-  const rows: Doc<"workflows">[] = [];
+  const rows: WorkflowRecord[] = [];
   const store = (engineWorkflowId: string, definition: unknown) => {
-    const row = { engineWorkflowId, definition, isEnabled: true } as Doc<"workflows">;
-    rows.splice(0, rows.length, row);
+    rows.splice(0, rows.length, { engineWorkflowId, definition, isEnabled: true } as WorkflowRecord);
   };
-  return {
-    rows,
-    writers: {
-      instanceId: "instance-1" as Id<"instances">,
-      createFromDefinition: async ({ definition }: { definition: never }) => {
-        store("wf-1", definition);
-        return { engineWorkflowId: "wf-1" };
-      },
-      updateFromDefinition: async ({
-        engineWorkflowId,
-        definition,
-      }: {
-        engineWorkflowId: string;
-        definition: never;
-      }) => {
-        store(engineWorkflowId, definition);
-        return {};
-      },
-      setEnabled: async () => ({}),
+  const writers: EngineWorkflowWriters = {
+    instanceId: "instance-1" as Id<"instances">,
+    createFromDefinition: async (_instanceId, definition) => {
+      store("wf-1", definition);
+      return { engineWorkflowId: "wf-1" };
     },
+    updateFromDefinition: async (_instanceId, engineWorkflowId, definition) => {
+      store(engineWorkflowId, definition);
+      return {};
+    },
+    setEnabled: async () => ({}),
   };
+  return { rows, writers };
 }
 
 function open(state: EventEditorState) {
@@ -108,11 +100,11 @@ describe("saveEventDraft", () => {
 
   test("keeps edits made while the save was in flight, still unsaved", async () => {
     open(anyTrigger);
-    const writers = {
+    const writers: EngineWorkflowWriters = {
       ...engine.writers,
-      createFromDefinition: async (args: { instanceId: Id<"instances">; definition: never }) => {
+      createFromDefinition: async (instanceId, definition) => {
         updateDraftValue(EVENT, (value) => ({ ...value, name: "Renamed meanwhile" }));
-        return engine.writers.createFromDefinition(args);
+        return engine.writers.createFromDefinition(instanceId, definition);
       },
     };
 

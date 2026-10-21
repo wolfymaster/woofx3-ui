@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, query } from "./_generated/server";
-import { parseKindRef } from "./lib/resourceKinds";
+import { parseKindRef, rowsOfKind } from "./lib/resourceKinds";
 import { isInstanceMember } from "./lib/teamAccess";
 import { findResourceKind } from "./resourceKinds";
 
@@ -69,11 +69,51 @@ export const listByKind = query({
       .withIndex("by_instance_kind", (q) => q.eq("instanceId", instanceId).eq("kind", parsed.kind))
       .collect();
     const owner = parsed.module ?? (await findResourceKind(ctx, instanceId, kind))?.moduleName;
-    if (owner === undefined) {
-      return rows;
+    return rowsOfKind(rows, parsed.kind, owner);
+  },
+});
+
+const MAX_KINDS_PER_LIST = 32;
+const MAX_INSTANCES_PER_KIND = 500;
+
+/**
+ * The instances of several kinds at once, each matched as listByKind matches it,
+ * with an instance two of the kinds both pick listed once. One query serves a
+ * screen whose set of kinds is only known at run time, such as the action
+ * picker's, which reads them from the installed actions. A malformed kind picks
+ * nothing.
+ */
+export const listByKinds = query({
+  args: { instanceId: v.id("instances"), kinds: v.array(v.string()) },
+  handler: async (ctx, { instanceId, kinds }) => {
+    const requested = [...new Set(kinds)];
+    if (requested.length > MAX_KINDS_PER_LIST) {
+      throw new Error(`listByKinds takes at most ${MAX_KINDS_PER_LIST} kinds, got ${requested.length}`);
     }
-    const prefix = `${owner}:${parsed.kind}:`;
-    return rows.filter((row) => row.canonicalId.startsWith(prefix));
+    if (!(await isInstanceMember(ctx, instanceId))) {
+      return [];
+    }
+    const rowsByName = new Map<string, Doc<"moduleResourceInstances">[]>();
+    const picked = new Map<string, Doc<"moduleResourceInstances">>();
+    for (const kind of requested) {
+      const parsed = parseKindRef(kind);
+      if (!parsed) {
+        continue;
+      }
+      let rows = rowsByName.get(parsed.kind);
+      if (!rows) {
+        rows = await ctx.db
+          .query("moduleResourceInstances")
+          .withIndex("by_instance_kind", (q) => q.eq("instanceId", instanceId).eq("kind", parsed.kind))
+          .take(MAX_INSTANCES_PER_KIND);
+        rowsByName.set(parsed.kind, rows);
+      }
+      const owner = parsed.module ?? (await findResourceKind(ctx, instanceId, kind))?.moduleName;
+      for (const row of rowsOfKind(rows, parsed.kind, owner)) {
+        picked.set(row.canonicalId, row);
+      }
+    }
+    return [...picked.values()];
   },
 });
 

@@ -16,6 +16,10 @@ describe("matchOpsRoute", () => {
       accountId: "k1",
     });
     expect(matchOpsRoute("GET", "/api/ops/engines")).toEqual({ method: "GET", name: "engines.list" });
+    expect(matchOpsRoute("GET", "/api/ops/engines/capabilities")).toEqual({
+      method: "GET",
+      name: "engines.capabilities",
+    });
     expect(matchOpsRoute("GET", "/api/ops/engines/by-maintenance-id/0a1b2c3d-4e5f")).toEqual({
       method: "GET",
       name: "engines.byMaintenanceId",
@@ -53,6 +57,15 @@ describe("matchOpsRoute", () => {
     }
     expect(matchOpsRoute("POST", "/api/ops/engines/i1/deprovision")).toBeNull();
     expect(matchOpsRoute("GET", "/api/ops/engines/i1/upgrade")).toBeNull();
+  });
+
+  it("names the storage limits write", () => {
+    expect(matchOpsRoute("POST", "/api/ops/instances/i1/storage-limits")).toEqual({
+      method: "POST",
+      name: "instances.setStorageLimits",
+      instanceId: "i1",
+    });
+    expect(matchOpsRoute("GET", "/api/ops/instances/i1/storage-limits")).toBeNull();
   });
 
   it("serves nothing else", () => {

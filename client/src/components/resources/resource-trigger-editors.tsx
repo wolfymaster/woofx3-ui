@@ -1,11 +1,10 @@
-import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { bareKind } from "@convex/lib/resourceKinds";
-import { useQuery } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
+import { EventTriggerList } from "@/components/alerts/event-trigger-list";
 import type { ResourceInstanceDoc } from "@/components/resources/resource-kind-page";
-import { EventWorkflowEditor } from "@/components/triggers/event-workflow-editor";
+import { useWorkflows } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
 import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { resourceTriggers } from "@/lib/resource-triggers";
@@ -16,8 +15,8 @@ import type { TriggerPreset } from "@/lib/workflow-presets";
  * kind's events offer (a timer starting, pausing, ending), each showing only the
  * triggers pinned to this instance.
  *
- * These are the same workflows the Alerts screen edits — one per event, with a
- * condition per instance — so a resource page adds no second way to react to an
+ * These are the same workflows the Alerts screen edits — one per trigger, pinned to
+ * this instance by a condition — so a resource page adds no second way to react to an
  * event, and an edit here shows up in the workflow builder like any other.
  */
 export function ResourceTriggerEditors({
@@ -31,8 +30,8 @@ export function ResourceTriggerEditors({
   triggerDetail?: (preset: TriggerPreset) => ReactNode;
 }) {
   const { instance: engineInstance } = useInstance();
-  const { triggerPresets, actionPresets, loading } = useWorkflowCatalog();
-  const workflows = useQuery(api.workflows.list, engineInstance ? { instanceId: engineInstance._id } : "skip");
+  const { triggerPresets, loading } = useWorkflowCatalog();
+  const workflows = useWorkflows(engineInstance ? engineInstance._id : null);
   const triggers = useMemo(() => resourceTriggers(triggerPresets, kind), [triggerPresets, kind]);
 
   if (loading || workflows === undefined) {
@@ -46,17 +45,16 @@ export function ResourceTriggerEditors({
   return (
     <div className="flex flex-col gap-12 pt-4" data-testid={`resource-triggers-${bareKind(kind)}`}>
       {triggers.map(({ preset, fieldId }) => (
-        <EventWorkflowEditor
+        <EventTriggerList
           key={preset.id}
           triggerPreset={preset}
-          actionPresets={actionPresets}
           workflows={workflows as Doc<"workflows">[]}
           breadcrumb={[]}
           headingLevel="h2"
-          scope={{ fieldId, value: instance.canonicalId, label }}
+          pin={{ fieldId, value: instance.canonicalId, label }}
         >
           {triggerDetail?.(preset)}
-        </EventWorkflowEditor>
+        </EventTriggerList>
       ))}
     </div>
   );

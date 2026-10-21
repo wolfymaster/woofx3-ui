@@ -1,8 +1,7 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { StreamRecapEngineDetail } from "@convex/lib/streamRecap";
-import { useAction } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
+import { useRecapEngineDetailRequest } from "@/engine/hooks/use-stream-recap";
 
 export type StreamRecapEngineState =
   | { kind: "loading" }
@@ -24,7 +23,7 @@ export function useStreamRecapEngineDetail(
   enabled: boolean,
   refreshKey = 0
 ) {
-  const loadEngineDetail = useAction(api.streamRecap.loadEngineDetail);
+  const loadEngineDetail = useRecapEngineDetailRequest();
   const [state, setState] = useState<StreamRecapEngineState>({ kind: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -35,7 +34,7 @@ export function useStreamRecapEngineDetail(
     }
     let cancelled = false;
     setState((prev) => (prev.kind === "loaded" ? prev : { kind: "loading" }));
-    loadEngineDetail({ instanceId, sessionId })
+    loadEngineDetail(instanceId, sessionId)
       .then((detail) => {
         if (!cancelled) {
           setState({ kind: "loaded", detail });

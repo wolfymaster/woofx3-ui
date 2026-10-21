@@ -1,39 +1,39 @@
 import type { AggregationConfig } from "@woofx3/api";
-import { useEffect, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
+import { DurationInput } from "@/components/flow/duration-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { CatalogTriggerRow } from "@/hooks/use-workflow-catalog";
 import {
   DEFAULT_AGGREGATION,
   DEFAULT_ON_TIMEOUT,
   DELAY_BOUNDS,
-  type DurationBounds,
   type DurationUnit,
   describeWaitTimeout,
-  durationAmount,
   type EventWaitConfig,
   formatGoDuration,
-  parseDurationInput,
+  parseAggregationField,
   parseGoDuration,
-  pickDurationUnit,
   setWaitTimeoutEnabled,
   switchWaitType,
   TIMEOUT_BOUNDS,
   type WaitConfig,
   type WaitType,
+  waitConditionProblem,
 } from "@/lib/wait-config";
-import type { VariableOption } from "@/lib/workflow-variables";
+import { type VariableOption, waitEventVariables } from "@/lib/workflow-variables";
 import { ConditionEditor } from "./condition-editor";
 
 interface WaitEditorProps {
   wait: WaitConfig;
   onChange: (wait: WaitConfig) => void;
-  /** Offered when the user types "{" in the event, sum-field, or match-condition inputs. */
-  availableVariables?: VariableOption[];
+  /** Suggested as events to wait for, and describe the fields those events carry. */
+  catalogTriggers?: CatalogTriggerRow[];
 }
 
-export function WaitEditor({ wait, onChange, availableVariables = [] }: WaitEditorProps) {
+export function WaitEditor({ wait, onChange, catalogTriggers = [] }: WaitEditorProps) {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -63,7 +63,7 @@ export function WaitEditor({ wait, onChange, availableVariables = [] }: WaitEdit
           />
         </div>
       ) : (
-        <EventWaitFields wait={wait} onChange={onChange} availableVariables={availableVariables} />
+        <EventWaitFields wait={wait} onChange={onChange} catalogTriggers={catalogTriggers} />
       )}
     </div>
   );
@@ -71,121 +71,56 @@ export function WaitEditor({ wait, onChange, availableVariables = [] }: WaitEdit
 
 const DELAY_UNITS: readonly DurationUnit[] = ["seconds", "minutes"];
 const TIMEOUT_UNITS: readonly DurationUnit[] = ["seconds", "minutes", "hours"];
-const UNIT_LABELS: Record<DurationUnit, string> = { seconds: "Seconds", minutes: "Minutes", hours: "Hours" };
-
-/**
- * An amount plus a unit picker. Keeps the typed text as a draft so an out-of-range or
- * half-typed entry can show its error without being saved; only a valid duration reaches
- * `onChange`. `valueMs` is null when the stored value is not a duration the editor can read.
- */
-function DurationInput({
-  id,
-  valueMs,
-  units,
-  bounds,
-  onChange,
-  hint,
-}: {
-  id: string;
-  valueMs: number | null;
-  units: readonly DurationUnit[];
-  bounds: DurationBounds;
-  onChange: (durationMs: number) => void;
-  hint?: string;
-}) {
-  const [unit, setUnit] = useState<DurationUnit>(() =>
-    valueMs === null ? units[0] : pickDurationUnit(valueMs, units)
-  );
-  const [text, setText] = useState(() => (valueMs === null ? "" : String(durationAmount(valueMs, unit))));
-  const parsed = parseDurationInput(text, unit, bounds);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only an outside change of the stored duration resets the draft; typing must not
-  useEffect(() => {
-    if (valueMs === null) {
-      return;
+/** Each event a catalog trigger listens for, once, as a suggestion for the wait's event. */
+function catalogEventSuggestions(catalogTriggers: CatalogTriggerRow[]): { event: string; name: string }[] {
+  const byEvent = new Map<string, string>();
+  for (const row of catalogTriggers) {
+    if (row.event && !byEvent.has(row.event)) {
+      byEvent.set(row.event, row.name);
     }
-    const current = parseDurationInput(text, unit, bounds);
-    if (!current.ok || current.durationMs !== valueMs) {
-      const nextUnit = pickDurationUnit(valueMs, units);
-      setUnit(nextUnit);
-      setText(String(durationAmount(valueMs, nextUnit)));
-    }
-  }, [valueMs]);
-
-  const commit = (nextText: string, nextUnit: DurationUnit) => {
-    setText(nextText);
-    setUnit(nextUnit);
-    const result = parseDurationInput(nextText, nextUnit, bounds);
-    if (result.ok && result.durationMs !== valueMs) {
-      onChange(result.durationMs);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex gap-2">
-        <Input
-          id={id}
-          type="number"
-          inputMode="decimal"
-          min={0}
-          step="any"
-          value={text}
-          onChange={(e) => commit(e.target.value, unit)}
-          aria-invalid={!parsed.ok}
-          className="flex-1"
-          data-testid={`input-${id}`}
-        />
-        <Select value={unit} onValueChange={(value) => commit(text, value as DurationUnit)}>
-          <SelectTrigger className="w-32" data-testid={`select-${id}-unit`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {units.map((u) => (
-              <SelectItem key={u} value={u}>
-                {UNIT_LABELS[u]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      {parsed.ok ? (
-        hint && <p className="text-xs text-muted-foreground">{hint}</p>
-      ) : (
-        <p className="text-xs text-destructive" data-testid={`text-${id}-error`}>
-          {parsed.message}
-        </p>
-      )}
-    </div>
-  );
+  }
+  return Array.from(byEvent, ([event, name]) => ({ event, name }));
 }
 
 function EventWaitFields({
   wait,
   onChange,
-  availableVariables,
+  catalogTriggers,
 }: {
   wait: EventWaitConfig;
   onChange: (wait: WaitConfig) => void;
-  availableVariables: VariableOption[];
+  catalogTriggers: CatalogTriggerRow[];
 }) {
   const isAggregation = wait.type === "aggregation";
+  const strategy = wait.aggregation?.strategy ?? DEFAULT_AGGREGATION.strategy;
+  const eventListId = useId();
+  const eventSuggestions = useMemo(() => catalogEventSuggestions(catalogTriggers), [catalogTriggers]);
+  const eventVariables = useMemo(() => waitEventVariables(wait.event, catalogTriggers), [wait.event, catalogTriggers]);
 
   return (
     <>
       <div className="space-y-2">
         <Label htmlFor="wait-event">Event</Label>
-        <VariableAwareInput
+        <Input
           id="wait-event"
+          list={eventListId}
           value={wait.event}
-          onChange={(event) => onChange({ ...wait, event })}
+          onChange={(e) => onChange({ ...wait, event: e.target.value })}
           placeholder="chat.command.hug"
           className="font-mono text-xs"
-          availableVariables={availableVariables}
           data-testid="input-wait-event"
         />
+        <datalist id={eventListId}>
+          {eventSuggestions.map(({ event, name }) => (
+            <option key={event} value={event}>
+              {name}
+            </option>
+          ))}
+        </datalist>
         <p className="text-xs text-muted-foreground">
-          {isAggregation ? "Event stream to aggregate over." : "NATS event subject to wait for."}
+          {isAggregation
+            ? "The event to count or add up. Matched exactly against each event's type."
+            : "The event to wait for. Matched exactly against each event's type."}
         </p>
       </div>
 
@@ -194,7 +129,7 @@ function EventWaitFields({
           <div className="space-y-2">
             <Label>Strategy</Label>
             <Select
-              value={wait.aggregation?.strategy ?? "count"}
+              value={strategy}
               onValueChange={(value) =>
                 onChange({
                   ...wait,
@@ -233,24 +168,16 @@ function EventWaitFields({
               data-testid="input-wait-threshold"
             />
           </div>
-          {wait.aggregation?.strategy === "sum" && (
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="wait-aggregation-field">Field to sum</Label>
-              <VariableAwareInput
-                id="wait-aggregation-field"
-                value={wait.aggregation?.field ?? ""}
-                onChange={(field) =>
-                  onChange({
-                    ...wait,
-                    aggregation: { ...(wait.aggregation ?? DEFAULT_AGGREGATION), field },
-                  })
-                }
-                placeholder="${trigger.data.amount}"
-                className="font-mono text-xs"
-                availableVariables={availableVariables}
-                data-testid="input-wait-aggregation-field"
-              />
-            </div>
+          {strategy !== "count" && (
+            <AggregationFieldInput
+              label={strategy === "sum" ? "Field to sum" : "Field to compare"}
+              field={wait.aggregation?.field}
+              numericFields={eventVariables.filter((v) => v.type === "number")}
+              onChange={(field) => {
+                const { field: _previous, ...aggregation } = wait.aggregation ?? DEFAULT_AGGREGATION;
+                onChange({ ...wait, aggregation: field === undefined ? aggregation : { ...aggregation, field } });
+              }}
+            />
           )}
           <div className="space-y-2 col-span-2">
             <Label htmlFor="wait-aggregation-window">Time window</Label>
@@ -274,15 +201,72 @@ function EventWaitFields({
 
       <div className="space-y-2">
         <Label>Match conditions (optional)</Label>
-        <p className="text-xs text-muted-foreground">Only resume when the event's payload also matches these.</p>
+        <p className="text-xs text-muted-foreground">
+          Only resume when the event's payload also matches these. They check the event this step waits for, not the
+          trigger or earlier steps.
+        </p>
         <ConditionEditor
           conditions={wait.conditions ?? []}
           onChange={(conditions) => onChange({ ...wait, conditions: conditions.length > 0 ? conditions : undefined })}
           addLabel="Add match condition"
-          availableVariables={availableVariables}
+          availableVariables={eventVariables}
+          rowProblem={waitConditionProblem}
         />
       </div>
     </>
+  );
+}
+
+/**
+ * The path an aggregation reads its number from. Keeps the typed text as a draft so a
+ * path the engine could not follow shows its error without being saved, as DurationInput
+ * does. A field picked from the variable menu arrives as a reference and is shown as the
+ * plain path it is saved as.
+ */
+function AggregationFieldInput({
+  label,
+  field,
+  numericFields,
+  onChange,
+}: {
+  label: string;
+  field: string | undefined;
+  numericFields: VariableOption[];
+  onChange: (field: string | undefined) => void;
+}) {
+  const [text, setText] = useState(field ?? "");
+  const parsed = parseAggregationField(text);
+
+  const commit = (nextText: string) => {
+    const result = parseAggregationField(nextText);
+    setText(result.ok && result.field !== undefined ? result.field : nextText);
+    if (result.ok && result.field !== field) {
+      onChange(result.field);
+    }
+  };
+
+  return (
+    <div className="space-y-2 col-span-2">
+      <Label htmlFor="wait-aggregation-field">{label}</Label>
+      <VariableAwareInput
+        id="wait-aggregation-field"
+        value={text}
+        onChange={commit}
+        placeholder="data.amount"
+        className="font-mono text-xs"
+        availableVariables={numericFields}
+        data-testid="input-wait-aggregation-field"
+      />
+      {parsed.ok ? (
+        <p className="text-xs text-muted-foreground">
+          A path into the event, like data.amount. Left empty, the event's amount or value is used.
+        </p>
+      ) : (
+        <p className="text-xs text-destructive" data-testid="text-wait-aggregation-field-error">
+          {parsed.message}
+        </p>
+      )}
+    </div>
   );
 }
 

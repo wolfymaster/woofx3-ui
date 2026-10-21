@@ -1,10 +1,8 @@
-import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
-import { useStore } from "@nanostores/react";
-import { useAction, useQuery } from "convex/react";
 import { useEffect, useMemo } from "react";
+import { useEngineHealth } from "@/engine/hooks/use-engine-health";
+import { useNotRunningWorkflowList, useWorkflowHealthResyncRequest } from "@/engine/hooks/use-workflows";
 import { useInstance } from "@/hooks/use-instance";
-import { $engineConnected } from "@/lib/transport/engine-connection";
 import { type NotRunningWorkflow, notRunningById } from "@/lib/workflow-health";
 
 /**
@@ -17,10 +15,7 @@ export function useNotRunningWorkflows(): {
   list: readonly NotRunningWorkflow[] | undefined;
 } {
   const { instance } = useInstance();
-  const list = useQuery(
-    api.workflowHealth.listNotRunning,
-    instance ? { instanceId: instance._id as Id<"instances"> } : "skip"
-  );
+  const list = useNotRunningWorkflowList(instance ? (instance._id as Id<"instances">) : null);
   const byId = useMemo(() => notRunningById(list), [list]);
   return { byId, list };
 }
@@ -31,14 +26,14 @@ export function useNotRunningWorkflows(): {
  */
 export function useWorkflowHealthResyncOnMount(): void {
   const { instance } = useInstance();
-  const resync = useAction(api.workflowHealth.resync);
+  const resync = useWorkflowHealthResyncRequest();
   const instanceId = instance?._id as Id<"instances"> | undefined;
 
   useEffect(() => {
     if (!instanceId) {
       return;
     }
-    resync({ instanceId, trigger: "mount" }).catch(() => undefined);
+    resync(instanceId, "mount").catch(() => undefined);
   }, [instanceId, resync]);
 }
 
@@ -49,14 +44,14 @@ export function useWorkflowHealthResyncOnMount(): void {
  */
 export function useWorkflowHealthResyncOnReconnect(): void {
   const { instance } = useInstance();
-  const connected = useStore($engineConnected);
-  const resync = useAction(api.workflowHealth.resync);
+  const { connected } = useEngineHealth();
+  const resync = useWorkflowHealthResyncRequest();
   const instanceId = instance?._id as Id<"instances"> | undefined;
 
   useEffect(() => {
     if (!instanceId || !connected) {
       return;
     }
-    resync({ instanceId, trigger: "reconnect" }).catch(() => undefined);
+    resync(instanceId, "reconnect").catch(() => undefined);
   }, [instanceId, connected, resync]);
 }

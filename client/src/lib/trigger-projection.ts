@@ -1,6 +1,6 @@
-import type { Doc } from "@convex/_generated/dataModel";
 import type { ConditionConfig, WorkflowDefinition } from "@woofx3/api";
 import type { TaskDefinition } from "@woofx3/api/workflow-definition";
+import type { WorkflowRecord } from "@/engine/types";
 import { unescapeDollarKeys } from "@/lib/dollar-keys";
 import type { TriggerConfigValues } from "@/lib/workflow-presets";
 
@@ -83,7 +83,7 @@ type EngineTask = TaskDefinition & { function?: string; $ref?: string; disabled?
 const RESULT_REFERENCE = /^\$\{([A-Za-z0-9_-]+)\.result\}$/;
 
 /** What projecting reads from a workflow row; a definition just saved projects the same way. */
-export type ProjectableWorkflow = Pick<Doc<"workflows">, "engineWorkflowId" | "definition" | "isEnabled">;
+export type ProjectableWorkflow = Pick<WorkflowRecord, "engineWorkflowId" | "definition" | "isEnabled">;
 
 export function projectWorkflow(row: ProjectableWorkflow): ProjectionResult {
   const definition = unescapeDollarKeys(row.definition) as WorkflowDefinition | undefined;

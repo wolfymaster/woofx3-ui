@@ -17,7 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useLiveState } from "@/hooks/use-live-state";
+import { useLiveState } from "@/engine/hooks/use-live-state";
 import { upgradeHeading, upgradeResult } from "@/lib/engine-upgrade";
 import { engineReleaseNotesUrl } from "@/lib/engine-version";
 import { ProvisioningSteps } from "./provisioning-steps";

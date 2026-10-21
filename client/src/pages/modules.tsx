@@ -1,14 +1,14 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import { installedListing } from "@convex/lib/marketplaceInstallIdentity";
-import { oauthErrorMessage } from "@convex/lib/oauthErrors";
 import type { ModuleDetailResult } from "@convex/moduleDetail";
-import { useAction, useConvexAuth, useQuery } from "convex/react";
-import { Check, Loader2, X, XCircle } from "lucide-react";
+import { useAction, useQuery } from "convex/react";
+import { Loader2, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { PageIntro } from "@/components/common/page-intro";
 import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/module-detail-panel";
+import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
 import { ModuleSidebar } from "@/components/modules/module-sidebar";
 import { ModuleStore } from "@/components/modules/module-store";
@@ -16,9 +16,11 @@ import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dia
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
 import { useModuleInstall } from "@/hooks/use-module-install";
+import { useModuleOAuthReturn } from "@/hooks/use-module-oauth-return";
 import { bareModuleKey } from "@/lib/module-key";
 
 interface ModuleListItem {
@@ -32,21 +34,6 @@ interface ModuleListItem {
   moduleKey?: string;
   isInstalled: boolean;
   status?: "pending" | "delivering" | "installed" | "failed";
-}
-
-/**
- * A connect of a module's `oauth[]` integration (moduleOAuth.ts) the OAuth
- * callback sent the browser back with. `label` names the provider to the
- * streamer.
- */
-type OAuthResult =
-  | { status: "finishing"; connectCode: string; label: string }
-  | { status: "connected"; label: string }
-  | { status: "error"; message: string };
-
-/** The provider's name for messages: the integration id, capitalized. */
-function integrationLabel(integration: string): string {
-  return integration.charAt(0).toUpperCase() + integration.slice(1);
 }
 
 type SelectedModule =
@@ -75,62 +62,7 @@ export default function Modules() {
   );
   const catalog = useMarketplaceCatalog(instance?._id ?? null);
 
-  // Set from the query string an integration's OAuth callback redirects with.
-  // Only the integration, a one-time code and an error code are read from it;
-  // the text shown is fixed (lib/oauthErrors.ts). An `oauth_code` is redeemed
-  // by moduleOAuth.finish, which only the member who started the connect can do.
-  const [oauthResult, setOauthResult] = useState<OAuthResult | null>(() => {
-    const params = new URLSearchParams(window.location.search);
-    const integration = params.get("integration");
-    if (!integration) {
-      return null;
-    }
-    const label = integrationLabel(integration);
-    const oauthCode = params.get("oauth_code");
-    if (oauthCode) {
-      return { status: "finishing", connectCode: oauthCode, label };
-    }
-    if (params.get("status") === "error") {
-      return { status: "error", message: oauthErrorMessage(params.get("error"), label) };
-    }
-    return null;
-  });
-
-  const finishModuleOAuth = useAction(api.moduleOAuth.finish);
-  const { isAuthenticated } = useConvexAuth();
-  const finishingCodeRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (
-      !isAuthenticated ||
-      oauthResult?.status !== "finishing" ||
-      finishingCodeRef.current === oauthResult.connectCode
-    ) {
-      return;
-    }
-    finishingCodeRef.current = oauthResult.connectCode;
-    const { label } = oauthResult;
-    finishModuleOAuth({ code: oauthResult.connectCode })
-      .then((result) => {
-        setOauthResult(
-          result.ok
-            ? { status: "connected", label }
-            : { status: "error", message: oauthErrorMessage(result.error, label) }
-        );
-      })
-      .catch((err: unknown) => {
-        console.error("[modules] finishing the OAuth connect failed:", String(err));
-        setOauthResult({ status: "error", message: oauthErrorMessage(null, label) });
-      });
-  }, [finishModuleOAuth, isAuthenticated, oauthResult]);
-
-  const oauthUrlStrippedRef = useRef(false);
-  useEffect(() => {
-    if (!oauthResult || oauthUrlStrippedRef.current) {
-      return;
-    }
-    oauthUrlStrippedRef.current = true;
-    navigate(location, { replace: true });
-  }, [location, navigate, oauthResult]);
+  const [oauthResult, dismissOauthResult] = useModuleOAuthReturn();
 
   const [selectedModule, setSelectedModule] = useState<SelectedModule | null>(null);
   const [uninstallTarget, setUninstallTarget] = useState<{
@@ -141,7 +73,7 @@ export default function Modules() {
   } | null>(null);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
 
-  const getModuleDetail = useAction(api.moduleDetail.getModuleDetail);
+  const getModuleDetail = useModuleDetailRequest();
   const [moduleDetail, setModuleDetail] = useState<ModuleDetailResult | null>(null);
   const [moduleDetailLoading, setModuleDetailLoading] = useState(false);
   const [moduleDetailError, setModuleDetailError] = useState<string | null>(null);
@@ -249,7 +181,7 @@ export default function Modules() {
     setModuleDetail(null);
     setModuleDetailError(null);
     let cancelled = false;
-    void getModuleDetail({ instanceId: instance._id, moduleId: detailModuleId })
+    void getModuleDetail(instance._id, detailModuleId)
       .then((detail) => {
         if (!cancelled) {
           setModuleDetail(detail);
@@ -422,31 +354,7 @@ export default function Modules() {
             ) : meta ? (
               <div className="flex-1 min-h-0 flex flex-col">
                 {oauthResult && (
-                  <div
-                    className={`mx-6 mt-4 flex items-center justify-between gap-3 rounded-md border px-3 py-2 text-xs ${
-                      oauthResult.status !== "error"
-                        ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-600"
-                        : "border-destructive/30 bg-destructive/5 text-destructive"
-                    }`}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      {oauthResult.status === "finishing" ? (
-                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-                      ) : oauthResult.status === "connected" ? (
-                        <Check className="h-3.5 w-3.5 shrink-0" />
-                      ) : (
-                        <XCircle className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                      {oauthResult.status === "finishing"
-                        ? `Finishing the ${oauthResult.label} connection...`
-                        : oauthResult.status === "connected"
-                          ? `${oauthResult.label} connected successfully.`
-                          : oauthResult.message}
-                    </span>
-                    <button type="button" onClick={() => setOauthResult(null)} className="shrink-0">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                  <ModuleOAuthResultBanner result={oauthResult} onDismiss={dismissOauthResult} className="mx-6 mt-4" />
                 )}
                 <div className="flex-1 min-h-0">
                   <ModuleDetailPanel

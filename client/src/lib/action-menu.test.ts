@@ -1,14 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Square } from "lucide-react";
-import {
-  ALL_SECTIONS,
-  actionGroupHeading,
-  actionMenuGroups,
-  actionPlacement,
-  actionSectionCounts,
-  BUILTIN_MODULE_LABEL,
-  flattenActionMenu,
-} from "./action-menu";
+import { actionGroupHeading, actionMenuGroups, actionPlacement, BUILTIN_MODULE_LABEL } from "./action-menu";
 import type { ActionPreset } from "./workflow-presets";
 
 function action(name: string, source: string, description = "", taxonomy?: string[]): ActionPreset {
@@ -35,8 +27,8 @@ const PRESETS: ActionPreset[] = [
   action("Alert", "woofx3", "Play an on-stream alert.", ["overlay.alerts", "alert.renderer"]),
 ];
 
-function menu(query: string, section?: string) {
-  return actionMenuGroups(PRESETS, query, section).map((group) => ({
+function menu(query: string) {
+  return actionMenuGroups(PRESETS, query).map((group) => ({
     section: group.sectionLabel,
     group: group.groupLabel,
     names: group.actions.map((preset) => preset.name),
@@ -148,11 +140,6 @@ describe("actionMenuGroups", () => {
     ]);
   });
 
-  test("a selected section narrows the menu to it", () => {
-    expect(menu("", "taxonomy:platform").map((group) => group.group)).toEqual(["Govee", "OBS"]);
-    expect(menu("", ALL_SECTIONS)).toHaveLength(7);
-  });
-
   test("an engine sending no taxonomy reads as one section per module", () => {
     const untagged = PRESETS.map((preset) => ({ ...preset, taxonomy: undefined }));
     expect(actionMenuGroups(untagged, "").map((group) => group.sectionLabel)).toEqual([
@@ -168,47 +155,10 @@ describe("actionMenuGroups", () => {
   });
 });
 
-describe("actionSectionCounts", () => {
-  test("counts every section's actions in the order the sections appear", () => {
-    expect(actionSectionCounts(PRESETS, "")).toEqual([
-      { key: "taxonomy:workflow", label: "Workflow", count: 1 },
-      { key: "taxonomy:overlay", label: "Overlays", count: 1 },
-      { key: "taxonomy:platform", label: "Platforms", count: 2 },
-      { key: "taxonomy:tools", label: "Stream tools", count: 3 },
-      { key: "module:Twitch Platform", label: "Twitch Platform", count: 1 },
-    ]);
-  });
-
-  test("counts only what the query matches", () => {
-    expect(actionSectionCounts(PRESETS, "counter")).toEqual([
-      { key: "taxonomy:tools", label: "Stream tools", count: 2 },
-    ]);
-  });
-});
-
-describe("flattenActionMenu", () => {
-  test("walks groups in the order they are shown", () => {
-    expect(flattenActionMenu(actionMenuGroups(PRESETS, "")).map((preset) => preset.name)).toEqual([
-      "Print",
-      "Alert",
-      "Set Govee light colour",
-      "Switch OBS scene",
-      "Decrement counter",
-      "Increment counter",
-      "Add to queue",
-      "Send chat message",
-    ]);
-  });
-});
-
 describe("actionGroupHeading", () => {
-  const headings = (showSection: boolean) => {
-    const groups = actionMenuGroups(PRESETS, "");
-    return groups.map((group, index) => actionGroupHeading(group, groups[index - 1], showSection));
-  };
-
   test("names the section over its first group, then each group's own heading", () => {
-    expect(headings(true)).toEqual([
+    const groups = actionMenuGroups(PRESETS, "");
+    expect(groups.map((group, index) => actionGroupHeading(group, groups[index - 1]))).toEqual([
       "Workflow",
       "Overlays › Alerts",
       "Platforms › Govee",
@@ -217,9 +167,5 @@ describe("actionGroupHeading", () => {
       "Queues",
       "Twitch Platform",
     ]);
-  });
-
-  test("leaves the section out when something else names it", () => {
-    expect(headings(false)).toEqual([null, "Alerts", "Govee", "OBS", "Counters", "Queues", null]);
   });
 });
