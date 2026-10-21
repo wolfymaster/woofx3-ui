@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
+import { NoInstanceSelectedError } from "@/engine/scope";
 import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // Gateway calls carry no instance, so these check that the adapter fills it
@@ -8,6 +9,7 @@ import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 const queries: Array<{ name: string; args: unknown }> = [];
 const actions: Array<{ name: string; args: unknown }> = [];
+const stableActions = new Map<string, (args: unknown) => Promise<null>>();
 
 // Bun runs every test file in one process and a module mock is not undone,
 // so the rest of convex/react stays real for the files loaded after this one.
@@ -19,13 +21,23 @@ mock.module("convex/react", () => ({
     queries.push({ name: getFunctionName(query), args });
     return undefined;
   },
-  useAction: (action: Parameters<typeof getFunctionName>[0]) => (args: unknown) => {
-    actions.push({ name: getFunctionName(action), args });
-    return Promise.resolve(null);
+  // Convex keeps a useAction function for as long as the action's name stays
+  // the same, so this does too.
+  useAction: (action: Parameters<typeof getFunctionName>[0]) => {
+    const name = getFunctionName(action);
+    const known = stableActions.get(name);
+    if (known) {
+      return known;
+    }
+    const run = (args: unknown) => {
+      actions.push({ name, args });
+      return Promise.resolve(null);
+    };
+    stableActions.set(name, run);
+    return run;
   },
 }));
 
-const { NoInstanceSelectedError } = await import("./scope");
 const { convexAlertQueueGateway } = await import("./alert-queue");
 const { convexEventLogGateway } = await import("./event-log");
 const { convexScenesGateway } = await import("./scenes");

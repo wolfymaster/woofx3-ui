@@ -2,21 +2,13 @@ import type { Id } from "@convex/_generated/dataModel";
 import { useAction } from "convex/react";
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
-import { useEngineScope } from "@/engine/scope";
+import { NoInstanceSelectedError, useEngineScope } from "@/engine/scope";
 import { fromInstanceId } from "./ids";
 
 // Gateway calls carry no instance: the Convex functions behind them still
 // need one, so the adapter takes it from the engine scope here. A request
 // keeps its identity until the scope's instance changes, so an effect that
 // depends on it runs again for a newly selected instance.
-
-/** Thrown, or rejected with, by a call made while the scope has no instance. */
-export class NoInstanceSelectedError extends Error {
-  constructor() {
-    super("No instance is selected, so there is no engine to ask");
-    this.name = "NoInstanceSelectedError";
-  }
-}
 
 /** The scope's instance as the Convex id; null while none is selected, which a read passes as "skip". */
 export function useScopeInstanceId(): Id<"instances"> | null {
