@@ -225,17 +225,13 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
       return [];
     }
     const alertWidgetIds = new Set(alertTargetUsage.alertWidgetIds);
-    const before = alertWidgetNamesOf(
-      scene.widgets.map((widget) => ({ widgetId: widget.widgetCanonicalId, settings: widget.settings })),
-      alertWidgetIds
-    );
-    const after = alertWidgetNamesOf(
-      Object.values(shownDoc.widgets).map((placement) => ({
-        widgetId: placement.widget,
-        settings: placement.settings,
-      })),
-      alertWidgetIds
-    );
+    const namesOf = (doc: CompositionDocument) =>
+      alertWidgetNamesOf(
+        Object.values(doc.widgets).map((placement) => ({ widgetId: placement.widget, settings: placement.settings })),
+        alertWidgetIds
+      );
+    const before = namesOf(compositionOfStoredScene(scene));
+    const after = namesOf(shownDoc);
     return orphanedAlertTargets(alertTargetUsage.uses, before, after, new Set(alertTargetUsage.elsewhere));
   }, [alertTargetUsage, scene, shownDoc]);
 

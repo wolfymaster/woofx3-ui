@@ -8,6 +8,7 @@ import {
   alertWidgetNamesOf,
   DEFAULT_ALERT_WIDGET_NAME,
   type PlacedWidget,
+  placedWidgetsOf,
 } from "./lib/alertWidgets";
 import { BUILTIN_MODULE_LABEL, resolveModuleDisplayNames } from "./lib/moduleDisplayName";
 
@@ -73,17 +74,8 @@ export const listForInstance = query({
   },
 });
 
-interface ScenePlacement {
-  widgetCanonicalId?: unknown;
-  settings?: Record<string, unknown>;
-}
-
 function placedWidgets(scene: Doc<"scenes">): PlacedWidget[] {
-  return ((scene.widgets ?? []) as ScenePlacement[]).flatMap((placement) =>
-    typeof placement.widgetCanonicalId === "string"
-      ? [{ widgetId: placement.widgetCanonicalId, settings: placement.settings }]
-      : []
-  );
+  return placedWidgetsOf(scene.widgets ?? []);
 }
 
 async function alertWidgetIdsOf(ctx: QueryCtx, instanceId: Id<"instances">): Promise<Set<string>> {
