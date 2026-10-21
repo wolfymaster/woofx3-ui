@@ -1,0 +1,197 @@
+{
+  "one": {
+    "name": "Cheers",
+    "trigger": {
+      "type": "event",
+      "event": "channel.cheer"
+    },
+    "tasks": [
+      {
+        "id": "rule_1",
+        "type": "condition",
+        "conditions": [
+          {
+            "field": "${trigger.data.amount}",
+            "operator": "gte",
+            "value": 100
+          }
+        ],
+        "onTrue": ["a1", "a2"]
+      },
+      {
+        "id": "a1",
+        "type": "action",
+        "action": "function",
+        "parameters": {
+          "message": "thanks"
+        },
+        "function": "twitch.chat.send",
+        "dependsOn": ["rule_1"]
+      },
+      {
+        "id": "a2",
+        "type": "action",
+        "action": "function",
+        "parameters": {
+          "message": "again"
+        },
+        "function": "twitch.chat.send",
+        "dependsOn": ["a1"]
+      }
+    ],
+    "id": "wf-cheers"
+  },
+  "two": {
+    "name": "Cheers",
+    "trigger": {
+      "type": "event",
+      "event": "channel.cheer"
+    },
+    "tasks": [
+      {
+        "id": "rule_1",
+        "type": "condition",
+        "conditions": [
+          {
+            "field": "${trigger.data.amount}",
+            "operator": "gte",
+            "value": 100
+          }
+        ],
+        "onTrue": ["a1"]
+      },
+      {
+        "id": "a1",
+        "type": "action",
+        "action": "function",
+        "parameters": {
+          "message": "one"
+        },
+        "function": "twitch.chat.send",
+        "dependsOn": ["rule_1"]
+      },
+      {
+        "id": "rule_2",
+        "type": "condition",
+        "conditions": [
+          {
+            "field": "${trigger.data.amount}",
+            "operator": "gte",
+            "value": 100
+          }
+        ],
+        "onTrue": ["a2"]
+      },
+      {
+        "id": "a2",
+        "type": "action",
+        "action": "function",
+        "parameters": {
+          "message": "two"
+        },
+        "function": "twitch.chat.send",
+        "dependsOn": ["rule_2"]
+      }
+    ],
+    "id": "wf-cheers"
+  },
+  "shared": {
+    "name": "Cheers",
+    "trigger": {
+      "type": "event",
+      "event": "channel.cheer"
+    },
+    "tasks": [
+      {
+        "id": "rule_1",
+        "type": "condition",
+        "conditions": [
+          {
+            "field": "${trigger.data.amount}",
+            "operator": "gte",
+            "value": 100
+          }
+        ],
+        "onTrue": []
+      },
+      {
+        "id": "rule_2",
+        "type": "condition",
+        "conditions": [
+          {
+            "field": "${trigger.data.amount}",
+            "operator": "gte",
+            "value": 100
+          }
+        ],
+        "onTrue": []
+      },
+      {
+        "id": "s1",
+        "type": "action",
+        "action": "function",
+        "parameters": {
+          "message": "either"
+        },
+        "function": "twitch.chat.send",
+        "dependsOn": ["rule_1", "rule_2"],
+        "conditions": [
+          {
+            "field": "${rule_1.result}",
+            "operator": "eq",
+            "value": true
+          },
+          {
+            "field": "${rule_2.result}",
+            "operator": "eq",
+            "value": true
+          }
+        ],
+        "conditionLogic": "or"
+      }
+    ],
+    "id": "wf-cheers"
+  },
+  "concurrent": {
+    "name": "Cheers",
+    "trigger": {
+      "type": "event",
+      "event": "channel.cheer"
+    },
+    "tasks": [
+      {
+        "id": "rule_1",
+        "type": "condition",
+        "conditions": [
+          {
+            "field": "${trigger.data.amount}",
+            "operator": "gte",
+            "value": 100
+          }
+        ],
+        "onTrue": ["a1", "a2"]
+      },
+      {
+        "id": "a1",
+        "type": "action",
+        "action": "function",
+        "parameters": {
+          "message": "one"
+        },
+        "function": "twitch.chat.send",
+        "dependsOn": ["rule_1"]
+      },
+      {
+        "id": "a2",
+        "type": "action",
+        "action": "function",
+        "parameters": {
+          "message": "two"
+        },
+        "function": "twitch.chat.send",
+        "dependsOn": ["rule_1"]
+      }
+    ],
+    "id": "wf-cheers"
+  }
+}

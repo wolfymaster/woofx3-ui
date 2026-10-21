@@ -1,7 +1,7 @@
 # Workflows
 
 **Routes:** `/stream/workflows`, `/stream/workflows/new`, `/stream/workflows/:id`, `/stream/workflows/:id/runs/:engineRunId`, `/stream/starter-packs`
-**Primary files:** `client/src/pages/workflows.tsx`, `client/src/components/workflows/basic-editor.tsx`, `client/src/components/workflows/workflow-flow-editor.tsx`, `client/src/components/flow/flow-editor.tsx`, `client/src/lib/workflow-display.ts`, `client/src/hooks/use-workflow-catalog.ts`
+**Primary files:** `client/src/pages/workflows.tsx`, `client/src/components/workflows/workflow-editor.tsx`, `client/src/components/workflows/workflow-flow-editor.tsx`, `client/src/components/flow/flow-editor.tsx`, `client/src/lib/workflow-display.ts`, `client/src/hooks/use-workflow-catalog.ts`
 
 `pages/workflows.tsx` serves the first three routes and picks one of three screens from the location: the list, the create flow, or the editor.
 
@@ -23,7 +23,7 @@ An instance with no workflows gets an empty state pointing at the starter packs 
 
 Curated sets of workflows and chat commands (raid welcome, follower thanks, sub and gift hype, cheer thanks, handy commands, BRB scene, ad break heads-up, ad break scene) that a new streamer installs in one click. The dashboard shows a banner linking here while the instance has no workflows (`api.workflows.hasAny`).
 
-- The packs are pure data in `convex/lib/starterPacks.ts`. Each names its actions by canonical ref and its triggers by event subject, and is resolved against the instance's catalog when installed, so the definitions carry the same handler type, function id and `$ref` the create wizard writes.
+- The packs are pure data in `convex/lib/starterPacks.ts`. Each names its actions by canonical ref and its triggers by event subject, and is resolved against the instance's catalog when installed, so the definitions carry the same handler type, function id and `$ref` the flow editor writes.
 - A pack's editable fields (message text, scene names, thresholds) accept `{name}` placeholders, such as `{raider}`, which become engine expressions such as `${trigger.data.fromBroadcasterUserName}`. A placeholder a field's items do not offer is refused, and so is any raw `${...}`: the engine resolves every expression in a parameter, `${env.NAME}` included, with no way to escape one. Lengths are checked against Twitch's limits (500 for chat, 140 for markers), counting each placeholder as 25 characters. Scene names are used exactly as typed and only flagged when they start or end with a space.
 - The raid pause is off (0) and its field disabled: a delay wait is a task type, not a catalog action, and no engine reports supporting it, while an engine without it fails the run at the wait. `STARTER_FEATURES` in `convex/lib/starterPacks.ts` is where that switches on once an engine can say so.
 - Twitch actions (`woofx3_twitch:action:twitch.shoutout`, `twitch.clip`, `twitch.marker`) come from the Twitch platform module, like every trigger the packs bind to. OBS scene switches (`woofx3_obs:action:obs.switch_scene`) come from the OBS platform module. Chat replies (`woofx3:action:chat.reply`) are the engine's own. Availability is read from the instance's action catalog, per item:
@@ -38,14 +38,10 @@ Curated sets of workflows and chat commands (raid welcome, follower thanks, sub 
 
 ## Create flow (`/stream/workflows/new`)
 
-- A full-width screen with a back link, wrapping **`BasicWorkflowEditor`**: a step-based wizard driven by presets (`client/src/lib/workflow-presets.ts`) and `useWorkflowCatalog` for trigger/action definitions.
-- On save it navigates to the new workflow's editor.
-
-## Action groups
-
-`lib/action-menu.ts` decides where each action is listed in the step tiles on alert triggers and command steps, and in the basic workflow wizard, from its first `taxonomy` entry: the first segment is the section, the second the heading inside it (`actionGroupHeading`). Sections are by purpose, not by the module that ships the action: the bundled actions file as `workflow` (Function, Print), `chat`, `overlay.alerts` / `overlay.scenes` (**Overlays**), and `tools.counter` / `tools.timer` / `tools.queue` (**Stream tools › Counters**, etc.); a platform integration's `platform.obs` lists under **Platforms › OBS**. **Workflow** leads, then sections alphabetically. An older engine's `system` family is labelled **Built-in** and also leads. An action with no taxonomy, or a malformed first entry, is listed under its module as a section of its own, so an engine that sends no action taxonomy shows one section per module. The manifest side is documented in the engine's `docs/barkloader/modules.md` (Taxonomy).
-
-The flow editor and the macro pad choose actions with the object-first picker instead (`ObjectActionPicker`, below).
+- A full-width screen with a back link, wrapping **`WorkflowEditor`** (`components/workflows/workflow-editor.tsx`).
+- It first asks what starts the workflow, in place: the event list a wait step uses (`EventCatalog` in `components/flow/event-catalog.tsx`, grouped by `waitEventGroups`), searchable and grouped by what each event is about. Chat command events are left out, with a pointer to the Commands page, since a command's steps are its own workflow there (see [Chat commands](./commands.md)); so is any event named with a wildcard, which would need a name filled in.
+- Picking an event builds an unsaved tree with `newTriggerTree` (`lib/alert-triggers.ts`), its conditions at their fields' defaults and no order, and opens it in the flow editor below a line naming the trigger, with **Pick a different trigger** to start over. Nothing is saved while editing: `onCommit` keeps the edit.
+- **Create workflow** is enabled once the workflow has an action. It creates the workflow through `workflowActions.createFromDefinition`, named after its trigger, and opens it in the editor.
 
 ## Editor (`/stream/workflows/:id`)
 
@@ -53,7 +49,7 @@ The flow editor and the macro pad choose actions with the object-first picker in
 - The screen is keyed by workflow id, so switching workflows resets the in-progress definition rather than carrying the previous one's draft into the next save.
 - Saves go through `workflowActions.updateFromDefinition` with `escapeDollarKeys` applied (the engine's `$`-prefixed keys are not legal Convex field names).
 - The step list is a tree read from the definition by `definitionToTree` (`client/src/lib/workflow-tree.ts`) and written back by `treeToDefinition`. The round trip is lossless: every task field is carried (ones the editor doesn't use ride along on the step), a task type the editor doesn't know is kept whole, and a workflow is written back in the `dependsOn` / `onTrue` layout it was read in, so a save changes only the edited steps. Only the order of `tasks` is normalised, to reading order. The engine runs a task after its `dependsOn` and after the condition whose `onTrue` / `onFalse` lists it, a step after a condition waits for the branch that ran, and tasks that wait on nothing run in `tasks` order, which reading order keeps. `workflow-tree.roundtrip.test.ts` holds the fixtures, including every starter pack workflow and setup import output.
-- A definition the tree can't express without changing it (a step waiting on two others, steps that run side by side, a step in two branches) opens read-only with the reason, rather than being rewritten on save. Alerts workflows with more than one trigger or a shared action are such definitions.
+- A definition the tree can't express without changing it (a step waiting on two others, steps that run side by side, a step in two branches) opens read-only with the reason, rather than being rewritten on save. An Alerts workflow the engine's upgrade could not split into one per trigger is such a definition (see [Alerts: Triggers saved together](./alerts.md#triggers-saved-together)).
 - Log and sub-workflow steps, and steps of unknown types, show as rows that can't be edited yet.
 - **Steps / Runs** tabs in the header. The step editor stays mounted behind the Runs tab so unsaved edits survive the switch; `?tab=runs` opens the editor on Runs.
 

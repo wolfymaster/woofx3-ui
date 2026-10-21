@@ -1,9 +1,14 @@
 import { bareKind, parseKindRef, resourceKindMatches } from "@convex/lib/resourceKinds";
 import { Braces, Clock, Hourglass, type LucideIcon, MessageSquare, Puzzle, Radio, Split } from "lucide-react";
-import { BUILTIN_MODULE_LABEL } from "@/lib/action-menu";
 import { taxonomyLabel } from "@/lib/alert-groups";
 import { STREAM_OBJECT_ICONS } from "@/lib/stream-object-icons";
 import type { ActionPreset, ConfigField } from "@/lib/workflow-presets";
+
+/**
+ * The group an action belongs to when it names no module: the actions the engine
+ * itself provides. Mirrors the Convex-side label so both catalogs read the same.
+ */
+export const BUILTIN_MODULE_LABEL = "Built-in";
 
 type SourceTarget = { type: "source"; source: "scenes" | "alertWidgets" };
 

@@ -4,7 +4,6 @@ import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react
 import { useLocation } from "wouter";
 import { type SavedTrigger, TriggerEditor } from "@/components/alerts/trigger-editor";
 import type { LoadedFieldOptions } from "@/components/triggers/condition-sentence";
-import { EventWorkflowEditor } from "@/components/triggers/event-workflow-editor";
 import { FieldOptionsLoader } from "@/components/triggers/field-options-loader";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -18,21 +17,21 @@ import { useWorkflowCatalog } from "@/hooks/use-workflow-catalog";
 import { useNotRunningWorkflows } from "@/hooks/use-workflow-health";
 import { alertSectionAnchor } from "@/lib/alert-groups";
 import {
+  conditionFieldsOf,
   type EventTrigger,
   eventTriggers,
   isPinnedTo,
   newTriggerTree,
   nextTriggerOrder,
+  storedTriggerCount,
   type TriggerPin,
   triggerAimsAt,
   triggerFieldValues,
 } from "@/lib/alert-triggers";
 import { type OptionLabels, type SentencePart, sentenceParts, sentenceText } from "@/lib/condition-sentence";
-import { conditionFieldsOf } from "@/lib/event-workflow-state";
 import { isInternalSource } from "@/lib/parse-config-fields";
 import type { ResourceAction } from "@/lib/resource-actions";
 import { stepSummary } from "@/lib/step-summary";
-import { projectWorkflow } from "@/lib/trigger-projection";
 import { cn } from "@/lib/utils";
 import { resolveCatalogAction } from "@/lib/workflow-node-label";
 import type { ActionPreset, TriggerPreset } from "@/lib/workflow-presets";
@@ -82,9 +81,9 @@ const NEW_TRIGGER = "new";
  * trigger's sentence and its steps; opening it shows the step editor, with the sentence as
  * the "When" card. Every trigger whose sentence holds runs, top to bottom.
  *
- * A workflow the step editor can't read is still listed and still opens: one holding
- * several triggers the way this page once stored them opens in the triggers editor those
- * were written in, and anything else says why it can't be edited here.
+ * A workflow the step editor can't read is still listed and still opens, saying why it
+ * can't be edited here. One holding several triggers, a condition task each, is one card
+ * named by its count (`storedTriggerCount`).
  */
 export function EventTriggerList({
   triggerPreset,
@@ -100,7 +99,6 @@ export function EventTriggerList({
 }: EventTriggerListProps) {
   const event = triggerPreset.event ?? "";
   const { instance } = useInstance();
-  const { actionPresets } = useWorkflowCatalog();
   const conditionFields = useMemo(() => conditionFieldsOf(triggerPreset), [triggerPreset]);
   const dynamicFields = useMemo(() => conditionFields.filter(isInternalSource), [conditionFields]);
   const [loadedOptions, setLoadedOptions] = useState<ReadonlyMap<string, LoadedFieldOptions>>(new Map());
@@ -311,13 +309,6 @@ export function EventTriggerList({
                   onDeleted={() => setExpandedId(null)}
                 />
               )}
-              legacyEditor={
-                <EventWorkflowEditor
-                  triggerPreset={triggerPreset}
-                  actionPresets={actionPresets}
-                  workflows={[trigger.row]}
-                />
-              }
             />
           ))}
 
@@ -363,21 +354,10 @@ interface TriggerCardProps {
   onToggle: () => void;
   /** The step editor for a workflow it can read. */
   editor: (tree: WorkflowTree) => ReactNode;
-  /** The editor for several triggers stored in one workflow. */
-  legacyEditor: ReactNode;
 }
 
 /** One trigger: its sentence and steps on one card, opening onto its editor. */
-function TriggerCard({
-  instanceId,
-  trigger,
-  triggerPreset,
-  sentence,
-  isExpanded,
-  onToggle,
-  editor,
-  legacyEditor,
-}: TriggerCardProps) {
+function TriggerCard({ instanceId, trigger, triggerPreset, sentence, isExpanded, onToggle, editor }: TriggerCardProps) {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { catalogActions } = useWorkflowCatalog();
@@ -387,8 +367,7 @@ function TriggerCard({
   const { row } = trigger;
 
   const read = useMemo(() => definitionToTree(trigger.definition), [trigger.definition]);
-  const stored = useMemo(() => (read.editable ? null : projectWorkflow(row)), [read, row]);
-  const storedTogether = stored?.ok === true ? stored.projection.triggers.length : 0;
+  const storedTogether = read.editable ? 0 : storedTriggerCount(trigger.definition);
 
   const title =
     storedTogether > 1
@@ -407,7 +386,7 @@ function TriggerCard({
               }).title
           )
           .join("  →  ")
-    : "Opens in the editor it was written in";
+    : "Can't be edited here";
   const health = row.isEnabled ? notRunning.get(row.engineWorkflowId) : undefined;
 
   async function toggleEnabled() {
@@ -488,17 +467,16 @@ function TriggerCard({
         <div className="border-t p-4 sm:p-5">
           {read.editable ? (
             editor(read.tree)
-          ) : stored?.ok ? (
-            <div className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground">
-                These triggers were saved together in one workflow and are edited together here. Their steps can't wait
-                or pause.
-              </p>
-              {legacyEditor}
-            </div>
           ) : (
             <div className="flex flex-col gap-3">
-              <WorkflowNotEditable reason={read.message} />
+              {storedTogether > 1 ? (
+                <p className="text-sm text-muted-foreground" data-testid="text-triggers-saved-together">
+                  These triggers were saved together in one workflow in a way that can't be edited here. To change them,
+                  delete this workflow and add each trigger again.
+                </p>
+              ) : (
+                <WorkflowNotEditable reason={read.message} />
+              )}
               <Button
                 variant="outline"
                 className="h-11 self-start sm:h-9"
