@@ -649,6 +649,12 @@ export interface ModuleArchiveInstall {
   archive: Uint8Array;
   /** `{moduleId}:{version}:{first 7 hex of the archive's sha256}`; the install's outcome is reported under it. */
   moduleKey: string;
+  /**
+   * What the module list shows until the engine reports the install. Read
+   * from `manifest`, so they must agree with it; they are passed rather than
+   * derived because a manifest without a name falls back to the archive's
+   * top-level folder, which only the archive's builder knows.
+   */
   name: string;
   description: string;
   version: string;
