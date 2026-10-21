@@ -14,11 +14,7 @@ import { presetToActionStep, resolveActionStepPreset } from "@/lib/workflow-pres
 
 const NO_STEP_IDS: ReadonlySet<string> = new Set();
 
-/**
- * The engine's own Alert handler gets its bell. Every other action shows the icon its
- * catalog entry carries, which is the same default arrow for all of them until modules
- * can declare one.
- */
+/** The engine's own Alert handler gets its bell; every other action shows its catalog entry's icon. */
 function stepIcon(handlerType: string, preset: ActionPreset | undefined): LucideIcon {
   if (handlerType === "alert") {
     return Bell;

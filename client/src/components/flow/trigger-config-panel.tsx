@@ -26,8 +26,6 @@ export function TriggerConfigPanel({
   catalog: CatalogTriggerRow[];
   onUpdateTriggerConditions: (conditions: ConditionConfig[]) => void;
 }) {
-  // Values with a field left empty have no condition form yet, so they are held here
-  // until finished; saving them would quietly turn the empty field into Any.
   const [unfinished, setUnfinished] = useState<TriggerConfigValues | null>(null);
   const catalogRow = resolveCatalogTrigger(node, catalog);
   const configFields = catalogRow?.configFields;

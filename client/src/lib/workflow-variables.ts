@@ -267,9 +267,8 @@ export function waitExportVariables(step: WaitNode, catalogTriggers: CatalogTrig
 
 /**
  * A trigger's payload comes from its declared `emits` when it has one. Otherwise it
- * falls back to deriving variables from config fields carrying an `eventPath`, which
- * is all that was available before triggers could describe their payload — and which
- * can only ever name keys that happen to also be config fields.
+ * falls back to deriving variables from config fields carrying an `eventPath`, for a
+ * module that declares no `emits`; those can only name keys that are also config fields.
  */
 function triggerDataVariables(
   emits: readonly DataShapeField[],
