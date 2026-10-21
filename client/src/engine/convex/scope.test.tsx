@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
-import { createElement } from "react";
 import { act, create } from "react-test-renderer";
 import { EngineScopeProvider, NoInstanceSelectedError } from "@/engine/scope";
 import type { InstanceId } from "@/engine/types";
@@ -116,10 +115,13 @@ describe("a request keeps its identity until the scope's instance changes", () =
     const seen: unknown[] = [];
     function Probe({ tick }: { tick: number }) {
       seen.push(convexAlertQueueGateway.useReplayRequest());
-      return createElement("span", null, tick);
+      return <span>{tick}</span>;
     }
-    const tree = (id: InstanceId, tick: number) =>
-      createElement(EngineScopeProvider, { scope: scopeOf(id), children: createElement(Probe, { tick }) });
+    const tree = (id: InstanceId, tick: number) => (
+      <EngineScopeProvider scope={scopeOf(id)}>
+        <Probe tick={tick} />
+      </EngineScopeProvider>
+    );
 
     let renderer: ReturnType<typeof create> | undefined;
     act(() => {
