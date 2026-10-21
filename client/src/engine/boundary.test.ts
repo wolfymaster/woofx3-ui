@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import allowlist from "./boundary-allowlist.json";
 import { ENGINE_NAMESPACE_MODULES } from "./namespaces";
 
@@ -16,10 +16,37 @@ const CONVEX_ADAPTER_DIR = join(ENGINE_DIR, "convex");
 
 // The gateway's interface and types have to be implementable without Convex,
 // so only the Convex adapter may import Convex modules or name its generated
-// types. Reaching the adapter itself (`@/engine/convex/...`) is how the app
-// wires it in, and stays allowed.
-const CONVEX_IMPORT = /(?:\bfrom\s+|\bimport\s*\(\s*)["'](?:@convex\/|convex(?:\/|["'])|(?:\.\.\/){3,}convex\/)/;
+// types.
+const CONVEX_MODULE = /^(?:@convex\/|convex(?:\/|$)|(?:\.\.\/){3,}convex\/)/;
 const CONVEX_GENERATED_TYPE = /\b(?:Id|Doc|FunctionReturnType|FunctionArgs)</;
+
+// Engine code reaches the instance through useEngineScope(), so no gateway
+// depends on how the Convex adapter learns which instance is selected. Only
+// the boot wiring picks the adapter and feeds it the selected instance.
+const BOOT_WIRING = join(ENGINE_DIR, "context.tsx");
+const INSTANCE_SELECTION = join(CLIENT_SRC, "hooks", "use-instance");
+
+// `from "x"`, `import "x"` and `import("x")`, static or type-only.
+const IMPORT_SPECIFIER = /(?:\bfrom\s+|\bimport\s*\(\s*|\bimport\s+)["']([^"']+)["']/g;
+
+function importSpecifiers(source: string): string[] {
+  return [...source.matchAll(IMPORT_SPECIFIER)].map((match) => match[1]);
+}
+
+/** The path a specifier names, for the `@/` alias and relative paths; null for packages. */
+function resolveSpecifier(file: string, specifier: string): string | null {
+  if (specifier.startsWith("@/")) {
+    return join(CLIENT_SRC, specifier.slice(2));
+  }
+  if (specifier.startsWith(".")) {
+    return resolve(dirname(file), specifier);
+  }
+  return null;
+}
+
+function isWithin(path: string, dir: string): boolean {
+  return path === dir || path.startsWith(`${dir}/`);
+}
 
 function engineReferencePattern(): RegExp {
   const entries: readonly string[] = Object.values(ENGINE_NAMESPACE_MODULES).flat();
@@ -49,18 +76,36 @@ function filesReferencingEngineModules(): string[] {
 }
 
 function convexLeaks(source: string): string[] {
-  return [CONVEX_IMPORT, CONVEX_GENERATED_TYPE].flatMap((pattern) => source.match(pattern) ?? []);
+  const imports = importSpecifiers(source).filter((specifier) => CONVEX_MODULE.test(specifier));
+  return [...imports, ...(source.match(CONVEX_GENERATED_TYPE) ?? [])];
+}
+
+/** What a file in client/src/engine imports that only the boot wiring may. */
+function bootOnlyImports(file: string, source: string): string[] {
+  return importSpecifiers(source).filter((specifier) => {
+    const target = resolveSpecifier(file, specifier);
+    return target !== null && (isWithin(target, CONVEX_ADAPTER_DIR) || target === INSTANCE_SELECTION);
+  });
+}
+
+function engineFilesOutsideAdapter(): string[] {
+  // This file spells the patterns out in its own cases.
+  return sourceFiles(ENGINE_DIR).filter((path) => path !== import.meta.path && !isWithin(path, CONVEX_ADAPTER_DIR));
 }
 
 function engineFilesNamingConvex(): string[] {
-  return (
-    sourceFiles(ENGINE_DIR)
-      // This file spells the patterns out in its own cases.
-      .filter((path) => path !== import.meta.path && !path.startsWith(`${CONVEX_ADAPTER_DIR}/`))
-      .filter((path) => convexLeaks(readFileSync(path, "utf8")).length > 0)
-      .map((path) => relative(CLIENT_SRC, path))
-      .sort()
-  );
+  return engineFilesOutsideAdapter()
+    .filter((path) => convexLeaks(readFileSync(path, "utf8")).length > 0)
+    .map((path) => relative(CLIENT_SRC, path))
+    .sort();
+}
+
+function engineFilesReachingBootDependencies(): string[] {
+  return engineFilesOutsideAdapter()
+    .filter((path) => path !== BOOT_WIRING)
+    .filter((path) => bootOnlyImports(path, readFileSync(path, "utf8")).length > 0)
+    .map((path) => relative(CLIENT_SRC, path))
+    .sort();
 }
 
 describe("engine gateway types", () => {
@@ -75,10 +120,24 @@ describe("engine gateway types", () => {
     expect(convexLeaks('import { useQuery } from "convex/react";')).not.toEqual([]);
     expect(convexLeaks('import type { Report } from "../../../convex/lib/report";')).not.toEqual([]);
     expect(convexLeaks('type Report = import("@convex/lib/report").Report;')).not.toEqual([]);
+    expect(convexLeaks('import "convex/browser";')).not.toEqual([]);
     expect(convexLeaks('type Row = Doc<"scenes">;')).not.toEqual([]);
     expect(convexLeaks("type Out = FunctionReturnType<typeof list>;")).not.toEqual([]);
     expect(convexLeaks('import { convexEngineGateway } from "@/engine/convex/gateway";')).toEqual([]);
     expect(convexLeaks("type Id = InstanceId;")).toEqual([]);
+  });
+
+  test("only the boot wiring in client/src/engine reaches the Convex adapter or the instance selection", () => {
+    expect(engineFilesReachingBootDependencies(), "read the instance with useEngineScope() instead").toEqual([]);
+  });
+
+  test("the boot-only check matches the adapter and the instance selection", () => {
+    const file = join(ENGINE_DIR, "hooks", "use-example.ts");
+    expect(bootOnlyImports(file, 'import { toInstanceId } from "@/engine/convex/ids";')).not.toEqual([]);
+    expect(bootOnlyImports(file, 'import { toInstanceId } from "../convex/ids";')).not.toEqual([]);
+    expect(bootOnlyImports(file, 'import { useInstance } from "@/hooks/use-instance";')).not.toEqual([]);
+    expect(bootOnlyImports(file, 'import { useEngineScope } from "@/engine/context";')).toEqual([]);
+    expect(bootOnlyImports(file, 'import { useInstanceSwitcher } from "@/hooks/use-instance-switcher";')).toEqual([]);
   });
 });
 
