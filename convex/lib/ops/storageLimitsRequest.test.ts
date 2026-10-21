@@ -8,12 +8,17 @@ describe("parseStorageLimitsRequest", () => {
       value: { totalBytes: 1024, fileBytes: null },
     });
     expect(parseStorageLimitsRequest({ fileBytes: 0 })).toEqual({ ok: true, value: { fileBytes: 0 } });
+    expect(parseStorageLimitsRequest({ moduleStorageBytes: 2048 })).toEqual({
+      ok: true,
+      value: { moduleStorageBytes: 2048 },
+    });
     expect(parseStorageLimitsRequest({})).toEqual({ ok: true, value: {} });
   });
 
   it("refuses amounts that are not whole bytes", () => {
-    for (const totalBytes of [-1, 1.5, "1024", Number.MAX_SAFE_INTEGER + 1]) {
-      expect(parseStorageLimitsRequest({ totalBytes })).toMatchObject({ ok: false });
+    for (const bytes of [-1, 1.5, "1024", Number.MAX_SAFE_INTEGER + 1]) {
+      expect(parseStorageLimitsRequest({ totalBytes: bytes })).toMatchObject({ ok: false });
+      expect(parseStorageLimitsRequest({ moduleStorageBytes: bytes })).toMatchObject({ ok: false });
     }
   });
 

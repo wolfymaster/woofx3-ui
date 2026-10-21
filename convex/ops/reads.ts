@@ -269,6 +269,45 @@ export const listEngines = internalQuery({
   },
 });
 
+/** One managed engine's module storage limit, by the id the maintenance API knows it by. */
+export interface ModuleStorageLimitDto {
+  engineId: string;
+  instanceId: string;
+  /** Null is unlimited. */
+  limitBytes: number | null;
+}
+
+/**
+ * Every managed engine's module storage limit, a page at a time, so the
+ * backoffice can flag the engines whose replica has grown past theirs. Rows
+ * without a maintenance engine yet, and engines someone else hosts, have no
+ * module storage of ours and are skipped, so a page may hold fewer rows than
+ * it read.
+ */
+export const moduleStorageLimits = internalQuery({
+  args: { cursor: cursorArg },
+  handler: async (ctx, { cursor }): Promise<Page<ModuleStorageLimitDto>> => {
+    const result = await ctx.db.query("engineProvisioning").paginate({ numItems: PAGE_SIZE, cursor });
+    const page: ModuleStorageLimitDto[] = [];
+    for (const row of result.page) {
+      if (row.maintenanceEngineId === undefined) {
+        continue;
+      }
+      const instance = await ctx.db.get(row.instanceId);
+      if (instance?.hosting !== "managed") {
+        continue;
+      }
+      const limits = await hostedStorageLimitsDto(ctx, instance);
+      page.push({
+        engineId: row.maintenanceEngineId,
+        instanceId: instance._id,
+        limitBytes: limits.effective.moduleStorageBytes,
+      });
+    }
+    return { page, cursor: result.isDone ? null : result.continueCursor };
+  },
+});
+
 export interface InstanceHealthDto {
   instance: InstanceDto;
   live: { isLive: boolean; startedAt: string | null; lastUpdatedAt: number; lastUpdateSource: string } | null;

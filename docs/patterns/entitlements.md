@@ -38,5 +38,6 @@ bunx convex run entitlements:get '{"accountId": "…"}'
 - Editing a plan changes it for every account on it. To keep existing accounts on the old terms, copy the plan, change the copy, stop offering the old one, and move accounts deliberately.
 - A plan cannot be deleted while it is the default or any account is on it.
 - A limit that bounds a hosted resource is enforced where it is granted, never in the engine. Hosted asset storage (`storage.hostedAssetBytes`, `storage.hostedFileBytes`) is checked by `resources.requestUpload` before the engine issues a size-bound upload grant; see [Media](../ui/assets.md#hosted-storage-limits).
+- A limit can be soft: tracked and warned about, never refused. Module storage (`storage.moduleStorageBytes`, default 500 MiB) is one: no write is ever refused, the dashboard warns the owner of an engine over it, and the backoffice flags it; see [Modules](../ui/modules.md#module-storage-limit).
 - Prices live in billing, not here: a plan says what is included, not what it costs.
 - Before plans existed, account creation wrote a `licenses` row per account; `migrations/dropLegacyLicenses` deletes them, and the table goes after that has run.

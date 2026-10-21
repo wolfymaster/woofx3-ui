@@ -3,6 +3,7 @@ import type { Doc } from "../_generated/dataModel";
 import { internalMutation, type QueryCtx } from "../_generated/server";
 import { accountEntitlements } from "../lib/entitlementAccess";
 import {
+  HOSTED_STORAGE_LIMIT_FIELDS,
   type HostedStorageLimits,
   type HostedStorageOverride,
   hostedStorageLimits,
@@ -53,7 +54,7 @@ export const set = internalMutation({
     reason: v.string(),
   },
   handler: async (ctx, { instanceId, limits, actor, reason }): Promise<StorageLimitsWriteResult> => {
-    for (const value of [limits.totalBytes, limits.fileBytes]) {
+    for (const value of HOSTED_STORAGE_LIMIT_FIELDS.map((field) => limits[field])) {
       if (value !== undefined && !isByteLimit(value)) {
         throw new Error(`Storage limits must be whole numbers of bytes of at least 0, or null; got ${value}`);
       }
@@ -83,7 +84,7 @@ export const set = internalMutation({
         message: "Only a managed engine has hosted storage to limit",
       };
     }
-    const cleared = limits.totalBytes === undefined && limits.fileBytes === undefined;
+    const cleared = HOSTED_STORAGE_LIMIT_FIELDS.every((field) => limits[field] === undefined);
     const hostedStorageLimits = cleared ? undefined : limits;
     await ctx.db.patch(id, { hostedStorageLimits });
     await audit("ok");

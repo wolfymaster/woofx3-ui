@@ -34,6 +34,8 @@ export interface HostedStorageLimits {
   totalBytes: number | null;
   /** Null is unlimited. */
   fileBytes: number | null;
+  /** What modules may keep in module storage before their owner is warned. Null is unlimited. */
+  moduleStorageBytes: number | null;
 }
 
 /**
@@ -45,12 +47,21 @@ export interface HostedStorageLimits {
 export interface HostedStorageOverride {
   totalBytes?: number | null;
   fileBytes?: number | null;
+  moduleStorageBytes?: number | null;
 }
 
 export const hostedStorageOverrideValidator = v.object({
   totalBytes: v.optional(v.union(v.number(), v.null())),
   fileBytes: v.optional(v.union(v.number(), v.null())),
+  moduleStorageBytes: v.optional(v.union(v.number(), v.null())),
 });
+
+/** Every field of an override, for code that walks them. */
+export const HOSTED_STORAGE_LIMIT_FIELDS = [
+  "totalBytes",
+  "fileBytes",
+  "moduleStorageBytes",
+] as const satisfies ReadonlyArray<keyof HostedStorageOverride>;
 
 /** The limits that apply to one engine: its override where it sets one, otherwise the account's entitlements. */
 export function hostedStorageLimits(
@@ -59,12 +70,14 @@ export function hostedStorageLimits(
 ): HostedStorageLimits {
   const totalBytes = entitlements.limits["storage.hostedAssetBytes"];
   const fileBytes = entitlements.limits["storage.hostedFileBytes"];
-  if (totalBytes === undefined || fileBytes === undefined) {
+  const moduleStorageBytes = entitlements.limits["storage.moduleStorageBytes"];
+  if (totalBytes === undefined || fileBytes === undefined || moduleStorageBytes === undefined) {
     throw new Error("Hosted storage limits were not resolved");
   }
   return {
     totalBytes: override.totalBytes === undefined ? totalBytes : override.totalBytes,
     fileBytes: override.fileBytes === undefined ? fileBytes : override.fileBytes,
+    moduleStorageBytes: override.moduleStorageBytes === undefined ? moduleStorageBytes : override.moduleStorageBytes,
   };
 }
 
@@ -100,4 +113,22 @@ export function formatStorageBytes(bytes: number): string {
   }
   const rounded = unit === 0 || Number.isInteger(value) ? String(value) : value.toFixed(1);
   return `${rounded} ${units[unit]}`;
+}
+
+/**
+ * Module storage against its limit, for the dashboard's warning. Module
+ * storage limits are soft: nothing refuses a write past one, so `over` only
+ * decides whether the owner is told that what modules keep beyond it may be
+ * lost.
+ */
+export interface ModuleStorageUsage {
+  usedBytes: number;
+  /** Null is unlimited. */
+  limitBytes: number | null;
+  over: boolean;
+}
+
+export function moduleStorageUsage(usedBytes: number, limits: HostedStorageLimits): ModuleStorageUsage {
+  const limitBytes = limits.moduleStorageBytes;
+  return { usedBytes, limitBytes, over: limitBytes !== null && usedBytes > limitBytes };
 }

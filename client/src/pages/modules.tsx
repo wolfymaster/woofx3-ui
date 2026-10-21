@@ -11,11 +11,13 @@ import { type ModuleDetailMeta, ModuleDetailPanel } from "@/components/modules/m
 import { ModuleOAuthResultBanner } from "@/components/modules/module-oauth-result";
 import { ApproveModulePermissionsDialog, type PermissionApprovalMode } from "@/components/modules/module-permissions";
 import { ModuleSidebar } from "@/components/modules/module-sidebar";
+import { ModuleStorageOverLimitAlert } from "@/components/modules/module-storage-usage";
 import { ModuleStore } from "@/components/modules/module-store";
 import { UninstallModuleDialog } from "@/components/modules/uninstall-module-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useModuleStorageUsage } from "@/engine/hooks/use-module-storage-usage";
 import { useModuleDetailRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useMarketplaceCatalog } from "@/hooks/use-marketplace-catalog";
@@ -87,6 +89,7 @@ export default function Modules() {
   // and the timeout have to stay together to be correct, and two copies of
   // that would drift.
   const install = useModuleInstall(instance?._id, () => setDetailRefreshKey((key) => key + 1));
+  const { usage: moduleStorage } = useModuleStorageUsage(instance?._id);
 
   const prevSelectedRef = useRef(selectedModule);
   useEffect(() => {
@@ -334,6 +337,7 @@ export default function Modules() {
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
+        {moduleStorage && <ModuleStorageOverLimitAlert usage={moduleStorage} className="mx-6 mt-4 w-auto" />}
         {selectedModule ? (
           <>
             {moduleDetailError ? (

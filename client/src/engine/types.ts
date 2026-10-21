@@ -9,6 +9,7 @@ export type { ConfigImportPlan, ConfigImportResult } from "@convex/lib/configBun
 export type { EngineCapability, EngineCapabilityReport } from "@convex/lib/engineCapabilities";
 export type { ObsStatus } from "@convex/lib/engineObsStatus";
 export type { FieldOptionsReference } from "@convex/lib/fieldOptions";
+export type { ModuleStorageUsage } from "@convex/lib/hostedStorage";
 export type { SceneEditorSession as SceneEditorGrant } from "@convex/lib/sceneEditorSession";
 export type { RecapTimelineEvents, StreamRecapEngineDetail } from "@convex/lib/streamRecap";
 export type { Supporter, SupporterStream } from "@convex/lib/supporters";

@@ -1,17 +1,28 @@
 import { type PlacementDocument, stackOrder } from "@woofx3/scene/model";
-import { Loader2 } from "lucide-react";
+import { BookmarkPlus, Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import {
   AlertEditorShell,
   DiscardAlertChangesDialog,
   useAlertEditorView,
 } from "@/components/alert-editor/alert-layout-editor";
+import {
+  AddLibraryAlertDialog,
+  type LibraryAlert,
+  LibraryAlertList,
+} from "@/components/alert-editor/alert-library-panel";
+import { SaveToLibraryDialog } from "@/components/alert-editor/save-to-library-dialog";
 import type { FieldDescriptor } from "@/components/common/configuration-form";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useAlertLibrary } from "@/engine/hooks/use-alert-library";
 import { useAlertLayoutEditor } from "@/hooks/use-alert-layout-editor";
+import { useToast } from "@/hooks/use-toast";
+import { libraryAlertEditorPath } from "@/lib/alert-editor-route";
 import { readAlertComposition } from "@/lib/alert-layout";
+import { inlineCopyOfLibraryAlert, unfilledInputsText, withLayersOf } from "@/lib/alert-library";
 import type { VariableOption } from "@/lib/workflow-variables";
 
 interface AlertLayoutFieldProps {
@@ -25,7 +36,9 @@ interface AlertLayoutFieldProps {
 /**
  * A `layout` field: a summary of the placed widgets, and a dialog with the alert
  * editor's stage, layers and inspector. The dialog edits a copy, so closing it
- * without Done leaves the step as it was.
+ * without Done leaves the step as it was. On an engine with an alert library, the
+ * palette has a Library tab (copy a library alert's layers onto the canvas) and the
+ * header a Save to library button (store a copy of this alert there).
  */
 export function AlertLayoutField({ field, value, onChange, availableVariables }: AlertLayoutFieldProps) {
   const [open, setOpen] = useState(false);
@@ -87,16 +100,43 @@ function AlertLayoutDialogBody({
 }) {
   const session = useAlertLayoutEditor(value);
   const view = useAlertEditorView(session, availableVariables);
-  const [confirmingLeave, setConfirmingLeave] = useState(false);
+  const libraryAlerts = useAlertLibrary();
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  // Where to go once the edits are confirmed discarded: back to the step, or to a library alert.
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null);
+  const [addingFromLibrary, setAddingFromLibrary] = useState<LibraryAlert | null>(null);
+  const [savingToLibrary, setSavingToLibrary] = useState(false);
   const isDirty = session?.isDirty === true;
 
-  const leave = () => {
+  const leaveTo = (go: () => void) => {
     if (isDirty) {
-      setConfirmingLeave(true);
+      setPendingLeave(() => go);
       return;
     }
-    onCancel();
+    go();
   };
+  const leave = () => leaveTo(onCancel);
+  const addFromLibrary = (alert: LibraryAlert) => {
+    setAddingFromLibrary(null);
+    const current = session?.state.doc ?? null;
+    if (session === null || current === null) {
+      return;
+    }
+    const { doc: copy, unfilled } = inlineCopyOfLibraryAlert(alert, availableVariables);
+    session.replace(withLayersOf(current, copy));
+    session.editor.dispatch("selection.clear");
+    if (unfilled.length > 0) {
+      toast({ title: "Some of its inputs had no value", description: unfilledInputsText(unfilled) });
+    }
+  };
+  const library = libraryAlerts.enabled ? (
+    <LibraryAlertList
+      alerts={libraryAlerts.alerts}
+      onPick={setAddingFromLibrary}
+      onEdit={(alert) => leaveTo(() => navigate(libraryAlertEditorPath(alert.engineCompositionId)))}
+    />
+  ) : undefined;
 
   return (
     <DialogContent
@@ -127,6 +167,17 @@ function AlertLayoutDialogBody({
           <Button variant="ghost" onClick={leave}>
             Cancel
           </Button>
+          {library && (
+            <Button
+              variant="outline"
+              onClick={() => setSavingToLibrary(true)}
+              disabled={session === null}
+              data-testid="button-save-to-library"
+            >
+              <BookmarkPlus className="mr-2 h-4 w-4" aria-hidden="true" />
+              Save to library
+            </Button>
+          )}
           <Button
             onClick={() => onDone(session?.changedLayout() ?? null)}
             disabled={session === null}
@@ -137,13 +188,34 @@ function AlertLayoutDialogBody({
         </div>
       </DialogHeader>
       {view ? (
-        <AlertEditorShell view={view} className="flex-1" />
+        <AlertEditorShell view={view} library={library} className="flex-1" />
       ) : (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       )}
-      <DiscardAlertChangesDialog open={confirmingLeave} onOpenChange={setConfirmingLeave} onDiscard={onCancel} />
+      <DiscardAlertChangesDialog
+        open={pendingLeave !== null}
+        onOpenChange={(open) => (open ? undefined : setPendingLeave(null))}
+        onDiscard={() => pendingLeave?.()}
+      />
+      {library && (
+        <>
+          <AddLibraryAlertDialog
+            alert={addingFromLibrary}
+            onClose={() => setAddingFromLibrary(null)}
+            onConfirm={addFromLibrary}
+          />
+          <SaveToLibraryDialog
+            open={savingToLibrary}
+            onOpenChange={setSavingToLibrary}
+            doc={session?.state.doc ?? null}
+            availableVariables={availableVariables}
+            takenNames={libraryAlerts.alerts?.map((alert) => alert.name)}
+            onSaved={() => setSavingToLibrary(false)}
+          />
+        </>
+      )}
     </DialogContent>
   );
 }
