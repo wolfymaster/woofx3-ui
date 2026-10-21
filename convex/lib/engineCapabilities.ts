@@ -30,6 +30,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "modules.localEndpoints",
   "modules.marketplaceInstall",
   "modules.oauth",
+  "modules.storageUsage",
   "obs.control",
   "obs.status",
   "scenes.behaviors",

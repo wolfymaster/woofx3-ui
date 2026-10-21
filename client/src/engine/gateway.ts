@@ -45,6 +45,7 @@ import type {
   ModuleResourceInstance,
   ModuleResourceInstanceChanges,
   ModuleSettingValue,
+  ModuleStorageUsage,
   NewChatCommand,
   NewChatCommandGroup,
   NewLibraryAlert,
@@ -360,6 +361,8 @@ export interface ModulesGateway {
     approvedPermissions: string[],
     approvedLocalEndpoints: string[]
   ) => Promise<{ moduleKey: string }>;
+  /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */
+  useStorageUsageRequest(): (instanceId: InstanceId) => Promise<ModuleStorageUsage | null>;
 }
 
 /**

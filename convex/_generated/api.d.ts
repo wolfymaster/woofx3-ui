@@ -234,6 +234,7 @@ import type * as moduleResourceActions from "../moduleResourceActions.js";
 import type * as moduleResourceInstances from "../moduleResourceInstances.js";
 import type * as moduleSettingProvenance from "../moduleSettingProvenance.js";
 import type * as moduleSettingsActions from "../moduleSettingsActions.js";
+import type * as moduleStorage from "../moduleStorage.js";
 import type * as moduleWebhook from "../moduleWebhook.js";
 import type * as moduleWidgets from "../moduleWidgets.js";
 import type * as notifications from "../notifications.js";
@@ -524,6 +525,7 @@ declare const fullApi: ApiFromModules<{
   moduleResourceInstances: typeof moduleResourceInstances;
   moduleSettingProvenance: typeof moduleSettingProvenance;
   moduleSettingsActions: typeof moduleSettingsActions;
+  moduleStorage: typeof moduleStorage;
   moduleWebhook: typeof moduleWebhook;
   moduleWidgets: typeof moduleWidgets;
   notifications: typeof notifications;
