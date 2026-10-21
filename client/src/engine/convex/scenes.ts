@@ -20,6 +20,10 @@ function useAlertWidgetNames(instanceId: InstanceId | null) {
   return useQuery(api.sceneWidgets.alertWidgetNames, instanceId ? { instanceId } : "skip");
 }
 
+function useAlertTargetUsage(instanceId: InstanceId, engineSceneId: string) {
+  return useQuery(api.sceneWidgets.alertTargetUsage, { instanceId, engineSceneId });
+}
+
 function useCreateRequest() {
   const createScene = useAction(api.sceneActions.createScene);
   return useCallback((instanceId: InstanceId, scene: NewScene) => createScene({ instanceId, ...scene }), [createScene]);
@@ -63,6 +67,7 @@ export const convexScenesGateway: ScenesGateway = {
   useScene,
   useWidgetCatalog,
   useAlertWidgetNames,
+  useAlertTargetUsage,
   useCreateRequest,
   useUpdateRequest,
   useRemoveRequest,

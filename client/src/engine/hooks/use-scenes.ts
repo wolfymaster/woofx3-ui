@@ -21,6 +21,11 @@ export function useAlertWidgetNames(instanceId: InstanceId | null) {
   return useEngineGateway().scenes.useAlertWidgetNames(instanceId);
 }
 
+/** Alert step targets, and the alert widget names on the instance's other scenes, for one scene's editor. */
+export function useAlertTargetUsage(instanceId: InstanceId, engineSceneId: string) {
+  return useEngineGateway().scenes.useAlertTargetUsage(instanceId, engineSceneId);
+}
+
 export function useCreateSceneRequest() {
   return useEngineGateway().scenes.useCreateRequest();
 }

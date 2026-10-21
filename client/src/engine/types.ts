@@ -20,7 +20,7 @@ export type {
   PaginatedResourcesDto as ResourcePage,
   ResourceDto as Resource,
 } from "@convex/resources";
-export type { SceneWidgetCatalogRow } from "@convex/sceneWidgets";
+export type { AlertTargetUsage, SceneWidgetCatalogRow } from "@convex/sceneWidgets";
 export type { OpenSessionRefresh } from "@convex/streamRecap";
 export type { NotRunningWorkflow } from "@convex/workflowHealth";
 export type {

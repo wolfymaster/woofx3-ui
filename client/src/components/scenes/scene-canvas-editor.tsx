@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
 import {
+  useAlertTargetUsage,
   useCreateSceneRequest,
   useDeleteSceneRequest,
   useScene,
@@ -213,7 +214,7 @@ export function SceneCanvasEditor({ instanceId, engineSceneId }: SceneCanvasEdit
   // Alert steps this editor's changes leave with no alert widget to play on,
   // measured against the scene as the editor first had it: the published
   // scene in session mode, the last save otherwise.
-  const alertTargetUsage = useQuery(api.sceneWidgets.alertTargetUsage, { instanceId, engineSceneId });
+  const alertTargetUsage = useAlertTargetUsage(instanceId, engineSceneId);
   const orphanedTargets = useMemo(() => {
     if (!alertTargetUsage || scene === null || shownDoc === null) {
       return [];
