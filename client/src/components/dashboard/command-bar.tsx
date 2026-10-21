@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import { COUNTER_KIND } from "@convex/lib/resourceKinds";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Check, Clapperboard, Loader2, Maximize2, Plus, Radio, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
@@ -17,6 +17,8 @@ import {
   useResourceInstancesOfKind,
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
+import { useCreateClipRequest } from "@/engine/hooks/use-twitch-channel";
+import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { ModuleResourceInstance } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
@@ -262,20 +264,19 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
   const { instanceId: engineInstanceId } = useEngineScope();
 
   const liveState = useLiveState();
-  const platformLinks = useQuery(api.instances.getPlatformLinks, instanceId ? { instanceId } : "skip");
+  const twitchLink = useTwitchLink();
   const counters = useResourceInstancesOfKind(COUNTER_KIND);
   const values = useResourceValues();
   const pinnedRows = useQuery(api.dashboardCounters.list, instanceId ? { instanceId } : "skip");
   const pinCounter = useMutation(api.dashboardCounters.add);
   const unpinCounter = useMutation(api.dashboardCounters.remove);
   const refreshValues = useRefreshResourceValuesRequest();
-  const createClip = useAction(api.twitchClips.createClip);
+  const createClip = useCreateClipRequest();
 
   const [showRemaining, setShowRemaining] = useState(false);
   const [clipping, setClipping] = useState(false);
 
   const isLive = liveState?.isLive ?? false;
-  const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   const login = twitchLink ? twitchLink.platformUsername.toLowerCase() : null;
 
   // Counter values arrive by webhook while the dashboard is open; this fills in
@@ -321,12 +322,12 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
   };
 
   const handleClip = async () => {
-    if (!instance) {
+    if (!engineInstanceId) {
       return;
     }
     setClipping(true);
     try {
-      const { editUrl } = await createClip({ instanceId: instance._id });
+      const { editUrl } = await createClip();
       // Twitch creates the clip as a draft — it isn't published until it's
       // trimmed in their editor, so send the user straight there.
       window.open(editUrl, "_blank", "noopener,noreferrer");
@@ -370,7 +371,7 @@ export function CommandBar({ onDismiss }: CommandBarProps) {
         size="sm"
         className="shrink-0 gap-1.5"
         onClick={() => void handleClip()}
-        disabled={clipping || !instance || !twitchLink}
+        disabled={clipping || !engineInstanceId || !twitchLink}
         data-testid="button-create-clip"
       >
         {clipping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Clapperboard className="h-4 w-4" />}

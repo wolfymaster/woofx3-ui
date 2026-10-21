@@ -1,32 +1,28 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { useAction, useMutation, useQuery } from "convex/react";
 import { Loader2, Megaphone, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { TwitchUserCard } from "@/components/twitch/twitch-user-card";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { useEngineScope } from "@/engine/context";
+import {
+  useEnqueueShoutoutRequest,
+  useLookupTwitchChannelRequest,
+  useRemoveShoutoutRequest,
+  useReorderShoutoutsRequest,
+  useShoutoutQueue,
+} from "@/engine/hooks/use-twitch-channel";
+import type { ShoutoutEntry, ShoutoutEntryId, TwitchChannel } from "@/engine/types";
 import { useChatters } from "@/hooks/use-chatters";
-import { useInstance } from "@/hooks/use-instance";
 import { matchChatters } from "@/lib/chatter-match";
-import { ShoutoutQueue, type ShoutoutQueueEntry } from "./shoutout-queue";
-
-interface PendingTarget {
-  twitchUserId: string;
-  login: string;
-  displayName: string;
-  profileImageUrl?: string;
-  broadcasterType?: string;
-}
+import { ShoutoutQueue } from "./shoutout-queue";
 
 export function ShoutoutWidget() {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
 
   const { chatters, error: chattersError } = useChatters();
   const [query, setQuery] = useState("");
-  const [pending, setPending] = useState<PendingTarget | null>(null);
+  const [pending, setPending] = useState<TwitchChannel | null>(null);
   const [isLooking, setIsLooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,26 +33,11 @@ export function ShoutoutWidget() {
     return () => clearInterval(timer);
   }, []);
 
-  const listArgs = instanceId ? { instanceId } : "skip";
-  const queue = useQuery(api.shoutouts.listQueue, listArgs);
-  const lookupUser = useAction(api.shoutouts.lookupUser);
-  const enqueue = useMutation(api.shoutouts.enqueue);
-  const removeEntry = useMutation(api.shoutouts.removeEntry);
-  const reorderQueue = useMutation(api.shoutouts.reorderQueue).withOptimisticUpdate((localStore, args) => {
-    if (!instanceId) {
-      return;
-    }
-    const current = localStore.getQuery(api.shoutouts.listQueue, { instanceId });
-    if (!current) {
-      return;
-    }
-    const byId = new Map(current.map((entry) => [entry.id, entry]));
-    const reordered = args.entryIds.flatMap((id) => {
-      const entry = byId.get(id);
-      return entry ? [entry] : [];
-    });
-    localStore.setQuery(api.shoutouts.listQueue, { instanceId }, reordered);
-  });
+  const queue = useShoutoutQueue();
+  const lookupUser = useLookupTwitchChannelRequest();
+  const enqueue = useEnqueueShoutoutRequest();
+  const removeEntry = useRemoveShoutoutRequest();
+  const reorderQueue = useReorderShoutoutsRequest();
 
   const suggestions = useMemo(() => matchChatters(chatters, query), [chatters, query]);
 
@@ -76,7 +57,7 @@ export function ShoutoutWidget() {
       setIsLooking(true);
       setError(null);
       try {
-        const found = await lookupUser({ instanceId, login });
+        const found = await lookupUser(login);
         if (!found) {
           setError(`No Twitch channel called "${login.trim().replace(/^@/, "")}"`);
           return;
@@ -95,32 +76,32 @@ export function ShoutoutWidget() {
     if (!instanceId || !pending) {
       return;
     }
-    void enqueue({ instanceId, ...pending });
+    void enqueue(pending);
     setPending(null);
     setQuery("");
   }, [instanceId, pending, enqueue]);
 
   const handleRemove = useCallback(
-    (id: string) => {
+    (id: ShoutoutEntryId) => {
       if (!instanceId) {
         return;
       }
-      void removeEntry({ instanceId, entryId: id as Id<"shoutoutQueue"> });
+      void removeEntry(id);
     },
     [instanceId, removeEntry]
   );
 
   const handleReorder = useCallback(
-    (ids: string[]) => {
+    (ids: ShoutoutEntryId[]) => {
       if (!instanceId) {
         return;
       }
-      void reorderQueue({ instanceId, entryIds: ids as Id<"shoutoutQueue">[] });
+      void reorderQueue(ids);
     },
     [instanceId, reorderQueue]
   );
 
-  const entries: ShoutoutQueueEntry[] = queue ?? [];
+  const entries: ShoutoutEntry[] = queue ?? [];
 
   return (
     <div className="flex h-full flex-col">

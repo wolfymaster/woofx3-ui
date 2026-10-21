@@ -1,14 +1,13 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { useAction } from "convex/react";
 import { useCallback, useEffect, useState } from "react";
+import { useEngineScope } from "@/engine/context";
+import { useChattersRequest } from "@/engine/hooks/use-twitch-channel";
+import type { InstanceId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
-import { useInstance } from "@/hooks/use-instance";
 import type { ChatterOption } from "@/lib/chatter-match";
 
 // Who is currently in chat, for the shoutout autocomplete.
 //
-// The roster comes from a Convex action, not a query, so there is no reactive
+// The roster comes from a request, not a subscribed read, so there is no reactive
 // result for several components to share -- two widgets mounting would be two
 // Helix calls. A throttle alone would not fix that: it would let one through
 // and leave the other with nothing. So the cache lives here at module scope,
@@ -23,7 +22,7 @@ interface CacheEntry {
   chatters: ChatterOption[];
 }
 
-type Fetcher = (args: { instanceId: Id<"instances"> }) => Promise<ChatterOption[]>;
+type Fetcher = () => Promise<ChatterOption[]>;
 
 let cache: CacheEntry | null = null;
 let inFlight: Promise<ChatterOption[]> | null = null;
@@ -35,7 +34,7 @@ function publish(chatters: ChatterOption[]): void {
   });
 }
 
-async function loadRoster(instanceId: Id<"instances">, fetcher: Fetcher, force: boolean): Promise<ChatterOption[]> {
+async function loadRoster(instanceId: InstanceId, fetcher: Fetcher, force: boolean): Promise<ChatterOption[]> {
   const fresh = cache && cache.instanceId === instanceId && Date.now() - cache.fetchedAt < ROSTER_TTL_MS;
   if (fresh && !force) {
     return cache?.chatters ?? [];
@@ -44,7 +43,7 @@ async function loadRoster(instanceId: Id<"instances">, fetcher: Fetcher, force: 
     return inFlight;
   }
 
-  inFlight = fetcher({ instanceId })
+  inFlight = fetcher()
     .then((chatters) => {
       cache = { instanceId, fetchedAt: Date.now(), chatters };
       publish(chatters);
@@ -72,9 +71,8 @@ export interface UseChatters {
 }
 
 export function useChatters(): UseChatters {
-  const { instance } = useInstance();
-  const listChatters = useAction(api.shoutouts.listChatters) as Fetcher;
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
+  const listChatters = useChattersRequest();
 
   const [chatters, setChatters] = useState<ChatterOption[]>(() => cache?.chatters ?? []);
   const [isLoading, setIsLoading] = useState(false);

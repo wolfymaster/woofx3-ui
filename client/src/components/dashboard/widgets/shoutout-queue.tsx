@@ -6,18 +6,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { ShoutoutEntry, ShoutoutEntryId } from "@/engine/types";
 import { cn } from "@/lib/utils";
-
-export interface ShoutoutQueueEntry {
-  id: string;
-  login: string;
-  displayName: string;
-  profileImageUrl?: string;
-  broadcasterType?: string;
-  attempts: number;
-  nextEligibleAt: number;
-  lastError?: string;
-}
 
 /** Twitch sends "" for a channel that is neither. */
 function broadcasterBadge(broadcasterType: string | undefined): string | null {
@@ -43,7 +33,7 @@ function untilLabel(nextEligibleAt: number, now: number): string {
 }
 
 interface RowProps {
-  entry: ShoutoutQueueEntry;
+  entry: ShoutoutEntry;
   now: number;
   onRemove: () => void;
 }
@@ -121,10 +111,10 @@ function QueueRow({ entry, now, onRemove }: RowProps) {
 }
 
 interface ShoutoutQueueProps {
-  entries: ShoutoutQueueEntry[];
+  entries: ShoutoutEntry[];
   now: number;
-  onRemove: (id: string) => void;
-  onReorder: (ids: string[]) => void;
+  onRemove: (id: ShoutoutEntryId) => void;
+  onReorder: (ids: ShoutoutEntryId[]) => void;
 }
 
 export function ShoutoutQueue({ entries, now, onRemove, onReorder }: ShoutoutQueueProps) {

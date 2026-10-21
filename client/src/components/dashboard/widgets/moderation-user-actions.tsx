@@ -1,5 +1,3 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import {
   BAN_REASON_MAX_LENGTH,
   type CapabilityStatus,
@@ -8,12 +6,12 @@ import {
   TIMEOUT_PRESETS,
   validateTimeoutSeconds,
 } from "@convex/lib/moderation";
-import { useAction } from "convex/react";
 import { Clock, Gavel, Loader2, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
+import { useBanUserRequest, useTimeoutUserRequest, useUnbanUserRequest } from "@/engine/hooks/use-twitch-channel";
 import { useChatters } from "@/hooks/use-chatters";
 import { useToast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -23,18 +21,16 @@ import { CapabilityNote, SectionHeading } from "./moderation-shared";
 type Pending = { kind: "timeout"; seconds: number } | { kind: "ban" } | { kind: "unban" };
 
 export function UserActionsSection({
-  instanceId,
   timeoutStatus,
   banStatus,
 }: {
-  instanceId: Id<"instances">;
   timeoutStatus: CapabilityStatus;
   banStatus: CapabilityStatus;
 }) {
   const { toast } = useToast();
-  const timeoutUser = useAction(api.moderation.timeoutUser);
-  const banUser = useAction(api.moderation.banUser);
-  const unbanUser = useAction(api.moderation.unbanUser);
+  const timeoutUser = useTimeoutUserRequest();
+  const banUser = useBanUserRequest();
+  const unbanUser = useUnbanUserRequest();
   const { chatters } = useChatters();
 
   const [login, setLogin] = useState("");
@@ -62,15 +58,15 @@ export function UserActionsSection({
     setError(null);
     try {
       if (pending.kind === "timeout") {
-        const user = await timeoutUser({ instanceId, login: target, seconds: pending.seconds });
+        const user = await timeoutUser(target, pending.seconds);
         toast({ title: `Timed out ${user.displayName} for ${formatDuration(pending.seconds)}` });
       } else if (pending.kind === "ban") {
-        const user = await banUser({ instanceId, login: target, reason });
+        const user = await banUser(target, reason);
         toast({ title: `Banned ${user.displayName}` });
         setConfirmingBan(false);
         setReason("");
       } else {
-        const user = await unbanUser({ instanceId, login: target });
+        const user = await unbanUser(target);
         toast({ title: `Unbanned ${user.displayName}` });
       }
       setLogin("");

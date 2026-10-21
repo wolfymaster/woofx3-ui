@@ -1,15 +1,27 @@
-import { api } from "@convex/_generated/api";
-import type { GoLiveCheckId, GoLiveCompletion, StreamInfoFacts, TwitchLinkFacts } from "@convex/lib/goLiveFacts";
-import type { StreamInfoField } from "@convex/lib/streamInfo";
-import { useAction, useMutation, useQuery } from "convex/react";
 import { ConvexError } from "convex/values";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEngineScope } from "@/engine/context";
 import { useSendCorrelatedRequest, useTransientEventWatchRequest } from "@/engine/hooks/use-correlated-request";
 import { useEngineHealth } from "@/engine/hooks/use-engine-health";
+import {
+  useCompleteGoLiveRequest,
+  useGoLiveChecklistState,
+  useGoLiveOverlayFacts,
+  useGoLiveStreamInfoCheckRequest,
+  useGoLiveTwitchCheckRequest,
+  useSetGoLiveCheckDismissedRequest,
+} from "@/engine/hooks/use-go-live";
 import { useLiveState } from "@/engine/hooks/use-live-state";
-import type { EventWatch } from "@/engine/types";
-import { useInstance } from "@/hooks/use-instance";
+import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-twitch-channel";
+import type {
+  EventWatch,
+  GoLiveCheckId,
+  GoLiveCompletion,
+  GoLiveFinish,
+  GoLiveStreamInfoFacts,
+  GoLiveTwitchFacts,
+  StreamInfoField,
+} from "@/engine/types";
 import { browserSourceUrlForKey } from "@/lib/browser-source-url";
 import { dispatchErrorMessage } from "@/lib/field-options-request";
 import {
@@ -39,9 +51,9 @@ const REMOTE_CHECK_IDS: RemoteCheckId[] = ["twitch", "obs", "stream-info"];
 type RemoteOutcome =
   | { kind: "running" }
   | { kind: "error"; message: string }
-  | { kind: "twitch"; facts: TwitchLinkFacts }
+  | { kind: "twitch"; facts: GoLiveTwitchFacts }
   | { kind: "obs"; facts: ObsFacts }
-  | { kind: "stream-info"; facts: StreamInfoFacts };
+  | { kind: "stream-info"; facts: GoLiveStreamInfoFacts };
 
 export function errorMessage(error: unknown): string {
   // ConvexError carries the user-facing text in `data`; a production
@@ -100,28 +112,26 @@ export interface GoLiveChecklist {
   runAll: () => void;
   rerun: (id: GoLiveCheckId) => void;
   setDismissed: (id: GoLiveCheckId, dismissed: boolean) => Promise<void>;
-  complete: (options: { announcement?: string; dropMarker: boolean }) => Promise<GoLiveCompletion>;
+  complete: (options: GoLiveFinish) => Promise<GoLiveCompletion>;
   /** Writes a saved preset's title, category and tags to Twitch; returns the fields Twitch kept its own. */
   applyPreset: (presetId: string) => Promise<StreamInfoField[]>;
 }
 
 export function useGoLiveChecklist(): GoLiveChecklist {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
-  const { instanceId: engineInstanceId } = useEngineScope();
+  const { instanceId } = useEngineScope();
   const { connected } = useEngineHealth();
   const liveState = useLiveState();
-  const local = useQuery(api.goLive.checklist, instanceId ? { instanceId } : "skip");
-  const overlays = useQuery(api.goLive.overlays, instanceId ? { instanceId } : "skip");
-  const presets = useQuery(api.streamInfo.listPresets, instanceId ? { instanceId } : "skip");
+  const local = useGoLiveChecklistState();
+  const overlays = useGoLiveOverlayFacts();
+  const presets = useStreamInfoPresets();
 
-  const checkTwitch = useAction(api.goLive.checkTwitch);
+  const checkTwitch = useGoLiveTwitchCheckRequest();
   const watchEvent = useTransientEventWatchRequest();
   const dispatchFieldOptions = useSendCorrelatedRequest("fieldOptions");
-  const checkStreamInfo = useAction(api.goLive.checkStreamInfo);
-  const setCheckDismissed = useMutation(api.goLive.setCheckDismissed);
-  const completeAction = useAction(api.goLive.complete);
-  const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
+  const checkStreamInfo = useGoLiveStreamInfoCheckRequest();
+  const setCheckDismissed = useSetGoLiveCheckDismissedRequest();
+  const completeRequest = useCompleteGoLiveRequest();
+  const updateChannelInfo = useUpdateStreamInfoRequest();
 
   const [outcomes, setOutcomes] = useState<Record<RemoteCheckId, RemoteOutcome>>({
     twitch: { kind: "running" },
@@ -135,7 +145,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
 
   const runRemote = useCallback(
     (id: RemoteCheckId) => {
-      if (!instanceId || !engineInstanceId) {
+      if (!instanceId) {
         return;
       }
       runIds.current[id] += 1;
@@ -149,7 +159,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
 
       let pending: Promise<RemoteOutcome>;
       if (id === "twitch") {
-        pending = checkTwitch({ instanceId }).then((facts) => ({ kind: "twitch", facts }));
+        pending = checkTwitch().then((facts) => ({ kind: "twitch", facts }));
       } else if (id === "obs") {
         const correlationKey = crypto.randomUUID();
         pending = dispatchFieldOptions(OBS_SCENES_FIELD, correlationKey)
@@ -159,11 +169,11 @@ export function useGoLiveChecklist(): GoLiveChecklist {
           )
           .then((facts) => ({ kind: "obs", facts }));
       } else {
-        pending = checkStreamInfo({ instanceId }).then((facts) => ({ kind: "stream-info", facts }));
+        pending = checkStreamInfo().then((facts) => ({ kind: "stream-info", facts }));
       }
       pending.then(settle, (error: unknown) => settle({ kind: "error", message: errorMessage(error) }));
     },
-    [instanceId, engineInstanceId, checkTwitch, watchEvent, dispatchFieldOptions, checkStreamInfo]
+    [instanceId, checkTwitch, watchEvent, dispatchFieldOptions, checkStreamInfo]
   );
 
   const runAll = useCallback(() => {
@@ -228,23 +238,23 @@ export function useGoLiveChecklist(): GoLiveChecklist {
       if (!instanceId) {
         return;
       }
-      await setCheckDismissed({ instanceId, checkId: id, dismissed });
+      await setCheckDismissed(id, dismissed);
     },
     [instanceId, setCheckDismissed]
   );
 
   const complete = useCallback(
-    async (options: { announcement?: string; dropMarker: boolean }) => {
+    async (options: GoLiveFinish) => {
       if (!instanceId) {
         throw new Error("Pick an instance first");
       }
-      const result = await completeAction({ instanceId, ...options });
+      const result = await completeRequest(options);
       // The stored title and category just changed, so stream info is
       // measured against them from here on.
       runRemote("stream-info");
       return result;
     },
-    [instanceId, completeAction, runRemote]
+    [instanceId, completeRequest, runRemote]
   );
 
   const applyPreset = useCallback(
@@ -257,7 +267,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
         throw new Error("That preset no longer exists");
       }
       try {
-        const { unapplied } = await updateChannelInfo({ instanceId, ...preset.info });
+        const { unapplied } = await updateChannelInfo(preset.info);
         return unapplied;
       } finally {
         runRemote("stream-info");

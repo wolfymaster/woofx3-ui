@@ -1,12 +1,14 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { BLOCKED_TERM_MAX_LENGTH, type CapabilityStatus, validateBlockedTerm } from "@convex/lib/moderation";
-import { useAction } from "convex/react";
 import { Ban, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  useAddBlockedTermRequest,
+  useBlockedTermsRequest,
+  useRemoveBlockedTermRequest,
+} from "@/engine/hooks/use-twitch-channel";
 import { actionErrorMessage } from "@/lib/action-error";
 import { cn } from "@/lib/utils";
 import { CapabilityNote, SectionHeading } from "./moderation-shared";
@@ -17,17 +19,15 @@ interface BlockedTerm {
 }
 
 export function BlockedTermsSection({
-  instanceId,
   addStatus,
   removeStatus,
 }: {
-  instanceId: Id<"instances">;
   addStatus: CapabilityStatus;
   removeStatus: CapabilityStatus;
 }) {
-  const listBlockedTerms = useAction(api.moderation.listBlockedTerms);
-  const addBlockedTerm = useAction(api.moderation.addBlockedTerm);
-  const removeBlockedTerm = useAction(api.moderation.removeBlockedTerm);
+  const listBlockedTerms = useBlockedTermsRequest();
+  const addBlockedTerm = useAddBlockedTermRequest();
+  const removeBlockedTerm = useRemoveBlockedTermRequest();
 
   const [terms, setTerms] = useState<BlockedTerm[] | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -43,13 +43,13 @@ export function BlockedTermsSection({
   // Twitch pushes nothing when terms change, and the list is only needed when
   // opened or edited, so it loads once rather than on a timer.
   const load = useCallback(() => {
-    listBlockedTerms({ instanceId })
+    listBlockedTerms()
       .then((result) => {
         setTerms(result.terms);
         setTruncated(result.truncated);
       })
       .catch((err: unknown) => setError(actionErrorMessage(err)));
-  }, [instanceId, listBlockedTerms]);
+  }, [listBlockedTerms]);
 
   useEffect(() => {
     if (ready) {
@@ -66,7 +66,7 @@ export function BlockedTermsSection({
     setBusy(true);
     setError(null);
     try {
-      const added = await addBlockedTerm({ instanceId, text: validated.value });
+      const added = await addBlockedTerm(validated.value);
       setTerms((current) => [added, ...(current ?? []).filter((term) => term.id !== added.id)]);
       setDraft("");
     } catch (err) {
@@ -83,7 +83,7 @@ export function BlockedTermsSection({
     setRemovingId(termId);
     setError(null);
     try {
-      await removeBlockedTerm({ instanceId, termId });
+      await removeBlockedTerm(termId);
       setTerms((current) => (current ?? []).filter((term) => term.id !== termId));
     } catch (err) {
       setError(actionErrorMessage(err));

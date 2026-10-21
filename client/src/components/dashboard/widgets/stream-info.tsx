@@ -1,5 +1,3 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import {
   diffStreamInfo,
   isEmptyChanges,
@@ -11,13 +9,21 @@ import {
   type StreamInfoChanges,
   titleCounter,
 } from "@convex/lib/streamInfo";
-import { useAction, useMutation, useQuery } from "convex/react";
 import { Bookmark, Check, Flag, Loader2, Radio, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  useCreateStreamMarkerRequest,
+  useRemoveStreamInfoPresetRequest,
+  useSaveStreamInfoPresetRequest,
+  useStreamInfoPresets,
+  useStreamInfoRequest,
+  useUpdateStreamInfoRequest,
+} from "@/engine/hooks/use-twitch-channel";
+import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
+import type { StreamInfoPresetId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { comparePreset, draftProblem, formatStreamPosition, isDirty, rebaseDraft } from "@/lib/stream-info-edit";
 import { cn } from "@/lib/utils";
@@ -55,14 +61,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 export function StreamInfoWidget() {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
-
-  const platformLinks = useQuery(api.instances.getPlatformLinks, instanceId ? { instanceId } : "skip");
-  const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
+  const twitchLink = useTwitchLink();
   const canManage = !!twitchLink?.scopes.includes(STREAM_INFO_SCOPE);
 
-  if (platformLinks !== undefined && !twitchLink) {
+  if (twitchLink === null) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4 text-center">
         <Radio className="mb-3 h-8 w-8 text-muted-foreground/50" />
@@ -70,7 +72,7 @@ export function StreamInfoWidget() {
       </div>
     );
   }
-  if (platformLinks !== undefined && !canManage) {
+  if (twitchLink !== undefined && !canManage) {
     return (
       <div className="flex h-full flex-col items-center justify-center p-4 text-center">
         <Radio className="mb-3 h-8 w-8 text-muted-foreground/50" />
@@ -81,20 +83,20 @@ export function StreamInfoWidget() {
       </div>
     );
   }
-  if (!instanceId || platformLinks === undefined) {
+  if (twitchLink === undefined) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
       </div>
     );
   }
-  return <StreamInfoEditor instanceId={instanceId} />;
+  return <StreamInfoEditor />;
 }
 
-function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
+function StreamInfoEditor() {
   const { toast } = useToast();
-  const getChannelInfo = useAction(api.streamInfo.getChannelInfo);
-  const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
+  const getChannelInfo = useStreamInfoRequest();
+  const updateChannelInfo = useUpdateStreamInfoRequest();
 
   const [edit, setEdit] = useState<EditState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -110,10 +112,7 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
   const refresh = useCallback(() => {
     const started = generation.current;
     const known = savedCategory.current;
-    getChannelInfo({
-      instanceId,
-      knownBoxArt: known?.boxArtUrl ? { categoryId: known.id, boxArtUrl: known.boxArtUrl } : undefined,
-    })
+    getChannelInfo(known?.boxArtUrl ? { categoryId: known.id, boxArtUrl: known.boxArtUrl } : undefined)
       .then((fresh) => {
         if (started !== generation.current) {
           return;
@@ -128,7 +127,7 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
           setLoadError(errorMessage(error));
         }
       });
-  }, [instanceId, getChannelInfo]);
+  }, [getChannelInfo]);
 
   useEffect(() => {
     refresh();
@@ -150,7 +149,7 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
     setEdit({ saved: optimistic, draft: optimistic });
     setSaving(true);
     try {
-      const result = await updateChannelInfo({ instanceId, ...changes });
+      const result = await updateChannelInfo(changes);
       generation.current += 1;
       setEdit({ saved: result.info, draft: result.info });
       if (result.unapplied.length > 0) {
@@ -216,12 +215,7 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
 
         <section className="space-y-1.5">
           <SectionLabel>Category</SectionLabel>
-          <CategoryPicker
-            instanceId={instanceId}
-            value={draft.category}
-            onChange={(category) => setDraft({ category })}
-            disabled={saving}
-          />
+          <CategoryPicker value={draft.category} onChange={(category) => setDraft({ category })} disabled={saving} />
         </section>
 
         <section className="space-y-1.5">
@@ -257,7 +251,6 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
         </div>
 
         <PresetsSection
-          instanceId={instanceId}
           current={saved}
           draft={draft}
           draftProblem={problem}
@@ -265,14 +258,13 @@ function StreamInfoEditor({ instanceId }: { instanceId: Id<"instances"> }) {
           onApply={(info, name) => void save(info, `Applied "${name}"`)}
         />
 
-        <MarkerSection instanceId={instanceId} />
+        <MarkerSection />
       </div>
     </div>
   );
 }
 
 interface PresetsSectionProps {
-  instanceId: Id<"instances">;
   current: StreamInfo;
   draft: StreamInfo;
   draftProblem: string | null;
@@ -280,20 +272,11 @@ interface PresetsSectionProps {
   onApply: (info: StreamInfo, name: string) => void;
 }
 
-function PresetsSection({ instanceId, current, draft, draftProblem, busy, onApply }: PresetsSectionProps) {
+function PresetsSection({ current, draft, draftProblem, busy, onApply }: PresetsSectionProps) {
   const { toast } = useToast();
-  const presets = useQuery(api.streamInfo.listPresets, { instanceId });
-  const savePreset = useMutation(api.streamInfo.savePreset);
-  const removePreset = useMutation(api.streamInfo.removePreset).withOptimisticUpdate((localStore, args) => {
-    const list = localStore.getQuery(api.streamInfo.listPresets, { instanceId });
-    if (list) {
-      localStore.setQuery(
-        api.streamInfo.listPresets,
-        { instanceId },
-        list.filter((preset) => preset.id !== args.presetId)
-      );
-    }
-  });
+  const presets = useStreamInfoPresets();
+  const savePreset = useSaveStreamInfoPresetRequest();
+  const removePreset = useRemoveStreamInfoPresetRequest();
   const [name, setName] = useState("");
   const [savingPreset, setSavingPreset] = useState(false);
 
@@ -306,13 +289,7 @@ function PresetsSection({ instanceId, current, draft, draftProblem, busy, onAppl
     }
     setSavingPreset(true);
     try {
-      await savePreset({
-        instanceId,
-        name: trimmedName,
-        title: draft.title,
-        category: draft.category,
-        tags: draft.tags,
-      });
+      await savePreset({ name: trimmedName, info: draft });
       setName("");
       toast({ title: replaces ? `Updated "${trimmedName}"` : `Saved "${trimmedName}"` });
     } catch (error) {
@@ -322,8 +299,8 @@ function PresetsSection({ instanceId, current, draft, draftProblem, busy, onAppl
     }
   };
 
-  const handleRemove = (presetId: Id<"streamInfoPresets">) => {
-    removePreset({ instanceId, presetId }).catch((error: unknown) => {
+  const handleRemove = (presetId: StreamInfoPresetId) => {
+    removePreset(presetId).catch((error: unknown) => {
       toast({ title: "Couldn't delete preset", description: errorMessage(error), variant: "destructive" });
     });
   };
@@ -412,9 +389,9 @@ function PresetsSection({ instanceId, current, draft, draftProblem, busy, onAppl
   );
 }
 
-function MarkerSection({ instanceId }: { instanceId: Id<"instances"> }) {
+function MarkerSection() {
   const { toast } = useToast();
-  const createMarker = useAction(api.streamInfo.createMarker);
+  const createMarker = useCreateStreamMarkerRequest();
   const [description, setDescription] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -427,7 +404,7 @@ function MarkerSection({ instanceId }: { instanceId: Id<"instances"> }) {
     setBusy(true);
     setError(null);
     try {
-      const marker = await createMarker({ instanceId, description: description.trim() || undefined });
+      const marker = await createMarker(description.trim() || undefined);
       setDescription("");
       toast({
         title: "Marker added",

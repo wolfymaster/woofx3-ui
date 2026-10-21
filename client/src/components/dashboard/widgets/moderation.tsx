@@ -1,7 +1,5 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { Loader2, ShieldAlert } from "lucide-react";
-import { useInstance } from "@/hooks/use-instance";
+import { useModerationAccess } from "@/engine/hooks/use-twitch-channel";
 import { BlockedTermsSection } from "./moderation-blocked-terms";
 import { ChatLockdownSection } from "./moderation-chat-lockdown";
 import { UserActionsSection } from "./moderation-user-actions";
@@ -12,11 +10,9 @@ import { UserActionsSection } from "./moderation-user-actions";
 // failing on click.
 
 export function ModerationWidget() {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
-  const access = useQuery(api.moderation.access, instanceId ? { instanceId } : "skip");
+  const access = useModerationAccess();
 
-  if (!instanceId || access === undefined) {
+  if (access === undefined) {
     return (
       <div className="flex h-full items-center justify-center">
         <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -40,13 +36,9 @@ export function ModerationWidget() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-4 overflow-auto p-3">
-        <BlockedTermsSection
-          instanceId={instanceId}
-          addStatus={access.addBlockedTerm}
-          removeStatus={access.removeBlockedTerm}
-        />
-        <UserActionsSection instanceId={instanceId} timeoutStatus={access.timeout} banStatus={access.ban} />
-        <ChatLockdownSection instanceId={instanceId} status={access.chatSettings} />
+        <BlockedTermsSection addStatus={access.addBlockedTerm} removeStatus={access.removeBlockedTerm} />
+        <UserActionsSection timeoutStatus={access.timeout} banStatus={access.ban} />
+        <ChatLockdownSection status={access.chatSettings} />
       </div>
     </div>
   );

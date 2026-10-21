@@ -1,13 +1,20 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import { useAction, useMutation, useQuery } from "convex/react";
 import { Loader2, Pin, PinOff, Radio, RotateCcw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useEngineScope } from "@/engine/context";
+import {
+  useCurrentPinRequest,
+  usePinHistory,
+  usePinNewMessageRequest,
+  useRemovePinHistoryEntryRequest,
+  useRepinRequest,
+  useUnpinRequest,
+} from "@/engine/hooks/use-twitch-channel";
+import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
+import type { CurrentPin, PinHistoryEntryId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
-import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 
 // Twitch keeps exactly one pinned message per channel, and pinning a new one
@@ -20,36 +27,27 @@ const MAX_MESSAGE_LENGTH = 500;
 /** Twitch pushes nothing when a pin changes, so the current pin is polled. */
 const PIN_REFRESH_MS = 60_000;
 
-interface CurrentPin {
-  messageId: string;
-  content: string | null;
-  authorName: string | null;
-  expiresAt?: string;
-}
-
 function formatWhen(timestamp: number): string {
   return new Date(timestamp).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 export function PinnedWidget() {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
-  const instanceId = instance?._id;
 
-  const platformLinks = useQuery(api.instances.getPlatformLinks, instanceId ? { instanceId } : "skip");
-  const history = useQuery(api.pins.listHistory, instanceId ? { instanceId } : "skip");
+  const twitchLink = useTwitchLink();
+  const history = usePinHistory();
 
-  const currentPinAction = useAction(api.pins.currentPin);
-  const pinNewMessage = useAction(api.pins.pinNewMessage);
-  const repinFromHistory = useAction(api.pins.repinFromHistory);
-  const unpinCurrent = useAction(api.pins.unpinCurrent);
-  const removeFromHistory = useMutation(api.pins.removeFromHistory);
+  const currentPinRequest = useCurrentPinRequest();
+  const pinNewMessage = usePinNewMessageRequest();
+  const repin = useRepinRequest();
+  const unpin = useUnpinRequest();
+  const removeFromHistory = useRemovePinHistoryEntryRequest();
 
   const [current, setCurrent] = useState<CurrentPin | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   // Reading the current pin needs only the read scope, which existing links
   // already carry — so the pin is visible even when pinning is not yet allowed.
   const canPin = !!twitchLink?.scopes.includes(PIN_MANAGE_SCOPE);
@@ -58,13 +56,13 @@ export function PinnedWidget() {
     if (!instanceId) {
       return;
     }
-    currentPinAction({ instanceId })
+    currentPinRequest()
       .then(setCurrent)
       .catch(() => {
         // A failed read is not worth a toast on a timer; the card just keeps
         // showing what it last knew.
       });
-  }, [instanceId, currentPinAction]);
+  }, [instanceId, currentPinRequest]);
 
   useEffect(() => {
     refreshCurrent();
@@ -96,17 +94,17 @@ export function PinnedWidget() {
       return;
     }
     void run(async () => {
-      await pinNewMessage({ instanceId, text: draft });
+      await pinNewMessage(draft);
       setDraft("");
     }, "Couldn't pin that message");
   };
 
-  const handleRepin = (entryId: string) => {
+  const handleRepin = (entryId: PinHistoryEntryId) => {
     if (!instanceId) {
       return;
     }
     void run(async () => {
-      const result = await repinFromHistory({ instanceId, entryId: entryId as Id<"pinnedMessages"> });
+      const result = await repin(entryId);
       if (result.resent) {
         // Worth saying: the original message was too old to pin, so this posted
         // a new copy into chat rather than re-pinning the one people remember.
@@ -119,10 +117,10 @@ export function PinnedWidget() {
     if (!instanceId || !current) {
       return;
     }
-    void run(() => unpinCurrent({ instanceId, messageId: current.messageId }), "Couldn't unpin that");
+    void run(() => unpin(current.messageId), "Couldn't unpin that");
   };
 
-  if (platformLinks !== undefined && !twitchLink) {
+  if (twitchLink === null) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-4 text-center">
         <Radio className="h-8 w-8 text-muted-foreground/50 mb-3" />
@@ -186,7 +184,7 @@ export function PinnedWidget() {
               {draft.length}/{MAX_MESSAGE_LENGTH}
             </span>
           </div>
-          {!canPin && platformLinks !== undefined && (
+          {!canPin && twitchLink !== undefined && (
             <p className="text-xs text-muted-foreground">
               Reconnect Twitch in Settings → Integrations to grant the pinning permission.
             </p>
@@ -242,7 +240,7 @@ export function PinnedWidget() {
                       className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive"
                       onClick={() => {
                         if (instanceId) {
-                          void removeFromHistory({ instanceId, entryId: entry.id as Id<"pinnedMessages"> });
+                          void removeFromHistory(entry.id);
                         }
                       }}
                       aria-label="Remove from history"

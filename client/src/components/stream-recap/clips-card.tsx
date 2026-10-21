@@ -1,11 +1,9 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import type { RecapClip } from "@convex/lib/recapClips";
-import { useAction } from "convex/react";
 import { Clapperboard, Copy, ExternalLink, Eye, Loader2, MessageSquare, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-channel";
 import type { RecapClipsState } from "@/hooks/use-recap-clips";
 import { useToast } from "@/hooks/use-toast";
 import { buildClipShareMessage, formatClipDuration, formatStreamOffset } from "@/lib/recap-clips";
@@ -16,17 +14,9 @@ function viewLabel(count: number): string {
   return count === 1 ? "1 view" : `${count.toLocaleString()} views`;
 }
 
-function ClipRow({
-  instanceId,
-  clip,
-  canAnnounce,
-}: {
-  instanceId: Id<"instances">;
-  clip: RecapClip;
-  canAnnounce: boolean;
-}) {
+function ClipRow({ clip, canAnnounce }: { clip: RecapClip; canAnnounce: boolean }) {
   const { toast } = useToast();
-  const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
+  const sendAnnouncement = useSendAnnouncementRequest();
   const [sending, setSending] = useState(false);
 
   const handleCopy = async () => {
@@ -41,7 +31,7 @@ function ClipRow({
   const handleShare = async () => {
     setSending(true);
     try {
-      await sendAnnouncement({ instanceId, message: buildClipShareMessage(clip), color: "primary" });
+      await sendAnnouncement({ message: buildClipShareMessage(clip), color: "primary" });
       toast({ title: "Clip shared to chat" });
     } catch (error) {
       toast({
@@ -109,15 +99,7 @@ function ClipRow({
   );
 }
 
-function ClipsBody({
-  instanceId,
-  state,
-  canAnnounce,
-}: {
-  instanceId: Id<"instances">;
-  state: RecapClipsState;
-  canAnnounce: boolean;
-}) {
+function ClipsBody({ state, canAnnounce }: { state: RecapClipsState; canAnnounce: boolean }) {
   switch (state.kind) {
     case "loading":
       return (
@@ -148,7 +130,7 @@ function ClipsBody({
       return (
         <ol className="space-y-4">
           {state.clips.map((clip) => (
-            <ClipRow key={clip.id} instanceId={instanceId} clip={clip} canAnnounce={canAnnounce} />
+            <ClipRow key={clip.id} clip={clip} canAnnounce={canAnnounce} />
           ))}
         </ol>
       );
@@ -156,12 +138,10 @@ function ClipsBody({
 }
 
 export function ClipsCard({
-  instanceId,
   state,
   onReload,
   canAnnounce,
 }: {
-  instanceId: Id<"instances">;
   state: RecapClipsState;
   onReload: () => void;
   canAnnounce: boolean;
@@ -185,7 +165,7 @@ export function ClipsCard({
         </Button>
       </CardHeader>
       <CardContent>
-        <ClipsBody instanceId={instanceId} state={state} canAnnounce={canAnnounce} />
+        <ClipsBody state={state} canAnnounce={canAnnounce} />
       </CardContent>
     </Card>
   );

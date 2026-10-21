@@ -1,12 +1,12 @@
-import { api } from "@convex/_generated/api";
-import { useAction, useQuery } from "convex/react";
 import { Loader2, Megaphone, Radio } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { useInstance } from "@/hooks/use-instance";
+import { useEngineScope } from "@/engine/context";
+import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-channel";
+import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -26,31 +26,28 @@ const ANNOUNCEMENT_SCOPE = "moderator:manage:announcements";
 const MAX_ANNOUNCEMENT_LENGTH = 500;
 
 export function AnnouncementWidget() {
-  const { instance } = useInstance();
+  const { instanceId } = useEngineScope();
   const { toast } = useToast();
 
-  // Token-free view of the link — enough to know whether Twitch is connected
-  // and which scopes it was granted.
-  const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
-  const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
+  const twitchLink = useTwitchLink();
+  const sendAnnouncement = useSendAnnouncementRequest();
 
   const [message, setMessage] = useState("");
   const [color, setColor] = useState<AnnouncementColor>("primary");
   const [busy, setBusy] = useState(false);
 
-  const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   // A link created before the announcement scope was added keeps working for
   // everything else, so say why the button is off rather than letting Twitch
   // 401 at send time.
   const canAnnounce = !!twitchLink?.scopes.includes(ANNOUNCEMENT_SCOPE);
 
   const handleAnnounce = async () => {
-    if (!instance || !message.trim()) {
+    if (!instanceId || !message.trim()) {
       return;
     }
     setBusy(true);
     try {
-      await sendAnnouncement({ instanceId: instance._id, message, color });
+      await sendAnnouncement({ message, color });
       setMessage("");
       toast({ title: "Announcement sent" });
     } catch (error) {
@@ -64,7 +61,7 @@ export function AnnouncementWidget() {
     }
   };
 
-  if (platformLinks !== undefined && !twitchLink) {
+  if (twitchLink === null) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-4 text-center">
         <Radio className="h-8 w-8 text-muted-foreground/50 mb-3" />
@@ -123,7 +120,7 @@ export function AnnouncementWidget() {
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Megaphone className="h-4 w-4" />}
         Announce
       </Button>
-      {!canAnnounce && platformLinks !== undefined && (
+      {!canAnnounce && twitchLink !== undefined && (
         <p className="text-xs text-muted-foreground">
           Reconnect Twitch in Settings → Integrations to grant the announcement permission.
         </p>

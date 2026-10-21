@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { useGoLiveOverlayFacts } from "@/engine/hooks/use-go-live";
 import { useObsStatus } from "@/engine/hooks/use-obs-status";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
 import { useToast } from "@/hooks/use-toast";
@@ -90,7 +91,7 @@ export interface GettingStarted {
  */
 export function useGettingStarted(instanceId: Id<"instances">): GettingStarted | null {
   const setup = useQuery(api.setup.status, { instanceId });
-  const overlays = useQuery(api.goLive.overlays, { instanceId });
+  const overlays = useGoLiveOverlayFacts();
   const state = useQuery(api.gettingStarted.state, { instanceId });
   const markDone = useMutation(api.gettingStarted.markDone);
   const dismissMutation = useMutation(api.gettingStarted.dismiss);
