@@ -1,9 +1,8 @@
 import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
 import { localEndpointSummaries } from "@convex/lib/localEndpoints";
 import { parseManifestPermissions } from "@convex/lib/modulePermissions";
 import Editor from "@monaco-editor/react";
-import { useMutation, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import {
   AlertCircle,
   CheckCircle2,
@@ -28,7 +27,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useEngineScope } from "@/engine/context";
 import { useTransientEvent } from "@/engine/hooks/use-correlated-request";
+import { useModuleArchiveInstallRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useTheme } from "@/hooks/use-theme";
 import { buildModuleArchive, computeModuleKey, readModuleArchive } from "@/lib/module-archive";
@@ -299,8 +300,8 @@ export default function ModuleInstall() {
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [approvalOpen, setApprovalOpen] = useState(false);
 
-  const generateUploadUrl = useMutation(api.moduleRepository.generateUploadUrl);
-  const uploadAndDeliver = useMutation(api.moduleRepository.uploadAndDeliver);
+  const { instanceId } = useEngineScope();
+  const installArchive = useModuleArchiveInstallRequest();
 
   // Subscribe to transient events — Convex realtime pushes the moment the webhook emits one
   const installEvent = useTransientEvent(pendingModuleKey || null);
@@ -484,7 +485,7 @@ export default function ModuleInstall() {
   }, []);
 
   const handleInstall = useCallback(async () => {
-    if (!instance) {
+    if (!instanceId) {
       setInstallError("No instance selected. Please select an instance first.");
       return;
     }
@@ -493,20 +494,6 @@ export default function ModuleInstall() {
     setInstallError(null);
     try {
       const archive = buildModuleArchive(files);
-      const zipBlob = new Blob([archive], { type: "application/zip" });
-
-      // Upload zip to Convex storage
-      const uploadUrl = await generateUploadUrl();
-      const uploadResult = await fetch(uploadUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/zip" },
-        body: zipBlob,
-      });
-      if (!uploadResult.ok) {
-        throw new Error("Upload failed");
-      }
-      const { storageId } = (await uploadResult.json()) as { storageId: Id<"_storage"> };
-
       const manifest: Record<string, unknown> = editedManifest ?? {};
 
       const name = (manifest.name as string) || Object.keys(files)[0]?.split("/")[0] || "Unknown Module";
@@ -529,17 +516,7 @@ export default function ModuleInstall() {
         moduleKey,
       });
 
-      // Deliver zip to the engine — no DB record until webhook callback
-      await uploadAndDeliver({
-        instanceId: instance._id,
-        moduleKey,
-        name,
-        description,
-        version,
-        tags,
-        manifest,
-        archiveKey: storageId,
-      });
+      await installArchive({ archive, moduleKey, name, description, version, tags, manifest });
 
       // Subscribe to transient events for this moduleKey
       setPendingModuleKey(moduleKey);
@@ -548,7 +525,7 @@ export default function ModuleInstall() {
       setInstallError(error instanceof Error ? error.message : "Failed to install module. Please try again.");
       setIsInstalling(false);
     }
-  }, [files, editedManifest, instance, generateUploadUrl, uploadAndDeliver]);
+  }, [files, editedManifest, instanceId, installArchive]);
 
   const handleInstallClick = useCallback(() => {
     if (permissionsNeedingApproval.length > 0 || localEndpointsNeedingApproval.length > 0) {

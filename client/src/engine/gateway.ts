@@ -59,6 +59,7 @@ import type {
   MarketplaceBundleInstall,
   ModeratedUser,
   ModerationAccess,
+  ModuleArchiveInstall,
   ModuleDetail,
   ModuleFileContent,
   ModuleFileList,
@@ -402,6 +403,12 @@ export interface ModulesGateway {
    * resolves with what it made. Rejects for a listing the instance may not install.
    */
   useBundleInstallRequest(): (listingId: string) => Promise<MarketplaceBundleInstall>;
+  /**
+   * Installs or upgrades a module from an archive built in the browser;
+   * resolves once the engine has been handed it, and the outcome is reported
+   * under `moduleKey` (`transientEvents`).
+   */
+  useArchiveInstallRequest(): (install: ModuleArchiveInstall) => Promise<{ moduleKey: string }>;
   /** What every module keeps in module storage against the plan's limit; null when no limit applies or the engine cannot say. */
   useStorageUsageRequest(): () => Promise<ModuleStorageUsage | null>;
 }

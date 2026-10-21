@@ -644,6 +644,19 @@ export interface EngineWorkflowOption {
   name: string;
 }
 
+/** A zipped module built in the browser, to install on the engine. */
+export interface ModuleArchiveInstall {
+  archive: Uint8Array;
+  /** `{moduleId}:{version}:{first 7 hex of the archive's sha256}`; the install's outcome is reported under it. */
+  moduleKey: string;
+  name: string;
+  description: string;
+  version: string;
+  tags: string[];
+  /** The parsed manifest, kept with the module: the engine's install callback carries none. */
+  manifest: Record<string, unknown>;
+}
+
 // ==================== Requests ====================
 
 /**
