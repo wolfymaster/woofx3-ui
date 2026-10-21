@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { getFunctionName } from "convex/server";
-import { NoInstanceSelectedError } from "@/engine/scope";
+import { createElement } from "react";
+import { act, create } from "react-test-renderer";
+import { EngineScopeProvider, NoInstanceSelectedError } from "@/engine/scope";
+import type { InstanceId } from "@/engine/types";
 import { renderInScope, TEST_INSTANCE_ID } from "./render-in-scope";
 
 // Gateway calls carry no instance, so these check that the adapter fills it
@@ -99,5 +102,38 @@ describe("live subscriptions need an instance", () => {
   test("an event-log read rejects while the scope has no instance", async () => {
     const listEvents = renderInScope(() => convexEventLogGateway.useEventsRequest(), null);
     await expect(listEvents()).rejects.toBeInstanceOf(NoInstanceSelectedError);
+  });
+});
+
+describe("a request keeps its identity until the scope's instance changes", () => {
+  // Re-rendering needs a renderer that keeps hook state between renders,
+  // which server rendering does not.
+  function scopeOf(id: InstanceId) {
+    return { instanceId: id, optimisticInstanceId: id, isInstanceLoading: false };
+  }
+
+  test("the same function across re-renders, a new one for another instance", () => {
+    const seen: unknown[] = [];
+    function Probe({ tick }: { tick: number }) {
+      seen.push(convexAlertQueueGateway.useReplayRequest());
+      return createElement("span", null, tick);
+    }
+    const tree = (id: InstanceId, tick: number) =>
+      createElement(EngineScopeProvider, { scope: scopeOf(id), children: createElement(Probe, { tick }) });
+
+    let renderer: ReturnType<typeof create> | undefined;
+    act(() => {
+      renderer = create(tree(instanceId, 0));
+    });
+    act(() => {
+      renderer?.update(tree(instanceId, 1));
+    });
+    act(() => {
+      renderer?.update(tree("instance-2" as InstanceId, 2));
+    });
+
+    expect(seen).toHaveLength(3);
+    expect(seen[1]).toBe(seen[0]);
+    expect(seen[2]).not.toBe(seen[1]);
   });
 });
