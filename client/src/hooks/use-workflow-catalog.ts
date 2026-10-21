@@ -16,7 +16,6 @@ export type CatalogTriggerRow = {
   color: string;
   icon: string;
   event?: string;
-  allowVariants?: boolean;
   configFields?: unknown;
   /** DataShapeField[] naming what `trigger.data` carries when this trigger fires. */
   emits?: unknown;
@@ -64,13 +63,7 @@ function toTriggerPreset(row: CatalogTriggerRow): TriggerPreset {
     withModuleName(parseConfigFields(row.configFields), row.moduleName),
     fieldOptionsOwnerFromCanonicalId(row.canonicalRef)
   );
-  let config: TriggerConfig | undefined;
-  if (fields.length > 0 || row.allowVariants) {
-    config = {
-      fields,
-      allowVariants: row.allowVariants === true,
-    };
-  }
+  const config: TriggerConfig | undefined = fields.length > 0 ? { fields } : undefined;
   return {
     id: row.id,
     canonicalRef: row.canonicalRef,

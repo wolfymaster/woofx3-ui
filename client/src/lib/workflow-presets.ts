@@ -10,18 +10,12 @@ import {
 } from "@/lib/condition-comparison";
 
 /**
- * A preset's configuration surface: the fields plus whether the user may
- * create multiple bound instances of the trigger.
- *
- * Declared here rather than imported. The engine contract has no such
- * container any more — a field declaration is a bare array, and this pairing
- * only exists because a *preset* bundles a trigger with its form. Keeping it
- * local also ends the long-standing name clash with the workflow-definition
- * `TriggerConfig`, which is a completely different thing.
+ * A preset's configuration surface: the fields of its form. The engine declares fields
+ * as a bare array; this wrapper belongs to the preset, which bundles a trigger with its
+ * form, and is unrelated to the workflow definition's `TriggerConfig`.
  */
 export interface TriggerConfig {
   fields: ConfigField[];
-  allowVariants?: boolean;
 }
 
 export type { ConfigField };
