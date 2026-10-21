@@ -56,7 +56,21 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
   const viewerRole = useQuery(api.instances.viewerRole, instanceId ? { instanceId } : "skip");
   const canManage = canManageTwitchLink(viewerRole);
 
+  const clearEnginePendingMarker = () => {
+    window.history.replaceState(null, "", `${window.location.pathname}${withoutEnginePending(window.location.search)}`);
+    setEnginePending(false);
+  };
+
+  // Shown in both card states: a forced removal deletes the link, which flips
+  // the card to "Not connected" while the warning still applies.
+  const unlinkWarningNote = unlinkWarning && (
+    <p className="text-sm text-muted-foreground" data-testid="text-disconnect-twitch-warning">
+      {unlinkWarning}
+    </p>
+  );
+
   const handleConnect = () => {
+    setUnlinkWarning(null);
     connect("/admin/integrations");
   };
 
@@ -66,6 +80,7 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
       const result = await unlink({ force });
       setUnlinkFailure(null);
       setUnlinkWarning(result.warning ?? null);
+      clearEnginePendingMarker();
       setConfirmOpen(false);
     } catch (err) {
       console.error("Failed to disconnect Twitch:", err);
@@ -80,12 +95,7 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
     setRetryError(null);
     try {
       await retryEngineSync();
-      window.history.replaceState(
-        null,
-        "",
-        `${window.location.pathname}${withoutEnginePending(window.location.search)}`
-      );
-      setEnginePending(false);
+      clearEnginePendingMarker();
     } catch (err) {
       console.error("Failed to hand Twitch to the engine:", err);
       setRetryError(actionErrorMessage(err));
@@ -171,7 +181,7 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
             </Button>
           </div>
         )}
-        {unlinkWarning && <p className="text-sm text-muted-foreground">{unlinkWarning}</p>}
+        {unlinkWarningNote}
 
         <AlertDialog open={confirmOpen} onOpenChange={handleConfirmOpenChange}>
           <AlertDialogContent>
@@ -212,27 +222,30 @@ export function TwitchIntegrationCard({ instanceId, isConnected, twitchLink, isL
   }
 
   return (
-    <div className="flex items-center justify-between p-4 rounded-lg border">
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded bg-purple-600 flex items-center justify-center text-white font-bold">T</div>
-        <div>
-          <p className="font-medium">Twitch</p>
-          <p className="text-sm text-muted-foreground">Not connected</p>
-          {connectError && <p className="text-sm text-destructive">{connectError}</p>}
-          {viewerRole !== undefined && !canManage && (
-            <p className="text-xs text-muted-foreground">Only an owner or admin can connect Twitch.</p>
-          )}
+    <>
+      <div className="flex items-center justify-between p-4 rounded-lg border">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded bg-purple-600 flex items-center justify-center text-white font-bold">T</div>
+          <div>
+            <p className="font-medium">Twitch</p>
+            <p className="text-sm text-muted-foreground">Not connected</p>
+            {connectError && <p className="text-sm text-destructive">{connectError}</p>}
+            {viewerRole !== undefined && !canManage && (
+              <p className="text-xs text-muted-foreground">Only an owner or admin can connect Twitch.</p>
+            )}
+          </div>
         </div>
+        <Button
+          variant="outline"
+          onClick={handleConnect}
+          disabled={!instanceId || !canManage || starting}
+          data-testid="button-connect-twitch"
+        >
+          {starting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+          Connect
+        </Button>
       </div>
-      <Button
-        variant="outline"
-        onClick={handleConnect}
-        disabled={!instanceId || !canManage || starting}
-        data-testid="button-connect-twitch"
-      >
-        {starting && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-        Connect
-      </Button>
-    </div>
+      {unlinkWarningNote}
+    </>
   );
 }
