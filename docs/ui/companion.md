@@ -25,7 +25,7 @@ companion/
 
 The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Once open, it stays open until the companion quits. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
 
-The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
+The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails, and so does any build whose URL is not an `http` or `https` URL with a host; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
 
 ```bash
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev

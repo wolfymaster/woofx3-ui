@@ -9,6 +9,8 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
+#[cfg(test)]
+mod convex_url;
 mod credentials;
 mod installation;
 mod integration_store;
@@ -427,4 +429,35 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running the woofx3 companion");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::convex_url::check_convex_url;
+
+    #[test]
+    fn test_check_convex_url_accepts_deployment_urls() {
+        for url in [
+            "https://happy-animal-123.convex.cloud",
+            "http://127.0.0.1:3210",
+            "https://convex.example.test/",
+        ] {
+            assert_eq!(check_convex_url(url), Ok(()), "{url}");
+        }
+    }
+
+    #[test]
+    fn test_check_convex_url_refuses_what_convex_cannot_connect_to() {
+        for url in [
+            "happy-animal-123.convex.cloud",
+            "wss://happy-animal-123.convex.cloud",
+            "ftp://example.test",
+            "https://",
+            " https://happy-animal-123.convex.cloud",
+            "https://happy-animal-123.convex.cloud\n",
+            "not a url",
+        ] {
+            assert!(check_convex_url(url).is_err(), "{url}");
+        }
+    }
 }
