@@ -1,17 +1,12 @@
-import {
-  type CapabilityStatus,
-  type ChatSettings,
-  type ChatSettingsPatch,
-  FOLLOWER_MODE_OPTIONS,
-  SLOW_MODE_OPTIONS,
-} from "@convex/lib/moderation";
+import { FOLLOWER_MODE_OPTIONS, SLOW_MODE_OPTIONS } from "@convex/lib/moderation";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ToastAction } from "@/components/ui/toast";
-import { useChatSettingsRequest, useUpdateChatSettingsRequest } from "@/engine/hooks/use-twitch-channel";
+import { useChatSettingsRequest, useUpdateChatSettingsRequest } from "@/engine/hooks/use-moderation";
+import type { ChatSettings, ChatSettingsPatch, ModerationCapabilityStatus } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useToast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -24,7 +19,7 @@ const SETTINGS_REFRESH_MS = 60_000;
 const DEFAULT_FOLLOWER_MINUTES = 10;
 const DEFAULT_SLOW_SECONDS = 30;
 
-export function ChatLockdownSection({ status }: { status: CapabilityStatus }) {
+export function ChatLockdownSection({ status }: { status: ModerationCapabilityStatus }) {
   const { toast } = useToast();
   const getChatSettings = useChatSettingsRequest();
   const updateChatSettings = useUpdateChatSettingsRequest();

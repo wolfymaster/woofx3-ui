@@ -11,13 +11,13 @@ import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEngineScope } from "@/engine/context";
+import { useCreateClipRequest } from "@/engine/hooks/use-clips";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import {
   useRefreshResourceValuesRequest,
   useResourceInstancesOfKind,
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
-import { useCreateClipRequest } from "@/engine/hooks/use-twitch-channel";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { ModuleResourceInstance } from "@/engine/types";
 import { useInstance } from "@/hooks/use-instance";

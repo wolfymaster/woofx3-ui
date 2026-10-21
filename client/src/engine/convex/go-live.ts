@@ -1,4 +1,5 @@
 import { api } from "@convex/_generated/api";
+import { isGoLiveCheckId } from "@convex/lib/goLiveFacts";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
@@ -32,7 +33,8 @@ type StepOutcomeRow = CompletionRow["announcement"];
 
 export function toGoLiveChecklistState(row: ChecklistRow): GoLiveChecklistState {
   return {
-    dismissedCheckIds: row.dismissedCheckIds,
+    // Convex stores the ids as strings; one this client no longer knows is dropped.
+    dismissedCheckIds: row.dismissedCheckIds.filter(isGoLiveCheckId),
     lastGoLive: row.lastGoLive
       ? {
           completedAt: row.lastGoLive.completedAt,

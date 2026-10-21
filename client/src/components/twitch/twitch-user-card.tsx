@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 export interface TwitchUserCardUser extends TwitchUserBadgeSource {
   login: string;
   displayName: string;
-  profileImageUrl?: string;
+  profileImageUrl?: string | null;
 }
 
 /**
@@ -31,7 +31,7 @@ export function TwitchUserCard({
     <div className={cn("space-y-3 rounded-md border border-border p-3", className)} data-testid={testId}>
       <div className="flex items-center gap-3">
         <Avatar className="h-12 w-12 shrink-0">
-          <AvatarImage src={user.profileImageUrl} alt="" />
+          <AvatarImage src={user.profileImageUrl ?? undefined} alt="" />
           <AvatarFallback>{user.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
         </Avatar>
         <div className="min-w-0">

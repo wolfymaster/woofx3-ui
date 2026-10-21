@@ -1,5 +1,4 @@
 import type { GoLiveCompletion, GoLiveStepOutcome } from "@convex/lib/goLiveFacts";
-import type { StreamInfoField } from "@convex/lib/streamInfo";
 import {
   AlertTriangle,
   Bookmark,
@@ -27,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { StreamInfoField, StreamInfoPresetId } from "@/engine/types";
 import { errorMessage, useGoLiveChecklist } from "@/hooks/use-go-live-checklist";
 import { useToast } from "@/hooks/use-toast";
 import type { CheckFix, ChecklistOverall, CheckResult, CheckStatus } from "@/lib/go-live-checks";
@@ -64,12 +64,12 @@ function ApplyPresetButton({
   onApplyPreset,
 }: {
   fix: Extract<CheckFix, { kind: "apply-preset" }>;
-  onApplyPreset: (presetId: string) => Promise<StreamInfoField[]>;
+  onApplyPreset: (presetId: StreamInfoPresetId) => Promise<StreamInfoField[]>;
 }) {
   const { toast } = useToast();
   const [applying, setApplying] = useState(false);
 
-  const apply = async (presetId: string, name: string) => {
+  const apply = async (presetId: StreamInfoPresetId, name: string) => {
     setApplying(true);
     try {
       const unapplied = await onApplyPreset(presetId);
@@ -128,7 +128,7 @@ function FixButton({
 }: {
   fix: CheckFix;
   onRetry: () => void;
-  onApplyPreset: (presetId: string) => Promise<StreamInfoField[]>;
+  onApplyPreset: (presetId: StreamInfoPresetId) => Promise<StreamInfoField[]>;
 }) {
   const { toast } = useToast();
   const className = "h-7 gap-1.5 px-2 text-xs";
@@ -195,7 +195,7 @@ function CheckRow({
   compact: boolean;
   onRetry: () => void;
   onDismiss: () => void;
-  onApplyPreset: (presetId: string) => Promise<StreamInfoField[]>;
+  onApplyPreset: (presetId: StreamInfoPresetId) => Promise<StreamInfoField[]>;
 }) {
   return (
     <li

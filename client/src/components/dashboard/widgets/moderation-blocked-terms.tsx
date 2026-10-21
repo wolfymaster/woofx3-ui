@@ -1,4 +1,4 @@
-import { BLOCKED_TERM_MAX_LENGTH, type CapabilityStatus, validateBlockedTerm } from "@convex/lib/moderation";
+import { BLOCKED_TERM_MAX_LENGTH, validateBlockedTerm } from "@convex/lib/moderation";
 import { Ban, Loader2, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { WidgetOverlay } from "@/components/dashboard/widget-overlay";
@@ -8,7 +8,8 @@ import {
   useAddBlockedTermRequest,
   useBlockedTermsRequest,
   useRemoveBlockedTermRequest,
-} from "@/engine/hooks/use-twitch-channel";
+} from "@/engine/hooks/use-moderation";
+import type { ModerationCapabilityStatus } from "@/engine/types";
 import { actionErrorMessage } from "@/lib/action-error";
 import { cn } from "@/lib/utils";
 import { CapabilityNote, SectionHeading } from "./moderation-shared";
@@ -22,8 +23,8 @@ export function BlockedTermsSection({
   addStatus,
   removeStatus,
 }: {
-  addStatus: CapabilityStatus;
-  removeStatus: CapabilityStatus;
+  addStatus: ModerationCapabilityStatus;
+  removeStatus: ModerationCapabilityStatus;
 }) {
   const listBlockedTerms = useBlockedTermsRequest();
   const addBlockedTerm = useAddBlockedTermRequest();

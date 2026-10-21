@@ -14,7 +14,7 @@ import { useEngineScope } from "@/engine/context";
 import { useChatCommands } from "@/engine/hooks/use-chat-commands";
 import { useRunMacroRequest } from "@/engine/hooks/use-macros";
 import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
-import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-channel";
+import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { toMacroId } from "@/lib/cloud-ids";

@@ -21,11 +21,11 @@ export function toShoutoutEntry(row: QueueRow): ShoutoutEntry {
     id: toShoutoutEntryId(row.id),
     login: row.login,
     displayName: row.displayName,
-    profileImageUrl: row.profileImageUrl,
-    broadcasterType: row.broadcasterType,
+    profileImageUrl: row.profileImageUrl ?? null,
+    broadcasterType: row.broadcasterType ?? null,
     attempts: row.attempts,
     nextEligibleAt: row.nextEligibleAt,
-    lastError: row.lastError,
+    lastError: row.lastError ?? null,
   };
 }
 
@@ -34,8 +34,8 @@ export function toTwitchChannel(user: LookupRow): TwitchChannel {
     twitchUserId: user.twitchUserId,
     login: user.login,
     displayName: user.displayName,
-    profileImageUrl: user.profileImageUrl,
-    broadcasterType: user.broadcasterType,
+    profileImageUrl: user.profileImageUrl ?? null,
+    broadcasterType: user.broadcasterType ?? null,
   };
 }
 
@@ -77,7 +77,13 @@ function useEnqueueRequest() {
   const enqueue = useInstanceMutation(api.shoutouts.enqueue);
   return useCallback(
     async ({ twitchUserId, login, displayName, profileImageUrl, broadcasterType }: TwitchChannel) => {
-      await enqueue({ twitchUserId, login, displayName, profileImageUrl, broadcasterType }).catch(withPlainError);
+      await enqueue({
+        twitchUserId,
+        login,
+        displayName,
+        profileImageUrl: profileImageUrl ?? undefined,
+        broadcasterType: broadcasterType ?? undefined,
+      }).catch(withPlainError);
     },
     [enqueue]
   );

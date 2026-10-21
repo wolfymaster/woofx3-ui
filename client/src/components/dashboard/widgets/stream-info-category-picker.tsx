@@ -1,9 +1,9 @@
-import type { StreamCategory } from "@convex/lib/streamInfo";
 import { Gamepad2, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSearchCategoriesRequest } from "@/engine/hooks/use-twitch-channel";
+import { useSearchCategoriesRequest } from "@/engine/hooks/use-stream-info";
+import type { StreamCategory } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
 

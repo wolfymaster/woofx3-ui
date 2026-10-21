@@ -11,7 +11,7 @@ import {
   useRemoveShoutoutRequest,
   useReorderShoutoutsRequest,
   useShoutoutQueue,
-} from "@/engine/hooks/use-twitch-channel";
+} from "@/engine/hooks/use-shoutouts";
 import type { ShoutoutEntry, ShoutoutEntryId, TwitchChannel } from "@/engine/types";
 import { useChatters } from "@/hooks/use-chatters";
 import { matchChatters } from "@/lib/chatter-match";

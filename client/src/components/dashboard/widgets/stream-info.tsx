@@ -5,8 +5,6 @@ import {
   MAX_MARKER_DESCRIPTION_LENGTH,
   MAX_PRESET_NAME_LENGTH,
   STREAM_INFO_SCOPE,
-  type StreamInfo,
-  type StreamInfoChanges,
   titleCounter,
 } from "@convex/lib/streamInfo";
 import { Bookmark, Check, Flag, Loader2, Radio, RotateCcw, Save, Trash2 } from "lucide-react";
@@ -20,9 +18,9 @@ import {
   useStreamInfoPresets,
   useStreamInfoRequest,
   useUpdateStreamInfoRequest,
-} from "@/engine/hooks/use-twitch-channel";
+} from "@/engine/hooks/use-stream-info";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
-import type { StreamInfoPresetId } from "@/engine/types";
+import type { StreamInfo, StreamInfoChanges, StreamInfoPresetId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useToast } from "@/hooks/use-toast";
 import { comparePreset, draftProblem, formatStreamPosition, isDirty, rebaseDraft } from "@/lib/stream-info-edit";

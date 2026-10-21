@@ -1,5 +1,5 @@
 import { Loader2, ShieldAlert } from "lucide-react";
-import { useModerationAccess } from "@/engine/hooks/use-twitch-channel";
+import { useModerationAccess } from "@/engine/hooks/use-moderation";
 import { BlockedTermsSection } from "./moderation-blocked-terms";
 import { ChatLockdownSection } from "./moderation-chat-lockdown";
 import { UserActionsSection } from "./moderation-user-actions";

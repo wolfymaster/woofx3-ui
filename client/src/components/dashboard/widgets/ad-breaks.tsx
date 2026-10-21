@@ -5,9 +5,9 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { useEngineScope } from "@/engine/context";
+import { useAdScheduleRequest, useSnoozeNextAdRequest } from "@/engine/hooks/use-ad-breaks";
 import { useStreamEventsSubscription } from "@/engine/hooks/use-event-log";
 import { useLiveState } from "@/engine/hooks/use-live-state";
-import { useAdScheduleRequest, useSnoozeNextAdRequest } from "@/engine/hooks/use-twitch-channel";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
 import { actionErrorMessage } from "@/lib/action-error";

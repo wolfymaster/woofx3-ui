@@ -39,11 +39,8 @@ import {
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
-import {
-  useSendChatMessageRequest,
-  useStreamInfoPresets,
-  useUpdateStreamInfoRequest,
-} from "@/engine/hooks/use-twitch-channel";
+import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-stream-info";
+import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
 import { useSetWorkflowEnabledRequest, useWorkflows } from "@/engine/hooks/use-workflows";
 import type { ModuleResourceInstance } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";

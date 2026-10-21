@@ -8,7 +8,7 @@ import {
   type TwitchLinkFacts,
   type WorkflowFacts,
 } from "@convex/lib/goLiveFacts";
-import type { StreamInfo } from "@convex/lib/streamInfo";
+import type { StreamInfo, StreamInfoPresetId } from "@/engine/types";
 import { parseFieldOptionsReply } from "@/lib/field-options";
 import { comparePreset } from "@/lib/stream-info-edit";
 import { formatTimeAgo } from "@/lib/time-ago";
@@ -32,14 +32,14 @@ export type CheckFix =
 
 /** A saved stream info preset as the checklist offers it. */
 export interface StreamInfoPresetOption {
-  id: string;
+  id: StreamInfoPresetId;
   name: string;
   info: StreamInfo;
 }
 
 /** A preset that would change the channel, with what applying it changes. */
 export interface PresetChoice {
-  id: string;
+  id: StreamInfoPresetId;
   name: string;
   summary: string;
 }
@@ -298,7 +298,7 @@ export function obsCheck(facts: ObsFacts): CheckResult {
 export function streamInfoFromFacts(facts: Extract<StreamInfoFacts, { kind: "ok" }>): StreamInfo {
   return {
     title: facts.title,
-    category: facts.categoryId ? { id: facts.categoryId, name: facts.categoryName } : null,
+    category: facts.categoryId ? { id: facts.categoryId, name: facts.categoryName, boxArtUrl: null } : null,
     tags: facts.tags,
   };
 }

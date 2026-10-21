@@ -1402,6 +1402,9 @@ export interface StarterPackInstall {
 // What the dashboard does on the linked Twitch channel, as the broadcaster.
 // The engine makes these calls itself (its `twitch.*` capabilities) and
 // answers with Twitch's own bodies; a gateway parses them into these.
+// A value these records lack (Twitch left it out, or nothing was kept) is
+// null, never undefined; an absent field means "leave it as it is" and only
+// appears in what a request takes (`ChatSettingsPatch`, `StreamInfoChanges`).
 
 /**
  * The channel's ad schedule. Times are ISO-8601 strings, null when Twitch
@@ -1491,19 +1494,19 @@ export interface CurrentPin {
   messageId: string;
   content: string | null;
   authorName: string | null;
-  /** ISO-8601; absent when the pin lasts until the stream ends. */
-  expiresAt: string | undefined;
+  /** ISO-8601; null when the pin lasts until the stream ends. */
+  expiresAt: string | null;
 }
 
 /** A message worth pinning again, kept across streams. Times are epoch ms. */
 export interface PinHistoryEntry {
   id: PinHistoryEntryId;
   content: string;
-  authorName: string | undefined;
-  /** The chat message's id on Twitch; absent for an entry this app never posted. */
-  twitchMessageId: string | undefined;
+  authorName: string | null;
+  /** The chat message's id on Twitch; null for an entry this app never posted. */
+  twitchMessageId: string | null;
   createdAt: number;
-  lastPinnedAt: number | undefined;
+  lastPinnedAt: number | null;
 }
 
 export interface PinnedMessage {
@@ -1528,9 +1531,9 @@ export interface TwitchChannel {
   twitchUserId: string;
   login: string;
   displayName: string;
-  profileImageUrl: string | undefined;
+  profileImageUrl: string | null;
   /** `partner`, `affiliate`, or empty for neither. */
-  broadcasterType: string | undefined;
+  broadcasterType: string | null;
 }
 
 /** A channel waiting to be shouted out; the queue paces shoutouts within Twitch's limits. Times are epoch ms. */
@@ -1538,12 +1541,12 @@ export interface ShoutoutEntry {
   id: ShoutoutEntryId;
   login: string;
   displayName: string;
-  profileImageUrl: string | undefined;
-  broadcasterType: string | undefined;
+  profileImageUrl: string | null;
+  broadcasterType: string | null;
   attempts: number;
   /** Not tried again before this. */
   nextEligibleAt: number;
-  lastError: string | undefined;
+  lastError: string | null;
 }
 
 /** Twitch's announcement colors; there is no free-form one. */
@@ -1563,8 +1566,8 @@ export interface CreatedClip {
 export interface StreamCategory {
   id: string;
   name: string;
-  /** Sized box art URL; absent when Twitch has none for the category. */
-  boxArtUrl?: string;
+  /** Sized box art URL; null when Twitch has none for the category. */
+  boxArtUrl: string | null;
 }
 
 /** The channel's title, category and tags. */
@@ -1637,7 +1640,7 @@ export interface GoLiveWorkflowFacts {
 
 /** What the checklist keeps between runs, and the workflow facts it checks. */
 export interface GoLiveChecklistState {
-  dismissedCheckIds: string[];
+  dismissedCheckIds: GoLiveCheckId[];
   lastGoLive: LastGoLive | null;
   /** A "Stream start" marker is waiting for the stream to go live. */
   markerPending: boolean;
