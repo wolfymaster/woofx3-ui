@@ -3,7 +3,7 @@ import { Clapperboard, Copy, ExternalLink, Eye, Loader2, MessageSquare, RefreshC
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-channel";
+import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
 import type { RecapClipsState } from "@/hooks/use-recap-clips";
 import { useToast } from "@/hooks/use-toast";
 import { buildClipShareMessage, formatClipDuration, formatStreamOffset } from "@/lib/recap-clips";

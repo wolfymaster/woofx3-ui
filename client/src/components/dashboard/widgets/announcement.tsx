@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
-import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-channel";
+import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";

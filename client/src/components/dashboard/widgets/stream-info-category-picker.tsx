@@ -3,7 +3,7 @@ import { Gamepad2, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useSearchCategoriesRequest } from "@/engine/hooks/use-twitch-channel";
+import { useSearchCategoriesRequest } from "@/engine/hooks/use-stream-info";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
 

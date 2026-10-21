@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useEngineScope } from "@/engine/context";
-import { useChattersRequest } from "@/engine/hooks/use-twitch-channel";
+import { useChattersRequest } from "@/engine/hooks/use-twitch-chat";
 import type { InstanceId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import type { ChatterOption } from "@/lib/chatter-match";

@@ -20,7 +20,7 @@ import {
   useStreamInfoPresets,
   useStreamInfoRequest,
   useUpdateStreamInfoRequest,
-} from "@/engine/hooks/use-twitch-channel";
+} from "@/engine/hooks/use-stream-info";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { StreamInfoPresetId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";

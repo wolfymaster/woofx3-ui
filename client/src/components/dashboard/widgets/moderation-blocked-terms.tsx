@@ -8,7 +8,7 @@ import {
   useAddBlockedTermRequest,
   useBlockedTermsRequest,
   useRemoveBlockedTermRequest,
-} from "@/engine/hooks/use-twitch-channel";
+} from "@/engine/hooks/use-moderation";
 import { actionErrorMessage } from "@/lib/action-error";
 import { cn } from "@/lib/utils";
 import { CapabilityNote, SectionHeading } from "./moderation-shared";

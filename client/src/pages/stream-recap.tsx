@@ -12,7 +12,7 @@ import { RecapTimeline } from "@/components/stream-recap/recap-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
-import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-channel";
+import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import { useInstance } from "@/hooks/use-instance";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";

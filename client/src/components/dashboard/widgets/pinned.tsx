@@ -11,7 +11,7 @@ import {
   useRemovePinHistoryEntryRequest,
   useRepinRequest,
   useUnpinRequest,
-} from "@/engine/hooks/use-twitch-channel";
+} from "@/engine/hooks/use-pins";
 import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import type { CurrentPin, PinHistoryEntryId } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";

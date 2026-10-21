@@ -17,12 +17,12 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useEnqueueShoutoutRequest } from "@/engine/hooks/use-shoutouts";
 import {
   useSupporterLeaderboardRequest,
   useSupporterStreamsRequest,
   useViewerSupportTotalsRequest,
 } from "@/engine/hooks/use-supporters";
-import { useEnqueueShoutoutRequest } from "@/engine/hooks/use-twitch-channel";
 import type { InstanceId } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { useInstance } from "@/hooks/use-instance";

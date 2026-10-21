@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
-import { useBanUserRequest, useTimeoutUserRequest, useUnbanUserRequest } from "@/engine/hooks/use-twitch-channel";
+import { useBanUserRequest, useTimeoutUserRequest, useUnbanUserRequest } from "@/engine/hooks/use-moderation";
 import { useChatters } from "@/hooks/use-chatters";
 import { useToast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";

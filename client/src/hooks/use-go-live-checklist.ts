@@ -12,7 +12,7 @@ import {
   useSetGoLiveCheckDismissedRequest,
 } from "@/engine/hooks/use-go-live";
 import { useLiveState } from "@/engine/hooks/use-live-state";
-import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-twitch-channel";
+import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-stream-info";
 import type {
   EventWatch,
   GoLiveCheckId,
