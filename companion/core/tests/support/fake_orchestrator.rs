@@ -16,6 +16,10 @@
 //!   also never exits.
 //! - `fail-leaving-service`: starts a service that never exits, then exits 1.
 //! - `linger`: a service that never exits.
+//! - `migrate-then-ready`: runs the `migrate` step, which completes once the
+//!   file `FAKE_ORCHESTRATOR_GATE` names exists, then behaves as `ready`.
+//! - `step-fails:<name>`: runs the run-once step `name`, which fails, then
+//!   reports and exits as the orchestrator does when a step fails.
 //!
 //! With `FAKE_ORCHESTRATOR_RECORD` set, it appends what it was started with to
 //! that file, one `key=value` per line. The service pid is recorded as
@@ -30,6 +34,7 @@ use std::time::Duration;
 const SCRIPT_ENV: &str = "FAKE_ORCHESTRATOR_SCRIPT";
 const RECORD_ENV: &str = "FAKE_ORCHESTRATOR_RECORD";
 const RUNS_ENV: &str = "FAKE_ORCHESTRATOR_RUNS";
+const GATE_ENV: &str = "FAKE_ORCHESTRATOR_GATE";
 
 fn main() {
     let script = std::env::var(SCRIPT_ENV).unwrap_or_default();
@@ -70,6 +75,18 @@ fn main() {
             start_service();
             fail();
         }
+        ("migrate-then-ready", _) => {
+            let pid = std::process::id();
+            status(&format!(
+                r#"{{"event":"service","time":"t","name":"migrate","status":"starting","pid":{pid}}}"#
+            ));
+            wait_for_gate();
+            status(&format!(
+                r#"{{"event":"service","time":"t","name":"migrate","status":"completed","pid":{pid},"message":"exit status 0"}}"#
+            ));
+            ready_until_stdin_closes();
+        }
+        ("step-fails", step) => fail_step(step),
         (other, _) => {
             eprintln!("fake orchestrator: unknown script {other:?}");
             std::process::exit(2);
@@ -119,6 +136,34 @@ fn fail() -> ! {
     eprintln!("fake orchestrator: giving up");
     status(r#"{"event":"error","time":"t","message":"services.json not found"}"#);
     std::process::exit(1);
+}
+
+/// The lines the orchestrator writes when run-once step `step` fails: the
+/// step stops, its failure is reported, the orchestrator's own error
+/// follows, and it exits 1 (build/orchestrator/main.go in the engine).
+fn fail_step(step: &str) -> ! {
+    let pid = std::process::id();
+    status(&format!(
+        r#"{{"event":"service","time":"t","name":"{step}","status":"starting","pid":{pid}}}"#
+    ));
+    status(&format!(
+        r#"{{"event":"service","time":"t","name":"{step}","status":"stopped","pid":{pid},"message":"exit status 1"}}"#
+    ));
+    status(&format!(
+        r#"{{"event":"error","time":"t","name":"{step}","message":"run-once step failed: exit status 1"}}"#
+    ));
+    status(&format!(
+        r#"{{"event":"error","time":"t","message":"Stopped because a run-once step failed: {step}: exit status 1"}}"#
+    ));
+    std::process::exit(1);
+}
+
+/// Waits for the file `FAKE_ORCHESTRATOR_GATE` names to exist.
+fn wait_for_gate() {
+    let gate = std::env::var(GATE_ENV).expect("FAKE_ORCHESTRATOR_GATE is set");
+    while !Path::new(&gate).exists() {
+        std::thread::sleep(Duration::from_millis(20));
+    }
 }
 
 fn wait_for_stdin_to_close() {
