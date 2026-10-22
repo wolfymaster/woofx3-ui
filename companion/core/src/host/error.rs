@@ -62,4 +62,10 @@ pub enum HostError {
     DataDirNotAbsolute(PathBuf),
     #[error("the engine's data directory {0} is inside the engine release")]
     DataDirInsideEngine(PathBuf),
+    #[error("cannot queue this shoutout: {0}")]
+    ShoutoutChannelInvalid(&'static str),
+    #[error("the shoutout queue is full: it holds at most {0} channels")]
+    ShoutoutQueueFull(usize),
+    #[error("there is no shoutout queue entry {0}")]
+    ShoutoutEntryNotFound(u64),
 }
