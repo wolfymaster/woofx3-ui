@@ -1,13 +1,13 @@
 //! A stand-in for the local engine's Twitch calls, for the tests of the
 //! host's workers that act through the engine.
 
-use std::collections::VecDeque;
+use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use futures::future::BoxFuture;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 
-use super::gateway::{ClientCredentials, EngineGateway, TwitchHelixResult};
+use super::gateway::{ClientCredentials, EngineGateway, StreamLiveness, TwitchHelixResult};
 use super::registration::LocalSession;
 use super::HostError;
 
@@ -16,50 +16,103 @@ use super::HostError;
 pub enum EngineCall {
     SendShoutout(String),
     CreateStreamMarker(String),
-    IsLive,
+    StreamLiveness,
 }
 
-/// Answers each Twitch call with the next scripted reply, and reports
-/// each call as it arrives. A call with no reply scripted yet waits for
-/// one, so a test can look at the worker mid-call.
+/// The replies for one kind of call, by the order the calls arrived: the
+/// n-th call gets the n-th reply. A reply can be scripted before its call
+/// arrives, or for a later call before an earlier one, so a test can hold
+/// one call while another completes.
+struct Script<T> {
+    /// Calls made so far; the next call's ticket.
+    issued: usize,
+    /// The ticket the next [`Script::push`] answers.
+    next_scripted: usize,
+    replies: BTreeMap<usize, T>,
+}
+
+impl<T> Script<T> {
+    fn new() -> Mutex<Self> {
+        Mutex::new(Script {
+            issued: 0,
+            next_scripted: 0,
+            replies: BTreeMap::new(),
+        })
+    }
+}
+
+/// Answers each Twitch call with its scripted reply, and reports each call
+/// as it arrives. A call with no reply scripted yet waits for one, so a
+/// test can look at the worker mid-call.
 pub struct FakeEngine {
-    replies: Mutex<VecDeque<Result<TwitchHelixResult, HostError>>>,
-    live: Mutex<VecDeque<Result<bool, HostError>>>,
+    replies: Mutex<Script<Result<TwitchHelixResult, HostError>>>,
+    liveness: Mutex<Script<Result<StreamLiveness, HostError>>>,
     calls: mpsc::UnboundedSender<EngineCall>,
     /// Signalled when a reply is scripted, for calls waiting on one.
-    scripted: tokio::sync::Notify,
+    scripted: Notify,
 }
 
 impl FakeEngine {
     pub fn new() -> (Arc<Self>, mpsc::UnboundedReceiver<EngineCall>) {
         let (calls, received) = mpsc::unbounded_channel();
         let engine = FakeEngine {
-            replies: Mutex::new(VecDeque::new()),
-            live: Mutex::new(VecDeque::new()),
+            replies: Script::new(),
+            liveness: Script::new(),
             calls,
-            scripted: tokio::sync::Notify::new(),
+            scripted: Notify::new(),
         };
         (Arc::new(engine), received)
     }
 
+    /// The reply to the next Twitch write (shoutout or marker) not yet
+    /// scripted.
     pub fn reply(&self, reply: Result<TwitchHelixResult, HostError>) {
-        self.replies.lock().expect("replies lock").push_back(reply);
+        self.push(&self.replies, reply);
+    }
+
+    /// The reply to the next `stream_liveness` call not yet scripted.
+    pub fn live(&self, reply: Result<StreamLiveness, HostError>) {
+        self.push(&self.liveness, reply);
+    }
+
+    /// The reply to `stream_liveness` call number `ticket`, counting from 0.
+    pub fn live_for(&self, ticket: usize, reply: Result<StreamLiveness, HostError>) {
+        let mut script = self.liveness.lock().expect("script lock");
+        assert!(
+            script.replies.insert(ticket, reply).is_none(),
+            "call {ticket} already has a reply"
+        );
+        script.next_scripted = script.next_scripted.max(ticket + 1);
+        drop(script);
         self.scripted.notify_waiters();
     }
 
-    pub fn live(&self, reply: Result<bool, HostError>) {
-        self.live.lock().expect("live lock").push_back(reply);
+    fn push<T>(&self, script: &Mutex<Script<T>>, reply: T) {
+        let mut script = script.lock().expect("script lock");
+        let ticket = script.next_scripted;
+        script.next_scripted += 1;
+        script.replies.insert(ticket, reply);
+        drop(script);
         self.scripted.notify_waiters();
     }
 
-    async fn next<T>(&self, queue: &Mutex<VecDeque<T>>) -> T {
-        loop {
-            let notified = self.scripted.notified();
-            if let Some(reply) = queue.lock().expect("reply lock").pop_front() {
-                return reply;
+    /// Takes the call's ticket now, as the call arrives, and waits for its
+    /// reply.
+    fn answer<'a, T: Send + 'a>(&'a self, script: &'a Mutex<Script<T>>) -> BoxFuture<'a, T> {
+        let ticket = {
+            let mut script = script.lock().expect("script lock");
+            script.issued += 1;
+            script.issued - 1
+        };
+        Box::pin(async move {
+            loop {
+                let notified = self.scripted.notified();
+                if let Some(reply) = script.lock().expect("script lock").replies.remove(&ticket) {
+                    return reply;
+                }
+                notified.await;
             }
-            notified.await;
-        }
+        })
     }
 }
 
@@ -87,7 +140,7 @@ impl EngineGateway for FakeEngine {
         let _ = self
             .calls
             .send(EngineCall::SendShoutout(to_broadcaster_id.to_string()));
-        Box::pin(self.next(&self.replies))
+        self.answer(&self.replies)
     }
 
     fn create_stream_marker<'a>(
@@ -98,15 +151,15 @@ impl EngineGateway for FakeEngine {
         let _ = self
             .calls
             .send(EngineCall::CreateStreamMarker(description.to_string()));
-        Box::pin(self.next(&self.replies))
+        self.answer(&self.replies)
     }
 
-    fn is_live<'a>(
+    fn stream_liveness<'a>(
         &'a self,
         _credentials: &'a ClientCredentials,
-    ) -> BoxFuture<'a, Result<bool, HostError>> {
-        let _ = self.calls.send(EngineCall::IsLive);
-        Box::pin(self.next(&self.live))
+    ) -> BoxFuture<'a, Result<StreamLiveness, HostError>> {
+        let _ = self.calls.send(EngineCall::StreamLiveness);
+        self.answer(&self.liveness)
     }
 }
 

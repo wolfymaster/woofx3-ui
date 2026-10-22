@@ -22,7 +22,7 @@ pub use engine::{orchestrator_spec, LocalEngineLayout, DEFAULT_API_PORT};
 pub use error::HostError;
 pub use gateway::{
     is_authentication_refused, ClientCredentials, EngineGateway, GatewayTimeouts,
-    HttpEngineGateway, TwitchHelixFailure, TwitchHelixResult,
+    HttpEngineGateway, StreamLiveness, TwitchHelixFailure, TwitchHelixResult,
 };
 pub use registration::{
     run_registration, CredentialStore, LocalSession, Registrar, RegistrationOptions,

@@ -69,6 +69,8 @@ export type ShoutoutEnqueued = {
 export type StreamStartMarker =
   | { kind: "idle" }
   | { kind: "pending"; requestedAt: EpochMillis }
+  /** The stream is live and the marker is being dropped. */
+  | { kind: "dropping" }
   | { kind: "dropped"; droppedAt: EpochMillis }
   | { kind: "failed"; message: string };
 

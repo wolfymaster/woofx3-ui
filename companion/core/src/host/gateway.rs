@@ -84,12 +84,44 @@ pub trait EngineGateway: Send + Sync {
     ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>>;
 
     /// Whether the broadcaster is live, from the engine's `getStreamStatus`.
-    /// The engine answers offline when it cannot ask Twitch, so `false` can
-    /// also mean "unknown".
-    fn is_live<'a>(
+    fn stream_liveness<'a>(
         &'a self,
         credentials: &'a ClientCredentials,
-    ) -> BoxFuture<'a, Result<bool, HostError>>;
+    ) -> BoxFuture<'a, Result<StreamLiveness, HostError>>;
+}
+
+/// What the engine's `getStreamStatus` says about the broadcast.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamLiveness {
+    Live,
+    /// Twitch answered that the broadcaster is not live.
+    Offline,
+    /// The engine could not ask Twitch: no linked account, a refused token,
+    /// or a Helix failure. The engine answers those with its offline shape,
+    /// but without the broadcaster's `twitchUserId`, which only an answer
+    /// from Twitch carries (the engine's api/src/twitch-stream-status.ts).
+    Unknown,
+}
+
+impl StreamLiveness {
+    /// Reads the `StreamStatus` capnweb wrote. Only `isLive` and whether
+    /// `twitchUserId` is a string are read: the engine writes absent
+    /// optional fields as capnweb's `undefined` form, which the host does
+    /// not decode.
+    pub fn from_wire(value: &Value) -> Result<Self, HostError> {
+        let live = value.get("isLive").and_then(Value::as_bool).ok_or(
+            HostError::EngineReplyUnreadable(
+                "getStreamStatus did not say whether the stream is live",
+            ),
+        )?;
+        if live {
+            return Ok(StreamLiveness::Live);
+        }
+        match value.get("twitchUserId").and_then(Value::as_str) {
+            Some(_) => Ok(StreamLiveness::Offline),
+            None => Ok(StreamLiveness::Unknown),
+        }
+    }
 }
 
 /// Why the engine has no answer from Twitch for a Twitch method. Must match
@@ -387,10 +419,10 @@ impl EngineGateway for HttpEngineGateway {
         })
     }
 
-    fn is_live<'a>(
+    fn stream_liveness<'a>(
         &'a self,
         credentials: &'a ClientCredentials,
-    ) -> BoxFuture<'a, Result<bool, HostError>> {
+    ) -> BoxFuture<'a, Result<StreamLiveness, HostError>> {
         Box::pin(async move {
             let value = self
                 .authenticated_call(
@@ -400,14 +432,7 @@ impl EngineGateway for HttpEngineGateway {
                     self.timeouts.twitch_call,
                 )
                 .await?;
-            // Only `isLive` is read: the engine writes absent optional fields
-            // as capnweb's `undefined` form, which the host does not decode.
-            value
-                .get("isLive")
-                .and_then(Value::as_bool)
-                .ok_or(HostError::EngineReplyUnreadable(
-                    "getStreamStatus did not say whether the stream is live",
-                ))
+            StreamLiveness::from_wire(&value)
         })
     }
 }
@@ -499,6 +524,48 @@ mod tests {
             assert!(
                 matches!(
                     TwitchHelixResult::from_wire(&wire),
+                    Err(HostError::EngineReplyUnreadable(_))
+                ),
+                "{wire}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_stream_liveness_from_wire_tells_offline_from_unknown() {
+        let cases = [
+            (
+                json!({ "isLive": true, "uptime": "00:01:00", "streamTitle": ["undefined"] }),
+                StreamLiveness::Live,
+            ),
+            (
+                json!({ "isLive": false, "uptime": "00:00:00", "twitchUserId": "7" }),
+                StreamLiveness::Offline,
+            ),
+            (
+                json!({ "isLive": false, "uptime": "00:00:00", "viewerCount": 0 }),
+                StreamLiveness::Unknown,
+            ),
+            (
+                json!({ "isLive": false, "twitchUserId": ["undefined"] }),
+                StreamLiveness::Unknown,
+            ),
+        ];
+        for (wire, expected) in cases {
+            assert_eq!(
+                StreamLiveness::from_wire(&wire).expect("readable"),
+                expected,
+                "{wire}"
+            );
+        }
+        for wire in [
+            json!({ "uptime": "00:00:00" }),
+            json!({ "isLive": "true" }),
+            json!(null),
+        ] {
+            assert!(
+                matches!(
+                    StreamLiveness::from_wire(&wire),
                     Err(HostError::EngineReplyUnreadable(_))
                 ),
                 "{wire}"

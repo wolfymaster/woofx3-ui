@@ -8,7 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use woofx3_companion_core::host::{
     ClientCredentials, EngineGateway, GatewayTimeouts, HostError, HttpEngineGateway,
-    TwitchHelixResult,
+    StreamLiveness, TwitchHelixResult,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -314,22 +314,26 @@ async fn test_http_engine_gateway_creates_a_stream_marker_and_reads_a_refusal() 
 async fn test_http_engine_gateway_reads_whether_the_stream_is_live() {
     let cases = [
         (
-            "[\"resolve\",2,{\"isLive\":true,\"uptime\":\"00:01:00\",\"viewerCount\":3,\"streamTitle\":[\"undefined\"]}]",
-            true,
+            "[\"resolve\",2,{\"isLive\":true,\"uptime\":\"00:01:00\",\"viewerCount\":3,\"streamTitle\":[\"undefined\"],\"twitchUserId\":\"7\"}]",
+            StreamLiveness::Live,
+        ),
+        (
+            "[\"resolve\",2,{\"isLive\":false,\"uptime\":\"00:00:00\",\"viewerCount\":0,\"twitchUserId\":\"7\"}]",
+            StreamLiveness::Offline,
         ),
         (
             "[\"resolve\",2,{\"isLive\":false,\"uptime\":\"00:00:00\",\"viewerCount\":0}]",
-            false,
+            StreamLiveness::Unknown,
         ),
     ];
-    for (body, live) in cases {
+    for (body, liveness) in cases {
         let (url, bodies) = stand_in(Answer::Reply { status: 200, body }).await;
         assert_eq!(
             gateway(url)
-                .is_live(&credentials())
+                .stream_liveness(&credentials())
                 .await
                 .expect("answered"),
-            live,
+            liveness,
             "{body}"
         );
         assert!(bodies.lock().expect("lock")[0].contains("[\"getStreamStatus\"],[]"));
@@ -341,7 +345,7 @@ async fn test_http_engine_gateway_reads_whether_the_stream_is_live() {
     })
     .await;
     assert!(matches!(
-        gateway(url).is_live(&credentials()).await,
+        gateway(url).stream_liveness(&credentials()).await,
         Err(HostError::EngineReplyUnreadable(_))
     ));
 }
@@ -362,7 +366,7 @@ async fn test_http_engine_gateway_reports_refused_credentials_on_authenticated_c
         Err(HostError::CredentialsRefused { .. })
     ));
     assert!(matches!(
-        gateway.is_live(&credentials()).await,
+        gateway.stream_liveness(&credentials()).await,
         Err(HostError::CredentialsRefused { .. })
     ));
 }
@@ -399,7 +403,7 @@ async fn test_http_engine_gateway_waits_longer_for_calls_forwarded_to_twitch() {
     })
     .await;
     let gateway = HttpEngineGateway::new(url, timeouts).expect("a client");
-    assert!(gateway.is_live(&credentials()).await.is_ok());
+    assert!(gateway.stream_liveness(&credentials()).await.is_ok());
     assert!(matches!(
         gateway.verify(&credentials()).await,
         Err(HostError::EngineUnreachable(_))

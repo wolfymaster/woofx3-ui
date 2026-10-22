@@ -226,7 +226,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
-    use crate::host::gateway::TwitchHelixResult;
+    use crate::host::gateway::{StreamLiveness, TwitchHelixResult};
 
     fn credentials(id: &str) -> ClientCredentials {
         ClientCredentials {
@@ -319,10 +319,10 @@ mod tests {
             unimplemented!("registration never drops markers")
         }
 
-        fn is_live<'a>(
+        fn stream_liveness<'a>(
             &'a self,
             _credentials: &'a ClientCredentials,
-        ) -> BoxFuture<'a, Result<bool, HostError>> {
+        ) -> BoxFuture<'a, Result<StreamLiveness, HostError>> {
             unimplemented!("registration never reads the stream status")
         }
     }
