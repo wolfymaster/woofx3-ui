@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::future::BoxFuture;
-use tokio::sync::watch;
+use tokio::sync::{watch, Notify};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 
@@ -50,8 +50,6 @@ pub enum LocalSession {
 
 #[derive(Debug, Clone)]
 pub struct RegistrationOptions {
-    /// Bounds each call to the engine's gateway, connecting included.
-    pub request_timeout: Duration,
     /// The delay before each retry of a failed registration.
     pub backoff: Backoff,
     /// The jitter for each retry delay, in `[0, 1]`.
@@ -61,7 +59,6 @@ pub struct RegistrationOptions {
 impl Default for RegistrationOptions {
     fn default() -> Self {
         RegistrationOptions {
-            request_timeout: Duration::from_secs(10),
             backoff: Backoff {
                 initial: Duration::from_secs(1),
                 max: Duration::from_secs(30),
@@ -159,14 +156,48 @@ async fn read_registration_token(path: &Path) -> Result<String, HostError> {
     Ok(token.to_string())
 }
 
-/// Registers each time the engine becomes ready, until cancelled or until
-/// the engine's supervisor ends. A failed attempt is retried with backoff
-/// for as long as the engine stays ready.
+/// Lets a worker that acts with the host's credentials tell registration
+/// that the engine refused them on a later call, as when the host's client
+/// was revoked while the engine ran. Registration then checks them again
+/// and registers anew if the engine no longer knows them. It carries no
+/// data, since registration verifies for itself, so a worker can ask for
+/// nothing more than that check.
+#[derive(Clone, Default)]
+pub struct CredentialRefusals(Arc<Notify>);
+
+impl CredentialRefusals {
+    pub fn new() -> Self {
+        CredentialRefusals::default()
+    }
+
+    /// Kept until registration next looks, so a report made while it is
+    /// busy is not lost.
+    pub fn report(&self) {
+        self.0.notify_one();
+    }
+
+    pub(crate) async fn reported(&self) {
+        self.0.notified().await;
+    }
+}
+
+/// How registering while the engine is ready ended.
+enum Registration {
+    Ready,
+    EngineLeft,
+    Stopped,
+}
+
+/// Registers each time the engine becomes ready, and again each time a
+/// worker reports the credentials refused, until cancelled or until the
+/// engine's supervisor ends. A failed attempt is retried with backoff for
+/// as long as the engine stays ready.
 pub async fn run_registration(
     mut engine: watch::Receiver<EngineStatus>,
     mut registrar: Registrar,
     options: RegistrationOptions,
     session: watch::Sender<LocalSession>,
+    refusals: CredentialRefusals,
     cancel: CancellationToken,
 ) {
     loop {
@@ -178,47 +209,70 @@ pub async fn run_registration(
         if !ready {
             return;
         }
-        let mut attempt: u32 = 0;
         loop {
-            let registered = tokio::select! {
-                _ = cancel.cancelled() => return,
-                registered = registrar.ensure() => registered,
-            };
-            match registered {
-                Ok(credentials) => {
-                    session.send_replace(LocalSession::Ready(credentials));
-                    break;
-                }
-                Err(err) => {
-                    session.send_replace(LocalSession::Failed {
-                        reason: err.to_string(),
-                    });
-                }
+            match register_while_ready(&mut engine, &mut registrar, &options, &session, &cancel)
+                .await
+            {
+                Registration::Ready => {}
+                Registration::EngineLeft => break,
+                Registration::Stopped => return,
             }
-            let after = options
-                .backoff
-                .delay_with_jitter(attempt, (options.jitter)());
-            attempt = attempt.saturating_add(1);
-            let still_ready = tokio::select! {
+            tokio::select! {
                 _ = cancel.cancelled() => return,
-                _ = sleep(after) => true,
                 left = engine.wait_for(|status| status.phase != EnginePhase::Ready) => {
                     if left.is_err() {
                         return;
                     }
-                    false
+                    break;
                 }
-            };
-            if !still_ready {
-                break;
+                () = refusals.reported() => {
+                    session.send_replace(LocalSession::Starting);
+                }
             }
         }
-        let left = tokio::select! {
-            _ = cancel.cancelled() => return,
-            left = engine.wait_for(|status| status.phase != EnginePhase::Ready) => left.is_ok(),
+    }
+}
+
+/// Registers, retrying with backoff, until it succeeds or the engine stops
+/// being ready.
+async fn register_while_ready(
+    engine: &mut watch::Receiver<EngineStatus>,
+    registrar: &mut Registrar,
+    options: &RegistrationOptions,
+    session: &watch::Sender<LocalSession>,
+    cancel: &CancellationToken,
+) -> Registration {
+    let mut attempt: u32 = 0;
+    loop {
+        let registered = tokio::select! {
+            _ = cancel.cancelled() => return Registration::Stopped,
+            registered = registrar.ensure() => registered,
         };
-        if !left {
-            return;
+        match registered {
+            Ok(credentials) => {
+                session.send_replace(LocalSession::Ready(credentials));
+                return Registration::Ready;
+            }
+            Err(err) => {
+                session.send_replace(LocalSession::Failed {
+                    reason: err.to_string(),
+                });
+            }
+        }
+        let after = options
+            .backoff
+            .delay_with_jitter(attempt, (options.jitter)());
+        attempt = attempt.saturating_add(1);
+        tokio::select! {
+            _ = cancel.cancelled() => return Registration::Stopped,
+            _ = sleep(after) => {}
+            left = engine.wait_for(|status| status.phase != EnginePhase::Ready) => {
+                return if left.is_err() {
+                    Registration::Stopped
+                } else {
+                    Registration::EngineLeft
+                };
+            }
         }
     }
 }
@@ -229,6 +283,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::host::gateway::{StreamLiveness, TwitchHelixResult};
 
     fn credentials(id: &str) -> ClientCredentials {
         ClientCredentials {
@@ -303,6 +358,29 @@ mod tests {
                 .pop_front()
                 .expect("a scripted verification");
             Box::pin(async move { reply })
+        }
+
+        fn send_shoutout<'a>(
+            &'a self,
+            _credentials: &'a ClientCredentials,
+            _to_broadcaster_id: &'a str,
+        ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>> {
+            unimplemented!("registration never sends shoutouts")
+        }
+
+        fn create_stream_marker<'a>(
+            &'a self,
+            _credentials: &'a ClientCredentials,
+            _description: &'a str,
+        ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>> {
+            unimplemented!("registration never drops markers")
+        }
+
+        fn stream_liveness<'a>(
+            &'a self,
+            _credentials: &'a ClientCredentials,
+        ) -> BoxFuture<'a, Result<StreamLiveness, HostError>> {
+            unimplemented!("registration never reads the stream status")
         }
     }
 
@@ -605,13 +683,13 @@ mod tests {
                 max: Duration::from_millis(20),
             },
             jitter: no_jitter,
-            ..RegistrationOptions::default()
         };
         let task = tokio::spawn(run_registration(
             engine,
             registrar(&gateway, &store, &token),
             options,
             session_tx,
+            CredentialRefusals::new(),
             cancel.clone(),
         ));
         let within = Duration::from_secs(5);
@@ -660,6 +738,60 @@ mod tests {
         tokio::time::timeout(within, task)
             .await
             .expect("ends with the engine")
+            .expect("no panic");
+    }
+
+    #[tokio::test]
+    async fn test_run_registration_registers_again_when_a_worker_reports_a_refusal() {
+        let token = TokenFile::new("refused", Some("tok"));
+        let gateway = Arc::new(
+            ScriptedGateway::registering(vec![Ok(credentials("c1")), Ok(credentials("c2"))])
+                .verifying(vec![Err(refused())]),
+        );
+        let store = Arc::new(MemoryStore::default());
+        let (_engine_tx, engine) = watch::channel(status(EnginePhase::Ready));
+        let (session_tx, mut session) = watch::channel(LocalSession::Starting);
+        let refusals = CredentialRefusals::new();
+        let cancel = CancellationToken::new();
+        let task = tokio::spawn(run_registration(
+            engine,
+            registrar(&gateway, &store, &token),
+            RegistrationOptions::default(),
+            session_tx,
+            refusals.clone(),
+            cancel.clone(),
+        ));
+        let within = Duration::from_secs(5);
+        tokio::time::timeout(
+            within,
+            session.wait_for(|session| *session == LocalSession::Ready(credentials("c1"))),
+        )
+        .await
+        .expect("ready in time")
+        .expect("session open");
+
+        refusals.report();
+        tokio::time::timeout(
+            within,
+            session.wait_for(|session| *session == LocalSession::Ready(credentials("c2"))),
+        )
+        .await
+        .expect("registered again in time")
+        .expect("session open");
+        assert_eq!(store.stored(), Some(credentials("c2")));
+        assert_eq!(
+            gateway.calls(),
+            vec![
+                "register woofx3-desktop tok",
+                "verify c1",
+                "register woofx3-desktop tok"
+            ]
+        );
+
+        cancel.cancel();
+        tokio::time::timeout(within, task)
+            .await
+            .expect("stops when cancelled")
             .expect("no panic");
     }
 }

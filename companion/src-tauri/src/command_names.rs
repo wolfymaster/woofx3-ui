@@ -21,7 +21,13 @@ macro_rules! with_command_names {
             set_share_password,
             test_endpoint,
             reconnect_relay,
-            local_engine_session
+            local_engine_session,
+            shoutout_queue,
+            enqueue_shoutout,
+            remove_shoutout,
+            reorder_shoutouts,
+            stream_start_marker,
+            request_stream_start_marker
         )
     };
 }

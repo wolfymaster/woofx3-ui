@@ -5,7 +5,8 @@
 //!
 //! In local mode, chosen by the host configuration file, it also runs the
 //! engine's orchestrator as its sidecar (`engine_host`), and stops it before
-//! it quits.
+//! it quits. There it also keeps the shoutout queue and the stream start
+//! marker for the window, which reaches them through the local-mode commands.
 //!
 //! Commands are async so none of them runs on the main thread: tray updates
 //! (`MenuItem::set_text`) dispatch to the main thread and wait for it, so a
@@ -33,7 +34,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
-use woofx3_companion_core::host::{HostMode, HOST_CONFIG_FILE};
+use woofx3_companion_core::host::{
+    HostMode, MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntryId,
+    ShoutoutQueueView, StreamStartMarker, HOST_CONFIG_FILE,
+};
 
 use cloud::CloudLink;
 use engine_host::LocalEngine;
@@ -368,6 +372,56 @@ async fn local_engine_session(
     Ok(companion.engine.session())
 }
 
+/// The local shoutout queue, in order, and why it is paused, if it is.
+/// Local mode only, like every shoutout and marker command below.
+#[tauri::command]
+async fn shoutout_queue(companion: State<'_, Arc<Companion>>) -> Result<ShoutoutQueueView, String> {
+    companion.engine.shoutout_queue()
+}
+
+/// A channel already waiting keeps its place.
+#[tauri::command]
+async fn enqueue_shoutout(
+    companion: State<'_, Arc<Companion>>,
+    channel: ShoutoutChannel,
+) -> Result<ShoutoutEnqueued, String> {
+    companion.engine.enqueue_shoutout(channel)
+}
+
+#[tauri::command]
+async fn remove_shoutout(
+    companion: State<'_, Arc<Companion>>,
+    entry_id: ShoutoutEntryId,
+) -> Result<(), String> {
+    companion.engine.remove_shoutout(entry_id)
+}
+
+/// An entry gone meanwhile is skipped; entries left out keep their order
+/// after the ones named.
+#[tauri::command]
+async fn reorder_shoutouts(
+    companion: State<'_, Arc<Companion>>,
+    entry_ids: Vec<ShoutoutEntryId>,
+) -> Result<(), String> {
+    companion.engine.reorder_shoutouts(&entry_ids)
+}
+
+#[tauri::command]
+async fn stream_start_marker(
+    companion: State<'_, Arc<Companion>>,
+) -> Result<StreamStartMarker, String> {
+    companion.engine.stream_start_marker()
+}
+
+/// Drops the "Stream start" marker now when the stream is live, else when
+/// it next goes live.
+#[tauri::command]
+async fn request_stream_start_marker(
+    companion: State<'_, Arc<Companion>>,
+) -> Result<MarkerRequestOutcome, String> {
+    companion.engine.request_stream_start_marker().await
+}
+
 /// Connects to the relay again after another connection displaced this one
 /// or woofx3 refused a credential.
 #[tauri::command]
@@ -474,6 +528,7 @@ fn start_local_engine(app: &tauri::App) -> anyhow::Result<LocalEngine> {
             &settings,
             &app.path().resource_dir()?,
             &app.path().app_local_data_dir()?,
+            Arc::new(app.handle().clone()),
         )?),
     }
 }
