@@ -339,6 +339,7 @@ impl Launcher {
             Arc::clone(&self.shoutouts),
             Arc::clone(&gateway),
             session.clone(),
+            status.clone(),
             refusals.clone(),
             cancel.clone(),
         ));

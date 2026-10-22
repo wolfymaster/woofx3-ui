@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::gateway::{ClientCredentials, EngineGateway, TwitchHelixResult};
 use super::registration::{CredentialRefusals, LocalSession};
+use super::sidecar::{EnginePhase, EngineStatus, StopCause};
 use super::HostError;
 use crate::backoff::Backoff;
 use crate::clock::{millis, Clock, EpochMillis};
@@ -122,6 +123,12 @@ fn reregistration_failed(reason: &str) -> String {
     format!(
         "The engine refused this app's credentials, and registering with it again failed: {reason}. The app keeps trying while the engine runs."
     )
+}
+
+/// Why the queue holds its sends once the engine has stopped and will not
+/// start again on its own.
+fn engine_stopped(reason: &str) -> String {
+    format!("The engine has stopped and will not start again on its own: {reason}")
 }
 
 /// The queue as the window shows it.
@@ -399,18 +406,24 @@ pub async fn run_shoutout_pacing(
     queue: Arc<ShoutoutQueue>,
     gateway: Arc<dyn EngineGateway>,
     mut session: watch::Receiver<LocalSession>,
+    mut engine: watch::Receiver<EngineStatus>,
     refusals: CredentialRefusals,
     cancel: CancellationToken,
 ) {
     let mut changes = queue.state.subscribe();
+    // Whether the engine refused the session's credentials on the last send.
+    let mut refused = false;
     loop {
         let credentials = tokio::select! {
             _ = cancel.cancelled() => return,
-            credentials = ready_credentials(&mut session) => match credentials {
-                Some(credentials) => credentials,
-                None => return,
-            },
+            credentials = wait_for_session(&queue, &mut session, &mut engine, refused) => {
+                match credentials {
+                    Some(credentials) => credentials,
+                    None => return,
+                }
+            }
         };
+        refused = false;
         queue.set_paused(None);
         changes.borrow_and_update();
         let now = queue.clock.now();
@@ -443,36 +456,66 @@ pub async fn run_shoutout_pacing(
                 if host_refused {
                     queue.set_paused(Some(PAUSED_FOR_CREDENTIALS));
                     refusals.report();
-                    // Until registration has a session again, the queue
-                    // says where registering stands.
-                    loop {
-                        tokio::select! {
-                            _ = cancel.cancelled() => return,
-                            changed = session.changed() => if changed.is_err() { return; },
-                        }
-                        let paused = match &*session.borrow() {
-                            LocalSession::Ready(_) => break,
-                            LocalSession::Starting => PAUSED_FOR_CREDENTIALS.to_string(),
-                            LocalSession::Failed { reason } => reregistration_failed(reason),
-                        };
-                        queue.set_paused(Some(&paused));
-                    }
+                    refused = true;
                 }
             }
         }
     }
 }
 
-/// The session's credentials once it has them; `None` once registration
-/// has ended.
-async fn ready_credentials(
+/// The session's credentials once it has them, saying meanwhile why the
+/// queue holds its sends, if it can say; `None` once registration or the
+/// engine's supervisor has ended. After a refusal (`refused`) the session
+/// still holds the refused credentials until registration moves it on, so
+/// they are not taken again.
+async fn wait_for_session(
+    queue: &ShoutoutQueue,
     session: &mut watch::Receiver<LocalSession>,
+    engine: &mut watch::Receiver<EngineStatus>,
+    refused: bool,
 ) -> Option<ClientCredentials> {
+    let mut stale = refused;
     loop {
-        if let LocalSession::Ready(credentials) = &*session.borrow_and_update() {
+        let phase = engine.borrow_and_update().phase.clone();
+        let current = session.borrow_and_update().clone();
+        if let (false, LocalSession::Ready(credentials)) = (stale, &current) {
             return Some(credentials.clone());
         }
-        session.changed().await.ok()?;
+        queue.set_paused(waiting_reason(&phase, &current, refused).as_deref());
+        let closed = tokio::select! {
+            changed = session.changed() => {
+                stale = false;
+                changed.is_err()
+            }
+            changed = engine.changed() => changed.is_err(),
+        };
+        if closed {
+            // The engine's last state can arrive just before its supervisor
+            // ends, after which nothing will say it again.
+            let phase = engine.borrow().phase.clone();
+            let current = session.borrow().clone();
+            queue.set_paused(waiting_reason(&phase, &current, refused).as_deref());
+            return None;
+        }
+    }
+}
+
+/// Why the queue holds its sends while it has no session to send with, or
+/// `None` when it only waits for the engine to start. An engine stopped for
+/// good comes first: no session will come, whatever registration says.
+fn waiting_reason(engine: &EnginePhase, session: &LocalSession, refused: bool) -> Option<String> {
+    if let EnginePhase::Stopped(
+        StopCause::MigrationFailed { reason } | StopCause::ExitedOnItsOwn { reason },
+    ) = engine
+    {
+        return Some(engine_stopped(reason));
+    }
+    if !refused {
+        return None;
+    }
+    match session {
+        LocalSession::Failed { reason } => Some(reregistration_failed(reason)),
+        LocalSession::Starting | LocalSession::Ready(_) => Some(PAUSED_FOR_CREDENTIALS.to_string()),
     }
 }
 
@@ -554,8 +597,16 @@ mod tests {
         engine: Arc<FakeEngine>,
         calls: mpsc::UnboundedReceiver<EngineCall>,
         session: watch::Sender<LocalSession>,
+        engine_status: watch::Sender<EngineStatus>,
         cancel: CancellationToken,
         worker: JoinHandle<()>,
+    }
+
+    fn ready_engine() -> EngineStatus {
+        EngineStatus {
+            phase: EnginePhase::Ready,
+            ..EngineStatus::starting()
+        }
     }
 
     impl Harness {
@@ -568,11 +619,13 @@ mod tests {
             ));
             let (engine, calls) = FakeEngine::new();
             let (session, session_rx) = watch::channel(session);
+            let (engine_status, engine_status_rx) = watch::channel(ready_engine());
             let cancel = CancellationToken::new();
             let worker = tokio::spawn(run_shoutout_pacing(
                 Arc::clone(&queue),
                 Arc::clone(&engine) as Arc<dyn EngineGateway>,
                 session_rx,
+                engine_status_rx,
                 CredentialRefusals::new(),
                 cancel.clone(),
             ));
@@ -583,6 +636,7 @@ mod tests {
                 engine,
                 calls,
                 session,
+                engine_status,
                 cancel,
                 worker,
             }
@@ -1081,6 +1135,7 @@ mod tests {
                 Arc::clone(&queue),
                 Arc::clone(&engine) as Arc<dyn EngineGateway>,
                 session,
+                engine_status.subscribe(),
                 refusals,
                 cancel.clone(),
             ));
@@ -1174,6 +1229,84 @@ mod tests {
         harness.engine.registered(Ok(credentials("new")));
         harness.resumes_with_new_credentials().await;
         harness.stop().await;
+    }
+
+    fn migration_failed() -> EngineStatus {
+        EngineStatus {
+            phase: EnginePhase::Stopped(StopCause::MigrationFailed {
+                reason: "the database migration failed".into(),
+            }),
+            ..EngineStatus::starting()
+        }
+    }
+
+    /// Waits until the queue's paused reason is no longer `from`, failing
+    /// rather than hanging when it never changes.
+    async fn paused_reason_after(
+        view: &mut ShoutoutQueueWatch,
+        from: Option<&str>,
+    ) -> Option<String> {
+        let changed = async {
+            loop {
+                let reason = view.view().paused_reason;
+                if reason.as_deref() != from {
+                    return reason;
+                }
+                view.changed().await.expect("the queue lives");
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(5), changed)
+            .await
+            .expect("the paused reason changes")
+    }
+
+    /// After a refusal the queue promised shoutouts would resume once the app
+    /// registered again; once the engine has stopped for good, no
+    /// registration will come, so it says the engine stopped instead.
+    #[tokio::test]
+    async fn test_run_shoutout_pacing_says_the_engine_stopped_while_paused_after_a_refusal() {
+        let mut harness = WithRegistration::start("engine-stopped").await;
+        harness.refuse_a_send().await;
+        harness.engine_status.send_replace(migration_failed());
+        assert_eq!(
+            paused_reason_after(&mut harness.view, Some(PAUSED_FOR_CREDENTIALS)).await,
+            Some(engine_stopped("the database migration failed"))
+        );
+        harness.stop().await;
+    }
+
+    /// A queue waiting for the engine to start says nothing; once the engine
+    /// has stopped for good, it says why, and keeps saying it after the
+    /// engine's supervisor and registration have ended.
+    #[tokio::test]
+    async fn test_run_shoutout_pacing_says_when_the_engine_stops_for_good() {
+        let harness = Harness::start(LocalSession::Starting);
+        harness.queue.enqueue(channel("a")).expect("queued");
+        let mut view = harness.queue.subscribe();
+        assert_eq!(view.view().paused_reason, None);
+
+        harness.engine_status.send_replace(migration_failed());
+        assert_eq!(
+            paused_reason_after(&mut view, None).await,
+            Some(engine_stopped("the database migration failed"))
+        );
+        let Harness {
+            session,
+            engine_status,
+            worker,
+            queue,
+            ..
+        } = harness;
+        drop(engine_status);
+        drop(session);
+        tokio::time::timeout(Duration::from_secs(5), worker)
+            .await
+            .expect("the worker ends with the engine")
+            .expect("the worker ends cleanly");
+        assert_eq!(
+            queue.view().paused_reason,
+            Some(engine_stopped("the database migration failed"))
+        );
     }
 
     /// While registering again fails, the queue says so, rather than that
