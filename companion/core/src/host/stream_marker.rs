@@ -782,10 +782,17 @@ mod tests {
         harness.engine.live(Ok(StreamLiveness::Live));
         tokio::task::yield_now().await;
         assert!(!second.is_finished(), "waits for the drop under way");
+        assert!(
+            harness.calls.try_recv().is_err(),
+            "no second marker while the first is being dropped"
+        );
 
         harness.engine.reply(Ok(TwitchHelixResult::Ok));
         assert_eq!(
-            second.await.expect("the request ends"),
+            tokio::time::timeout(Duration::from_secs(5), second)
+                .await
+                .expect("the request ends once the drop does")
+                .expect("the request ends cleanly"),
             MarkerRequestOutcome::Done
         );
         assert_eq!(
