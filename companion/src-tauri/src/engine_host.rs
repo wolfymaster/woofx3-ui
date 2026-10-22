@@ -15,22 +15,56 @@
 //! The client secret stays in this process and the credential store. The
 //! window gets it only through `local_engine_session`, to open its own
 //! capnweb session with the engine.
+//!
+//! In local mode this host also keeps the UI state that a cloud deployment's
+//! dashboard backend keeps and the engine has no business holding: the
+//! shoutout queue and the go-live checklist's stream start marker. Both live
+//! in memory for as long as the app runs, outlast an engine restart, and
+//! act through the engine with this host's own client credentials.
 
 use std::path::Path;
 use std::sync::Arc;
 
 use tauri::async_runtime::JoinHandle;
+use tauri::{AppHandle, Emitter};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
+use woofx3_companion_core::clock::{Clock, SystemClock};
 use woofx3_companion_core::host::{
-    orchestrator_spec, run_registration, run_sidecar, EngineGateway, EnginePhase, EngineStatus,
-    HostError, HttpEngineGateway, LocalEngineLayout, LocalEngineSettings, LocalSession, Registrar,
-    RegistrationOptions, SidecarSpec,
+    orchestrator_spec, run_registration, run_shoutout_pacing, run_sidecar, run_stream_marker,
+    ClientCredentials, EngineGateway, EnginePhase, EngineStatus, HostError, HttpEngineGateway,
+    LocalEngineLayout, LocalEngineSettings, LocalSession, MarkerRequestOutcome, Registrar,
+    RegistrationOptions, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutEntryId,
+    ShoutoutOptions, ShoutoutQueue, ShoutoutQueueWatch, SidecarSpec, StreamMarkerOptions,
+    StreamMarkerRequests, StreamStartMarker,
 };
 
 use crate::credentials::EngineClientStore;
 use crate::lock;
-use crate::state::LocalEngineSession;
+use crate::state::{LocalEngineSession, SHOUTOUT_QUEUE_EVENT, STREAM_START_MARKER_EVENT};
+
+/// The answer to a local-mode call on a host that runs no local engine.
+const NOT_LOCAL: &str = "This host runs no local engine.";
+
+/// Where the window hears that local-mode UI state changed.
+pub trait WindowEvents: Send + Sync + 'static {
+    fn shoutout_queue_changed(&self, entries: &[ShoutoutEntry]);
+    fn stream_start_marker_changed(&self, marker: &StreamStartMarker);
+}
+
+impl WindowEvents for AppHandle {
+    fn shoutout_queue_changed(&self, entries: &[ShoutoutEntry]) {
+        if let Err(err) = self.emit(SHOUTOUT_QUEUE_EVENT, entries) {
+            eprintln!("[companion] could not send the shoutout queue to the window: {err}");
+        }
+    }
+
+    fn stream_start_marker_changed(&self, marker: &StreamStartMarker) {
+        if let Err(err) = self.emit(STREAM_START_MARKER_EVENT, marker) {
+            eprintln!("[companion] could not send the stream start marker to the window: {err}");
+        }
+    }
+}
 
 /// The bundled engine release, relative to the app's resource directory.
 pub const BUNDLED_ENGINE_DIR: &str = "engine";
@@ -50,6 +84,7 @@ impl LocalEngine {
         settings: &LocalEngineSettings,
         resource_dir: &Path,
         app_local_data_dir: &Path,
+        events: Arc<dyn WindowEvents>,
     ) -> Result<Self, HostError> {
         let bundled = resource_dir.join(BUNDLED_ENGINE_DIR);
         let layout = LocalEngineLayout::under(app_local_data_dir, settings.api_port());
@@ -61,7 +96,62 @@ impl LocalEngine {
             layout,
             Arc::new(gateway),
             options,
+            Arc::new(SystemClock),
+            events,
         ))))
+    }
+
+    fn sidecar(&self) -> Result<&EngineSidecar, String> {
+        match self {
+            LocalEngine::Off => Err(NOT_LOCAL.to_string()),
+            LocalEngine::Supervised(sidecar) => Ok(sidecar),
+        }
+    }
+
+    /// The shoutout queue, in order.
+    pub fn shoutout_queue(&self) -> Result<Vec<ShoutoutEntry>, String> {
+        Ok(self.sidecar()?.launcher.shoutouts.entries())
+    }
+
+    pub fn enqueue_shoutout(&self, channel: ShoutoutChannel) -> Result<ShoutoutEnqueued, String> {
+        self.sidecar()?
+            .launcher
+            .shoutouts
+            .enqueue(channel)
+            .map_err(|err| err.to_string())
+    }
+
+    pub fn remove_shoutout(&self, id: ShoutoutEntryId) -> Result<(), String> {
+        self.sidecar()?
+            .launcher
+            .shoutouts
+            .remove(id)
+            .map_err(|err| err.to_string())
+    }
+
+    pub fn reorder_shoutouts(&self, ids: &[ShoutoutEntryId]) -> Result<(), String> {
+        self.sidecar()?.launcher.shoutouts.reorder(ids);
+        Ok(())
+    }
+
+    pub fn stream_start_marker(&self) -> Result<StreamStartMarker, String> {
+        Ok(self.sidecar()?.launcher.markers.current())
+    }
+
+    /// Drops the stream start marker now when the stream is live, else when
+    /// it next goes live.
+    pub async fn request_stream_start_marker(&self) -> Result<MarkerRequestOutcome, String> {
+        let sidecar = self.sidecar()?;
+        let Some(credentials) = sidecar.credentials() else {
+            return Ok(MarkerRequestOutcome::Failed {
+                message: "The local engine is not ready yet.".to_string(),
+            });
+        };
+        let launcher = &sidecar.launcher;
+        Ok(launcher
+            .markers
+            .request(launcher.gateway.as_ref(), &credentials)
+            .await)
     }
 
     /// What the window needs to open a session with the engine.
@@ -97,12 +187,10 @@ impl LocalEngine {
     }
 }
 
-/// The orchestrator under supervision, and the registration that follows it.
+/// The orchestrator under supervision, the registration that follows it,
+/// and the workers that act through the engine for the window.
 pub struct EngineSidecar {
-    spec: SidecarSpec,
-    layout: LocalEngineLayout,
-    gateway: Arc<HttpEngineGateway>,
-    options: RegistrationOptions,
+    launcher: Launcher,
     /// What the current run reports, swapped when the engine is resumed.
     views: std::sync::Mutex<Views>,
     /// The tasks while they run. Async, so a second stop waits for the first
@@ -116,10 +204,12 @@ struct Views {
 }
 
 struct Tasks {
-    /// Stops both tasks.
+    /// Stops every task.
     cancel: CancellationToken,
     supervisor: JoinHandle<()>,
-    registration: JoinHandle<()>,
+    /// Registration and the tasks that follow the session or the window's
+    /// state, stopped before the supervisor so none acts on a dying engine.
+    followers: Vec<(&'static str, JoinHandle<()>)>,
 }
 
 impl EngineSidecar {
@@ -128,13 +218,29 @@ impl EngineSidecar {
         layout: LocalEngineLayout,
         gateway: Arc<HttpEngineGateway>,
         options: RegistrationOptions,
+        clock: Arc<dyn Clock>,
+        events: Arc<dyn WindowEvents>,
     ) -> Self {
-        let (views, tasks) = launch(&spec, &layout, &gateway, &options);
-        EngineSidecar {
+        let shoutouts = Arc::new(ShoutoutQueue::new(
+            Arc::clone(&clock),
+            ShoutoutOptions::default(),
+        ));
+        let markers = Arc::new(StreamMarkerRequests::new(
+            clock,
+            StreamMarkerOptions::default(),
+        ));
+        let launcher = Launcher {
             spec,
             layout,
             gateway,
             options,
+            shoutouts,
+            markers,
+            events,
+        };
+        let (views, tasks) = launcher.launch();
+        EngineSidecar {
+            launcher,
             views: std::sync::Mutex::new(views),
             tasks: tokio::sync::Mutex::new(Some(tasks)),
         }
@@ -144,13 +250,21 @@ impl EngineSidecar {
         lock(&self.views).status.borrow().phase.clone()
     }
 
+    /// This host's engine credentials, once it is registered.
+    fn credentials(&self) -> Option<ClientCredentials> {
+        match &*lock(&self.views).session.borrow() {
+            LocalSession::Ready(credentials) => Some(credentials.clone()),
+            LocalSession::Starting | LocalSession::Failed { .. } => None,
+        }
+    }
+
     fn session(&self) -> LocalEngineSession {
         let views = lock(&self.views);
         let session = views.session.borrow();
         match &*session {
             LocalSession::Starting => LocalEngineSession::Starting,
             LocalSession::Ready(credentials) => LocalEngineSession::Ready {
-                api_url: self.layout.api_url(),
+                api_url: self.launcher.layout.api_url(),
                 client_id: credentials.client_id.clone(),
                 client_secret: credentials.client_secret.clone(),
             },
@@ -165,14 +279,16 @@ impl EngineSidecar {
         let Some(Tasks {
             cancel,
             supervisor,
-            registration,
+            followers,
         }) = tasks.take()
         else {
             return;
         };
         cancel.cancel();
-        if let Err(err) = registration.await {
-            eprintln!("[companion] engine registration ended abnormally: {err}");
+        for (name, follower) in followers {
+            if let Err(err) = follower.await {
+                eprintln!("[companion] the {name} ended abnormally: {err}");
+            }
         }
         if let Err(err) = supervisor.await {
             eprintln!("[companion] the engine supervisor ended abnormally: {err}");
@@ -184,45 +300,120 @@ impl EngineSidecar {
         if tasks.is_some() {
             return;
         }
-        let (views, started) = launch(&self.spec, &self.layout, &self.gateway, &self.options);
+        let (views, started) = self.launcher.launch();
         *lock(&self.views) = views;
         *tasks = Some(started);
     }
 }
 
-fn launch(
-    spec: &SidecarSpec,
-    layout: &LocalEngineLayout,
-    gateway: &Arc<HttpEngineGateway>,
-    options: &RegistrationOptions,
-) -> (Views, Tasks) {
-    let (status_tx, status) = watch::channel(EngineStatus::starting());
-    let (session_tx, session) = watch::channel(LocalSession::Starting);
-    let cancel = CancellationToken::new();
-    let supervisor =
-        tauri::async_runtime::spawn(run_sidecar(spec.clone(), status_tx, cancel.clone()));
-    let registrar = Registrar::new(
-        Arc::clone(gateway) as Arc<dyn EngineGateway>,
-        Arc::new(EngineClientStore),
-        layout.registration_token_file.clone(),
-    );
-    let registration = tauri::async_runtime::spawn(run_registration(
-        status.clone(),
-        registrar,
-        options.clone(),
-        session_tx,
-        cancel.clone(),
-    ));
-    tauri::async_runtime::spawn(log_status(status.clone()));
-    tauri::async_runtime::spawn(log_sessions(session.clone()));
-    (
-        Views { status, session },
-        Tasks {
-            cancel,
-            supervisor,
-            registration,
-        },
-    )
+/// What every run of the engine is started from.
+struct Launcher {
+    spec: SidecarSpec,
+    layout: LocalEngineLayout,
+    gateway: Arc<HttpEngineGateway>,
+    options: RegistrationOptions,
+    /// Kept across engine restarts; only the workers stop with the engine.
+    shoutouts: Arc<ShoutoutQueue>,
+    markers: Arc<StreamMarkerRequests>,
+    events: Arc<dyn WindowEvents>,
+}
+
+impl Launcher {
+    fn launch(&self) -> (Views, Tasks) {
+        let (status_tx, status) = watch::channel(EngineStatus::starting());
+        let (session_tx, session) = watch::channel(LocalSession::Starting);
+        let cancel = CancellationToken::new();
+        let supervisor =
+            tauri::async_runtime::spawn(run_sidecar(self.spec.clone(), status_tx, cancel.clone()));
+        let gateway = Arc::clone(&self.gateway) as Arc<dyn EngineGateway>;
+        let registrar = Registrar::new(
+            Arc::clone(&gateway),
+            Arc::new(EngineClientStore),
+            self.layout.registration_token_file.clone(),
+        );
+        let registration = tauri::async_runtime::spawn(run_registration(
+            status.clone(),
+            registrar,
+            self.options.clone(),
+            session_tx,
+            cancel.clone(),
+        ));
+        let shoutout_pacing = tauri::async_runtime::spawn(run_shoutout_pacing(
+            Arc::clone(&self.shoutouts),
+            Arc::clone(&gateway),
+            session.clone(),
+            cancel.clone(),
+        ));
+        let stream_marker = tauri::async_runtime::spawn(run_stream_marker(
+            Arc::clone(&self.markers),
+            gateway,
+            session.clone(),
+            cancel.clone(),
+        ));
+        let shoutout_events = tauri::async_runtime::spawn(forward_shoutout_queue(
+            self.shoutouts.subscribe(),
+            Arc::clone(&self.events),
+            cancel.clone(),
+        ));
+        let marker_events = tauri::async_runtime::spawn(forward_stream_start_marker(
+            self.markers.subscribe(),
+            Arc::clone(&self.events),
+            cancel.clone(),
+        ));
+        tauri::async_runtime::spawn(log_status(status.clone()));
+        tauri::async_runtime::spawn(log_sessions(session.clone()));
+        (
+            Views { status, session },
+            Tasks {
+                cancel,
+                supervisor,
+                followers: vec![
+                    ("engine registration", registration),
+                    ("shoutout queue", shoutout_pacing),
+                    ("stream start marker", stream_marker),
+                    ("shoutout queue events", shoutout_events),
+                    ("stream start marker events", marker_events),
+                ],
+            },
+        )
+    }
+}
+
+/// Sends the queue to the window now and after every change, until
+/// cancelled. Sending it first means a change made while the engine was
+/// stopped still reaches the window when it starts again.
+async fn forward_shoutout_queue(
+    mut queue: ShoutoutQueueWatch,
+    events: Arc<dyn WindowEvents>,
+    cancel: CancellationToken,
+) {
+    loop {
+        events.shoutout_queue_changed(&queue.entries());
+        tokio::select! {
+            _ = cancel.cancelled() => return,
+            changed = queue.changed() => if changed.is_err() { return; },
+        }
+    }
+}
+
+/// Sends the marker's state to the window now and after every change, and
+/// logs a marker that could not be dropped, until cancelled.
+async fn forward_stream_start_marker(
+    mut marker: watch::Receiver<StreamStartMarker>,
+    events: Arc<dyn WindowEvents>,
+    cancel: CancellationToken,
+) {
+    loop {
+        let current = marker.borrow_and_update().clone();
+        if let StreamStartMarker::Failed { message } = &current {
+            eprintln!("[companion] could not drop the stream start marker: {message}");
+        }
+        events.stream_start_marker_changed(&current);
+        tokio::select! {
+            _ = cancel.cancelled() => return,
+            changed = marker.changed() => if changed.is_err() { return; },
+        }
+    }
 }
 
 /// Logs each change of phase, and each failure to kill the process tree.
@@ -276,6 +467,24 @@ async fn log_sessions(mut session: watch::Receiver<LocalSession>) {
 mod tests {
     use super::*;
 
+    /// Drops every event.
+    struct NoWindow;
+
+    impl WindowEvents for NoWindow {
+        fn shoutout_queue_changed(&self, _entries: &[ShoutoutEntry]) {}
+        fn stream_start_marker_changed(&self, _marker: &StreamStartMarker) {}
+    }
+
+    fn channel(id: &str) -> ShoutoutChannel {
+        ShoutoutChannel {
+            twitch_user_id: id.to_string(),
+            login: id.to_string(),
+            display_name: id.to_string(),
+            profile_image_url: None,
+            broadcaster_type: None,
+        }
+    }
+
     /// A sidecar whose program does not exist, so it only ever restarts.
     fn unstartable() -> LocalEngine {
         let app_data =
@@ -294,6 +503,8 @@ mod tests {
             layout,
             Arc::new(gateway),
             options,
+            Arc::new(SystemClock),
+            Arc::new(NoWindow),
         )))
     }
 
@@ -319,5 +530,57 @@ mod tests {
         engine.resume().await;
         assert!(!engine.must_stop_before_exit());
         assert_eq!(engine.session(), LocalEngineSession::NotLocal);
+    }
+
+    #[tokio::test]
+    async fn test_local_engine_off_refuses_local_mode_calls() {
+        let engine = LocalEngine::Off;
+        assert_eq!(engine.shoutout_queue(), Err(NOT_LOCAL.to_string()));
+        assert_eq!(
+            engine.enqueue_shoutout(channel("a")),
+            Err(NOT_LOCAL.to_string())
+        );
+        assert_eq!(
+            engine.remove_shoutout(ShoutoutEntryId(0)),
+            Err(NOT_LOCAL.to_string())
+        );
+        assert_eq!(engine.reorder_shoutouts(&[]), Err(NOT_LOCAL.to_string()));
+        assert_eq!(engine.stream_start_marker(), Err(NOT_LOCAL.to_string()));
+        assert_eq!(
+            engine.request_stream_start_marker().await,
+            Err(NOT_LOCAL.to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_local_engine_keeps_the_shoutout_queue_across_a_restart() {
+        let engine = unstartable();
+        engine.enqueue_shoutout(channel("a")).expect("queued");
+        engine.stop().await;
+        engine
+            .enqueue_shoutout(channel("b"))
+            .expect("queued while stopped");
+        engine.resume().await;
+        let logins: Vec<String> = engine
+            .shoutout_queue()
+            .expect("local")
+            .into_iter()
+            .map(|entry| entry.login)
+            .collect();
+        assert_eq!(logins, ["a", "b"]);
+        engine.stop().await;
+    }
+
+    #[tokio::test]
+    async fn test_local_engine_marker_request_waits_for_a_session() {
+        let engine = unstartable();
+        assert_eq!(
+            engine.request_stream_start_marker().await,
+            Ok(MarkerRequestOutcome::Failed {
+                message: "The local engine is not ready yet.".to_string()
+            })
+        );
+        assert_eq!(engine.stream_start_marker(), Ok(StreamStartMarker::Idle));
+        engine.stop().await;
     }
 }

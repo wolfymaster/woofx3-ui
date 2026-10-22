@@ -85,6 +85,14 @@ pub const STATE_EVENT: &str = "companion://state";
 /// Must match `INTEGRATIONS_EVENT` in companion/ui/src/state.ts.
 pub const INTEGRATIONS_EVENT: &str = "companion://integrations";
 
+/// Carries the shoutout queue, in order, after every change. Local mode
+/// only. Must match `SHOUTOUT_QUEUE_EVENT` in companion/ui/src/host.ts.
+pub const SHOUTOUT_QUEUE_EVENT: &str = "companion://shoutout-queue";
+
+/// Carries the stream start marker's state after every change. Local mode
+/// only. Must match `STREAM_START_MARKER_EVENT` in companion/ui/src/host.ts.
+pub const STREAM_START_MARKER_EVENT: &str = "companion://stream-start-marker";
+
 /// What the Integrations tab and the Status tab's relay row render. Sent on
 /// its own event, apart from `WindowState`, because it changes with every
 /// relay reconnect and discovery pass. Must match `IntegrationsView` in

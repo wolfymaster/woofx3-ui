@@ -21,6 +21,12 @@
     "allow-set-share-password",
     "allow-test-endpoint",
     "allow-reconnect-relay",
-    "allow-local-engine-session"
+    "allow-local-engine-session",
+    "allow-shoutout-queue",
+    "allow-enqueue-shoutout",
+    "allow-remove-shoutout",
+    "allow-reorder-shoutouts",
+    "allow-stream-start-marker",
+    "allow-request-stream-start-marker"
   ]
 }
