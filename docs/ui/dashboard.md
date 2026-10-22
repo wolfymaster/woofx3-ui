@@ -598,7 +598,7 @@ read per action) and reads the answer:
 |---|---|
 | `delivered` | Done; pins record the posted message id in the history |
 | `dropped` | Shows Twitch's reason (AutoMod, a duplicate, a banned term) |
-| `unconfirmed`, or no answer in 15s | Says the line may already be in chat; never resends it |
+| `unconfirmed`, no answer in 15s, or the engine connection failing mid-call | Says the line may already be in chat; never resends it |
 | `unavailable` | Says why nothing was sent (Twitch off or not linked in the engine, the gateway not running). There is no Helix fallback: the engine owns the platform connection |
 | `failed` | Shows Twitch's refusal. A pin by id that Twitch refused as `invalid` or `upstream` re-posts the text, as on the Helix route |
 

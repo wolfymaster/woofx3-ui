@@ -34,9 +34,11 @@ import {
 // docs/services/platform-gateway.md, "Sending from the dashboard".
 
 /**
- * How long Convex waits for `sendToPlatforms`. The engine waits at least 12s
- * for its gateway (WOOFX3_PLATFORM_GATEWAY_TIMEOUT_MS) and then answers
- * `timeout` itself; this leaves room for that answer to travel back.
+ * How long Convex waits for `sendToPlatforms`. The engine waits 12s for its
+ * gateway by default (WOOFX3_PLATFORM_GATEWAY_TIMEOUT_MS, never lower) and
+ * then answers `timeout` itself; 15s leaves room for that answer to travel
+ * back. An engine configured to wait longer makes Convex give up first, which
+ * is reported as unconfirmed.
  */
 export const GATEWAY_CALL_TIMEOUT_MS = 15_000;
 
@@ -97,8 +99,9 @@ export async function chatRoute(
 }
 
 /**
- * Sends one write to one platform through the gateway. Never throws: every
- * way of not getting the platform's outcome is an outcome of its own.
+ * Sends one write to one platform through the gateway. Every way of not
+ * getting the platform's outcome is returned as an outcome of its own; it
+ * throws only on a caller error (anything but exactly one platform).
  */
 export async function sendThroughGateway(
   route: Extract<ChatRoute, { kind: "gateway" }>,
@@ -108,18 +111,28 @@ export async function sendThroughGateway(
   if (platform === undefined || others.length > 0) {
     throw new Error(`sendThroughGateway sends to exactly one platform, got ${JSON.stringify(params.platforms)}`);
   }
+  let engine: EngineApi;
+  try {
+    engine = route.engine();
+  } catch (error) {
+    return logged(route, params, {
+      kind: "unavailable",
+      detail: `the engine could not be reached: ${errorText(error)}`,
+    });
+  }
   let raw: unknown;
   try {
-    raw = await withEngineTimeout(route.engine().sendToPlatforms(params), GATEWAY_CALL_TIMEOUT_MS);
+    raw = await withEngineTimeout(engine.sendToPlatforms(params), GATEWAY_CALL_TIMEOUT_MS);
   } catch (error) {
     if (error instanceof EngineTimeoutError) {
       return logged(route, params, { kind: "unconfirmed", detail: "the engine did not answer in time" });
     }
     // sendToPlatforms answers every refusal as a result, so a throw is the
-    // RPC itself failing before the engine ran it.
+    // RPC session failing. It may have failed after the engine received the
+    // request and posted the line, so nothing here can say it wasn't sent.
     return logged(route, params, {
-      kind: "unavailable",
-      detail: `the engine could not be reached: ${errorText(error)}`,
+      kind: "unconfirmed",
+      detail: `the engine connection failed: ${errorText(error)}`,
     });
   }
   return logged(route, params, readGatewayResult(raw, platform));
@@ -230,7 +243,7 @@ export function undeliveredError(
       return new ConvexError(`Twitch didn't post the ${what}: ${outcome.reason}`);
     case "unconfirmed":
       return new ConvexError(
-        `Twitch didn't confirm the ${what} (${outcome.detail}), so it may already be in chat. Check chat before sending it again.`
+        `Twitch didn't confirm the ${what} (${outcome.detail}), so it may already be in chat. Sending it again in the next few minutes won't post a second copy.`
       );
     case "unavailable":
       return new ConvexError(`The ${what} wasn't sent: ${outcome.detail}`);

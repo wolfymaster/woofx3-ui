@@ -155,12 +155,27 @@ describe("sendThroughGateway", () => {
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
-  test("an engine that cannot be reached sent nothing", async () => {
-    const { route } = fakeGatewayRoute(new TypeError("fetch failed"));
+  test("a session that fails during the call may have posted", async () => {
+    const { route } = fakeGatewayRoute(new TypeError("socket closed"));
     expect(await sendThroughGateway(route, SEND)).toEqual({
+      kind: "unconfirmed",
+      detail: "the engine connection failed: socket closed",
+    });
+  });
+
+  test("an engine whose session cannot be opened sent nothing", async () => {
+    const { route, calls } = fakeGatewayRoute(twitchAnswer({ status: "delivered" }));
+    const unreachable = {
+      ...route,
+      engine: () => {
+        throw new TypeError("fetch failed");
+      },
+    };
+    expect(await sendThroughGateway(unreachable, SEND)).toEqual({
       kind: "unavailable",
       detail: "the engine could not be reached: fetch failed",
     });
+    expect(calls).toHaveLength(0);
   });
 
   test("refuses anything but exactly one platform", async () => {
@@ -257,7 +272,7 @@ describe("undeliveredError", () => {
     {
       outcome: { kind: "unconfirmed", detail: "the engine did not answer in time" },
       sentence:
-        "Twitch didn't confirm the chat message (the engine did not answer in time), so it may already be in chat. Check chat before sending it again.",
+        "Twitch didn't confirm the chat message (the engine did not answer in time), so it may already be in chat. Sending it again in the next few minutes won't post a second copy.",
     },
     {
       outcome: { kind: "unavailable", detail: "Twitch is turned off in the engine" },
