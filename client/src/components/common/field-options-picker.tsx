@@ -1,4 +1,4 @@
-import type { InternalConfigFieldSource } from "@woofx3/api/ui-schema";
+import { type ConfigFieldOption, type InternalConfigFieldSource, mergePinnedOptions } from "@woofx3/api/ui-schema";
 import { Check, ChevronsUpDown, RefreshCw } from "lucide-react";
 import { useId, useState } from "react";
 import { ConfigFieldDescription, ConfigFieldLabel } from "@/components/common/config-field-label";
@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useEngineScope } from "@/engine/context";
 import { type FieldOptionsState, useFieldOptions } from "@/hooks/use-field-options";
 import {
+  type FieldOptionGroup,
   fieldOptionMismatch,
   groupFieldOptions,
   optionValueOfItem,
@@ -37,6 +38,8 @@ interface PickerField {
   hint?: string;
   description?: string;
   examplePayload?: string;
+  /** Options the manifest pins ahead of the worker's. */
+  options?: ConfigFieldOption[];
 }
 
 interface PickerProps {
@@ -45,6 +48,9 @@ interface PickerProps {
   onChange: (value: unknown) => void;
   source: InternalConfigFieldSource;
 }
+
+/** Radix needs a non-empty value on the disabled row; it never reaches the field. */
+const LOADING_ITEM_VALUE = "loading-options";
 
 /** Why there is nothing to pick, or null while there is something (or it is still coming). */
 function emptyReason(state: FieldOptionsState): string | null {
@@ -82,23 +88,71 @@ function RefreshButton({ field, state }: { field: PickerField; state: FieldOptio
   );
 }
 
+/** What InternalSelectField shows, derived from the pinned options, the worker's reply and the saved value. */
+export interface InternalSelectView {
+  groups: FieldOptionGroup[];
+  /** A saved value no option names, listed (unselectable) so the select does not read as unset. */
+  unavailableValue: string | null;
+  loadingRow: boolean;
+  disabled: boolean;
+  placeholder: string;
+  /** Helper text: the worker's failure or emptiness, unless pinned options still stand. */
+  reason: string | null;
+}
+
+/**
+ * Pinned options come first and keep the select usable whatever the worker
+ * says: it is disabled only when there is nothing at all to pick.
+ */
+export function internalSelectView(
+  pinned: readonly ConfigFieldOption[],
+  state: FieldOptionsState,
+  value: unknown,
+  fallbackPlaceholder: string
+): InternalSelectView {
+  const options = mergePinnedOptions(pinned, state.options);
+  const groups = groupFieldOptions(options);
+  const hasOptions = options.length > 0;
+  const failureReason = emptyReason(state);
+  const reason = hasOptions && state.error === null ? null : failureReason;
+
+  const unavailableValue =
+    typeof value === "string" && value !== "" && !state.loading && !options.some((option) => option.value === value)
+      ? value
+      : null;
+
+  let placeholder = fallbackPlaceholder;
+  if (!hasOptions) {
+    placeholder = state.loading ? "Loading options..." : "No options available";
+  }
+
+  return {
+    groups,
+    unavailableValue,
+    loadingRow: state.loading && hasOptions,
+    disabled: !hasOptions && (state.loading || state.empty),
+    placeholder,
+    reason,
+  };
+}
+
 /**
  * A `select` whose options a worker lists: only a listed option can be saved.
- * Options carrying a `group` are listed under its heading.
+ * Options carrying a `group` are listed under its heading. Options the field
+ * pins are always listed first, so it works while the worker's list is
+ * loading, empty or failed.
  */
 export function InternalSelectField({ field, value, onChange, source }: PickerProps) {
   const state = useFieldOptions(source);
-  const reason = emptyReason(state);
-  const groups = groupFieldOptions(state.options);
-
-  let placeholder: string;
-  if (state.loading) {
-    placeholder = "Loading options...";
-  } else if (state.empty) {
-    placeholder = "No options available";
-  } else {
-    placeholder = field.placeholder ?? `Select ${field.label.toLowerCase()}...`;
-  }
+  const view = internalSelectView(
+    field.options ?? [],
+    state,
+    value,
+    field.placeholder ?? `Select ${field.label.toLowerCase()}...`
+  );
+  const { groups, unavailableValue, reason } = view;
+  const selected =
+    unavailableValue === null ? selectedItemValue(value, groups) : selectItemValue(null, unavailableValue);
 
   return (
     <div className="space-y-2">
@@ -110,17 +164,17 @@ export function InternalSelectField({ field, value, onChange, source }: PickerPr
       />
       <div className="flex items-center gap-2">
         <Select
-          value={selectedItemValue(value, groups)}
+          value={selected}
           onValueChange={(itemValue) => {
             const picked = optionValueOfItem(itemValue, groups);
             if (picked !== undefined) {
               onChange(picked);
             }
           }}
-          disabled={state.loading || state.empty}
+          disabled={view.disabled}
         >
           <SelectTrigger data-testid={`select-${field.id}`}>
-            <SelectValue placeholder={placeholder} />
+            <SelectValue placeholder={view.placeholder} />
           </SelectTrigger>
           <SelectContent>
             {groups.map((group) => (
@@ -133,6 +187,16 @@ export function InternalSelectField({ field, value, onChange, source }: PickerPr
                 ))}
               </SelectGroup>
             ))}
+            {unavailableValue !== null && (
+              <SelectItem value={selectItemValue(null, unavailableValue)} disabled>
+                {unavailableValue} (unavailable)
+              </SelectItem>
+            )}
+            {view.loadingRow && (
+              <SelectItem value={LOADING_ITEM_VALUE} disabled>
+                Loading options...
+              </SelectItem>
+            )}
           </SelectContent>
         </Select>
         <RefreshButton field={field} state={state} />
