@@ -225,6 +225,47 @@ pub enum TestResult {
     TimedOut,
 }
 
+/// What the window needs to open its own capnweb session with the local
+/// engine: the engine's `/api` URL and the client credentials this host
+/// registered. Must match `LocalEngineSession` in companion/ui/src/host.ts.
+#[derive(Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum LocalEngineSession {
+    /// Companion mode: this host runs no engine.
+    NotLocal,
+    /// The engine is starting, or this host is registering with it.
+    Starting,
+    #[serde(rename_all = "camelCase")]
+    Ready {
+        api_url: String,
+        client_id: String,
+        client_secret: String,
+    },
+    /// Registering failed; it is tried again while the engine runs.
+    Failed { reason: String },
+}
+
+/// Never prints the client secret.
+impl std::fmt::Debug for LocalEngineSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LocalEngineSession::NotLocal => f.write_str("NotLocal"),
+            LocalEngineSession::Starting => f.write_str("Starting"),
+            LocalEngineSession::Ready {
+                api_url, client_id, ..
+            } => f
+                .debug_struct("Ready")
+                .field("api_url", api_url)
+                .field("client_id", client_id)
+                .field("client_secret", &"<redacted>")
+                .finish(),
+            LocalEngineSession::Failed { reason } => {
+                f.debug_struct("Failed").field("reason", reason).finish()
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -458,6 +499,49 @@ mod tests {
                 "modules": [],
             })
         );
+    }
+
+    #[test]
+    fn test_local_engine_session_serializes_as_the_typescript_mirror_expects() {
+        assert_eq!(
+            to_wire(&LocalEngineSession::NotLocal),
+            json!({ "kind": "notLocal" })
+        );
+        assert_eq!(
+            to_wire(&LocalEngineSession::Starting),
+            json!({ "kind": "starting" })
+        );
+        assert_eq!(
+            to_wire(&LocalEngineSession::Ready {
+                api_url: "http://127.0.0.1:5050/api".into(),
+                client_id: "id".into(),
+                client_secret: "secret".into(),
+            }),
+            json!({
+                "kind": "ready",
+                "apiUrl": "http://127.0.0.1:5050/api",
+                "clientId": "id",
+                "clientSecret": "secret",
+            })
+        );
+        assert_eq!(
+            to_wire(&LocalEngineSession::Failed { reason: "r".into() }),
+            json!({ "kind": "failed", "reason": "r" })
+        );
+    }
+
+    #[test]
+    fn test_local_engine_session_debug_output_redacts_the_secret() {
+        let printed = format!(
+            "{:?}",
+            LocalEngineSession::Ready {
+                api_url: "http://127.0.0.1:5050/api".into(),
+                client_id: "id".into(),
+                client_secret: "secret".into(),
+            }
+        );
+        assert!(printed.contains("id"));
+        assert!(!printed.contains("\"secret\""));
     }
 
     #[test]

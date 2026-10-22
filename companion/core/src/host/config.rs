@@ -4,17 +4,19 @@
 //! only by this file:
 //!
 //! ```json
-//! { "mode": "local", "engineDir": "C:\\woofx3\\engine" }
+//! { "mode": "local", "engineDir": "C:\\woofx3\\engine", "apiPort": 5050 }
 //! ```
 //!
 //! `engineDir` is the unpacked engine release (the orchestrator, its
 //! `services.json` and every service binary). Without it the host uses the
-//! engine bundled with the app.
+//! engine bundled with the app. `apiPort` is the port the engine's api
+//! listens on, [`DEFAULT_API_PORT`] unless set.
 
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use super::engine::DEFAULT_API_PORT;
 use super::HostError;
 
 /// The file the mode is read from, in the app's config directory.
@@ -32,9 +34,15 @@ pub enum HostMode {
 pub struct LocalEngineSettings {
     /// Absolute when set; checked when the file is read.
     pub engine_dir: Option<PathBuf>,
+    /// Never 0; checked when the file is read.
+    pub api_port: Option<u16>,
 }
 
 impl LocalEngineSettings {
+    pub fn api_port(&self) -> u16 {
+        self.api_port.unwrap_or(DEFAULT_API_PORT)
+    }
+
     /// The engine release to run: the configured one, else `bundled`.
     pub fn engine_dir<'a>(&'a self, bundled: &'a Path) -> &'a Path {
         self.engine_dir.as_deref().unwrap_or(bundled)
@@ -60,6 +68,8 @@ enum ConfigFile {
     Local {
         #[serde(default)]
         engine_dir: Option<PathBuf>,
+        #[serde(default)]
+        api_port: Option<u16>,
     },
 }
 
@@ -89,13 +99,22 @@ impl HostMode {
             })?;
         match file {
             ConfigFile::Companion {} => Ok(HostMode::Companion),
-            ConfigFile::Local { engine_dir } => {
+            ConfigFile::Local {
+                engine_dir,
+                api_port,
+            } => {
                 if let Some(dir) = &engine_dir {
                     if !dir.is_absolute() {
                         return Err(HostError::EngineDirNotAbsolute(dir.clone()));
                     }
                 }
-                Ok(HostMode::Local(LocalEngineSettings { engine_dir }))
+                if api_port == Some(0) {
+                    return Err(HostError::ApiPortZero);
+                }
+                Ok(HostMode::Local(LocalEngineSettings {
+                    engine_dir,
+                    api_port,
+                }))
             }
         }
     }
@@ -126,13 +145,25 @@ mod tests {
             (
                 "local with the bundled engine",
                 r#"{"mode":"local"}"#.to_string(),
-                HostMode::Local(LocalEngineSettings { engine_dir: None }),
+                HostMode::Local(LocalEngineSettings {
+                    engine_dir: None,
+                    api_port: None,
+                }),
             ),
             (
                 "local with an engine directory",
                 format!(r#"{{"mode":"local","engineDir":{engine_json}}}"#),
                 HostMode::Local(LocalEngineSettings {
                     engine_dir: Some(engine.clone()),
+                    api_port: None,
+                }),
+            ),
+            (
+                "local with an api port",
+                r#"{"mode":"local","apiPort":20200}"#.to_string(),
+                HostMode::Local(LocalEngineSettings {
+                    engine_dir: None,
+                    api_port: Some(20200),
                 }),
             ),
             (
@@ -143,7 +174,10 @@ mod tests {
             (
                 "whitespace and newlines",
                 "\n  { \"mode\" : \"local\" }\r\n".to_string(),
-                HostMode::Local(LocalEngineSettings { engine_dir: None }),
+                HostMode::Local(LocalEngineSettings {
+                    engine_dir: None,
+                    api_port: None,
+                }),
             ),
         ];
         for (case, raw, expected) in cases {
@@ -168,6 +202,8 @@ mod tests {
                 r#"{"mode":"companion","engineDir":"/x"}"#,
             ),
             ("mode in the wrong case", r#"{"mode":"Local"}"#),
+            ("port out of range", r#"{"mode":"local","apiPort":70000}"#),
+            ("port as a string", r#"{"mode":"local","apiPort":"5050"}"#),
         ];
         for (case, raw) in invalid {
             assert!(
@@ -179,6 +215,10 @@ mod tests {
         assert!(matches!(
             parse(r#"{"mode":"local","engineDir":"engine"}"#),
             Err(HostError::EngineDirNotAbsolute(dir)) if dir == Path::new("engine")
+        ));
+        assert!(matches!(
+            parse(r#"{"mode":"local","apiPort":0}"#),
+            Err(HostError::ApiPortZero)
         ));
     }
 
@@ -192,7 +232,10 @@ mod tests {
         std::fs::write(&path, r#"{"mode":"local"}"#).expect("write");
         assert_eq!(
             HostMode::load(&path).expect("reads"),
-            HostMode::Local(LocalEngineSettings { engine_dir: None })
+            HostMode::Local(LocalEngineSettings {
+                engine_dir: None,
+                api_port: None
+            })
         );
         std::fs::remove_file(&path).expect("cleanup");
     }
@@ -209,14 +252,20 @@ mod tests {
     }
 
     #[test]
-    fn test_local_engine_settings_engine_dir_falls_back_to_the_bundle() {
+    fn test_local_engine_settings_fall_back_to_the_bundle_and_default_port() {
         let bundled = absolute("bundled");
         let configured = absolute("configured");
-        let unset = LocalEngineSettings { engine_dir: None };
+        let unset = LocalEngineSettings {
+            engine_dir: None,
+            api_port: None,
+        };
         assert_eq!(unset.engine_dir(&bundled), bundled.as_path());
+        assert_eq!(unset.api_port(), DEFAULT_API_PORT);
         let set = LocalEngineSettings {
             engine_dir: Some(configured.clone()),
+            api_port: Some(20200),
         };
         assert_eq!(set.engine_dir(&bundled), configured.as_path());
+        assert_eq!(set.api_port(), 20200);
     }
 }

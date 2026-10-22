@@ -5,6 +5,15 @@
 /// crate needs no deployment.
 const DEBUG_CONVEX_URL: &str = "http://127.0.0.1:3210";
 
+include!("src/command_names.rs");
+
+macro_rules! command_name_list {
+    ($($name:ident),* $(,)?) => {
+        &[$(stringify!($name)),*]
+    };
+}
+
+const COMMAND_NAMES: &[&str] = with_command_names!(command_name_list);
 include!("src/convex_url.rs");
 
 fn main() {
@@ -27,5 +36,9 @@ fn main() {
     }
     println!("cargo:rustc-env=WOOFX3_CONVEX_URL={url}");
 
-    tauri_build::build()
+    // Declaring the commands makes Tauri check each call against the
+    // window's capabilities instead of allowing every command.
+    let manifest = tauri_build::AppManifest::new().commands(COMMAND_NAMES);
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(manifest))
+        .expect("the Tauri build script failed");
 }

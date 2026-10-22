@@ -13,6 +13,8 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
+#[macro_use]
+mod command_names;
 #[cfg(test)]
 mod convex_url;
 mod credentials;
@@ -36,7 +38,10 @@ use woofx3_companion_core::host::{HostMode, HOST_CONFIG_FILE};
 use cloud::CloudLink;
 use engine_host::LocalEngine;
 use integrations::Integrations;
-use state::{CompanionState, IntegrationsView, ReadyUpdate, TestResult, WindowState, STATE_EVENT};
+use state::{
+    CompanionState, IntegrationsView, LocalEngineSession, ReadyUpdate, TestResult, WindowState,
+    STATE_EVENT,
+};
 use tray::Tray;
 use update::Downloaded;
 
@@ -354,12 +359,27 @@ async fn test_endpoint(
     companion.integrations.test(&module_id, &endpoint_id).await
 }
 
+/// What the window needs to open a capnweb session with the local engine.
+/// Only this host's own window can call it (capabilities/main.json).
+#[tauri::command]
+async fn local_engine_session(
+    companion: State<'_, Arc<Companion>>,
+) -> Result<LocalEngineSession, String> {
+    Ok(companion.engine.session())
+}
+
 /// Connects to the relay again after another connection displaced this one
 /// or woofx3 refused a credential.
 #[tauri::command]
 async fn reconnect_relay(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
     companion.integrations.reconnect_relay();
     Ok(())
+}
+
+macro_rules! command_handler {
+    ($($name:ident),* $(,)?) => {
+        tauri::generate_handler![$($name),*]
+    };
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -433,23 +453,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![
-            get_state,
-            start_pairing,
-            cancel_pairing,
-            open_verification_url,
-            confirm_pairing,
-            reject_pairing,
-            unpair,
-            install_update,
-            get_integrations,
-            set_endpoint_enabled,
-            confirm_address,
-            use_discovered,
-            set_share_password,
-            test_endpoint,
-            reconnect_relay
-        ])
+        .invoke_handler(with_command_names!(command_handler))
         .build(tauri::generate_context!())
         .expect("error while building the woofx3 companion")
         .run(|app, event| {
@@ -496,7 +500,33 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
 
 #[cfg(test)]
 mod tests {
+    macro_rules! command_name_list {
+        ($($name:ident),* $(,)?) => {
+            &[$(stringify!($name)),*]
+        };
+    }
+
+    const COMMAND_NAMES: &[&str] = with_command_names!(command_name_list);
     use super::convex_url::check_convex_url;
+
+    #[test]
+    fn test_capabilities_grant_exactly_the_declared_commands() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/main.json")).expect("valid JSON");
+        let granted: Vec<&str> = capability["permissions"]
+            .as_array()
+            .expect("a permission list")
+            .iter()
+            .map(|permission| permission.as_str().expect("a permission id"))
+            .filter(|permission| permission.starts_with("allow-"))
+            .collect();
+        let declared: Vec<String> = COMMAND_NAMES
+            .iter()
+            .map(|name| format!("allow-{}", name.replace('_', "-")))
+            .collect();
+        assert_eq!(granted, declared);
+        assert_eq!(capability["windows"], serde_json::json!(["main"]));
+    }
 
     #[test]
     fn test_check_convex_url_accepts_deployment_urls() {

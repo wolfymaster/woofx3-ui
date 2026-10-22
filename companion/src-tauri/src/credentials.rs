@@ -1,14 +1,20 @@
-//! The companion token: generated here, kept in the OS credential store, and
-//! sent to Convex only as a hash until pairing is approved.
+//! What the companion keeps in the OS credential store: the companion token,
+//! generated here and sent to Convex only as a hash until pairing is
+//! approved, and in local mode the client id and secret the local engine
+//! issued to this host.
 
 use anyhow::{anyhow, Context, Result};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+use futures::future::BoxFuture;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::{Arc, OnceLock};
+use woofx3_companion_core::host::{ClientCredentials, CredentialStore};
 
 const SERVICE: &str = "tv.woofx3.companion";
-const ACCOUNT: &str = "companion-token";
+const TOKEN_ACCOUNT: &str = "companion-token";
+const ENGINE_CLIENT_ACCOUNT: &str = "local-engine-client";
 
 /// Marks the string as a woofx3 companion token, so one pasted somewhere it
 /// should not be is recognizable to a person or a secret scanner. Must match
@@ -45,15 +51,16 @@ pub struct StoredToken {
     pub instance_name: Option<String>,
 }
 
-fn entry() -> Result<keyring::Entry> {
-    keyring::Entry::new(SERVICE, ACCOUNT).context("could not open the credential store")
+fn entry(account: &str) -> Result<keyring::Entry> {
+    keyring::Entry::new(SERVICE, account).context("could not open the credential store")
 }
 
-fn load_blocking() -> Result<Option<StoredToken>> {
-    match entry()?.get_password() {
+/// The JSON value stored under `account`; `label` names it in errors.
+fn load_blocking<T: DeserializeOwned>(account: &str, label: &str) -> Result<Option<T>> {
+    match entry(account)?.get_password() {
         Ok(raw) => {
-            let stored: StoredToken = serde_json::from_str(&raw)
-                .context("the stored companion credential is unreadable")?;
+            let stored: T = serde_json::from_str(&raw)
+                .with_context(|| format!("the stored {label} is unreadable"))?;
             Ok(Some(stored))
         }
         Err(keyring::Error::NoEntry) => Ok(None),
@@ -61,15 +68,15 @@ fn load_blocking() -> Result<Option<StoredToken>> {
     }
 }
 
-fn store_blocking(stored: &StoredToken) -> Result<()> {
+fn store_blocking<T: Serialize>(account: &str, stored: &T) -> Result<()> {
     let raw = serde_json::to_string(stored)?;
-    entry()?
+    entry(account)?
         .set_password(&raw)
         .context("could not write to the credential store")
 }
 
-fn clear_blocking() -> Result<()> {
-    match entry()?.delete_credential() {
+fn clear_blocking(account: &str) -> Result<()> {
+    match entry(account)?.delete_credential() {
         Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
         Err(err) => Err(anyhow::Error::new(err).context("could not clear the credential store")),
     }
@@ -104,15 +111,33 @@ where
 }
 
 pub async fn load() -> Result<Option<StoredToken>> {
-    off_thread(load_blocking).await
+    off_thread(|| load_blocking(TOKEN_ACCOUNT, "companion credential")).await
 }
 
 pub async fn store(stored: StoredToken) -> Result<()> {
-    off_thread(move || store_blocking(&stored)).await
+    off_thread(move || store_blocking(TOKEN_ACCOUNT, &stored)).await
 }
 
 pub async fn clear() -> Result<()> {
-    off_thread(clear_blocking).await
+    off_thread(|| clear_blocking(TOKEN_ACCOUNT)).await
+}
+
+/// The local engine's client credentials, in the credential store next to
+/// the companion token.
+pub struct EngineClientStore;
+
+impl CredentialStore for EngineClientStore {
+    fn load(&self) -> BoxFuture<'_, Result<Option<ClientCredentials>>> {
+        Box::pin(off_thread(|| {
+            load_blocking(ENGINE_CLIENT_ACCOUNT, "engine client credential")
+        }))
+    }
+
+    fn store(&self, credentials: ClientCredentials) -> BoxFuture<'_, Result<()>> {
+        Box::pin(off_thread(move || {
+            store_blocking(ENGINE_CLIENT_ACCOUNT, &credentials)
+        }))
+    }
 }
 
 #[cfg(test)]
