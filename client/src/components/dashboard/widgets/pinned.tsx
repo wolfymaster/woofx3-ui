@@ -99,10 +99,13 @@ export function PinnedWidget() {
       return;
     }
     void run(async () => {
-      await pinIntents.run(`${instanceId}:chat.pin:${draft}`, (operationId) =>
+      const result = await pinIntents.run(`${instanceId}:chat.pin:${draft}`, (operationId) =>
         pinNewMessage({ instanceId, text: draft, operationId })
       );
       setDraft("");
+      if (!result.pinned) {
+        toast({ title: "Posted, but not pinned", description: result.warning });
+      }
     }, "Couldn't pin that message");
   };
 
@@ -114,7 +117,9 @@ export function PinnedWidget() {
       const result = await pinIntents.run(`${instanceId}:repin:${entryId}`, (operationId) =>
         repinFromHistory({ instanceId, entryId: entryId as Id<"pinnedMessages">, operationId })
       );
-      if (result.resent) {
+      if (!result.pinned) {
+        toast({ title: "Posted again, but not pinned", description: result.warning });
+      } else if (result.resent) {
         // Worth saying: the original message was too old to pin, so this posted
         // a new copy into chat rather than re-pinning the one people remember.
         toast({ title: "Posted again and pinned", description: "The original message was no longer pinnable." });

@@ -14,7 +14,7 @@ import {
   stubFetch,
 } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
-import { fetchCurrentPin, repinOnTwitch, repinThroughGateway, unpinOnTwitch } from "./pins";
+import { fetchCurrentPin, pinNewLine, repinOnTwitch, repinThroughGateway, unpinOnTwitch } from "./pins";
 
 const CALL: AuthorizedTwitchCall = { accessToken: "token", broadcasterUserId: "B1", clientId: "client" };
 const PINS = `https://api.twitch.tv/helix/chat/pins?broadcaster_id=B1&moderator_id=B1`;
@@ -200,7 +200,7 @@ describe("re-pinning through the platform gateway", () => {
     const result = await repinThroughGateway(gateway.route, REPIN, "Rules: be nice", key, async () => {
       resendChecks += 1;
     });
-    expect(result).toEqual({ messageId: "m1", notPinned: null, resent: false });
+    expect(result).toEqual({ pinned: true, messageId: "m1", resent: false });
     expect(gateway.calls).toEqual([
       {
         action: "chat.pin",
@@ -216,7 +216,7 @@ describe("re-pinning through the platform gateway", () => {
     test(`re-posts when Twitch refuses the id (${code})`, async () => {
       const gateway = gatewayAnswering({ status: "failed", code, message: "Twitch answered 400: bad id" });
       const result = await repinThroughGateway(gateway.route, REPIN, "Rules: be nice", key, async () => {});
-      expect(result).toEqual({ messageId: "m2", notPinned: null, resent: true });
+      expect(result).toEqual({ pinned: true, messageId: "m2", resent: true });
       expect(gateway.calls.map((call) => [call.payload, call.idempotencyKey])).toEqual([
         [{ messageId: "m1" }, "dashboard:op_12345678:chat.pin.existing"],
         [{ message: "Rules: be nice" }, "dashboard:op_12345678:chat.pin.new"],
@@ -249,10 +249,9 @@ describe("re-pinning through the platform gateway", () => {
   for (const { name, outcome, sentence } of noRepost) {
     test(`does not re-post after ${name}`, async () => {
       const gateway = gatewayAnswering(outcome);
-      const result = await repinThroughGateway(gateway.route, REPIN, "Rules: be nice", key, async () => {});
-      expect(result.messageId).toBeNull();
-      expect(result.resent).toBe(false);
-      expect(result.notPinned?.data).toContain(sentence);
+      await expect(repinThroughGateway(gateway.route, REPIN, "Rules: be nice", key, async () => {})).rejects.toThrow(
+        sentence
+      );
       expect(gateway.calls).toHaveLength(1);
     });
   }
@@ -266,7 +265,7 @@ describe("re-pinning through the platform gateway", () => {
       key,
       async () => {}
     );
-    expect(result).toEqual({ messageId: "m2", notPinned: null, resent: true });
+    expect(result).toEqual({ pinned: true, messageId: "m2", resent: true });
     expect(gateway.calls.map((call) => call.payload)).toEqual([{ message: "Rules: be nice" }]);
   });
 
@@ -276,9 +275,12 @@ describe("re-pinning through the platform gateway", () => {
       { status: "failed", code: "upstream", message: "posted but not pinned", messageId: "m3" }
     );
     const result = await repinThroughGateway(gateway.route, REPIN, "Rules: be nice", key, async () => {});
-    expect(result.messageId).toBe("m3");
-    expect(result.resent).toBe(true);
-    expect(result.notPinned?.data).toContain("The message is in chat, but Twitch didn't pin it");
+    expect(result).toEqual({
+      pinned: false,
+      messageId: "m3",
+      warning: "The message is in chat, but Twitch didn't pin it (posted but not pinned). Pin it from the history.",
+      resent: true,
+    });
   });
 
   test("the send scope is checked before a re-post, and a refusal stops it", async () => {
@@ -289,5 +291,44 @@ describe("re-pinning through the platform gateway", () => {
       })
     ).rejects.toThrow("missing user:write:chat");
     expect(gateway.calls).toHaveLength(1);
+  });
+});
+
+describe("pinning a new line through the platform gateway", () => {
+  const KEY = "dashboard:op_12345678:chat.pin";
+  const POSTED_NOT_PINNED: PlatformOutcome = {
+    status: "failed",
+    code: "forbidden",
+    message: "Twitch answered 403",
+    messageId: "m4",
+  };
+
+  test("a pinned line resolves with its id", async () => {
+    const gateway = fakeGatewayRoute(twitchAnswer({ status: "delivered", messageId: "m1" }));
+    expect(await pinNewLine(CALL, gateway.route, "Rules: be nice", KEY)).toEqual({ pinned: true, messageId: "m1" });
+    expect(gateway.calls).toEqual([
+      { action: "chat.pin", platforms: ["twitch"], payload: { message: "Rules: be nice" }, idempotencyKey: KEY },
+    ]);
+  });
+
+  // The gateway keeps no reply whose only outcome is failed, so a posted but
+  // unpinned line must resolve: a thrown error leaves the client's intent open,
+  // and the retry under the same key would post the line a second time.
+  test("a line posted but not pinned resolves with a warning instead of throwing", async () => {
+    const gateway = fakeGatewayRoute(twitchAnswer(POSTED_NOT_PINNED));
+    expect(await pinNewLine(CALL, gateway.route, "Rules: be nice", KEY)).toEqual({
+      pinned: false,
+      messageId: "m4",
+      warning: "The message is in chat, but Twitch didn't pin it (Twitch answered 403). Pin it from the history.",
+    });
+  });
+
+  test("a line that never reached chat throws", async () => {
+    const gateway = fakeGatewayRoute(
+      twitchAnswer({ status: "failed", code: "forbidden", message: "Twitch answered 403" })
+    );
+    await expect(pinNewLine(CALL, gateway.route, "Rules: be nice", KEY)).rejects.toThrow(
+      "Twitch refused the pinned message: Twitch answered 403"
+    );
   });
 });

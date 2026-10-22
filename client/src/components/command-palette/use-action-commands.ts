@@ -308,10 +308,10 @@ export function useActionCommands(
             aliases: ["pin"],
             submitLabel: (text) => `Pin “${text}”`,
             run: async (text) => {
-              await chatIntents.run(`${id}:chat.pin:${text}`, (operationId) =>
+              const result = await chatIntents.run(`${id}:chat.pin:${text}`, (operationId) =>
                 pinNewMessage({ instanceId: id, text, operationId })
               );
-              return "Message pinned";
+              return result.pinned ? "Message pinned" : result.warning;
             },
           },
         },

@@ -695,9 +695,12 @@ Pinning and re-posting go through the platform gateway on an engine with
 Otherwise, and always for reading and unpinning, they go to Helix from
 `convex/pins.ts`, or through an engine with `twitch.pins` (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). The history
-stays in Convex. A message the gateway posted but could not pin is still
-recorded with its id, so it can be pinned from the history without posting it
-again.
+stays in Convex. A message the gateway posted but could not pin is recorded
+with its id and reported as a warning rather than an error: the pin counts as
+done, so the draft clears and the next click is a new pin. It can then be
+pinned from the history by its id. It is not an error because the gateway
+forgets a reply where nothing succeeded, so retrying it would post the line
+a second time.
 
 Re-pinning has two paths, chosen by `convex/lib/pinStrategy.ts`: reuse the
 stored message id when the entry was created during the current broadcast,
