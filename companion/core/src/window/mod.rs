@@ -1,25 +1,30 @@
 //! The window's contract: every value the host sends the window, as a
-//! command result or an event, the event names, and the commands the window
-//! may call. The window's TypeScript types are generated from these
-//! (`bindings`), so serde's attributes here decide the wire shape for both.
+//! command result or an event, the event names, the commands the window may
+//! call and their arguments. The window's TypeScript types are generated from
+//! these (`bindings`), so serde's attributes here decide the wire shape for
+//! both.
 
 mod bindings;
-#[macro_use]
+mod command_args;
 mod command_names;
 
 use serde::Serialize;
 use ts_rs::TS;
 
 pub use bindings::{window_bindings, BINDINGS_FILE};
+pub use command_args::{
+    ConfirmAddressArgs, EnqueueShoutoutArgs, RemoveShoutoutArgs, ReorderShoutoutsArgs,
+    SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, UseDiscoveredArgs,
+};
 
 macro_rules! command_name_list {
-    ($($name:ident),* $(,)?) => {
+    ($($name:ident($args:ty) -> $result:ty),* $(,)?) => {
         &[$(stringify!($name)),*]
     };
 }
 
 /// Every command the window may call, in the order the host registers them.
-pub const COMMAND_NAMES: &[&str] = with_command_names!(command_name_list);
+pub const COMMAND_NAMES: &[&str] = crate::with_command_names!(command_name_list);
 
 /// Where pairing stands.
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
