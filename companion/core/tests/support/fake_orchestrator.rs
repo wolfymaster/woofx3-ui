@@ -20,6 +20,8 @@
 //!   file `FAKE_ORCHESTRATOR_GATE` names exists, then behaves as `ready`.
 //! - `step-fails:<name>`: runs the run-once step `name`, which fails, then
 //!   reports and exits as the orchestrator does when a step fails.
+//! - `step-cannot-start:<name>`: the run-once step `name` cannot be started
+//!   (its binary is missing), reported and exited as the orchestrator does.
 //!
 //! With `FAKE_ORCHESTRATOR_RECORD` set, it appends what it was started with to
 //! that file, one `key=value` per line. The service pid is recorded as
@@ -87,6 +89,7 @@ fn main() {
             ready_until_stdin_closes();
         }
         ("step-fails", step) => fail_step(step),
+        ("step-cannot-start", step) => step_cannot_start(step),
         (other, _) => {
             eprintln!("fake orchestrator: unknown script {other:?}");
             std::process::exit(2);
@@ -154,6 +157,19 @@ fn fail_step(step: &str) -> ! {
     ));
     status(&format!(
         r#"{{"event":"error","time":"t","message":"Stopped because a run-once step failed: {step}: exit status 1"}}"#
+    ));
+    std::process::exit(1);
+}
+
+/// The lines the orchestrator writes when run-once step `step` cannot be
+/// started: no `starting` status, since no process ran, only its error,
+/// then the orchestrator's own, and exit 1.
+fn step_cannot_start(step: &str) -> ! {
+    status(&format!(
+        r#"{{"event":"error","time":"t","name":"{step}","message":"failed to start: binary not found: /engine/{step}"}}"#
+    ));
+    status(&format!(
+        r#"{{"event":"error","time":"t","message":"Stopped because a run-once step failed: {step}: failed to start: binary not found: /engine/{step}"}}"#
     ));
     std::process::exit(1);
 }

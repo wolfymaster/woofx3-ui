@@ -302,7 +302,10 @@ struct RunState {
     ready_at: Option<Instant>,
     /// The orchestrator's own last error, which explains its exit.
     fatal: Option<String>,
-    /// What the migration step's failure said, once it failed.
+    /// The migration step's process started in this run. Only then can its
+    /// failure have left the database half-migrated.
+    migration_ran: bool,
+    /// What the migration step's failure said, once it ran and failed.
     migration_failure: Option<String>,
     /// Lines that did not parse, counted rather than kept: they are not the
     /// orchestrator's, and could be anything.
@@ -324,6 +327,12 @@ impl RunState {
                 name, status: next, ..
             } => {
                 let migrating = name == MIGRATE_STEP;
+                // The orchestrator reports a step `starting` once its process
+                // is running; a step that could not start reports only an
+                // error.
+                if migrating && next == ServiceStatus::Starting {
+                    self.migration_ran = true;
+                }
                 status.send_modify(|current| {
                     if migrating {
                         current.phase = match (&current.phase, next) {
@@ -354,7 +363,9 @@ impl RunState {
             StatusEvent::Error {
                 service: Some(service),
                 message,
-            } if service == MIGRATE_STEP => self.migration_failure = Some(message),
+            } if service == MIGRATE_STEP && self.migration_ran => {
+                self.migration_failure = Some(message)
+            }
             StatusEvent::Error {
                 service: Some(_), ..
             }

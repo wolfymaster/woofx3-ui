@@ -539,3 +539,30 @@ async fn test_sidecar_restarts_after_another_step_fails() {
         .expect("stops in time")
         .expect("no panic");
 }
+
+/// A migration that could not start migrated nothing, so it is a failure
+/// like any other: restarted with backoff, as a passing spawn failure
+/// would succeed on a later run.
+#[tokio::test]
+async fn test_sidecar_restarts_when_the_migration_cannot_start() {
+    let scratch = Scratch::new("migrate-cannot-start");
+    let mut running = start(spec(&scratch, "step-cannot-start:migrate"), options());
+    running
+        .wait_for("a second restart", |status| {
+            matches!(status.phase, EnginePhase::Restarting { attempt: 2, .. })
+        })
+        .await;
+    assert!(
+        !running.phases().iter().any(|phase| matches!(
+            phase,
+            EnginePhase::Stopped(StopCause::MigrationFailed { .. })
+        )),
+        "{:?}",
+        running.phases()
+    );
+    running.cancel.cancel();
+    timeout(WITHIN, running.task)
+        .await
+        .expect("stops in time")
+        .expect("no panic");
+}
