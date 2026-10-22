@@ -25,9 +25,11 @@
 //! [`SidecarOptions::stable_after`] starts the backoff over. When it exits
 //! cleanly without being asked to (no enabled services, or a stop request
 //! from outside the host), the sidecar stops for good and says why. So it
-//! does when the database migration, the orchestrator's first step, fails:
-//! running it again would fail the same way, and the engine must not start
-//! on a half-migrated database.
+//! does when the database migration fails: the run-once step every service
+//! that opens the database waits for. Running it again would fail the same
+//! way, and the engine must not start on a half-migrated database. A
+//! migration that could not even start migrated nothing, so it keeps the
+//! restart policy.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::OsString;
@@ -140,8 +142,9 @@ pub enum EnginePhase {
     /// The orchestrator is starting its services. `attempt` counts the
     /// restarts since the last stable run.
     Starting { attempt: u32 },
-    /// The orchestrator is migrating the database, its first step. Services
-    /// that use the database start once it completes.
+    /// The orchestrator is migrating the database: the run-once step every
+    /// service that opens the database waits for. Services that do not use
+    /// the database may be starting meanwhile.
     Migrating { attempt: u32 },
     /// Every service passed its health check. The orchestrator says so once
     /// per run, so a service that fails later shows only in `services`.
