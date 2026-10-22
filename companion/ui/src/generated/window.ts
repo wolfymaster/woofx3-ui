@@ -1,6 +1,6 @@
 // Generated from the Rust wire types in companion/core (src/window/bindings.rs).
 // Do not edit. To regenerate, run in companion/core:
-//   cargo run --example write_window_bindings
+//   cargo run --features ts --example write_window_bindings
 
 /**
  * Where pairing stands.
@@ -109,7 +109,8 @@ export type ShoutoutChannel = { twitchUserId: string, login: string, displayName
 broadcasterType: string | null, };
 
 /**
- * A channel waiting in the queue. Times are [`EpochMillis`].
+ * A channel waiting in the queue. Times are milliseconds since the Unix
+ * epoch on this PC's clock.
  */
 export type ShoutoutEntry = { id: ShoutoutEntryId, twitchUserId: string, login: string, displayName: string, profileImageUrl: string | null, broadcasterType: string | null, attempts: number, 
 /**
@@ -144,7 +145,8 @@ position: number,
 alreadyQueued: boolean, };
 
 /**
- * Where the stream start marker stands. Times are [`EpochMillis`].
+ * Where the stream start marker stands. Times are milliseconds since the Unix
+ * epoch on this PC's clock.
  */
 export type StreamStartMarker = { "kind": "idle" } | { "kind": "pending", requestedAt: number, } | { "kind": "dropping" } | { "kind": "dropped", droppedAt: number, } | { "kind": "failed", message: string, };
 
@@ -154,6 +156,33 @@ export type StreamStartMarker = { "kind": "idle" } | { "kind": "pending", reques
  * has `skipped` for a step not asked for.
  */
 export type MarkerRequestOutcome = { "status": "done" } | { "status": "queued", reason: string, } | { "status": "failed", message: string, };
+
+/**
+ * Turns an integration endpoint on or off. On needs an address,
+ * discovered or confirmed.
+ */
+export type SetEndpointEnabledArgs = { moduleId: string, endpointId: string, enabled: boolean, };
+
+/**
+ * The `host:port` the streamer typed and confirmed.
+ */
+export type ConfirmAddressArgs = { moduleId: string, endpointId: string, address: string, };
+
+export type UseDiscoveredArgs = { moduleId: string, endpointId: string, };
+
+export type SetSharePasswordArgs = { moduleId: string, endpointId: string, share: boolean, };
+
+export type TestEndpointArgs = { moduleId: string, endpointId: string, };
+
+export type EnqueueShoutoutArgs = { channel: ShoutoutChannel, };
+
+export type RemoveShoutoutArgs = { entryId: ShoutoutEntryId, };
+
+/**
+ * The queue's new order. An id no longer queued is skipped; entries left
+ * out keep their order after the ones named.
+ */
+export type ReorderShoutoutsArgs = { entryIds: Array<ShoutoutEntryId>, };
 
 export const STATE_EVENT = "companion://state";
 export const INTEGRATIONS_EVENT = "companion://integrations";
@@ -187,3 +216,55 @@ export const COMMANDS = {
 } as const;
 
 export type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS];
+
+/** Each command's arguments, its one `args` parameter; null for none. */
+export type CommandArgs = {
+  get_state: null;
+  start_pairing: null;
+  cancel_pairing: null;
+  open_verification_url: null;
+  confirm_pairing: null;
+  reject_pairing: null;
+  unpair: null;
+  install_update: null;
+  get_integrations: null;
+  set_endpoint_enabled: SetEndpointEnabledArgs;
+  confirm_address: ConfirmAddressArgs;
+  use_discovered: UseDiscoveredArgs;
+  set_share_password: SetSharePasswordArgs;
+  test_endpoint: TestEndpointArgs;
+  reconnect_relay: null;
+  local_engine_session: null;
+  shoutout_queue: null;
+  enqueue_shoutout: EnqueueShoutoutArgs;
+  remove_shoutout: RemoveShoutoutArgs;
+  reorder_shoutouts: ReorderShoutoutsArgs;
+  stream_start_marker: null;
+  request_stream_start_marker: null;
+};
+
+/** What each command resolves to. */
+export type CommandResults = {
+  get_state: WindowState;
+  start_pairing: void;
+  cancel_pairing: void;
+  open_verification_url: void;
+  confirm_pairing: void;
+  reject_pairing: void;
+  unpair: void;
+  install_update: void;
+  get_integrations: IntegrationsView;
+  set_endpoint_enabled: void;
+  confirm_address: void;
+  use_discovered: void;
+  set_share_password: void;
+  test_endpoint: TestResult;
+  reconnect_relay: void;
+  local_engine_session: LocalEngineSession;
+  shoutout_queue: ShoutoutQueueView;
+  enqueue_shoutout: ShoutoutEnqueued;
+  remove_shoutout: void;
+  reorder_shoutouts: void;
+  stream_start_marker: StreamStartMarker;
+  request_stream_start_marker: MarkerRequestOutcome;
+};

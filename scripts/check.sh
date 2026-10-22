@@ -53,7 +53,8 @@ else
   fi
   for path in "${changed[@]}"; do
     case "$path" in
-      companion/core/*) companion_core=true ;;
+      # The window's bindings are checked against core's types by a core test.
+      companion/core/* | companion/ui/src/generated/*) companion_core=true ;;
       companion/* | docs/*) ;;
       *) web=true ;;
     esac
@@ -106,7 +107,9 @@ if $companion_core; then
   run_check core-fmt cargo fmt --manifest-path "$core" --check
   if ! $quick; then
     run_check core-clippy cargo clippy --manifest-path "$core" --all-targets -- -D warnings
-    run_check core-test cargo test --manifest-path "$core"
+    # `ts` builds the window's bindings and the test that keeps them current.
+    run_check core-clippy-ts cargo clippy --manifest-path "$core" --all-targets --features ts -- -D warnings
+    run_check core-test cargo test --manifest-path "$core" --features ts
   fi
 fi
 

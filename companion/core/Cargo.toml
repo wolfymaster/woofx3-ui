@@ -20,12 +20,19 @@ futures = "0.3"
 sha2 = "0.10"
 rand = "0.9"
 thiserror = "2"
-# The window's TypeScript types are generated from the Rust wire types
-# (src/window/bindings.rs), so the two cannot drift.
-ts-rs = "12"
+# Generates the window's TypeScript types from the Rust wire types
+# (src/window/bindings.rs). Only the `ts` feature uses it, so the app does
+# not carry it.
+ts-rs = { version = "12", optional = true }
 # Plain HTTP to the local engine on loopback, so no TLS. The version the
 # updater plugin already pulls in.
 reqwest = { version = "0.13", default-features = false }
+
+[features]
+# Derives the window's TypeScript bindings. The generator example and the
+# test that keeps the committed bindings current need it; CI's core job
+# enables it.
+ts = ["dep:ts-rs"]
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -41,3 +48,7 @@ path = "tests/support/fake_orchestrator.rs"
 test = false
 bench = false
 doc = false
+
+[[example]]
+name = "write_window_bindings"
+required-features = ["ts"]

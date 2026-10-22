@@ -283,9 +283,16 @@ jobs:
         if: ${{ !cancelled() }}
         run: cargo clippy --all-targets -- -D warnings
 
+      # `ts` derives the window's TypeScript bindings. The app never enables
+      # it, so the crate is linted with and without it.
+      - name: Clippy with the bindings
+        if: ${{ !cancelled() }}
+        run: cargo clippy --all-targets --features ts -- -D warnings
+
+      # With `ts`, a test fails while companion/ui/src/generated is stale.
       - name: Rust tests
         if: ${{ !cancelled() }}
-        run: cargo test
+        run: cargo test --features ts
 
   docs:
     name: Docs build
