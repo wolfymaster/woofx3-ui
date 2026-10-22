@@ -25,21 +25,48 @@ const DATA_DIR_ENV: &str = "WOOFX3_DATA_DIR";
 const REGISTRATION_TOKEN_FILE_ENV: &str = "WOOFX3_REGISTRATION_TOKEN_FILE";
 const API_PORT_ENV: &str = "WOOFX3_API_PORT";
 const ALLOWED_HOSTS_ENV: &str = "WOOFX3_ALLOWED_HOSTS";
+/// Every service's origin list, the api's included.
 const ALLOWED_ORIGINS_ENV: &str = "WOOFX3_ALLOWED_ORIGINS";
+/// sceneManager's own origin list, which replaces the shared one for it.
+const SCENE_MANAGER_ALLOWED_ORIGINS_ENV: &str = "WOOFX3_SCENE_MANAGER_ALLOWED_ORIGINS";
 
 /// Every name the engine is reached by on loopback. The services' own
 /// health checks use 127.0.0.1.
-const ALLOWED_HOSTS: &str = "localhost,127.0.0.1,[::1]";
+const ALLOWED_HOSTS: &[&str] = &["localhost", "127.0.0.1", "[::1]"];
 
 /// Loopback pages (sceneManager's overlays post from their own origin) and
 /// the desktop app's webview, which is `tauri://localhost` on macOS and Linux
-/// and `http://tauri.localhost` on Windows. The engine's desktop recipe also
-/// gives sceneManager `null`, for sandboxed widget frames, but the
-/// orchestrator hands every service the same environment, and `null` must
-/// not reach the api; so widget frames' CORS loads from sceneManager are
-/// refused until the engine can take a sceneManager-only list.
-const ALLOWED_ORIGINS: &str =
-    "http://localhost:*,http://127.0.0.1:*,tauri://localhost,http://tauri.localhost";
+/// and `http://tauri.localhost` on Windows.
+const ALLOWED_ORIGINS: &[&str] = &[
+    "http://localhost:*",
+    "http://127.0.0.1:*",
+    "tauri://localhost",
+    "http://tauri.localhost",
+];
+
+/// The origin sandboxed widget frames send on their CORS loads from
+/// sceneManager (module scripts, fonts). Only sceneManager's list may hold
+/// it: the api refuses to start with it, since a listed `null` admits every
+/// sandboxed page.
+const OPAQUE_ORIGIN: &str = "null";
+
+/// An allowlist as the engine reads it: comma-separated entries. The engine
+/// refuses at startup a list that is set but names nothing, so one is never
+/// built empty.
+fn allowlist(entries: &[&str]) -> OsString {
+    assert!(
+        !entries.is_empty() && entries.iter().all(|entry| !entry.trim().is_empty()),
+        "an allowlist needs entries, and no blank one: {entries:?}"
+    );
+    entries.join(",").into()
+}
+
+/// The shared origins, then `null`, for sceneManager alone.
+fn scene_manager_origins() -> Vec<&'static str> {
+    let mut origins = ALLOWED_ORIGINS.to_vec();
+    origins.push(OPAQUE_ORIGIN);
+    origins
+}
 
 /// The api port of an engine release (`apiPort` in the engine's
 /// build/config/.woofx3.json), used unless the host configuration names one.
@@ -84,8 +111,12 @@ impl LocalEngineLayout {
                 self.registration_token_file.clone().into_os_string(),
             ),
             (API_PORT_ENV.into(), self.api_port.to_string().into()),
-            (ALLOWED_HOSTS_ENV.into(), ALLOWED_HOSTS.into()),
-            (ALLOWED_ORIGINS_ENV.into(), ALLOWED_ORIGINS.into()),
+            (ALLOWED_HOSTS_ENV.into(), allowlist(ALLOWED_HOSTS)),
+            (ALLOWED_ORIGINS_ENV.into(), allowlist(ALLOWED_ORIGINS)),
+            (
+                SCENE_MANAGER_ALLOWED_ORIGINS_ENV.into(),
+                allowlist(&scene_manager_origins()),
+            ),
         ]
     }
 }
@@ -244,12 +275,48 @@ mod tests {
                 "http://localhost:*,http://127.0.0.1:*,tauri://localhost,http://tauri.localhost"
                     .into(),
             ),
+            (
+                "WOOFX3_SCENE_MANAGER_ALLOWED_ORIGINS",
+                "http://localhost:*,http://127.0.0.1:*,tauri://localhost,http://tauri.localhost,null"
+                    .into(),
+            ),
         ];
         for (key, value) in &expected {
             assert_eq!(env_value(&spec, key), Some(value), "{key}");
         }
         assert_eq!(spec.env.len(), expected.len());
         std::fs::remove_dir_all(&dir).expect("cleanup");
+    }
+
+    /// The engine refuses at startup an allowlist that is set but names
+    /// nothing, and the api one that holds `null`.
+    #[test]
+    fn test_allowlists_name_entries_and_keep_null_from_the_api() {
+        for (name, entries) in [
+            ("hosts", ALLOWED_HOSTS.to_vec()),
+            ("origins", ALLOWED_ORIGINS.to_vec()),
+            ("sceneManager origins", scene_manager_origins()),
+        ] {
+            let list = allowlist(&entries).into_string().expect("UTF-8");
+            assert!(
+                list.split(',').all(|entry| !entry.trim().is_empty()),
+                "{name}: {list}"
+            );
+        }
+        assert!(!ALLOWED_ORIGINS.contains(&OPAQUE_ORIGIN));
+        assert!(scene_manager_origins().contains(&OPAQUE_ORIGIN));
+    }
+
+    #[test]
+    #[should_panic(expected = "an allowlist needs entries")]
+    fn test_allowlist_refuses_to_build_an_empty_list() {
+        allowlist(&[]);
+    }
+
+    #[test]
+    #[should_panic(expected = "no blank one")]
+    fn test_allowlist_refuses_a_blank_entry() {
+        allowlist(&["http://localhost:*", " "]);
     }
 
     #[test]
