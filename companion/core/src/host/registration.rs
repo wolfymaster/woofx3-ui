@@ -229,6 +229,7 @@ mod tests {
     use std::sync::Mutex;
 
     use super::*;
+    use crate::host::gateway::TwitchHelixResult;
 
     fn credentials(id: &str) -> ClientCredentials {
         ClientCredentials {
@@ -303,6 +304,29 @@ mod tests {
                 .pop_front()
                 .expect("a scripted verification");
             Box::pin(async move { reply })
+        }
+
+        fn send_shoutout<'a>(
+            &'a self,
+            _credentials: &'a ClientCredentials,
+            _to_broadcaster_id: &'a str,
+        ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>> {
+            unimplemented!("registration never sends shoutouts")
+        }
+
+        fn create_stream_marker<'a>(
+            &'a self,
+            _credentials: &'a ClientCredentials,
+            _description: &'a str,
+        ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>> {
+            unimplemented!("registration never drops markers")
+        }
+
+        fn is_live<'a>(
+            &'a self,
+            _credentials: &'a ClientCredentials,
+        ) -> BoxFuture<'a, Result<bool, HostError>> {
+            unimplemented!("registration never reads the stream status")
         }
     }
 

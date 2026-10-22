@@ -1,6 +1,8 @@
 //! The host's calls to a local engine's gateway over capnweb HTTP batch:
-//! registering as a client, and checking that stored credentials still
-//! authenticate. Each call is one batch, so one HTTP request.
+//! registering as a client, checking that stored credentials still
+//! authenticate, and the few authenticated calls the host makes itself (the
+//! shoutout queue's sends and the stream start marker). Each call is one
+//! batch, so one HTTP request.
 
 use std::fmt;
 use std::time::Duration;
@@ -64,6 +66,129 @@ pub trait EngineGateway: Send + Sync {
         &'a self,
         credentials: &'a ClientCredentials,
     ) -> BoxFuture<'a, Result<(), HostError>>;
+
+    /// Twitch's shoutout of the channel `to_broadcaster_id` from the
+    /// broadcaster, through the engine's `twitchSendShoutout`.
+    fn send_shoutout<'a>(
+        &'a self,
+        credentials: &'a ClientCredentials,
+        to_broadcaster_id: &'a str,
+    ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>>;
+
+    /// A marker on the broadcaster's live stream, through the engine's
+    /// `twitchCreateStreamMarker`.
+    fn create_stream_marker<'a>(
+        &'a self,
+        credentials: &'a ClientCredentials,
+        description: &'a str,
+    ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>>;
+
+    /// Whether the broadcaster is live, from the engine's `getStreamStatus`.
+    /// The engine answers offline when it cannot ask Twitch, so `false` can
+    /// also mean "unknown".
+    fn is_live<'a>(
+        &'a self,
+        credentials: &'a ClientCredentials,
+    ) -> BoxFuture<'a, Result<bool, HostError>>;
+}
+
+/// Why the engine has no answer from Twitch for a Twitch method. Must match
+/// `TwitchHelixErrorCode` in the engine's
+/// shared/clients/typescript/api/twitch-helix.ts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TwitchHelixFailure {
+    /// The engine refused the arguments before calling Twitch.
+    InvalidArguments,
+    NotLinked,
+    /// The engine's twitch service is not running.
+    Unavailable,
+    /// The twitch service did not answer in time; Twitch may still have acted.
+    Timeout,
+    Failed,
+}
+
+impl std::str::FromStr for TwitchHelixFailure {
+    type Err = ();
+
+    fn from_str(code: &str) -> Result<Self, Self::Err> {
+        match code {
+            "invalid_arguments" => Ok(TwitchHelixFailure::InvalidArguments),
+            "not_linked" => Ok(TwitchHelixFailure::NotLinked),
+            "unavailable" => Ok(TwitchHelixFailure::Unavailable),
+            "timeout" => Ok(TwitchHelixFailure::Timeout),
+            "failed" => Ok(TwitchHelixFailure::Failed),
+            _ => Err(()),
+        }
+    }
+}
+
+impl fmt::Display for TwitchHelixFailure {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            TwitchHelixFailure::InvalidArguments => "invalid_arguments",
+            TwitchHelixFailure::NotLinked => "not_linked",
+            TwitchHelixFailure::Unavailable => "unavailable",
+            TwitchHelixFailure::Timeout => "timeout",
+            TwitchHelixFailure::Failed => "failed",
+        })
+    }
+}
+
+/// A Twitch method's outcome, as the engine's `TwitchHelixResult` reports
+/// it. A refusal is a result rather than a thrown error, so the host can
+/// tell Twitch's answer from the engine's own failure. Twitch's body on
+/// success is never read here, so it is not kept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TwitchHelixResult {
+    Ok,
+    /// Twitch answered with an error status; `body` is Twitch's, as text.
+    Refused {
+        status: u16,
+        body: String,
+    },
+    /// The engine got no answer from Twitch.
+    Failed {
+        code: TwitchHelixFailure,
+        error: String,
+    },
+}
+
+impl TwitchHelixResult {
+    /// Reads the value capnweb wrote. Only scalar fields are read, so a
+    /// success body holding forms the host does not decode cannot fail it.
+    pub fn from_wire(value: &Value) -> Result<Self, HostError> {
+        let unreadable = || HostError::EngineReplyUnreadable("not a TwitchHelixResult");
+        match value.get("ok").and_then(Value::as_bool) {
+            Some(true) => Ok(TwitchHelixResult::Ok),
+            Some(false) => {
+                let code = value
+                    .get("code")
+                    .and_then(Value::as_str)
+                    .ok_or_else(unreadable)?;
+                let error = value
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .ok_or_else(unreadable)?
+                    .to_string();
+                if code == "helix" {
+                    let status = value
+                        .get("status")
+                        .and_then(Value::as_u64)
+                        .and_then(|status| u16::try_from(status).ok())
+                        .ok_or_else(unreadable)?;
+                    let body = value
+                        .get("body")
+                        .and_then(Value::as_str)
+                        .ok_or_else(unreadable)?
+                        .to_string();
+                    return Ok(TwitchHelixResult::Refused { status, body });
+                }
+                let code = code.parse().map_err(|()| unreadable())?;
+                Ok(TwitchHelixResult::Failed { code, error })
+            }
+            None => Err(unreadable()),
+        }
+    }
 }
 
 /// The gateway at an engine's `/api` URL.
@@ -117,6 +242,41 @@ impl HttpEngineGateway {
             Err(unreadable) => Err(HostError::EngineReplyUnreadable(unreadable.0)),
         }
     }
+
+    /// `method` on the API that `credentials` authenticate to, in the same
+    /// batch as `authenticate`. A refused `authenticate` rejects the
+    /// pipelined call with the same error, so it is reported as
+    /// [`HostError::CredentialsRefused`]; anything else came from `method`
+    /// or the engine.
+    async fn authenticated_call(
+        &self,
+        credentials: &ClientCredentials,
+        method: &str,
+        args: Vec<Value>,
+    ) -> Result<Value, HostError> {
+        self.call(&[
+            Call {
+                target: MAIN_STUB,
+                method: "authenticate",
+                args: vec![
+                    json!(credentials.client_id),
+                    json!(credentials.client_secret),
+                ],
+            },
+            Call {
+                target: 1,
+                method,
+                args,
+            },
+        ])
+        .await
+        .map_err(|err| match err {
+            HostError::EngineRefused { message, .. } if is_authentication_refused(&message) => {
+                HostError::CredentialsRefused { message }
+            }
+            other => other,
+        })
+    }
 }
 
 impl EngineGateway for HttpEngineGateway {
@@ -149,33 +309,64 @@ impl EngineGateway for HttpEngineGateway {
         credentials: &'a ClientCredentials,
     ) -> BoxFuture<'a, Result<(), HostError>> {
         Box::pin(async move {
-            self.call(&[
-                Call {
-                    target: MAIN_STUB,
-                    method: "authenticate",
-                    args: vec![
-                        json!(credentials.client_id),
-                        json!(credentials.client_secret),
-                    ],
-                },
-                Call {
-                    target: 1,
-                    method: "getEngineInfo",
-                    args: vec![],
-                },
-            ])
-            .await
-            // A refused authenticate rejects the pipelined call with the same
-            // error; anything else came from getEngineInfo or the engine.
-            .map_err(|err| match err {
-                HostError::EngineRefused { message, .. } if is_authentication_refused(&message) => {
-                    HostError::CredentialsRefused { message }
-                }
-                other => other,
-            })
-            // Only whether the call went through matters, so the value is
-            // never decoded: a field the host cannot read must not fail it.
-            .map(|_| ())
+            self.authenticated_call(credentials, "getEngineInfo", vec![])
+                .await
+                // Only whether the call went through matters, so the value is
+                // never decoded: a field the host cannot read must not fail it.
+                .map(|_| ())
+        })
+    }
+
+    fn send_shoutout<'a>(
+        &'a self,
+        credentials: &'a ClientCredentials,
+        to_broadcaster_id: &'a str,
+    ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>> {
+        Box::pin(async move {
+            let value = self
+                .authenticated_call(
+                    credentials,
+                    "twitchSendShoutout",
+                    vec![json!({ "to_broadcaster_id": to_broadcaster_id })],
+                )
+                .await?;
+            TwitchHelixResult::from_wire(&value)
+        })
+    }
+
+    fn create_stream_marker<'a>(
+        &'a self,
+        credentials: &'a ClientCredentials,
+        description: &'a str,
+    ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>> {
+        Box::pin(async move {
+            let value = self
+                .authenticated_call(
+                    credentials,
+                    "twitchCreateStreamMarker",
+                    vec![json!({ "description": description })],
+                )
+                .await?;
+            TwitchHelixResult::from_wire(&value)
+        })
+    }
+
+    fn is_live<'a>(
+        &'a self,
+        credentials: &'a ClientCredentials,
+    ) -> BoxFuture<'a, Result<bool, HostError>> {
+        Box::pin(async move {
+            let value = self
+                .authenticated_call(credentials, "getStreamStatus", vec![])
+                .await?;
+            // Only `isLive` is read: the engine writes absent optional fields
+            // as capnweb's `undefined` form, which the host does not decode.
+            value
+                .get("isLive")
+                .and_then(Value::as_bool)
+                .ok_or(HostError::EngineReplyUnreadable(
+                    "getStreamStatus did not say whether the stream is live",
+                ))
         })
     }
 }
@@ -199,5 +390,93 @@ mod tests {
         for (message, refused) in cases {
             assert_eq!(is_authentication_refused(message), refused, "{message:?}");
         }
+    }
+
+    #[test]
+    fn test_twitch_helix_result_from_wire_reads_every_outcome() {
+        let cases = [
+            (json!({ "ok": true, "body": null }), TwitchHelixResult::Ok),
+            (
+                json!({ "ok": true, "body": { "data": [[{ "id": "m" }]] } }),
+                TwitchHelixResult::Ok,
+            ),
+            (
+                json!({ "ok": true, "body": ["undefined"] }),
+                TwitchHelixResult::Ok,
+            ),
+            (
+                json!({ "ok": false, "code": "helix", "error": "e", "status": 429, "body": "slow down" }),
+                TwitchHelixResult::Refused {
+                    status: 429,
+                    body: "slow down".to_string(),
+                },
+            ),
+            (
+                json!({ "ok": false, "code": "helix", "error": "e", "status": 400, "body": "" }),
+                TwitchHelixResult::Refused {
+                    status: 400,
+                    body: String::new(),
+                },
+            ),
+            (
+                json!({ "ok": false, "code": "not_linked", "error": "no twitch" }),
+                TwitchHelixResult::Failed {
+                    code: TwitchHelixFailure::NotLinked,
+                    error: "no twitch".to_string(),
+                },
+            ),
+            (
+                json!({ "ok": false, "code": "timeout", "error": "slow" }),
+                TwitchHelixResult::Failed {
+                    code: TwitchHelixFailure::Timeout,
+                    error: "slow".to_string(),
+                },
+            ),
+        ];
+        for (wire, expected) in cases {
+            assert_eq!(
+                TwitchHelixResult::from_wire(&wire).expect("readable"),
+                expected,
+                "{wire}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_twitch_helix_result_from_wire_refuses_what_is_not_a_result() {
+        for wire in [
+            json!(null),
+            json!({ "body": null }),
+            json!({ "ok": "true" }),
+            json!({ "ok": false, "error": "no code" }),
+            json!({ "ok": false, "code": "teapot", "error": "unknown code" }),
+            json!({ "ok": false, "code": "failed" }),
+            json!({ "ok": false, "code": "helix", "error": "e", "body": "no status" }),
+            json!({ "ok": false, "code": "helix", "error": "e", "status": 70000, "body": "" }),
+            json!({ "ok": false, "code": "helix", "error": "e", "status": 400 }),
+        ] {
+            assert!(
+                matches!(
+                    TwitchHelixResult::from_wire(&wire),
+                    Err(HostError::EngineReplyUnreadable(_))
+                ),
+                "{wire}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_twitch_helix_failure_round_trips_every_code() {
+        for code in [
+            "invalid_arguments",
+            "not_linked",
+            "unavailable",
+            "timeout",
+            "failed",
+        ] {
+            let parsed: TwitchHelixFailure = code.parse().expect("a known code");
+            assert_eq!(parsed.to_string(), code);
+        }
+        assert!("helix".parse::<TwitchHelixFailure>().is_err());
     }
 }
