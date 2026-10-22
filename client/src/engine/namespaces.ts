@@ -35,6 +35,9 @@ export const ENGINE_NAMESPACE_MODULES = {
     // The rest of marketplace and marketplaceCatalog is the catalog, which the cloud serves.
     "marketplace.installModule",
     "marketplaceCatalog.installBundle",
+    // The rest of moduleRepository is the cloud's list of installed modules.
+    "moduleRepository.generateUploadUrl",
+    "moduleRepository.uploadAndDeliver",
   ],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],

@@ -1,4 +1,4 @@
-import type { NotRunningWorkflow } from "@convex/workflowHealth";
+import type { NotRunningWorkflow } from "@/engine/types";
 
 export type { NotRunningWorkflow };
 

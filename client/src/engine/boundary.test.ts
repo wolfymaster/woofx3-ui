@@ -185,6 +185,82 @@ describe("engine adapter boundary", () => {
   });
 });
 
+// A Convex module a namespace owns whole is the adapter's to import, types
+// included: a screen naming its shapes would depend on how the Convex gateway
+// serves the engine. A function entry (`macros.run`) leaves its module's
+// other exports to the cloud, so only whole-module entries are guarded.
+const CONVEX_DIR = join(CLIENT_SRC, "..", "..", "convex");
+const CONVEX_ALIAS = "@convex/";
+
+function engineOwnedModules(): Set<string> {
+  const entries: readonly string[] = Object.values(ENGINE_NAMESPACE_MODULES).flat();
+  return new Set(entries.filter((entry) => !entry.includes(".")));
+}
+
+/** The Convex module a specifier names, by its path under convex/ without extension; null for anything else. */
+function convexModuleOf(file: string, specifier: string): string | null {
+  const target = specifier.startsWith(CONVEX_ALIAS)
+    ? join(CONVEX_DIR, specifier.slice(CONVEX_ALIAS.length))
+    : resolveSpecifier(file, specifier);
+  if (target === null || !isWithin(target, CONVEX_DIR)) {
+    return null;
+  }
+  return relative(CONVEX_DIR, target).replace(/\.(ts|js)$/, "");
+}
+
+/** What a file imports from Convex modules a namespace owns. */
+function engineModuleImports(file: string, source: string, owned: Set<string>): string[] {
+  return importSpecifiers(source).filter((specifier) => {
+    const module = convexModuleOf(file, specifier);
+    return module !== null && owned.has(module);
+  });
+}
+
+function filesImportingEngineModules(): string[] {
+  const owned = engineOwnedModules();
+  return sourceFiles(CLIENT_SRC)
+    .filter((path) => path !== import.meta.path && !isWithin(path, CONVEX_ADAPTER_DIR))
+    .filter((path) => engineModuleImports(path, readFileSync(path, "utf8"), owned).length > 0)
+    .map((path) => relative(CLIENT_SRC, path))
+    .sort();
+}
+
+describe("engine module imports", () => {
+  const importing = filesImportingEngineModules();
+
+  test("only the Convex adapter imports the Convex modules a namespace owns", () => {
+    expect(importing, "import the gateway's types from @/engine/types instead").toEqual([]);
+  });
+
+  const importCases: Array<{ specifier: string; guarded: boolean }> = [
+    { specifier: "@convex/pins", guarded: true },
+    { specifier: "@convex/pins.js", guarded: true },
+    { specifier: "../../../../../convex/moderation", guarded: true },
+    { specifier: "../../../../../convex/moderation.ts", guarded: true },
+    { specifier: "../../../../../convex/moderation.js", guarded: true },
+    { specifier: "@convex/lib/moderation", guarded: false },
+    { specifier: "../../../../../convex/lib/moderation.js", guarded: false },
+    { specifier: "@convex/feedback", guarded: false },
+    { specifier: "@convex/_generated/api", guarded: false },
+  ];
+
+  for (const { specifier, guarded } of importCases) {
+    test(`an import of ${specifier} is ${guarded ? "refused" : "allowed"}`, () => {
+      const owned = new Set(["pins", "moderation"]);
+      const file = join(CLIENT_SRC, "components", "dashboard", "widgets", "example.tsx");
+      const found = engineModuleImports(file, `import type { Row } from "${specifier}";`, owned);
+      expect(found).toEqual(guarded ? [specifier] : []);
+    });
+  }
+
+  test("whole-module entries are guarded and function entries are not", () => {
+    const owned = engineOwnedModules();
+    expect(owned.has("pins")).toBe(true);
+    expect(owned.has("macros")).toBe(false);
+    expect(owned.has("instances")).toBe(false);
+  });
+});
+
 /** What a file imports from the live transport. */
 function transportImports(file: string, source: string): string[] {
   return importSpecifiers(source).filter((specifier) => {
