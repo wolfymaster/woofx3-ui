@@ -1,0 +1,109 @@
+//! Renders the window's TypeScript bindings: every wire type the window
+//! reads or sends, the event names, and the command names, in one file.
+//! `examples/write_window_bindings.rs` writes it, and a test fails while the
+//! committed file differs, so the window never compiles against stale types.
+
+use ts_rs::{Config, TS};
+
+use super::{
+    AddressView, Availability, CompanionState, DiscoveryView, EndpointView, IntegrationsView,
+    LocalEngineSession, ModuleView, ReadyUpdate, RelayView, TestResult, WindowState, COMMAND_NAMES,
+    INTEGRATIONS_EVENT, SHOUTOUT_QUEUE_EVENT, STATE_EVENT, STREAM_START_MARKER_EVENT,
+};
+use crate::host::{
+    MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutEntryId,
+    ShoutoutQueueView, StreamStartMarker,
+};
+use crate::AddressOrigin;
+
+/// Where the bindings live, relative to the companion directory.
+pub const BINDINGS_FILE: &str = "ui/src/generated/window.ts";
+
+const HEADER: &str = "\
+// Generated from the Rust wire types in companion/core (src/window/bindings.rs).
+// Do not edit. To regenerate, run in companion/core:
+//   cargo run --example write_window_bindings
+";
+
+/// One declaration, with its doc comment as JSDoc.
+fn declaration<T: TS>(cfg: &Config) -> String {
+    let docs = T::docs().unwrap_or_default();
+    format!("{docs}export {}\n", T::decl(cfg))
+}
+
+/// The file's contents.
+pub fn window_bindings() -> String {
+    // Every integer the host sends fits in a JavaScript number (epoch
+    // milliseconds, ids, ports), and serde writes them as JSON numbers, so
+    // they are `number` rather than ts-rs's default `bigint`.
+    let cfg = Config::new().with_large_int("number");
+    let declarations = [
+        declaration::<CompanionState>(&cfg),
+        declaration::<ReadyUpdate>(&cfg),
+        declaration::<WindowState>(&cfg),
+        declaration::<Availability>(&cfg),
+        declaration::<RelayView>(&cfg),
+        declaration::<DiscoveryView>(&cfg),
+        declaration::<AddressOrigin>(&cfg),
+        declaration::<AddressView>(&cfg),
+        declaration::<EndpointView>(&cfg),
+        declaration::<ModuleView>(&cfg),
+        declaration::<IntegrationsView>(&cfg),
+        declaration::<TestResult>(&cfg),
+        declaration::<LocalEngineSession>(&cfg),
+        declaration::<ShoutoutEntryId>(&cfg),
+        declaration::<ShoutoutChannel>(&cfg),
+        declaration::<ShoutoutEntry>(&cfg),
+        declaration::<ShoutoutQueueView>(&cfg),
+        declaration::<ShoutoutEnqueued>(&cfg),
+        declaration::<StreamStartMarker>(&cfg),
+        declaration::<MarkerRequestOutcome>(&cfg),
+    ];
+    let events = [
+        ("STATE_EVENT", STATE_EVENT),
+        ("INTEGRATIONS_EVENT", INTEGRATIONS_EVENT),
+        ("SHOUTOUT_QUEUE_EVENT", SHOUTOUT_QUEUE_EVENT),
+        ("STREAM_START_MARKER_EVENT", STREAM_START_MARKER_EVENT),
+    ];
+
+    let mut out = String::from(HEADER);
+    for declaration in declarations {
+        out.push('\n');
+        out.push_str(&declaration);
+    }
+    out.push('\n');
+    for (name, value) in events {
+        out.push_str(&format!("export const {name} = {value:?};\n"));
+    }
+    out.push_str(
+        "\n/** Every command the window may call, by its name. */\nexport const COMMANDS = {\n",
+    );
+    for name in COMMAND_NAMES {
+        out.push_str(&format!("  {name}: {name:?},\n"));
+    }
+    out.push_str(
+        "} as const;\n\nexport type CommandName = (typeof COMMANDS)[keyof typeof COMMANDS];\n",
+    );
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    #[test]
+    fn test_window_bindings_are_up_to_date() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join(BINDINGS_FILE);
+        let committed = std::fs::read_to_string(&path)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+        assert!(
+            committed == window_bindings(),
+            "{} is stale: run `cargo run --example write_window_bindings` in companion/core",
+            path.display()
+        );
+    }
+}

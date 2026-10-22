@@ -1,12 +1,28 @@
 //! The window's contract: every value the host sends the window, as a
 //! command result or an event, the event names, and the commands the window
-//! may call.
+//! may call. The window's TypeScript types are generated from these
+//! (`bindings`), so serde's attributes here decide the wire shape for both.
+
+mod bindings;
+#[macro_use]
+mod command_names;
 
 use serde::Serialize;
+use ts_rs::TS;
 
-/// Where pairing stands. Serialized with `kind` as the tag; must match
-/// `CompanionState` in companion/ui/src/state.ts.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+pub use bindings::{window_bindings, BINDINGS_FILE};
+
+macro_rules! command_name_list {
+    ($($name:ident),* $(,)?) => {
+        &[$(stringify!($name)),*]
+    };
+}
+
+/// Every command the window may call, in the order the host registers them.
+pub const COMMAND_NAMES: &[&str] = with_command_names!(command_name_list);
+
+/// Where pairing stands.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CompanionState {
     Starting,
@@ -61,8 +77,8 @@ impl CompanionState {
 
 /// What the window renders: where pairing stands, plus the update waiting to
 /// be installed, if any. The pairing state's fields sit at the top level next
-/// to `update`. Must match `WindowState` in companion/ui/src/state.ts.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+/// to `update`.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 pub struct WindowState {
     #[serde(flatten)]
     pub state: CompanionState,
@@ -71,7 +87,7 @@ pub struct WindowState {
 
 /// A newer release, downloaded and verified, that installs on Restart to
 /// update.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 pub struct ReadyUpdate {
     pub version: String,
 }
@@ -83,25 +99,24 @@ impl ReadyUpdate {
     }
 }
 
-/// Must match `STATE_EVENT` in companion/ui/src/state.ts.
+/// Carries [`WindowState`] after every change.
 pub const STATE_EVENT: &str = "companion://state";
 
-/// Must match `INTEGRATIONS_EVENT` in companion/ui/src/state.ts.
+/// Carries [`IntegrationsView`] after every change.
 pub const INTEGRATIONS_EVENT: &str = "companion://integrations";
 
 /// Carries the shoutout queue's view after every change. Local mode
-/// only. Must match `SHOUTOUT_QUEUE_EVENT` in companion/ui/src/host.ts.
+/// only.
 pub const SHOUTOUT_QUEUE_EVENT: &str = "companion://shoutout-queue";
 
 /// Carries the stream start marker's state after every change. Local mode
-/// only. Must match `STREAM_START_MARKER_EVENT` in companion/ui/src/host.ts.
+/// only.
 pub const STREAM_START_MARKER_EVENT: &str = "companion://stream-start-marker";
 
 /// What the Integrations tab and the Status tab's relay row render. Sent on
 /// its own event, apart from `WindowState`, because it changes with every
-/// relay reconnect and discovery pass. Must match `IntegrationsView` in
-/// companion/ui/src/state.ts.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+/// relay reconnect and discovery pass.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct IntegrationsView {
     pub availability: Availability,
@@ -122,7 +137,7 @@ impl IntegrationsView {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Availability {
     /// Not paired and confirmed, so integrations are not running.
@@ -137,7 +152,7 @@ pub enum Availability {
 }
 
 /// The companion's connection to the relay.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum RelayView {
     /// No enabled endpoint needs it.
@@ -159,7 +174,7 @@ pub enum RelayView {
     Refused,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ModuleView {
     pub module_id: String,
@@ -167,7 +182,7 @@ pub struct ModuleView {
     pub endpoints: Vec<EndpointView>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct EndpointView {
     pub id: String,
@@ -191,7 +206,7 @@ pub struct EndpointView {
     pub report_error: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct AddressView {
     /// `host:port`, with brackets around an IPv6 host.
@@ -199,9 +214,8 @@ pub struct AddressView {
     pub origin: crate::AddressOrigin,
 }
 
-/// What discovery found for an endpoint. Must match `DiscoveryView` in
-/// companion/ui/src/state.ts.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+/// What discovery found for an endpoint.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DiscoveryView {
     /// The endpoint declares no discovery: its address is entered by hand.
@@ -227,9 +241,8 @@ pub enum DiscoveryView {
     Unreadable,
 }
 
-/// The result of the Test button. Must match `TestResult` in
-/// companion/ui/src/state.ts.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+/// The result of the Test button.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TestResult {
     Ok { protocol: Option<String> },
@@ -239,8 +252,8 @@ pub enum TestResult {
 
 /// What the window needs to open its own capnweb session with the local
 /// engine: the engine's `/api` URL and the client credentials this host
-/// registered. Must match `LocalEngineSession` in companion/ui/src/host.ts.
-#[derive(Clone, PartialEq, Eq, Serialize)]
+/// registered.
+#[derive(Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LocalEngineSession {
     /// Companion mode: this host runs no engine.

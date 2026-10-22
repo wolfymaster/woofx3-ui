@@ -20,6 +20,9 @@ futures = "0.3"
 sha2 = "0.10"
 rand = "0.9"
 thiserror = "2"
+# The window's TypeScript types are generated from the Rust wire types
+# (src/window/bindings.rs), so the two cannot drift.
+ts-rs = "12"
 # Plain HTTP to the local engine on loopback, so no TLS. The version the
 # updater plugin already pulls in.
 reqwest = { version = "0.13", default-features = false }

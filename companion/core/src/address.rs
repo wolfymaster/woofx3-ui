@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 const MAX_DNS_NAME_LEN: usize = 253;
 const MAX_DNS_LABEL_LEN: usize = 63;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum AddressOrigin {
     /// Found by the companion on this PC or network.

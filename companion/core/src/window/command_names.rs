@@ -1,8 +1,9 @@
 /// Calls `$callback!` with every command the window may call. Written once
 /// so nothing that lists the commands can drift: the host passes the list to
-/// `generate_handler!` (companion/src-tauri/src/lib.rs), and its build script
+/// `generate_handler!` (companion/src-tauri/src/lib.rs), its build script
 /// turns it into the `allow-<name>` permissions that
-/// companion/src-tauri/capabilities/main.json grants. A handler missing a
+/// companion/src-tauri/capabilities/main.json grants, and the window's
+/// generated bindings name each command from it. A handler missing a
 /// permission would be denied at runtime.
 macro_rules! with_command_names {
     ($callback:ident) => {

@@ -22,6 +22,7 @@ use std::time::Duration;
 use serde::Serialize;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
+use ts_rs::TS;
 
 use super::gateway::{ClientCredentials, EngineGateway, StreamLiveness, TwitchHelixResult};
 use super::registration::{CredentialRefusals, LocalSession};
@@ -61,9 +62,8 @@ impl Default for StreamMarkerOptions {
     }
 }
 
-/// Where the stream start marker stands. Times are [`EpochMillis`]. Must
-/// match `StreamStartMarker` in companion/ui/src/host.ts.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// Where the stream start marker stands. Times are [`EpochMillis`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum StreamStartMarker {
     /// Nothing is waiting: none was asked for, or the request window ended.
@@ -81,7 +81,7 @@ pub enum StreamStartMarker {
 /// The answer to asking for the marker, as the checklist reports each step.
 /// Must match `GoLiveStepOutcome` in client/src/engine/types.ts, which also
 /// has `skipped` for a step not asked for.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum MarkerRequestOutcome {
     Done,

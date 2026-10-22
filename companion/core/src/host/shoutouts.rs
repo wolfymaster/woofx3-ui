@@ -19,6 +19,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
+use ts_rs::TS;
 
 use super::gateway::{ClientCredentials, EngineGateway, TwitchHelixResult};
 use super::registration::{CredentialRefusals, LocalSession};
@@ -51,14 +52,13 @@ impl Default for ShoutoutOptions {
     }
 }
 
-/// An entry's id, unique for the life of the queue.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
+/// An entry's id, unique for the life of the queue. A newtype, so serde
+/// writes it as the bare number.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 pub struct ShoutoutEntryId(pub u64);
 
-/// The channel to shout out, as the window looked it up. Must match
-/// `ShoutoutChannel` in companion/ui/src/host.ts.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+/// The channel to shout out, as the window looked it up.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutChannel {
     pub twitch_user_id: String,
@@ -69,9 +69,8 @@ pub struct ShoutoutChannel {
     pub broadcaster_type: Option<String>,
 }
 
-/// A channel waiting in the queue. Times are [`EpochMillis`]. Must match
-/// `ShoutoutEntry` in companion/ui/src/host.ts.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// A channel waiting in the queue. Times are [`EpochMillis`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutEntry {
     pub id: ShoutoutEntryId,
@@ -86,9 +85,8 @@ pub struct ShoutoutEntry {
     pub last_error: Option<String>,
 }
 
-/// What enqueueing did. Must match `ShoutoutEnqueued` in
-/// companion/ui/src/host.ts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+/// What enqueueing did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutEnqueued {
     pub id: ShoutoutEntryId,
@@ -113,9 +111,8 @@ struct QueueState {
 const PAUSED_FOR_CREDENTIALS: &str =
     "The engine refused this app's credentials. Shoutouts resume once the app has registered with it again.";
 
-/// The queue as the window shows it. Must match `ShoutoutQueueView` in
-/// companion/ui/src/host.ts.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+/// The queue as the window shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutQueueView {
     /// In queue order.
