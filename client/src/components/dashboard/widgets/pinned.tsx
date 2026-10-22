@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
+import { useIntentOperationIds } from "@/lib/operation-id";
 
 // Twitch keeps exactly one pinned message per channel, and pinning a new one
 // replaces it — so this shows a single current pin, not a list. The list below
@@ -44,6 +46,7 @@ export function PinnedWidget() {
   const repinFromHistory = useAction(api.pins.repinFromHistory);
   const unpinCurrent = useAction(api.pins.unpinCurrent);
   const removeFromHistory = useMutation(api.pins.removeFromHistory);
+  const pinIntents = useIntentOperationIds();
 
   const [current, setCurrent] = useState<CurrentPin | null>(null);
   const [draft, setDraft] = useState("");
@@ -74,7 +77,7 @@ export function PinnedWidget() {
   const report = (error: unknown, title: string) => {
     toast({
       title,
-      description: error instanceof Error ? error.message : String(error),
+      description: actionErrorMessage(error),
       variant: "destructive",
     });
   };
@@ -96,7 +99,9 @@ export function PinnedWidget() {
       return;
     }
     void run(async () => {
-      await pinNewMessage({ instanceId, text: draft });
+      await pinIntents.run(`${instanceId}:chat.pin:${draft}`, (operationId) =>
+        pinNewMessage({ instanceId, text: draft, operationId })
+      );
       setDraft("");
     }, "Couldn't pin that message");
   };
@@ -106,7 +111,9 @@ export function PinnedWidget() {
       return;
     }
     void run(async () => {
-      const result = await repinFromHistory({ instanceId, entryId: entryId as Id<"pinnedMessages"> });
+      const result = await pinIntents.run(`${instanceId}:repin:${entryId}`, (operationId) =>
+        repinFromHistory({ instanceId, entryId: entryId as Id<"pinnedMessages">, operationId })
+      );
       if (result.resent) {
         // Worth saying: the original message was too old to pin, so this posted
         // a new copy into chat rather than re-pinning the one people remember.

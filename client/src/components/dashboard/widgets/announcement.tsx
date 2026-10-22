@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
+import { useIntentOperationIds } from "@/lib/operation-id";
 import { cn } from "@/lib/utils";
 
 // Twitch accepts exactly these five announcement colors — a fixed swatch set,
@@ -33,6 +35,7 @@ export function AnnouncementWidget() {
   // and which scopes it was granted.
   const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
   const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
+  const announceIntents = useIntentOperationIds();
 
   const [message, setMessage] = useState("");
   const [color, setColor] = useState<AnnouncementColor>("primary");
@@ -50,13 +53,16 @@ export function AnnouncementWidget() {
     }
     setBusy(true);
     try {
-      await sendAnnouncement({ instanceId: instance._id, message, color });
+      const instanceId = instance._id;
+      await announceIntents.run(`${instanceId}:chat.announce:${color}:${message}`, (operationId) =>
+        sendAnnouncement({ instanceId, message, color, operationId })
+      );
       setMessage("");
       toast({ title: "Announcement sent" });
     } catch (error) {
       toast({
         title: "Couldn't send that announcement",
-        description: error instanceof Error ? error.message : String(error),
+        description: actionErrorMessage(error),
         variant: "destructive",
       });
     } finally {
