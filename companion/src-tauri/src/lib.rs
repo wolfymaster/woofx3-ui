@@ -26,6 +26,7 @@ mod startup_failure;
 mod tray;
 mod update;
 
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -423,6 +424,44 @@ async fn reconnect_relay(companion: State<'_, Arc<Companion>>) -> Result<(), Str
     companion.integrations.reconnect_relay();
     Ok(())
 }
+
+/// Marks a command that takes arguments, as its `args` parameter.
+struct WithArgs;
+/// Marks a command that takes none.
+struct NoArgs;
+
+/// A command taking the arguments `A` and resolving to `R`, the types the
+/// command list declares for it. `Marker` tells the two shapes apart:
+/// rustc cannot tell two blanket impls for `F` apart by their bounds alone.
+trait CommandSignature<A, R, Marker> {}
+
+impl<F, Fut, A, R> CommandSignature<A, R, WithArgs> for F
+where
+    F: Fn(State<'static, Arc<Companion>>, A) -> Fut,
+    Fut: Future<Output = Result<R, String>>,
+{
+}
+
+impl<F, Fut, R> CommandSignature<(), R, NoArgs> for F
+where
+    F: Fn(State<'static, Arc<Companion>>) -> Fut,
+    Fut: Future<Output = Result<R, String>>,
+{
+}
+
+/// Compiles only when `command` has the declared signature.
+const fn declared<A, R, M, F: CommandSignature<A, R, M>>(_command: &F) {}
+
+/// Checks every command against the list's `name(Args) -> Result` at compile
+/// time, so a command whose argument or result type drifts from what the
+/// window's generated bindings say fails the build instead of a call.
+macro_rules! check_command_signatures {
+    ($($name:ident($args:ty) -> $result:ty),* $(,)?) => {
+        const _: () = { $( declared::<$args, $result, _, _>(&$name); )* };
+    };
+}
+
+woofx3_companion_core::with_command_names!(check_command_signatures);
 
 macro_rules! command_handler {
     ($($name:ident($args:ty) -> $result:ty),* $(,)?) => {
