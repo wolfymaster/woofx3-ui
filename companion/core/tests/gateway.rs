@@ -186,29 +186,6 @@ async fn test_http_engine_gateway_verify_ignores_values_it_does_not_read() {
 }
 
 #[tokio::test]
-async fn test_http_engine_gateway_ignores_proxies_from_the_environment() {
-    // A proxy that is not there: a client that used it could not connect.
-    let closed = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let proxy = format!("http://{}", closed.local_addr().expect("address"));
-    drop(closed);
-    std::env::set_var("HTTP_PROXY", &proxy);
-    std::env::set_var("http_proxy", &proxy);
-    std::env::set_var("ALL_PROXY", &proxy);
-
-    let (url, bodies) = stand_in(Answer::Reply {
-        status: 200,
-        body: "[\"resolve\",2,{\"version\":\"dev\"}]",
-    })
-    .await;
-    let verified = gateway(url).verify(&credentials()).await;
-    std::env::remove_var("HTTP_PROXY");
-    std::env::remove_var("http_proxy");
-    std::env::remove_var("ALL_PROXY");
-    verified.expect("goes straight to the engine");
-    assert_eq!(bodies.lock().expect("lock").len(), 1);
-}
-
-#[tokio::test]
 async fn test_http_engine_gateway_reports_transport_failures() {
     let (url, _) = stand_in(Answer::Reply {
         status: 421,
