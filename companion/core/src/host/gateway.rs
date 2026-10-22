@@ -191,34 +191,61 @@ impl TwitchHelixResult {
     }
 }
 
+/// How long the host waits for each call to the engine, connecting included.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GatewayTimeouts {
+    /// Calls the engine answers itself: registering and verifying.
+    pub request: Duration,
+    /// Calls the engine forwards to Twitch. Longer than the engine's own
+    /// Twitch timeout (`TWITCH_HELIX_TIMEOUT_MS`, 10 seconds, in the
+    /// engine's api/src/routes/twitch.ts) plus its round trip, so the
+    /// engine's own `timeout` answer, which says Twitch may still have
+    /// acted, arrives before the host gives up on the engine.
+    pub twitch_call: Duration,
+}
+
+impl Default for GatewayTimeouts {
+    fn default() -> Self {
+        GatewayTimeouts {
+            request: Duration::from_secs(10),
+            twitch_call: Duration::from_secs(20),
+        }
+    }
+}
+
 /// The gateway at an engine's `/api` URL.
 pub struct HttpEngineGateway {
     http: reqwest::Client,
     api_url: String,
+    timeouts: GatewayTimeouts,
 }
 
 impl HttpEngineGateway {
-    /// `timeout` bounds each call, connection included.
-    pub fn new(api_url: String, timeout: Duration) -> Result<Self, HostError> {
+    pub fn new(api_url: String, timeouts: GatewayTimeouts) -> Result<Self, HostError> {
         // In an app where reqwest is built with rustls (the updater's
         // feature), building a client panics until a provider is installed.
         crate::install_tls_provider();
         let http = reqwest::Client::builder()
-            .timeout(timeout)
+            .timeout(timeouts.request)
             // The engine is on loopback, and the calls carry the registration
             // token and the client secret in plain HTTP, so no proxy from the
             // environment or the OS may see them.
             .no_proxy()
             .build()
             .map_err(HostError::HttpClientBuild)?;
-        Ok(HttpEngineGateway { http, api_url })
+        Ok(HttpEngineGateway {
+            http,
+            api_url,
+            timeouts,
+        })
     }
 
-    /// The last call's result, as capnweb wrote it.
-    async fn call(&self, calls: &[Call<'_>]) -> Result<Value, HostError> {
+    /// The last call's result, as capnweb wrote it, waiting at most `timeout`.
+    async fn call(&self, calls: &[Call<'_>], timeout: Duration) -> Result<Value, HostError> {
         let response = self
             .http
             .post(&self.api_url)
+            .timeout(timeout)
             .body(batch_request(calls))
             .send()
             .await
@@ -253,22 +280,26 @@ impl HttpEngineGateway {
         credentials: &ClientCredentials,
         method: &str,
         args: Vec<Value>,
+        timeout: Duration,
     ) -> Result<Value, HostError> {
-        self.call(&[
-            Call {
-                target: MAIN_STUB,
-                method: "authenticate",
-                args: vec![
-                    json!(credentials.client_id),
-                    json!(credentials.client_secret),
-                ],
-            },
-            Call {
-                target: 1,
-                method,
-                args,
-            },
-        ])
+        self.call(
+            &[
+                Call {
+                    target: MAIN_STUB,
+                    method: "authenticate",
+                    args: vec![
+                        json!(credentials.client_id),
+                        json!(credentials.client_secret),
+                    ],
+                },
+                Call {
+                    target: 1,
+                    method,
+                    args,
+                },
+            ],
+            timeout,
+        )
         .await
         .map_err(|err| match err {
             HostError::EngineRefused { message, .. } if is_authentication_refused(&message) => {
@@ -287,14 +318,17 @@ impl EngineGateway for HttpEngineGateway {
     ) -> BoxFuture<'a, Result<ClientCredentials, HostError>> {
         Box::pin(async move {
             let value = self
-                .call(&[Call {
-                    target: MAIN_STUB,
-                    method: "registerClient",
-                    args: vec![
-                        json!(description),
-                        json!({ "registrationToken": registration_token }),
-                    ],
-                }])
+                .call(
+                    &[Call {
+                        target: MAIN_STUB,
+                        method: "registerClient",
+                        args: vec![
+                            json!(description),
+                            json!({ "registrationToken": registration_token }),
+                        ],
+                    }],
+                    self.timeouts.request,
+                )
                 .await?;
             let value = decode_value(&value)
                 .map_err(|unreadable| HostError::EngineReplyUnreadable(unreadable.0))?;
@@ -309,7 +343,7 @@ impl EngineGateway for HttpEngineGateway {
         credentials: &'a ClientCredentials,
     ) -> BoxFuture<'a, Result<(), HostError>> {
         Box::pin(async move {
-            self.authenticated_call(credentials, "getEngineInfo", vec![])
+            self.authenticated_call(credentials, "getEngineInfo", vec![], self.timeouts.request)
                 .await
                 // Only whether the call went through matters, so the value is
                 // never decoded: a field the host cannot read must not fail it.
@@ -328,6 +362,7 @@ impl EngineGateway for HttpEngineGateway {
                     credentials,
                     "twitchSendShoutout",
                     vec![json!({ "to_broadcaster_id": to_broadcaster_id })],
+                    self.timeouts.twitch_call,
                 )
                 .await?;
             TwitchHelixResult::from_wire(&value)
@@ -345,6 +380,7 @@ impl EngineGateway for HttpEngineGateway {
                     credentials,
                     "twitchCreateStreamMarker",
                     vec![json!({ "description": description })],
+                    self.timeouts.twitch_call,
                 )
                 .await?;
             TwitchHelixResult::from_wire(&value)
@@ -357,7 +393,12 @@ impl EngineGateway for HttpEngineGateway {
     ) -> BoxFuture<'a, Result<bool, HostError>> {
         Box::pin(async move {
             let value = self
-                .authenticated_call(credentials, "getStreamStatus", vec![])
+                .authenticated_call(
+                    credentials,
+                    "getStreamStatus",
+                    vec![],
+                    self.timeouts.twitch_call,
+                )
                 .await?;
             // Only `isLive` is read: the engine writes absent optional fields
             // as capnweb's `undefined` form, which the host does not decode.

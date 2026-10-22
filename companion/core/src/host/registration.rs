@@ -50,8 +50,6 @@ pub enum LocalSession {
 
 #[derive(Debug, Clone)]
 pub struct RegistrationOptions {
-    /// Bounds each call to the engine's gateway, connecting included.
-    pub request_timeout: Duration,
     /// The delay before each retry of a failed registration.
     pub backoff: Backoff,
     /// The jitter for each retry delay, in `[0, 1]`.
@@ -61,7 +59,6 @@ pub struct RegistrationOptions {
 impl Default for RegistrationOptions {
     fn default() -> Self {
         RegistrationOptions {
-            request_timeout: Duration::from_secs(10),
             backoff: Backoff {
                 initial: Duration::from_secs(1),
                 max: Duration::from_secs(30),
@@ -629,7 +626,6 @@ mod tests {
                 max: Duration::from_millis(20),
             },
             jitter: no_jitter,
-            ..RegistrationOptions::default()
         };
         let task = tokio::spawn(run_registration(
             engine,

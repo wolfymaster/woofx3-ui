@@ -32,11 +32,11 @@ use tokio_util::sync::CancellationToken;
 use woofx3_companion_core::clock::{Clock, SystemClock};
 use woofx3_companion_core::host::{
     orchestrator_spec, run_registration, run_shoutout_pacing, run_sidecar, run_stream_marker,
-    ClientCredentials, EngineGateway, EnginePhase, EngineStatus, HostError, HttpEngineGateway,
-    LocalEngineLayout, LocalEngineSettings, LocalSession, MarkerRequestOutcome, Registrar,
-    RegistrationOptions, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutEntryId,
-    ShoutoutOptions, ShoutoutQueue, ShoutoutQueueWatch, SidecarSpec, StreamMarkerOptions,
-    StreamMarkerRequests, StreamStartMarker,
+    ClientCredentials, EngineGateway, EnginePhase, EngineStatus, GatewayTimeouts, HostError,
+    HttpEngineGateway, LocalEngineLayout, LocalEngineSettings, LocalSession, MarkerRequestOutcome,
+    Registrar, RegistrationOptions, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry,
+    ShoutoutEntryId, ShoutoutOptions, ShoutoutQueue, ShoutoutQueueWatch, SidecarSpec,
+    StreamMarkerOptions, StreamMarkerRequests, StreamStartMarker,
 };
 
 use crate::credentials::EngineClientStore;
@@ -90,7 +90,7 @@ impl LocalEngine {
         let layout = LocalEngineLayout::under(app_local_data_dir, settings.api_port());
         let spec = orchestrator_spec(settings.engine_dir(&bundled), &layout)?;
         let options = RegistrationOptions::default();
-        let gateway = HttpEngineGateway::new(layout.api_url(), options.request_timeout)?;
+        let gateway = HttpEngineGateway::new(layout.api_url(), GatewayTimeouts::default())?;
         Ok(LocalEngine::Supervised(Box::new(EngineSidecar::start(
             spec,
             layout,
@@ -491,7 +491,7 @@ mod tests {
             std::env::temp_dir().join(format!("woofx3-no-orchestrator-{}", uuid::Uuid::new_v4()));
         let layout = LocalEngineLayout::under(&app_data, 1);
         let options = RegistrationOptions::default();
-        let gateway = HttpEngineGateway::new(layout.api_url(), options.request_timeout)
+        let gateway = HttpEngineGateway::new(layout.api_url(), GatewayTimeouts::default())
             .expect("a gateway client");
         LocalEngine::Supervised(Box::new(EngineSidecar::start(
             SidecarSpec {

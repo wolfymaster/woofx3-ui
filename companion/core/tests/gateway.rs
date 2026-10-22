@@ -7,7 +7,8 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use woofx3_companion_core::host::{
-    ClientCredentials, EngineGateway, HostError, HttpEngineGateway, TwitchHelixResult,
+    ClientCredentials, EngineGateway, GatewayTimeouts, HostError, HttpEngineGateway,
+    TwitchHelixResult,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(5);
@@ -17,6 +18,11 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 enum Answer {
     Reply {
         status: u16,
+        body: &'static str,
+    },
+    /// Answers `body` after `delay`.
+    Late {
+        delay: Duration,
         body: &'static str,
     },
     /// Reads the request and never answers.
@@ -39,14 +45,11 @@ async fn stand_in(answer: Answer) -> (String, Arc<Mutex<Vec<String>>>) {
             received.lock().expect("bodies lock").push(request);
             match &answer {
                 Answer::Reply { status, body } => {
-                    let response = format!(
-                        "HTTP/1.1 {status} X\r\ncontent-type: text/plain\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                        body.len()
-                    );
-                    socket
-                        .write_all(response.as_bytes())
-                        .await
-                        .expect("write the response");
+                    reply(&mut socket, *status, body).await;
+                }
+                Answer::Late { delay, body } => {
+                    tokio::time::sleep(*delay).await;
+                    reply(&mut socket, 200, body).await;
                 }
                 Answer::Silence => {
                     tokio::time::sleep(Duration::from_secs(60)).await;
@@ -55,6 +58,16 @@ async fn stand_in(answer: Answer) -> (String, Arc<Mutex<Vec<String>>>) {
         }
     });
     (url, bodies)
+}
+
+/// Writes one HTTP response. A client that gave up has closed the socket,
+/// so a failed write is the case under test, not an error.
+async fn reply(socket: &mut tokio::net::TcpStream, status: u16, body: &str) {
+    let response = format!(
+        "HTTP/1.1 {status} X\r\ncontent-type: text/plain\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    let _client_may_have_gone = socket.write_all(response.as_bytes()).await;
 }
 
 /// The body of one HTTP request, read up to its Content-Length.
@@ -85,7 +98,14 @@ async fn read_request(socket: &mut tokio::net::TcpStream) -> String {
 }
 
 fn gateway(url: String) -> HttpEngineGateway {
-    HttpEngineGateway::new(url, TIMEOUT).expect("a client")
+    HttpEngineGateway::new(
+        url,
+        GatewayTimeouts {
+            request: TIMEOUT,
+            twitch_call: TIMEOUT,
+        },
+    )
+    .expect("a client")
 }
 
 fn credentials() -> ClientCredentials {
@@ -232,7 +252,14 @@ async fn test_http_engine_gateway_reports_transport_failures() {
 #[tokio::test]
 async fn test_http_engine_gateway_gives_up_on_an_engine_that_never_answers() {
     let (url, _) = stand_in(Answer::Silence).await;
-    let gateway = HttpEngineGateway::new(url, Duration::from_millis(200)).expect("a client");
+    let gateway = HttpEngineGateway::new(
+        url,
+        GatewayTimeouts {
+            request: Duration::from_millis(200),
+            twitch_call: Duration::from_millis(200),
+        },
+    )
+    .expect("a client");
     let started = std::time::Instant::now();
     assert!(matches!(
         gateway.verify(&credentials()).await,
@@ -337,6 +364,45 @@ async fn test_http_engine_gateway_reports_refused_credentials_on_authenticated_c
     assert!(matches!(
         gateway.is_live(&credentials()).await,
         Err(HostError::CredentialsRefused { .. })
+    ));
+}
+
+/// A Twitch call waits past the request timeout for the engine's answer, so
+/// the engine's own Twitch timeout reaches the host instead of the host
+/// giving up on the engine first.
+#[tokio::test]
+async fn test_http_engine_gateway_waits_longer_for_calls_forwarded_to_twitch() {
+    let timeouts = GatewayTimeouts {
+        request: Duration::from_millis(200),
+        twitch_call: Duration::from_secs(5),
+    };
+    let late = Duration::from_millis(600);
+
+    let (url, _) = stand_in(Answer::Late {
+        delay: late,
+        body: "[\"resolve\",2,{\"ok\":false,\"code\":\"timeout\",\"error\":\"twitch did not answer\"}]",
+    })
+    .await;
+    let gateway = HttpEngineGateway::new(url, timeouts).expect("a client");
+    assert!(matches!(
+        gateway.send_shoutout(&credentials(), "42").await,
+        Ok(TwitchHelixResult::Failed { .. })
+    ));
+    assert!(gateway
+        .create_stream_marker(&credentials(), "Stream start")
+        .await
+        .is_ok());
+
+    let (url, _) = stand_in(Answer::Late {
+        delay: late,
+        body: "[\"resolve\",2,{\"isLive\":false,\"twitchUserId\":\"7\"}]",
+    })
+    .await;
+    let gateway = HttpEngineGateway::new(url, timeouts).expect("a client");
+    assert!(gateway.is_live(&credentials()).await.is_ok());
+    assert!(matches!(
+        gateway.verify(&credentials()).await,
+        Err(HostError::EngineUnreachable(_))
     ));
 }
 

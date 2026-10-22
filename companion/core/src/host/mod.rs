@@ -21,8 +21,8 @@ pub use config::{HostMode, LocalEngineSettings, HOST_CONFIG_FILE};
 pub use engine::{orchestrator_spec, LocalEngineLayout, DEFAULT_API_PORT};
 pub use error::HostError;
 pub use gateway::{
-    is_authentication_refused, ClientCredentials, EngineGateway, HttpEngineGateway,
-    TwitchHelixFailure, TwitchHelixResult,
+    is_authentication_refused, ClientCredentials, EngineGateway, GatewayTimeouts,
+    HttpEngineGateway, TwitchHelixFailure, TwitchHelixResult,
 };
 pub use registration::{
     run_registration, CredentialStore, LocalSession, Registrar, RegistrationOptions,
