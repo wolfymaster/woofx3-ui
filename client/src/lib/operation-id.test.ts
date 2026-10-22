@@ -56,4 +56,15 @@ describe("IntentOperationIds", () => {
     ).rejects.toThrow("may already be in chat");
     expect(await ids.run("intent", async (operationId) => operationId)).toBe("op_00000001");
   });
+
+  test("a result `settled` rejects keeps the intent open, as Go live does for a failed announcement", async () => {
+    const ids = new IntentOperationIds(counter());
+    const failed = (operationId: string) => Promise.resolve({ operationId, announcement: "failed" });
+    const done = (operationId: string) => Promise.resolve({ operationId, announcement: "done" });
+    const settled = (result: { announcement: string }) => result.announcement !== "failed";
+
+    expect((await ids.run("golive", failed, settled)).operationId).toBe("op_00000001");
+    expect((await ids.run("golive", done, settled)).operationId).toBe("op_00000001");
+    expect((await ids.run("golive", done, settled)).operationId).toBe("op_00000002");
+  });
 });

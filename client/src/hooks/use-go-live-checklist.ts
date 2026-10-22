@@ -242,12 +242,11 @@ export function useGoLiveChecklist(): GoLiveChecklist {
       }
       // A completion whose announcement failed stays the same intent, so
       // finishing again replays an announcement Twitch may already have posted.
-      const intent = `${instanceId}:golive:${options.announcement ?? ""}`;
-      const operationId = completionIntents.begin(intent);
-      const result = await completeAction({ instanceId, ...options, operationId });
-      if (result.announcement.status !== "failed") {
-        completionIntents.finish(intent, operationId);
-      }
+      const result = await completionIntents.run(
+        `${instanceId}:golive:${options.announcement ?? ""}`,
+        (operationId) => completeAction({ instanceId, ...options, operationId }),
+        (completion) => completion.announcement.status !== "failed"
+      );
       // The stored title and category just changed, so stream info is
       // measured against them from here on.
       runRemote("stream-info");

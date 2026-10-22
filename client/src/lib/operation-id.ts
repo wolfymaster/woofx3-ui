@@ -42,11 +42,21 @@ export class IntentOperationIds {
     }
   }
 
-  /** Runs `send` under the intent's id, closing the intent once it resolves. */
-  async run<T>(intent: string, send: (operationId: string) => Promise<T>): Promise<T> {
+  /**
+   * Runs `send` under the intent's id, closing the intent once it resolves
+   * and `settled` accepts the result. A throw, or a result `settled` rejects,
+   * leaves the intent open for the retry.
+   */
+  async run<T>(
+    intent: string,
+    send: (operationId: string) => Promise<T>,
+    settled: (result: T) => boolean = () => true
+  ): Promise<T> {
     const id = this.begin(intent);
     const result = await send(id);
-    this.finish(intent, id);
+    if (settled(result)) {
+      this.finish(intent, id);
+    }
     return result;
   }
 }
