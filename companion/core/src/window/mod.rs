@@ -8,6 +8,8 @@
 mod bindings;
 mod command_args;
 mod command_names;
+#[cfg(test)]
+mod wire_tests;
 
 use serde::Serialize;
 
