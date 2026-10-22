@@ -3,6 +3,10 @@
 //! An unpaired companion holds no Convex connection. Its window
 //! renders `WindowState`; all work happens here, in Rust commands.
 //!
+//! In local mode, chosen by the host configuration file, it also runs the
+//! engine's orchestrator as its sidecar (`engine_host`), and stops it before
+//! it quits.
+//!
 //! Commands are async so none of them runs on the main thread: tray updates
 //! (`MenuItem::set_text`) dispatch to the main thread and wait for it, so a
 //! command blocking the main thread on a lock that a state update holds
@@ -12,10 +16,12 @@ mod cloud;
 #[cfg(test)]
 mod convex_url;
 mod credentials;
+mod engine_host;
 mod installation;
 mod integration_store;
 mod integrations;
 mod pairing;
+mod startup_failure;
 mod state;
 mod tray;
 mod update;
@@ -24,9 +30,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+use woofx3_companion_core::host::{HostMode, HOST_CONFIG_FILE};
 
 use cloud::CloudLink;
+use engine_host::LocalEngine;
 use integrations::Integrations;
 use state::{CompanionState, IntegrationsView, ReadyUpdate, TestResult, WindowState, STATE_EVENT};
 use tray::Tray;
@@ -36,6 +44,7 @@ use update::Downloaded;
 pub struct Companion {
     app: AppHandle,
     cloud_link: CloudLink,
+    engine: LocalEngine,
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
     integrations: Arc<Integrations>,
@@ -271,7 +280,9 @@ async fn unpair(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
 /// fails, in which case the update stays ready.
 #[tauri::command]
 async fn install_update(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    update::install(&companion).inspect_err(|err| eprintln!("[companion] {err}"))
+    update::install(&companion)
+        .await
+        .inspect_err(|err| eprintln!("[companion] {err}"))
 }
 
 #[tauri::command]
@@ -365,6 +376,16 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             let app_data_dir = app.path().app_data_dir()?;
+            let engine = match start_local_engine(app) {
+                Ok(engine) => engine,
+                Err(err) => {
+                    startup_failure::report(
+                        app.path().app_log_dir().ok().as_deref(),
+                        &format!("{err:#}"),
+                    );
+                    std::process::exit(1);
+                }
+            };
             let installation_id = installation::load_or_create(&app_data_dir)?;
             let integrations = Arc::new(Integrations::new(
                 handle.clone(),
@@ -374,6 +395,7 @@ pub fn run() {
             let companion = Arc::new(Companion {
                 app: handle.clone(),
                 cloud_link: CloudLink::dormant(),
+                engine,
                 installation_id,
                 integrations,
                 view: Mutex::new(WindowState {
@@ -428,8 +450,48 @@ pub fn run() {
             test_endpoint,
             reconnect_relay
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running the woofx3 companion");
+        .build(tauri::generate_context!())
+        .expect("error while building the woofx3 companion")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, code, .. } = event {
+                stop_engine_before_exit(app, &api, code);
+            }
+        });
+}
+
+/// The local engine the host configuration asks for, started. An invalid
+/// configuration, or a release with no orchestrator, is an error the caller
+/// shows before exiting.
+fn start_local_engine(app: &tauri::App) -> anyhow::Result<LocalEngine> {
+    let config = app.path().app_config_dir()?.join(HOST_CONFIG_FILE);
+    match HostMode::load(&config)? {
+        HostMode::Companion => Ok(LocalEngine::Off),
+        HostMode::Local(settings) => Ok(LocalEngine::start(
+            &settings,
+            &app.path().resource_dir()?,
+            &app.path().app_local_data_dir()?,
+        )?),
+    }
+}
+
+/// Holds a quit until the local engine has stopped, so its services shut
+/// down in order rather than being cut off, then quits with the same code.
+/// A restart cannot be held (Tauri ignores `prevent_exit` for it), which is
+/// why installing an update stops the engine before it restarts.
+fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: Option<i32>) {
+    let Some(companion) = app.try_state::<Arc<Companion>>() else {
+        return;
+    };
+    if !companion.engine.must_stop_before_exit() {
+        return;
+    }
+    api.prevent_exit();
+    let companion = Arc::clone(companion.inner());
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        companion.engine.stop().await;
+        app.exit(code.unwrap_or(0));
+    });
 }
 
 #[cfg(test)]

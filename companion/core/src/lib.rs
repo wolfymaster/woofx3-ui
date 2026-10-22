@@ -1,14 +1,15 @@
 //! The companion's platform-independent pieces: the relay frame format,
 //! reconnect backoff, OBS WebSocket discovery, the rules for which addresses
-//! may be dialled, and the bridge that carries local WebSocket connections
-//! over the relay. Nothing here depends on Tauri, so `cargo test` runs on any
-//! OS.
+//! may be dialled, the bridge that carries local WebSocket connections over
+//! the relay, and the desktop host's supervision of a local engine. Nothing
+//! here depends on Tauri, so `cargo test` runs on any OS.
 
 pub mod address;
 pub mod backoff;
 pub mod bridge;
 mod budget;
 pub mod frame;
+pub mod host;
 pub mod obs_config;
 pub mod relay;
 

@@ -126,14 +126,23 @@ async fn check_and_download(companion: &Companion) -> tauri_plugin_updater::Resu
 /// Installs the ready update and restarts into it. On Windows the plugin
 /// starts the installer and exits the process itself; the installer starts
 /// the new version.
-pub fn install(companion: &Companion) -> Result<(), String> {
+///
+/// The local engine is stopped first: Windows will not let the installer
+/// replace the bundled engine's executables while they run, and the new
+/// companion needs the engine's ports free. If the install fails the engine
+/// is started again and the update stays ready.
+pub async fn install(companion: &Companion) -> Result<(), String> {
     let Some(ready) = companion.ready_update() else {
         return Err("No update is ready to install.".to_string());
     };
-    ready
-        .update
-        .install(&ready.bytes)
-        .map_err(|err| format!("Could not install update {}: {err}", ready.version()))?;
+    companion.engine.stop().await;
+    if let Err(err) = ready.update.install(&ready.bytes) {
+        companion.engine.resume().await;
+        return Err(format!(
+            "Could not install update {}: {err}",
+            ready.version()
+        ));
+    }
     companion.app.restart()
 }
 
