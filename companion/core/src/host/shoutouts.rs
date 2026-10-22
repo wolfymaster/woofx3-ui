@@ -106,6 +106,18 @@ struct QueueState {
     last_attempt_at: Option<EpochMillis>,
 }
 
+/// How one send went, as the queue records it.
+#[derive(Debug, PartialEq, Eq)]
+enum Attempt {
+    Sent,
+    /// The entry backs off, with the reason the window shows.
+    Failed(String),
+    /// The engine refused the host's own credentials. Not the entry's
+    /// fault, so it counts only for pacing; the worker waits for a new
+    /// session, as it does with none.
+    HostRefused,
+}
+
 /// What the pacing worker does next.
 #[derive(Debug, PartialEq, Eq)]
 enum Step {
@@ -287,7 +299,7 @@ impl ShoutoutQueue {
     /// Records an attempt made at `at`: a sent entry leaves the queue, a
     /// failed one backs off. An entry removed while its attempt was in
     /// flight is left removed.
-    fn record_attempt(&self, id: ShoutoutEntryId, at: EpochMillis, outcome: Result<(), String>) {
+    fn record_attempt(&self, id: ShoutoutEntryId, at: EpochMillis, outcome: Attempt) {
         let retry = self.options.retry;
         self.state.send_modify(|state| {
             state.last_attempt_at = Some(at);
@@ -295,10 +307,11 @@ impl ShoutoutQueue {
                 return;
             };
             match outcome {
-                Ok(()) => {
+                Attempt::Sent => {
                     state.entries.remove(index);
                 }
-                Err(message) => {
+                Attempt::HostRefused => {}
+                Attempt::Failed(message) => {
                     let entry = &mut state.entries[index];
                     entry.attempts = entry.attempts.saturating_add(1);
                     entry.next_eligible_at =
@@ -357,13 +370,21 @@ pub async fn run_shoutout_pacing(
             }
             Step::Send { id, twitch_user_id } => {
                 // Cancelled mid-send, the entry stays queued and the attempt
-                // unrecorded. Twitch refuses a second shoutout of a channel
-                // within the hour, so sending it again cannot repeat it.
+                // unrecorded, though the engine may still complete the send.
+                // A resend within the hour is refused by Twitch; one after
+                // that would shout the channel out again.
                 let outcome = tokio::select! {
                     _ = cancel.cancelled() => return,
                     sent = send(gateway.as_ref(), &credentials, &twitch_user_id) => sent,
                 };
+                let host_refused = outcome == Attempt::HostRefused;
                 queue.record_attempt(id, now, outcome);
+                if host_refused {
+                    tokio::select! {
+                        _ = cancel.cancelled() => return,
+                        changed = session.changed() => if changed.is_err() { return; },
+                    }
+                }
             }
         }
     }
@@ -387,21 +408,22 @@ async fn send(
     gateway: &dyn EngineGateway,
     credentials: &ClientCredentials,
     to_broadcaster_id: &str,
-) -> Result<(), String> {
+) -> Attempt {
     match gateway.send_shoutout(credentials, to_broadcaster_id).await {
-        Ok(TwitchHelixResult::Ok) => Ok(()),
+        Ok(TwitchHelixResult::Ok) => Attempt::Sent,
         Ok(TwitchHelixResult::Refused { status: 429, .. }) => {
-            Err("Twitch is rate-limiting shoutouts".to_string())
+            Attempt::Failed("Twitch is rate-limiting shoutouts".to_string())
         }
         // The common refusal is a channel that is not live; Twitch's body
         // says which.
         Ok(TwitchHelixResult::Refused { status, body }) => {
-            Err(format!("Twitch shoutout failed: {status} {body}"))
+            Attempt::Failed(format!("Twitch shoutout failed: {status} {body}"))
         }
-        Ok(TwitchHelixResult::Failed { code, error }) => Err(format!(
+        Ok(TwitchHelixResult::Failed { code, error }) => Attempt::Failed(format!(
             "The engine could not send the shoutout ({code}): {error}"
         )),
-        Err(err) => Err(err.to_string()),
+        Err(HostError::CredentialsRefused { .. }) => Attempt::HostRefused,
+        Err(err) => Attempt::Failed(err.to_string()),
     }
 }
 
@@ -662,7 +684,11 @@ mod tests {
                 twitch_user_id: "a".to_string()
             }
         );
-        queue.record_attempt(ShoutoutEntryId(0), START, Err("offline".to_string()));
+        queue.record_attempt(
+            ShoutoutEntryId(0),
+            START,
+            Attempt::Failed("offline".to_string()),
+        );
         assert_eq!(
             queue.next_step(START + 1),
             Step::WaitUntil(START + COOLDOWN)
@@ -679,7 +705,7 @@ mod tests {
         queue.record_attempt(
             ShoutoutEntryId(0),
             START + COOLDOWN,
-            Err("offline".to_string()),
+            Attempt::Failed("offline".to_string()),
         );
         // After the next cooldown, "a" is still backing off, so "b" goes.
         assert_eq!(
@@ -689,7 +715,7 @@ mod tests {
                 twitch_user_id: "b".to_string()
             }
         );
-        queue.record_attempt(ShoutoutEntryId(1), START + 2 * COOLDOWN, Ok(()));
+        queue.record_attempt(ShoutoutEntryId(1), START + 2 * COOLDOWN, Attempt::Sent);
         let a = &queue.entries()[0];
         assert_eq!(a.attempts, 2);
         assert_eq!(a.next_eligible_at, START + COOLDOWN + 240_000);
@@ -710,7 +736,7 @@ mod tests {
         let expected = [120_000, 240_000, 480_000, 900_000, 900_000];
         for (attempt, delay) in expected.into_iter().enumerate() {
             let at = START + attempt as u64 * 10_000_000;
-            queue.record_attempt(ShoutoutEntryId(0), at, Err("no".to_string()));
+            queue.record_attempt(ShoutoutEntryId(0), at, Attempt::Failed("no".to_string()));
             let entry = &queue.entries()[0];
             assert_eq!(
                 entry.next_eligible_at - at,
@@ -727,7 +753,7 @@ mod tests {
         let queued = queue.enqueue(channel("a")).expect("queued");
         queue.enqueue(channel("b")).expect("queued");
         queue.remove(queued.id).expect("removed");
-        queue.record_attempt(queued.id, START, Err("late".to_string()));
+        queue.record_attempt(queued.id, START, Attempt::Failed("late".to_string()));
         assert_eq!(ids(&queue), ["b"]);
         assert_eq!(queue.next_step(START), Step::WaitUntil(START + COOLDOWN));
     }
@@ -790,9 +816,7 @@ mod tests {
             harness.next_call().await,
             EngineCall::SendShoutout("a".into())
         );
-        harness.engine.reply(Err(HostError::CredentialsRefused {
-            message: "AuthenticationRefused: client revoked".into(),
-        }));
+        harness.engine.reply(Err(HostError::EngineHttpStatus(500)));
         harness.attempted("a", |attempts| attempts == Some(2)).await;
         assert_eq!(harness.next_sleep().await, START + 2 * COOLDOWN);
         harness.clock.set(START + 2 * COOLDOWN);
@@ -902,6 +926,43 @@ mod tests {
         harness.engine.reply(Ok(TwitchHelixResult::Ok));
         harness.attempted("b", |attempts| attempts.is_none()).await;
         assert_eq!(harness.queue.entries()[0].twitch_user_id, "a");
+        harness.stop().await;
+    }
+
+    #[tokio::test]
+    async fn test_run_shoutout_pacing_does_not_count_refused_host_credentials_against_the_entry() {
+        let mut harness = Harness::start(ready_session());
+        harness.queue.enqueue(channel("a")).expect("queued");
+        assert_eq!(
+            harness.next_call().await,
+            EngineCall::SendShoutout("a".into())
+        );
+        harness.engine.reply(Err(HostError::CredentialsRefused {
+            message: "AuthenticationRefused: client revoked".into(),
+        }));
+        let mut recorded = harness.queue.state.subscribe();
+        recorded
+            .wait_for(|state| state.last_attempt_at == Some(START))
+            .await
+            .expect("the queue lives");
+        let entry = &harness.queue.entries()[0];
+        assert_eq!(entry.attempts, 0);
+        assert_eq!(entry.last_error, None);
+
+        // It waits for a new session rather than retrying the same credentials.
+        tokio::task::yield_now().await;
+        assert!(harness.sleeps.try_recv().is_err(), "waiting on the session");
+        assert!(harness.calls.try_recv().is_err());
+
+        harness.session.send_replace(ready_session());
+        assert_eq!(harness.next_sleep().await, START + COOLDOWN);
+        harness.clock.set(START + COOLDOWN);
+        assert_eq!(
+            harness.next_call().await,
+            EngineCall::SendShoutout("a".into())
+        );
+        harness.engine.reply(Ok(TwitchHelixResult::Ok));
+        harness.attempted("a", |attempts| attempts.is_none()).await;
         harness.stop().await;
     }
 
