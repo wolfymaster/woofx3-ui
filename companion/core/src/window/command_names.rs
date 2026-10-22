@@ -11,12 +11,15 @@
 ///   its result from it.
 ///
 /// A command with arguments takes them as its one parameter, named `args`,
-/// of the `Args` type listed here; `()` means it takes none. The host's
-/// build script reads this file with `include!`, so it holds only the macro.
+/// of the `Args` type listed here; `()` means it takes none. The host checks
+/// at compile time that each command's arguments and result are the types
+/// listed. The callback is invoked with braces, so it may expand to items.
+/// The host's build script reads this file with `include!`, so it holds
+/// only the macro.
 #[macro_export]
 macro_rules! with_command_names {
     ($callback:ident) => {
-        $callback!(
+        $callback! {
             get_state(()) -> WindowState,
             start_pairing(()) -> (),
             cancel_pairing(()) -> (),
@@ -39,6 +42,6 @@ macro_rules! with_command_names {
             reorder_shoutouts(ReorderShoutoutsArgs) -> (),
             stream_start_marker(()) -> StreamStartMarker,
             request_stream_start_marker(()) -> MarkerRequestOutcome
-        )
+        }
     };
 }
