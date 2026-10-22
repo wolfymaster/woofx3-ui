@@ -35,8 +35,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 use woofx3_companion_core::host::{
-    HostMode, MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry,
-    ShoutoutEntryId, StreamStartMarker, HOST_CONFIG_FILE,
+    HostMode, MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntryId,
+    ShoutoutQueueView, StreamStartMarker, HOST_CONFIG_FILE,
 };
 
 use cloud::CloudLink;
@@ -372,12 +372,10 @@ async fn local_engine_session(
     Ok(companion.engine.session())
 }
 
-/// The local shoutout queue, in order. Local mode only, like every
-/// shoutout and marker command below.
+/// The local shoutout queue, in order, and why it is paused, if it is.
+/// Local mode only, like every shoutout and marker command below.
 #[tauri::command]
-async fn shoutout_queue(
-    companion: State<'_, Arc<Companion>>,
-) -> Result<Vec<ShoutoutEntry>, String> {
+async fn shoutout_queue(companion: State<'_, Arc<Companion>>) -> Result<ShoutoutQueueView, String> {
     companion.engine.shoutout_queue()
 }
 

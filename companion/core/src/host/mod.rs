@@ -25,12 +25,12 @@ pub use gateway::{
     HttpEngineGateway, StreamLiveness, TwitchHelixFailure, TwitchHelixResult,
 };
 pub use registration::{
-    run_registration, CredentialStore, LocalSession, Registrar, RegistrationOptions,
-    CLIENT_DESCRIPTION,
+    run_registration, CredentialRefusals, CredentialStore, LocalSession, Registrar,
+    RegistrationOptions, CLIENT_DESCRIPTION,
 };
 pub use shoutouts::{
     run_shoutout_pacing, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry, ShoutoutEntryId,
-    ShoutoutOptions, ShoutoutQueue, ShoutoutQueueWatch,
+    ShoutoutOptions, ShoutoutQueue, ShoutoutQueueView, ShoutoutQueueWatch,
 };
 pub use sidecar::{
     run_sidecar, run_sidecar_with, EnginePhase, EngineStatus, SidecarOptions, SidecarSpec,

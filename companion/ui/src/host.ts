@@ -56,6 +56,14 @@ export type ShoutoutEntry = {
   lastError: string | null;
 };
 
+/** Must match `ShoutoutQueueView` in companion/core/src/host/shoutouts.rs. */
+export type ShoutoutQueueView = {
+  /** In queue order. */
+  entries: ShoutoutEntry[];
+  /** Why no shoutout is being sent, while none can be; null otherwise. */
+  pausedReason: string | null;
+};
+
 /** Must match `ShoutoutEnqueued` in companion/core/src/host/shoutouts.rs. */
 export type ShoutoutEnqueued = {
   id: ShoutoutEntryId;
@@ -101,10 +109,9 @@ export type ReorderShoutoutsArgs = { entryIds: ShoutoutEntryId[] };
 export type StreamStartMarkerArgs = Record<string, never>;
 export type RequestStreamStartMarkerArgs = Record<string, never>;
 
-/** In queue order. */
-export async function shoutoutQueue(): Promise<ShoutoutEntry[]> {
+export async function shoutoutQueue(): Promise<ShoutoutQueueView> {
   const args: ShoutoutQueueArgs = {};
-  return invoke<ShoutoutEntry[]>(SHOUTOUT_QUEUE_COMMAND, args);
+  return invoke<ShoutoutQueueView>(SHOUTOUT_QUEUE_COMMAND, args);
 }
 
 /** A channel already waiting keeps its place. */
@@ -125,8 +132,8 @@ export async function reorderShoutouts(entryIds: ShoutoutEntryId[]): Promise<voi
   return invoke<void>(REORDER_SHOUTOUTS_COMMAND, args);
 }
 
-export function onShoutoutQueueChange(handler: (entries: ShoutoutEntry[]) => void): Promise<() => void> {
-  return listen<ShoutoutEntry[]>(SHOUTOUT_QUEUE_EVENT, (event) => handler(event.payload));
+export function onShoutoutQueueChange(handler: (queue: ShoutoutQueueView) => void): Promise<() => void> {
+  return listen<ShoutoutQueueView>(SHOUTOUT_QUEUE_EVENT, (event) => handler(event.payload));
 }
 
 export async function streamStartMarker(): Promise<StreamStartMarker> {

@@ -32,11 +32,11 @@ use tokio_util::sync::CancellationToken;
 use woofx3_companion_core::clock::{Clock, SystemClock};
 use woofx3_companion_core::host::{
     orchestrator_spec, run_registration, run_shoutout_pacing, run_sidecar, run_stream_marker,
-    ClientCredentials, EngineGateway, EnginePhase, EngineStatus, GatewayTimeouts, HostError,
-    HttpEngineGateway, LocalEngineLayout, LocalEngineSettings, LocalSession, MarkerRequestOutcome,
-    Registrar, RegistrationOptions, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntry,
-    ShoutoutEntryId, ShoutoutOptions, ShoutoutQueue, ShoutoutQueueWatch, SidecarSpec,
-    StreamMarkerOptions, StreamMarkerRequests, StreamStartMarker,
+    ClientCredentials, CredentialRefusals, EngineGateway, EnginePhase, EngineStatus,
+    GatewayTimeouts, HostError, HttpEngineGateway, LocalEngineLayout, LocalEngineSettings,
+    LocalSession, MarkerRequestOutcome, Registrar, RegistrationOptions, ShoutoutChannel,
+    ShoutoutEnqueued, ShoutoutEntryId, ShoutoutOptions, ShoutoutQueue, ShoutoutQueueView,
+    ShoutoutQueueWatch, SidecarSpec, StreamMarkerOptions, StreamMarkerRequests, StreamStartMarker,
 };
 
 use crate::credentials::EngineClientStore;
@@ -48,13 +48,13 @@ const NOT_LOCAL: &str = "This host runs no local engine.";
 
 /// Where the window hears that local-mode UI state changed.
 pub trait WindowEvents: Send + Sync + 'static {
-    fn shoutout_queue_changed(&self, entries: &[ShoutoutEntry]);
+    fn shoutout_queue_changed(&self, queue: &ShoutoutQueueView);
     fn stream_start_marker_changed(&self, marker: &StreamStartMarker);
 }
 
 impl WindowEvents for AppHandle {
-    fn shoutout_queue_changed(&self, entries: &[ShoutoutEntry]) {
-        if let Err(err) = self.emit(SHOUTOUT_QUEUE_EVENT, entries) {
+    fn shoutout_queue_changed(&self, queue: &ShoutoutQueueView) {
+        if let Err(err) = self.emit(SHOUTOUT_QUEUE_EVENT, queue) {
             eprintln!("[companion] could not send the shoutout queue to the window: {err}");
         }
     }
@@ -108,9 +108,9 @@ impl LocalEngine {
         }
     }
 
-    /// The shoutout queue, in order.
-    pub fn shoutout_queue(&self) -> Result<Vec<ShoutoutEntry>, String> {
-        Ok(self.sidecar()?.launcher.shoutouts.entries())
+    /// The shoutout queue, in order, and why it is paused, if it is.
+    pub fn shoutout_queue(&self) -> Result<ShoutoutQueueView, String> {
+        Ok(self.sidecar()?.launcher.shoutouts.view())
     }
 
     pub fn enqueue_shoutout(&self, channel: ShoutoutChannel) -> Result<ShoutoutEnqueued, String> {
@@ -322,6 +322,9 @@ impl Launcher {
     fn launch(&self) -> (Views, Tasks) {
         let (status_tx, status) = watch::channel(EngineStatus::starting());
         let (session_tx, session) = watch::channel(LocalSession::Starting);
+        // Lets the workers tell registration the engine refused the
+        // credentials they act with.
+        let refusals = CredentialRefusals::new();
         let cancel = CancellationToken::new();
         let supervisor =
             tauri::async_runtime::spawn(run_sidecar(self.spec.clone(), status_tx, cancel.clone()));
@@ -336,18 +339,21 @@ impl Launcher {
             registrar,
             self.options.clone(),
             session_tx,
+            refusals.clone(),
             cancel.clone(),
         ));
         let shoutout_pacing = tauri::async_runtime::spawn(run_shoutout_pacing(
             Arc::clone(&self.shoutouts),
             Arc::clone(&gateway),
             session.clone(),
+            refusals.clone(),
             cancel.clone(),
         ));
         let stream_marker = tauri::async_runtime::spawn(run_stream_marker(
             Arc::clone(&self.markers),
             gateway,
             session.clone(),
+            refusals,
             cancel.clone(),
         ));
         let shoutout_events = tauri::async_runtime::spawn(forward_shoutout_queue(
@@ -388,7 +394,7 @@ async fn forward_shoutout_queue(
     cancel: CancellationToken,
 ) {
     loop {
-        events.shoutout_queue_changed(&queue.entries());
+        events.shoutout_queue_changed(&queue.view());
         tokio::select! {
             _ = cancel.cancelled() => return,
             changed = queue.changed() => if changed.is_err() { return; },
@@ -471,7 +477,7 @@ mod tests {
     struct NoWindow;
 
     impl WindowEvents for NoWindow {
-        fn shoutout_queue_changed(&self, _entries: &[ShoutoutEntry]) {}
+        fn shoutout_queue_changed(&self, _queue: &ShoutoutQueueView) {}
         fn stream_start_marker_changed(&self, _marker: &StreamStartMarker) {}
     }
 
@@ -564,6 +570,7 @@ mod tests {
         let logins: Vec<String> = engine
             .shoutout_queue()
             .expect("local")
+            .entries
             .into_iter()
             .map(|entry| entry.login)
             .collect();

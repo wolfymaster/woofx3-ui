@@ -24,7 +24,8 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 use super::gateway::{ClientCredentials, EngineGateway, StreamLiveness, TwitchHelixResult};
-use super::registration::LocalSession;
+use super::registration::{CredentialRefusals, LocalSession};
+use super::HostError;
 use crate::clock::{millis, Clock, EpochMillis};
 
 /// The marker's description on the VOD. Must match `MARKER_DESCRIPTION` in
@@ -298,11 +299,14 @@ impl Drop for DropClaim<'_> {
 }
 
 /// Watches for the stream going live while a marker waits, and drops it,
-/// until cancelled or until the host's registration ends.
+/// until cancelled or until the host's registration ends. A poll the
+/// engine refuses the host's credentials for is reported to registration
+/// through `refusals`.
 pub async fn run_stream_marker(
     requests: Arc<StreamMarkerRequests>,
     gateway: Arc<dyn EngineGateway>,
     mut session: watch::Receiver<LocalSession>,
+    refusals: CredentialRefusals,
     cancel: CancellationToken,
 ) {
     let mut pending = requests.subscribe();
@@ -356,6 +360,9 @@ pub async fn run_stream_marker(
             _ = cancel.cancelled() => return,
             liveness = gateway.stream_liveness(&credentials) => liveness,
         };
+        if matches!(liveness, Err(HostError::CredentialsRefused { .. })) {
+            refusals.report();
+        }
         // Offline, unknown, or an engine that could not answer: the next
         // poll asks again.
         if !matches!(liveness, Ok(StreamLiveness::Live)) {
@@ -423,6 +430,7 @@ mod tests {
         engine: Arc<FakeEngine>,
         calls: mpsc::UnboundedReceiver<EngineCall>,
         session: watch::Sender<LocalSession>,
+        refusals: CredentialRefusals,
         cancel: CancellationToken,
         worker: JoinHandle<()>,
     }
@@ -437,11 +445,13 @@ mod tests {
             ));
             let (engine, calls) = FakeEngine::new();
             let (session, session_rx) = watch::channel(ready_session());
+            let refusals = CredentialRefusals::new();
             let cancel = CancellationToken::new();
             let worker = tokio::spawn(run_stream_marker(
                 Arc::clone(&requests),
                 Arc::clone(&engine) as Arc<dyn EngineGateway>,
                 session_rx,
+                refusals.clone(),
                 cancel.clone(),
             ));
             Harness {
@@ -451,6 +461,7 @@ mod tests {
                 engine,
                 calls,
                 session,
+                refusals,
                 cancel,
                 worker,
             }
@@ -728,6 +739,7 @@ mod tests {
             Arc::clone(&requests),
             engine as Arc<dyn EngineGateway>,
             session_rx,
+            CredentialRefusals::new(),
             cancel.clone(),
         ));
         state
@@ -842,6 +854,29 @@ mod tests {
         harness.clock.set(START + 3 * POLL);
         tokio::task::yield_now().await;
         assert!(harness.calls.try_recv().is_err(), "nothing left waiting");
+        harness.stop().await;
+    }
+
+    #[tokio::test]
+    async fn test_run_stream_marker_reports_refused_credentials_to_registration() {
+        let mut harness = Harness::start();
+        harness.pending().await;
+        harness.clock.set(START + POLL);
+        assert_eq!(harness.next_call().await, EngineCall::StreamLiveness);
+        harness.engine.live(Err(HostError::CredentialsRefused {
+            message: "AuthenticationRefused: client revoked".into(),
+        }));
+        tokio::time::timeout(Duration::from_secs(5), harness.refusals.reported())
+            .await
+            .expect("registration is told");
+        // The request still waits, and the next poll asks again.
+        assert_eq!(harness.next_sleep().await, START + 2 * POLL);
+        assert_eq!(
+            harness.requests.current(),
+            StreamStartMarker::Pending {
+                requested_at: START
+            }
+        );
         harness.stop().await;
     }
 

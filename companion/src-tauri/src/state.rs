@@ -85,7 +85,7 @@ pub const STATE_EVENT: &str = "companion://state";
 /// Must match `INTEGRATIONS_EVENT` in companion/ui/src/state.ts.
 pub const INTEGRATIONS_EVENT: &str = "companion://integrations";
 
-/// Carries the shoutout queue, in order, after every change. Local mode
+/// Carries the shoutout queue's view after every change. Local mode
 /// only. Must match `SHOUTOUT_QUEUE_EVENT` in companion/ui/src/host.ts.
 pub const SHOUTOUT_QUEUE_EVENT: &str = "companion://shoutout-queue";
 

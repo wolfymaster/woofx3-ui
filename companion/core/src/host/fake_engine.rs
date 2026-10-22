@@ -1,5 +1,5 @@
-//! A stand-in for the local engine's Twitch calls, for the tests of the
-//! host's workers that act through the engine.
+//! A stand-in for the local engine, for the tests of the host's workers
+//! that act through it and of their recovery through registration.
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -8,12 +8,15 @@ use futures::future::BoxFuture;
 use tokio::sync::{mpsc, Notify};
 
 use super::gateway::{ClientCredentials, EngineGateway, StreamLiveness, TwitchHelixResult};
-use super::registration::LocalSession;
+use super::registration::{CredentialStore, LocalSession};
 use super::HostError;
 
 /// A call the fake engine received.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineCall {
+    /// `verify`, with the client id it was given.
+    Verify(String),
+    RegisterClient,
     SendShoutout(String),
     CreateStreamMarker(String),
     StreamLiveness,
@@ -45,7 +48,11 @@ impl<T> Script<T> {
 /// as it arrives. A call with no reply scripted yet waits for one, so a
 /// test can look at the worker mid-call.
 pub struct FakeEngine {
+    verifications: Mutex<Script<Result<(), HostError>>>,
+    registrations: Mutex<Script<Result<ClientCredentials, HostError>>>,
     replies: Mutex<Script<Result<TwitchHelixResult, HostError>>>,
+    /// The client id each shoutout was sent with, in order.
+    senders: Mutex<Vec<String>>,
     liveness: Mutex<Script<Result<StreamLiveness, HostError>>>,
     calls: mpsc::UnboundedSender<EngineCall>,
     /// Signalled when a reply is scripted, for calls waiting on one.
@@ -56,12 +63,27 @@ impl FakeEngine {
     pub fn new() -> (Arc<Self>, mpsc::UnboundedReceiver<EngineCall>) {
         let (calls, received) = mpsc::unbounded_channel();
         let engine = FakeEngine {
+            verifications: Script::new(),
+            registrations: Script::new(),
             replies: Script::new(),
+            senders: Mutex::new(Vec::new()),
             liveness: Script::new(),
             calls,
             scripted: Notify::new(),
         };
         (Arc::new(engine), received)
+    }
+
+    pub fn verified(&self, reply: Result<(), HostError>) {
+        self.push(&self.verifications, reply);
+    }
+
+    pub fn registered(&self, reply: Result<ClientCredentials, HostError>) {
+        self.push(&self.registrations, reply);
+    }
+
+    pub fn senders(&self) -> Vec<String> {
+        self.senders.lock().expect("senders lock").clone()
     }
 
     /// The reply to the next Twitch write (shoutout or marker) not yet
@@ -122,21 +144,29 @@ impl EngineGateway for FakeEngine {
         _description: &'a str,
         _registration_token: &'a str,
     ) -> BoxFuture<'a, Result<ClientCredentials, HostError>> {
-        unimplemented!("the shoutout and marker tests never register")
+        let _ = self.calls.send(EngineCall::RegisterClient);
+        self.answer(&self.registrations)
     }
 
     fn verify<'a>(
         &'a self,
-        _credentials: &'a ClientCredentials,
+        credentials: &'a ClientCredentials,
     ) -> BoxFuture<'a, Result<(), HostError>> {
-        unimplemented!("the shoutout and marker tests never verify")
+        let _ = self
+            .calls
+            .send(EngineCall::Verify(credentials.client_id.clone()));
+        self.answer(&self.verifications)
     }
 
     fn send_shoutout<'a>(
         &'a self,
-        _credentials: &'a ClientCredentials,
+        credentials: &'a ClientCredentials,
         to_broadcaster_id: &'a str,
     ) -> BoxFuture<'a, Result<TwitchHelixResult, HostError>> {
+        self.senders
+            .lock()
+            .expect("senders lock")
+            .push(credentials.client_id.clone());
         let _ = self
             .calls
             .send(EngineCall::SendShoutout(to_broadcaster_id.to_string()));
@@ -160,6 +190,38 @@ impl EngineGateway for FakeEngine {
     ) -> BoxFuture<'a, Result<StreamLiveness, HostError>> {
         let _ = self.calls.send(EngineCall::StreamLiveness);
         self.answer(&self.liveness)
+    }
+}
+
+/// Keeps the host's credentials in memory, in place of the OS keychain.
+pub struct MemoryCredentialStore(Mutex<Option<ClientCredentials>>);
+
+impl MemoryCredentialStore {
+    pub fn holding(credentials: ClientCredentials) -> Self {
+        MemoryCredentialStore(Mutex::new(Some(credentials)))
+    }
+
+    pub fn stored(&self) -> Option<ClientCredentials> {
+        self.0.lock().expect("store lock").clone()
+    }
+}
+
+impl CredentialStore for MemoryCredentialStore {
+    fn load(&self) -> BoxFuture<'_, anyhow::Result<Option<ClientCredentials>>> {
+        let stored = self.stored();
+        Box::pin(async move { Ok(stored) })
+    }
+
+    fn store(&self, credentials: ClientCredentials) -> BoxFuture<'_, anyhow::Result<()>> {
+        *self.0.lock().expect("store lock") = Some(credentials);
+        Box::pin(async { Ok(()) })
+    }
+}
+
+pub fn credentials(client_id: &str) -> ClientCredentials {
+    ClientCredentials {
+        client_id: client_id.to_string(),
+        client_secret: format!("{client_id}-secret"),
     }
 }
 
