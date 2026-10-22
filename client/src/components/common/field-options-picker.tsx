@@ -1,4 +1,4 @@
-import { type ConfigFieldOption, type InternalConfigFieldSource, mergePinnedOptions } from "@woofx3/api/ui-schema";
+import type { ConfigFieldOption, InternalConfigFieldSource } from "@woofx3/api/ui-schema";
 import { Check, ChevronsUpDown, RefreshCw } from "lucide-react";
 import { useId, useState } from "react";
 import { ConfigFieldDescription, ConfigFieldLabel } from "@/components/common/config-field-label";
@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useEngineScope } from "@/engine/context";
 import { type FieldOptionsState, useFieldOptions } from "@/hooks/use-field-options";
 import {
+  type FieldOption,
   type FieldOptionGroup,
   fieldOptionMismatch,
   groupFieldOptions,
@@ -101,6 +102,16 @@ export interface InternalSelectView {
 }
 
 /**
+ * Drops only the worker's options that a pinned option already names; the
+ * worker's own list is kept as sent, since it may list one value under
+ * several group headings.
+ */
+function withPinnedFirst(pinned: readonly ConfigFieldOption[], fetched: readonly FieldOption[]): FieldOption[] {
+  const pinnedValues = new Set(pinned.map((option) => option.value));
+  return [...pinned, ...fetched.filter((option) => !pinnedValues.has(option.value))];
+}
+
+/**
  * Pinned options come first and keep the select usable whatever the worker
  * says: it is disabled only when there is nothing at all to pick.
  */
@@ -110,7 +121,7 @@ export function internalSelectView(
   value: unknown,
   fallbackPlaceholder: string
 ): InternalSelectView {
-  const options = mergePinnedOptions(pinned, state.options);
+  const options = withPinnedFirst(pinned, state.options);
   const groups = groupFieldOptions(options);
   const hasOptions = options.length > 0;
   const failureReason = emptyReason(state);

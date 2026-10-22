@@ -78,4 +78,18 @@ describe("internalSelectView", () => {
     expect(internalSelectView([], FAILED, "", FALLBACK).reason).toBe("Could not load options: gateway down");
     expect(internalSelectView([], LISTED, "", FALLBACK)).toMatchObject({ disabled: false, placeholder: FALLBACK });
   });
+
+  test("test_internal_select_view_keeps_a_value_listed_under_two_groups", () => {
+    const grouped = state({
+      options: [
+        { value: "shared", label: "Shared", group: "A" },
+        { value: "shared", label: "Shared", group: "B" },
+      ],
+    });
+    for (const pinned of [[], PINNED]) {
+      const view = internalSelectView(pinned, grouped, "", FALLBACK);
+      const headings = view.groups.filter((g) => g.options.some((o) => o.value === "shared")).map((g) => g.heading);
+      expect(headings).toEqual(["A", "B"]);
+    }
+  });
 });
