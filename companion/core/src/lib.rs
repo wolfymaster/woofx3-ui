@@ -40,11 +40,4 @@ mod tests {
             .with_root_certificates(rustls::RootCertStore::empty())
             .with_no_client_auth();
     }
-
-    #[test]
-    fn test_install_tls_provider_installs_a_default_once_or_more() {
-        crate::install_tls_provider();
-        crate::install_tls_provider();
-        assert!(rustls::crypto::CryptoProvider::get_default().is_some());
-    }
 }

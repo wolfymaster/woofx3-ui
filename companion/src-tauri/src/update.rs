@@ -10,8 +10,9 @@
 //! A failed check or download is logged and tried again after a capped,
 //! jittered backoff, so a PC that started offline checks soon after its
 //! network comes up. This needs no Convex connection, which an unpaired
-//! companion does not have. A failure never becomes `CompanionState::Error`: that state is about pairing, and
-//! an update that cannot be fetched leaves the companion working as it was.
+//! companion does not have. A failure never becomes
+//! `CompanionState::Error`: that state is about pairing, and an update that
+//! cannot be fetched leaves the companion working as it was.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,7 +25,8 @@ use crate::Companion;
 /// Startup is busy resuming the paired session, so the first check waits.
 const FIRST_CHECK_DELAY: Duration = Duration::from_secs(30);
 const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 60 * 60);
-/// The wait after the first failed check. It doubles with each failure in a
+/// The ceiling of the wait after the first failed check; jitter puts the
+/// wait between half of it and all of it. It doubles with each failure in a
 /// row, up to [`CHECK_INTERVAL`], and stays there.
 const RETRY_INITIAL: Duration = Duration::from_secs(60);
 /// The plugin sets no timeout of its own, so a stalled connection would
