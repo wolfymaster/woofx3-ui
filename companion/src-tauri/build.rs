@@ -5,7 +5,7 @@
 /// crate needs no deployment.
 const DEBUG_CONVEX_URL: &str = "http://127.0.0.1:3210";
 
-include!("src/command_names.rs");
+include!("../core/src/window/command_names.rs");
 
 macro_rules! command_name_list {
     ($($name:ident),* $(,)?) => {
@@ -18,6 +18,7 @@ include!("src/convex_url.rs");
 
 fn main() {
     println!("cargo:rerun-if-env-changed=WOOFX3_CONVEX_URL");
+    println!("cargo:rerun-if-changed=../core/src/window/command_names.rs");
     let configured = std::env::var("WOOFX3_CONVEX_URL")
         .ok()
         .filter(|url| !url.trim().is_empty());

@@ -4,8 +4,8 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, Wry};
 
-use crate::state::ReadyUpdate;
 use crate::{show_main_window, update, Companion};
+use woofx3_companion_core::window::ReadyUpdate;
 
 const OPEN_ID: &str = "open";
 const UPDATE_ID: &str = "update";

@@ -1,3 +1,7 @@
+//! The window's contract: every value the host sends the window, as a
+//! command result or an event, the event names, and the commands the window
+//! may call.
+
 use serde::Serialize;
 
 /// Where pairing stands. Serialized with `kind` as the tag; must match
@@ -192,7 +196,7 @@ pub struct EndpointView {
 pub struct AddressView {
     /// `host:port`, with brackets around an IPv6 host.
     pub display: String,
-    pub origin: woofx3_companion_core::AddressOrigin,
+    pub origin: crate::AddressOrigin,
 }
 
 /// What discovery found for an endpoint. Must match `DiscoveryView` in
@@ -384,7 +388,7 @@ mod tests {
                     },
                     address: Some(AddressView {
                         display: "127.0.0.1:4455".into(),
-                        origin: woofx3_companion_core::AddressOrigin::Discovered,
+                        origin: crate::AddressOrigin::Discovered,
                     }),
                     enabled: true,
                     share_password: false,

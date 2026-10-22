@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 
 /**
  * Where pairing stands. Must match `CompanionState` in
- * companion/src-tauri/src/state.rs (serde tag = "kind").
+ * companion/core/src/window/mod.rs (serde tag = "kind").
  * `expiresAt` is milliseconds since the epoch on this PC's clock.
  */
 export type CompanionState =
@@ -15,18 +15,18 @@ export type CompanionState =
   | { kind: "paired"; instanceName: string; cloudConnected: boolean }
   | { kind: "error"; message: string };
 
-/** A newer release, downloaded and verified. Must match `ReadyUpdate` in companion/src-tauri/src/state.rs. */
+/** A newer release, downloaded and verified. Must match `ReadyUpdate` in companion/core/src/window/mod.rs. */
 export type ReadyUpdate = { version: string };
 
 /**
  * What the Rust process says the window should show: where pairing stands,
  * plus the update waiting to be installed. Must match `WindowState` in
- * companion/src-tauri/src/state.rs, which puts the pairing state's fields next
+ * companion/core/src/window/mod.rs, which puts the pairing state's fields next
  * to `update`.
  */
 export type WindowState = CompanionState & { update: ReadyUpdate | null };
 
-/** Must match `STATE_EVENT` in companion/src-tauri/src/state.rs. */
+/** Must match `STATE_EVENT` in companion/core/src/window/mod.rs. */
 export const STATE_EVENT = "companion://state";
 
 export async function currentState(): Promise<WindowState> {
@@ -37,10 +37,10 @@ export function onStateChange(handler: (state: WindowState) => void): Promise<()
   return listen<WindowState>(STATE_EVENT, (event) => handler(event.payload));
 }
 
-/** Must match `INTEGRATIONS_EVENT` in companion/src-tauri/src/state.rs. */
+/** Must match `INTEGRATIONS_EVENT` in companion/core/src/window/mod.rs. */
 export const INTEGRATIONS_EVENT = "companion://integrations";
 
-/** Must match `Availability` in companion/src-tauri/src/state.rs. */
+/** Must match `Availability` in companion/core/src/window/mod.rs. */
 export type Availability =
   | { kind: "off" }
   | { kind: "loading" }
@@ -50,7 +50,7 @@ export type Availability =
 
 /**
  * The companion's connection to the relay. Must match `RelayView` in
- * companion/src-tauri/src/state.rs. `retryAt` is milliseconds since the epoch
+ * companion/core/src/window/mod.rs. `retryAt` is milliseconds since the epoch
  * on this PC's clock.
  */
 export type RelayView =
@@ -62,7 +62,7 @@ export type RelayView =
   | { kind: "displaced" }
   | { kind: "refused" };
 
-/** Must match `DiscoveryView` in companion/src-tauri/src/state.rs. */
+/** Must match `DiscoveryView` in companion/core/src/window/mod.rs. */
 export type DiscoveryView =
   | { kind: "manual" }
   | { kind: "unsupported" }
@@ -73,10 +73,10 @@ export type DiscoveryView =
   | { kind: "found"; port: number; hasPassword: boolean }
   | { kind: "unreadable" };
 
-/** Must match `AddressView` in companion/src-tauri/src/state.rs. */
+/** Must match `AddressView` in companion/core/src/window/mod.rs. */
 export type AddressView = { display: string; origin: "discovered" | "confirmed" };
 
-/** Must match `EndpointView` in companion/src-tauri/src/state.rs. */
+/** Must match `EndpointView` in companion/core/src/window/mod.rs. */
 export type EndpointView = {
   id: string;
   name: string;
@@ -92,10 +92,10 @@ export type EndpointView = {
   reportError: string | null;
 };
 
-/** Must match `ModuleView` in companion/src-tauri/src/state.rs. */
+/** Must match `ModuleView` in companion/core/src/window/mod.rs. */
 export type ModuleView = { moduleId: string; moduleName: string; endpoints: EndpointView[] };
 
-/** Must match `IntegrationsView` in companion/src-tauri/src/state.rs. */
+/** Must match `IntegrationsView` in companion/core/src/window/mod.rs. */
 export type IntegrationsView = {
   availability: Availability;
   relayAvailable: boolean;
@@ -103,7 +103,7 @@ export type IntegrationsView = {
   modules: ModuleView[];
 };
 
-/** Must match `TestResult` in companion/src-tauri/src/state.rs. */
+/** Must match `TestResult` in companion/core/src/window/mod.rs. */
 export type TestResult =
   | { kind: "ok"; protocol: string | null }
   | { kind: "refused"; reason: string }

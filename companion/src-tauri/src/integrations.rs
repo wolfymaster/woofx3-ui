@@ -37,11 +37,11 @@ use crate::cloud::{
 };
 use crate::integration_store::{endpoint_key, IntegrationStore, StoreIdentity, StoredEndpoint};
 use crate::lock;
-use crate::state::{
+use crate::Companion;
+use woofx3_companion_core::window::{
     AddressView, Availability, DiscoveryView, EndpointView, IntegrationsView, ModuleView,
     RelayView, TestResult, INTEGRATIONS_EVENT,
 };
-use crate::Companion;
 
 /// The discoverer that reads obs-websocket's config file.
 const OBS_WEBSOCKET: &str = "obs-websocket";

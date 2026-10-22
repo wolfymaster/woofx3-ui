@@ -14,7 +14,10 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
+// The command list is the window's contract, kept with its other wire
+// types in core; build.rs reads the same file.
 #[macro_use]
+#[path = "../../core/src/window/command_names.rs"]
 mod command_names;
 #[cfg(test)]
 mod convex_url;
@@ -25,7 +28,6 @@ mod integration_store;
 mod integrations;
 mod pairing;
 mod startup_failure;
-mod state;
 mod tray;
 mod update;
 
@@ -42,12 +44,12 @@ use woofx3_companion_core::host::{
 use cloud::CloudLink;
 use engine_host::LocalEngine;
 use integrations::Integrations;
-use state::{
+use tray::Tray;
+use update::Downloaded;
+use woofx3_companion_core::window::{
     CompanionState, IntegrationsView, LocalEngineSession, ReadyUpdate, TestResult, WindowState,
     STATE_EVENT,
 };
-use tray::Tray;
-use update::Downloaded;
 
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {

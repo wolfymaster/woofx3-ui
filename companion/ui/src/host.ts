@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 
 /**
  * What the webview needs to open its own capnweb session with the local
- * engine. Must match `LocalEngineSession` in companion/src-tauri/src/state.rs
+ * engine. Must match `LocalEngineSession` in companion/core/src/window/mod.rs
  * (serde tag = "kind").
  */
 export type LocalEngineSession =
@@ -88,10 +88,10 @@ export type MarkerRequestOutcome =
   | { status: "queued"; reason: string }
   | { status: "failed"; message: string };
 
-/** Must match `SHOUTOUT_QUEUE_EVENT` in companion/src-tauri/src/state.rs. */
+/** Must match `SHOUTOUT_QUEUE_EVENT` in companion/core/src/window/mod.rs. */
 export const SHOUTOUT_QUEUE_EVENT = "companion://shoutout-queue";
 
-/** Must match `STREAM_START_MARKER_EVENT` in companion/src-tauri/src/state.rs. */
+/** Must match `STREAM_START_MARKER_EVENT` in companion/core/src/window/mod.rs. */
 export const STREAM_START_MARKER_EVENT = "companion://stream-start-marker";
 
 /** Must match the command names in companion/src-tauri/src/command_names.rs. */

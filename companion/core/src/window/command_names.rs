@@ -1,8 +1,9 @@
-/// Calls `$callback!` with every command the window may call. lib.rs passes
-/// the list to `generate_handler!`, and build.rs turns the same list into
-/// `allow-<name>` permissions, which capabilities/main.json grants. Writing
-/// the list once keeps the handlers and the permissions from drifting: a
-/// handler missing a permission would be denied at runtime.
+/// Calls `$callback!` with every command the window may call. Written once
+/// so nothing that lists the commands can drift: the host passes the list to
+/// `generate_handler!` (companion/src-tauri/src/lib.rs), and its build script
+/// turns it into the `allow-<name>` permissions that
+/// companion/src-tauri/capabilities/main.json grants. A handler missing a
+/// permission would be denied at runtime.
 macro_rules! with_command_names {
     ($callback:ident) => {
         $callback!(

@@ -151,7 +151,7 @@ The client secret stays in the Rust process and the credential store. The window
 
 ### Window permissions
 
-The commands are listed once, in `src/command_names.rs`: `lib.rs` builds the invoke handler from that list, and `build.rs` declares the same list to Tauri, which then checks each call against the window's capability (`capabilities/main.json`). The capability grants the window only those commands plus listening for events, and nothing from Tauri's core or its plugins. A test keeps the capability and the list in step.
+The commands are listed once, in `companion/core/src/window/command_names.rs`: `lib.rs` builds the invoke handler from that list, and `build.rs` declares the same list to Tauri, which then checks each call against the window's capability (`capabilities/main.json`). The capability grants the window only those commands plus listening for events, and nothing from Tauri's core or its plugins. A test keeps the capability and the list in step.
 
 ## Updates
 
@@ -281,7 +281,7 @@ Every 15 minutes the `companion relay resync` cron (`companionRelay.resyncBridge
 
 ## Companion states
 
-The window renders `WindowState` (`companion/src-tauri/src/state.rs`, mirrored in `companion/ui/src/state.ts`): the pairing state, `CompanionState`, with its fields at the top level, plus `update`, which is `null` or the [ready update](#updates)'s `{ version }`. Integrations and the relay arrive separately as `IntegrationsView` on the `companion://integrations` event (and from `get_integrations`), since they change far more often.
+The window renders `WindowState` (`companion/core/src/window/mod.rs`, mirrored in `companion/ui/src/state.ts`): the pairing state, `CompanionState`, with its fields at the top level, plus `update`, which is `null` or the [ready update](#updates)'s `{ version }`. Integrations and the relay arrive separately as `IntegrationsView` on the `companion://integrations` event (and from `get_integrations`), since they change far more often.
 
 | State | Shown when |
 |---|---|
