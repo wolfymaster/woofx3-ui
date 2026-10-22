@@ -3,7 +3,8 @@ import { type ConfigField, isFieldVisible } from "@woofx3/api/ui-schema";
 type ConditionedField = { id: string } & Pick<ConfigField, "visibleWhen">;
 type Values = Record<string, unknown>;
 
-function isVariableReference(value: unknown): boolean {
+/** Whether `value` is (or starts with) a `${...}` reference to an earlier value in the workflow. */
+export function isVariableReference(value: unknown): value is string {
   return typeof value === "string" && value.trim().startsWith("${");
 }
 

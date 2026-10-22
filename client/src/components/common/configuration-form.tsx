@@ -28,7 +28,7 @@ import {
   defaultComparison,
   isComparisonValue,
 } from "@/lib/condition-comparison";
-import { applyVisibilityChange, dropHiddenValues, isFieldShown } from "@/lib/field-visibility";
+import { applyVisibilityChange, dropHiddenValues, isFieldShown, isVariableReference } from "@/lib/field-visibility";
 import { cn } from "@/lib/utils";
 import { ANY_CONDITION } from "@/lib/workflow-presets-json";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -426,7 +426,7 @@ const builtinRenderers: Record<string, React.ComponentType<FieldRendererProps>> 
 
 /** What a field reverts to when toggled out of variable mode — mirrors workflow-presets.ts's
  * getDefaultConfigValues, kept separate since this component has no workflow-specific import. */
-function defaultValueForField(field: FieldDescriptor): unknown {
+export function defaultValueForField(field: FieldDescriptor): unknown {
   if (comparisonChoices(asComparisonField(field))) {
     return defaultComparison(asComparisonField(field));
   }
@@ -443,10 +443,6 @@ function defaultValueForField(field: FieldDescriptor): unknown {
     return false;
   }
   return "";
-}
-
-function isVariableReference(value: unknown): value is string {
-  return typeof value === "string" && value.trim().startsWith("${");
 }
 
 function VariableToggleWrapper({
@@ -636,7 +632,9 @@ export function ConfigurationForm({
   const handleFieldChange = useCallback(
     (fieldId: string, value: unknown) => {
       setValidationError(null);
-      onChange(applyVisibilityChange(fields, values, { ...values, [fieldId]: value }, defaultValueForField));
+      const settled = applyVisibilityChange(fields, values, { ...values, [fieldId]: value }, defaultValueForField);
+      // Also sheds a hidden value the form was opened with, which no change ever hid.
+      onChange(dropHiddenValues(fields, settled));
     },
     [fields, values, onChange]
   );
