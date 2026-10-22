@@ -83,10 +83,11 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "capnweb": "Import capnweb through @woofx3/api/client: capnweb recognises an RpcTarget only by its own copy, so a second copy breaks passing targets to the engine."
-                },
                 "patterns": [
+                  {
+                    "group": ["capnweb", "capnweb/**"],
+                    "message": "Import capnweb through @woofx3/api/client: capnweb recognises an RpcTarget only by its own copy, so a second copy breaks passing targets to the engine."
+                  },
                   {
                     "group": ["@/lib/transport", "@/lib/transport/**"],
                     "message": "The engine transport is reached through the EngineGateway (client/src/engine). Add what you need to a gateway namespace instead."
@@ -113,9 +114,12 @@
             "noRestrictedImports": {
               "level": "error",
               "options": {
-                "paths": {
-                  "capnweb": "Import capnweb through @woofx3/api/client: capnweb recognises an RpcTarget only by its own copy, so a second copy breaks passing targets to the engine."
-                }
+                "patterns": [
+                  {
+                    "group": ["capnweb", "capnweb/**"],
+                    "message": "Import capnweb through @woofx3/api/client: capnweb recognises an RpcTarget only by its own copy, so a second copy breaks passing targets to the engine."
+                  }
+                ]
               }
             }
           }
