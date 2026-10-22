@@ -10,7 +10,8 @@
 //! Registering is the one step with an effect outside the host: the engine
 //! issues a new client every time. So credentials the engine issued are
 //! kept until the store takes them, and a failed store is retried on its
-//! own rather than by registering again.
+//! own rather than by registering again. They are checked against the
+//! engine before each retry, and dropped if it no longer knows them.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -96,35 +97,45 @@ impl Registrar {
     }
 
     /// The credentials to open a session with: issued ones the store has not
-    /// taken yet, once it takes them; else the stored ones while the engine
-    /// accepts them; else new ones from registering, stored before they are
-    /// returned.
+    /// taken yet, while the engine still accepts them, once the store takes
+    /// them; else the stored ones while the engine accepts them; else new
+    /// ones from registering, stored before they are returned.
     pub async fn ensure(&mut self) -> Result<ClientCredentials, HostError> {
-        let credentials = match self.unsaved.clone() {
-            Some(unsaved) => unsaved,
-            None => {
-                if let Some(stored) = self
-                    .store
-                    .load()
-                    .await
-                    .map_err(HostError::CredentialStoreRead)?
-                {
-                    match self.gateway.verify(&stored).await {
-                        Ok(()) => return Ok(stored),
-                        // The engine no longer knows them.
-                        Err(HostError::CredentialsRefused { .. }) => {}
-                        Err(err) => return Err(err),
-                    }
-                }
-                let token = read_registration_token(&self.token_file).await?;
-                let issued = self
-                    .gateway
-                    .register_client(CLIENT_DESCRIPTION, &token)
-                    .await?;
-                self.unsaved = Some(issued.clone());
-                issued
+        if let Some(unsaved) = self.unsaved.clone() {
+            match self.gateway.verify(&unsaved).await {
+                Ok(()) => return self.store_unsaved(unsaved).await,
+                // The engine forgot them before they were stored, as when
+                // its data is wiped, so they must never reach the window.
+                Err(HostError::CredentialsRefused { .. }) => self.unsaved = None,
+                Err(err) => return Err(err),
             }
-        };
+        }
+        if let Some(stored) = self
+            .store
+            .load()
+            .await
+            .map_err(HostError::CredentialStoreRead)?
+        {
+            match self.gateway.verify(&stored).await {
+                Ok(()) => return Ok(stored),
+                // The engine no longer knows them.
+                Err(HostError::CredentialsRefused { .. }) => {}
+                Err(err) => return Err(err),
+            }
+        }
+        let token = read_registration_token(&self.token_file).await?;
+        let issued = self
+            .gateway
+            .register_client(CLIENT_DESCRIPTION, &token)
+            .await?;
+        self.unsaved = Some(issued.clone());
+        self.store_unsaved(issued).await
+    }
+
+    async fn store_unsaved(
+        &mut self,
+        credentials: ClientCredentials,
+    ) -> Result<ClientCredentials, HostError> {
         self.store
             .store(credentials.clone())
             .await
@@ -452,7 +463,13 @@ mod tests {
     #[tokio::test]
     async fn test_registrar_retries_only_the_store_after_a_failed_write() {
         let token = TokenFile::new("unsaved", Some("tok"));
-        let gateway = Arc::new(ScriptedGateway::registering(vec![Ok(credentials("c1"))]));
+        let gateway = Arc::new(
+            ScriptedGateway::registering(vec![Ok(credentials("c1"))]).verifying(vec![
+                Ok(()),
+                Ok(()),
+                Ok(()),
+            ]),
+        );
         let store = Arc::new(MemoryStore::failing(3));
         let mut registrar = registrar(&gateway, &store, &token);
 
@@ -463,7 +480,63 @@ mod tests {
             ));
         }
         assert_eq!(registrar.ensure().await.expect("stored"), credentials("c1"));
-        assert_eq!(gateway.calls(), vec!["register woofx3-desktop tok"]);
+        assert_eq!(
+            gateway.calls(),
+            vec![
+                "register woofx3-desktop tok",
+                "verify c1",
+                "verify c1",
+                "verify c1"
+            ]
+        );
+        assert_eq!(store.stored(), Some(credentials("c1")));
+    }
+
+    #[tokio::test]
+    async fn test_registrar_drops_unsaved_credentials_the_engine_no_longer_knows() {
+        let token = TokenFile::new("unsaved-forgotten", Some("tok"));
+        let gateway = Arc::new(
+            ScriptedGateway::registering(vec![Ok(credentials("c1")), Ok(credentials("c2"))])
+                .verifying(vec![Err(refused())]),
+        );
+        let store = Arc::new(MemoryStore::failing(1));
+        let mut registrar = registrar(&gateway, &store, &token);
+
+        assert!(matches!(
+            registrar.ensure().await,
+            Err(HostError::CredentialStoreWrite(_))
+        ));
+        assert_eq!(
+            registrar.ensure().await.expect("registers again"),
+            credentials("c2")
+        );
+        assert_eq!(
+            gateway.calls(),
+            vec![
+                "register woofx3-desktop tok",
+                "verify c1",
+                "register woofx3-desktop tok"
+            ]
+        );
+        assert_eq!(store.stored(), Some(credentials("c2")));
+    }
+
+    #[tokio::test]
+    async fn test_registrar_keeps_unsaved_credentials_through_other_failures() {
+        let token = TokenFile::new("unsaved-kept", Some("tok"));
+        let gateway = Arc::new(
+            ScriptedGateway::registering(vec![Ok(credentials("c1"))])
+                .verifying(vec![Err(HostError::EngineHttpStatus(503)), Ok(())]),
+        );
+        let store = Arc::new(MemoryStore::failing(1));
+        let mut registrar = registrar(&gateway, &store, &token);
+
+        assert!(registrar.ensure().await.is_err());
+        assert!(matches!(
+            registrar.ensure().await,
+            Err(HostError::EngineHttpStatus(503))
+        ));
+        assert_eq!(registrar.ensure().await.expect("stored"), credentials("c1"));
         assert_eq!(store.stored(), Some(credentials("c1")));
     }
 
