@@ -26,7 +26,7 @@ pub const BINDINGS_FILE: &str = "ui/src/generated/window.ts";
 const HEADER: &str = "\
 // Generated from the Rust wire types in companion/core (src/window/bindings.rs).
 // Do not edit. To regenerate, run in companion/core:
-//   cargo run --example write_window_bindings
+//   cargo run --features ts --example write_window_bindings
 ";
 
 /// One declaration, with its doc comment as JSDoc.
@@ -157,7 +157,7 @@ mod tests {
             .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
         assert!(
             committed == window_bindings(),
-            "{} is stale: run `cargo run --example write_window_bindings` in companion/core",
+            "{} is stale: run `cargo run --features ts --example write_window_bindings` in companion/core",
             path.display()
         );
     }

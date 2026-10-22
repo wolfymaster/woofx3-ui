@@ -19,7 +19,6 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
-use ts_rs::TS;
 
 use super::gateway::{ClientCredentials, EngineGateway, TwitchHelixResult};
 use super::registration::{CredentialRefusals, LocalSession};
@@ -54,11 +53,13 @@ impl Default for ShoutoutOptions {
 
 /// An entry's id, unique for the life of the queue. A newtype, so serde
 /// writes it as the bare number.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ShoutoutEntryId(pub u64);
 
 /// The channel to shout out, as the window looked it up.
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutChannel {
     pub twitch_user_id: String,
@@ -70,7 +71,8 @@ pub struct ShoutoutChannel {
 }
 
 /// A channel waiting in the queue. Times are [`EpochMillis`].
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutEntry {
     pub id: ShoutoutEntryId,
@@ -86,7 +88,8 @@ pub struct ShoutoutEntry {
 }
 
 /// What enqueueing did.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutEnqueued {
     pub id: ShoutoutEntryId,
@@ -112,7 +115,8 @@ const PAUSED_FOR_CREDENTIALS: &str =
     "The engine refused this app's credentials. Shoutouts resume once the app has registered with it again.";
 
 /// The queue as the window shows it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutQueueView {
     /// In queue order.

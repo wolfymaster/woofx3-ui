@@ -1,16 +1,17 @@
 //! The window's contract: every value the host sends the window, as a
 //! command result or an event, the event names, the commands the window may
-//! call and their arguments. The window's TypeScript types are generated from
-//! these (`bindings`), so serde's attributes here decide the wire shape for
-//! both.
+//! call and their arguments. With the `ts` feature, the window's TypeScript
+//! types are generated from these (`bindings`), so serde's attributes here
+//! decide the wire shape for both.
 
+#[cfg(feature = "ts")]
 mod bindings;
 mod command_args;
 mod command_names;
 
 use serde::Serialize;
-use ts_rs::TS;
 
+#[cfg(feature = "ts")]
 pub use bindings::{window_bindings, BINDINGS_FILE};
 pub use command_args::{
     ConfirmAddressArgs, EnqueueShoutoutArgs, RemoveShoutoutArgs, ReorderShoutoutsArgs,
@@ -27,7 +28,8 @@ macro_rules! command_name_list {
 pub const COMMAND_NAMES: &[&str] = crate::with_command_names!(command_name_list);
 
 /// Where pairing stands.
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CompanionState {
     Starting,
@@ -83,7 +85,8 @@ impl CompanionState {
 /// What the window renders: where pairing stands, plus the update waiting to
 /// be installed, if any. The pairing state's fields sit at the top level next
 /// to `update`.
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct WindowState {
     #[serde(flatten)]
     pub state: CompanionState,
@@ -92,7 +95,8 @@ pub struct WindowState {
 
 /// A newer release, downloaded and verified, that installs on Restart to
 /// update.
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ReadyUpdate {
     pub version: String,
 }
@@ -121,7 +125,8 @@ pub const STREAM_START_MARKER_EVENT: &str = "companion://stream-start-marker";
 /// What the Integrations tab and the Status tab's relay row render. Sent on
 /// its own event, apart from `WindowState`, because it changes with every
 /// relay reconnect and discovery pass.
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct IntegrationsView {
     pub availability: Availability,
@@ -142,7 +147,8 @@ impl IntegrationsView {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Availability {
     /// Not paired and confirmed, so integrations are not running.
@@ -157,7 +163,8 @@ pub enum Availability {
 }
 
 /// The companion's connection to the relay.
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum RelayView {
     /// No enabled endpoint needs it.
@@ -179,7 +186,8 @@ pub enum RelayView {
     Refused,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ModuleView {
     pub module_id: String,
@@ -187,7 +195,8 @@ pub struct ModuleView {
     pub endpoints: Vec<EndpointView>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct EndpointView {
     pub id: String,
@@ -211,7 +220,8 @@ pub struct EndpointView {
     pub report_error: Option<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct AddressView {
     /// `host:port`, with brackets around an IPv6 host.
@@ -220,7 +230,8 @@ pub struct AddressView {
 }
 
 /// What discovery found for an endpoint.
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum DiscoveryView {
     /// The endpoint declares no discovery: its address is entered by hand.
@@ -247,7 +258,8 @@ pub enum DiscoveryView {
 }
 
 /// The result of the Test button.
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum TestResult {
     Ok { protocol: Option<String> },
@@ -258,7 +270,8 @@ pub enum TestResult {
 /// What the window needs to open its own capnweb session with the local
 /// engine: the engine's `/api` URL and the client credentials this host
 /// registered.
-#[derive(Clone, PartialEq, Eq, Serialize, TS)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum LocalEngineSession {
     /// Companion mode: this host runs no engine.
