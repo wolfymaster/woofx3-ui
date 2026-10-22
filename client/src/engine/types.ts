@@ -933,11 +933,6 @@ export interface WorkflowTriggerResult {
   optionsIgnored: boolean;
 }
 
-/** Whether the engine takes test-run options; `unknown` when it could not be asked. */
-export interface TestRunCapabilities {
-  options: "supported" | "unsupported" | "unknown";
-}
-
 /** A recorded run to run again, whole or from one step. */
 export interface WorkflowReplay {
   engineRunId: string;

@@ -120,7 +120,6 @@ import type {
   Supporter,
   SupporterLeaderboardQuery,
   SupporterStream,
-  TestRunCapabilities,
   TransientEvent,
   TwitchChannel,
   TwitchLink,
@@ -490,8 +489,6 @@ export interface WorkflowsGateway {
   useSetEnabledRequest(): (engineWorkflowId: string, isEnabled: boolean) => Promise<{ isEnabled: boolean }>;
   /** Starts a manual run and resolves at once with its key; the run's progress arrives in transient events. */
   useTriggerRequest(): (run: WorkflowTrigger) => Promise<WorkflowTriggerResult>;
-  /** Probes whether the engine takes test-run options, without starting a run. */
-  useTestRunCapabilitiesRequest(): () => Promise<TestRunCapabilities>;
   /** The values `${viewer.*}` resolves on the engine. Needs `workflow.viewerFacts`. */
   useViewerFactsRequest(): () => Promise<ViewerFact[]>;
   /** Runs a recorded run again and resolves at once with its key, like a manual run. */

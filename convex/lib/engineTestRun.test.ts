@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildTriggerOptions,
-  classifyOptionsProbe,
   dryRunWouldDo,
   MAX_TRIGGER_DATA_BYTES,
   optionsWereIgnored,
@@ -19,22 +18,6 @@ describe("dryRunWouldDo", () => {
     expect(dryRunWouldDo('{"dryRun":false,"wouldDo":"x"}')).toBeNull();
     expect(dryRunWouldDo('{"dryRun":true,"wouldDo":""}')).toBeNull();
     expect(dryRunWouldDo("not json")).toBeNull();
-  });
-});
-
-describe("classifyOptionsProbe", () => {
-  it("is supported when the engine refuses platform without triggerData", () => {
-    const err = new Error("options.platform and options.skipConditions only apply with options.triggerData");
-    expect(classifyOptionsProbe(err)).toBe("supported");
-  });
-
-  it("is unsupported when the engine ignored the options and looked the workflow up", () => {
-    expect(classifyOptionsProbe(new Error('Workflow "\u0000woofx3-options-probe" not found'))).toBe("unsupported");
-  });
-
-  it("is unknown for anything else, so the caller can ask again", () => {
-    expect(classifyOptionsProbe(new Error("fetch failed"))).toBe("unknown");
-    expect(classifyOptionsProbe(null)).toBe("unknown");
   });
 });
 
