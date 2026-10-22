@@ -9,6 +9,7 @@ import {
   isComparisonOperator,
   isWidgetSurface,
   LIST_ITEM_FIELD_TYPES,
+  type VisibleWhen,
 } from "@woofx3/api/ui-schema";
 import { isThemeField } from "@/lib/widget-theme-picker";
 
@@ -110,6 +111,29 @@ const OPERATORS = new Set<ConditionOperator>([
   "between",
 ]);
 
+/**
+ * `null`/absent means no condition. Anything else that is not a field id plus
+ * a non-empty list of strings is dropped with a warning, which shows the field
+ * always: an unreadable condition must not hide a control the author declared.
+ */
+function parseVisibleWhen(raw: unknown, fieldId: string): VisibleWhen | undefined {
+  if (raw === null || raw === undefined) {
+    return undefined;
+  }
+  const o = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  if (
+    typeof o.field === "string" &&
+    o.field !== "" &&
+    Array.isArray(o.oneOf) &&
+    o.oneOf.length > 0 &&
+    o.oneOf.every((v) => typeof v === "string")
+  ) {
+    return { field: o.field, oneOf: o.oneOf as string[] };
+  }
+  console.warn(`[parseConfigFields] field "${fieldId}" has a malformed visibleWhen; showing it unconditionally`);
+  return undefined;
+}
+
 export function parseConfigField(item: unknown): ConfigField | null {
   if (!item || typeof item !== "object") {
     return null;
@@ -148,6 +172,7 @@ export function parseConfigField(item: unknown): ConfigField | null {
     action: type === "button" ? parseConfigFieldAction(o.action) : undefined,
     anyText: parseAnyText(o.anyText),
     missingText: parseMissingText(o.missingText),
+    visibleWhen: parseVisibleWhen(o.visibleWhen, id),
   };
   if (Array.isArray(o.options)) {
     field.options = o.options

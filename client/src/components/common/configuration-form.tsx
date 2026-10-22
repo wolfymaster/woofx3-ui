@@ -28,6 +28,7 @@ import {
   defaultComparison,
   isComparisonValue,
 } from "@/lib/condition-comparison";
+import { applyVisibilityChange, dropHiddenValues, isFieldShown } from "@/lib/field-visibility";
 import { cn } from "@/lib/utils";
 import { ANY_CONDITION } from "@/lib/workflow-presets-json";
 import type { VariableOption } from "@/lib/workflow-variables";
@@ -553,7 +554,7 @@ function isEmptyValue(value: unknown): boolean {
 function validateRequired(fields: FieldDescriptor[], values: FieldValues): string[] {
   const missing: string[] = [];
   for (const field of fields) {
-    if (!field.required) {
+    if (!field.required || !isFieldShown(field, values)) {
       continue;
     }
     const v = values[field.id];
@@ -635,9 +636,9 @@ export function ConfigurationForm({
   const handleFieldChange = useCallback(
     (fieldId: string, value: unknown) => {
       setValidationError(null);
-      onChange({ ...values, [fieldId]: value });
+      onChange(applyVisibilityChange(fields, values, { ...values, [fieldId]: value }, defaultValueForField));
     },
-    [values, onChange]
+    [fields, values, onChange]
   );
 
   const handleSubmit = useCallback(() => {
@@ -650,7 +651,7 @@ export function ConfigurationForm({
       return;
     }
     setValidationError(null);
-    onSubmit(values);
+    onSubmit(dropHiddenValues(fields, values));
   }, [fields, values, onSubmit]);
 
   const renderField = (field: FieldDescriptor): ReactNode => {
@@ -802,22 +803,24 @@ export function ConfigurationForm({
         </div>
       )}
 
-      {fields.map((field) =>
-        // A commands field is folded into the event name rather than saved as a
-        // condition, so there is no condition for Any to leave out.
-        allowAny && (field as { source?: { kind?: unknown } }).source?.kind !== "commands" ? (
-          <AnyFieldWrapper
-            key={field.id}
-            field={field}
-            value={values[field.id]}
-            onChange={(v) => handleFieldChange(field.id, v)}
-          >
-            {renderField(field)}
-          </AnyFieldWrapper>
-        ) : (
-          renderField(field)
-        )
-      )}
+      {fields
+        .filter((field) => isFieldShown(field, values))
+        .map((field) =>
+          // A commands field is folded into the event name rather than saved as a
+          // condition, so there is no condition for Any to leave out.
+          allowAny && (field as { source?: { kind?: unknown } }).source?.kind !== "commands" ? (
+            <AnyFieldWrapper
+              key={field.id}
+              field={field}
+              value={values[field.id]}
+              onChange={(v) => handleFieldChange(field.id, v)}
+            >
+              {renderField(field)}
+            </AnyFieldWrapper>
+          ) : (
+            renderField(field)
+          )
+        )}
 
       {onSubmit && (
         <Button onClick={handleSubmit} className="w-full" data-testid="button-config-submit">
