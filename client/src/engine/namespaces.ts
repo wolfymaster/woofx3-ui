@@ -8,7 +8,7 @@
  * claims that function alone, leaving the rest of the module cloud-owned.
  *
  * Cloud-owned modules (accounts, instances, provisioning, the marketplace catalog, Twitch
- * Helix proxies, dashboard preferences) are not engine access and stay out.
+ * calls the engine has no method for, dashboard preferences) are not engine access and stay out.
  */
 export const ENGINE_NAMESPACE_MODULES = {
   status: [
@@ -35,6 +35,9 @@ export const ENGINE_NAMESPACE_MODULES = {
     // The rest of marketplace and marketplaceCatalog is the catalog, which the cloud serves.
     "marketplace.installModule",
     "marketplaceCatalog.installBundle",
+    // The rest of moduleRepository is the cloud's list of installed modules.
+    "moduleRepository.generateUploadUrl",
+    "moduleRepository.uploadAndDeliver",
   ],
   scenes: ["scenes", "sceneActions", "sceneWidgets"],
   requests: ["transientEvents", "fieldOptions"],
@@ -63,11 +66,27 @@ export const ENGINE_NAMESPACE_MODULES = {
   setupImports: ["setupImports"],
   starterPacks: ["starterPacks"],
   twitchLink: [
+    "instances.getPlatformLinks",
     // finishConnect completes Convex's own OAuth redirect on the callback page,
     // which a gateway that links another way never reaches.
     "twitchIntegration.startConnect",
     "twitchIntegration.disconnect",
   ],
+  adBreaks: ["adBreaks"],
+  moderation: ["moderation"],
+  pins: ["pins"],
+  shoutouts: [
+    // listChatters is twitchChat's.
+    "shoutouts.listQueue",
+    "shoutouts.lookupUser",
+    "shoutouts.enqueue",
+    "shoutouts.removeEntry",
+    "shoutouts.reorderQueue",
+  ],
+  twitchChat: ["twitchBroadcast", "shoutouts.listChatters"],
+  clips: ["twitchClips"],
+  streamInfo: ["streamInfo"],
+  goLive: ["goLive"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type EngineNamespace = keyof typeof ENGINE_NAMESPACE_MODULES;

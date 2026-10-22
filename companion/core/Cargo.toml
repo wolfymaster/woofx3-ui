@@ -2,13 +2,13 @@
 name = "woofx3-companion-core"
 version = "0.1.0"
 edition = "2021"
-description = "The companion's relay client, bridge and discovery, without Tauri, so they test on any OS"
+description = "The companion's relay client, bridge, discovery and local engine supervision, without Tauri, so they test on any OS"
 
 [dependencies]
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["sync", "time", "macros", "rt", "net"] }
+tokio = { version = "1", features = ["sync", "time", "macros", "rt", "net", "process", "io-util", "fs"] }
 tokio-util = "0.7"
 # The version convex 0.10 pulls in, so the binary carries one copy.
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-webpki-roots"] }
@@ -19,6 +19,22 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 futures = "0.3"
 sha2 = "0.10"
 rand = "0.9"
+thiserror = "2"
+# Plain HTTP to the local engine on loopback, so no TLS. The version the
+# updater plugin already pulls in.
+reqwest = { version = "0.13", default-features = false }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+
+# A stand-in for the engine's orchestrator that the sidecar tests run as a
+# real child process. Not shipped: nothing depends on this crate's binaries.
+[[bin]]
+name = "fake-orchestrator"
+path = "tests/support/fake_orchestrator.rs"
+test = false
+bench = false
+doc = false

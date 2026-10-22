@@ -13,6 +13,11 @@ const CLIENT_SRC = join(import.meta.dir, "..");
 const SCANNED_DIRS = ["components", "pages", "hooks", "lib"];
 const ENGINE_DIR = import.meta.dir;
 const CONVEX_ADAPTER_DIR = join(ENGINE_DIR, "convex");
+const DIRECT_ADAPTER_DIR = join(ENGINE_DIR, "direct");
+
+// The test that holds the direct adapter's transient events to the Convex
+// webhook's runs both projections, so it alone imports from both sides.
+const TRANSIENT_PARITY_TEST = join(DIRECT_ADAPTER_DIR, "webhook-parity.test.ts");
 
 // The gateway's interface and types have to be implementable without Convex,
 // so only the Convex adapter may import Convex modules or name its generated
@@ -99,8 +104,11 @@ function bootOnlyImports(file: string, source: string): string[] {
 }
 
 function engineFilesOutsideAdapter(): string[] {
-  // This file spells the patterns out in its own cases.
-  return sourceFiles(ENGINE_DIR).filter((path) => path !== import.meta.path && !isWithin(path, CONVEX_ADAPTER_DIR));
+  // This file spells the patterns out in its own cases, and the parity test
+  // imports Convex on purpose (TRANSIENT_PARITY_TEST).
+  return sourceFiles(ENGINE_DIR).filter(
+    (path) => path !== import.meta.path && path !== TRANSIENT_PARITY_TEST && !isWithin(path, CONVEX_ADAPTER_DIR)
+  );
 }
 
 function engineFilesNamingConvex(): string[] {
@@ -185,6 +193,82 @@ describe("engine adapter boundary", () => {
   });
 });
 
+// A Convex module a namespace owns whole is the adapter's to import, types
+// included: a screen naming its shapes would depend on how the Convex gateway
+// serves the engine. A function entry (`macros.run`) leaves its module's
+// other exports to the cloud, so only whole-module entries are guarded.
+const CONVEX_DIR = join(CLIENT_SRC, "..", "..", "convex");
+const CONVEX_ALIAS = "@convex/";
+
+function engineOwnedModules(): Set<string> {
+  const entries: readonly string[] = Object.values(ENGINE_NAMESPACE_MODULES).flat();
+  return new Set(entries.filter((entry) => !entry.includes(".")));
+}
+
+/** The Convex module a specifier names, by its path under convex/ without extension; null for anything else. */
+function convexModuleOf(file: string, specifier: string): string | null {
+  const target = specifier.startsWith(CONVEX_ALIAS)
+    ? join(CONVEX_DIR, specifier.slice(CONVEX_ALIAS.length))
+    : resolveSpecifier(file, specifier);
+  if (target === null || !isWithin(target, CONVEX_DIR)) {
+    return null;
+  }
+  return relative(CONVEX_DIR, target).replace(/\.(ts|js)$/, "");
+}
+
+/** What a file imports from Convex modules a namespace owns. */
+function engineModuleImports(file: string, source: string, owned: Set<string>): string[] {
+  return importSpecifiers(source).filter((specifier) => {
+    const module = convexModuleOf(file, specifier);
+    return module !== null && owned.has(module);
+  });
+}
+
+function filesImportingEngineModules(): string[] {
+  const owned = engineOwnedModules();
+  return sourceFiles(CLIENT_SRC)
+    .filter((path) => path !== import.meta.path && !isWithin(path, CONVEX_ADAPTER_DIR))
+    .filter((path) => engineModuleImports(path, readFileSync(path, "utf8"), owned).length > 0)
+    .map((path) => relative(CLIENT_SRC, path))
+    .sort();
+}
+
+describe("engine module imports", () => {
+  const importing = filesImportingEngineModules();
+
+  test("only the Convex adapter imports the Convex modules a namespace owns", () => {
+    expect(importing, "import the gateway's types from @/engine/types instead").toEqual([]);
+  });
+
+  const importCases: Array<{ specifier: string; guarded: boolean }> = [
+    { specifier: "@convex/pins", guarded: true },
+    { specifier: "@convex/pins.js", guarded: true },
+    { specifier: "../../../../../convex/moderation", guarded: true },
+    { specifier: "../../../../../convex/moderation.ts", guarded: true },
+    { specifier: "../../../../../convex/moderation.js", guarded: true },
+    { specifier: "@convex/lib/moderation", guarded: false },
+    { specifier: "../../../../../convex/lib/moderation.js", guarded: false },
+    { specifier: "@convex/feedback", guarded: false },
+    { specifier: "@convex/_generated/api", guarded: false },
+  ];
+
+  for (const { specifier, guarded } of importCases) {
+    test(`an import of ${specifier} is ${guarded ? "refused" : "allowed"}`, () => {
+      const owned = new Set(["pins", "moderation"]);
+      const file = join(CLIENT_SRC, "components", "dashboard", "widgets", "example.tsx");
+      const found = engineModuleImports(file, `import type { Row } from "${specifier}";`, owned);
+      expect(found).toEqual(guarded ? [specifier] : []);
+    });
+  }
+
+  test("whole-module entries are guarded and function entries are not", () => {
+    const owned = engineOwnedModules();
+    expect(owned.has("pins")).toBe(true);
+    expect(owned.has("macros")).toBe(false);
+    expect(owned.has("instances")).toBe(false);
+  });
+});
+
 /** What a file imports from the live transport. */
 function transportImports(file: string, source: string): string[] {
   return importSpecifiers(source).filter((specifier) => {
@@ -233,6 +317,114 @@ describe("live transport boundary", () => {
       transportImports(file, 'import { useStreamEventsSubscription } from "@/engine/hooks/use-event-log";')
     ).toEqual([]);
     expect(transportImports(file, 'import { transportLabel } from "@/lib/transport-labels";')).toEqual([]);
+  });
+});
+
+// The direct adapter drives the engine itself, with no Convex behind it, so
+// it and the live session it runs on must not know a backend exists. Only the
+// boot wiring picks it, as it picks the Convex adapter, and TanStack Query is
+// its cache alone: a screen that used it would cache outside the gateway.
+const ENGINE_SESSION_DIR = join(CLIENT_SRC, "lib", "engine-session");
+/** `lib/cloud-ids.ts` as a specifier resolves to it, with or without the extension. */
+const CLOUD_ID_MODULE = CLOUD_ID_CONVERSIONS.replace(/\.ts$/, "");
+const TANSTACK_QUERY = /^@tanstack\/react-query(?:\/|$)/;
+
+/**
+ * What a file of the direct adapter or the live session imports from a
+ * backend, or from the Convex adapter's own inputs: its instance selection
+ * and the conversions to Convex ids.
+ */
+function directLeaks(file: string, source: string): string[] {
+  const reaching = importSpecifiers(source).filter((specifier) => {
+    const target = resolveSpecifier(file, specifier);
+    return (
+      target !== null &&
+      (isWithin(target, CONVEX_ADAPTER_DIR) ||
+        isWithin(target, TRANSPORT_DIR) ||
+        target === INSTANCE_SELECTION ||
+        target.replace(/\.tsx?$/, "") === CLOUD_ID_MODULE)
+    );
+  });
+  return [...convexLeaks(source), ...reaching];
+}
+
+/** What a file imports from the direct adapter. */
+function directAdapterImports(file: string, source: string): string[] {
+  return importSpecifiers(source).filter((specifier) => {
+    const target = resolveSpecifier(file, specifier);
+    return target !== null && isWithin(target, DIRECT_ADAPTER_DIR);
+  });
+}
+
+function tanstackQueryImports(source: string): string[] {
+  return importSpecifiers(source).filter((specifier) => TANSTACK_QUERY.test(specifier));
+}
+
+function offenders(files: string[], leaks: (file: string, source: string) => string[]): string[] {
+  return files
+    .filter((path) => path !== import.meta.path)
+    .filter((path) => leaks(path, readFileSync(path, "utf8")).length > 0)
+    .map((path) => relative(CLIENT_SRC, path))
+    .sort();
+}
+
+describe("direct adapter boundary", () => {
+  const appFiles = sourceFiles(CLIENT_SRC).filter((path) => !isWithin(path, DIRECT_ADAPTER_DIR));
+  const leakingBackend = offenders(
+    [...sourceFiles(DIRECT_ADAPTER_DIR), ...sourceFiles(ENGINE_SESSION_DIR)].filter(
+      (path) => path !== TRANSIENT_PARITY_TEST
+    ),
+    directLeaks
+  );
+  const reachingDirect = offenders(
+    appFiles.filter((path) => path !== BOOT_WIRING),
+    directAdapterImports
+  );
+  const usingTanstack = offenders(appFiles, (_file, source) => tanstackQueryImports(source));
+  const convexReachingDirect = offenders(sourceFiles(CONVEX_ADAPTER_DIR), directAdapterImports);
+
+  test("the direct adapter and the live session import no backend", () => {
+    expect(leakingBackend, "map through @/engine/types; never import Convex, its adapter or the transport").toEqual([]);
+  });
+
+  test("outside client/src/engine/direct only the boot wiring reaches the direct adapter", () => {
+    expect(reachingDirect, "go through useEngineGateway() instead of @/engine/direct").toEqual([]);
+  });
+
+  test("only the direct adapter imports TanStack Query", () => {
+    expect(usingTanstack, "read through the engine gateway instead of caching beside it").toEqual([]);
+  });
+
+  test("the Convex adapter does not import the direct adapter", () => {
+    expect(convexReachingDirect, "share code through @/engine or @/lib instead").toEqual([]);
+  });
+
+  test("the backend check matches Convex, its adapter, the transport, the instance selection and cloud ids", () => {
+    const file = join(DIRECT_ADAPTER_DIR, "example.ts");
+    expect(directLeaks(file, 'import { api } from "@convex/_generated/api";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { toInstanceId } from "../convex/ids";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { transport } from "@/lib/transport";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { transport } from "../../lib/transport/browser-transport";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { useInstance } from "@/hooks/use-instance";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { toCloudSceneId } from "@/lib/cloud-ids";')).not.toEqual([]);
+    expect(directLeaks(file, 'import { EngineSession } from "@/lib/engine-session/EngineSession";')).toEqual([]);
+    expect(directLeaks(file, 'import type { TransientEvent } from "@/engine/types";')).toEqual([]);
+  });
+
+  test("the direct adapter check matches aliased, relative and deep imports", () => {
+    const file = join(CLIENT_SRC, "components", "dashboard", "example.tsx");
+    expect(directAdapterImports(file, 'import { x } from "@/engine/direct/connection";')).not.toEqual([]);
+    expect(directAdapterImports(file, 'import { x } from "../../engine/direct";')).not.toEqual([]);
+    expect(directAdapterImports(file, 'import type { X } from "@/engine/direct/testing/x";')).not.toEqual([]);
+    expect(directAdapterImports(file, 'import { useEngineScope } from "@/engine/context";')).toEqual([]);
+    expect(directAdapterImports(file, 'import { x } from "@/engine/directory";')).toEqual([]);
+  });
+
+  test("the TanStack check matches the package and its subpaths only", () => {
+    expect(tanstackQueryImports('import { useQuery } from "@tanstack/react-query";')).not.toEqual([]);
+    expect(tanstackQueryImports('import type { QueryKey } from "@tanstack/react-query/build/modern";')).not.toEqual([]);
+    expect(tanstackQueryImports('import { useVirtualizer } from "@tanstack/react-virtual";')).toEqual([]);
+    expect(tanstackQueryImports('import { useQuery } from "convex/react";')).toEqual([]);
   });
 });
 

@@ -1,6 +1,6 @@
 import { api } from "@convex/_generated/api";
 import type { RecapSupporter, StreamRecapEngineDetail } from "@convex/lib/streamRecap";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import { ArrowLeft, Copy, Gift, Loader2, MessageSquare, RefreshCw, Sparkles, WifiOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
@@ -12,6 +12,8 @@ import { RecapTimeline } from "@/components/stream-recap/recap-timeline";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useSendAnnouncementRequest } from "@/engine/hooks/use-twitch-chat";
+import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 import { useInstance } from "@/hooks/use-instance";
 import { useOpenSessionRefresh } from "@/hooks/use-open-session-refresh";
 import { useRecapClips } from "@/hooks/use-recap-clips";
@@ -257,16 +259,14 @@ function SupporterList({
 }
 
 function SupportersCard({
-  instanceId,
   detail,
   canAnnounce,
 }: {
-  instanceId: SessionSummaryRow["instanceId"];
   detail: Extract<StreamRecapEngineDetail, { status: "ok" }>;
   canAnnounce: boolean;
 }) {
   const { toast } = useToast();
-  const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
+  const sendAnnouncement = useSendAnnouncementRequest();
   const [sending, setSending] = useState(false);
   const message = useMemo(
     () => buildThankYouMessage({ gifters: detail.topGifters, cheerers: detail.topCheerers }),
@@ -291,7 +291,7 @@ function SupportersCard({
     }
     setSending(true);
     try {
-      await sendAnnouncement({ instanceId, message, color: "primary" });
+      await sendAnnouncement({ message, color: "primary" });
       toast({ title: "Sent to chat" });
     } catch (error) {
       toast({
@@ -364,7 +364,7 @@ function SupportersCard({
 }
 
 function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: string }) {
-  const platformLinks = useQuery(api.instances.getPlatformLinks, { instanceId: row.instanceId });
+  const twitchLink = useTwitchLink();
   const capabilities = useEngineCapabilities();
   const engineSupport = capabilities.support(...RECAP_ENGINE_CAPABILITIES);
   // Keyed on any open session, not only a live one: the snapshot taken after
@@ -402,7 +402,6 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
     markers: markerLayerStatus(markers),
   });
   const timeline = useMemo(() => segmentTimeline(segments), [segments]);
-  const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   const canAnnounce = !!twitchLink?.scopes.includes(ANNOUNCEMENT_SCOPE);
 
   const title = body ? new Date(body.session.startedAt).toLocaleDateString(undefined, DATE_FORMAT) : "Stream recap";
@@ -469,7 +468,7 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
       </Card>
 
       {detail ? (
-        <SupportersCard instanceId={row.instanceId} detail={detail} canAnnounce={canAnnounce} />
+        <SupportersCard detail={detail} canAnnounce={canAnnounce} />
       ) : (
         engineSupport === "supported" &&
         state.kind === "loading" && (
@@ -484,9 +483,7 @@ function RecapBody({ row, sessionId }: { row: SessionSummaryRow; sessionId: stri
         )
       )}
 
-      {body && (
-        <ClipsCard instanceId={row.instanceId} state={clips.state} onReload={clips.reload} canAnnounce={canAnnounce} />
-      )}
+      {body && <ClipsCard state={clips.state} onReload={clips.reload} canAnnounce={canAnnounce} />}
     </div>
   );
 }

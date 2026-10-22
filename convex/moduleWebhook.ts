@@ -16,6 +16,12 @@ import { recordedProvenance } from "./lib/marketplaceInstallRecords";
 import { bareModuleKey } from "./lib/moduleKey";
 import { triggerDefinitionRow } from "./lib/triggerDefinitionRow";
 import { webhookEndpointKey } from "./lib/webhookEndpointKey";
+import {
+  moduleDeleteFailedTransient,
+  moduleInstalledTransient,
+  moduleInstallFailedTransient,
+  moduleRemovedTransient,
+} from "./lib/webhookTransients";
 
 // Provenance from the engine: createdByRef == the module's composite moduleKey
 // (or "builtin" for SYSTEM resources). Drives cascade-on-delete; replaces moduleId.
@@ -322,10 +328,7 @@ export const processModuleInstalled = internalMutation({
     // Emit success event for the UI
     await ctx.runMutation(internal.transientEvents.emit, {
       instanceId,
-      correlationKey,
-      type: "module.install",
-      status: "success",
-      message: `Module ${moduleName}@${moduleVersion} installed successfully.`,
+      ...moduleInstalledTransient({ correlationKey, moduleName, moduleVersion }),
     });
 
     for (const trigger of triggers) {
@@ -482,24 +485,17 @@ export const processModuleInstallFailed = internalMutation({
     statusMessage: v.optional(v.string()),
   },
   handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion, statusMessage }) => {
-    const failMessage = statusMessage ?? "Module installation failed on the engine.";
+    const transient = moduleInstallFailedTransient({ correlationKey, moduleName, moduleVersion }, statusMessage);
 
     const record = await ctx.db
       .query("moduleRepository")
       .withIndex("by_instance_module_key", (q) => q.eq("instanceId", instanceId).eq("moduleKey", correlationKey))
       .first();
     if (record) {
-      await ctx.db.patch(record._id, { status: "failed" as const, statusMessage: failMessage });
+      await ctx.db.patch(record._id, { status: "failed" as const, statusMessage: transient.message });
     }
 
-    await ctx.runMutation(internal.transientEvents.emit, {
-      instanceId,
-      correlationKey,
-      type: "module.install",
-      status: "error",
-      message: failMessage,
-      data: { moduleName, moduleVersion },
-    });
+    await ctx.runMutation(internal.transientEvents.emit, { instanceId, ...transient });
   },
 });
 
@@ -667,11 +663,7 @@ export const processModuleDeleted = internalMutation({
 
     await ctx.runMutation(internal.transientEvents.emit, {
       instanceId,
-      correlationKey,
-      type: "module.uninstall",
-      status: "success",
-      message: `Module ${moduleName}${moduleVersion ? `@${moduleVersion}` : ""} removed.`,
-      data: { moduleName, moduleVersion },
+      ...moduleRemovedTransient({ correlationKey, moduleName, moduleVersion }),
     });
   },
 });
@@ -707,11 +699,7 @@ export const reconcileUninstalledModule = internalMutation({
 
     await ctx.runMutation(internal.transientEvents.emit, {
       instanceId,
-      correlationKey,
-      type: "module.uninstall",
-      status: "success",
-      message: `Module ${moduleName}@${moduleVersion} removed.`,
-      data: { moduleName, moduleVersion },
+      ...moduleRemovedTransient({ correlationKey, moduleName, moduleVersion }),
     });
   },
 });
@@ -771,15 +759,9 @@ export const processModuleDeleteFailed = internalMutation({
     conflicts: v.optional(v.array(v.any())),
   },
   handler: async (ctx, { instanceId, correlationKey, moduleName, moduleVersion, error, conflicts }) => {
-    const message = error ?? "Module delete was refused by the engine.";
-
     await ctx.runMutation(internal.transientEvents.emit, {
       instanceId,
-      correlationKey,
-      type: "module.uninstall",
-      status: "error",
-      message,
-      data: { moduleName, moduleVersion, conflicts: conflicts ?? [] },
+      ...moduleDeleteFailedTransient({ correlationKey, moduleName, moduleVersion }, error, conflicts),
     });
   },
 });

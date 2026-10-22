@@ -1,6 +1,11 @@
 //! The woofx3 companion: a tray app that pairs this computer with a woofx3
-//! instance through the browser and stays connected to Convex. Its window
+//! instance through the browser and stays connected to Convex while paired.
+//! An unpaired companion holds no Convex connection. Its window
 //! renders `WindowState`; all work happens here, in Rust commands.
+//!
+//! In local mode, chosen by the host configuration file, it also runs the
+//! engine's orchestrator as its sidecar (`engine_host`), and stops it before
+//! it quits.
 //!
 //! Commands are async so none of them runs on the main thread: tray updates
 //! (`MenuItem::set_text`) dispatch to the main thread and wait for it, so a
@@ -8,11 +13,17 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
+#[macro_use]
+mod command_names;
+#[cfg(test)]
+mod convex_url;
 mod credentials;
+mod engine_host;
 mod installation;
 mod integration_store;
 mod integrations;
 mod pairing;
+mod startup_failure;
 mod state;
 mod tray;
 mod update;
@@ -21,18 +32,24 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
-use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
+use woofx3_companion_core::host::{HostMode, HOST_CONFIG_FILE};
 
-use cloud::Cloud;
+use cloud::CloudLink;
+use engine_host::LocalEngine;
 use integrations::Integrations;
-use state::{CompanionState, IntegrationsView, ReadyUpdate, TestResult, WindowState, STATE_EVENT};
+use state::{
+    CompanionState, IntegrationsView, LocalEngineSession, ReadyUpdate, TestResult, WindowState,
+    STATE_EVENT,
+};
 use tray::Tray;
 use update::Downloaded;
 
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
-    cloud: Cloud,
+    cloud_link: CloudLink,
+    engine: LocalEngine,
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
     integrations: Arc<Integrations>,
@@ -161,7 +178,9 @@ impl Companion {
         show_main_window(&self.app);
     }
 
-    /// Picks up where the last run left off, from the stored token.
+    /// Picks up where the last run left off, from the stored token. Only a
+    /// stored token opens the Convex connection; without one the companion
+    /// stays off the cloud until a pairing starts.
     async fn resume(self: Arc<Self>) {
         match credentials::load().await {
             Ok(None) => {
@@ -266,7 +285,9 @@ async fn unpair(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
 /// fails, in which case the update stays ready.
 #[tauri::command]
 async fn install_update(companion: State<'_, Arc<Companion>>) -> Result<(), String> {
-    update::install(&companion).inspect_err(|err| eprintln!("[companion] {err}"))
+    update::install(&companion)
+        .await
+        .inspect_err(|err| eprintln!("[companion] {err}"))
 }
 
 #[tauri::command]
@@ -338,6 +359,15 @@ async fn test_endpoint(
     companion.integrations.test(&module_id, &endpoint_id).await
 }
 
+/// What the window needs to open a capnweb session with the local engine.
+/// Only this host's own window can call it (capabilities/main.json).
+#[tauri::command]
+async fn local_engine_session(
+    companion: State<'_, Arc<Companion>>,
+) -> Result<LocalEngineSession, String> {
+    Ok(companion.engine.session())
+}
+
 /// Connects to the relay again after another connection displaced this one
 /// or woofx3 refused a credential.
 #[tauri::command]
@@ -346,8 +376,15 @@ async fn reconnect_relay(companion: State<'_, Arc<Companion>>) -> Result<(), Str
     Ok(())
 }
 
+macro_rules! command_handler {
+    ($($name:ident),* $(,)?) => {
+        tauri::generate_handler![$($name),*]
+    };
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    woofx3_companion_core::install_tls_provider();
     tauri::Builder::default()
         // First, so a second launch hands over to this one before it opens a
         // second Convex connection.
@@ -358,18 +395,27 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
-            let cloud = tauri::async_runtime::block_on(Cloud::connect())?;
             let app_data_dir = app.path().app_data_dir()?;
+            let engine = match start_local_engine(app) {
+                Ok(engine) => engine,
+                Err(err) => {
+                    startup_failure::report(
+                        app.path().app_log_dir().ok().as_deref(),
+                        &format!("{err:#}"),
+                    );
+                    std::process::exit(1);
+                }
+            };
             let installation_id = installation::load_or_create(&app_data_dir)?;
             let integrations = Arc::new(Integrations::new(
                 handle.clone(),
-                cloud.clone(),
                 &app_data_dir,
                 app.path().config_dir().ok(),
             ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
-                cloud,
+                cloud_link: CloudLink::dormant(),
+                engine,
                 installation_id,
                 integrations,
                 view: Mutex::new(WindowState {
@@ -407,23 +453,104 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(tauri::generate_handler![
-            get_state,
-            start_pairing,
-            cancel_pairing,
-            open_verification_url,
-            confirm_pairing,
-            reject_pairing,
-            unpair,
-            install_update,
-            get_integrations,
-            set_endpoint_enabled,
-            confirm_address,
-            use_discovered,
-            set_share_password,
-            test_endpoint,
-            reconnect_relay
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running the woofx3 companion");
+        .invoke_handler(with_command_names!(command_handler))
+        .build(tauri::generate_context!())
+        .expect("error while building the woofx3 companion")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, code, .. } = event {
+                stop_engine_before_exit(app, &api, code);
+            }
+        });
+}
+
+/// The local engine the host configuration asks for, started. An invalid
+/// configuration, or a release with no orchestrator, is an error the caller
+/// shows before exiting.
+fn start_local_engine(app: &tauri::App) -> anyhow::Result<LocalEngine> {
+    let config = app.path().app_config_dir()?.join(HOST_CONFIG_FILE);
+    match HostMode::load(&config)? {
+        HostMode::Companion => Ok(LocalEngine::Off),
+        HostMode::Local(settings) => Ok(LocalEngine::start(
+            &settings,
+            &app.path().resource_dir()?,
+            &app.path().app_local_data_dir()?,
+        )?),
+    }
+}
+
+/// Holds a quit until the local engine has stopped, so its services shut
+/// down in order rather than being cut off, then quits with the same code.
+/// A restart cannot be held (Tauri ignores `prevent_exit` for it), which is
+/// why installing an update stops the engine before it restarts.
+fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: Option<i32>) {
+    let Some(companion) = app.try_state::<Arc<Companion>>() else {
+        return;
+    };
+    if !companion.engine.must_stop_before_exit() {
+        return;
+    }
+    api.prevent_exit();
+    let companion = Arc::clone(companion.inner());
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        companion.engine.stop().await;
+        app.exit(code.unwrap_or(0));
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    macro_rules! command_name_list {
+        ($($name:ident),* $(,)?) => {
+            &[$(stringify!($name)),*]
+        };
+    }
+
+    const COMMAND_NAMES: &[&str] = with_command_names!(command_name_list);
+    use super::convex_url::check_convex_url;
+
+    #[test]
+    fn test_capabilities_grant_exactly_the_declared_commands() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/main.json")).expect("valid JSON");
+        let granted: Vec<&str> = capability["permissions"]
+            .as_array()
+            .expect("a permission list")
+            .iter()
+            .map(|permission| permission.as_str().expect("a permission id"))
+            .filter(|permission| permission.starts_with("allow-"))
+            .collect();
+        let declared: Vec<String> = COMMAND_NAMES
+            .iter()
+            .map(|name| format!("allow-{}", name.replace('_', "-")))
+            .collect();
+        assert_eq!(granted, declared);
+        assert_eq!(capability["windows"], serde_json::json!(["main"]));
+    }
+
+    #[test]
+    fn test_check_convex_url_accepts_deployment_urls() {
+        for url in [
+            "https://happy-animal-123.convex.cloud",
+            "http://127.0.0.1:3210",
+            "https://convex.example.test/",
+        ] {
+            assert_eq!(check_convex_url(url), Ok(()), "{url}");
+        }
+    }
+
+    #[test]
+    fn test_check_convex_url_refuses_what_convex_cannot_connect_to() {
+        for url in [
+            "happy-animal-123.convex.cloud",
+            "wss://happy-animal-123.convex.cloud",
+            "ftp://example.test",
+            "https://",
+            " https://happy-animal-123.convex.cloud",
+            "https://happy-animal-123.convex.cloud\n",
+            "not a url",
+        ] {
+            assert!(check_convex_url(url).is_err(), "{url}");
+        }
+    }
 }

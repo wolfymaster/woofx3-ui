@@ -1,10 +1,18 @@
 import { api } from "@convex/_generated/api";
+import type { Id } from "@convex/_generated/dataModel";
+import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useCallback } from "react";
 import type { ModulesGateway } from "@/engine/gateway";
-import type { MarketplaceBundleInstall, ModuleDetail, ModuleId, ModuleStorageUsage } from "@/engine/types";
+import type {
+  MarketplaceBundleInstall,
+  ModuleArchiveInstall,
+  ModuleDetail,
+  ModuleId,
+  ModuleStorageUsage,
+} from "@/engine/types";
 import { fromModuleId, toModuleId } from "./ids";
-import { useInstanceAction } from "./scope";
+import { useInstanceAction, useInstanceMutation } from "./scope";
 
 function toModuleDetail(result: FunctionReturnType<typeof api.moduleDetail.getModuleDetail>): ModuleDetail {
   return {
@@ -120,6 +128,33 @@ function useStorageUsageRequest() {
   return useCallback(() => moduleStorageUsage({}).then(toModuleStorageUsage), [moduleStorageUsage]);
 }
 
+/**
+ * Convex keeps the archive in its file storage, records the module as
+ * pending with its manifest, and hands the archive to the engine from a
+ * scheduled action.
+ */
+function useArchiveInstallRequest() {
+  const generateUploadUrl = useMutation(api.moduleRepository.generateUploadUrl);
+  const uploadAndDeliver = useInstanceMutation(api.moduleRepository.uploadAndDeliver);
+  return useCallback(
+    async ({ archive, moduleKey, name, description, version, tags, manifest }: ModuleArchiveInstall) => {
+      const uploadUrl = await generateUploadUrl();
+      const uploaded = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/zip" },
+        body: new Blob([archive], { type: "application/zip" }),
+      });
+      if (!uploaded.ok) {
+        throw new Error("Upload failed");
+      }
+      const { storageId } = (await uploaded.json()) as { storageId: Id<"_storage"> };
+      await uploadAndDeliver({ moduleKey, name, description, version, tags, manifest, archiveKey: storageId });
+      return { moduleKey };
+    },
+    [generateUploadUrl, uploadAndDeliver]
+  );
+}
+
 export const convexModulesGateway: ModulesGateway = {
   useDetailRequest,
   useSettingsRequest,
@@ -132,4 +167,5 @@ export const convexModulesGateway: ModulesGateway = {
   useMarketplaceInstallRequest,
   useBundleInstallRequest,
   useStorageUsageRequest,
+  useArchiveInstallRequest,
 };

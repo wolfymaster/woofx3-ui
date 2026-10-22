@@ -19,7 +19,14 @@ mock.module("convex/react", () => ({
     calls.push({ name: getFunctionName(action), args });
     return Promise.resolve(result);
   },
+  useMutation: (mutation: Parameters<typeof getFunctionName>[0]) => (args: unknown) => {
+    const name = getFunctionName(mutation);
+    calls.push({ name, args });
+    return Promise.resolve(name === "moduleRepository:generateUploadUrl" ? UPLOAD_URL : { delivered: true });
+  },
 }));
+
+const UPLOAD_URL = "https://storage.test/upload";
 
 const { convexModulesGateway } = await import("./modules");
 
@@ -80,5 +87,68 @@ describe("modules.useStorageUsageRequest", () => {
     result = null;
     const readUsage = renderInScope(() => convexModulesGateway.useStorageUsageRequest());
     expect(await readUsage()).toBeNull();
+  });
+});
+
+describe("modules.useArchiveInstallRequest", () => {
+  const archive = new Uint8Array([80, 75, 3, 4]);
+  const install = {
+    archive,
+    moduleKey: "obs:1.2.0:abcdef1",
+    name: "OBS",
+    description: "Scenes",
+    version: "1.2.0",
+    tags: ["obs"],
+    manifest: { id: "obs" },
+  };
+  const realFetch = globalThis.fetch;
+  const uploads: Array<{ url: string; init: RequestInit | undefined }> = [];
+
+  function answerUploadsWith(response: Response) {
+    uploads.length = 0;
+    globalThis.fetch = ((url: string, init?: RequestInit) => {
+      uploads.push({ url, init });
+      return Promise.resolve(response);
+    }) as typeof fetch;
+  }
+
+  test("stores the archive, then hands its storage key to the engine delivery", async () => {
+    answerUploadsWith(Response.json({ storageId: "storage-1" }));
+    try {
+      const installArchive = renderInScope(() => convexModulesGateway.useArchiveInstallRequest());
+      expect(await installArchive(install)).toEqual({ moduleKey: "obs:1.2.0:abcdef1" });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(uploads.map(({ url, init }) => ({ url, method: init?.method }))).toEqual([
+      { url: UPLOAD_URL, method: "POST" },
+    ]);
+    expect(calls).toEqual([
+      { name: "moduleRepository:generateUploadUrl", args: undefined },
+      {
+        name: "moduleRepository:uploadAndDeliver",
+        args: {
+          instanceId,
+          moduleKey: "obs:1.2.0:abcdef1",
+          name: "OBS",
+          description: "Scenes",
+          version: "1.2.0",
+          tags: ["obs"],
+          manifest: { id: "obs" },
+          archiveKey: "storage-1",
+        },
+      },
+    ]);
+  });
+
+  test("a refused upload rejects before anything reaches the engine", async () => {
+    answerUploadsWith(new Response("no", { status: 500 }));
+    try {
+      const installArchive = renderInScope(() => convexModulesGateway.useArchiveInstallRequest());
+      await expect(installArchive(install)).rejects.toThrow("Upload failed");
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+    expect(calls.map((call) => call.name)).toEqual(["moduleRepository:generateUploadUrl"]);
   });
 });

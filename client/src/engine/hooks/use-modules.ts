@@ -44,3 +44,8 @@ export function useMarketplaceInstallRequest() {
 export function useMarketplaceBundleInstallRequest() {
   return useEngineGateway().modules.useBundleInstallRequest();
 }
+
+/** Installs a module from an archive built in the browser; resolves with the key its outcome is reported under. */
+export function useModuleArchiveInstallRequest() {
+  return useEngineGateway().modules.useArchiveInstallRequest();
+}

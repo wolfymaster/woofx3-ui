@@ -1,19 +1,15 @@
-import { api } from "@convex/_generated/api";
-import { useQuery } from "convex/react";
 import { Maximize2, Radio } from "lucide-react";
 import { useState } from "react";
 import { LiveThumbnail } from "@/components/dashboard/live-thumbnail";
 import { StreamPlayerDialog } from "@/components/dashboard/stream-player-dialog";
 import { useLiveState } from "@/engine/hooks/use-live-state";
-import { useInstance } from "@/hooks/use-instance";
+import { useTwitchLink } from "@/engine/hooks/use-twitch-link";
 
 export function StreamPreviewWidget() {
-  const { instance } = useInstance();
   const liveState = useLiveState();
-  const platformLinks = useQuery(api.instances.getPlatformLinks, instance ? { instanceId: instance._id } : "skip");
+  const twitchLink = useTwitchLink();
   const [enlarged, setEnlarged] = useState(false);
 
-  const twitchLink = platformLinks?.find((link) => link.platform === "twitch");
   const isLive = liveState?.isLive ?? false;
 
   if (!twitchLink) {

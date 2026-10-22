@@ -1,6 +1,6 @@
 export interface TwitchUserBadgeSource {
   /** Helix's `broadcaster_type`: `partner`, `affiliate`, or empty. */
-  broadcasterType?: string;
+  broadcasterType?: string | null;
   /** Undefined when nobody could tell; only a known true shows a badge. */
   isModerator?: boolean;
   isVip?: boolean;

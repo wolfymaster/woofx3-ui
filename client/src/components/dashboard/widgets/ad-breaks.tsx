@@ -1,15 +1,14 @@
-import { api } from "@convex/_generated/api";
 import { AD_BREAK_EVENTS, AD_MANAGE_SCOPE, AD_READ_SCOPE } from "@convex/lib/adBreaks";
 import { useStore } from "@nanostores/react";
-import { useAction } from "convex/react";
 import { AlarmClockOff, Loader2, Megaphone } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useEngineScope } from "@/engine/context";
+import { useAdScheduleRequest, useSnoozeNextAdRequest } from "@/engine/hooks/use-ad-breaks";
 import { useStreamEventsSubscription } from "@/engine/hooks/use-event-log";
 import { useLiveState } from "@/engine/hooks/use-live-state";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
-import { useInstance } from "@/hooks/use-instance";
 import { useTwitchIntegration } from "@/hooks/use-twitch-integration";
 import { actionErrorMessage } from "@/lib/action-error";
 import {
@@ -37,13 +36,12 @@ const SCHEDULE_REFRESH_MS = 60_000;
 const AD_SCOPES = [AD_READ_SCOPE, AD_MANAGE_SCOPE];
 
 export function AdBreaksWidget() {
-  const { instance } = useInstance();
-  const instanceId = instance?._id;
+  const { instanceId } = useEngineScope();
   const liveState = useLiveState();
   const { twitchLink, isLoading: linksLoading } = useTwitchIntegration();
   const subscribeStreamEvents = useStreamEventsSubscription();
-  const getSchedule = useAction(api.adBreaks.getSchedule);
-  const snoozeNextAd = useAction(api.adBreaks.snoozeNextAd);
+  const getSchedule = useAdScheduleRequest();
+  const snoozeNextAd = useSnoozeNextAdRequest();
   const now = useStore($nowPerSecond);
 
   const [fetchState, setFetchState] = useState<AdScheduleFetch>({ status: "loading" });
@@ -66,7 +64,7 @@ export function AdBreaksWidget() {
     }
     latestRequest.current += 1;
     const request = latestRequest.current;
-    getSchedule({ instanceId })
+    getSchedule()
       .then((result) => {
         if (request !== latestRequest.current) {
           return;
@@ -117,7 +115,7 @@ export function AdBreaksWidget() {
     setSnoozing(true);
     setSnoozeError(null);
     try {
-      const result = await snoozeNextAd({ instanceId });
+      const result = await snoozeNextAd();
       latestRequest.current += 1;
       const receivedAt = Date.now();
       setFetchState((current) => applySnooze(current, result, receivedAt));
