@@ -1,5 +1,6 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
-import { v } from "convex/values";
+import type { FailureCode } from "@woofx3/api/platform-gateway";
+import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import {
@@ -12,6 +13,15 @@ import {
   query,
 } from "./_generated/server";
 import { planRepin, type RepinPlan } from "./lib/pinStrategy";
+import {
+  type ChatRoute,
+  chatRoute,
+  type GatewaySendOutcome,
+  idempotencyKeys,
+  sendThroughGateway,
+  serverOperationId,
+  undeliveredError,
+} from "./lib/platformGateway";
 import { getInstanceMembership } from "./lib/teamAccess";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
@@ -32,7 +42,10 @@ import { parsePinsResponse, type TwitchPin } from "./lib/twitchPins";
 //
 // These endpoints are in open beta as of 2026-05-15 and may change.
 //
-// The Helix calls go through an engine that advertises twitch.pins when it
+// Pinning goes through the engine's platform gateway when it advertises
+// platform.gateway (convex/lib/platformGateway.ts); the history stays here
+// either way. Reading and removing the pin, and pinning on older engines, are
+// Helix calls that go through an engine that advertises twitch.pins when it
 // does (convex/lib/twitchEngineHelix.ts).
 
 const TWITCH_PINS_URL = "https://api.twitch.tv/helix/chat/pins";
@@ -342,10 +355,104 @@ export async function repinOnTwitch(
   return { messageId, resent };
 }
 
+/**
+ * A pin through the platform gateway. `notPinned` is set when the outcome was
+ * anything but a pin; `messageId` is still set when the line reached chat
+ * unpinned, so the history can pin that line instead of posting it again.
+ */
+interface GatewayPin {
+  messageId: string | null;
+  notPinned: ConvexError<string> | null;
+}
+
+function gatewayPin(outcome: GatewaySendOutcome): GatewayPin {
+  if (outcome.kind === "delivered") {
+    return { messageId: outcome.messageId, notPinned: null };
+  }
+  if (outcome.kind === "failed" && outcome.messageId !== null) {
+    return {
+      messageId: outcome.messageId,
+      notPinned: new ConvexError(
+        `The message is in chat, but Twitch didn't pin it (${outcome.detail}). Pin it again from the history.`
+      ),
+    };
+  }
+  return { messageId: null, notPinned: undeliveredError(outcome, "pinned message") };
+}
+
+/** Posts `text` and pins it, through the gateway when the route has it. */
+async function pinNewLine(
+  twitch: AuthorizedTwitchCall,
+  route: ChatRoute,
+  text: string,
+  key: string
+): Promise<GatewayPin> {
+  if (route.kind === "helix") {
+    return { messageId: await sendChatMessage(twitch, text, { pin: true }, route.helix), notPinned: null };
+  }
+  return gatewayPin(
+    await sendThroughGateway(route, {
+      action: "chat.pin",
+      platforms: ["twitch"],
+      payload: { message: text },
+      idempotencyKey: key,
+    })
+  );
+}
+
+/**
+ * Gateway refusals of a pin by id that mean the id itself is no good, so the
+ * text is posted again. A rate limit or a missing permission would refuse
+ * the re-post too.
+ */
+const REPOST_AFTER_PIN_FAILURES: ReadonlySet<FailureCode> = new Set(["invalid", "upstream"]);
+
+/**
+ * `repinOnTwitch` through the gateway: pins the entry's id when the plan says
+ * to, and re-posts the text when the gateway reports Twitch refused that id.
+ * An unconfirmed pin is never followed by a re-post. Each step has its own
+ * idempotency key, so a repeated click replays whichever step reached Twitch.
+ */
+export async function repinThroughGateway(
+  route: Extract<ChatRoute, { kind: "gateway" }>,
+  plan: RepinPlan,
+  content: string,
+  key: (step: string) => string,
+  beforeResend: () => Promise<void>
+): Promise<GatewayPin & { resent: boolean }> {
+  if (plan.kind === "repin") {
+    const outcome = await sendThroughGateway(route, {
+      action: "chat.pin",
+      platforms: ["twitch"],
+      payload: { messageId: plan.messageId },
+      idempotencyKey: key("chat.pin.existing"),
+    });
+    if (outcome.kind === "delivered") {
+      return { messageId: plan.messageId, notPinned: null, resent: false };
+    }
+    if (outcome.kind !== "failed" || outcome.code === null || !REPOST_AFTER_PIN_FAILURES.has(outcome.code)) {
+      return { messageId: null, notPinned: undeliveredError(outcome, "pin"), resent: false };
+    }
+  }
+  await beforeResend();
+  const outcome = await sendThroughGateway(route, {
+    action: "chat.pin",
+    platforms: ["twitch"],
+    payload: { message: content },
+    idempotencyKey: key("chat.pin.new"),
+  });
+  return { ...gatewayPin(outcome), resent: true };
+}
+
 /** Post a new message and pin it, recording it in history. */
 export const pinNewMessage = action({
-  args: { instanceId: v.id("instances"), text: v.string() },
-  handler: async (ctx, args): Promise<{ messageId: string }> => {
+  args: {
+    instanceId: v.id("instances"),
+    text: v.string(),
+    /** One id per user intent, so a repeated click replays the first pin instead of posting twice. */
+    operationId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ messageId: string | null }> => {
     const text = args.text.trim();
     if (!text) {
       throw new Error("A pinned message needs some text");
@@ -353,6 +460,8 @@ export const pinNewMessage = action({
     if (text.length > MAX_CHAT_MESSAGE_LENGTH) {
       throw new Error(`Chat messages are limited to ${MAX_CHAT_MESSAGE_LENGTH} characters`);
     }
+
+    const key = idempotencyKeys("dashboard", args.operationId, serverOperationId)("chat.pin");
 
     const userId = await getAuthUserId(ctx);
     if (!userId) {
@@ -362,19 +471,25 @@ export const pinNewMessage = action({
     const twitch = await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
     await authorizeTwitch(ctx, args.instanceId, PIN_MANAGE_SCOPE);
 
-    const messageId = await sendChatMessage(
+    const { messageId, notPinned } = await pinNewLine(
       twitch,
+      await chatRoute(ctx, args.instanceId, "twitch.pins"),
       text,
-      { pin: true },
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.pins")
+      key
     );
+    if (messageId === null && notPinned) {
+      throw notPinned;
+    }
     await ctx.runMutation(internal.pins.recordPinned, {
       instanceId: args.instanceId,
       userId,
       content: text,
-      twitchMessageId: messageId,
+      twitchMessageId: messageId ?? undefined,
       at: Date.now(),
     });
+    if (notPinned) {
+      throw notPinned;
+    }
     return { messageId };
   },
 });
@@ -387,8 +502,14 @@ export const pinNewMessage = action({
  * reasons the rule cannot see.
  */
 export const repinFromHistory = action({
-  args: { instanceId: v.id("instances"), entryId: v.id("pinnedMessages") },
-  handler: async (ctx, args): Promise<{ messageId: string; resent: boolean }> => {
+  args: {
+    instanceId: v.id("instances"),
+    entryId: v.id("pinnedMessages"),
+    /** One id per user intent, so a repeated click replays the first pin instead of posting twice. */
+    operationId: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<{ messageId: string | null; resent: boolean }> => {
+    const keys = idempotencyKeys("dashboard", args.operationId, serverOperationId);
     const userId = await getAuthUserId(ctx);
     if (!userId) {
       throw new Error("Not authenticated");
@@ -415,24 +536,29 @@ export const repinFromHistory = action({
       startedAt ?? undefined
     );
 
-    const { messageId, resent } = await repinOnTwitch(
-      twitch,
-      await twitchHelixRoute(ctx, args.instanceId, "twitch.pins"),
-      plan,
-      entry.content,
-      async () => {
-        await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
-      }
-    );
+    const beforeResend = async () => {
+      await authorizeTwitch(ctx, args.instanceId, SEND_SCOPE);
+    };
+    const route = await chatRoute(ctx, args.instanceId, "twitch.pins");
+    const { messageId, notPinned, resent } =
+      route.kind === "gateway"
+        ? await repinThroughGateway(route, plan, entry.content, keys, beforeResend)
+        : { ...(await repinOnTwitch(twitch, route.helix, plan, entry.content, beforeResend)), notPinned: null };
+    if (messageId === null && notPinned) {
+      throw notPinned;
+    }
 
     await ctx.runMutation(internal.pins.recordPinned, {
       instanceId: args.instanceId,
       userId,
       content: entry.content,
-      twitchMessageId: messageId,
+      twitchMessageId: messageId ?? undefined,
       entryId: args.entryId,
       at: Date.now(),
     });
+    if (notPinned) {
+      throw notPinned;
+    }
 
     return { messageId, resent };
   },
