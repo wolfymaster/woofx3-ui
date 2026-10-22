@@ -1,11 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import {
-  buildTriggerOptions,
-  dryRunWouldDo,
-  MAX_TRIGGER_DATA_BYTES,
-  optionsWereIgnored,
-  type TriggerWorkflowResponse,
-} from "./engineTestRun";
+import { buildTriggerOptions, dryRunWouldDo, MAX_TRIGGER_DATA_BYTES } from "./engineTestRun";
 
 describe("dryRunWouldDo", () => {
   it("reads the description a dry-run step recorded", () => {
@@ -46,25 +40,5 @@ describe("buildTriggerOptions", () => {
   it("refuses a sample over the engine's limit", () => {
     const built = buildTriggerOptions({ triggerData: { text: "x".repeat(MAX_TRIGGER_DATA_BYTES) } });
     expect(built.ok).toBe(false);
-  });
-});
-
-describe("optionsWereIgnored", () => {
-  const response = (status: string): TriggerWorkflowResponse => ({
-    executionId: status === "started" ? "run-1" : "",
-    status,
-    message: "",
-    triggerId: "t",
-  });
-
-  it("is true when options were sent and the old requested answer came back", () => {
-    expect(optionsWereIgnored({ triggerData: {} }, response("requested"))).toBe(true);
-    expect(optionsWereIgnored({ dryRun: true }, response("requested"))).toBe(true);
-  });
-
-  it("is false when the engine answered, or nothing was asked", () => {
-    expect(optionsWereIgnored({ triggerData: {} }, response("started"))).toBe(false);
-    expect(optionsWereIgnored({ triggerData: {} }, response("conditions_not_met"))).toBe(false);
-    expect(optionsWereIgnored({}, response("requested"))).toBe(false);
   });
 });

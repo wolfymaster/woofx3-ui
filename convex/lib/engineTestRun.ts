@@ -122,15 +122,6 @@ export function buildTriggerOptions(input: {
   return { ok: true, options };
 }
 
-/**
- * Whether an engine ignored the options it was sent: it answered the old
- * `requested`, which an engine with options never does once it has any.
- */
-export function optionsWereIgnored(options: TriggerWorkflowOptions, response: TriggerWorkflowResponse): boolean {
-  const asked = options.triggerData !== undefined || options.dryRun === true;
-  return asked && response.status === "requested";
-}
-
 /** The outputs a side-effect step records in a dry run instead of executing. */
 export interface DryRunStepOutputs {
   dryRun: true;

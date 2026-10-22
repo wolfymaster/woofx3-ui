@@ -29,11 +29,7 @@ import { useTransientEvents } from "@/engine/hooks/use-correlated-request";
 import { useTriggerWorkflowRequest, useWorkflowRun } from "@/engine/hooks/use-workflows";
 import type { WorkflowRunDetail, WorkflowTriggerResult } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
-import {
-  rememberOptionsUnsupported,
-  type TestRunOptionsState,
-  useTestRunSupport,
-} from "@/hooks/use-test-run-capabilities";
+import { type TestRunOptionsState, useTestRunSupport } from "@/hooks/use-test-run-capabilities";
 import { useToast } from "@/hooks/use-toast";
 import {
   settleTestEventOutcome,
@@ -351,9 +347,6 @@ function DirectTest({
         TEST_EVENT_PUBLISH_TIMEOUT_MS,
         "The engine didn't answer. Check that it is running, then try again."
       );
-      if (result.optionsIgnored) {
-        rememberOptionsUnsupported(instanceId);
-      }
       setAttempt({ triggerData, dryRun, result });
       return result.triggerId;
     } catch (err) {
@@ -515,11 +508,6 @@ function DirectOutcome({
 
   return (
     <div className="space-y-2">
-      {result.optionsIgnored && (
-        <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="test-run-options-ignored">
-          This engine doesn't take sample data or dry runs yet, so the workflow ran without them, for real.
-        </p>
-      )}
       <TestRunOutcome
         triggerId={result.triggerId}
         engineWorkflowId={engineWorkflowId}

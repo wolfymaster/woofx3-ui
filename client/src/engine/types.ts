@@ -929,8 +929,6 @@ export interface WorkflowTriggerResult {
   executionId: string | null;
   unmetConditions: UnmetTriggerCondition[];
   dryRun: boolean;
-  /** True when the engine ran the workflow without the test-run options it was given. */
-  optionsIgnored: boolean;
 }
 
 /** A recorded run to run again, whole or from one step. */

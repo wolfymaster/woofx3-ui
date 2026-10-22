@@ -10,7 +10,6 @@ import { createEngineRpcSession, type EngineApi } from "./lib/engineInstanceUrl"
 import {
   buildTriggerOptions,
   type CancelWorkflowResult,
-  optionsWereIgnored,
   type TestRunEngineApi,
   type UnmetTriggerCondition,
 } from "./lib/engineTestRun";
@@ -204,9 +203,7 @@ export const trigger = action({
     workflowNameOrId: v.string(),
     parameters: v.optional(v.record(v.string(), v.string())),
     origin: v.optional(manualRunOrigin),
-    // Test-run options; see lib/engineTestRun.ts. An engine without them
-    // ignores them and runs the workflow as if none were given, which
-    // `optionsIgnored` reports.
+    // Test-run options; see lib/engineTestRun.ts. Sent only to engines that advertise workflow.testRunOptions.
     options: v.optional(
       v.object({
         triggerData: v.optional(v.record(v.string(), v.any())),
@@ -244,7 +241,6 @@ export const trigger = action({
       executionId: response.executionId || null,
       unmetConditions: response.unmetConditions ?? [],
       dryRun: response.dryRun === true,
-      optionsIgnored: optionsWereIgnored(built.options, response),
     };
   },
 });
@@ -257,8 +253,6 @@ interface TriggerResult {
   executionId: string | null;
   unmetConditions: UnmetTriggerCondition[];
   dryRun: boolean;
-  /** True when options were sent and the engine, predating them, ran without them. */
-  optionsIgnored: boolean;
 }
 
 /**
