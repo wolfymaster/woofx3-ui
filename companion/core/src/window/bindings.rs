@@ -65,9 +65,11 @@ fn command_types() -> Vec<(&'static str, TypeName, TypeName)> {
 
 /// The file's contents.
 pub fn window_bindings() -> String {
-    // Every integer the host sends fits in a JavaScript number (epoch
-    // milliseconds, ids, ports), and serde writes them as JSON numbers, so
-    // they are `number` rather than ts-rs's default `bigint`.
+    // serde writes every integer as a JSON number, so the bindings type them
+    // as `number` rather than ts-rs's default `bigint`. That holds only for
+    // values up to `MAX_SAFE_INTEGER` (2^53 - 1): epoch milliseconds, ids,
+    // ports and counts all are. A field that could pass it must not be
+    // added as an integer; send it as a string.
     let cfg = Config::new().with_large_int("number");
     let declarations = [
         declaration::<CompanionState>(&cfg),

@@ -61,7 +61,8 @@ impl Default for StreamMarkerOptions {
     }
 }
 
-/// Where the stream start marker stands. Times are [`EpochMillis`].
+/// Where the stream start marker stands. Times are milliseconds since the Unix
+/// epoch on this PC's clock.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]

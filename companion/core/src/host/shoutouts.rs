@@ -70,7 +70,8 @@ pub struct ShoutoutChannel {
     pub broadcaster_type: Option<String>,
 }
 
-/// A channel waiting in the queue. Times are [`EpochMillis`].
+/// A channel waiting in the queue. Times are milliseconds since the Unix
+/// epoch on this PC's clock.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
@@ -250,6 +251,10 @@ impl ShoutoutQueue {
                 return false;
             }
             let id = ShoutoutEntryId(state.next_id);
+            debug_assert!(
+                id.0 <= crate::window::MAX_SAFE_INTEGER,
+                "the window reads entry ids as JavaScript numbers"
+            );
             state.next_id += 1;
             state.entries.push(ShoutoutEntry {
                 id,

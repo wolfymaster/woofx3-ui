@@ -18,6 +18,12 @@ pub use command_args::{
     SetEndpointEnabledArgs, SetSharePasswordArgs, TestEndpointArgs, UseDiscoveredArgs,
 };
 
+/// The largest integer a JavaScript number holds exactly, 2^53 - 1
+/// (`Number.MAX_SAFE_INTEGER`). The window's bindings type every integer
+/// the host sends as `number`, so none may exceed it; a value that could
+/// must be sent as a string instead.
+pub const MAX_SAFE_INTEGER: u64 = (1 << 53) - 1;
+
 macro_rules! command_name_list {
     ($($name:ident($args:ty) -> $result:ty),* $(,)?) => {
         &[$(stringify!($name)),*]
