@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Doc } from "@convex/_generated/dataModel";
 import { COUNTER_KIND, QUEUE_KIND, TIMER_KIND } from "@convex/lib/resourceKinds";
-import { useAction, useQuery } from "convex/react";
+import { useQuery } from "convex/react";
 import {
   Bell,
   Boxes,
@@ -39,6 +39,8 @@ import {
   useResourceValues,
 } from "@/engine/hooks/use-module-resources";
 import { useScenes } from "@/engine/hooks/use-scenes";
+import { useStreamInfoPresets, useUpdateStreamInfoRequest } from "@/engine/hooks/use-stream-info";
+import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
 import { useSetWorkflowEnabledRequest, useWorkflows } from "@/engine/hooks/use-workflows";
 import type { ModuleResourceInstance } from "@/engine/types";
 import { useFireTestEvent } from "@/hooks/use-fire-test-event";
@@ -100,7 +102,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
     instanceId ? { instanceId, limit: RECENT_RECAPS } : "skip"
   );
   const macros = useQuery(api.macros.list, args);
-  const presets = useQuery(api.streamInfo.listPresets, args);
+  const presets = useStreamInfoPresets();
   const counters = useResourceInstancesOfKind(COUNTER_KIND);
   const timers = useResourceInstancesOfKind(TIMER_KIND);
   const queues = useResourceInstancesOfKind(QUEUE_KIND);
@@ -115,8 +117,8 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const setWorkflowEnabled = useSetWorkflowEnabledRequest();
   const updateCommand = useUpdateChatCommandRequest();
   const runMacro = useRunMacroRequest();
-  const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
-  const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
+  const sendChatMessage = useSendChatMessageRequest();
+  const updateChannelInfo = useUpdateStreamInfoRequest();
   const runResourceAction = useResourceActionRunner();
   const runAimedAction = useAimedResourceActionRunner();
   const fireTestEvent = useFireTestEvent();
@@ -558,7 +560,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         type: "run",
         run: async () => {
           if (macro.type === "send-message") {
-            await sendChatMessage({ instanceId, message: applyMacroVariables(macro.config, {}).message ?? "" });
+            await sendChatMessage(applyMacroVariables(macro.config, {}).message ?? "");
           } else {
             await runMacro(toMacroId(macro.id), []);
           }
@@ -579,7 +581,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
       action: {
         type: "run",
         run: async () => {
-          const { unapplied } = await updateChannelInfo({ instanceId, ...preset.info });
+          const { unapplied } = await updateChannelInfo(preset.info);
           return unapplied.length > 0
             ? `Applied ${preset.name}; Twitch kept its own ${unapplied.join(", ")}`
             : `Applied ${preset.name}`;

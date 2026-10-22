@@ -1,11 +1,9 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import type { StreamCategory } from "@convex/lib/streamInfo";
-import { useAction } from "convex/react";
 import { Gamepad2, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSearchCategoriesRequest } from "@/engine/hooks/use-stream-info";
+import type { StreamCategory } from "@/engine/types";
 import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { cn } from "@/lib/utils";
 
@@ -39,14 +37,13 @@ export function CategoryBoxArt({
 }
 
 interface CategoryPickerProps {
-  instanceId: Id<"instances">;
   value: StreamCategory | null;
   onChange: (category: StreamCategory | null) => void;
   disabled?: boolean;
 }
 
-export function CategoryPicker({ instanceId, value, onChange, disabled }: CategoryPickerProps) {
-  const searchCategories = useAction(api.streamInfo.searchCategories);
+export function CategoryPicker({ value, onChange, disabled }: CategoryPickerProps) {
+  const searchCategories = useSearchCategoriesRequest();
   const [query, setQuery] = useState("");
   const settledQuery = useDebouncedValue(query.trim(), SEARCH_DEBOUNCE_MS);
   const [results, setResults] = useState<{ query: string; categories: StreamCategory[] } | null>(null);
@@ -61,7 +58,7 @@ export function CategoryPicker({ instanceId, value, onChange, disabled }: Catego
     // Responses can land out of order; only the one for the query still in the
     // box is allowed to replace the list.
     let current = true;
-    searchCategories({ instanceId, query: settledQuery })
+    searchCategories(settledQuery)
       .then((categories) => {
         if (current) {
           setResults({ query: settledQuery, categories });
@@ -77,7 +74,7 @@ export function CategoryPicker({ instanceId, value, onChange, disabled }: Catego
     return () => {
       current = false;
     };
-  }, [instanceId, settledQuery, searchCategories]);
+  }, [settledQuery, searchCategories]);
 
   const searching = query.trim() !== "" && results?.query !== query.trim() && error === null;
 

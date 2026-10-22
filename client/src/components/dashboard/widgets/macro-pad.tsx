@@ -4,7 +4,7 @@ import { CHAT_COMMAND_RUN_RESTRICTION } from "@convex/lib/macroTrigger";
 import { closestCenter, DndContext, type DragEndEvent, PointerSensor, useSensor, useSensors } from "@dnd-kit/core";
 import { arrayMove, rectSortingStrategy, SortableContext, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Check, GripVertical, Loader2, Pencil, Plus, Radio, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/common/empty-state";
@@ -14,6 +14,7 @@ import { useEngineScope } from "@/engine/context";
 import { useChatCommands } from "@/engine/hooks/use-chat-commands";
 import { useRunMacroRequest } from "@/engine/hooks/use-macros";
 import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
+import { useSendChatMessageRequest } from "@/engine/hooks/use-twitch-chat";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
 import { toMacroId } from "@/lib/cloud-ids";
@@ -183,7 +184,7 @@ export function MacroPadModule() {
   const [workflows, setWorkflows] = useState<{ id: string; name: string }[]>([]);
   const listEngineWorkflows = useEngineWorkflowsRequest();
   const runMacroOnServer = useRunMacroRequest();
-  const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
+  const sendChatMessage = useSendChatMessageRequest();
   const { toast } = useToast();
 
   const instanceId = instance?._id;
@@ -315,7 +316,7 @@ export function MacroPadModule() {
           }
         } else if (macro.type === "send-message") {
           const resolved = applyMacroVariables(macro.config, values);
-          await sendChatMessage({ instanceId, message: resolved.message ?? "" });
+          await sendChatMessage(resolved.message ?? "");
         } else {
           if (!engineInstanceId) {
             return;

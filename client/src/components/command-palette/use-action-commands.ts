@@ -1,8 +1,8 @@
 import { api } from "@convex/_generated/api";
-import type { Doc, Id } from "@convex/_generated/dataModel";
+import type { Doc } from "@convex/_generated/dataModel";
 import { formatDuration, parseDuration, validateTimeoutSeconds } from "@convex/lib/moderation";
 import { useStore } from "@nanostores/react";
-import { useAction, useMutation } from "convex/react";
+import { useMutation } from "convex/react";
 import {
   Ban,
   BellOff,
@@ -29,7 +29,22 @@ import {
   Type,
   UserCheck,
 } from "lucide-react";
+import { useSnoozeNextAdRequest } from "@/engine/hooks/use-ad-breaks";
 import { useClearAlertQueueRequest, useSkipCurrentAlertRequest } from "@/engine/hooks/use-alert-queue";
+import { useCreateClipRequest } from "@/engine/hooks/use-clips";
+import {
+  useBanUserRequest,
+  useTimeoutUserRequest,
+  useUnbanUserRequest,
+  useUpdateChatSettingsRequest,
+} from "@/engine/hooks/use-moderation";
+import { usePinNewMessageRequest } from "@/engine/hooks/use-pins";
+import { useCreateStreamMarkerRequest, useUpdateStreamInfoRequest } from "@/engine/hooks/use-stream-info";
+import {
+  useSendAnnouncementRequest,
+  useSendChatMessageRequest,
+  useSendShoutoutRequest,
+} from "@/engine/hooks/use-twitch-chat";
 import { useAuthActions } from "@/hooks/use-convex-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { $commandBarHidden, $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
@@ -103,20 +118,20 @@ export function useActionCommands(
   setInstance: (id: string) => void
 ): PaletteCommand[] {
   const instanceId = instance?._id;
-  const createClip = useAction(api.twitchClips.createClip);
-  const createMarker = useAction(api.streamInfo.createMarker);
-  const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
-  const snoozeNextAd = useAction(api.adBreaks.snoozeNextAd);
+  const createClip = useCreateClipRequest();
+  const createMarker = useCreateStreamMarkerRequest();
+  const updateChannelInfo = useUpdateStreamInfoRequest();
+  const snoozeNextAd = useSnoozeNextAdRequest();
   const skipCurrentAlert = useSkipCurrentAlertRequest();
   const clearAlertQueue = useClearAlertQueueRequest();
-  const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
-  const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
-  const sendShoutout = useAction(api.twitchBroadcast.sendShoutout);
-  const pinNewMessage = useAction(api.pins.pinNewMessage);
-  const timeoutUser = useAction(api.moderation.timeoutUser);
-  const banUser = useAction(api.moderation.banUser);
-  const unbanUser = useAction(api.moderation.unbanUser);
-  const updateChatSettings = useAction(api.moderation.updateChatSettings);
+  const sendChatMessage = useSendChatMessageRequest();
+  const sendAnnouncement = useSendAnnouncementRequest();
+  const sendShoutout = useSendShoutoutRequest();
+  const pinNewMessage = usePinNewMessageRequest();
+  const timeoutUser = useTimeoutUserRequest();
+  const banUser = useBanUserRequest();
+  const unbanUser = useUnbanUserRequest();
+  const updateChatSettings = useUpdateChatSettingsRequest();
   const renameInstance = useMutation(api.instances.update);
   const { signOut } = useAuthActions();
   const { mode, modePreference, paletteId, setMode, toggleMode, selectPalette } = useTheme();
@@ -126,12 +141,12 @@ export function useActionCommands(
   const commands: PaletteCommand[] = [];
 
   if (instanceId) {
-    commands.push(...streamCommands(instanceId), ...chatCommands(instanceId), ...moderationCommands(instanceId));
+    commands.push(...streamCommands(), ...chatCommands(), ...moderationCommands());
   }
   commands.push(...appCommands());
   return commands;
 
-  function streamCommands(id: Id<"instances">): PaletteCommand[] {
+  function streamCommands(): PaletteCommand[] {
     return [
       {
         id: "stream:clip",
@@ -143,7 +158,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const { editUrl } = await createClip({ instanceId: id });
+            const { editUrl } = await createClip();
             // A new clip is a draft until it is trimmed and published in Twitch's editor.
             window.open(editUrl, "_blank", "noopener,noreferrer");
             return "Clip created — opened Twitch's editor";
@@ -165,7 +180,7 @@ export function useActionCommands(
             allowEmpty: true,
             submitLabel: (text) => (text ? `Add marker “${text}”` : "Add marker"),
             run: async (text) => {
-              await createMarker({ instanceId: id, description: text });
+              await createMarker(text);
               return "Marker added";
             },
           },
@@ -185,7 +200,7 @@ export function useActionCommands(
             aliases: ["title"],
             submitLabel: (text) => `Set title to “${text}”`,
             run: async (text) => {
-              const { unapplied } = await updateChannelInfo({ instanceId: id, title: text });
+              const { unapplied } = await updateChannelInfo({ title: text });
               return unapplied.includes("title") ? "Twitch kept the old title" : "Title updated";
             },
           },
@@ -201,7 +216,7 @@ export function useActionCommands(
         action: {
           type: "run",
           run: async () => {
-            const result = await snoozeNextAd({ instanceId: id });
+            const result = await snoozeNextAd();
             return `Ad snoozed — ${result.snoozeCount} snooze${result.snoozeCount === 1 ? "" : "s"} left`;
           },
         },
@@ -246,7 +261,7 @@ export function useActionCommands(
     ];
   }
 
-  function chatCommands(id: Id<"instances">): PaletteCommand[] {
+  function chatCommands(): PaletteCommand[] {
     return [
       {
         id: "chat:message",
@@ -262,7 +277,7 @@ export function useActionCommands(
             aliases: ["say", "chat"],
             submitLabel: (text) => `Send “${text}”`,
             run: async (text) => {
-              await sendChatMessage({ instanceId: id, message: text });
+              await sendChatMessage(text);
               return "Sent to chat";
             },
           },
@@ -282,7 +297,7 @@ export function useActionCommands(
             aliases: ["announce"],
             submitLabel: (text) => `Announce “${text}”`,
             run: async (text) => {
-              await sendAnnouncement({ instanceId: id, message: text, color: "primary" });
+              await sendAnnouncement({ message: text, color: "primary" });
               return "Announcement sent";
             },
           },
@@ -302,7 +317,7 @@ export function useActionCommands(
             aliases: ["pin"],
             submitLabel: (text) => `Pin “${text}”`,
             run: async (text) => {
-              await pinNewMessage({ instanceId: id, text });
+              await pinNewMessage(text);
               return "Message pinned";
             },
           },
@@ -322,7 +337,7 @@ export function useActionCommands(
             aliases: ["so", "shoutout", "shout out"],
             submitLabel: (text) => `Shout out ${stripAt(text)}`,
             run: async (text) => {
-              await sendShoutout({ instanceId: id, targetLogin: stripAt(text) });
+              await sendShoutout(stripAt(text));
               return `Shouted out ${stripAt(text)}`;
             },
           },
@@ -331,7 +346,7 @@ export function useActionCommands(
     ];
   }
 
-  function moderationCommands(id: Id<"instances">): PaletteCommand[] {
+  function moderationCommands(): PaletteCommand[] {
     const modes: PaletteCommand[] = CHAT_MODES.flatMap((chatMode) =>
       (["on", "off"] as const).map((state) => ({
         id: `moderation:mode:${chatMode.id}:${state}`,
@@ -345,7 +360,7 @@ export function useActionCommands(
         action: {
           type: "run" as const,
           run: async () => {
-            await updateChatSettings({ instanceId: id, patch: chatMode[state] });
+            await updateChatSettings(chatMode[state]);
             return `${chatMode.label} ${state}`;
           },
         },
@@ -376,7 +391,7 @@ export function useActionCommands(
               if ("error" in parsed) {
                 throw new Error(parsed.error);
               }
-              await timeoutUser({ instanceId: id, login: parsed.login, seconds: parsed.seconds });
+              await timeoutUser(parsed.login, parsed.seconds);
               return `Timed out ${parsed.login}`;
             },
           },
@@ -395,7 +410,7 @@ export function useActionCommands(
             aliases: ["ban"],
             submitLabel: (text) => `Ban ${stripAt(text)}`,
             run: async (text) => {
-              await banUser({ instanceId: id, login: stripAt(text) });
+              await banUser(stripAt(text));
               return `Banned ${stripAt(text)}`;
             },
           },
@@ -415,7 +430,7 @@ export function useActionCommands(
             aliases: ["unban"],
             submitLabel: (text) => `Unban ${stripAt(text)}`,
             run: async (text) => {
-              await unbanUser({ instanceId: id, login: stripAt(text) });
+              await unbanUser(stripAt(text));
               return `Unbanned ${stripAt(text)}`;
             },
           },

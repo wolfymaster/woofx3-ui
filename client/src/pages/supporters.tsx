@@ -1,7 +1,7 @@
 import { api } from "@convex/_generated/api";
 import type { Id } from "@convex/_generated/dataModel";
 import type { SupporterMetric, SupporterStream } from "@convex/lib/supporters";
-import { useAction, useMutation, useQuery } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { Copy, Gem, Gift, Loader2, Megaphone, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EngineFeatureGate } from "@/components/engine/engine-feature-gate";
@@ -17,6 +17,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEngineScope } from "@/engine/context";
 import { useEngineCapabilities } from "@/engine/hooks/use-engine-capabilities";
+import { useEnqueueShoutoutRequest } from "@/engine/hooks/use-shoutouts";
 import {
   useSupporterLeaderboardRequest,
   useSupporterStreamsRequest,
@@ -482,7 +483,7 @@ function ViewerDetail({
 }) {
   const readViewerTotals = useViewerSupportTotalsRequest();
   const findTwitchViewer = useAction(api.supporters.findTwitchViewer);
-  const enqueueShoutout = useMutation(api.shoutouts.enqueue);
+  const enqueueShoutout = useEnqueueShoutoutRequest();
   const canShoutOut = useQuery(api.supporters.canShoutOut, { instanceId });
   const [queueing, setQueueing] = useState(false);
 
@@ -506,12 +507,11 @@ function ViewerDetail({
     setQueueing(true);
     try {
       await enqueueShoutout({
-        instanceId,
         twitchUserId: user.twitchUserId,
         login: user.login,
         displayName: user.displayName,
-        profileImageUrl: user.profileImageUrl,
-        broadcasterType: user.broadcasterType,
+        profileImageUrl: user.profileImageUrl ?? null,
+        broadcasterType: user.broadcasterType ?? null,
       });
       toast({
         title: "Shoutout queued",
@@ -522,7 +522,7 @@ function ViewerDetail({
     } finally {
       setQueueing(false);
     }
-  }, [enqueueShoutout, instanceId, twitch.data]);
+  }, [enqueueShoutout, twitch.data]);
 
   return (
     <div className="space-y-5" data-testid="viewer-detail">

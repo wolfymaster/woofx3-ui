@@ -1,14 +1,22 @@
 import type {
+  AdSchedule,
+  AdSnoozeResult,
   AlertClearResult,
   AlertComposition,
   AlertOverview,
   AlertReplayResult,
   AlertSkipResult,
   AlertTargetUsage,
+  Announcement,
+  BlockedTerm,
+  BlockedTermList,
   ChatCommand,
   ChatCommandChanges,
   ChatCommandGroup,
   ChatCommandGroupChanges,
+  ChatSettings,
+  ChatSettingsPatch,
+  Chatter,
   CompositionPreviewUrl,
   ConfigExportRequest,
   ConfigImportPlan,
@@ -17,7 +25,9 @@ import type {
   Correlated,
   CorrelatedRequestKind,
   CorrelatedRequests,
+  CreatedClip,
   CreatedModuleResourceInstance,
+  CurrentPin,
   DeclaredResourceKind,
   EngineAlert,
   EngineCapabilityReport,
@@ -32,13 +42,23 @@ import type {
   EventLogSelection,
   EventLogSettings,
   EventWatch,
+  GoLiveCheckId,
+  GoLiveChecklistState,
+  GoLiveCompletion,
+  GoLiveFinish,
+  GoLiveOverlayFacts,
+  GoLiveStreamInfoFacts,
+  GoLiveTwitchFacts,
   HostedStorageUsage,
   InstanceLiveState,
+  KnownBoxArt,
   Live,
   MacroId,
   MacroRunResult,
   MacroVariableValue,
   MarketplaceBundleInstall,
+  ModeratedUser,
+  ModerationAccess,
   ModuleDetail,
   ModuleFileContent,
   ModuleFileList,
@@ -54,14 +74,19 @@ import type {
   NewLibraryAlert,
   NewModuleResourceInstance,
   NewScene,
+  NewStreamInfoPreset,
   NotRunningWorkflow,
   ObsStatus,
   OpenSessionRefresh,
   Paginated,
+  PinHistoryEntry,
+  PinHistoryEntryId,
+  PinnedMessage,
   PublishedTestEvent,
   ReadOptions,
   RecapTimelineEvents,
   RecordedWorkflowRun,
+  RepinnedMessage,
   Resource,
   ResourceChanges,
   ResourcePage,
@@ -76,17 +101,27 @@ import type {
   SetupImportAnalysis,
   SetupImportId,
   SetupImportReport,
+  ShoutoutEntry,
+  ShoutoutEntryId,
   StarterPackInstall,
   StarterPackInstallOutcome,
   StarterPackItemState,
   StorageConfig,
+  StreamCategory,
   StreamEventFrame,
+  StreamInfo,
+  StreamInfoChanges,
+  StreamInfoPreset,
+  StreamInfoPresetId,
+  StreamInfoUpdate,
+  StreamMarker,
   StreamRecapEngineDetail,
   Supporter,
   SupporterLeaderboardQuery,
   SupporterStream,
   TestRunCapabilities,
   TransientEvent,
+  TwitchChannel,
   TwitchLink,
   TwitchLinkFlow,
   UploadGrant,
@@ -144,6 +179,14 @@ export interface EngineGateway {
   readonly moduleOAuth: ModuleOAuthGateway;
   readonly setupImports: SetupImportsGateway;
   readonly starterPacks: StarterPacksGateway;
+  readonly adBreaks: AdBreaksGateway;
+  readonly moderation: ModerationGateway;
+  readonly pins: PinsGateway;
+  readonly shoutouts: ShoutoutsGateway;
+  readonly twitchChat: TwitchChatGateway;
+  readonly clips: ClipsGateway;
+  readonly streamInfo: StreamInfoGateway;
+  readonly goLive: GoLiveGateway;
 }
 
 /** Engine reachability, version, features and stream state. */
@@ -655,4 +698,120 @@ export interface StarterPacksGateway {
   useStatus(): Live<Record<string, StarterPackItemState> | null>;
   /** Installs a pack's items and resolves with how each went; an item can still be pending on the engine. */
   useInstallRequest(): (install: StarterPackInstall) => Promise<StarterPackInstallOutcome[]>;
+}
+
+// The namespaces below act on the linked Twitch channel as its broadcaster.
+// A request rejects with words for the streamer, such as a missing Twitch
+// permission to reconnect for, an offline channel, or Twitch's own refusal.
+
+/** The channel's ad schedule, and snoozing the next ad. Any member may snooze. */
+export interface AdBreaksGateway {
+  useScheduleRequest(): () => Promise<AdSchedule>;
+  useSnoozeRequest(): () => Promise<AdSnoozeResult>;
+}
+
+/**
+ * Blocked terms, timeouts and bans, and chat modes. Who may do what depends
+ * on the caller's role and the link's scopes; every request enforces it, and
+ * `useAccess` reports it so a screen can disable and explain.
+ */
+export interface ModerationGateway {
+  /** Null when the caller cannot see the instance. */
+  useAccess(options?: ReadOptions): Live<ModerationAccess | null>;
+  useBlockedTermsRequest(): () => Promise<BlockedTermList>;
+  useAddBlockedTermRequest(): (text: string) => Promise<BlockedTerm>;
+  useRemoveBlockedTermRequest(): (termId: string) => Promise<void>;
+  /** Times out a viewer by login for `seconds`. */
+  useTimeoutRequest(): (login: string, seconds: number) => Promise<ModeratedUser>;
+  useBanRequest(): (login: string, reason?: string) => Promise<ModeratedUser>;
+  /** Lifts a ban or a timeout. */
+  useUnbanRequest(): (login: string) => Promise<ModeratedUser>;
+  useChatSettingsRequest(): () => Promise<ChatSettings>;
+  /** Resolves with the chat modes as Twitch holds them afterwards. */
+  useUpdateChatSettingsRequest(): (patch: ChatSettingsPatch) => Promise<ChatSettings>;
+}
+
+/**
+ * The chat's one pinned message, and a history of messages worth pinning
+ * again. Twitch keeps a single pin per channel, so pinning replaces it.
+ */
+export interface PinsGateway {
+  /** Newest first. Empty when the caller cannot see the instance. */
+  useHistory(options?: ReadOptions): Live<PinHistoryEntry[]>;
+  /** Null when nothing is pinned. A pin made outside the app joins the history the first time it is read. */
+  useCurrentRequest(): () => Promise<CurrentPin | null>;
+  /** Posts a message, pins it, and keeps it in the history. */
+  usePinNewRequest(): (text: string) => Promise<PinnedMessage>;
+  /** Pins a history entry again, posting its text anew when the original message can no longer be pinned. */
+  useRepinRequest(): (entryId: PinHistoryEntryId) => Promise<RepinnedMessage>;
+  useUnpinRequest(): (messageId: string) => Promise<void>;
+  useRemoveFromHistoryRequest(): (entryId: PinHistoryEntryId) => Promise<void>;
+}
+
+/**
+ * The shoutout queue: channels waiting for a Twitch shoutout, sent one at a
+ * time within Twitch's rate limits. Workflows and chat commands add to the
+ * same queue.
+ */
+export interface ShoutoutsGateway {
+  /** In queue order. Empty when the caller cannot see the instance. */
+  useQueue(options?: ReadOptions): Live<ShoutoutEntry[]>;
+  /** The channel a login names, to confirm before queueing; null when there is none. */
+  useLookupRequest(): (login: string) => Promise<TwitchChannel | null>;
+  /** Queues a looked-up channel; a channel already waiting keeps its place. */
+  useEnqueueRequest(): (channel: TwitchChannel) => Promise<void>;
+  useRemoveRequest(): (entryId: ShoutoutEntryId) => Promise<void>;
+  /** Puts the queue in this order, showing it at once; an entry gone meanwhile is skipped. */
+  useReorderRequest(): (entryIds: ShoutoutEntryId[]) => Promise<void>;
+}
+
+/** Writing in the channel's chat as the broadcaster, and who is in it. */
+export interface TwitchChatGateway {
+  /** Rejects when Twitch takes the message but drops it (AutoMod, a duplicate), with its reason. */
+  useSendMessageRequest(): (message: string) => Promise<void>;
+  useSendAnnouncementRequest(): (announcement: Announcement) => Promise<void>;
+  /** A Twitch shoutout of another channel now, by login, outside the queue. */
+  useSendShoutoutRequest(): (login: string) => Promise<void>;
+  /** Everyone in chat now, one page of up to a thousand. */
+  useChattersRequest(): () => Promise<Chatter[]>;
+}
+
+export interface ClipsGateway {
+  /** Clips the live stream. Rejects while the channel is offline or has clipping off. */
+  useCreateRequest(): () => Promise<CreatedClip>;
+}
+
+/** The channel's title, category and tags, VOD markers, and named presets of the three. */
+export interface StreamInfoGateway {
+  /** `knownBoxArt` saves a lookup when the category has not changed. */
+  useChannelRequest(): (knownBoxArt?: KnownBoxArt) => Promise<StreamInfo>;
+  /** At most ten; empty for a blank query. */
+  useSearchCategoriesRequest(): (query: string) => Promise<StreamCategory[]>;
+  /** Writes only the fields given, so a field changed elsewhere since it was read is not reverted. */
+  useUpdateRequest(): (changes: StreamInfoChanges) => Promise<StreamInfoUpdate>;
+  /** Rejects while the channel is offline or keeps no VODs. */
+  useCreateMarkerRequest(): (description?: string) => Promise<StreamMarker>;
+  /** By name. Empty when the caller cannot see the instance. */
+  usePresets(options?: ReadOptions): Live<StreamInfoPreset[]>;
+  useSavePresetRequest(): (preset: NewStreamInfoPreset) => Promise<StreamInfoPresetId>;
+  useRemovePresetRequest(): (presetId: StreamInfoPresetId) => Promise<void>;
+}
+
+/**
+ * The go-live checklist run just before a stream: each check that asks
+ * Twitch is its own request so the checks run side by side, and finishing it
+ * posts the announcement and drops the start marker.
+ */
+export interface GoLiveGateway {
+  /** Null when the caller cannot see the instance. */
+  useChecklist(options?: ReadOptions): Live<GoLiveChecklistState | null>;
+  /** The instance's scenes and browser sources; null when the caller cannot see the instance. */
+  useOverlays(options?: ReadOptions): Live<GoLiveOverlayFacts | null>;
+  /** Hides a check from the checklist, or shows it again. */
+  useSetCheckDismissedRequest(): (checkId: GoLiveCheckId, dismissed: boolean) => Promise<void>;
+  /** Whether Twitch still accepts the link and it holds every required scope. */
+  useCheckTwitchRequest(): () => Promise<GoLiveTwitchFacts>;
+  useCheckStreamInfoRequest(): () => Promise<GoLiveStreamInfoFacts>;
+  /** Each step reports its own outcome rather than rejecting. */
+  useCompleteRequest(): (finish: GoLiveFinish) => Promise<GoLiveCompletion>;
 }

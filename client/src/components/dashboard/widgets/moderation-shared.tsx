@@ -1,5 +1,5 @@
-import type { CapabilityStatus } from "@convex/lib/moderation";
 import type { ReactNode } from "react";
+import type { ModerationCapabilityStatus } from "@/engine/types";
 
 const PERMISSION_NAMES = {
   addBlockedTerm: "block terms",
@@ -14,7 +14,7 @@ export function CapabilityNote({
   status,
   capability,
 }: {
-  status: CapabilityStatus;
+  status: ModerationCapabilityStatus;
   capability: keyof typeof PERMISSION_NAMES;
 }) {
   if (status === "ready") {

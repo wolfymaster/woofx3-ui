@@ -1,19 +1,12 @@
-import { api } from "@convex/_generated/api";
-import type { Id } from "@convex/_generated/dataModel";
-import {
-  type CapabilityStatus,
-  type ChatSettings,
-  type ChatSettingsPatch,
-  FOLLOWER_MODE_OPTIONS,
-  SLOW_MODE_OPTIONS,
-} from "@convex/lib/moderation";
-import { useAction } from "convex/react";
+import { FOLLOWER_MODE_OPTIONS, SLOW_MODE_OPTIONS } from "@convex/lib/moderation";
 import { Loader2 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { ToastAction } from "@/components/ui/toast";
+import { useChatSettingsRequest, useUpdateChatSettingsRequest } from "@/engine/hooks/use-moderation";
+import type { ChatSettings, ChatSettingsPatch, ModerationCapabilityStatus } from "@/engine/types";
 import { useAttendedInterval } from "@/hooks/use-attended-interval";
 import { useToast } from "@/hooks/use-toast";
 import { actionErrorMessage } from "@/lib/action-error";
@@ -26,10 +19,10 @@ const SETTINGS_REFRESH_MS = 60_000;
 const DEFAULT_FOLLOWER_MINUTES = 10;
 const DEFAULT_SLOW_SECONDS = 30;
 
-export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"instances">; status: CapabilityStatus }) {
+export function ChatLockdownSection({ status }: { status: ModerationCapabilityStatus }) {
   const { toast } = useToast();
-  const getChatSettings = useAction(api.moderation.getChatSettings);
-  const updateChatSettings = useAction(api.moderation.updateChatSettings);
+  const getChatSettings = useChatSettingsRequest();
+  const updateChatSettings = useUpdateChatSettingsRequest();
 
   const [settings, setSettings] = useState<ChatSettings | null>(null);
   const [busy, setBusy] = useState(false);
@@ -60,7 +53,7 @@ export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"in
       return;
     }
     const current = fence.read();
-    getChatSettings({ instanceId })
+    getChatSettings()
       .then((next) => {
         loaded.current = true;
         setLoadError(null);
@@ -73,7 +66,7 @@ export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"in
           setLoadError(actionErrorMessage(err));
         }
       });
-  }, [instanceId, getChatSettings, adopt, fence]);
+  }, [getChatSettings, adopt, fence]);
 
   useEffect(() => {
     refresh();
@@ -86,7 +79,7 @@ export function ChatLockdownSection({ instanceId, status }: { instanceId: Id<"in
     setBusy(true);
     setError(null);
     try {
-      adopt(await updateChatSettings({ instanceId, patch }));
+      adopt(await updateChatSettings(patch));
       return true;
     } catch (err) {
       setError(actionErrorMessage(err));
