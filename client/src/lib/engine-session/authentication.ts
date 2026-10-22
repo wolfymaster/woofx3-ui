@@ -13,8 +13,11 @@ const LEGACY_AUTHENTICATION_REFUSAL = "Invalid client credentials";
  * credentials change, so the session stops retrying. A wording this does not
  * recognise is read as a transport failure and retried, which is safe.
  *
- * TODO: drop the legacy message once every engine the desktop app can run
- * sends the prefix; engines released before it still send the plain message.
+ * TODO: replace this function and the prefix constant with
+ * `isAuthenticationRefused` from `@woofx3/api/rpc`, which owns the prefix.
+ * Not used yet because the engine package on master does not export it.
+ * Keep matching the legacy message while the desktop app can still run an
+ * engine released before the prefix.
  */
 export function isAuthenticationRefused(error: unknown): boolean {
   if (!(error instanceof Error)) {

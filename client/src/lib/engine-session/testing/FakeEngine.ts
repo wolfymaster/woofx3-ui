@@ -21,6 +21,10 @@ import type { EngineTarget } from "../target";
 // fake run on that copy, or a target passed across would not serialize. The
 // package exports no MessagePort session, so `capnweb` is resolved the way
 // the package resolves it, wherever its dependencies are installed.
+//
+// TODO: import `newMessagePortRpcSession` from `@woofx3/api/client` and drop
+// this lookup, whose two-argument `import.meta.resolve` works only under Bun.
+// Not done yet because the engine package on master does not export it.
 const { newMessagePortRpcSession }: typeof import("capnweb") = await import(
   import.meta.resolve("capnweb", import.meta.resolve("@woofx3/api/client"))
 );
