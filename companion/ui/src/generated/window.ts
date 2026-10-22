@@ -91,7 +91,7 @@ export type TestResult = { "kind": "ok", protocol: string | null, } | { "kind": 
  * engine: the engine's `/api` URL and the client credentials this host
  * registered.
  */
-export type LocalEngineSession = { "kind": "notLocal" } | { "kind": "starting" } | { "kind": "ready", apiUrl: string, clientId: string, clientSecret: string, } | { "kind": "failed", reason: string, };
+export type LocalEngineSession = { "kind": "notLocal" } | { "kind": "starting" } | { "kind": "migrating" } | { "kind": "ready", apiUrl: string, clientId: string, clientSecret: string, } | { "kind": "failed", reason: string, } | { "kind": "stopped", reason: string, };
 
 /**
  * An entry's id, unique for the life of the queue. A newtype, so serde
