@@ -126,7 +126,7 @@ In local mode the companion runs the engine's orchestrator as its one sidecar pr
 
 The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases).
 
-- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours. A failed check is tried again after 1 minute, doubling with each failure in a row up to 6 hours, with jitter, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
+- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
 - A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
 - Once downloaded, `WindowState.update` carries its version. The window shows "woofx3 companion {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
 - A failed check, download or signature is logged and tried again on that backoff. It never becomes the `error` state, which is about pairing.
