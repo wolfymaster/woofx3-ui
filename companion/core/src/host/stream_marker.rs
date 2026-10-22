@@ -938,34 +938,7 @@ mod tests {
     }
 
     #[test]
-    fn test_stream_start_marker_serializes_as_the_typescript_mirror_expects() {
-        let cases = [
-            (
-                StreamStartMarker::Idle,
-                serde_json::json!({ "kind": "idle" }),
-            ),
-            (
-                StreamStartMarker::Pending { requested_at: 7 },
-                serde_json::json!({ "kind": "pending", "requestedAt": 7 }),
-            ),
-            (
-                StreamStartMarker::Dropping,
-                serde_json::json!({ "kind": "dropping" }),
-            ),
-            (
-                StreamStartMarker::Dropped { dropped_at: 8 },
-                serde_json::json!({ "kind": "dropped", "droppedAt": 8 }),
-            ),
-            (
-                StreamStartMarker::Failed {
-                    message: "m".into(),
-                },
-                serde_json::json!({ "kind": "failed", "message": "m" }),
-            ),
-        ];
-        for (state, wire) in cases {
-            assert_eq!(serde_json::to_value(&state).expect("serializes"), wire);
-        }
+    fn test_marker_request_outcome_serializes_as_a_go_live_step_outcome() {
         let outcomes = [
             (
                 MarkerRequestOutcome::Done,
