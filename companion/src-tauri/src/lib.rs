@@ -1,5 +1,6 @@
 //! The woofx3 companion: a tray app that pairs this computer with a woofx3
-//! instance through the browser and stays connected to Convex. Its window
+//! instance through the browser and stays connected to Convex while paired.
+//! An unpaired companion holds no Convex connection. Its window
 //! renders `WindowState`; all work happens here, in Rust commands.
 //!
 //! Commands are async so none of them runs on the main thread: tray updates
@@ -8,6 +9,8 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
+#[cfg(test)]
+mod convex_url;
 mod credentials;
 mod installation;
 mod integration_store;
@@ -23,7 +26,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, State, WindowEvent};
 
-use cloud::Cloud;
+use cloud::CloudLink;
 use integrations::Integrations;
 use state::{CompanionState, IntegrationsView, ReadyUpdate, TestResult, WindowState, STATE_EVENT};
 use tray::Tray;
@@ -32,7 +35,7 @@ use update::Downloaded;
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
     app: AppHandle,
-    cloud: Cloud,
+    cloud_link: CloudLink,
     installation_id: String,
     /// Local endpoints served over the relay while paired and confirmed.
     integrations: Arc<Integrations>,
@@ -161,7 +164,9 @@ impl Companion {
         show_main_window(&self.app);
     }
 
-    /// Picks up where the last run left off, from the stored token.
+    /// Picks up where the last run left off, from the stored token. Only a
+    /// stored token opens the Convex connection; without one the companion
+    /// stays off the cloud until a pairing starts.
     async fn resume(self: Arc<Self>) {
         match credentials::load().await {
             Ok(None) => {
@@ -348,6 +353,7 @@ async fn reconnect_relay(companion: State<'_, Arc<Companion>>) -> Result<(), Str
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    woofx3_companion_core::install_tls_provider();
     tauri::Builder::default()
         // First, so a second launch hands over to this one before it opens a
         // second Convex connection.
@@ -358,18 +364,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
-            let cloud = tauri::async_runtime::block_on(Cloud::connect())?;
             let app_data_dir = app.path().app_data_dir()?;
             let installation_id = installation::load_or_create(&app_data_dir)?;
             let integrations = Arc::new(Integrations::new(
                 handle.clone(),
-                cloud.clone(),
                 &app_data_dir,
                 app.path().config_dir().ok(),
             ));
             let companion = Arc::new(Companion {
                 app: handle.clone(),
-                cloud,
+                cloud_link: CloudLink::dormant(),
                 installation_id,
                 integrations,
                 view: Mutex::new(WindowState {
@@ -426,4 +430,35 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running the woofx3 companion");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::convex_url::check_convex_url;
+
+    #[test]
+    fn test_check_convex_url_accepts_deployment_urls() {
+        for url in [
+            "https://happy-animal-123.convex.cloud",
+            "http://127.0.0.1:3210",
+            "https://convex.example.test/",
+        ] {
+            assert_eq!(check_convex_url(url), Ok(()), "{url}");
+        }
+    }
+
+    #[test]
+    fn test_check_convex_url_refuses_what_convex_cannot_connect_to() {
+        for url in [
+            "happy-animal-123.convex.cloud",
+            "wss://happy-animal-123.convex.cloud",
+            "ftp://example.test",
+            "https://",
+            " https://happy-animal-123.convex.cloud",
+            "https://happy-animal-123.convex.cloud\n",
+            "not a url",
+        ] {
+            assert!(check_convex_url(url).is_err(), "{url}");
+        }
+    }
 }

@@ -23,9 +23,9 @@ companion/
                       the bridge, address rules and OBS discovery. No Tauri.
 ```
 
-The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
+The Rust process owns the Convex connection (the `convex` crate), so it lasts as long as the tray icon rather than the window. The connection is optional: the companion starts without it and opens it only when a pairing starts or a stored pairing resumes (`CloudLink` in `cloud.rs`), so a computer that was never paired runs with no Convex connection at all. Unpairing, or a pairing that fails or is cancelled, closes it again once the calls that release the pairing on the server have finished. Closing the window hides it; **Quit** in the tray menu is the only way out. A second launch focuses the running one (`tauri-plugin-single-instance`).
 
-The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
+The Convex deployment URL is compiled in from `WOOFX3_CONVEX_URL` by `companion/src-tauri/build.rs`. A release build without it fails, and so does any build whose URL is not an `http` or `https` URL with a host; a debug build falls back to a local Convex backend so `cargo check` and tests need no deployment.
 
 ```bash
 WOOFX3_CONVEX_URL=https://<deployment>.convex.cloud bun run companion:dev
@@ -101,10 +101,10 @@ How the relay ends a connection decides what the companion does next:
 
 The companion updates itself with `tauri-plugin-updater` (`companion/src-tauri/src/update.rs`). How releases are cut and signed is in [Companion releases](/ops/companion-releases).
 
-- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours, only while connected to Convex. Debug builds never check.
+- It checks `latest.json` on the `companion-latest` release 30 seconds after starting and then every 6 hours. A failed check is tried again after 30 to 60 seconds (jittered), a wait that doubles with each failure in a row up to 6 hours, so a PC that started offline checks soon after it comes online. None of this depends on the Convex connection. Debug builds never check.
 - A newer release downloads in the background. The plugin verifies its signature, including the version it was signed for (`requireSignedVersion`), before the companion offers it.
 - Once downloaded, `WindowState.update` carries its version. The window shows "woofx3 companion {version} is ready" with **Restart to update**, and the tray menu gains **Restart to update to {version}**. Both call `install_update`, which runs the installer in passive mode and restarts into the new version. The companion never restarts on its own.
-- A failed check, download or signature is logged and tried again at the next interval. It never becomes the `error` state, which is about pairing.
+- A failed check, download or signature is logged and tried again on that backoff. It never becomes the `error` state, which is about pairing.
 - The installer is per user, so installs and updates need no administrator prompt.
 
 ## Pairing
