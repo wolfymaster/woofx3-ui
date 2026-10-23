@@ -33,6 +33,7 @@ export const ENGINE_CAPABILITY_IDS = [
   "modules.storageUsage",
   "obs.control",
   "obs.status",
+  "platform.gateway",
   "scenes.behaviors",
   "scenes.editorSessions",
   "scenes.editorSync",

@@ -22,6 +22,7 @@ import {
   type WorkflowFacts,
 } from "./lib/goLiveFacts";
 import { isMarkerRequestPending } from "./lib/goLiveMarker";
+import { chatRoute, idempotencyKeys, serverOperationId } from "./lib/platformGateway";
 import { getInstanceMembership, isInstanceMember } from "./lib/teamAccess";
 import {
   type AuthorizedTwitchCall,
@@ -31,9 +32,9 @@ import {
   missingTwitchScopeMessage,
 } from "./lib/twitchAuth";
 import { createStreamMarker, fetchChannelInfo } from "./lib/twitchChannels";
-import { MAX_CHAT_MESSAGE_LENGTH, sendChatMessage } from "./lib/twitchChat";
-import { twitchHelixRoute } from "./lib/twitchEngineHelix";
+import { MAX_CHAT_MESSAGE_LENGTH } from "./lib/twitchChat";
 import { missingRequiredTwitchScopes } from "./lib/twitchScopeHealth";
+import { sendChatLine } from "./twitchBroadcast";
 
 // The Go live checklist: a pre-flight run just before a stream starts, so a
 // broken setup is found by the streamer rather than by their viewers.
@@ -356,9 +357,15 @@ export const complete = action({
     announcement: v.optional(v.string()),
     /** Dropped now when live, else when the stream next goes live. */
     dropMarker: v.boolean(),
+    /**
+     * Names this completion, so finishing the checklist twice for the same
+     * go-live posts the announcement once.
+     */
+    operationId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<GoLiveCompletion> => {
     await requireMemberForAction(ctx, args.instanceId);
+    const keys = idempotencyKeys("golive", args.operationId, serverOperationId);
 
     const announcementText = args.announcement?.trim();
     if (args.announcement !== undefined && !announcementText) {
@@ -394,11 +401,11 @@ export const complete = action({
     if (announcementText) {
       try {
         requireScope(SEND_SCOPE);
-        await sendChatMessage(
+        await sendChatLine(
           twitch,
+          await chatRoute(ctx, args.instanceId, "twitch.chat"),
           announcementText,
-          { pin: false },
-          await twitchHelixRoute(ctx, args.instanceId, "twitch.chat")
+          keys("announce")
         );
         announcement = { status: "done" };
       } catch (error) {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import type { TwitchHelixResult } from "@woofx3/api";
+import { fakeGatewayRoute, twitchAnswer } from "./lib/platformGateway.fakes";
 import type { AuthorizedTwitchCall } from "./lib/twitchAuth";
 import type { TwitchHelixRoute } from "./lib/twitchEngineHelix";
 import {
@@ -12,7 +13,7 @@ import {
   stubFetch,
 } from "./lib/twitchEngineHelix.fakes";
 import { logger } from "./logger";
-import { postAnnouncement, postChatMessage, postShoutout } from "./twitchBroadcast";
+import { postAnnouncement, postChatMessage, postShoutout, sendAnnouncementLine, sendChatLine } from "./twitchBroadcast";
 
 const CALL: AuthorizedTwitchCall = { accessToken: "token", broadcasterUserId: "B1", clientId: "client" };
 const HELIX = "https://api.twitch.tv/helix";
@@ -163,4 +164,59 @@ describe("Twitch's refusals read the same on either path", () => {
       });
     }
   }
+});
+
+describe("through the platform gateway", () => {
+  test("a chat message and an announcement go to Twitch with their keys, and never to Helix", async () => {
+    const stub = helixAnswering(200, JSON.stringify(SENT));
+    const gateway = fakeGatewayRoute(twitchAnswer({ status: "delivered", messageId: "m1" }));
+    await sendChatLine(CALL, gateway.route, "hello chat", "dashboard:op_12345678:chat.send");
+    await sendAnnouncementLine(CALL, gateway.route, "we're live", "purple", "dashboard:op_12345678:chat.announce");
+    expect(gateway.calls).toEqual([
+      {
+        action: "chat.send",
+        platforms: ["twitch"],
+        payload: { message: "hello chat" },
+        idempotencyKey: "dashboard:op_12345678:chat.send",
+      },
+      {
+        action: "chat.announce",
+        platforms: ["twitch"],
+        payload: { message: "we're live" },
+        options: { twitch: { color: "purple" } },
+        idempotencyKey: "dashboard:op_12345678:chat.announce",
+      },
+    ]);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  test("a line the gateway could not confirm fails once, with no second send anywhere", async () => {
+    const stub = helixAnswering(200, JSON.stringify(SENT));
+    const gateway = fakeGatewayRoute({ ok: false, code: "timeout", error: "may have been sent" });
+    expect(await rejection(() => sendChatLine(CALL, gateway.route, "hello", "k"))).toContain("may already be in chat");
+    expect(gateway.calls).toHaveLength(1);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  test("a line Twitch dropped says why", async () => {
+    const gateway = fakeGatewayRoute(twitchAnswer({ status: "dropped", reason: "Held by AutoMod" }));
+    expect(await rejection(() => sendChatLine(CALL, gateway.route, "hello", "k"))).toBe(
+      "Twitch didn't post the chat message: Held by AutoMod"
+    );
+  });
+
+  test("Twitch turned off in the engine is not worked around through Helix", async () => {
+    const stub = helixAnswering(200, JSON.stringify(SENT));
+    const gateway = fakeGatewayRoute(twitchAnswer({ status: "unavailable", reason: "disabled" }));
+    expect(await rejection(() => sendAnnouncementLine(CALL, gateway.route, "hi", "primary", "k"))).toBe(
+      "The announcement wasn't sent: Twitch is turned off in the engine"
+    );
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  test("without the gateway the Helix route is used", async () => {
+    const stub = helixAnswering(200, JSON.stringify(SENT));
+    await sendChatLine(CALL, { kind: "helix", helix: DIRECT_ROUTE }, "hello chat", "k");
+    expect(stub.calls.map((call) => call.url)).toEqual([`${HELIX}/chat/messages`]);
+  });
 });

@@ -75,17 +75,27 @@ export async function twitchHelixRoute(
   instanceId: Id<"instances">,
   capability: EngineCapability
 ): Promise<TwitchHelixRoute> {
+  const gate = await twitchHelixRouteGate(ctx, instanceId, capability);
+  return gate ? chooseTwitchHelixRoute(gate) : directHelixRoute(instanceId);
+}
+
+/** How to ask the instance's engine, or null when the instance is not registered with one. */
+export async function twitchHelixRouteGate(
+  ctx: ActionCtx,
+  instanceId: Id<"instances">,
+  capability: EngineCapability
+): Promise<TwitchHelixRouteGate | null> {
   const instance = await ctx.runQuery(internal.instances.getInternal, { instanceId });
   if (!instance?.clientId || !instance.clientSecret) {
-    return directHelixRoute(instanceId);
+    return null;
   }
   const engine = { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret };
-  return chooseTwitchHelixRoute({
+  return {
     instanceId,
     capability,
     capabilities: () => withEngineTimeout(fetchEngineCapabilities(engine), CAPABILITY_TIMEOUT_MS),
     session: () => createEngineRpcSession<EngineApi>(engine.url, engine.clientId, engine.clientSecret),
-  });
+  };
 }
 
 export interface HelixRequest {
