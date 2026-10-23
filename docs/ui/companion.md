@@ -122,6 +122,8 @@ In local mode the companion runs the engine's orchestrator as its one sidecar pr
 - On Windows the orchestrator is started with `CREATE_NO_WINDOW`, which gives it the hidden console it needs to stop its services gracefully, and its job object ends every service when it exits. Elsewhere it is started in a process group of its own, and the group is killed whenever the orchestrator exits, so no service it left behind holds a port the next run needs. The exit is noticed without reaping the orchestrator, so the group id stays reserved until it has been killed and a kill can never reach an unrelated group. A supervisor that is dropped rather than stopped kills the tree as well.
 - When the orchestrator fails it is started again after a capped exponential backoff with jitter (1 second doubling to at most 60). A run that stayed ready for 60 seconds starts the backoff over.
 - When it exits cleanly without being asked (it has no enabled services, or something else stopped it), the sidecar stops for good with that reason rather than restarting it.
+- The orchestrator migrates the database first, as its run-once `migrate` step, before anything that opens the database starts. While the step runs, the engine's phase is migrating, and the window's `local_engine_session` answers `migrating`. The step reports `completed` when it succeeds.
+- A failed migration is final. The orchestrator reports an error naming `migrate`, then its own error, and exits 1. Running it again would fail the same way, and the engine must not start on a half-migrated database, so the sidecar stops for good. `local_engine_session` then answers `stopped` with the reason, as it does after a clean exit nobody asked for. Any other failure keeps the restart policy.
 
 The engine is configured as a local engine (`core/src/host/engine.rs`), following the desktop recipe in the engine's `docs/services/deployment.md`:
 
@@ -133,8 +135,9 @@ The engine is configured as a local engine (`core/src/host/engine.rs`), followin
 | `WOOFX3_API_PORT` | `apiPort` |
 | `WOOFX3_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` |
 | `WOOFX3_ALLOWED_ORIGINS` | `http://localhost:*,http://127.0.0.1:*,tauri://localhost,http://tauri.localhost` |
+| `WOOFX3_SCENE_MANAGER_ALLOWED_ORIGINS` | The same list plus `null` |
 
-The engine's recipe also allows `null` on sceneManager alone, for sandboxed widget frames. The orchestrator gives every service the same environment and `null` must not reach the api, so it is left out, and widget frames' CORS loads from sceneManager are refused in local mode.
+Sandboxed widget frames send `Origin: null` on their CORS loads from sceneManager (module scripts and fonts), so sceneManager's own list adds `null`. That list replaces the shared one for sceneManager alone. The shared list, which the api reads, never holds `null`: the api refuses to start with it, since a listed `null` admits every sandboxed page. The engine also refuses to start with a list that is set but names nothing (such as `,`), so the companion builds each list from named entries and never an empty one.
 
 ### Local registration
 
@@ -145,7 +148,7 @@ Once the engine is ready, the companion becomes its client (`core/src/host/regis
 3. A failure (engine unreachable, token missing, registration refused, store unavailable) is retried with backoff for as long as the engine stays ready. Every time the engine becomes ready again after a restart, the credentials are checked again.
 4. Registering is the one step with an effect on the engine, which issues a new client each time. Credentials it issued are kept in memory until the credential store takes them, so a locked keychain makes the companion retry the store alone, not register again. Before each retry it checks them with `authenticate`; if the engine no longer knows them (its data was wiped meanwhile) they are dropped and the companion registers again, so the window never receives credentials the engine does not know.
 
-The capnweb calls are plain HTTP batch requests to `http://127.0.0.1:<apiPort>/api` (`core/src/host/capnweb.rs`, `gateway.rs`), with a 10-second timeout. Each call is a single request with no origin, which the engine allows. They never go through a proxy, whatever the environment or the OS says, since they carry the registration token and the client secret. A reply is decoded only where the companion reads it (`registerClient`'s credentials), so a field the engine adds to `getEngineInfo` cannot break the check. An `abort` from the engine, which ends the whole session, is reported with the engine's reason.
+The capnweb calls are plain HTTP batch requests to `http://127.0.0.1:<apiPort>/api` (`core/src/host/capnweb.rs`, `gateway.rs`), with a 10-second timeout, or 20 seconds for the calls the engine forwards to Twitch, so the engine's own 10-second Twitch timeout answers first. Each call is a single request with no origin, which the engine allows. They never go through a proxy, whatever the environment or the OS says, since they carry the registration token and the client secret. A reply is decoded only where the companion reads it (`registerClient`'s credentials), so a field the engine adds to `getEngineInfo` cannot break the check. An `abort` from the engine, which ends the whole session, is reported with the engine's reason.
 
 The client secret stays in the Rust process and the credential store. The window asks for it with the `local_engine_session` command, wrapped in `companion/ui/src/host.ts`, which answers `notLocal` in companion mode, `starting` until registration succeeds, `failed` with the reason, or `ready` with the api URL, client id and client secret the window needs to open its own capnweb session.
 

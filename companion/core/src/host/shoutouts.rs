@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::gateway::{ClientCredentials, EngineGateway, TwitchHelixResult};
 use super::registration::{CredentialRefusals, LocalSession};
+use super::sidecar::{EnginePhase, EngineStatus, StopCause};
 use super::HostError;
 use crate::backoff::Backoff;
 use crate::clock::{millis, Clock, EpochMillis};
@@ -114,6 +115,21 @@ struct QueueState {
 /// credentials, until registration has given it a session again.
 const PAUSED_FOR_CREDENTIALS: &str =
     "The engine refused this app's credentials. Shoutouts resume once the app has registered with it again.";
+
+/// Why the queue holds its sends while registering again after a refusal
+/// fails. Registration retries while the engine runs, so it promises no
+/// resumption.
+fn reregistration_failed(reason: &str) -> String {
+    format!(
+        "The engine refused this app's credentials, and registering with it again failed: {reason}. The app keeps trying while the engine runs."
+    )
+}
+
+/// Why the queue holds its sends once the engine has stopped and will not
+/// start again on its own.
+fn engine_stopped(reason: &str) -> String {
+    format!("The engine has stopped and will not start again on its own: {reason}")
+}
 
 /// The queue as the window shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -390,18 +406,24 @@ pub async fn run_shoutout_pacing(
     queue: Arc<ShoutoutQueue>,
     gateway: Arc<dyn EngineGateway>,
     mut session: watch::Receiver<LocalSession>,
+    mut engine: watch::Receiver<EngineStatus>,
     refusals: CredentialRefusals,
     cancel: CancellationToken,
 ) {
     let mut changes = queue.state.subscribe();
+    // Whether the engine refused the session's credentials on the last send.
+    let mut refused = false;
     loop {
         let credentials = tokio::select! {
             _ = cancel.cancelled() => return,
-            credentials = ready_credentials(&mut session) => match credentials {
-                Some(credentials) => credentials,
-                None => return,
-            },
+            credentials = wait_for_session(&queue, &mut session, &mut engine, refused) => {
+                match credentials {
+                    Some(credentials) => credentials,
+                    None => return,
+                }
+            }
         };
+        refused = false;
         queue.set_paused(None);
         changes.borrow_and_update();
         let now = queue.clock.now();
@@ -434,26 +456,66 @@ pub async fn run_shoutout_pacing(
                 if host_refused {
                     queue.set_paused(Some(PAUSED_FOR_CREDENTIALS));
                     refusals.report();
-                    tokio::select! {
-                        _ = cancel.cancelled() => return,
-                        changed = session.changed() => if changed.is_err() { return; },
-                    }
+                    refused = true;
                 }
             }
         }
     }
 }
 
-/// The session's credentials once it has them; `None` once registration
-/// has ended.
-async fn ready_credentials(
+/// The session's credentials once it has them, saying meanwhile why the
+/// queue holds its sends, if it can say; `None` once registration or the
+/// engine's supervisor has ended. After a refusal (`refused`) the session
+/// still holds the refused credentials until registration moves it on, so
+/// they are not taken again.
+async fn wait_for_session(
+    queue: &ShoutoutQueue,
     session: &mut watch::Receiver<LocalSession>,
+    engine: &mut watch::Receiver<EngineStatus>,
+    refused: bool,
 ) -> Option<ClientCredentials> {
+    let mut stale = refused;
     loop {
-        if let LocalSession::Ready(credentials) = &*session.borrow_and_update() {
+        let phase = engine.borrow_and_update().phase.clone();
+        let current = session.borrow_and_update().clone();
+        if let (false, LocalSession::Ready(credentials)) = (stale, &current) {
             return Some(credentials.clone());
         }
-        session.changed().await.ok()?;
+        queue.set_paused(waiting_reason(&phase, &current, refused).as_deref());
+        let closed = tokio::select! {
+            changed = session.changed() => {
+                stale = false;
+                changed.is_err()
+            }
+            changed = engine.changed() => changed.is_err(),
+        };
+        if closed {
+            // The engine's last state can arrive just before its supervisor
+            // ends, after which nothing will say it again.
+            let phase = engine.borrow().phase.clone();
+            let current = session.borrow().clone();
+            queue.set_paused(waiting_reason(&phase, &current, refused).as_deref());
+            return None;
+        }
+    }
+}
+
+/// Why the queue holds its sends while it has no session to send with, or
+/// `None` when it only waits for the engine to start. An engine stopped for
+/// good comes first: no session will come, whatever registration says.
+fn waiting_reason(engine: &EnginePhase, session: &LocalSession, refused: bool) -> Option<String> {
+    if let EnginePhase::Stopped(
+        StopCause::MigrationFailed { reason } | StopCause::ExitedOnItsOwn { reason },
+    ) = engine
+    {
+        return Some(engine_stopped(reason));
+    }
+    if !refused {
+        return None;
+    }
+    match session {
+        LocalSession::Failed { reason } => Some(reregistration_failed(reason)),
+        LocalSession::Starting | LocalSession::Ready(_) => Some(PAUSED_FOR_CREDENTIALS.to_string()),
     }
 }
 
@@ -535,8 +597,16 @@ mod tests {
         engine: Arc<FakeEngine>,
         calls: mpsc::UnboundedReceiver<EngineCall>,
         session: watch::Sender<LocalSession>,
+        engine_status: watch::Sender<EngineStatus>,
         cancel: CancellationToken,
         worker: JoinHandle<()>,
+    }
+
+    fn ready_engine() -> EngineStatus {
+        EngineStatus {
+            phase: EnginePhase::Ready,
+            ..EngineStatus::starting()
+        }
     }
 
     impl Harness {
@@ -549,11 +619,13 @@ mod tests {
             ));
             let (engine, calls) = FakeEngine::new();
             let (session, session_rx) = watch::channel(session);
+            let (engine_status, engine_status_rx) = watch::channel(ready_engine());
             let cancel = CancellationToken::new();
             let worker = tokio::spawn(run_shoutout_pacing(
                 Arc::clone(&queue),
                 Arc::clone(&engine) as Arc<dyn EngineGateway>,
                 session_rx,
+                engine_status_rx,
                 CredentialRefusals::new(),
                 cancel.clone(),
             ));
@@ -564,6 +636,7 @@ mod tests {
                 engine,
                 calls,
                 session,
+                engine_status,
                 cancel,
                 worker,
             }
@@ -991,105 +1064,287 @@ mod tests {
         harness.stop().await;
     }
 
+    /// The pacing worker and the real registration loop against one fake
+    /// engine, with the host's stored credentials "old" accepted at start.
+    struct WithRegistration {
+        clock: Arc<FakeClock>,
+        sleeps: mpsc::UnboundedReceiver<EpochMillis>,
+        queue: Arc<ShoutoutQueue>,
+        engine: Arc<FakeEngine>,
+        calls: mpsc::UnboundedReceiver<EngineCall>,
+        store: Arc<MemoryCredentialStore>,
+        token_file: std::path::PathBuf,
+        view: ShoutoutQueueWatch,
+        /// Held so registration, which ends when it drops, keeps running.
+        engine_status: watch::Sender<EngineStatus>,
+        cancel: CancellationToken,
+        tasks: [JoinHandle<()>; 2],
+    }
+
+    /// Fast registration retries, so a failed re-registration retries
+    /// within the test.
+    fn quick_registration() -> RegistrationOptions {
+        fn no_jitter() -> f64 {
+            0.0
+        }
+        RegistrationOptions {
+            backoff: crate::backoff::Backoff {
+                initial: Duration::from_millis(20),
+                max: Duration::from_millis(20),
+            },
+            jitter: no_jitter,
+        }
+    }
+
+    impl WithRegistration {
+        async fn start(name: &str) -> Self {
+            let (clock, sleeps) = FakeClock::new(START);
+            let clock = Arc::new(clock);
+            let queue = Arc::new(ShoutoutQueue::new(
+                Arc::clone(&clock) as Arc<dyn Clock>,
+                ShoutoutOptions::default(),
+            ));
+            let (engine, mut calls) = FakeEngine::new();
+            let store = Arc::new(MemoryCredentialStore::holding(credentials("old")));
+            let token_file = std::env::temp_dir().join(format!(
+                "woofx3-shoutout-registration-{name}-{}",
+                std::process::id()
+            ));
+            std::fs::write(&token_file, "tok").expect("write the registration token");
+            let registrar = Registrar::new(
+                Arc::clone(&engine) as Arc<dyn EngineGateway>,
+                Arc::clone(&store) as Arc<dyn CredentialStore>,
+                token_file.clone(),
+            );
+            let (engine_status, engine_status_rx) = watch::channel(EngineStatus {
+                phase: EnginePhase::Ready,
+                ..EngineStatus::starting()
+            });
+            let (session_tx, session) = watch::channel(LocalSession::Starting);
+            let refusals = CredentialRefusals::new();
+            let cancel = CancellationToken::new();
+            let registration = tokio::spawn(run_registration(
+                engine_status_rx,
+                registrar,
+                quick_registration(),
+                session_tx,
+                refusals.clone(),
+                cancel.clone(),
+            ));
+            let pacing = tokio::spawn(run_shoutout_pacing(
+                Arc::clone(&queue),
+                Arc::clone(&engine) as Arc<dyn EngineGateway>,
+                session,
+                engine_status.subscribe(),
+                refusals,
+                cancel.clone(),
+            ));
+            let view = queue.subscribe();
+            assert_eq!(calls.recv().await, Some(EngineCall::Verify("old".into())));
+            engine.verified(Ok(()));
+            WithRegistration {
+                clock,
+                sleeps,
+                queue,
+                engine,
+                calls,
+                store,
+                token_file,
+                view,
+                engine_status,
+                cancel,
+                tasks: [registration, pacing],
+            }
+        }
+
+        /// Queues "a", has the engine refuse the host's credentials for
+        /// it, and waits for registration to check them again.
+        async fn refuse_a_send(&mut self) {
+            self.queue.enqueue(channel("a")).expect("queued");
+            assert_eq!(
+                self.calls.recv().await,
+                Some(EngineCall::SendShoutout("a".into()))
+            );
+            self.engine.reply(Err(HostError::CredentialsRefused {
+                message: "AuthenticationRefused: client revoked".into(),
+            }));
+            assert_eq!(
+                self.calls.recv().await,
+                Some(EngineCall::Verify("old".into()))
+            );
+            let paused = self.view.view();
+            assert_eq!(
+                paused.paused_reason.as_deref(),
+                Some(PAUSED_FOR_CREDENTIALS)
+            );
+            assert_eq!(paused.entries[0].attempts, 0);
+            assert_eq!(paused.entries[0].last_error, None);
+            self.engine.verified(Err(HostError::CredentialsRefused {
+                message: "AuthenticationRefused: client revoked".into(),
+            }));
+            assert_eq!(self.calls.recv().await, Some(EngineCall::RegisterClient));
+        }
+
+        /// After new credentials "new" are registered: the queue resumes,
+        /// after the cooldown, and sends "a" with them.
+        async fn resumes_with_new_credentials(&mut self) {
+            assert_eq!(self.sleeps.recv().await, Some(START + COOLDOWN));
+            assert_eq!(self.queue.view().paused_reason, None);
+            assert_eq!(self.store.stored(), Some(credentials("new")));
+            self.clock.set(START + COOLDOWN);
+            assert_eq!(
+                self.calls.recv().await,
+                Some(EngineCall::SendShoutout("a".into()))
+            );
+            assert_eq!(self.engine.senders(), ["old", "new"]);
+            self.engine.reply(Ok(TwitchHelixResult::Ok));
+            loop {
+                if self.view.view().entries.is_empty() {
+                    break;
+                }
+                self.view.changed().await.expect("the queue lives");
+            }
+        }
+
+        async fn stop(self) {
+            self.cancel.cancel();
+            drop(self.engine_status);
+            for task in self.tasks {
+                tokio::time::timeout(Duration::from_secs(5), task)
+                    .await
+                    .expect("stops when cancelled")
+                    .expect("ends cleanly");
+            }
+            std::fs::remove_file(&self.token_file).expect("remove the registration token");
+        }
+    }
+
     /// The engine revokes the host's client while it runs: the entry is not
     /// charged, the queue says why it is paused, and registration, told
     /// of the refusal, registers again so the queue resumes on its own.
     #[tokio::test]
     async fn test_run_shoutout_pacing_recovers_from_refused_credentials_through_registration() {
-        let (clock, mut sleeps) = FakeClock::new(START);
-        let clock = Arc::new(clock);
-        let queue = Arc::new(ShoutoutQueue::new(
-            Arc::clone(&clock) as Arc<dyn Clock>,
-            ShoutoutOptions::default(),
-        ));
-        let (engine, mut calls) = FakeEngine::new();
-        let store = Arc::new(MemoryCredentialStore::holding(credentials("old")));
-        let token_file = std::env::temp_dir().join(format!(
-            "woofx3-shoutout-registration-token-{}",
-            std::process::id()
-        ));
-        std::fs::write(&token_file, "tok").expect("write the registration token");
-        let registrar = Registrar::new(
-            Arc::clone(&engine) as Arc<dyn EngineGateway>,
-            Arc::clone(&store) as Arc<dyn CredentialStore>,
-            token_file.clone(),
-        );
-        let (_engine_status, engine_status_rx) = watch::channel(EngineStatus {
-            phase: EnginePhase::Ready,
+        let mut harness = WithRegistration::start("recovers").await;
+        harness.refuse_a_send().await;
+        harness.engine.registered(Ok(credentials("new")));
+        harness.resumes_with_new_credentials().await;
+        harness.stop().await;
+    }
+
+    fn migration_failed() -> EngineStatus {
+        EngineStatus {
+            phase: EnginePhase::Stopped(StopCause::MigrationFailed {
+                reason: "the database migration failed".into(),
+            }),
             ..EngineStatus::starting()
-        });
-        let (session_tx, session) = watch::channel(LocalSession::Starting);
-        let refusals = CredentialRefusals::new();
-        let cancel = CancellationToken::new();
-        let registration = tokio::spawn(run_registration(
-            engine_status_rx,
-            registrar,
-            RegistrationOptions::default(),
-            session_tx,
-            refusals.clone(),
-            cancel.clone(),
-        ));
-        let pacing = tokio::spawn(run_shoutout_pacing(
-            Arc::clone(&queue),
-            Arc::clone(&engine) as Arc<dyn EngineGateway>,
-            session,
-            refusals,
-            cancel.clone(),
-        ));
-        let mut view = queue.subscribe();
+        }
+    }
 
-        assert_eq!(calls.recv().await, Some(EngineCall::Verify("old".into())));
-        engine.verified(Ok(()));
-        queue.enqueue(channel("a")).expect("queued");
-        assert_eq!(
-            calls.recv().await,
-            Some(EngineCall::SendShoutout("a".into()))
-        );
-        engine.reply(Err(HostError::CredentialsRefused {
-            message: "AuthenticationRefused: client revoked".into(),
-        }));
-
-        // Registration checks the credentials again, and registers anew.
-        assert_eq!(calls.recv().await, Some(EngineCall::Verify("old".into())));
-        let paused = view.view();
-        assert_eq!(
-            paused.paused_reason.as_deref(),
-            Some(PAUSED_FOR_CREDENTIALS)
-        );
-        assert_eq!(paused.entries[0].attempts, 0);
-        assert_eq!(paused.entries[0].last_error, None);
-        engine.verified(Err(HostError::CredentialsRefused {
-            message: "AuthenticationRefused: client revoked".into(),
-        }));
-        assert_eq!(calls.recv().await, Some(EngineCall::RegisterClient));
-        engine.registered(Ok(credentials("new")));
-
-        // The queue resumes with the new credentials, after the cooldown.
-        assert_eq!(sleeps.recv().await, Some(START + COOLDOWN));
-        assert_eq!(queue.view().paused_reason, None);
-        assert_eq!(store.stored(), Some(credentials("new")));
-        clock.set(START + COOLDOWN);
-        assert_eq!(
-            calls.recv().await,
-            Some(EngineCall::SendShoutout("a".into()))
-        );
-        assert_eq!(engine.senders(), ["old", "new"]);
-        engine.reply(Ok(TwitchHelixResult::Ok));
-        loop {
-            if view.view().entries.is_empty() {
-                break;
+    /// Waits until the queue's paused reason is no longer `from`, failing
+    /// rather than hanging when it never changes.
+    async fn paused_reason_after(
+        view: &mut ShoutoutQueueWatch,
+        from: Option<&str>,
+    ) -> Option<String> {
+        let changed = async {
+            loop {
+                let reason = view.view().paused_reason;
+                if reason.as_deref() != from {
+                    return reason;
+                }
+                view.changed().await.expect("the queue lives");
             }
-            view.changed().await.expect("the queue lives");
-        }
+        };
+        tokio::time::timeout(Duration::from_secs(5), changed)
+            .await
+            .expect("the paused reason changes")
+    }
 
-        cancel.cancel();
-        for task in [registration, pacing] {
-            tokio::time::timeout(Duration::from_secs(5), task)
-                .await
-                .expect("stops when cancelled")
-                .expect("ends cleanly");
-        }
-        std::fs::remove_file(&token_file).expect("remove the registration token");
+    /// After a refusal the queue promised shoutouts would resume once the app
+    /// registered again; once the engine has stopped for good, no
+    /// registration will come, so it says the engine stopped instead.
+    #[tokio::test]
+    async fn test_run_shoutout_pacing_says_the_engine_stopped_while_paused_after_a_refusal() {
+        let mut harness = WithRegistration::start("engine-stopped").await;
+        harness.refuse_a_send().await;
+        harness.engine_status.send_replace(migration_failed());
+        assert_eq!(
+            paused_reason_after(&mut harness.view, Some(PAUSED_FOR_CREDENTIALS)).await,
+            Some(engine_stopped("the database migration failed"))
+        );
+        harness.stop().await;
+    }
+
+    /// A queue waiting for the engine to start says nothing; once the engine
+    /// has stopped for good, it says why, and keeps saying it after the
+    /// engine's supervisor and registration have ended.
+    #[tokio::test]
+    async fn test_run_shoutout_pacing_says_when_the_engine_stops_for_good() {
+        let harness = Harness::start(LocalSession::Starting);
+        harness.queue.enqueue(channel("a")).expect("queued");
+        let mut view = harness.queue.subscribe();
+        assert_eq!(view.view().paused_reason, None);
+
+        harness.engine_status.send_replace(migration_failed());
+        assert_eq!(
+            paused_reason_after(&mut view, None).await,
+            Some(engine_stopped("the database migration failed"))
+        );
+        let Harness {
+            session,
+            engine_status,
+            worker,
+            queue,
+            ..
+        } = harness;
+        drop(engine_status);
+        drop(session);
+        tokio::time::timeout(Duration::from_secs(5), worker)
+            .await
+            .expect("the worker ends with the engine")
+            .expect("the worker ends cleanly");
+        assert_eq!(
+            queue.view().paused_reason,
+            Some(engine_stopped("the database migration failed"))
+        );
+    }
+
+    /// While registering again fails, the queue says so, rather than that
+    /// shoutouts will resume; once registration succeeds, they do.
+    #[tokio::test]
+    async fn test_run_shoutout_pacing_says_when_registering_again_fails() {
+        let mut harness = WithRegistration::start("fails-again").await;
+        harness.refuse_a_send().await;
+        harness.engine.registered(Err(HostError::EngineRefused {
+            name: "RegistrationRefused".into(),
+            message: "bad token".into(),
+        }));
+        let reason = loop {
+            let reason = harness.view.view().paused_reason;
+            if reason.as_deref() != Some(PAUSED_FOR_CREDENTIALS) {
+                break reason.expect("still paused");
+            }
+            harness.view.changed().await.expect("the queue lives");
+        };
+        assert_eq!(
+            reason,
+            reregistration_failed("the engine refused: RegistrationRefused: bad token")
+        );
+        assert!(!reason.contains("resume"), "{reason}");
+
+        // Registration retries: the stored "old" is refused again, and this
+        // time the engine registers the host.
+        assert_eq!(
+            harness.calls.recv().await,
+            Some(EngineCall::Verify("old".into()))
+        );
+        harness.engine.verified(Err(HostError::CredentialsRefused {
+            message: "AuthenticationRefused: client revoked".into(),
+        }));
+        assert_eq!(harness.calls.recv().await, Some(EngineCall::RegisterClient));
+        harness.engine.registered(Ok(credentials("new")));
+        harness.resumes_with_new_credentials().await;
+        harness.stop().await;
     }
 
     #[tokio::test]

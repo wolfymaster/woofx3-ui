@@ -262,18 +262,9 @@ impl EngineSidecar {
 
     fn session(&self) -> LocalEngineSession {
         let views = lock(&self.views);
+        let engine = views.status.borrow();
         let session = views.session.borrow();
-        match &*session {
-            LocalSession::Starting => LocalEngineSession::Starting,
-            LocalSession::Ready(credentials) => LocalEngineSession::Ready {
-                api_url: self.launcher.layout.api_url(),
-                client_id: credentials.client_id.clone(),
-                client_secret: credentials.client_secret.clone(),
-            },
-            LocalSession::Failed { reason } => LocalEngineSession::Failed {
-                reason: reason.clone(),
-            },
-        }
+        LocalEngineSession::from_engine(&engine.phase, &session, || self.launcher.layout.api_url())
     }
 
     async fn stop(&self) {
@@ -348,6 +339,7 @@ impl Launcher {
             Arc::clone(&self.shoutouts),
             Arc::clone(&gateway),
             session.clone(),
+            status.clone(),
             refusals.clone(),
             cancel.clone(),
         ));

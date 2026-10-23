@@ -13,6 +13,8 @@ mod wire_tests;
 
 use serde::Serialize;
 
+use crate::host::{EnginePhase, LocalSession, StopCause};
+
 #[cfg(feature = "ts")]
 pub use bindings::{window_bindings, BINDINGS_FILE};
 pub use command_args::{
@@ -286,6 +288,8 @@ pub enum LocalEngineSession {
     NotLocal,
     /// The engine is starting, or this host is registering with it.
     Starting,
+    /// The engine is migrating its database before its services start.
+    Migrating,
     #[serde(rename_all = "camelCase")]
     Ready {
         api_url: String,
@@ -294,6 +298,47 @@ pub enum LocalEngineSession {
     },
     /// Registering failed; it is tried again while the engine runs.
     Failed { reason: String },
+    /// The engine stopped and will not start again on its own, as when its
+    /// database migration failed.
+    Stopped { reason: String },
+}
+
+impl LocalEngineSession {
+    /// What the window is told, from where the engine stands and where this
+    /// host's registration with it stands. The engine's own state comes
+    /// first: registration waits for the engine and cannot say why.
+    pub fn from_engine(
+        engine: &EnginePhase,
+        session: &LocalSession,
+        api_url: impl FnOnce() -> String,
+    ) -> Self {
+        match engine {
+            EnginePhase::Migrating { .. } => return LocalEngineSession::Migrating,
+            EnginePhase::Stopped(
+                StopCause::MigrationFailed { reason } | StopCause::ExitedOnItsOwn { reason },
+            ) => {
+                return LocalEngineSession::Stopped {
+                    reason: reason.clone(),
+                }
+            }
+            EnginePhase::Starting { .. }
+            | EnginePhase::Ready
+            | EnginePhase::Restarting { .. }
+            | EnginePhase::Stopping
+            | EnginePhase::Stopped(StopCause::Requested) => {}
+        }
+        match session {
+            LocalSession::Starting => LocalEngineSession::Starting,
+            LocalSession::Ready(credentials) => LocalEngineSession::Ready {
+                api_url: api_url(),
+                client_id: credentials.client_id.clone(),
+                client_secret: credentials.client_secret.clone(),
+            },
+            LocalSession::Failed { reason } => LocalEngineSession::Failed {
+                reason: reason.clone(),
+            },
+        }
+    }
 }
 
 /// Never prints the client secret.
@@ -302,6 +347,7 @@ impl std::fmt::Debug for LocalEngineSession {
         match self {
             LocalEngineSession::NotLocal => f.write_str("NotLocal"),
             LocalEngineSession::Starting => f.write_str("Starting"),
+            LocalEngineSession::Migrating => f.write_str("Migrating"),
             LocalEngineSession::Ready {
                 api_url, client_id, ..
             } => f
@@ -313,13 +359,89 @@ impl std::fmt::Debug for LocalEngineSession {
             LocalEngineSession::Failed { reason } => {
                 f.debug_struct("Failed").field("reason", reason).finish()
             }
+            LocalEngineSession::Stopped { reason } => {
+                f.debug_struct("Stopped").field("reason", reason).finish()
+            }
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
+    use crate::host::ClientCredentials;
+
+    #[test]
+    fn test_local_engine_session_from_engine_puts_the_engine_first() {
+        let ready = LocalSession::Ready(ClientCredentials {
+            client_id: "id".into(),
+            client_secret: "secret".into(),
+        });
+        let api_url = || "http://127.0.0.1:5050/api".to_string();
+        let failed_migration = EnginePhase::Stopped(StopCause::MigrationFailed {
+            reason: "the database migration failed".into(),
+        });
+        let cases = [
+            (
+                EnginePhase::Migrating { attempt: 0 },
+                LocalSession::Starting,
+                LocalEngineSession::Migrating,
+            ),
+            (
+                failed_migration.clone(),
+                LocalSession::Starting,
+                LocalEngineSession::Stopped {
+                    reason: "the database migration failed".into(),
+                },
+            ),
+            (
+                EnginePhase::Stopped(StopCause::ExitedOnItsOwn {
+                    reason: "no services".into(),
+                }),
+                LocalSession::Starting,
+                LocalEngineSession::Stopped {
+                    reason: "no services".into(),
+                },
+            ),
+            (
+                EnginePhase::Starting { attempt: 1 },
+                LocalSession::Starting,
+                LocalEngineSession::Starting,
+            ),
+            (
+                EnginePhase::Restarting {
+                    attempt: 1,
+                    after: Duration::from_secs(1),
+                    reason: "crashed".into(),
+                },
+                LocalSession::Failed { reason: "r".into() },
+                LocalEngineSession::Failed { reason: "r".into() },
+            ),
+            (
+                EnginePhase::Ready,
+                ready.clone(),
+                LocalEngineSession::Ready {
+                    api_url: api_url(),
+                    client_id: "id".into(),
+                    client_secret: "secret".into(),
+                },
+            ),
+            (
+                EnginePhase::Stopped(StopCause::Requested),
+                LocalSession::Starting,
+                LocalEngineSession::Starting,
+            ),
+        ];
+        for (engine, session, expected) in cases {
+            assert_eq!(
+                LocalEngineSession::from_engine(&engine, &session, api_url),
+                expected,
+                "{engine:?} {session:?}"
+            );
+        }
+    }
 
     #[test]
     fn test_local_engine_session_debug_output_redacts_the_secret() {
