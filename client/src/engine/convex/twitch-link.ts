@@ -1,15 +1,26 @@
 import { api } from "@convex/_generated/api";
+import { isEngineUnreachableData } from "@convex/lib/twitchLinkEngine";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
+import { ConvexError } from "convex/values";
 import { useCallback, useMemo, useState } from "react";
+import { EngineUnreachableError } from "@/engine/errors";
 import type { TwitchLinkGateway } from "@/engine/gateway";
-import type { TwitchLink, TwitchLinkFlow, TwitchLinking, TwitchLinkStart } from "@/engine/types";
+import type {
+  TwitchLink,
+  TwitchLinkFlow,
+  TwitchLinking,
+  TwitchLinkStart,
+  TwitchUnlinkOptions,
+  TwitchUnlinkResult,
+} from "@/engine/types";
+import { withPlainError } from "./errors";
 import { useInstanceAction, useScopeInstanceId } from "./scope";
 
 // Convex holds the link: Twitch's OAuth redirect lands on Convex, which keeps
 // the tokens and hands the engine an access token whenever it asks. Linking
 // therefore leaves the page for Twitch; unlinking also tells the engine to
-// drop the token it holds.
+// drop the token it holds, and is refused while it cannot be told.
 
 type PlatformLinkRow = FunctionReturnType<typeof api.instances.getPlatformLinks>[number];
 
@@ -104,15 +115,43 @@ function useLinkFlow(): TwitchLinkFlow {
   return { linking, start, cancel };
 }
 
+/** Rethrows an engine-unreachable refusal as its typed error, and any other refusal as a plain Error. */
+function rethrowTwitchLinkError(error: unknown): never {
+  if (error instanceof ConvexError && isEngineUnreachableData(error.data)) {
+    throw new EngineUnreachableError(error.data.message);
+  }
+  return withPlainError(error);
+}
+
 function useUnlinkRequest() {
   const disconnect = useInstanceAction(api.twitchIntegration.disconnect);
+  return useCallback(
+    async (options?: TwitchUnlinkOptions): Promise<TwitchUnlinkResult> => {
+      try {
+        const result = await disconnect({ platform: TWITCH, force: options?.force });
+        return { warning: result.warning };
+      } catch (error) {
+        return rethrowTwitchLinkError(error);
+      }
+    },
+    [disconnect]
+  );
+}
+
+function useRetryEngineSyncRequest() {
+  const retry = useInstanceAction(api.twitchIntegration.retryEngineSync);
   return useCallback(async () => {
-    await disconnect({ platform: TWITCH });
-  }, [disconnect]);
+    try {
+      await retry({});
+    } catch (error) {
+      rethrowTwitchLinkError(error);
+    }
+  }, [retry]);
 }
 
 export const convexTwitchLinkGateway: TwitchLinkGateway = {
   useLink,
   useLinkFlow,
   useUnlinkRequest,
+  useRetryEngineSyncRequest,
 };

@@ -89,6 +89,8 @@ import type {
   TransientEvent,
   TwitchLink,
   TwitchLinkFlow,
+  TwitchUnlinkOptions,
+  TwitchUnlinkResult,
   UploadGrant,
   UploadRequest,
   ViewerFact,
@@ -590,8 +592,17 @@ export interface TwitchLinkGateway {
   useLink(): Live<TwitchLink | null>;
   /** Starts and follows linking for the calling component. */
   useLinkFlow(): TwitchLinkFlow;
-  /** Removes the link. Rejects for a caller who is not an owner or admin. */
-  useUnlinkRequest(): () => Promise<void>;
+  /**
+   * Removes the link. Rejects for a caller who is not an owner or admin, and
+   * with `EngineUnreachableError` (leaving the link) when the engine cannot
+   * be told, unless `force` is set.
+   */
+  useUnlinkRequest(): (options?: TwitchUnlinkOptions) => Promise<TwitchUnlinkResult>;
+  /**
+   * Offers the saved link to the engine again, after a connect the engine did
+   * not pick up. Rejects with `EngineUnreachableError` while it still does not.
+   */
+  useRetryEngineSyncRequest(): () => Promise<void>;
 }
 
 /** The addresses a scene's overlay is served at: the one OBS loads, and previews of it. */
