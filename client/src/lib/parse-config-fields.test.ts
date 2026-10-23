@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { sentenceParts } from "./condition-sentence";
 import { parseConfigField, parseConfigFields, withWidgetCanonicalId } from "./parse-config-fields";
@@ -243,5 +243,43 @@ describe("withWidgetCanonicalId", () => {
     const [theme, color] = withWidgetCanonicalId([themeField, colorField], "timer:widget:clock");
     expect((theme as { widgetCanonicalId?: string }).widgetCanonicalId).toBe("timer:widget:clock");
     expect(color).toBe(colorField);
+  });
+});
+
+describe("parseConfigField visibleWhen", () => {
+  const base = { id: "color", label: "Color", type: "color" };
+
+  test("test_parse_visible_when_valid_is_kept", () => {
+    const field = parseConfigField({ ...base, visibleWhen: { field: "platform", oneOf: ["origin", "twitch"] } });
+    expect(field?.visibleWhen).toEqual({ field: "platform", oneOf: ["origin", "twitch"] });
+  });
+
+  test("test_parse_visible_when_absent_or_null_is_silent", () => {
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    expect(parseConfigField(base)?.visibleWhen).toBeUndefined();
+    expect(parseConfigField({ ...base, visibleWhen: null })?.visibleWhen).toBeUndefined();
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  test("test_parse_visible_when_malformed_is_dropped_with_warning", () => {
+    const malformed: unknown[] = [
+      "platform",
+      { field: "platform" },
+      { field: "", oneOf: ["a"] },
+      { field: "platform", oneOf: [] },
+      { field: "platform", oneOf: ["a", 2] },
+      { field: 3, oneOf: ["a"] },
+    ];
+    for (const visibleWhen of malformed) {
+      const warn = spyOn(console, "warn").mockImplementation(() => {});
+      const field = parseConfigField({ ...base, visibleWhen });
+      expect({ visibleWhen, kept: field?.visibleWhen, warned: warn.mock.calls.length }).toEqual({
+        visibleWhen,
+        kept: undefined,
+        warned: 1,
+      });
+      warn.mockRestore();
+    }
   });
 });
