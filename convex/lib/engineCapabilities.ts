@@ -50,7 +50,6 @@ export const ENGINE_CAPABILITY_IDS = [
   "workflow.dryRun",
   "workflow.health",
   "workflow.realCancel",
-  "workflow.reservedSubjects",
   "workflow.testRunOptions",
   "workflow.viewerFacts",
 ] as const;
