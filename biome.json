@@ -7,7 +7,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "includes": ["**", "!convex/_generated"]
+    "includes": ["**", "!convex/_generated", "!companion/ui/src/generated"]
   },
   "formatter": {
     "enabled": true,

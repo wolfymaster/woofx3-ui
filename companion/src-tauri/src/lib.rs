@@ -14,8 +14,6 @@
 //! would deadlock. Locks here are never held across a call into Tauri.
 
 mod cloud;
-#[macro_use]
-mod command_names;
 #[cfg(test)]
 mod convex_url;
 mod credentials;
@@ -25,29 +23,31 @@ mod integration_store;
 mod integrations;
 mod pairing;
 mod startup_failure;
-mod state;
 mod tray;
 mod update;
 
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WindowEvent};
 use woofx3_companion_core::host::{
-    HostMode, MarkerRequestOutcome, ShoutoutChannel, ShoutoutEnqueued, ShoutoutEntryId,
-    ShoutoutQueueView, StreamStartMarker, HOST_CONFIG_FILE,
+    HostMode, MarkerRequestOutcome, ShoutoutEnqueued, ShoutoutQueueView, StreamStartMarker,
+    HOST_CONFIG_FILE,
 };
 
 use cloud::CloudLink;
 use engine_host::LocalEngine;
 use integrations::Integrations;
-use state::{
-    CompanionState, IntegrationsView, LocalEngineSession, ReadyUpdate, TestResult, WindowState,
-    STATE_EVENT,
-};
 use tray::Tray;
 use update::Downloaded;
+use woofx3_companion_core::window::{
+    CompanionState, ConfirmAddressArgs, EnqueueShoutoutArgs, IntegrationsView, LocalEngineSession,
+    ReadyUpdate, RemoveShoutoutArgs, ReorderShoutoutsArgs, SetEndpointEnabledArgs,
+    SetSharePasswordArgs, TestEndpointArgs, TestResult, UseDiscoveredArgs, WindowState,
+    STATE_EVENT,
+};
 
 /// Shared by the commands, the tray and the running flow.
 pub struct Companion {
@@ -305,13 +305,11 @@ async fn get_integrations(
 #[tauri::command]
 async fn set_endpoint_enabled(
     companion: State<'_, Arc<Companion>>,
-    module_id: String,
-    endpoint_id: String,
-    enabled: bool,
+    args: SetEndpointEnabledArgs,
 ) -> Result<(), String> {
     companion
         .integrations
-        .set_enabled(&module_id, &endpoint_id, enabled)
+        .set_enabled(&args.module_id, &args.endpoint_id, args.enabled)
         .await
 }
 
@@ -319,48 +317,45 @@ async fn set_endpoint_enabled(
 #[tauri::command]
 async fn confirm_address(
     companion: State<'_, Arc<Companion>>,
-    module_id: String,
-    endpoint_id: String,
-    address: String,
+    args: ConfirmAddressArgs,
 ) -> Result<(), String> {
     companion
         .integrations
-        .confirm_address(&module_id, &endpoint_id, &address)
+        .confirm_address(&args.module_id, &args.endpoint_id, &args.address)
         .await
 }
 
 #[tauri::command]
 async fn use_discovered(
     companion: State<'_, Arc<Companion>>,
-    module_id: String,
-    endpoint_id: String,
+    args: UseDiscoveredArgs,
 ) -> Result<(), String> {
     companion
         .integrations
-        .use_discovered(&module_id, &endpoint_id)
+        .use_discovered(&args.module_id, &args.endpoint_id)
         .await
 }
 
 #[tauri::command]
 async fn set_share_password(
     companion: State<'_, Arc<Companion>>,
-    module_id: String,
-    endpoint_id: String,
-    share: bool,
+    args: SetSharePasswordArgs,
 ) -> Result<(), String> {
     companion
         .integrations
-        .set_share_password(&module_id, &endpoint_id, share)
+        .set_share_password(&args.module_id, &args.endpoint_id, args.share)
         .await
 }
 
 #[tauri::command]
 async fn test_endpoint(
     companion: State<'_, Arc<Companion>>,
-    module_id: String,
-    endpoint_id: String,
+    args: TestEndpointArgs,
 ) -> Result<TestResult, String> {
-    companion.integrations.test(&module_id, &endpoint_id).await
+    companion
+        .integrations
+        .test(&args.module_id, &args.endpoint_id)
+        .await
 }
 
 /// What the window needs to open a capnweb session with the local engine.
@@ -383,17 +378,17 @@ async fn shoutout_queue(companion: State<'_, Arc<Companion>>) -> Result<Shoutout
 #[tauri::command]
 async fn enqueue_shoutout(
     companion: State<'_, Arc<Companion>>,
-    channel: ShoutoutChannel,
+    args: EnqueueShoutoutArgs,
 ) -> Result<ShoutoutEnqueued, String> {
-    companion.engine.enqueue_shoutout(channel)
+    companion.engine.enqueue_shoutout(args.channel)
 }
 
 #[tauri::command]
 async fn remove_shoutout(
     companion: State<'_, Arc<Companion>>,
-    entry_id: ShoutoutEntryId,
+    args: RemoveShoutoutArgs,
 ) -> Result<(), String> {
-    companion.engine.remove_shoutout(entry_id)
+    companion.engine.remove_shoutout(args.entry_id)
 }
 
 /// An entry gone meanwhile is skipped; entries left out keep their order
@@ -401,9 +396,9 @@ async fn remove_shoutout(
 #[tauri::command]
 async fn reorder_shoutouts(
     companion: State<'_, Arc<Companion>>,
-    entry_ids: Vec<ShoutoutEntryId>,
+    args: ReorderShoutoutsArgs,
 ) -> Result<(), String> {
-    companion.engine.reorder_shoutouts(&entry_ids)
+    companion.engine.reorder_shoutouts(&args.entry_ids)
 }
 
 #[tauri::command]
@@ -430,8 +425,46 @@ async fn reconnect_relay(companion: State<'_, Arc<Companion>>) -> Result<(), Str
     Ok(())
 }
 
+/// Marks a command that takes arguments, as its `args` parameter.
+struct WithArgs;
+/// Marks a command that takes none.
+struct NoArgs;
+
+/// A command taking the arguments `A` and resolving to `R`, the types the
+/// command list declares for it. `Marker` tells the two shapes apart:
+/// rustc cannot tell two blanket impls for `F` apart by their bounds alone.
+trait CommandSignature<A, R, Marker> {}
+
+impl<F, Fut, A, R> CommandSignature<A, R, WithArgs> for F
+where
+    F: Fn(State<'static, Arc<Companion>>, A) -> Fut,
+    Fut: Future<Output = Result<R, String>>,
+{
+}
+
+impl<F, Fut, R> CommandSignature<(), R, NoArgs> for F
+where
+    F: Fn(State<'static, Arc<Companion>>) -> Fut,
+    Fut: Future<Output = Result<R, String>>,
+{
+}
+
+/// Compiles only when `command` has the declared signature.
+const fn declared<A, R, M, F: CommandSignature<A, R, M>>(_command: &F) {}
+
+/// Checks every command against the list's `name(Args) -> Result` at compile
+/// time, so a command whose argument or result type drifts from what the
+/// window's generated bindings say fails the build instead of a call.
+macro_rules! check_command_signatures {
+    ($($name:ident($args:ty) -> $result:ty),* $(,)?) => {
+        const _: () = { $( declared::<$args, $result, _, _>(&$name); )* };
+    };
+}
+
+woofx3_companion_core::with_command_names!(check_command_signatures);
+
 macro_rules! command_handler {
-    ($($name:ident),* $(,)?) => {
+    ($($name:ident($args:ty) -> $result:ty),* $(,)?) => {
         tauri::generate_handler![$($name),*]
     };
 }
@@ -507,7 +540,7 @@ pub fn run() {
                 _ => {}
             }
         })
-        .invoke_handler(with_command_names!(command_handler))
+        .invoke_handler(woofx3_companion_core::with_command_names!(command_handler))
         .build(tauri::generate_context!())
         .expect("error while building the woofx3 companion")
         .run(|app, event| {
@@ -555,13 +588,8 @@ fn stop_engine_before_exit(app: &AppHandle, api: &tauri::ExitRequestApi, code: O
 
 #[cfg(test)]
 mod tests {
-    macro_rules! command_name_list {
-        ($($name:ident),* $(,)?) => {
-            &[$(stringify!($name)),*]
-        };
-    }
+    use woofx3_companion_core::window::COMMAND_NAMES;
 
-    const COMMAND_NAMES: &[&str] = with_command_names!(command_name_list);
     use super::convex_url::check_convex_url;
 
     #[test]

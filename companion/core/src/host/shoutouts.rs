@@ -51,14 +51,15 @@ impl Default for ShoutoutOptions {
     }
 }
 
-/// An entry's id, unique for the life of the queue.
+/// An entry's id, unique for the life of the queue. A newtype, so serde
+/// writes it as the bare number.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 pub struct ShoutoutEntryId(pub u64);
 
-/// The channel to shout out, as the window looked it up. Must match
-/// `ShoutoutChannel` in companion/ui/src/host.ts.
+/// The channel to shout out, as the window looked it up.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutChannel {
     pub twitch_user_id: String,
@@ -69,9 +70,10 @@ pub struct ShoutoutChannel {
     pub broadcaster_type: Option<String>,
 }
 
-/// A channel waiting in the queue. Times are [`EpochMillis`]. Must match
-/// `ShoutoutEntry` in companion/ui/src/host.ts.
+/// A channel waiting in the queue. Times are milliseconds since the Unix
+/// epoch on this PC's clock.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutEntry {
     pub id: ShoutoutEntryId,
@@ -86,9 +88,9 @@ pub struct ShoutoutEntry {
     pub last_error: Option<String>,
 }
 
-/// What enqueueing did. Must match `ShoutoutEnqueued` in
-/// companion/ui/src/host.ts.
+/// What enqueueing did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutEnqueued {
     pub id: ShoutoutEntryId,
@@ -113,9 +115,9 @@ struct QueueState {
 const PAUSED_FOR_CREDENTIALS: &str =
     "The engine refused this app's credentials. Shoutouts resume once the app has registered with it again.";
 
-/// The queue as the window shows it. Must match `ShoutoutQueueView` in
-/// companion/ui/src/host.ts.
+/// The queue as the window shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(rename_all = "camelCase")]
 pub struct ShoutoutQueueView {
     /// In queue order.
@@ -249,6 +251,10 @@ impl ShoutoutQueue {
                 return false;
             }
             let id = ShoutoutEntryId(state.next_id);
+            debug_assert!(
+                id.0 <= crate::window::MAX_SAFE_INTEGER,
+                "the window reads entry ids as JavaScript numbers"
+            );
             state.next_id += 1;
             state.entries.push(ShoutoutEntry {
                 id,
@@ -1144,70 +1150,5 @@ mod tests {
             .await
             .expect("the worker ends with the registration")
             .expect("the worker ends cleanly");
-    }
-
-    #[test]
-    fn test_shoutout_entry_serializes_as_the_typescript_mirror_expects() {
-        let (queue, _clock) = queue_at(START);
-        queue
-            .enqueue(ShoutoutChannel {
-                twitch_user_id: "42".into(),
-                login: "Wolfy".into(),
-                display_name: "Wolfy".into(),
-                profile_image_url: Some("https://img".into()),
-                broadcaster_type: Some("partner".into()),
-            })
-            .expect("queued");
-        assert_eq!(
-            serde_json::to_value(queue.entries()).expect("serializes"),
-            serde_json::json!([{
-                "id": 0,
-                "twitchUserId": "42",
-                "login": "wolfy",
-                "displayName": "Wolfy",
-                "profileImageUrl": "https://img",
-                "broadcasterType": "partner",
-                "attempts": 0,
-                "nextEligibleAt": START,
-                "lastError": null,
-            }])
-        );
-        assert_eq!(
-            serde_json::to_value(ShoutoutEnqueued {
-                id: ShoutoutEntryId(3),
-                position: 2,
-                already_queued: true
-            })
-            .expect("serializes"),
-            serde_json::json!({ "id": 3, "position": 2, "alreadyQueued": true })
-        );
-    }
-
-    #[test]
-    fn test_shoutout_queue_view_serializes_as_the_typescript_mirror_expects() {
-        let (queue, _clock) = queue_at(START);
-        assert_eq!(
-            serde_json::to_value(queue.view()).expect("serializes"),
-            serde_json::json!({ "entries": [], "pausedReason": null })
-        );
-        queue.set_paused(Some(PAUSED_FOR_CREDENTIALS));
-        assert_eq!(
-            serde_json::to_value(queue.view()).expect("serializes"),
-            serde_json::json!({ "entries": [], "pausedReason": PAUSED_FOR_CREDENTIALS })
-        );
-    }
-
-    #[test]
-    fn test_shoutout_channel_reads_the_typescript_shape() {
-        let read: ShoutoutChannel = serde_json::from_value(serde_json::json!({
-            "twitchUserId": "42",
-            "login": "wolfy",
-            "displayName": "Wolfy",
-            "profileImageUrl": null,
-            "broadcasterType": null,
-        }))
-        .expect("reads");
-        assert_eq!(read.twitch_user_id, "42");
-        assert_eq!(read.profile_image_url, None);
     }
 }

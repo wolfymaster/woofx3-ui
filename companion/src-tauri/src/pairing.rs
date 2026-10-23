@@ -28,8 +28,8 @@ use crate::cloud::{
 use crate::credentials::{self, StoredToken};
 use crate::integration_store::StoreIdentity;
 use crate::integrations;
-use crate::state::CompanionState;
 use crate::Companion;
+use woofx3_companion_core::window::CompanionState;
 
 const COMPANION_VERSION: &str = env!("CARGO_PKG_VERSION");
 

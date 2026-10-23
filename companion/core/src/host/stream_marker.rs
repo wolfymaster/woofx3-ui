@@ -61,9 +61,10 @@ impl Default for StreamMarkerOptions {
     }
 }
 
-/// Where the stream start marker stands. Times are [`EpochMillis`]. Must
-/// match `StreamStartMarker` in companion/ui/src/host.ts.
+/// Where the stream start marker stands. Times are milliseconds since the Unix
+/// epoch on this PC's clock.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum StreamStartMarker {
     /// Nothing is waiting: none was asked for, or the request window ended.
@@ -82,6 +83,7 @@ pub enum StreamStartMarker {
 /// Must match `GoLiveStepOutcome` in client/src/engine/types.ts, which also
 /// has `skipped` for a step not asked for.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[serde(tag = "status", rename_all = "camelCase")]
 pub enum MarkerRequestOutcome {
     Done,
@@ -938,34 +940,7 @@ mod tests {
     }
 
     #[test]
-    fn test_stream_start_marker_serializes_as_the_typescript_mirror_expects() {
-        let cases = [
-            (
-                StreamStartMarker::Idle,
-                serde_json::json!({ "kind": "idle" }),
-            ),
-            (
-                StreamStartMarker::Pending { requested_at: 7 },
-                serde_json::json!({ "kind": "pending", "requestedAt": 7 }),
-            ),
-            (
-                StreamStartMarker::Dropping,
-                serde_json::json!({ "kind": "dropping" }),
-            ),
-            (
-                StreamStartMarker::Dropped { dropped_at: 8 },
-                serde_json::json!({ "kind": "dropped", "droppedAt": 8 }),
-            ),
-            (
-                StreamStartMarker::Failed {
-                    message: "m".into(),
-                },
-                serde_json::json!({ "kind": "failed", "message": "m" }),
-            ),
-        ];
-        for (state, wire) in cases {
-            assert_eq!(serde_json::to_value(&state).expect("serializes"), wire);
-        }
+    fn test_marker_request_outcome_serializes_as_a_go_live_step_outcome() {
         let outcomes = [
             (
                 MarkerRequestOutcome::Done,

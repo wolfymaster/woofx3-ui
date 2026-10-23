@@ -41,7 +41,9 @@ use woofx3_companion_core::host::{
 
 use crate::credentials::EngineClientStore;
 use crate::lock;
-use crate::state::{LocalEngineSession, SHOUTOUT_QUEUE_EVENT, STREAM_START_MARKER_EVENT};
+use woofx3_companion_core::window::{
+    LocalEngineSession, SHOUTOUT_QUEUE_EVENT, STREAM_START_MARKER_EVENT,
+};
 
 /// The answer to a local-mode call on a host that runs no local engine.
 const NOT_LOCAL: &str = "This host runs no local engine.";

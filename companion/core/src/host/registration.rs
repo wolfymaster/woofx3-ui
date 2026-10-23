@@ -743,7 +743,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_run_registration_registers_again_when_a_worker_reports_a_refusal() {
-        let token = TokenFile::new("refused", Some("tok"));
+        let token = TokenFile::new("reported-refusal", Some("tok"));
         let gateway = Arc::new(
             ScriptedGateway::registering(vec![Ok(credentials("c1")), Ok(credentials("c2"))])
                 .verifying(vec![Err(refused())]),
