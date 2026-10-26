@@ -583,6 +583,40 @@ and body. `convex/lib/twitchEngineHelix.ts` is the one place that chooses:
   or `failed`. A write does not: Twitch may already have applied it, so it
   fails as a Twitch 504 (timeout) or 502 (failed) instead of being sent twice.
 
+## Chat writes through the platform gateway
+
+Chat messages, announcements and pins (from the macro pad, the command
+palette, the Announcement and Pinned widgets, the stream recap and the Go live
+announcement) go through the engine's platform gateway when the engine
+advertises `platform.gateway`. The engine then posts with its own Twitch
+connection, so the line gets its command guard and is recognised as the
+engine's own when Twitch echoes it, and the answer says what Twitch did.
+`convex/lib/platformGateway.ts` chooses the route (`chatRoute`, one capability
+read per action) and reads the answer:
+
+| Gateway outcome | What the dashboard does |
+|---|---|
+| `delivered` | Done; pins record the posted message id in the history |
+| `dropped` | Shows Twitch's reason (AutoMod, a duplicate, a banned term) |
+| `unconfirmed`, no answer in 15s, or the engine connection failing mid-call | Says the line may already be in chat; never resends it |
+| `unavailable` | Says why nothing was sent (Twitch off or not linked in the engine, the gateway not running). There is no Helix fallback: the engine owns the platform connection |
+| `failed` | Shows Twitch's refusal. A pin by id that Twitch refused as `invalid` or `upstream` re-posts the text, as on the Helix route |
+
+Every write carries an idempotency key, `<scope>:<operationId>:<step>`
+(`dashboard:…` for widget and palette actions, `golive:…:announce` for the Go
+live checklist). The client mints one operation id per intent
+(`client/src/lib/operation-id.ts`): the same action, target and text asked
+again reuse the id until one attempt succeeds, so a double click or a retry
+after an unconfirmed send replays the engine's first answer rather than
+posting twice. The gateway forgets a send that reached no platform, so a retry
+after `unavailable` sends again. A client that sends no operation id gets a
+server-side one, with no dedupe. The engine keeps keys in memory, so a restart
+forgets them.
+
+Engines without `platform.gateway` keep the
+[Helix route](#helix-calls-through-the-engine). Shoutouts, reading the current
+pin and unpinning always take it.
+
 ## Stream info
 
 Edits the channel's title, category and tags, and drops stream markers, without
@@ -655,10 +689,18 @@ keyed by its message id so it is added once, and can then be pinned again from
 here. There is no EventSub type for pinning, which is why the current pin is
 polled rather than pushed.
 
-Reading, pinning, re-posting and unpinning go to Helix from `convex/pins.ts`,
-or through an engine with `twitch.pins` (see
+Pinning and re-posting go through the platform gateway on an engine with
+`platform.gateway` (see
+[Chat writes through the platform gateway](#chat-writes-through-the-platform-gateway)).
+Otherwise, and always for reading and unpinning, they go to Helix from
+`convex/pins.ts`, or through an engine with `twitch.pins` (see
 [Helix calls through the engine](#helix-calls-through-the-engine)). The history
-stays in Convex.
+stays in Convex. A message the gateway posted but could not pin is recorded
+with its id and reported as a warning rather than an error: the pin counts as
+done, so the draft clears and the next click is a new pin. It can then be
+pinned from the history by its id. It is not an error because the gateway
+forgets a reply where nothing succeeded, so retrying it would post the line
+a second time.
 
 Re-pinning has two paths, chosen by `convex/lib/pinStrategy.ts`: reuse the
 stored message id when the entry was created during the current broadcast,

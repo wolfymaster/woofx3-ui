@@ -19,7 +19,9 @@ import { useRecapMarkers } from "@/hooks/use-recap-markers";
 import { useRecapTimelineEvents } from "@/hooks/use-recap-timeline-events";
 import { type StreamRecapEngineState, useStreamRecapEngineDetail } from "@/hooks/use-stream-recap-engine-detail";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 import { RECAP_ENGINE_CAPABILITIES, RECAP_EVENT_CAPABILITIES } from "@/lib/engine-capabilities";
+import { useIntentOperationIds } from "@/lib/operation-id";
 import {
   buildLanePoints,
   clipLayerStatus,
@@ -267,6 +269,7 @@ function SupportersCard({
 }) {
   const { toast } = useToast();
   const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
+  const thanksIntents = useIntentOperationIds();
   const [sending, setSending] = useState(false);
   const message = useMemo(
     () => buildThankYouMessage({ gifters: detail.topGifters, cheerers: detail.topCheerers }),
@@ -291,12 +294,14 @@ function SupportersCard({
     }
     setSending(true);
     try {
-      await sendAnnouncement({ instanceId, message, color: "primary" });
+      await thanksIntents.run(`${instanceId}:chat.announce:primary:${message}`, (operationId) =>
+        sendAnnouncement({ instanceId, message, color: "primary", operationId })
+      );
       toast({ title: "Sent to chat" });
     } catch (error) {
       toast({
         title: "Couldn't send to chat",
-        description: error instanceof Error ? error.message : String(error),
+        description: actionErrorMessage(error),
         variant: "destructive",
       });
     } finally {

@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { RecapClipsState } from "@/hooks/use-recap-clips";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
+import { useIntentOperationIds } from "@/lib/operation-id";
 import { buildClipShareMessage, formatClipDuration, formatStreamOffset } from "@/lib/recap-clips";
 
 const CREATED_FORMAT: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
@@ -27,6 +29,7 @@ function ClipRow({
 }) {
   const { toast } = useToast();
   const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
+  const shareIntents = useIntentOperationIds();
   const [sending, setSending] = useState(false);
 
   const handleCopy = async () => {
@@ -41,12 +44,15 @@ function ClipRow({
   const handleShare = async () => {
     setSending(true);
     try {
-      await sendAnnouncement({ instanceId, message: buildClipShareMessage(clip), color: "primary" });
+      const message = buildClipShareMessage(clip);
+      await shareIntents.run(`${instanceId}:chat.announce:primary:${message}`, (operationId) =>
+        sendAnnouncement({ instanceId, message, color: "primary", operationId })
+      );
       toast({ title: "Clip shared to chat" });
     } catch (error) {
       toast({
         title: "Couldn't share to chat",
-        description: error instanceof Error ? error.message : String(error),
+        description: actionErrorMessage(error),
         variant: "destructive",
       });
     } finally {

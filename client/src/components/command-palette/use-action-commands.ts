@@ -32,6 +32,7 @@ import {
 import { useClearAlertQueueRequest, useSkipCurrentAlertRequest } from "@/engine/hooks/use-alert-queue";
 import { useAuthActions } from "@/hooks/use-convex-auth";
 import { useTheme } from "@/hooks/use-theme";
+import { useIntentOperationIds } from "@/lib/operation-id";
 import { $commandBarHidden, $sidebarShownCollapsed, toggleSidebar } from "@/lib/stores";
 import { themePalettes } from "@/lib/theme/palettes";
 import { CUSTOM_PALETTE_ID } from "@/lib/theme/resolve";
@@ -113,6 +114,7 @@ export function useActionCommands(
   const sendAnnouncement = useAction(api.twitchBroadcast.sendAnnouncement);
   const sendShoutout = useAction(api.twitchBroadcast.sendShoutout);
   const pinNewMessage = useAction(api.pins.pinNewMessage);
+  const chatIntents = useIntentOperationIds();
   const timeoutUser = useAction(api.moderation.timeoutUser);
   const banUser = useAction(api.moderation.banUser);
   const unbanUser = useAction(api.moderation.unbanUser);
@@ -262,7 +264,9 @@ export function useActionCommands(
             aliases: ["say", "chat"],
             submitLabel: (text) => `Send “${text}”`,
             run: async (text) => {
-              await sendChatMessage({ instanceId: id, message: text });
+              await chatIntents.run(`${id}:chat.send:${text}`, (operationId) =>
+                sendChatMessage({ instanceId: id, message: text, operationId })
+              );
               return "Sent to chat";
             },
           },
@@ -282,7 +286,9 @@ export function useActionCommands(
             aliases: ["announce"],
             submitLabel: (text) => `Announce “${text}”`,
             run: async (text) => {
-              await sendAnnouncement({ instanceId: id, message: text, color: "primary" });
+              await chatIntents.run(`${id}:chat.announce:primary:${text}`, (operationId) =>
+                sendAnnouncement({ instanceId: id, message: text, color: "primary", operationId })
+              );
               return "Announcement sent";
             },
           },
@@ -302,8 +308,10 @@ export function useActionCommands(
             aliases: ["pin"],
             submitLabel: (text) => `Pin “${text}”`,
             run: async (text) => {
-              await pinNewMessage({ instanceId: id, text });
-              return "Message pinned";
+              const result = await chatIntents.run(`${id}:chat.pin:${text}`, (operationId) =>
+                pinNewMessage({ instanceId: id, text, operationId })
+              );
+              return result.pinned ? "Message pinned" : result.warning;
             },
           },
         },

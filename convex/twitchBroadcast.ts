@@ -1,5 +1,13 @@
 import { v } from "convex/values";
 import { action } from "./_generated/server";
+import {
+  type ChatRoute,
+  chatRoute,
+  idempotencyKeys,
+  sendThroughGateway,
+  serverOperationId,
+  undeliveredError,
+} from "./lib/platformGateway";
 import { type AuthorizedTwitchCall, authorizeTwitch } from "./lib/twitchAuth";
 import { helixResponse, type TwitchHelixRoute, twitchHelixRoute } from "./lib/twitchEngineHelix";
 import { fetchTwitchUser, normalizeTwitchLogin } from "./lib/twitchUsers";
@@ -7,9 +15,11 @@ import { fetchTwitchUser, normalizeTwitchLogin } from "./lib/twitchUsers";
 // Chat message / announce / shoutout for the dashboard's Broadcast Controls
 // panel and macro pad.
 //
-// These go straight to Helix with the broadcaster token Convex holds, or
-// through an engine that advertises twitch.chat and sends the same requests
-// (convex/lib/twitchEngineHelix.ts).
+// Chat messages and announcements go through the engine's platform gateway
+// when it advertises platform.gateway (convex/lib/platformGateway.ts).
+// Otherwise, and for shoutouts, they go straight to Helix with the broadcaster
+// token Convex holds, or through an engine that advertises twitch.chat and
+// sends the same requests (convex/lib/twitchEngineHelix.ts).
 // Same shape as convex/twitchClips.ts.
 
 const TWITCH_MESSAGES_URL = "https://api.twitch.tv/helix/chat/messages";
@@ -39,6 +49,8 @@ export const sendChatMessage = action({
   args: {
     instanceId: v.id("instances"),
     message: v.string(),
+    /** One id per user intent, so a repeated click replays the first send instead of posting twice. */
+    operationId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ ok: true }> => {
     const message = args.message.trim();
@@ -49,11 +61,34 @@ export const sendChatMessage = action({
       throw new Error(`Twitch chat messages are limited to ${MAX_CHAT_MESSAGE_LENGTH} characters`);
     }
 
+    const key = idempotencyKeys("dashboard", args.operationId, serverOperationId)("chat.send");
     const call = await authorizeTwitch(ctx, args.instanceId, SEND_MESSAGE_SCOPE);
-    await postChatMessage(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"), message);
+    await sendChatLine(call, await chatRoute(ctx, args.instanceId, "twitch.chat"), message, key);
     return { ok: true };
   },
 });
+
+/** Posts `message` to chat on `route`; throws a sentence for a line that was not posted. */
+export async function sendChatLine(
+  call: AuthorizedTwitchCall,
+  route: ChatRoute,
+  message: string,
+  key: string
+): Promise<void> {
+  if (route.kind === "helix") {
+    await postChatMessage(call, route.helix, message);
+    return;
+  }
+  const outcome = await sendThroughGateway(route, {
+    action: "chat.send",
+    platforms: ["twitch"],
+    payload: { message },
+    idempotencyKey: key,
+  });
+  if (outcome.kind !== "delivered") {
+    throw undeliveredError(outcome, "chat message");
+  }
+}
 
 export async function postChatMessage(
   { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,
@@ -95,6 +130,8 @@ export const sendAnnouncement = action({
     instanceId: v.id("instances"),
     message: v.string(),
     color: ANNOUNCEMENT_COLOR_VALIDATOR,
+    /** One id per user intent, so a repeated click replays the first send instead of posting twice. */
+    operationId: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<{ ok: true }> => {
     const message = args.message.trim();
@@ -105,11 +142,36 @@ export const sendAnnouncement = action({
       throw new Error(`Twitch announcements are limited to ${MAX_ANNOUNCEMENT_LENGTH} characters`);
     }
 
+    const key = idempotencyKeys("dashboard", args.operationId, serverOperationId)("chat.announce");
     const call = await authorizeTwitch(ctx, args.instanceId, ANNOUNCEMENT_SCOPE);
-    await postAnnouncement(call, await twitchHelixRoute(ctx, args.instanceId, "twitch.chat"), message, args.color);
+    await sendAnnouncementLine(call, await chatRoute(ctx, args.instanceId, "twitch.chat"), message, args.color, key);
     return { ok: true };
   },
 });
+
+/** Posts an announcement on `route`; throws a sentence for one that was not posted. */
+export async function sendAnnouncementLine(
+  call: AuthorizedTwitchCall,
+  route: ChatRoute,
+  message: string,
+  color: (typeof ANNOUNCEMENT_COLORS)[number],
+  key: string
+): Promise<void> {
+  if (route.kind === "helix") {
+    await postAnnouncement(call, route.helix, message, color);
+    return;
+  }
+  const outcome = await sendThroughGateway(route, {
+    action: "chat.announce",
+    platforms: ["twitch"],
+    payload: { message },
+    options: { twitch: { color } },
+    idempotencyKey: key,
+  });
+  if (outcome.kind !== "delivered") {
+    throw undeliveredError(outcome, "announcement");
+  }
+}
 
 export async function postAnnouncement(
   { accessToken, broadcasterUserId, clientId }: AuthorizedTwitchCall,

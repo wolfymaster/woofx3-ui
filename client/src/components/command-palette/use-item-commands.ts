@@ -51,6 +51,7 @@ import { dynamicLucideIcon } from "@/lib/dynamic-lucide-icon";
 import { groupLabel } from "@/lib/group-display";
 import { applyMacroVariables, hasMacroVariables } from "@/lib/macro-pad";
 import { bareModuleKey } from "@/lib/module-key";
+import { useIntentOperationIds } from "@/lib/operation-id";
 import { resourceActions } from "@/lib/resource-actions";
 import { resourceName, resourceSettings } from "@/lib/resource-instance";
 import { counterValue, formatDuration, parseDuration, queueEntries, timerState } from "@/lib/resource-values";
@@ -116,6 +117,7 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
   const updateCommand = useUpdateChatCommandRequest();
   const runMacro = useRunMacroRequest();
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
+  const chatIntents = useIntentOperationIds();
   const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
   const runResourceAction = useResourceActionRunner();
   const runAimedAction = useAimedResourceActionRunner();
@@ -558,7 +560,10 @@ export function useItemCommands(instance: Doc<"instances"> | null): PaletteComma
         type: "run",
         run: async () => {
           if (macro.type === "send-message") {
-            await sendChatMessage({ instanceId, message: applyMacroVariables(macro.config, {}).message ?? "" });
+            const message = applyMacroVariables(macro.config, {}).message ?? "";
+            await chatIntents.run(`${instanceId}:chat.send:${message}`, (operationId) =>
+              sendChatMessage({ instanceId, message, operationId })
+            );
           } else {
             await runMacro(toMacroId(macro.id), []);
           }

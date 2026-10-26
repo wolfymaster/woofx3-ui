@@ -30,6 +30,7 @@ import {
   twitchCheck,
   workflowsCheck,
 } from "@/lib/go-live-checks";
+import { useIntentOperationIds } from "@/lib/operation-id";
 
 /** The checks that ask Twitch or the engine, each started on its own so they run side by side. */
 type RemoteCheckId = Extract<GoLiveCheckId, "twitch" | "obs" | "stream-info">;
@@ -121,6 +122,7 @@ export function useGoLiveChecklist(): GoLiveChecklist {
   const checkStreamInfo = useAction(api.goLive.checkStreamInfo);
   const setCheckDismissed = useMutation(api.goLive.setCheckDismissed);
   const completeAction = useAction(api.goLive.complete);
+  const completionIntents = useIntentOperationIds();
   const updateChannelInfo = useAction(api.streamInfo.updateChannelInfo);
 
   const [outcomes, setOutcomes] = useState<Record<RemoteCheckId, RemoteOutcome>>({
@@ -238,13 +240,19 @@ export function useGoLiveChecklist(): GoLiveChecklist {
       if (!instanceId) {
         throw new Error("Pick an instance first");
       }
-      const result = await completeAction({ instanceId, ...options });
+      // A completion whose announcement failed stays the same intent, so
+      // finishing again replays an announcement Twitch may already have posted.
+      const result = await completionIntents.run(
+        `${instanceId}:golive:${options.announcement ?? ""}`,
+        (operationId) => completeAction({ instanceId, ...options, operationId }),
+        (completion) => completion.announcement.status !== "failed"
+      );
       // The stored title and category just changed, so stream info is
       // measured against them from here on.
       runRemote("stream-info");
       return result;
     },
-    [instanceId, completeAction, runRemote]
+    [instanceId, completeAction, completionIntents, runRemote]
   );
 
   const applyPreset = useCallback(

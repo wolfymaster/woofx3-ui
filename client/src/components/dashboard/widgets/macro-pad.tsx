@@ -16,6 +16,7 @@ import { useRunMacroRequest } from "@/engine/hooks/use-macros";
 import { useEngineWorkflowsRequest } from "@/engine/hooks/use-modules";
 import { useInstance } from "@/hooks/use-instance";
 import { useToast } from "@/hooks/use-toast";
+import { actionErrorMessage } from "@/lib/action-error";
 import { toMacroId } from "@/lib/cloud-ids";
 import {
   applyMacroVariables,
@@ -25,6 +26,7 @@ import {
   type MacroInput,
 } from "@/lib/macro-pad";
 import { macroTriggerStatusLabel } from "@/lib/macro-trigger-examples";
+import { useIntentOperationIds } from "@/lib/operation-id";
 import { cn } from "@/lib/utils";
 import { MacroIconPreview } from "./macro-icon-picker";
 import { MacroConfigModal } from "./macro-pad-config-modal";
@@ -184,6 +186,7 @@ export function MacroPadModule() {
   const listEngineWorkflows = useEngineWorkflowsRequest();
   const runMacroOnServer = useRunMacroRequest();
   const sendChatMessage = useAction(api.twitchBroadcast.sendChatMessage);
+  const chatIntents = useIntentOperationIds();
   const { toast } = useToast();
 
   const instanceId = instance?._id;
@@ -314,8 +317,10 @@ export function MacroPadModule() {
             console.log("HTTP request result:", response.status);
           }
         } else if (macro.type === "send-message") {
-          const resolved = applyMacroVariables(macro.config, values);
-          await sendChatMessage({ instanceId, message: resolved.message ?? "" });
+          const message = applyMacroVariables(macro.config, values).message ?? "";
+          await chatIntents.run(`${instanceId}:chat.send:${message}`, (operationId) =>
+            sendChatMessage({ instanceId, message, operationId })
+          );
         } else {
           if (!engineInstanceId) {
             return;
@@ -328,14 +333,14 @@ export function MacroPadModule() {
       } catch (error) {
         toast({
           title: `"${macro.label}" failed`,
-          description: error instanceof Error ? error.message : String(error),
+          description: actionErrorMessage(error),
           variant: "destructive",
         });
       } finally {
         setIsExecuting(null);
       }
     },
-    [instanceId, engineInstanceId, runMacroOnServer, sendChatMessage, toast]
+    [instanceId, engineInstanceId, runMacroOnServer, sendChatMessage, chatIntents, toast]
   );
 
   const handlePress = useCallback(
