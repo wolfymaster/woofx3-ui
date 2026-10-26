@@ -1252,6 +1252,17 @@ export type TwitchLinking =
     }
   | { status: "failed"; error: string };
 
+/** What removing the link led to. */
+export interface TwitchUnlinkResult {
+  /** Set when the link was removed while the engine could not be told, so it may still use it. */
+  warning: string | undefined;
+}
+
+export interface TwitchUnlinkOptions {
+  /** Removes the link even when the engine cannot be reached. */
+  force?: boolean;
+}
+
 export interface TwitchLinkStart {
   /** The app path to come back to, for a gateway that leaves the page for Twitch. */
   returnTo: string;

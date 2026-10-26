@@ -1,7 +1,7 @@
 import type { ConfigField } from "@woofx3/api/ui-schema";
 import { Info } from "lucide-react";
 import { useId, useMemo, useState } from "react";
-import { ConfigurationForm, type FieldDescriptor } from "@/components/common/configuration-form";
+import { ConfigurationForm, defaultValueForField, type FieldDescriptor } from "@/components/common/configuration-form";
 import { VariableAwareInput } from "@/components/common/variable-aware-input";
 import { ModuleAssetFieldRenderer, withAssetModule } from "@/components/flow/module-asset-field";
 import { StepIdField } from "@/components/flow/step-id-field";
@@ -18,6 +18,7 @@ import {
   withSetting,
 } from "@/lib/action-settings";
 import { fieldOptionsOwnerFromCanonicalId, withFieldOptionsOwner } from "@/lib/field-options-reference";
+import { applyVisibilityChange, dropHiddenValues, isFieldShown } from "@/lib/field-visibility";
 import { parseConfigFields, parseDataShapeFields, withModuleName } from "@/lib/parse-config-fields";
 import { cn } from "@/lib/utils";
 import { resolveCatalogAction } from "@/lib/workflow-node-label";
@@ -72,8 +73,15 @@ export function ActionSettingsEditor({
   }, [row]);
   const outputs = useMemo(() => parseDataShapeFields(row?.returns), [row]);
 
-  const setValue = (fieldId: string, value: unknown) =>
-    onChange({ ...step, parameters: withSetting(step.parameters, fieldId, value) });
+  // A change settles the fields it shows or hides across the whole step, since each
+  // setting is drawn by its own form that can see no other.
+  const setValue = (fieldId: string, value: unknown) => {
+    const next = withSetting(step.parameters, fieldId, value);
+    const settled = applyVisibilityChange(fields, step.parameters, next, (field) =>
+      defaultValueForField(withoutHelp(field))
+    );
+    onChange({ ...step, parameters: dropHiddenValues(fields, settled) });
+  };
 
   return (
     <div className="flex flex-col gap-5" data-testid="action-settings">
@@ -85,15 +93,17 @@ export function ActionSettingsEditor({
         </p>
       )}
       {row && fields.length === 0 && <p className="text-sm text-muted-foreground">This action has no settings.</p>}
-      {fields.map((field) => (
-        <SettingRow
-          key={field.id}
-          field={field}
-          values={step.parameters}
-          variables={availableVariables}
-          onChange={(value) => setValue(field.id, value)}
-        />
-      ))}
+      {fields
+        .filter((field) => isFieldShown(field, step.parameters))
+        .map((field) => (
+          <SettingRow
+            key={field.id}
+            field={field}
+            values={step.parameters}
+            variables={availableVariables}
+            onChange={(value) => setValue(field.id, value)}
+          />
+        ))}
       {outputs.length > 0 && (
         <p className="text-xs text-muted-foreground" data-testid="text-action-outputs">
           Later steps can use: {outputs.map((output) => output.path).join(", ")}.

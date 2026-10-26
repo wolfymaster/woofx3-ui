@@ -14,3 +14,8 @@ export function useTwitchLinkFlow() {
 export function useUnlinkTwitchRequest() {
   return useEngineGateway().twitchLink.useUnlinkRequest();
 }
+
+/** Offers the saved Twitch link to the engine again. Owners and admins only. */
+export function useRetryEngineSyncRequest() {
+  return useEngineGateway().twitchLink.useRetryEngineSyncRequest();
+}

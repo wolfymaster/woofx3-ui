@@ -6,6 +6,7 @@ import { useAction, useConvexAuth } from "convex/react";
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { withEnginePending } from "@/lib/twitch-connect-return";
 import { takeTwitchSignInNonce } from "@/lib/twitch-sign-in";
 
 /**
@@ -68,8 +69,14 @@ export default function TwitchCallback() {
           setFailure({ code: result.error, detail: result.detail });
           return;
         }
+        const destination = safeRelativePath(result.redirectTo);
+        if (result.status === "connectedPendingEngine") {
+          setMessage("Twitch connected, but your engine has not picked it up yet. Redirecting...");
+          window.location.href = withEnginePending(destination);
+          return;
+        }
         setMessage("Twitch connected successfully! Redirecting...");
-        window.location.href = safeRelativePath(result.redirectTo);
+        window.location.href = destination;
       })
       .catch((err: unknown) => {
         console.error("[twitch-callback] finishConnect failed:", String(err));

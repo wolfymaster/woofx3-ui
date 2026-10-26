@@ -12,6 +12,16 @@ import { hashOpaqueToken, isOpaqueToken } from "./lib/oauthHandoff";
 import { mintOAuthState, oauthStateConfigFromEnv } from "./lib/oauthState";
 import { safeRelativePath } from "./lib/safeRedirect";
 import { TWITCH_INTEGRATION_SCOPES } from "./lib/twitchIntegrationScopes";
+import {
+  type DisconnectResult,
+  disconnectLink,
+  ENGINE_CALL_DEADLINE_MS,
+  type EngineSyncOutcome,
+  type EngineSyncStatus,
+  retryEngineSyncWith,
+  syncAfterConnect,
+  withEngineDeadline,
+} from "./lib/twitchLinkEngine";
 import { canManageTwitchLink, relinkRefusal } from "./lib/twitchLinkPolicy";
 import { type TwitchTokenRequestedResponse, twitchTokenForEngine, twitchTokenGrant } from "./lib/twitchTokenGrant";
 import { claimHandoff } from "./oauthConnectHandoff";
@@ -71,7 +81,13 @@ export const startConnect = action({
 
 type ConnectRefusal = { ok: false; error: OAuthErrorCode; detail?: string };
 
-export type FinishConnectResult = { ok: true; redirectTo: string } | ConnectRefusal;
+/**
+ * `connectedPendingEngine`: the link is saved but the engine did not take it;
+ * `retryEngineSync` asks again for `instanceId`.
+ */
+export type FinishConnectResult =
+  | { ok: true; status: EngineSyncStatus; redirectTo: string; instanceId: Id<"instances"> }
+  | ConnectRefusal;
 
 type CompletedConnect = { ok: true; redirectTo: string; instanceId: Id<"instances"> };
 
@@ -151,12 +167,24 @@ export const finishConnect = action({
     if (!result.ok) {
       return result;
     }
-    try {
-      await ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId: result.instanceId });
-    } catch (err) {
-      console.error("[twitch-connect] engine sync failed after saving the link", String(err));
-    }
-    return { ok: true, redirectTo: result.redirectTo };
+    const status = await syncAfterConnect(() =>
+      ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId: result.instanceId })
+    );
+    return { ok: true, status, redirectTo: result.redirectTo, instanceId: result.instanceId };
+  },
+});
+
+/**
+ * Offers the saved Twitch link to the engine again, for a connect that
+ * finished as `connectedPendingEngine`. Rejects with `engine_unreachable`
+ * while the engine still does not take it.
+ */
+export const retryEngineSync = action({
+  args: { instanceId: v.id("instances") },
+  handler: async (ctx, { instanceId }): Promise<{ ok: true }> => {
+    await requireTwitchLinkManager(ctx, instanceId);
+    await retryEngineSyncWith(() => ctx.runAction(internal.twitchIntegration.syncToEngine, { instanceId }));
+    return { ok: true };
   },
 });
 
@@ -185,7 +213,7 @@ export const deletePlatformLink = internalMutation({
 
 export const syncToEngine = internalAction({
   args: { instanceId: v.id("instances") },
-  handler: async (ctx, { instanceId }) => {
+  handler: async (ctx, { instanceId }): Promise<EngineSyncOutcome> => {
     const { link, instance } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
       instanceId,
       platform: "twitch",
@@ -198,7 +226,7 @@ export const syncToEngine = internalAction({
       throw new Error("Instance not found");
     }
     if (!instance.clientId || !instance.clientSecret) {
-      throw new Error("Instance not registered with engine");
+      return "no_engine";
     }
 
     const twitchClientId = process.env.AUTH_TWITCH_ID;
@@ -206,21 +234,26 @@ export const syncToEngine = internalAction({
       throw new Error("AUTH_TWITCH_ID env var is not set");
     }
 
-    const capabilities = await fetchEngineCapabilities({
-      url: instance.url,
-      clientId: instance.clientId,
-      clientSecret: instance.clientSecret,
-    });
-    const token = twitchTokenForEngine({
-      link,
-      asksForTokens: hasEngineCapability(capabilities, "twitch.dashboardTokens"),
-      clientId: twitchClientId,
-      now: Date.now(),
-    });
-
-    const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
-
-    await engine.setTwitchToken(token, link.connectedByUserId ?? undefined);
+    const { url, clientId, clientSecret } = instance;
+    try {
+      await withEngineDeadline(async () => {
+        const capabilities = await fetchEngineCapabilities({ url, clientId, clientSecret });
+        const token = twitchTokenForEngine({
+          link,
+          asksForTokens: hasEngineCapability(capabilities, "twitch.dashboardTokens"),
+          clientId: twitchClientId,
+          now: Date.now(),
+        });
+        await createEngineRpcSession<EngineApi>(url, clientId, clientSecret).setTwitchToken(
+          token,
+          link.connectedByUserId ?? undefined
+        );
+      }, ENGINE_CALL_DEADLINE_MS);
+    } catch (err) {
+      console.error("[twitch-connect] engine sync failed", String(err));
+      return "engine_failed";
+    }
+    return "synced";
   },
 });
 
@@ -261,12 +294,18 @@ export const grantTokenToEngine = internalAction({
   },
 });
 
+/**
+ * Removes the instance's Twitch link. The row stays when the engine cannot be
+ * told to drop its token, and the caller gets `engine_unreachable`; `force`
+ * removes it anyway, with a warning that the engine may still hold the token.
+ */
 export const disconnect = action({
   args: {
     instanceId: v.id("instances"),
     platform: v.string(),
+    force: v.optional(v.boolean()),
   },
-  handler: async (ctx, { instanceId, platform }) => {
+  handler: async (ctx, { instanceId, platform, force }): Promise<DisconnectResult> => {
     await requireTwitchLinkManager(ctx, instanceId);
     const { link, instance } = await ctx.runQuery(internal.twitchIntegration.getLinkAndInstance, {
       instanceId,
@@ -277,16 +316,31 @@ export const disconnect = action({
       return { ok: true };
     }
 
-    if (instance?.clientId && instance?.clientSecret) {
-      try {
-        const engine = createEngineRpcSession<EngineApi>(instance.url, instance.clientId, instance.clientSecret);
-        await engine.deleteTwitchToken();
-      } catch (err) {
-        console.warn("[disconnect] engine.deleteTwitchToken failed (proceeding with local delete)", err);
-      }
-    }
-
-    await ctx.runMutation(internal.twitchIntegration.deletePlatformLink, { linkId: link._id });
-    return { ok: true };
+    const engine =
+      instance?.clientId && instance.clientSecret
+        ? { url: instance.url, clientId: instance.clientId, clientSecret: instance.clientSecret }
+        : null;
+    return disconnectLink(
+      {
+        deleteTokenOnEngine: engine
+          ? async () => {
+              await withEngineDeadline(
+                () =>
+                  createEngineRpcSession<EngineApi>(
+                    engine.url,
+                    engine.clientId,
+                    engine.clientSecret
+                  ).deleteTwitchToken(),
+                ENGINE_CALL_DEADLINE_MS
+              );
+            }
+          : null,
+        deleteLink: async () => {
+          await ctx.runMutation(internal.twitchIntegration.deletePlatformLink, { linkId: link._id });
+        },
+        onEngineFailure: (err) => console.warn("[disconnect] engine.deleteTwitchToken failed", String(err)),
+      },
+      force ?? false
+    );
   },
 });
