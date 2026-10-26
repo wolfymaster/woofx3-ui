@@ -158,7 +158,6 @@ export type EngineCapability =
   | "workflow.dryRun"
   | "workflow.health"
   | "workflow.realCancel"
-  | "workflow.reservedSubjects"
   | "workflow.testRunOptions"
   | "workflow.viewerFacts";
 
