@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { configFieldRenderers } from "@/components/workflows/trigger-config-form";
 import { resourceKindFieldOptionsOwner, withFieldOptionsOwner } from "@/lib/field-options-reference";
+import { dropHiddenValues, isFieldShown } from "@/lib/field-visibility";
 import { parseConfigFields } from "@/lib/parse-config-fields";
 import { getDefaultConfigValues } from "@/lib/workflow-presets";
 
@@ -98,7 +99,7 @@ export function CreateResourceForm({
   const idIsValid = INSTANCE_ID_PATTERN.test(resourceInstanceId);
   const missingRequired = fields.filter((field) => {
     const value = settings[field.id];
-    return field.required && (value === undefined || value === null || value === "");
+    return field.required && isFieldShown(field, settings) && (value === undefined || value === null || value === "");
   });
   const canCreate = displayName.trim() !== "" && idIsValid && missingRequired.length === 0 && !creating;
 
@@ -109,7 +110,7 @@ export function CreateResourceForm({
     setCreating(true);
     setError(null);
     try {
-      await onCreate(resourceInstanceId, displayName.trim(), settings as Record<string, unknown>);
+      await onCreate(resourceInstanceId, displayName.trim(), dropHiddenValues(fields, settings));
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to create the ${kind.name.toLowerCase()}.`);
