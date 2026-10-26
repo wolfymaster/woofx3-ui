@@ -67,6 +67,7 @@ export const ENGINE_NAMESPACE_MODULES = {
     // which a gateway that links another way never reaches.
     "twitchIntegration.startConnect",
     "twitchIntegration.disconnect",
+    "twitchIntegration.retryEngineSync",
   ],
 } as const satisfies Record<string, readonly string[]>;
 
