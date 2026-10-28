@@ -9,7 +9,7 @@ import {
   DEFAULT_ALERT_WIDGET_NAME,
   type PlacedWidget,
   placedWidgetsOf,
-} from "./lib/alertWidgets";
+} from "@shared/alert-widgets";
 import { BUILTIN_MODULE_LABEL, resolveModuleDisplayNames } from "./lib/moduleDisplayName";
 
 export type SceneWidgetCatalogRow = Doc<"moduleWidgets"> & { moduleName: string };

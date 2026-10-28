@@ -8,7 +8,7 @@ import {
   nextAlertWidgetName,
   orphanedAlertTargets,
   placedWidgetsOf,
-} from "./alertWidgets";
+} from "./alert-widgets";
 
 describe("alertWidgetName", () => {
   it("answers to its name setting, trimmed", () => {

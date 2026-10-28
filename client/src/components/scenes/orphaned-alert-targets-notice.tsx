@@ -1,4 +1,4 @@
-import type { OrphanedAlertTarget } from "@convex/lib/alertWidgets";
+import type { OrphanedAlertTarget } from "@shared/alert-widgets";
 import { AlertTriangle } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
