@@ -5,10 +5,13 @@ import type {
   AlertSnapshot,
   CommandSnapshot,
   CreateCommandInput,
+  EngineModuleSummary,
   FieldOptionsReference,
   Leaderboard,
   LeaderboardQuery,
   PaginatedStreamSessions,
+  PaginatedWorkflows,
+  SceneSnapshot,
   StreamEventFrame,
   StreamEventSubscriber,
   StreamSession,
@@ -16,6 +19,8 @@ import type {
   ViewerTotals,
   ViewerTotalsQuery,
   Woofx3EngineApi,
+  Workflow,
+  WorkflowsQuery,
 } from "@woofx3/api";
 import { FakeApi, type FakeEngine } from "@/lib/engine-session/testing/FakeEngine";
 
@@ -39,7 +44,14 @@ type DirectFakeSurface = Pick<
   | "listOverlayTokens"
   | "mintOverlayToken"
   | "rotateOverlayToken"
+  | "listSceneSnapshots"
+  | "getSceneSnapshot"
+  | "getAvailableWidgets"
+  | "listEngineModules"
+  | "getWorkflows"
 >;
+
+export type AvailableWidget = Awaited<ReturnType<Woofx3EngineApi["getAvailableWidgets"]>>["widgets"][number];
 
 type OverlayToken = Awaited<ReturnType<Woofx3EngineApi["listOverlayTokens"]>>[number];
 
@@ -63,6 +75,10 @@ export class FakeEngineState {
   /** Per-viewer totals keyed by `platformUserId` and, for one stream, `:sessionId`. */
   viewerTotals: Record<string, ViewerTotals> = {};
   overlayTokens: OverlayToken[] = [];
+  scenes: SceneSnapshot[] = [];
+  widgets: AvailableWidget[] = [];
+  modules: EngineModuleSummary[] = [];
+  workflows: Workflow[] = [];
   /** Every call the fake served, by method, with its arguments. */
   readonly calls: Array<{ method: keyof DirectFakeSurface; args: unknown[] }> = [];
   /** The latest stream subscription of each session, in the order they were made. */
@@ -222,6 +238,34 @@ export class DirectFakeApi extends FakeApi implements DirectFakeSurface {
     }
     old.status = "revoked";
     return this.mint(old.sceneId);
+  }
+
+  async listSceneSnapshots(): Promise<{ scenes: SceneSnapshot[] }> {
+    this.state.record("listSceneSnapshots");
+    return { scenes: this.state.scenes };
+  }
+
+  async getSceneSnapshot(id: string): Promise<SceneSnapshot | null> {
+    this.state.record("getSceneSnapshot", id);
+    return this.state.scenes.find((scene) => scene.id === id) ?? null;
+  }
+
+  async getAvailableWidgets(): Promise<{ widgets: AvailableWidget[] }> {
+    this.state.record("getAvailableWidgets");
+    return { widgets: this.state.widgets };
+  }
+
+  async listEngineModules(): Promise<EngineModuleSummary[]> {
+    this.state.record("listEngineModules");
+    return this.state.modules;
+  }
+
+  async getWorkflows(query?: WorkflowsQuery): Promise<PaginatedWorkflows> {
+    this.state.record("getWorkflows", query);
+    const page = query?.page ?? 1;
+    const pageSize = query?.pageSize ?? 20;
+    const workflows = this.state.workflows.slice((page - 1) * pageSize, page * pageSize);
+    return { workflows, total: this.state.workflows.length, page, pageSize };
   }
 
   private mint(sceneId: string): OverlayToken {
