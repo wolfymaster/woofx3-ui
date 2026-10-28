@@ -1,3 +1,5 @@
+import { readWidgetBehaviorKinds } from "@shared/widget-behavior-kinds";
+import { widgetCanonicalKey } from "@shared/widget-key";
 import type { InboundWebhookResponse } from "@woofx3/api";
 import type { CallbackEnvelope, CallbackEvent, WorkflowRunCancelledEvent } from "@woofx3/api/webhooks";
 import { EngineEventType } from "@woofx3/api/webhooks";
@@ -50,8 +52,6 @@ import {
   storageChangedTransient,
   widgetStatusTransient,
 } from "./lib/webhookTransients";
-import { readWidgetBehaviorKinds } from "./lib/widgetBehaviorKinds";
-import { widgetCanonicalKey } from "./lib/widgetKey";
 import { WORKFLOW_HEALTH_CHANGED_EVENT_TYPE, WORKFLOW_HEALTH_SNAPSHOT_EVENT_TYPE } from "./lib/workflowHealth";
 import { logger } from "./logger";
 import { opsHandler } from "./ops/http";
